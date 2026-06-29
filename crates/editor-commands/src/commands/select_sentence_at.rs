@@ -1,5 +1,6 @@
 use editor_resource::Resource;
-use editor_state::{Selection, resolve_sentence_selection_expansion};
+use editor_state::Selection;
+use editor_state::resolve_sentence_selection_expansion;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -10,11 +11,11 @@ pub fn select_sentence_at(
     selection: Selection,
     resource: &Resource,
 ) -> CommandResult {
-    let doc = tr.doc();
-    set_selection_if_changed(
-        tr,
-        resolve_sentence_selection_expansion(&doc, selection, resource),
-    )
+    let resolved = {
+        let view = tr.view();
+        resolve_sentence_selection_expansion(&selection, &view, resource)
+    };
+    set_selection_if_changed(tr, resolved)
 }
 
 #[cfg(test)]
@@ -29,9 +30,9 @@ mod tests {
     #[test]
     fn select_sentence_at_sets_resolved_selection() {
         let resource = Resource::new_test();
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("Hello.  Next.") } } }
-            selection: (t, 1)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello.  Next.") } } }
+            selection: (p1, 1)
         };
 
         let (actual, ..) = transact!(initial, |tr| {
@@ -42,9 +43,9 @@ mod tests {
         assert_eq!(
             actual.selection,
             Some(Selection::new(
-                Position::new(t, 0),
+                Position::new(p1, 0),
                 Position {
-                    node_id: t,
+                    node: p1,
                     offset: 6,
                     affinity: Affinity::Upstream,
                 },

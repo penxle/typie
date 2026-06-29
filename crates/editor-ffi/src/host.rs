@@ -84,9 +84,9 @@ impl EditorHost {
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let plain: editor_model::PlainDoc = doc.from_ffi()?;
-        let (doc, op_graph) = editor_model::Doc::from_plain(plain);
-        let selection = doc_start_selection(&doc)?;
-        let state = editor_state::State::new(doc, op_graph, Some(selection));
+        let state = editor_state::State::from_plain(&plain).map_err(|e| EditorError::General {
+            msg: format!("{e:?}"),
+        })?;
 
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
@@ -99,25 +99,33 @@ impl EditorHost {
         changesets: Vec<u8>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let (doc, graph) = crate::graph::doc_from_changesets(changesets)?;
-        let selection = doc_start_selection(&doc)?;
-        let state = editor_state::State::new(doc, graph, Some(selection));
+        let mut state = crate::graph::state_from_changesets(changesets)?;
+        let selection = {
+            let view = state.view();
+            editor_state::doc_start_selection(&view)
+        };
+        state.selection = selection;
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))
     }
 
     pub fn extract_text_from_graph(&self, changesets: Vec<u8>) -> EditorResult<String> {
-        let (doc, _) = crate::graph::doc_from_changesets(changesets)?;
-        Ok(doc.extract_text())
+        let state = crate::graph::state_from_changesets(changesets)?;
+        let view = state.view();
+        Ok(editor_state::flat_text(
+            &view,
+            0..editor_state::flat_size(&view),
+        ))
     }
 
     pub fn root_attrs_from_graph(
         &self,
         changesets: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainRootNode>> {
-        let (doc, _) = crate::graph::doc_from_changesets(changesets)?;
-        let root = crate::root::attrs(&doc).ok_or(FfiError::NoInitialCursorPosition)?;
+        let state = crate::graph::state_from_changesets(changesets)?;
+        let view = state.view();
+        let root = crate::root::attrs(&view).ok_or(FfiError::NoInitialCursorPosition)?;
         Ok(root.into_ffi()?)
     }
 
@@ -125,8 +133,8 @@ impl EditorHost {
         &self,
         changesets: Vec<u8>,
     ) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
-        let (doc, _) = crate::graph::doc_from_changesets(changesets)?;
-        Ok(crate::root::base_style_modifiers(&doc).into_ffi()?)
+        let state = crate::graph::state_from_changesets(changesets)?;
+        Ok(crate::root::base_style_modifiers(&state).into_ffi()?)
     }
 
     pub fn set_fonts(
@@ -194,18 +202,6 @@ impl EditorHost {
     }
 }
 
-fn doc_start_selection(doc: &editor_model::Doc) -> EditorResult<editor_state::Selection> {
-    use editor_state::NodeRefCursorExt;
-    let root = doc.root().ok_or(FfiError::NoInitialCursorPosition)?;
-    let pos = root
-        .first_cursor_position()
-        .ok_or(FfiError::NoInitialCursorPosition)?;
-    // Bypass entry point: first_cursor_position can yield (root,0) collapsed on a
-    // leading atom, so normalize upholds the invariant here.
-    let sel = editor_state::Selection::collapsed(pos);
-    Ok(sel.normalize(doc).unwrap_or(sel))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,8 +243,8 @@ mod tests {
                 editor_model::Modifier::BlockGap { value: 120 },
             ],
         );
-        let (_, graph) = editor_model::Doc::from_plain(plain);
-        let graph = editor_crdt::wire::encode(&graph.changesets_as_vec()).unwrap();
+        let state = editor_state::State::from_plain(&plain).unwrap();
+        let graph = editor_crdt::wire::encode(&state.graph().changesets_as_vec()).unwrap();
 
         let modifiers = host.root_modifiers_from_graph(graph).unwrap();
 

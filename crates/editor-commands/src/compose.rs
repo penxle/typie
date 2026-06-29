@@ -137,9 +137,9 @@ mod tests {
 
     #[test]
     fn first_macro_bare_path() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -149,9 +149,9 @@ mod tests {
 
     #[test]
     fn first_macro_multiple_bare_paths() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -161,9 +161,9 @@ mod tests {
 
     #[test]
     fn first_macro_path_with_args() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -173,9 +173,9 @@ mod tests {
 
     #[test]
     fn first_macro_closure() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -185,9 +185,9 @@ mod tests {
 
     #[test]
     fn chain_macro_all_succeed() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -197,9 +197,9 @@ mod tests {
 
     #[test]
     fn chain_macro_stops_on_failure() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -209,9 +209,9 @@ mod tests {
 
     #[test]
     fn optional_macro_bare_path() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -221,9 +221,9 @@ mod tests {
 
     #[test]
     fn optional_macro_path_with_args() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -233,9 +233,9 @@ mod tests {
 
     #[test]
     fn optional_macro_in_chain() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -250,9 +250,9 @@ mod tests {
 
     #[test]
     fn when_macro_true_runs_command() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -262,9 +262,9 @@ mod tests {
 
     #[test]
     fn when_macro_false_skips_command() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -274,9 +274,9 @@ mod tests {
 
     #[test]
     fn when_macro_in_chain() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -292,9 +292,9 @@ mod tests {
 
     #[test]
     fn optional_wraps_when() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 
@@ -304,9 +304,9 @@ mod tests {
 
     #[test]
     fn when_wraps_optional() {
-        let (state, ..) = editor_macros::state! {
-            doc { root { paragraph { _t: text("hello") } } }
-            selection: (_t, 0)
+        let (state, _p1) = editor_macros::state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
 

@@ -1,137 +1,130 @@
-use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_state::{Affinity, NodeRefCursorExt, Position, Selection};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, NodeType, NodeView};
+use editor_state::last_cursor_position;
+use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
+use crate::helpers::{child_node_type, prev_sibling};
 use crate::{CommandError, CommandResult};
 
 pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let paragraph_id = match node.node() {
-        Node::Text(_) => {
-            if pos.offset > 0 || node.prev_sibling().is_some() {
-                return Ok(false);
-            }
-            node.parent()
-                .ok_or(CommandError::NoParent(pos.node_id))?
-                .id()
-        }
-        Node::Paragraph(_) => {
-            if pos.offset > 0 {
-                return Ok(false);
-            }
-            pos.node_id
-        }
-        _ => return Ok(false),
-    };
-
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
-
-    let is_empty = paragraph.first_child().is_none();
-
-    let prev = match paragraph.prev_sibling() {
-        Some(prev) => prev,
-        None => return Ok(false),
-    };
-
-    if matches!(prev.node(), Node::Paragraph(_)) {
+    if pos.offset > 0 {
         return Ok(false);
     }
+    let paragraph_id = pos.node;
 
-    let target_id = match find_sink_target(&doc, &prev, &paragraph) {
-        Some(id) => id,
-        None => return Ok(false),
+    let (is_empty, target_id, source_parent_id) = {
+        let view = tr.state().view();
+        let paragraph = view
+            .node(paragraph_id)
+            .ok_or(CommandError::NodeNotFound(paragraph_id))?;
+
+        if paragraph.node_type() != NodeType::Paragraph {
+            return Ok(false);
+        }
+
+        let is_empty = paragraph.children().next().is_none();
+
+        let prev = match prev_sibling(&paragraph) {
+            Some(ChildView::Block(b)) => b,
+            _ => return Ok(false),
+        };
+
+        if prev.node_type() == NodeType::Paragraph {
+            return Ok(false);
+        }
+
+        let target_id = match find_sink_target(&view, &prev, &paragraph) {
+            Some(id) => id,
+            None => return Ok(false),
+        };
+
+        let source_parent_id = paragraph
+            .parent()
+            .ok_or(CommandError::NoParent(paragraph_id))?
+            .id();
+
+        (is_empty, target_id, source_parent_id)
     };
 
-    let source_parent_id = paragraph
-        .parent()
-        .ok_or(CommandError::NoParent(paragraph_id))?
-        .id();
-
     if is_empty {
-        let doc = tr.doc();
-        let target = doc
-            .node(target_id)
-            .ok_or(CommandError::NodeNotFound(target_id))?;
-        let cursor_pos = target
-            .last_cursor_position()
-            .ok_or(CommandError::NodeNotFound(target_id))?;
+        let cursor_pos = {
+            let view = tr.state().view();
+            let target = view
+                .node(target_id)
+                .ok_or(CommandError::NodeNotFound(target_id))?;
+            last_cursor_position(&target).ok_or(CommandError::NodeNotFound(target_id))?
+        };
 
         tr.batch::<_, CommandError>(|tr| {
             tr.remove_subtree(paragraph_id)?;
-            let doc = tr.doc();
-            if let Some(parent) = doc.node(source_parent_id) {
-                tr.apply_steps(fulfill(&parent))?;
-            }
+            let steps = {
+                let view = tr.state().view();
+                view.node(source_parent_id)
+                    .map(|parent| fulfill(&parent))
+                    .unwrap_or_default()
+            };
+            tr.apply_steps(steps)?;
             Ok(())
         })?;
 
         tr.set_selection(Some(Selection::collapsed(Position {
-            node_id: cursor_pos.node_id,
+            node: cursor_pos.node,
             offset: cursor_pos.offset,
             affinity: Affinity::Downstream,
         })))?;
     } else {
-        let doc = tr.doc();
-        let target = doc
-            .node(target_id)
-            .ok_or(CommandError::NodeNotFound(target_id))?;
-        let target_children_count = target.entry().children.len();
+        let target_children_count = {
+            let view = tr.state().view();
+            view.node(target_id)
+                .ok_or(CommandError::NodeNotFound(target_id))?
+                .children()
+                .count()
+        };
 
+        let mut moved_id = paragraph_id;
         tr.batch::<_, CommandError>(|tr| {
             tr.move_node(paragraph_id, target_id, target_children_count)?;
-            let doc = tr.doc();
-            if let Some(parent) = doc.node(source_parent_id) {
-                tr.apply_steps(fulfill(&parent))?;
-            }
+            moved_id = {
+                let view = tr.state().view();
+                view.node(target_id)
+                    .and_then(|target| target.child_blocks().last().map(|b| b.id()))
+                    .ok_or(CommandError::NodeNotFound(target_id))?
+            };
+            let steps = {
+                let view = tr.state().view();
+                view.node(source_parent_id)
+                    .map(|parent| fulfill(&parent))
+                    .unwrap_or_default()
+            };
+            tr.apply_steps(steps)?;
             Ok(())
         })?;
 
-        let doc = tr.doc();
-        let paragraph = doc
-            .node(paragraph_id)
-            .ok_or(CommandError::NodeNotFound(paragraph_id))?;
-
-        let new_selection = match paragraph.first_child() {
-            Some(child) if matches!(child.node(), Node::Text(_)) => {
-                Selection::collapsed(Position {
-                    node_id: child.id(),
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                })
-            }
-            _ => Selection::collapsed(Position {
-                node_id: paragraph_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            }),
-        };
-        tr.set_selection(Some(new_selection))?;
+        tr.set_selection(Some(Selection::collapsed(Position {
+            node: moved_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        })))?;
     }
 
     Ok(true)
 }
 
-fn find_sink_target(doc: &Doc, start: &NodeRef, paragraph: &NodeRef) -> Option<NodeId> {
+fn find_sink_target(view: &DocView, start: &NodeView, paragraph: &NodeView) -> Option<Dot> {
     let mut candidate = None;
     let mut current_id = start.id();
 
     loop {
-        let current = doc.node(current_id)?;
+        let current = view.node(current_id)?;
         let spec = current.spec();
 
         if spec.isolating {
@@ -140,15 +133,15 @@ fn find_sink_target(doc: &Doc, start: &NodeRef, paragraph: &NodeRef) -> Option<N
 
         // Content check: can Paragraph be appended to this node's children?
         let mut children_types: Vec<NodeType> =
-            current.children().map(|child| child.as_type()).collect();
+            current.children().map(|c| child_node_type(&c)).collect();
         children_types.push(NodeType::Paragraph);
 
         let content_ok = spec.content.matches_sequence(&children_types);
 
         // Context check: Paragraph and all its descendants valid in new location?
         let context_ok = if content_ok {
-            let new_base: Vec<NodeType> = build_ancestor_path(doc, current_id);
-            validate_context_deep(doc, paragraph, &new_base)
+            let new_base: Vec<NodeType> = build_ancestor_path(view, current_id);
+            validate_context_deep(view, paragraph, &new_base)
         } else {
             false
         };
@@ -158,8 +151,8 @@ fn find_sink_target(doc: &Doc, start: &NodeRef, paragraph: &NodeRef) -> Option<N
         }
 
         match current.last_child() {
-            Some(child) => current_id = child.id(),
-            None => break,
+            Some(ChildView::Block(b)) => current_id = b.id(),
+            _ => break,
         }
     }
 
@@ -167,13 +160,13 @@ fn find_sink_target(doc: &Doc, start: &NodeRef, paragraph: &NodeRef) -> Option<N
 }
 
 /// Build ancestor path from root to node (inclusive), as NodeType list.
-fn build_ancestor_path(doc: &Doc, node_id: NodeId) -> Vec<NodeType> {
+fn build_ancestor_path(view: &DocView, node_id: Dot) -> Vec<NodeType> {
     let mut path = Vec::new();
     let mut current = node_id;
-    while let Some(node) = doc.node(current) {
-        path.push(node.as_type());
-        match *node.entry().parent.get() {
-            Some(parent_id) => current = parent_id,
+    while let Some(node) = view.node(current) {
+        path.push(node.node_type());
+        match node.parent() {
+            Some(parent) => current = parent.id(),
             None => break,
         }
     }
@@ -182,15 +175,15 @@ fn build_ancestor_path(doc: &Doc, node_id: NodeId) -> Vec<NodeType> {
 }
 
 /// Validate context for a node and all its descendants at a hypothetical new base path.
-fn validate_context_deep(doc: &Doc, node: &NodeRef, base_path: &[NodeType]) -> bool {
-    let mut stack: Vec<(NodeId, Vec<NodeType>)> = vec![(node.id(), {
+fn validate_context_deep(view: &DocView, node: &NodeView, base_path: &[NodeType]) -> bool {
+    let mut stack: Vec<(Dot, Vec<NodeType>)> = vec![(node.id(), {
         let mut p = base_path.to_vec();
-        p.push(node.as_type());
+        p.push(node.node_type());
         p
     })];
 
     while let Some((node_id, path)) = stack.pop() {
-        let Some(current) = doc.node(node_id) else {
+        let Some(current) = view.node(node_id) else {
             return false;
         };
 
@@ -199,9 +192,11 @@ fn validate_context_deep(doc: &Doc, node: &NodeRef, base_path: &[NodeType]) -> b
         }
 
         for child in current.children() {
-            let mut child_path = path.clone();
-            child_path.push(child.as_type());
-            stack.push((child.id(), child_path));
+            if let ChildView::Block(b) = child {
+                let mut child_path = path.clone();
+                child_path.push(b.node_type());
+                stack.push((b.id(), child_path));
+            }
         }
     }
 
@@ -220,11 +215,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t0: text("A") } }
-                    paragraph { t1: text("B") }
+                    blockquote { p1: paragraph { text("A") } }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t1, 0) -> (t1, 1)
+            selection: (p2, 0) -> (p2, 1)
         };
         transact_fail!(initial, |tr| sink_paragraph_backward(&mut tr));
     }
@@ -234,24 +229,24 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t1: text("A") } }
-                    paragraph { t2: text("B") }
+                    blockquote { p1: paragraph { text("A") } }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     blockquote {
-                        paragraph { t1: text("A") }
-                        paragraph { t2: text("B") }
+                        p1: paragraph { text("A") }
+                        p2: paragraph { text("B") }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -261,55 +256,58 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    callout { paragraph { t1: text("A") } }
-                    paragraph { t2: text("B") }
+                    callout { p1: paragraph { text("A") } }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     callout {
-                        paragraph { t1: text("A") }
-                        paragraph { t2: text("B") }
+                        p1: paragraph { text("A") }
+                        p2: paragraph { text("B") }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn sink_deep_blockquote() {
+        // Blockquote/Callout are monolithic and cannot nest, and the only
+        // containers that accept a blockquote (FoldContent/TableCell) are
+        // isolating, so the deepest reachable sink target is the blockquote
+        // itself. This exercises descend-and-backtrack: the sink walks past the
+        // non-appendable inner list and lands in the blockquote.
         let (initial, ..) = state! {
             doc {
                 root {
                     blockquote {
-                        blockquote { paragraph { t1: text("A") } }
+                        bullet_list { list_item { p1: paragraph { text("A") } } }
                     }
-                    paragraph { t2: text("B") }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     blockquote {
-                        blockquote {
-                            paragraph { t1: text("A") }
-                            paragraph { t2: text("B") }
-                        }
+                        bullet_list { list_item { p1: paragraph { text("A") } } }
+                        p2: paragraph { text("B") }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -319,10 +317,10 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| sink_paragraph_backward(&mut tr));
     }
@@ -332,11 +330,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
-                    paragraph { t2: text("B") }
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         transact_fail!(initial, |tr| sink_paragraph_backward(&mut tr));
     }
@@ -351,12 +349,12 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
+                        list_item { p1: paragraph { text("A") } }
                     }
-                    paragraph { t2: text("B") }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         transact_fail!(initial, |tr| sink_paragraph_backward(&mut tr));
     }
@@ -366,11 +364,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t1: text("A") } }
-                    paragraph { t2: text("B") }
+                    blockquote { p1: paragraph { text("A") } }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t2, 1)
+            selection: (p2, 1)
         };
         transact_fail!(initial, |tr| sink_paragraph_backward(&mut tr));
     }
@@ -380,7 +378,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t1: text("A") } }
+                    blockquote { p1: paragraph { text("A") } }
                     p2: paragraph {}
                 }
             }
@@ -390,11 +388,11 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t1: text("A") } }
+                    blockquote { p1: paragraph { text("A") } }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }

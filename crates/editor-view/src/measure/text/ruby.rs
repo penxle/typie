@@ -1,26 +1,7 @@
-use editor_model::{Modifier, Node, NodeId, NodeRef};
-use editor_resource::{Resource, TextBrush};
-use parley::style::{
-    FontFamily, FontFamilyName, FontFeatures, FontWeight as ParleyFontWeight, LineHeight, TextStyle,
-};
-use parley::{OverflowWrap, WordBreak};
-use smallvec::SmallVec;
-use std::borrow::Cow;
-
-use crate::glyph_run::{Glyph, RubyAnnotation, Synthesis};
-use crate::measure::text::extract::ExtractedLine;
-
 pub(crate) const RUBY_FONT_SIZE_RATIO: f32 = 0.5;
-// 9pt readability floor, expressed in px (9 * 96 / 72).
 pub(crate) const RUBY_FONT_SIZE_MIN_PX: f32 = 12.0;
 pub(crate) const RUBY_GAP: f32 = 2.0;
 
-/// Space ruby reserves above the base text, inflating the line's `ascent` and
-/// `baseline` (see `measure_inline_text`); 0 without ruby. Subtract from
-/// `ascent` for the base-text ascent so backgrounds/selection skip the ruby.
-///
-/// Takes the already-inflated `baseline`/`ascent`: their difference is
-/// invariant under the inflation, so this recovers what the measure pass added.
 pub fn ruby_extra_top(baseline: f32, ascent: f32, ruby_annotations: &[RubyAnnotation]) -> f32 {
     if ruby_annotations.is_empty() {
         return 0.0;
@@ -38,70 +19,21 @@ pub fn ruby_extra_top(baseline: f32, ascent: f32, ruby_annotations: &[RubyAnnota
     (required_top - available_top).max(0.0)
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct RubyGroup {
-    pub text: String,
-    pub node_ids: SmallVec<[NodeId; 2]>,
-    pub total_base_chars: usize,
-}
+use std::borrow::Cow;
 
-pub(crate) fn identify_ruby_groups(paragraph: &NodeRef<'_>) -> Vec<RubyGroup> {
-    let mut groups: Vec<RubyGroup> = Vec::new();
-    let mut current: Option<RubyGroup> = None;
+use editor_resource::{Resource, TextBrush};
+use parley::style::{
+    FontFamily, FontFamilyName, FontFeatures, FontWeight as ParleyFontWeight, LineHeight, TextStyle,
+};
+use parley::{OverflowWrap, WordBreak};
 
-    let flush = |current: &mut Option<RubyGroup>, groups: &mut Vec<RubyGroup>| {
-        if let Some(g) = current.take() {
-            // drop groups with no ruby text or no base chars — nothing to render.
-            if !g.text.is_empty() && g.total_base_chars > 0 {
-                groups.push(g);
-            }
-        }
-    };
+use crate::glyph_run::{Glyph, RubyAnnotation, Synthesis};
 
-    for child in paragraph.children() {
-        let Node::Text(text_node) = child.node() else {
-            flush(&mut current, &mut groups);
-            continue;
-        };
+use super::extract::ExtractedLine;
+use super::inline::RubyGroup;
+use crate::glyph_run::GlyphRun;
 
-        let ruby_text: Option<&str> = child.modifiers().find_map(|m| match m {
-            Modifier::Ruby { text } => Some(text.as_str()),
-            _ => None,
-        });
-
-        let Some(ruby_text) = ruby_text else {
-            flush(&mut current, &mut groups);
-            continue;
-        };
-
-        if ruby_text.is_empty() {
-            flush(&mut current, &mut groups);
-            continue;
-        }
-
-        let chars = text_node.text.len();
-
-        match current.as_mut() {
-            Some(g) if g.text == ruby_text => {
-                g.node_ids.push(child.id());
-                g.total_base_chars += chars;
-            }
-            _ => {
-                flush(&mut current, &mut groups);
-                current = Some(RubyGroup {
-                    text: ruby_text.to_owned(),
-                    node_ids: smallvec::smallvec![child.id()],
-                    total_base_chars: chars,
-                });
-            }
-        }
-    }
-
-    flush(&mut current, &mut groups);
-    groups
-}
-
-pub(crate) fn build_ruby_annotations_for_line(
+pub(crate) fn build_ruby_annotations(
     line: &ExtractedLine,
     line_width: f32,
     groups: &[RubyGroup],
@@ -122,23 +54,22 @@ pub(crate) fn build_ruby_annotations_for_line(
         color: String,
         ascent: f32,
         descent: f32,
-        glyphs_relative: Vec<Glyph>, // y relative to ruby baseline, x relative to ruby start.
+        glyphs_relative: Vec<Glyph>,
         x: f32,
         width: f32,
     }
     let mut pending: Vec<Pending> = Vec::new();
 
-    let group_of_node = |node_id: editor_model::NodeId| -> Option<(usize, &RubyGroup)> {
-        groups
-            .iter()
-            .enumerate()
-            .find(|(_, g)| g.node_ids.contains(&node_id))
+    let group_of_run = |r: &GlyphRun| -> Option<(usize, &RubyGroup)> {
+        groups.iter().enumerate().find(|(_, g)| {
+            g.offset_range.start <= r.offset_range.start && r.offset_range.end <= g.offset_range.end
+        })
     };
 
     let mut i = 0;
     while i < line.glyph_runs.len() {
         let run = &line.glyph_runs[i];
-        let Some((g_idx, group)) = group_of_node(run.node_id) else {
+        let Some((g_idx, group)) = group_of_run(run) else {
             i += 1;
             continue;
         };
@@ -146,7 +77,7 @@ pub(crate) fn build_ruby_annotations_for_line(
         let mut j = i + 1;
         while j < line.glyph_runs.len() {
             let next = &line.glyph_runs[j];
-            if matches!(group_of_node(next.node_id), Some((idx, _)) if idx == g_idx) {
+            if matches!(group_of_run(next), Some((idx, _)) if idx == g_idx) {
                 j += 1;
             } else {
                 break;
@@ -183,7 +114,6 @@ pub(crate) fn build_ruby_annotations_for_line(
         let first = &slice[0];
         let ruby_font_size = (first.font_size * RUBY_FONT_SIZE_RATIO).max(RUBY_FONT_SIZE_MIN_PX);
 
-        // same builder pattern as layout.rs / list_item.rs.
         let family_name = resource
             .font_registry
             .family_name_opt(first.family_id)
@@ -195,9 +125,7 @@ pub(crate) fn build_ruby_annotations_for_line(
             font_size: ruby_font_size,
             font_weight: ParleyFontWeight::new(first.weight as f32),
             line_height: LineHeight::FontSizeRelative(1.0),
-            brush: TextBrush {
-                node_id: first.node_id,
-            },
+            brush: TextBrush { run_index: 0 },
             font_features: FontFeatures::Source(Cow::Borrowed(
                 "\"ss05\" 1, \"cv12\" 1, \"ss18\" 1",
             )),
@@ -268,10 +196,6 @@ pub(crate) fn build_ruby_annotations_for_line(
         return Vec::new();
     }
 
-    // Line-local coordinates (line top = 0). Base ascent top = line.baseline - line.ascent.
-    // Ruby descent bottom sits RUBY_GAP above that; ruby baseline = descent bottom - max_ruby_descent.
-    // The extra_top correction is applied by measure_segment, so we compute against the
-    // pre-correction line metrics here.
     let max_descent = pending.iter().map(|p| p.descent).fold(0.0, f32::max);
     let baseline_y = (line.baseline - line.ascent) - RUBY_GAP - max_descent;
 
@@ -306,135 +230,20 @@ pub(crate) fn build_ruby_annotations_for_line(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use editor_macros::doc;
+    use std::ops::Range;
 
-    #[test]
-    fn empty_paragraph_returns_no_groups() {
-        let (d, p1) = doc! { root { p1: paragraph } };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert!(groups.is_empty());
-    }
-
-    #[test]
-    fn paragraph_without_ruby_returns_no_groups() {
-        let (d, p1) = doc! { root { p1: paragraph { text("abc") } } };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert!(groups.is_empty());
-    }
-
-    #[test]
-    fn single_ruby_text_node_one_group() {
-        let (d, p1) = doc! {
-            root { p1: paragraph { text("한자") [ruby(text: "한자".to_string())] } }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].text, "한자");
-        assert_eq!(groups[0].total_base_chars, 2);
-        assert_eq!(groups[0].node_ids.len(), 1);
-    }
-
-    #[test]
-    fn adjacent_same_ruby_merges() {
-        let (d, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("굵게") [font_weight(700), ruby(text: "루비".to_string())]
-                    text("보통")  [ruby(text: "루비".to_string())]
-                }
-            }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].text, "루비");
-        assert_eq!(groups[0].total_base_chars, 4);
-        assert_eq!(groups[0].node_ids.len(), 2);
-    }
-
-    #[test]
-    fn adjacent_different_ruby_splits() {
-        let (d, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("A") [ruby(text: "a".to_string())]
-                    text("B") [ruby(text: "b".to_string())]
-                }
-            }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert_eq!(groups.len(), 2);
-    }
-
-    #[test]
-    fn non_ruby_text_between_breaks_group() {
-        let (d, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("A") [ruby(text: "x".to_string())]
-                    text("plain")
-                    text("B") [ruby(text: "x".to_string())]
-                }
-            }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert_eq!(groups.len(), 2);
-    }
-
-    #[test]
-    fn hard_break_between_breaks_group() {
-        let (d, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("A") [ruby(text: "x".to_string())]
-                    hard_break
-                    text("B") [ruby(text: "x".to_string())]
-                }
-            }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert_eq!(groups.len(), 2);
-    }
-
-    #[test]
-    fn empty_ruby_text_does_not_form_group() {
-        let (d, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("A") [ruby(text: "".to_string())]
-                }
-            }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert!(groups.is_empty());
-    }
-
-    #[test]
-    fn zero_base_char_group_is_dropped() {
-        let (d, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("") [ruby(text: "ruby".to_string())]
-                }
-            }
-        };
-        let groups = identify_ruby_groups(&d.node(p1).unwrap());
-        assert!(
-            groups.is_empty(),
-            "group with zero base chars must be dropped even if ruby modifier is present"
-        );
-    }
-}
-
-#[cfg(test)]
-mod build_tests {
-    use super::*;
-    use crate::glyph_run::{GlyphRun, GraphemeSpan, TextDecoration};
-    use crate::measure::text::extract::ExtractedLine;
-    use editor_model::NodeId;
     use editor_resource::Resource;
 
-    fn make_run(node_id: NodeId, text: &str, x: f32, width: f32, font_size: f32) -> GlyphRun {
+    use super::*;
+    use crate::glyph_run::{GraphemeSpan, TextDecoration};
+
+    fn make_run(
+        offset_range: Range<usize>,
+        text: &str,
+        x: f32,
+        width: f32,
+        font_size: f32,
+    ) -> GlyphRun {
         GlyphRun {
             family_id: 0,
             weight: 400,
@@ -444,8 +253,8 @@ mod build_tests {
             background_color: None,
             glyphs: vec![],
             decoration: TextDecoration::default(),
-            node_id,
-            offset: 0,
+            offset_range,
+            link: None,
             text: text.to_string(),
             x,
             width,
@@ -453,6 +262,8 @@ mod build_tests {
                 advance: width,
                 codepoints: text.chars().count() as u8,
             }],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         }
     }
 
@@ -469,243 +280,183 @@ mod build_tests {
         }
     }
 
-    #[test]
-    fn no_groups_no_annotations() {
-        let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let line = make_line(vec![make_run(n, "abc", 0.0, 30.0, 16.0)]);
-        let mut offsets = vec![0usize; 0];
-        let out = build_ruby_annotations_for_line(&line, 100.0, &[], &mut offsets, &mut res);
-        assert!(out.is_empty());
+    fn group(text: &str, offset_range: Range<usize>, total_base_chars: usize) -> RubyGroup {
+        RubyGroup {
+            text: text.to_string(),
+            offset_range,
+            total_base_chars,
+        }
     }
 
     #[test]
     fn single_ruby_centers_over_base() {
         let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "ru".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 2,
-        };
-        let line = make_line(vec![make_run(n, "AB", 20.0, 20.0, 16.0)]);
+        let line = make_line(vec![make_run(0..2, "AB", 20.0, 20.0, 16.0)]);
+        let groups = vec![group("ru", 0..2, 2)];
         let mut offsets = vec![0usize; 1];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
         assert_eq!(out.len(), 1);
         let ann = &out[0];
-        // center: 20 + (20 - ruby_width)/2. ruby_width > 0 so ann.x lands inside the base span.
-        assert!(ann.x >= 20.0 - ann.width);
-        assert!(ann.x + ann.width <= 40.0 + ann.width);
-        assert!(ann.font_size < 16.0); // RUBY_FONT_SIZE_RATIO applied
+        // exact centering formula (codex hardening #3): base_min_x=20, base_width=20, line_width=200.
+        let expected_x = (20.0 + (20.0 - ann.width) / 2.0).clamp(0.0, (200.0 - ann.width).max(0.0));
+        assert!(
+            (ann.x - expected_x).abs() < 0.01,
+            "ruby_x must equal the exact centering/clamp formula"
+        );
+        assert!(ann.font_size < 16.0); // RATIO applied → smaller than base 16px
     }
 
     #[test]
-    fn ruby_clamps_to_line_left_edge() {
+    fn no_groups_or_empty_line_no_annotations() {
         let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "very_long_ruby".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 1,
-        };
-        // base sits at the left edge (x=0, width=4); ruby is much wider than the base.
-        let line = make_line(vec![make_run(n, "A", 0.0, 4.0, 16.0)]);
+        let line = make_line(vec![make_run(0..1, "a", 0.0, 10.0, 16.0)]);
+        let mut offsets: Vec<usize> = vec![];
+        assert!(build_ruby_annotations(&line, 100.0, &[], &mut offsets, &mut res).is_empty());
+        let empty = make_line(vec![]);
+        let groups = vec![group("x", 0..1, 1)];
         let mut offsets = vec![0usize; 1];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
-        assert_eq!(out.len(), 1);
-        assert!(out[0].x >= 0.0);
+        assert!(build_ruby_annotations(&empty, 100.0, &groups, &mut offsets, &mut res).is_empty());
     }
 
     #[test]
-    fn ruby_clamps_to_line_right_edge() {
+    fn run_outside_any_group_is_skipped() {
+        // glyph run at offset 5..6 is not contained in the group's 0..2 → not annotated,
+        // and a skipped run must NOT advance group_offsets (codex hardening #2).
         let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "very_long_ruby".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 1,
-        };
-        let line = make_line(vec![make_run(n, "A", 196.0, 4.0, 16.0)]);
+        let line = make_line(vec![make_run(5..6, "a", 0.0, 10.0, 16.0)]);
+        let groups = vec![group("x", 0..2, 2)];
         let mut offsets = vec![0usize; 1];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
+        assert!(build_ruby_annotations(&line, 100.0, &groups, &mut offsets, &mut res).is_empty());
+        assert_eq!(
+            offsets[0], 0,
+            "a skipped (non-contained) run must not consume base chars"
+        );
+    }
+
+    #[test]
+    fn partial_overlap_run_is_not_grouped() {
+        // A run that overlaps a group on ONE side only (run 1..3 vs group 0..2) must NOT match —
+        // the lookup is CONTAINMENT (run ⊆ group), not overlap. (codex hardening #1: distinguishes
+        // the containment predicate from a looser overlap predicate that would false-pass.)
+        let mut res = Resource::new_test();
+        let line = make_line(vec![make_run(1..3, "ab", 0.0, 20.0, 16.0)]);
+        let groups = vec![group("x", 0..2, 2)];
+        let mut offsets = vec![0usize; 1];
+        let out = build_ruby_annotations(&line, 100.0, &groups, &mut offsets, &mut res);
+        assert!(
+            out.is_empty(),
+            "run 1..3 is not ⊆ group 0..2 → must not be annotated"
+        );
+        assert_eq!(offsets[0], 0);
+    }
+
+    #[test]
+    fn consecutive_runs_same_group_merge_to_one_annotation() {
+        // two glyph runs both ⊆ the single group's 0..2 → ONE annotation spanning both.
+        let mut res = Resource::new_test();
+        let line = make_line(vec![
+            make_run(0..1, "A", 0.0, 16.0, 16.0),
+            make_run(1..2, "B", 16.0, 16.0, 16.0),
+        ]);
+        let groups = vec![group("ru", 0..2, 2)];
+        let mut offsets = vec![0usize; 1];
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
         assert_eq!(out.len(), 1);
-        assert!(out[0].x + out[0].width <= 200.0 + 0.01);
     }
 
     #[test]
     fn two_groups_two_annotations() {
         let mut res = Resource::new_test();
-        let n1 = NodeId::new();
-        let n2 = NodeId::new();
-        let groups = vec![
-            RubyGroup {
-                text: "a".to_string(),
-                node_ids: smallvec::smallvec![n1],
-                total_base_chars: 1,
-            },
-            RubyGroup {
-                text: "b".to_string(),
-                node_ids: smallvec::smallvec![n2],
-                total_base_chars: 1,
-            },
-        ];
         let line = make_line(vec![
-            make_run(n1, "A", 0.0, 16.0, 16.0),
-            make_run(n2, "B", 16.0, 16.0, 16.0),
+            make_run(0..1, "A", 0.0, 16.0, 16.0),
+            make_run(1..2, "B", 16.0, 16.0, 16.0),
         ]);
-        let mut offsets = vec![0usize; groups.len()];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &groups, &mut offsets, &mut res);
+        let groups = vec![group("a", 0..1, 1), group("b", 1..2, 1)];
+        let mut offsets = vec![0usize; 2];
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
         assert_eq!(out.len(), 2);
     }
 
     #[test]
-    fn wrap_distribution_partial_share() {
+    fn ruby_clamps_to_line_edges() {
         let mut res = Resource::new_test();
-        let n = NodeId::new();
-        // The group spans 4 chars total; this line occupies only 2 of them.
-        let group = RubyGroup {
-            text: "abcd".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 4,
-        };
-        let line = make_line(vec![make_run(n, "AB", 0.0, 32.0, 16.0)]);
+        // base at left edge, ruby much wider → clamped to x >= 0
+        let left = make_line(vec![make_run(0..1, "A", 0.0, 4.0, 16.0)]);
+        let groups = vec![group("very_long_ruby", 0..1, 1)];
         let mut offsets = vec![0usize; 1];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
+        let out = build_ruby_annotations(&left, 200.0, &groups, &mut offsets, &mut res);
         assert_eq!(out.len(), 1);
-        // Exact slice correctness is verified by integration tests; here we only check non-emptiness.
-        assert!(out[0].width > 0.0);
+        assert!(out[0].x >= 0.0);
+        // base near right edge → clamped so x + width <= line_width
+        let right = make_line(vec![make_run(0..1, "A", 196.0, 4.0, 16.0)]);
+        let mut offsets = vec![0usize; 1];
+        let out = build_ruby_annotations(&right, 200.0, &groups, &mut offsets, &mut res);
+        assert!(out[0].x + out[0].width <= 200.0 + 0.01);
     }
 
     #[test]
-    fn shared_baseline_across_two_annotations() {
+    fn wrap_distribution_accumulates_across_calls() {
+        // group spans 4 base chars; two lines each cover 2 chars (two calls share group_offsets).
         let mut res = Resource::new_test();
-        let n1 = NodeId::new();
-        let n2 = NodeId::new();
-        let groups = vec![
-            RubyGroup {
-                text: "x".to_string(),
-                node_ids: smallvec::smallvec![n1],
-                total_base_chars: 1,
-            },
-            RubyGroup {
-                text: "y".to_string(),
-                node_ids: smallvec::smallvec![n2],
-                total_base_chars: 1,
-            },
-        ];
+        let groups = vec![group("abcd", 0..4, 4)];
+        let mut offsets = vec![0usize; 1];
+        let line_a = make_line(vec![make_run(0..2, "AB", 0.0, 32.0, 16.0)]);
+        let out_a = build_ruby_annotations(&line_a, 200.0, &groups, &mut offsets, &mut res);
+        assert_eq!(offsets[0], 2, "first line consumes 2 base chars");
+        assert_eq!(out_a.len(), 1);
+        let line_b = make_line(vec![make_run(2..4, "CD", 0.0, 32.0, 16.0)]);
+        let out_b = build_ruby_annotations(&line_b, 200.0, &groups, &mut offsets, &mut res);
+        assert_eq!(offsets[0], 4, "second line consumes 2 more (total 4)");
+        assert_eq!(out_b.len(), 1);
+    }
+
+    #[test]
+    fn ruby_font_size_floor_and_ratio() {
+        let mut res = Resource::new_test();
+        // base 16 * 0.5 = 8 < 12 floor → clamps to RUBY_FONT_SIZE_MIN_PX (12)
+        let line = make_line(vec![make_run(0..1, "A", 0.0, 16.0, 16.0)]);
+        let groups = vec![group("x", 0..1, 1)];
+        let mut offsets = vec![0usize; 1];
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
+        assert!((out[0].font_size - RUBY_FONT_SIZE_MIN_PX).abs() < 0.01);
+        // base 32 * 0.5 = 16 > 12 floor → ratio wins (16)
+        let line = make_line(vec![make_run(0..1, "A", 0.0, 32.0, 32.0)]);
+        let mut offsets = vec![0usize; 1];
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
+        assert!((out[0].font_size - 16.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn two_annotations_share_baseline() {
+        let mut res = Resource::new_test();
         let line = make_line(vec![
-            make_run(n1, "A", 0.0, 16.0, 16.0),
-            // larger font_size on the second run means different ruby_font_size, making baseline alignment meaningful to verify.
-            make_run(n2, "B", 16.0, 16.0, 24.0),
+            make_run(0..1, "A", 0.0, 16.0, 16.0),
+            make_run(1..2, "B", 16.0, 16.0, 24.0), // different font size
         ]);
-        let mut offsets = vec![0usize; groups.len()];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &groups, &mut offsets, &mut res);
+        let groups = vec![group("x", 0..1, 1), group("y", 1..2, 1)];
+        let mut offsets = vec![0usize; 2];
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
         assert_eq!(out.len(), 2);
         assert!((out[0].baseline_y - out[1].baseline_y).abs() < 0.01);
     }
 
     #[test]
-    fn group_offsets_accumulates_across_calls() {
-        let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "abcd".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 4,
-        };
-        let line_a = make_line(vec![make_run(n, "AB", 0.0, 32.0, 16.0)]);
-        let line_b = make_line(vec![make_run(n, "CD", 0.0, 32.0, 16.0)]);
-
-        let mut offsets = vec![0usize];
-        let out_a = build_ruby_annotations_for_line(
-            &line_a,
-            200.0,
-            std::slice::from_ref(&group),
-            &mut offsets,
-            &mut res,
-        );
-        assert_eq!(
-            offsets[0], 2,
-            "accumulated offset after first line consumes 2 chars must be 2"
-        );
-        assert_eq!(out_a.len(), 1);
-
-        let out_b =
-            build_ruby_annotations_for_line(&line_b, 200.0, &[group], &mut offsets, &mut res);
-        assert_eq!(
-            offsets[0], 4,
-            "accumulated offset after second line consumes 2 more chars must be 4"
-        );
-        assert_eq!(out_b.len(), 1);
-    }
-
-    #[test]
     fn ruby_descent_bottom_exactly_ruby_gap_above_base_ascent_top() {
+        // pins baseline_y = (line.baseline - line.ascent) - RUBY_GAP - max_descent.
         let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "x".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 1,
-        };
-        // make_line defaults: baseline=13.0, ascent=13.0, so base_ascent_top = 0.0.
-        let line = make_line(vec![make_run(n, "A", 0.0, 16.0, 16.0)]);
-        let mut offsets = vec![0usize];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
+        // make_line defaults baseline=13, ascent=13 → base_ascent_top = 0.
+        let line = make_line(vec![make_run(0..1, "A", 0.0, 16.0, 16.0)]);
+        let groups = vec![group("x", 0..1, 1)];
+        let mut offsets = vec![0usize; 1];
+        let out = build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut res);
         assert_eq!(out.len(), 1);
         let ann = &out[0];
-
         let base_ascent_top = line.baseline - line.ascent;
         let ruby_descent_bottom = ann.baseline_y + ann.descent;
         let gap = base_ascent_top - ruby_descent_bottom;
-
         assert!(
             (gap - RUBY_GAP).abs() < 0.01,
-            "gap between ruby descent bottom and base ascent top must equal RUBY_GAP (gap={}, RUBY_GAP={})",
-            gap,
-            RUBY_GAP
-        );
-    }
-
-    #[test]
-    fn ruby_font_size_respects_minimum_floor() {
-        let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "x".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 1,
-        };
-        // base 16px * 0.5 = 8px would fall below the 12px floor.
-        let line = make_line(vec![make_run(n, "A", 0.0, 16.0, 16.0)]);
-        let mut offsets = vec![0usize];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
-        assert_eq!(out.len(), 1);
-        assert!(
-            (out[0].font_size - RUBY_FONT_SIZE_MIN_PX).abs() < 0.01,
-            "ruby font_size must clamp to RUBY_FONT_SIZE_MIN_PX when base * ratio is smaller (got {})",
-            out[0].font_size
-        );
-    }
-
-    #[test]
-    fn ruby_font_size_uses_ratio_when_above_floor() {
-        let mut res = Resource::new_test();
-        let n = NodeId::new();
-        let group = RubyGroup {
-            text: "x".to_string(),
-            node_ids: smallvec::smallvec![n],
-            total_base_chars: 1,
-        };
-        // base 32px * 0.5 = 16px stays above the 12px floor; ratio wins.
-        let line = make_line(vec![make_run(n, "A", 0.0, 32.0, 32.0)]);
-        let mut offsets = vec![0usize];
-        let out = build_ruby_annotations_for_line(&line, 200.0, &[group], &mut offsets, &mut res);
-        assert_eq!(out.len(), 1);
-        assert!(
-            (out[0].font_size - 16.0).abs() < 0.01,
-            "ruby font_size must follow ratio when above floor (got {})",
-            out[0].font_size
+            "gap {gap} must equal RUBY_GAP {RUBY_GAP}"
         );
     }
 }

@@ -182,6 +182,14 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
     let is_text = node_type == "text";
 
     if is_text {
+        if let Some(label) = &binding {
+            return Err(syn::Error::new(
+                label.span(),
+                "text() has no projected identity in the eg-walker model and cannot be labeled; \
+                 label the enclosing block instead (e.g. `p1: paragraph { text(...) }`) and use a \
+                 block-relative offset",
+            ));
+        }
         let text = parse_text_content(input)?;
         let style = parse_optional_style(input)?;
         let modifiers = if input.peek(token::Bracket) {

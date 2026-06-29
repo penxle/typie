@@ -1,5 +1,3 @@
-use editor_model::NodeId;
-
 pub type FontId = u16;
 
 #[derive(Debug, Clone, Copy)]
@@ -38,12 +36,14 @@ pub struct GlyphRun {
     pub glyphs: Vec<Glyph>,
     pub decoration: TextDecoration,
 
-    pub node_id: NodeId,
-    pub offset: usize,
+    pub offset_range: std::ops::Range<usize>,
+    pub link: Option<String>,
     pub text: String,
     pub x: f32,
     pub width: f32,
     pub graphemes: Vec<GraphemeSpan>,
+    pub cursor_ascent: f32,
+    pub cursor_descent: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -64,8 +64,7 @@ pub struct RubyAnnotation {
 #[cfg(test)]
 impl GlyphRun {
     pub fn make_test_run(
-        node_id: NodeId,
-        offset: usize,
+        offset_range: std::ops::Range<usize>,
         text: &str,
         x: f32,
         graphemes: Vec<GraphemeSpan>,
@@ -80,12 +79,14 @@ impl GlyphRun {
             background_color: None,
             glyphs: vec![],
             decoration: TextDecoration::default(),
-            node_id,
-            offset,
+            offset_range,
+            link: None,
             text: text.to_string(),
             x,
             width,
             graphemes,
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         }
     }
 }
@@ -93,11 +94,10 @@ impl GlyphRun {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_model::NodeId;
 
     #[test]
     fn make_test_run_defaults_decoration_to_false() {
-        let run = GlyphRun::make_test_run(NodeId::new(), 0, "hi", 0.0, vec![]);
+        let run = GlyphRun::make_test_run(0..0, "hi", 0.0, vec![]);
         assert!(!run.decoration.underline);
         assert!(!run.decoration.strikethrough);
     }

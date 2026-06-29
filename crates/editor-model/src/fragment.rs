@@ -1,4 +1,3 @@
-use crate::id::NodeId;
 use crate::modifier::Modifier;
 use crate::nodes::PlainNode;
 use crate::subtree::Subtree;
@@ -39,7 +38,6 @@ impl Fragment {
 
     pub fn into_subtree(self) -> Subtree {
         Subtree {
-            id: NodeId::new(),
             node: self.node,
             modifiers: self.modifiers,
             style: self.style,

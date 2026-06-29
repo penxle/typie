@@ -1,12 +1,45 @@
-use editor_model::{Doc, Node, NodeId};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, NodeType, NodeView};
+
+/// Dot of a child view (block id, or the leaf's char/atom dot).
+pub(crate) fn child_elem_id(child: &ChildView) -> Dot {
+    match child {
+        ChildView::Block(b) => b.id(),
+        ChildView::Leaf(l) => l.dot(),
+    }
+}
+
+/// Node type of a child view.
+pub(crate) fn child_node_type(child: &ChildView) -> NodeType {
+    match child {
+        ChildView::Block(b) => b.node_type(),
+        ChildView::Leaf(l) => l.node_type(),
+    }
+}
+
+/// Previous sibling (block or leaf) of `node`, if any.
+pub(crate) fn prev_sibling<'a>(node: &NodeView<'a>) -> Option<ChildView<'a>> {
+    let parent = node.parent()?;
+    let index = node.index()?;
+    if index == 0 {
+        return None;
+    }
+    parent.child_at(index - 1)
+}
+
+/// Next sibling (block or leaf) of `node`, if any.
+pub(crate) fn next_sibling<'a>(node: &NodeView<'a>) -> Option<ChildView<'a>> {
+    let parent = node.parent()?;
+    let index = node.index()?;
+    parent.child_at(index + 1)
+}
 
 /// Find the lowest common ancestor of two nodes.
-pub(crate) fn find_lowest_common_ancestor(doc: &Doc, a: NodeId, b: NodeId) -> Option<NodeId> {
-    let ancestors_a: Vec<NodeId> = doc.node(a)?.ancestors().map(|n| n.id()).collect();
-    let ancestors_b: Vec<NodeId> = doc.node(b)?.ancestors().map(|n| n.id()).collect();
+pub(crate) fn find_lowest_common_ancestor(view: &DocView, a: Dot, b: Dot) -> Option<Dot> {
+    let ancestors_a: Vec<Dot> = view.node(a)?.ancestors().map(|n| n.id()).collect();
+    let ancestors_b: Vec<Dot> = view.node(b)?.ancestors().map(|n| n.id()).collect();
 
     let mut lca = None;
-
     for (la, lb) in ancestors_a.iter().rev().zip(ancestors_b.iter().rev()) {
         if la == lb {
             lca = Some(*la);
@@ -14,28 +47,23 @@ pub(crate) fn find_lowest_common_ancestor(doc: &Doc, a: NodeId, b: NodeId) -> Op
             break;
         }
     }
-
     lca
 }
 
-/// Compute the index path from `ancestor_id` down to `node_id`.
-/// Returns None if `node_id` is not a descendant of `ancestor_id`.
-pub(crate) fn path_from_ancestor(
-    doc: &Doc,
-    node_id: NodeId,
-    ancestor_id: NodeId,
-) -> Option<Vec<usize>> {
-    if node_id == ancestor_id {
+/// Compute the index path from `ancestor` down to `node`.
+/// Returns None if `node` is not a descendant of `ancestor`.
+pub(crate) fn path_from_ancestor(view: &DocView, node: Dot, ancestor: Dot) -> Option<Vec<usize>> {
+    if node == ancestor {
         return Some(Vec::new());
     }
     let mut path = Vec::new();
-    let mut current = node_id;
+    let mut current = node;
     loop {
-        let node = doc.node(current)?;
-        let idx = node.index()?;
+        let nv = view.node(current)?;
+        let idx = nv.index()?;
         path.push(idx);
-        let parent_id = node.parent()?.id();
-        if parent_id == ancestor_id {
+        let parent_id = nv.parent()?.id();
+        if parent_id == ancestor {
             path.reverse();
             return Some(path);
         }
@@ -44,113 +72,20 @@ pub(crate) fn path_from_ancestor(
 }
 
 /// Find the nearest textblock ancestor (node whose content is all-inline).
-pub(crate) fn find_ancestor_textblock(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
-    let mut current = node_id;
+pub(crate) fn find_ancestor_textblock(view: &DocView, node: Dot) -> Option<Dot> {
+    let mut current = node;
     loop {
-        let node = doc.node(current)?;
-        if node.spec().is_textblock() {
+        let nv = view.node(current)?;
+        if nv.spec().is_textblock() {
             return Some(current);
         }
-        current = node.parent()?.id();
+        current = nv.parent()?.id();
     }
 }
 
-/// True when the node is a block-level container — a non-text, non-textblock node
-/// that holds block-level children (e.g. the doc root, blockquote, list_item).
-pub(crate) fn is_block_container(node: &Node) -> bool {
-    !matches!(node, Node::Text(_)) && !node.spec().is_textblock()
-}
-
-#[cfg(test)]
-mod tests {
-    use editor_macros::doc;
-    use editor_model::NodeId;
-
-    use super::*;
-
-    #[test]
-    fn lca_of_siblings_is_parent() {
-        let (doc, p1, p2) = doc! {
-            root {
-                p1: paragraph { text("Hello") }
-                p2: paragraph { text("World") }
-            }
-        };
-        assert_eq!(
-            find_lowest_common_ancestor(&doc, p1, p2),
-            Some(NodeId::ROOT)
-        );
-    }
-
-    #[test]
-    fn lca_of_cousins() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("Hello") }
-                paragraph { t2: text("World") }
-            }
-        };
-        assert_eq!(
-            find_lowest_common_ancestor(&doc, t1, t2),
-            Some(NodeId::ROOT)
-        );
-    }
-
-    #[test]
-    fn textblock_of_text_node_is_paragraph() {
-        let (doc, p, t) = doc! {
-            root {
-                p: paragraph { t: text("Hello") }
-            }
-        };
-        assert_eq!(find_ancestor_textblock(&doc, t), Some(p));
-    }
-
-    #[test]
-    fn textblock_of_paragraph_is_itself() {
-        let (doc, p) = doc! {
-            root {
-                p: paragraph { text("Hello") }
-            }
-        };
-        assert_eq!(find_ancestor_textblock(&doc, p), Some(p));
-    }
-
-    #[test]
-    fn path_from_ancestor_same_node() {
-        let (doc,) = doc! {
-            root { paragraph { text("Hello") } }
-        };
-        assert_eq!(
-            path_from_ancestor(&doc, NodeId::ROOT, NodeId::ROOT),
-            Some(vec![])
-        );
-    }
-
-    #[test]
-    fn path_from_ancestor_direct_child() {
-        let (doc, p) = doc! {
-            root { p: paragraph { text("Hello") } }
-        };
-        assert_eq!(path_from_ancestor(&doc, p, NodeId::ROOT), Some(vec![0]));
-    }
-
-    #[test]
-    fn path_from_ancestor_grandchild() {
-        let (doc, t) = doc! {
-            root { paragraph { t: text("Hello") } }
-        };
-        assert_eq!(path_from_ancestor(&doc, t, NodeId::ROOT), Some(vec![0, 0]));
-    }
-
-    #[test]
-    fn path_from_ancestor_second_branch() {
-        let (doc, _, t2) = doc! {
-            root {
-                paragraph { _t1: text("Hello") }
-                paragraph { t2: text("World") }
-            }
-        };
-        assert_eq!(path_from_ancestor(&doc, t2, NodeId::ROOT), Some(vec![1, 0]));
-    }
+/// True when the node is a block-level container — a non-textblock node that
+/// holds block-level children (e.g. the doc root, blockquote, list_item).
+pub(crate) fn is_block_container(node: &NodeView) -> bool {
+    let spec = node.spec();
+    !spec.is_leaf() && !spec.is_textblock()
 }

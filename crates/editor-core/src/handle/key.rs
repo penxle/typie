@@ -11,13 +11,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
     let resource = Arc::clone(&editor.resource);
     let resource = resource.lock().unwrap();
 
-    if matches!(event.key, Key::Backspace)
-        && let Some(playback) = editor.try_undo_auto_replacement()
-    {
-        editor.transact(|tr| {
-            super::history::apply_history_playback(tr, &playback)?;
-            Ok(())
-        })?;
+    if matches!(event.key, Key::Backspace) && editor.try_undo_auto_replacement() {
         return Ok(());
     }
 
@@ -104,7 +98,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             (Key::Escape, _) => {
                 if let Some(current) = tr.selection() {
                     let collapsed = Selection::collapsed(current.head);
-                    let normalized = collapsed.normalize(&tr.state().doc).unwrap_or(collapsed);
+                    let normalized = collapsed.normalize(&tr.view()).unwrap_or(collapsed);
                     // Unit selections re-normalize to the direction-flipped form;
                     // an anchor/head swap brackets the same content.
                     let unchanged = normalized == current
@@ -124,8 +118,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::assert_doc_eq;
-    use editor_state::assert_state_eq;
+    use editor_state::{assert_doc_eq, assert_state_eq};
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
@@ -133,8 +126,8 @@ mod tests {
     #[test]
     fn probe_backspace_at_boundary() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         assert_probe_predicts_apply(
             state,
@@ -202,14 +195,14 @@ mod tests {
     #[test]
     fn enter_splits_paragraph() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Enter));
         let (expected, ..) = state! {
-            doc { root { paragraph { text("hel") } paragraph { t1: text("lo") } } }
-            selection: (t1, 0)
+            doc { root { paragraph { text("hel") } p2: paragraph { text("lo") } } }
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -217,14 +210,14 @@ mod tests {
     #[test]
     fn shift_enter_inserts_hard_break() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key_shift(Key::Enter));
         let (expected, ..) = state! {
-            doc { root { paragraph { text("hel") hard_break {} t1: text("lo") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hel") hard_break {} text("lo") } } }
+            selection: (p1, 4)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -282,11 +275,11 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("11") }
-                    paragraph { t2: text("22") }
+                    p1: paragraph { text("11") }
+                    p2: paragraph { text("22") }
                 }
             }
-            selection: (t1, 1, >) -> (t2, 1, <)
+            selection: (p1, 1, >) -> (p2, 1, <)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -302,11 +295,11 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("abc") }
-                    paragraph { t2: text("def") }
+                    p1: paragraph { text("abc") }
+                    p2: paragraph { text("def") }
                 }
             }
-            selection: (t1, 2, >) -> (t2, 2, <)
+            selection: (p1, 2, >) -> (p2, 2, <)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -321,9 +314,9 @@ mod tests {
     fn undo_after_redeleting_restored_text_restores_cursor_after_restored_text() {
         let (state, ..) = state! {
             doc {
-                root { paragraph { t: text("aabb") } }
+                root { p1: paragraph { text("aabb") } }
             }
-            selection: (t, 2) -> (t, 4)
+            selection: (p1, 2) -> (p1, 4)
         };
         let after_restore = state.clone();
         let mut editor = Editor::new_test(state);
@@ -344,9 +337,9 @@ mod tests {
         });
         let (collapsed_after_restore, ..) = state! {
             doc {
-                root { paragraph { t: text("aabb") } }
+                root { p1: paragraph { text("aabb") } }
             }
-            selection: (t, 4)
+            selection: (p1, 4)
         };
         assert_state_eq!(editor.state(), &collapsed_after_restore);
 
@@ -358,9 +351,9 @@ mod tests {
 
         let (expected, ..) = state! {
             doc {
-                root { paragraph { t: text("aabb") } }
+                root { p1: paragraph { text("aabb") } }
             }
-            selection: (t, 4)
+            selection: (p1, 4)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -370,12 +363,12 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    callout { paragraph { t1: text("1") } }
-                    callout { paragraph { t2: text("2") } }
+                    callout { p1: paragraph { text("1") } }
+                    callout { p2: paragraph { text("2") } }
                     paragraph {}
                 }
             }
-            selection: (t1, 1, >) -> (t2, 1, <)
+            selection: (p1, 1, >) -> (p2, 1, <)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -391,12 +384,12 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t1: text("a") } }
-                    blockquote { paragraph { t2: text("b") } }
+                    blockquote { p1: paragraph { text("a") } }
+                    blockquote { p2: paragraph { text("b") } }
                     paragraph {}
                 }
             }
-            selection: (t1, 1, >) -> (t2, 1, <)
+            selection: (p1, 1, >) -> (p2, 1, <)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -414,12 +407,12 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("a") } }
-                        list_item { paragraph { t2: text("b") } }
+                        list_item { p1: paragraph { text("b") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p1, 0)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -436,13 +429,13 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("a") } }
+                        list_item { p1: paragraph { text("a") } }
                         list_item { paragraph { text("b") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -458,12 +451,12 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    p1: paragraph { text("a") }
                     callout { paragraph { text("b") } }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         let initial = state.clone();
         let mut editor = Editor::new_test(state);
@@ -477,14 +470,14 @@ mod tests {
     #[test]
     fn backspace_deletes_text_backward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("helo") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("helo") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -494,17 +487,17 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("hello") }
-                    paragraph { t2: text("world") }
+                    p1: paragraph { text("hello") }
+                    p2: paragraph { text("world") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("helloworld") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("helloworld") } } }
+            selection: (p1, 5)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -512,14 +505,14 @@ mod tests {
     #[test]
     fn delete_deletes_text_forward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("helo") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("helo") } } }
+            selection: (p1, 3)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -639,10 +632,10 @@ mod tests {
             doc {
                 root {
                     paragraph { page_break }
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
@@ -650,10 +643,10 @@ mod tests {
             doc {
                 root {
                     paragraph {}
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -664,10 +657,10 @@ mod tests {
             doc {
                 root {
                     paragraph { page_break }
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
@@ -675,10 +668,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -692,18 +685,18 @@ mod tests {
                     paragraph { text("b") }
                 }
             }
-            selection: (p1, 2)
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    p1: paragraph { text("a") }
                     paragraph { text("b") }
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -725,10 +718,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("ab") }
+                    p1: paragraph { text("ab") }
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -738,11 +731,11 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("Hello") } } }
+                    bullet_list { list_item { p1: paragraph { text("Hello") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Enter));
@@ -750,7 +743,7 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                         list_item { p2: paragraph {} }
                     }
                     paragraph {}
@@ -796,13 +789,13 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
-                        list_item { paragraph { t2: text("World") } }
+                        list_item { p1: paragraph { text("Hello") } }
+                        list_item { p2: paragraph { text("World") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
@@ -810,12 +803,12 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("HelloWorld") } }
+                        list_item { p1: paragraph { text("HelloWorld") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -826,25 +819,25 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
+                        list_item { p1: paragraph { text("A") } }
                         list_item { paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                     bullet_list { list_item { paragraph { text("B") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -910,13 +903,13 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                         list_item { paragraph { text("World") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
@@ -924,12 +917,12 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("HelloWorld") } }
+                        list_item { p1: paragraph { text("HelloWorld") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -939,22 +932,22 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
                     paragraph { text("B") }
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("AB") } } }
+                    bullet_list { list_item { p1: paragraph { text("AB") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -966,12 +959,12 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Tab));
@@ -981,13 +974,13 @@ mod tests {
                     bullet_list {
                         list_item {
                             paragraph { text("A") }
-                            bullet_list { list_item { paragraph { t1: text("B") } } }
+                            bullet_list { list_item { p1: paragraph { text("B") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1000,13 +993,13 @@ mod tests {
                     bullet_list {
                         list_item {
                             paragraph { text("A") }
-                            bullet_list { list_item { paragraph { t1: text("B") } } }
+                            bullet_list { list_item { p1: paragraph { text("B") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key_shift(Key::Tab));
@@ -1015,12 +1008,12 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1028,14 +1021,14 @@ mod tests {
     #[test]
     fn tab_in_paragraph_inserts_tab() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Tab));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("He") tab t2: text("llo") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("He") tab text("llo") } } }
+            selection: (p1, 3)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1045,22 +1038,22 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Tab));
         let (expected, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1068,14 +1061,14 @@ mod tests {
     #[test]
     fn shift_tab_deletes_preceding_tab_in_paragraph() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("a") tab t2: text("b") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key_shift(Key::Tab));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("a") t2: text("b") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("a") text("b") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1086,11 +1079,11 @@ mod tests {
             doc { root {
                 bullet_list {
                     list_item { paragraph { text("A") } }
-                    list_item { paragraph { t1: text("B") } }
+                    list_item { p1: paragraph { text("B") } }
                 }
                 paragraph {}
             } }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Tab));
@@ -1099,12 +1092,12 @@ mod tests {
                 bullet_list {
                     list_item {
                         paragraph { text("A") }
-                        bullet_list { list_item { paragraph { t1: text("B") } } }
+                        bullet_list { list_item { p1: paragraph { text("B") } } }
                     }
                 }
                 paragraph {}
             } }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1113,19 +1106,19 @@ mod tests {
     fn tab_mid_list_item_inserts_tab() {
         let (state, ..) = state! {
             doc { root {
-                bullet_list { list_item { paragraph { t1: text("AB") } } }
+                bullet_list { list_item { p1: paragraph { text("AB") } } }
                 paragraph {}
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Tab));
         let (expected, ..) = state! {
             doc { root {
-                bullet_list { list_item { paragraph { t1: text("A") tab t2: text("B") } } }
+                bullet_list { list_item { p1: paragraph { text("A") tab text("B") } } }
                 paragraph {}
             } }
-            selection: (t2, 0)
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1137,14 +1130,14 @@ mod tests {
     #[test]
     fn backspace_over_hard_break_is_unaffected_by_unit_gate() {
         let (state, ..) = state! {
-            doc { root { paragraph { text("ab") hard_break t: text("cd") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("ab") hard_break text("cd") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root { paragraph { text("ab") t: text("cd") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("ab") text("cd") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1152,14 +1145,14 @@ mod tests {
     #[test]
     fn delete_over_hard_break_is_unaffected_by_unit_gate() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("ab") hard_break text("cd") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("ab") hard_break text("cd") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("ab") text("cd") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("ab") text("cd") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1167,14 +1160,14 @@ mod tests {
     #[test]
     fn backspace_over_tab_removes_it() {
         let (state, ..) = state! {
-            doc { root { paragraph { text("ab") tab t: text("cd") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("ab") tab text("cd") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root { paragraph { text("ab") t: text("cd") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("ab") text("cd") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1182,14 +1175,14 @@ mod tests {
     #[test]
     fn delete_over_tab_removes_it() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("ab") tab text("cd") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("ab") tab text("cd") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("ab") text("cd") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("ab") text("cd") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1237,7 +1230,7 @@ mod tests {
             } }
             selection: (r, 0, <)
         };
-        assert_doc_eq!(editor.state().doc, expected.doc);
+        assert_doc_eq!(editor.state().clone(), expected);
     }
 
     #[test]
@@ -1283,7 +1276,7 @@ mod tests {
             } }
             selection: (r, 1)
         };
-        assert_doc_eq!(editor.state().doc, expected.doc);
+        assert_doc_eq!(editor.state().clone(), expected);
     }
 
     #[test]
@@ -1326,10 +1319,10 @@ mod tests {
         editor.apply(key(Key::Backspace));
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("b") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("b") } } }
+            selection: (p1, 0)
         };
-        assert_doc_eq!(editor.state().doc, expected.doc);
+        assert_doc_eq!(editor.state().clone(), expected);
     }
 
     #[test]
@@ -1342,23 +1335,23 @@ mod tests {
         editor.apply(key(Key::Delete));
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("b") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("b") } } }
+            selection: (p1, 0)
         };
-        assert_doc_eq!(editor.state().doc, expected.doc);
+        assert_doc_eq!(editor.state().clone(), expected);
     }
 
     #[test]
     fn escape_collapses_text_range_to_head() {
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 1) -> (t, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Escape));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 4)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1366,8 +1359,8 @@ mod tests {
     #[test]
     fn escape_on_collapsed_caret_clears_selection() {
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Escape));

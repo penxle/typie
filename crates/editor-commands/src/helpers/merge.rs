@@ -1,54 +1,75 @@
-use editor_model::{Node, NodeId};
+use editor_crdt::Dot;
+use editor_model::NodeView;
 use editor_transaction::Transaction;
 
 use crate::CommandError;
 
-/// Merge `source`'s children into `target` (appended at the end) and remove
-/// `source`. Same net effect as `Transaction::merge_node`, but composed from
-/// `MoveNode` + `RemoveSubtree` so the operation is properly invertible when
-/// source and target live in different parents.
+fn next_block_sibling_id(parent: &NodeView, target_id: Dot) -> Option<Dot> {
+    let idx = parent.child_blocks().position(|b| b.id() == target_id)?;
+    parent.child_blocks().nth(idx + 1).map(|b| b.id())
+}
+
+/// Merge `source`'s inline content into `target` (appended at the end) and
+/// remove `source`.
 ///
-/// `Step::MergeNode`'s inverse `Step::SplitNode` reconstructs the source as a
-/// sibling of `target`. When source originally lived in a different parent,
-/// that reconstruction places it in the wrong container, leaving source's
-/// original parent empty and tripping a content-validation panic at undo time.
-/// `MoveNode` records `old_parent`/`old_index`, so each moved child finds its
-/// way home; `RemoveSubtree` captures the source subtree for `InsertSubtree`
-/// inverse.
+/// When `target`'s container accepts `source` as an adjacent sibling (e.g. a
+/// `Root`/`Blockquote`/`Callout` that allows several paragraphs), `source` is
+/// moved to sit right after `target` and folded in with `merge_node`, which
+/// keeps the inline leaves (and their span formatting) intact.
 ///
-/// For element nodes only — text-content merges are always same-parent and
-/// stay on the `merge_node` path.
+/// Single-slot containers (a `ListItem` holds exactly one paragraph) reject the
+/// extra sibling: projection normalization drops it again, so the move cannot
+/// land. In that case `source`'s inline text is appended to `target` and the
+/// `source` subtree is removed.
 pub(crate) fn merge_element_cross_parent(
     tr: &mut Transaction,
-    source_id: NodeId,
-    target_id: NodeId,
+    source_id: Dot,
+    target_id: Dot,
 ) -> Result<(), CommandError> {
-    let (child_ids, target_len) = {
-        let doc = tr.doc();
-        let source = doc
-            .node(source_id)
-            .ok_or(CommandError::NodeNotFound(source_id))?;
-        let target = doc
+    let (target_parent, target_index, orig_next) = {
+        let view = tr.state().view();
+        let target = view
             .node(target_id)
             .ok_or(CommandError::NodeNotFound(target_id))?;
-        // Text nodes hold characters, not child slots; a `move_node` loop over
-        // an empty `children` list would silently drop the text along with the
-        // `remove_subtree` below. Same-parent text concatenation already runs
-        // through `merge_node`'s text path, so this helper only needs to refuse
-        // the wrong-input case rather than handle it.
-        if matches!(source.node(), Node::Text(_)) {
-            return Err(CommandError::ExpectedElementNode(source_id));
-        }
-        if matches!(target.node(), Node::Text(_)) {
-            return Err(CommandError::ExpectedElementNode(target_id));
-        }
-        let child_ids: Vec<NodeId> = source.entry().children.iter().copied().collect();
-        let target_len = target.entry().children.len();
-        (child_ids, target_len)
+        let parent = target.parent().ok_or(CommandError::NoParent(target_id))?;
+        let parent_id = parent.id();
+        let index = target
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(target_id, parent_id))?;
+        let next = next_block_sibling_id(&parent, target_id);
+        (parent_id, index, next)
     };
 
-    for (i, child_id) in child_ids.into_iter().enumerate() {
-        tr.move_node(child_id, target_id, target_len + i)?;
+    let sp = tr.savepoint();
+    tr.move_node(source_id, target_parent, target_index + 1)?;
+
+    let new_next = {
+        let view = tr.state().view();
+        view.node(target_parent)
+            .and_then(|p| next_block_sibling_id(&p, target_id))
+    };
+
+    if new_next.is_some() && new_next != orig_next {
+        tr.merge_node(target_id)?;
+        return Ok(());
+    }
+
+    tr.rollback(sp);
+
+    let text = {
+        let view = tr.state().view();
+        view.node(source_id)
+            .map(|s| s.inline_text())
+            .unwrap_or_default()
+    };
+    let target_len = {
+        let view = tr.state().view();
+        view.node(target_id)
+            .map(|t| t.children().count())
+            .ok_or(CommandError::NodeNotFound(target_id))?
+    };
+    if !text.is_empty() {
+        tr.insert_text(target_id, target_len, &text)?;
     }
     tr.remove_subtree(source_id)?;
     Ok(())

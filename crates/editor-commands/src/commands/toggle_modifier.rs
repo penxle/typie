@@ -1,11 +1,11 @@
-use editor_model::{Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, Position, resolve_effective_modifiers_at};
+use editor_common::Tri;
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, Modifier, ModifierState, ModifierType};
+use editor_state::ResolvedSelection;
+use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 use editor_transaction::Transaction;
 
-use crate::helpers::{
-    check_range_all_has_modifier, collect_text_nodes_in_range, compact_textblocks_for_nodes,
-    filter_applicable_node_ids,
-};
 use crate::{CommandError, CommandResult};
 
 fn modifier_from_unit_type(modifier_type: ModifierType) -> Result<Modifier, CommandError> {
@@ -19,54 +19,65 @@ fn modifier_from_unit_type(modifier_type: ModifierType) -> Result<Modifier, Comm
     }
 }
 
+fn range_has_modifier(ms: &ModifierState, ty: ModifierType) -> bool {
+    matches!(
+        match ty {
+            ModifierType::Italic => &ms.italic,
+            ModifierType::Underline => &ms.underline,
+            ModifierType::Strikethrough => &ms.strikethrough,
+            _ => return false,
+        },
+        Tri::Uniform { .. }
+    )
+}
+
+fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
+    let from = rs.from();
+    let to = rs.to();
+
+    let from_child = view.node(from.node())?.child_at(from.offset())?;
+    let first = match from_child {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(b) => b.dot()?,
+    };
+
+    let to_off = to.offset().checked_sub(1)?;
+    let to_child = view.node(to.node())?.child_at(to_off)?;
+    let last = match to_child {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(b) => b.dot()?,
+    };
+
+    Some((first, last))
+}
+
 pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> CommandResult {
     let modifier = modifier_from_unit_type(modifier_type)?;
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
 
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         return toggle_modifier_collapsed(tr, modifier_type, &modifier);
     }
 
-    let doc = tr.doc();
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
-
-    let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
-    let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, modifier_type);
-
-    if applicable_node_ids.is_empty() {
-        return Ok(false);
-    }
-
-    let doc = tr.doc();
-    let nodes: Vec<_> = applicable_node_ids
-        .iter()
-        .filter_map(|id| doc.node(*id))
-        .collect();
-    let all_have = check_range_all_has_modifier(&nodes, modifier_type);
+    let (first, last, all_have) = {
+        let view = tr.view();
+        let rs = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let Some((first, last)) = span_dots(&view, &rs) else {
+            return Ok(false);
+        };
+        let ms = resolve_modifier_state_in_range(&rs);
+        (first, last, range_has_modifier(&ms, modifier_type))
+    };
 
     if all_have {
-        for &node_id in &applicable_node_ids {
-            tr.remove_modifier(node_id, modifier.clone())?;
-        }
+        tr.remove_span_modifier(first, last, modifier)?;
     } else {
-        for &node_id in &applicable_node_ids {
-            let doc = tr.doc();
-            let node = doc
-                .node(node_id)
-                .ok_or(CommandError::NodeNotFound(node_id))?;
-            if !node.modifiers().any(|m| m.as_type() == modifier_type) {
-                tr.add_modifier(node_id, modifier.clone())?;
-            }
-        }
+        tr.add_span_modifier(first, last, modifier)?;
     }
-
-    compact_textblocks_for_nodes(tr, &node_ids)?;
 
     Ok(true)
 }
@@ -76,15 +87,19 @@ fn toggle_modifier_collapsed(
     modifier_type: ModifierType,
     modifier: &Modifier,
 ) -> CommandResult {
-    let pos = tr
-        .selection()
-        .expect("entry caller guaranteed selection")
-        .head;
-    let doc = tr.doc();
-    doc.node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-    let effective = resolve_effective_modifiers_at(tr.state(), &pos);
-    let has_modifier = effective.iter().any(|m| m.as_type() == modifier_type);
+    let selection = tr.selection().expect("entry caller guaranteed selection");
+    let pos = selection.head;
+    {
+        let view = tr.view();
+        view.node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+    }
+
+    let has_modifier = {
+        let ms = resolve_modifier_state(&tr.state().projected, &selection, tr.pending_modifiers())
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        range_has_modifier(&ms, modifier_type)
+    };
 
     let mut pending: PendingModifiers = tr
         .pending_modifiers()
@@ -126,13 +141,13 @@ mod tests {
     #[test]
     fn collapsed_toggle_italic_on() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
             pending_modifiers: [italic]
         };
         assert_state_eq!(&actual, &expected);
@@ -141,13 +156,13 @@ mod tests {
     #[test]
     fn collapsed_toggle_italic_off() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [italic] } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") [italic] } } }
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [italic] } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") [italic] } } }
+            selection: (p1, 3)
             pending_modifiers: [!italic]
         };
         assert_state_eq!(&actual, &expected);
@@ -156,16 +171,16 @@ mod tests {
     #[test]
     fn collapsed_toggle_underline_on() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(
             &mut tr,
             ModifierType::Underline
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
             pending_modifiers: [underline]
         };
         assert_state_eq!(&actual, &expected);
@@ -174,16 +189,16 @@ mod tests {
     #[test]
     fn collapsed_toggle_strikethrough_on() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(
             &mut tr,
             ModifierType::Strikethrough
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
             pending_modifiers: [strikethrough]
         };
         assert_state_eq!(&actual, &expected);
@@ -192,8 +207,8 @@ mod tests {
     #[test]
     fn collapsed_toggle_bold_rejected() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let err = transact_err!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Bold));
         assert!(matches!(err, CommandError::InvalidArgument(_)));
@@ -202,8 +217,8 @@ mod tests {
     #[test]
     fn collapsed_toggle_preserves_other_pending() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
             pending_modifiers: [italic]
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(
@@ -211,8 +226,8 @@ mod tests {
             ModifierType::Underline
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
             pending_modifiers: [italic, underline]
         };
         assert_state_eq!(&actual, &expected);
@@ -221,18 +236,13 @@ mod tests {
     #[test]
     fn range_toggle_italic_on() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello")
-                t2: text("World")
-            } } }
-            selection: (t1, 0) -> (t2, 5)
+            doc { root { p1: paragraph { text("HelloWorld") } } }
+            selection: (p1, 0) -> (p1, 10)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("HelloWorld") [italic]
-            } } }
-            selection: (t1, 0) -> (t1, 10)
+            doc { root { p1: paragraph { text("HelloWorld") [italic] } } }
+            selection: (p1, 0) -> (p1, 10)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -240,18 +250,13 @@ mod tests {
     #[test]
     fn range_toggle_italic_off() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [italic]
-                t2: text("World") [italic]
-            } } }
-            selection: (t1, 0) -> (t2, 5)
+            doc { root { p1: paragraph { text("HelloWorld") [italic] } } }
+            selection: (p1, 0) -> (p1, 10)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("HelloWorld")
-            } } }
-            selection: (t1, 0) -> (t1, 10)
+            doc { root { p1: paragraph { text("HelloWorld") } } }
+            selection: (p1, 0) -> (p1, 10)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -259,193 +264,34 @@ mod tests {
     #[test]
     fn range_toggle_italic_mixed_turns_on() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [italic]
-                t2: text("World")
+            doc { root { p: paragraph {
+                text("Hello") [italic]
+                text("World")
             } } }
-            selection: (t1, 0) -> (t2, 5)
+            selection: (p, 0) -> (p, 10)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("HelloWorld") [italic]
-            } } }
-            selection: (t1, 0) -> (t1, 10)
+            doc { root { p: paragraph { text("HelloWorld") [italic] } } }
+            selection: (p, 0) -> (p, 10)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn range_toggle_italic_skips_fold_title_applies_to_paragraph() {
+    fn range_toggle_partial_selection_applies_span_to_substring() {
         let (initial, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") } }
-                }
-            } }
-            selection: (t1, 0) -> (t2, 4)
+            doc { root { p: paragraph { text("HelloWorld") } } }
+            selection: (p, 2) -> (p, 7)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") [italic] } }
-                }
-            } }
-            selection: (t1, 0) -> (t2, 4)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_underline_skips_fold_title_applies_to_paragraph() {
-        let (initial, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") } }
-                }
-            } }
-            selection: (t1, 0) -> (t2, 4)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_modifier(
-            &mut tr,
-            ModifierType::Underline
-        ));
-        let (expected, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") [underline] } }
-                }
-            } }
-            selection: (t1, 0) -> (t2, 4)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_strikethrough_skips_fold_title_applies_to_paragraph() {
-        let (initial, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") } }
-                }
-            } }
-            selection: (t1, 0) -> (t2, 4)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_modifier(
-            &mut tr,
-            ModifierType::Strikethrough
-        ));
-        let (expected, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") [strikethrough] } }
-                }
-            } }
-            selection: (t1, 0) -> (t2, 4)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_italic_on_fold_title_only_is_noop() {
-        let (initial, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { text("Body") } }
-                }
-            } }
-            selection: (t1, 0) -> (t1, 5)
-        };
-        let (actual, ..) =
-            transact_fail!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
-        let (expected, ..) = state! {
-            doc { root {
-                fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { text("Body") } }
-                }
-            } }
-            selection: (t1, 0) -> (t1, 5)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_italic_cell_bracket_across_rows_applies_to_all_cells() {
-        let (initial, tr1, tr2, ..) = state! {
-            doc {
-                root {
-                    table {
-                        tr1: table_row {
-                            table_cell { paragraph { text("1") } }
-                            table_cell { paragraph {} }
-                            table_cell { paragraph {} }
-                            table_cell { paragraph {} }
-                        }
-                        table_row {
-                            table_cell { paragraph {} }
-                            table_cell { paragraph {} }
-                            table_cell { paragraph {} }
-                            table_cell { paragraph {} }
-                        }
-                        tr2: table_row {
-                            table_cell { paragraph {} }
-                            table_cell { paragraph {} }
-                            table_cell { paragraph { text("1234") } }
-                            table_cell { paragraph {} }
-                        }
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (tr1, 0, >) -> (tr2, 4, <)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
-
-        let sel = actual.selection.as_ref().unwrap();
-        assert_eq!(sel.anchor.node_id, tr1);
-        assert_eq!(sel.anchor.offset, 0);
-        assert_eq!(sel.head.node_id, tr2);
-        assert_eq!(sel.head.offset, 4);
-
-        let mut italic_texts = Vec::new();
-        for desc in actual.doc.root().unwrap().descendants() {
-            if let editor_model::Node::Text(t) = desc.node()
-                && desc
-                    .modifiers()
-                    .any(|m| m.as_type() == ModifierType::Italic)
-            {
-                italic_texts.push(t.text.to_string());
-            }
-        }
-        italic_texts.sort();
-        assert_eq!(italic_texts, vec!["1", "1234"]);
-    }
-
-    #[test]
-    fn range_toggle_partial_selection_splits() {
-        let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("HelloWorld")
-            } } }
-            selection: (t1, 2) -> (t1, 7)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
-        let (expected, ..) = state! {
-            doc { root { paragraph {
+            doc { root { p: paragraph {
                 text("He")
-                t1: text("lloWo") [italic]
-                t2: text("rld")
+                text("lloWo") [italic]
+                text("rld")
             } } }
-            selection: (t1, 0) -> (t2, 0)
+            selection: (p, 2) -> (p, 7)
         };
         assert_state_eq!(&actual, &expected);
     }

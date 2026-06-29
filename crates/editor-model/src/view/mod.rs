@@ -1,0 +1,1070 @@
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Range;
+use std::sync::LazyLock;
+
+use editor_crdt::Dot;
+
+use crate::projection::ProjectedDoc;
+use crate::schema::Schema;
+use crate::seq::{BlockNode, Child, anchor_dot};
+use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, Run, SeqItem};
+
+pub struct DocView<'a> {
+    doc: &'a ProjectedDoc,
+    blocks: HashMap<Dot, &'a BlockNode>,
+    parent: HashMap<Dot, Dot>,
+    leaves: HashMap<Dot, (&'a Child, Dot)>,
+    runs_by_block: HashMap<Dot, Vec<usize>>,
+}
+
+impl<'a> DocView<'a> {
+    pub fn new(doc: &'a ProjectedDoc) -> Self {
+        fn walk<'a>(
+            node: &'a BlockNode,
+            blocks: &mut HashMap<Dot, &'a BlockNode>,
+            parent: &mut HashMap<Dot, Dot>,
+            leaves: &mut HashMap<Dot, (&'a Child, Dot)>,
+        ) {
+            blocks.insert(node.id, node);
+            for c in &node.children {
+                match c {
+                    Child::Block(b) => {
+                        parent.insert(b.id, node.id);
+                        walk(b, blocks, parent, leaves);
+                    }
+                    Child::Leaf { id, .. } => {
+                        leaves.insert(*id, (c, node.id));
+                    }
+                }
+            }
+        }
+        let mut blocks = HashMap::new();
+        let mut parent = HashMap::new();
+        let mut leaves = HashMap::new();
+        for r in &doc.tree.roots {
+            walk(r, &mut blocks, &mut parent, &mut leaves);
+        }
+        let mut runs_by_block: HashMap<Dot, Vec<usize>> = HashMap::new();
+        for (i, run) in doc.runs.iter().enumerate() {
+            runs_by_block.entry(run.block).or_default().push(i);
+        }
+        DocView {
+            doc,
+            blocks,
+            parent,
+            leaves,
+            runs_by_block,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct NodeView<'a> {
+    view: &'a DocView<'a>,
+    node: &'a BlockNode,
+}
+
+#[derive(Clone)]
+pub struct LeafView<'a> {
+    view: &'a DocView<'a>,
+    dot: Dot,
+    child: &'a Child,
+    parent: Dot,
+}
+
+pub enum ChildView<'a> {
+    Block(NodeView<'a>),
+    Leaf(LeafView<'a>),
+}
+
+impl<'a> DocView<'a> {
+    pub fn roots(&'a self) -> impl Iterator<Item = NodeView<'a>> {
+        self.doc.tree.roots.iter().map(move |n| NodeView {
+            view: self,
+            node: n,
+        })
+    }
+    pub fn root(&'a self) -> Option<NodeView<'a>> {
+        self.doc
+            .tree
+            .roots
+            .iter()
+            .find(|n| n.node_type == NodeType::Root)
+            .map(|n| NodeView {
+                view: self,
+                node: n,
+            })
+    }
+    pub fn node(&'a self, id: Dot) -> Option<NodeView<'a>> {
+        self.blocks.get(&id).map(|n| NodeView {
+            view: self,
+            node: n,
+        })
+    }
+    pub fn leaf(&'a self, id: Dot) -> Option<LeafView<'a>> {
+        self.leaves.get(&id).map(|(c, p)| LeafView {
+            view: self,
+            dot: id,
+            child: c,
+            parent: *p,
+        })
+    }
+}
+
+fn child_view<'a>(view: &'a DocView<'a>, c: &'a Child, parent: Dot) -> ChildView<'a> {
+    match c {
+        Child::Block(b) => ChildView::Block(NodeView { view, node: b }),
+        Child::Leaf { id, .. } => ChildView::Leaf(LeafView {
+            view,
+            dot: *id,
+            child: c,
+            parent,
+        }),
+    }
+}
+
+impl<'a> NodeView<'a> {
+    pub fn id(&self) -> Dot {
+        self.node.id
+    }
+    pub fn dot(&self) -> Option<Dot> {
+        anchor_dot(self.node.id)
+    }
+    pub fn node_type(&self) -> NodeType {
+        self.node.node_type
+    }
+    pub fn spec(&self) -> &'static crate::schema::NodeSpec {
+        Schema::node_spec(self.node.node_type)
+    }
+    pub fn node(&self) -> Node {
+        self.dot()
+            .and_then(|d| self.view.doc.node_attrs.get(&d).cloned())
+            .unwrap_or_else(|| self.node.node_type.into_node())
+    }
+    pub fn parent(&self) -> Option<NodeView<'a>> {
+        self.view
+            .parent
+            .get(&self.node.id)
+            .and_then(|p| self.view.node(*p))
+    }
+    pub fn children(&self) -> impl Iterator<Item = ChildView<'a>> {
+        let view = self.view;
+        let id = self.node.id;
+        self.node
+            .children
+            .iter()
+            .map(move |c| child_view(view, c, id))
+    }
+    pub fn child_blocks(&self) -> impl Iterator<Item = NodeView<'a>> {
+        let view = self.view;
+        self.node.children.iter().filter_map(move |c| match c {
+            Child::Block(b) => Some(NodeView { view, node: b }),
+            _ => None,
+        })
+    }
+    pub fn first_child(&self) -> Option<ChildView<'a>> {
+        self.children().next()
+    }
+    pub fn last_child(&self) -> Option<ChildView<'a>> {
+        self.children().last()
+    }
+    pub fn child_at(&self, index: usize) -> Option<ChildView<'a>> {
+        self.children().nth(index)
+    }
+    pub fn ancestors(&self) -> impl Iterator<Item = NodeView<'a>> {
+        let mut cur = Some(*self);
+        std::iter::from_fn(move || {
+            let node = cur?;
+            cur = node.parent();
+            Some(node)
+        })
+    }
+    pub fn descendants(&self) -> impl Iterator<Item = ChildView<'a>> {
+        let mut stack: Vec<ChildView<'a>> = self.children().collect();
+        stack.reverse();
+        std::iter::from_fn(move || {
+            let next = stack.pop()?;
+            if let ChildView::Block(b) = &next {
+                let mut kids: Vec<ChildView<'a>> = b.children().collect();
+                kids.reverse();
+                stack.extend(kids);
+            }
+            Some(next)
+        })
+    }
+    pub fn index(&self) -> Option<usize> {
+        let parent = self.parent()?;
+        parent.children().position(|c| match c {
+            ChildView::Block(b) => b.node.id == self.node.id,
+            ChildView::Leaf(_) => false,
+        })
+    }
+}
+
+impl<'a> LeafView<'a> {
+    pub fn dot(&self) -> Dot {
+        self.dot
+    }
+    pub fn node_type(&self) -> NodeType {
+        match self.child {
+            Child::Leaf { item, .. } => item.as_child_type(),
+            _ => unreachable!(),
+        }
+    }
+    pub fn item(&self) -> &'a SeqItem {
+        match self.child {
+            Child::Leaf { item, .. } => item,
+            _ => unreachable!(),
+        }
+    }
+    pub fn as_char(&self) -> Option<char> {
+        match self.item() {
+            SeqItem::Char(c) => Some(*c),
+            _ => None,
+        }
+    }
+    pub fn as_atom(&self) -> Option<&'a AtomLeaf> {
+        match self.item() {
+            SeqItem::Atom(a) => Some(a),
+            _ => None,
+        }
+    }
+    pub fn parent(&self) -> Option<NodeView<'a>> {
+        self.view.node(self.parent)
+    }
+}
+
+static EMPTY_EFF: LazyLock<BTreeMap<ModifierType, Modifier>> = LazyLock::new(BTreeMap::new);
+static EMPTY_OWN: LazyLock<BTreeMap<ModifierType, OwnModifier>> = LazyLock::new(BTreeMap::new);
+
+pub enum InlineKind {
+    Char {
+        byte_range: Range<usize>,
+        char_index: usize,
+    },
+    Atom(NodeType),
+}
+
+pub struct InlineItem<'a> {
+    pub dot: Dot,
+    pub kind: InlineKind,
+    pub effective: &'a BTreeMap<ModifierType, Modifier>,
+    pub own_modifiers: &'a BTreeMap<ModifierType, OwnModifier>,
+}
+
+impl<'a> NodeView<'a> {
+    pub fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
+        self.view
+            .doc
+            .block_effective
+            .get(&self.node.id)
+            .unwrap_or(&EMPTY_EFF)
+    }
+    pub fn block_modifier(&self, ty: ModifierType) -> Option<&'a Modifier> {
+        let dot = anchor_dot(self.node.id)?;
+        self.view.doc.block_modifiers.get(&dot)?.get(&ty)
+    }
+    pub fn runs(&self) -> impl Iterator<Item = &'a Run> {
+        let doc = self.view.doc;
+        self.view
+            .runs_by_block
+            .get(&self.node.id)
+            .into_iter()
+            .flatten()
+            .map(move |&i| &doc.runs[i])
+    }
+    pub fn inline_text(&self) -> String {
+        self.node
+            .children
+            .iter()
+            .filter_map(|c| match c {
+                Child::Leaf {
+                    item: SeqItem::Char(ch),
+                    ..
+                } => Some(*ch),
+                _ => None,
+            })
+            .collect()
+    }
+    pub fn inline(&self) -> Vec<InlineItem<'a>> {
+        let doc = self.view.doc;
+        let mut out = Vec::new();
+        let mut byte = 0usize;
+        let mut char_index = 0usize;
+        for c in &self.node.children {
+            let Child::Leaf { id: d, item } = c else {
+                continue;
+            };
+            let effective = doc.effective.get(d).unwrap_or(&EMPTY_EFF);
+            let own_modifiers = doc.own_modifiers.get(d).unwrap_or(&EMPTY_OWN);
+            let kind = match item {
+                SeqItem::Char(ch) => {
+                    let len = ch.len_utf8();
+                    let k = InlineKind::Char {
+                        byte_range: byte..byte + len,
+                        char_index,
+                    };
+                    byte += len;
+                    char_index += 1;
+                    k
+                }
+                _ => InlineKind::Atom(item.as_child_type()),
+            };
+            out.push(InlineItem {
+                dot: *d,
+                kind,
+                effective,
+                own_modifiers,
+            });
+        }
+        out
+    }
+}
+
+impl<'a> LeafView<'a> {
+    pub fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
+        self.view.doc.effective.get(&self.dot).unwrap_or(&EMPTY_EFF)
+    }
+    pub fn own_modifiers(&self) -> &'a BTreeMap<ModifierType, OwnModifier> {
+        self.view
+            .doc
+            .own_modifiers
+            .get(&self.dot)
+            .unwrap_or(&EMPTY_OWN)
+    }
+    pub fn own(&self, ty: ModifierType) -> Option<&'a Modifier> {
+        self.own_modifiers().get(&ty).map(|o| &o.value)
+    }
+    pub fn own_no_style(&self, ty: ModifierType) -> Option<&'a Modifier> {
+        self.own_modifiers()
+            .get(&ty)
+            .filter(|o| !o.from_style)
+            .map(|o| &o.value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::projection::{DocLogs, project_document};
+    use crate::{
+        Anchor, Bias, Modifier, ModifierAttrLog, ModifierAttrOp, ModifierType, NodeAttr,
+        NodeAttrLog, NodeAttrOp, NodeLwwOp, NodeMarkerLog, NodeStyleLog, SpanLog, SpanOp, StyleLog,
+        StyleOp, StyleRegOp, TableNodeAttr,
+    };
+    use editor_crdt::{InputEvent, ListOp, LwwRegOp, build_oplog};
+
+    fn events(items: &[(Dot, SeqItem)]) -> Vec<InputEvent<SeqItem>> {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        ev
+    }
+
+    fn logs_of(items: &[(Dot, SeqItem)]) -> DocLogs {
+        DocLogs {
+            seq: build_oplog(&events(items)),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn nested_doc() -> ProjectedDoc {
+        let para = Dot::new(1, 1);
+        let bq = Dot::new(1, 4);
+        let bq_para = Dot::new(1, 5);
+        let elems = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('H')),
+            (Dot::new(1, 3), SeqItem::Char('i')),
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (
+                bq_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, bq],
+                },
+            ),
+            (Dot::new(1, 6), SeqItem::Char('y')),
+        ];
+        project_document(&logs_of(&elems)).unwrap()
+    }
+
+    fn doc_with_table_and_image() -> ProjectedDoc {
+        let image = Dot::new(1, 1);
+        let hr = Dot::new(1, 2);
+        let table = Dot::new(1, 3);
+        let row = Dot::new(1, 4);
+        let cell = Dot::new(1, 5);
+        let cell_para = Dot::new(1, 6);
+        let img_node = match NodeType::Image.into_node() {
+            Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        let elems = vec![
+            (
+                image,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img_node },
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: crate::nodes::HorizontalRuleVariant::default(),
+                    },
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![Dot::ROOT, table],
+                },
+            ),
+            (
+                cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![Dot::ROOT, table, row],
+                },
+            ),
+            (
+                cell_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, table, row, cell],
+                },
+            ),
+            (
+                Dot::new(1, 7),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+        ];
+        let mut l = logs_of(&elems);
+        l.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeAttrOp {
+                    target: table,
+                    attr: NodeAttr::Table {
+                        attr: TableNodeAttr::Proportion(80),
+                    },
+                },
+            )
+            .unwrap();
+        project_document(&l).unwrap()
+    }
+
+    #[test]
+    fn root_children_and_leaf_nav() {
+        let pd = nested_doc();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        assert_eq!(root.node_type(), NodeType::Root);
+        let blocks: Vec<NodeType> = root.child_blocks().map(|b| b.node_type()).collect();
+        assert_eq!(
+            blocks,
+            vec![
+                NodeType::Paragraph,
+                NodeType::Blockquote,
+                NodeType::Paragraph
+            ]
+        );
+        let h = view.leaf(Dot::new(1, 2)).unwrap();
+        assert_eq!(h.as_char(), Some('H'));
+        let para = h.parent().unwrap();
+        assert_eq!(para.node_type(), NodeType::Paragraph);
+        let anc: Vec<NodeType> = para.ancestors().map(|n| n.node_type()).collect();
+        assert_eq!(anc, vec![NodeType::Paragraph, NodeType::Root]);
+    }
+
+    #[test]
+    fn typed_block_node_and_atom() {
+        let pd = doc_with_table_and_image();
+        let view = DocView::new(&pd);
+        let table = view
+            .roots()
+            .next()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Table)
+            .unwrap();
+        if let Node::Table(t) = table.node() {
+            assert_eq!(*t.proportion.get(), 80);
+        } else {
+            panic!()
+        }
+        let hr = view.leaf(Dot::new(1, 2)).unwrap();
+        assert!(matches!(
+            hr.as_atom(),
+            Some(AtomLeaf::HorizontalRule { .. })
+        ));
+    }
+
+    #[test]
+    fn derived_block_node_default_and_dot_none() {
+        let pd = nested_doc();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let derived = root.child_blocks().last().unwrap();
+        assert_eq!(derived.node_type(), NodeType::Paragraph);
+        assert_eq!(derived.dot(), None);
+        assert_eq!(derived.node(), NodeType::Paragraph.into_node());
+    }
+
+    #[test]
+    fn child_at_index_first_last() {
+        let pd = nested_doc();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let para = root
+            .child_blocks()
+            .find(|b| b.dot() == Some(Dot::new(1, 1)))
+            .unwrap();
+
+        let first = match para.first_child().unwrap() {
+            ChildView::Leaf(l) => l,
+            ChildView::Block(_) => panic!(),
+        };
+        assert_eq!(first.dot(), Dot::new(1, 2));
+        assert_eq!(first.as_char(), Some('H'));
+
+        let last = match para.last_child().unwrap() {
+            ChildView::Leaf(l) => l,
+            ChildView::Block(_) => panic!(),
+        };
+        assert_eq!(last.dot(), Dot::new(1, 3));
+        assert_eq!(last.as_char(), Some('i'));
+
+        let at1 = match para.child_at(1).unwrap() {
+            ChildView::Leaf(l) => l,
+            ChildView::Block(_) => panic!(),
+        };
+        assert_eq!(at1.dot(), Dot::new(1, 3));
+        assert_eq!(at1.as_char(), Some('i'));
+
+        let bq = root
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Blockquote)
+            .unwrap();
+        assert_eq!(bq.index(), Some(1));
+    }
+
+    fn doc_styled_xy() -> ProjectedDoc {
+        let para = Dot::new(1, 1);
+        let x = Dot::new(1, 2);
+        let y = Dot::new(1, 3);
+        let elems = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (x, SeqItem::Char('x')),
+            (y, SeqItem::Char('y')),
+        ];
+        let mut l = logs_of(&elems);
+        l.node_styles = NodeStyleLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeLwwOp {
+                    target: x,
+                    op: LwwRegOp::Set {
+                        value: Some("s".to_string()),
+                    },
+                },
+            )
+            .unwrap();
+        l.styles = StyleLog::new()
+            .apply(
+                Dot::new(2, 1),
+                StyleRegOp {
+                    style_id: "s".to_string(),
+                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
+                        key: "s".to_string(),
+                        value: (),
+                    }),
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(2, 2),
+                StyleRegOp {
+                    style_id: "s".to_string(),
+                    op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
+                        elem: Modifier::Bold,
+                    }),
+                },
+            )
+            .unwrap();
+        l.spans = SpanLog::new()
+            .apply(
+                Dot::new(3, 0),
+                SpanOp::AddSpan {
+                    start: Anchor {
+                        id: y,
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id: y,
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Italic,
+                },
+            )
+            .unwrap();
+        project_document(&l).unwrap()
+    }
+
+    fn doc_inline_mixed() -> ProjectedDoc {
+        let para = Dot::new(1, 1);
+        let elems = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('a')),
+            (Dot::new(1, 3), SeqItem::Char('가')),
+            (Dot::new(1, 4), SeqItem::Char('b')),
+            (Dot::new(1, 5), SeqItem::Atom(AtomLeaf::HardBreak)),
+            (Dot::new(1, 6), SeqItem::Char('c')),
+        ];
+        project_document(&logs_of(&elems)).unwrap()
+    }
+
+    fn doc_empty_paragraph() -> ProjectedDoc {
+        let para = Dot::new(1, 1);
+        let elems = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![Dot::ROOT],
+            },
+        )];
+        project_document(&logs_of(&elems)).unwrap()
+    }
+
+    #[test]
+    fn empty_paragraph_inline_empty() {
+        let pd = doc_empty_paragraph();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let para = root.child_blocks().next().unwrap();
+        assert_eq!(para.node_type(), NodeType::Paragraph);
+        assert!(para.inline().is_empty());
+        assert_eq!(para.inline_text(), "");
+    }
+
+    #[test]
+    fn no_modifier_leaf_empty_fallback() {
+        let pd = nested_doc();
+        let view = DocView::new(&pd);
+        let h = view.leaf(Dot::new(1, 2)).unwrap();
+        assert_eq!(h.as_char(), Some('H'));
+        assert!(h.effective().is_empty());
+        assert!(h.own_modifiers().is_empty());
+        assert_eq!(h.own(ModifierType::Bold), None);
+        assert_eq!(h.own_no_style(ModifierType::Bold), None);
+
+        let i = view.leaf(Dot::new(1, 3)).unwrap();
+        assert_eq!(i.as_char(), Some('i'));
+        assert!(i.effective().is_empty());
+        assert!(i.own_modifiers().is_empty());
+    }
+
+    #[test]
+    fn leaf_modifier_accessors_and_own_no_style() {
+        let pd = doc_styled_xy();
+        let view = DocView::new(&pd);
+        let x = view.leaf(Dot::new(1, 2)).unwrap();
+        assert_eq!(x.own(ModifierType::Bold), Some(&Modifier::Bold));
+        assert_eq!(x.own_no_style(ModifierType::Bold), None);
+        let y = view.leaf(Dot::new(1, 3)).unwrap();
+        assert_eq!(
+            y.own_no_style(ModifierType::Italic),
+            Some(&Modifier::Italic)
+        );
+        assert!(!x.effective().is_empty());
+    }
+
+    #[test]
+    fn inline_text_offsets_and_runs() {
+        let pd = doc_inline_mixed();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        let text = para.inline_text();
+        let items = para.inline();
+        let chars: Vec<char> = items
+            .iter()
+            .filter_map(|it| match it.kind {
+                InlineKind::Char { .. } => view.leaf(it.dot).unwrap().as_char(),
+                InlineKind::Atom(_) => None,
+            })
+            .collect();
+        assert_eq!(text.chars().count(), chars.len());
+        assert!(para.runs().count() >= 1);
+
+        let mut last_char_index: Option<usize> = None;
+        let mut prev_byte_end = 0usize;
+        for it in &items {
+            match &it.kind {
+                InlineKind::Char {
+                    byte_range,
+                    char_index,
+                } => {
+                    if let Some(prev) = last_char_index {
+                        assert!(*char_index > prev);
+                    }
+                    last_char_index = Some(*char_index);
+                    assert_eq!(byte_range.start, prev_byte_end);
+                    let ch = view.leaf(it.dot).unwrap().as_char().unwrap();
+                    assert_eq!(byte_range.len(), ch.len_utf8());
+                    prev_byte_end = byte_range.end;
+                }
+                InlineKind::Atom(ty) => {
+                    assert_eq!(*ty, NodeType::HardBreak);
+                }
+            }
+        }
+        assert_eq!(text.len(), prev_byte_end);
+    }
+
+    fn doc_leaf_style_link() -> ProjectedDoc {
+        let para = Dot::new(1, 1);
+        let x = Dot::new(1, 2);
+        let elems = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (x, SeqItem::Char('x')),
+        ];
+        let mut l = logs_of(&elems);
+        l.node_styles = NodeStyleLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeLwwOp {
+                    target: x,
+                    op: LwwRegOp::Set {
+                        value: Some("s".to_string()),
+                    },
+                },
+            )
+            .unwrap();
+        l.styles = StyleLog::new()
+            .apply(
+                Dot::new(2, 1),
+                StyleRegOp {
+                    style_id: "s".to_string(),
+                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
+                        key: "s".to_string(),
+                        value: (),
+                    }),
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(2, 2),
+                StyleRegOp {
+                    style_id: "s".to_string(),
+                    op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
+                        elem: Modifier::Link {
+                            href: "https://example.com".to_string(),
+                        },
+                    }),
+                },
+            )
+            .unwrap();
+        project_document(&l).unwrap()
+    }
+
+    #[test]
+    fn style_link_excluded_from_own_no_style() {
+        let pd = doc_leaf_style_link();
+        let view = DocView::new(&pd);
+        let leaf = view.leaf(Dot::new(1, 2)).unwrap();
+        assert!(leaf.own(ModifierType::Link).is_some());
+        assert!(leaf.own_no_style(ModifierType::Link).is_none());
+    }
+
+    #[test]
+    fn measure_access_pattern_smoke() {
+        let pd = nested_doc();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let mut blocks_seen = 0usize;
+        for block in root.descendants() {
+            if let ChildView::Block(b) = block {
+                blocks_seen += 1;
+                let _ = b.effective();
+                let _ = b.spec();
+                let last_is_pagebreak = matches!(
+                    b.last_child(),
+                    Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak
+                );
+                let _ = last_is_pagebreak;
+                for it in b.inline() {
+                    let _ = (it.dot, &it.effective, &it.own_modifiers);
+                }
+            }
+        }
+        assert!(blocks_seen >= 3);
+    }
+
+    fn arb_projected_doc() -> impl proptest::strategy::Strategy<Value = ProjectedDoc> {
+        use proptest::prelude::*;
+        let para_strat = ("[a-c]{0,4}", proptest::bool::ANY, proptest::bool::ANY);
+        proptest::collection::vec(para_strat, 1..=2).prop_map(|paras| {
+            let mut elems: Vec<(Dot, SeqItem)> = vec![];
+            let mut next: u64 = 1;
+            let mut bold_leaf: Option<Dot> = None;
+            let mut style_leaf: Option<Dot> = None;
+            for (s, want_bold, want_style) in &paras {
+                let para = Dot::new(1, next);
+                next += 1;
+                elems.push((
+                    para,
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT],
+                    },
+                ));
+                for ch in s.chars() {
+                    let leaf = Dot::new(1, next);
+                    next += 1;
+                    elems.push((leaf, SeqItem::Char(ch)));
+                    if *want_bold && bold_leaf.is_none() {
+                        bold_leaf = Some(leaf);
+                    }
+                    if *want_style && style_leaf.is_none() {
+                        style_leaf = Some(leaf);
+                    }
+                }
+            }
+            let mut l = logs_of(&elems);
+            if let Some(d) = bold_leaf {
+                l.spans = l
+                    .spans
+                    .apply(
+                        Dot::new(3, 0),
+                        SpanOp::AddSpan {
+                            start: Anchor {
+                                id: d,
+                                bias: Bias::Before,
+                            },
+                            end: Anchor {
+                                id: d,
+                                bias: Bias::After,
+                            },
+                            modifier: Modifier::Bold,
+                        },
+                    )
+                    .unwrap();
+            }
+            if let Some(d) = style_leaf {
+                l.node_styles = l
+                    .node_styles
+                    .apply(
+                        Dot::new(2, 0),
+                        NodeLwwOp {
+                            target: d,
+                            op: LwwRegOp::Set {
+                                value: Some("s".to_string()),
+                            },
+                        },
+                    )
+                    .unwrap();
+                l.styles = StyleLog::new()
+                    .apply(
+                        Dot::new(2, 1),
+                        StyleRegOp {
+                            style_id: "s".to_string(),
+                            op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
+                                key: "s".to_string(),
+                                value: (),
+                            }),
+                        },
+                    )
+                    .unwrap()
+                    .apply(
+                        Dot::new(2, 2),
+                        StyleRegOp {
+                            style_id: "s".to_string(),
+                            op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
+                                elem: Modifier::Italic,
+                            }),
+                        },
+                    )
+                    .unwrap();
+            }
+            project_document(&l).unwrap()
+        })
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn every_real_block_and_leaf_reachable_once(doc in arb_projected_doc()) {
+            let view = DocView::new(&doc);
+            let mut ids = std::collections::HashSet::new();
+            fn count(b: &crate::seq::BlockNode, ids: &mut std::collections::HashSet<Dot>) -> bool {
+                let fresh = ids.insert(b.id);
+                let mut ok = fresh;
+                for c in &b.children {
+                    if let crate::seq::Child::Block(cb) = c {
+                        ok &= count(cb, ids);
+                    }
+                }
+                ok
+            }
+            let mut unique = true;
+            for r in &doc.tree.roots {
+                unique &= count(r, &mut ids);
+            }
+            proptest::prop_assert!(unique, "duplicate block ElemId");
+
+            let mut reconstructed = 0usize;
+            for id in ids.iter() {
+                if let Some(nv) = view.node(*id) {
+                    let bytes: usize = nv
+                        .inline()
+                        .iter()
+                        .filter_map(|it| match &it.kind {
+                            InlineKind::Char { byte_range, .. } => Some(byte_range.len()),
+                            _ => None,
+                        })
+                        .sum();
+                    proptest::prop_assert_eq!(nv.inline_text().len(), bytes);
+                    reconstructed += nv.runs().count();
+                }
+            }
+            proptest::prop_assert_eq!(reconstructed, doc.runs.len());
+        }
+    }
+
+    #[test]
+    fn block_modifier_explicit_only_not_inherited() {
+        let table = Dot::new(1, 1);
+        let row = Dot::new(1, 2);
+        let cell_with_bg = Dot::new(1, 3);
+        let cell_without_bg = Dot::new(1, 4);
+        let para_a = Dot::new(1, 5);
+        let para_b = Dot::new(1, 6);
+        let elems = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![Dot::ROOT, table],
+                },
+            ),
+            (
+                cell_with_bg,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![Dot::ROOT, table, row],
+                },
+            ),
+            (
+                para_a,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, table, row, cell_with_bg],
+                },
+            ),
+            (
+                cell_without_bg,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![Dot::ROOT, table, row],
+                },
+            ),
+            (
+                para_b,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, table, row, cell_without_bg],
+                },
+            ),
+        ];
+        let mut l = logs_of(&elems);
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(2, 0),
+                ModifierAttrOp::SetModifier {
+                    target: cell_with_bg,
+                    modifier: Modifier::BackgroundColor {
+                        value: "#fff".into(),
+                    },
+                },
+            )
+            .unwrap();
+        let pd = project_document(&l).unwrap();
+        let view = DocView::new(&pd);
+
+        let cell_a = view.node(cell_with_bg).unwrap();
+        assert_eq!(
+            cell_a.block_modifier(ModifierType::BackgroundColor),
+            Some(&Modifier::BackgroundColor {
+                value: "#fff".into()
+            }),
+        );
+
+        let cell_b = view.node(cell_without_bg).unwrap();
+        assert_eq!(cell_b.block_modifier(ModifierType::BackgroundColor), None,);
+    }
+}

@@ -1,9 +1,13 @@
+pub(crate) mod support;
+
 pub(crate) mod add_modifier;
+pub(crate) mod add_span_modifier;
 pub(crate) mod insert_subtree;
 pub(crate) mod insert_text;
 pub(crate) mod merge_node;
 pub(crate) mod move_node;
 pub(crate) mod remove_modifier;
+pub(crate) mod remove_span_modifier;
 pub(crate) mod remove_subtree;
 pub(crate) mod remove_text;
 pub(crate) mod set_composition;

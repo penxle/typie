@@ -1,5 +1,4 @@
-use editor_model::{Doc, Node};
-use editor_state::{Bind, Position, Selection, StablePosition, StableSelection};
+use editor_state::{Selection, StableResolveCtx, StableSelection, State};
 use editor_view::PageRect;
 use hashbrown::{HashMap, HashSet};
 
@@ -83,6 +82,16 @@ impl TrackedRangeRegistry {
         true
     }
 
+    pub fn set_selection(&mut self, id: &str, selection: StableSelection) -> bool {
+        match self.by_id.get_mut(id) {
+            Some(range) => {
+                range.selection = selection;
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn clear_group(&mut self, group: &str) -> Vec<TrackedRange> {
         let Some(ids) = self.by_group.remove(group) else {
             return Vec::new();
@@ -146,89 +155,28 @@ impl TrackedRange {
         group: String,
         selection: StableSelection,
         metadata: String,
-        doc: &Doc,
+        _state: &State,
     ) -> Self {
         Self {
             id,
             group,
-            selection: covered_selection(selection, doc),
+            selection,
             metadata,
             explicitly_invalid: false,
         }
     }
 
-    pub fn locate(&self, doc: &Doc) -> Option<Selection> {
-        if self.explicitly_invalid || !self.selection.is_preserved(doc) {
+    pub fn locate(&self, state: &State) -> Option<Selection> {
+        if self.explicitly_invalid {
             return None;
         }
-        let sel = self.selection.restore(doc);
-        let sel = sel.normalize(doc)?;
-        sel.resolve(doc)?;
+        let view = state.view();
+        let ctx = StableResolveCtx::new(&view, state.projected.seq());
+        let sel = self.selection.resolve(&ctx)?;
+        let sel = sel.normalize(&view)?;
+        sel.resolve(&view)?;
         (!sel.is_collapsed()).then_some(sel)
     }
-}
-
-fn covered_selection(selection: StableSelection, doc: &Doc) -> StableSelection {
-    if !selection.is_preserved(doc) {
-        return selection;
-    }
-
-    let live = selection.restore(doc);
-    let Some(live) = live.normalize(doc) else {
-        return selection;
-    };
-    let Some(resolved) = live.resolve(doc) else {
-        return selection;
-    };
-    if resolved.is_collapsed() {
-        return selection;
-    }
-
-    let start = Position::from(resolved.from());
-    let end = Position::from(resolved.to());
-    let mut first = None;
-    let mut last = None;
-    resolved.for_each_text_node(|node, span| {
-        let Node::Text(text_node) = node.node() else {
-            return;
-        };
-        let first_entry_dot = text_node
-            .text
-            .entry_dot_at(span.start)
-            .expect("covered span start must be in text bounds");
-        let last_entry_dot = text_node
-            .text
-            .entry_dot_at(span.end - 1)
-            .expect("covered span end must be in text bounds");
-
-        first.get_or_insert((node.id(), span.start, first_entry_dot));
-        last = Some((node.id(), span.end, last_entry_dot));
-    });
-
-    let anchor = match first {
-        Some((node_id, boundary_offset, entry_dot)) => StablePosition::capture_text_endpoint(
-            node_id,
-            entry_dot,
-            boundary_offset,
-            Bind::Left,
-            start.affinity,
-            doc,
-        ),
-        None => StablePosition::capture(start, doc),
-    };
-    let head = match last {
-        Some((node_id, boundary_offset, entry_dot)) => StablePosition::capture_text_endpoint(
-            node_id,
-            entry_dot,
-            boundary_offset,
-            Bind::Right,
-            end.affinity,
-            doc,
-        ),
-        None => StablePosition::capture(end, doc),
-    };
-
-    StableSelection { anchor, head }
 }
 
 #[cfg(test)]
@@ -238,16 +186,16 @@ mod tests {
 
     fn make_range(id: &str, group: &str) -> TrackedRange {
         let (s, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let sel = s.selection.unwrap();
         TrackedRange::new(
             id.into(),
             group.into(),
-            StableSelection::capture(&sel, &s.doc),
+            StableSelection::capture(&sel, &s.view()),
             String::new(),
-            &s.doc,
+            &s,
         )
     }
 
@@ -330,61 +278,40 @@ mod tests {
     #[test]
     fn locate_returns_none_when_range_is_explicitly_invalid() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let sel = state.selection.unwrap();
         let mut range = TrackedRange {
             id: "a".into(),
             group: "g1".into(),
-            selection: StableSelection::capture(&sel, &state.doc),
+            selection: StableSelection::capture(&sel, &state.view()),
             metadata: String::new(),
             explicitly_invalid: false,
         };
 
         range.explicitly_invalid = true;
 
-        assert!(range.locate(&state.doc).is_none());
+        assert!(range.locate(&state).is_none());
     }
 
     #[test]
-    fn locate_follows_moved_entry_dot() {
-        let (state, t1, t2) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("a") }
-                    paragraph { t2: text("") }
-                }
-            }
-            selection: (t1, 0) -> (t1, 1)
+    fn locate_resolves_captured_range() {
+        let (state, p1, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let range = TrackedRange {
             id: "a".into(),
             group: "g1".into(),
-            selection: StableSelection::capture(state.selection.as_ref().unwrap(), &state.doc),
+            selection: StableSelection::capture(state.selection.as_ref().unwrap(), &state.view()),
             metadata: String::new(),
             explicitly_invalid: false,
         };
-        let selected_entry = state
-            .doc
-            .text_view(t1)
-            .unwrap()
-            .visible_entries()
-            .next()
-            .unwrap()
-            .0;
-        let (state, _) = state
-            .apply(editor_model::DocOp::MoveText {
-                entry: selected_entry,
-                to_node_id: t2,
-                after: None,
-            })
-            .unwrap();
 
-        let resolved = range.locate(&state.doc).expect("range locates after move");
-        assert_eq!(resolved.anchor.node_id, t2);
-        assert_eq!(resolved.head.node_id, t2);
-        assert_eq!(state.doc.text_view(t2).unwrap().text(), "a");
+        let resolved = range.locate(&state).expect("range locates");
+        assert_eq!(resolved.anchor.node, p1);
+        assert_eq!(resolved.head.node, p1);
     }
 
     #[test]

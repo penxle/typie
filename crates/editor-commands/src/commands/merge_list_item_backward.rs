@@ -1,6 +1,7 @@
-use editor_model::{Node, NodeId};
+use editor_crdt::Dot;
+use editor_model::{ChildView, NodeType};
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, compact, fulfill};
+use editor_transaction::{Transaction, fulfill};
 
 use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
 use crate::{CommandError, CommandResult};
@@ -9,7 +10,7 @@ pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
@@ -18,121 +19,109 @@ pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let view = tr.view();
 
-    let list_item_id = match find_enclosing_list_item_id(&doc, pos.node_id) {
+    let list_item_id = match find_enclosing_list_item_id(&view, pos.node) {
         Some(id) => id,
         None => return Ok(false),
     };
 
-    let list_item = doc
+    let list_item = view
         .node(list_item_id)
         .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    let paragraph = list_item.first_child().ok_or(CommandError::Corrupted(
-        "list_item missing paragraph".into(),
-    ))?;
+    let paragraph = match list_item.first_child() {
+        Some(ChildView::Block(p)) => p,
+        _ => {
+            return Err(CommandError::Corrupted(
+                "list_item missing paragraph".into(),
+            ));
+        }
+    };
     let paragraph_id = paragraph.id();
 
-    // Only fire when the cursor is anchored at the very start of the list_item's
-    // paragraph — either at offset 0 of the paragraph itself, or at offset 0 of
-    // its first inline child.
-    match node.node() {
-        Node::Text(_) => {
-            if node.prev_sibling().is_some() {
-                return Ok(false);
-            }
-            let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
-            if parent.id() != paragraph_id {
-                return Ok(false);
-            }
-        }
-        Node::Paragraph(_) => {
-            if node.id() != paragraph_id {
-                return Ok(false);
-            }
-        }
-        _ => return Ok(false),
+    if pos.node != paragraph_id || pos.offset != 0 {
+        return Ok(false);
     }
 
-    let prev_list_item = match list_item.prev_sibling() {
-        Some(p) => p,
-        None => return Ok(false),
+    let list = list_item
+        .parent()
+        .ok_or(CommandError::NoParent(list_item_id))?;
+    let li_idx = list_item
+        .index()
+        .ok_or_else(|| CommandError::orphan_child(list_item_id, list.id()))?;
+    if li_idx == 0 {
+        return Ok(false);
+    }
+    let prev = list
+        .child_blocks()
+        .nth(li_idx - 1)
+        .ok_or(CommandError::Corrupted("prev list_item missing".into()))?;
+    let prev_id = prev.id();
+    let prev_paragraph = match prev.first_child() {
+        Some(ChildView::Block(p)) => p,
+        _ => {
+            return Err(CommandError::Corrupted(
+                "prev list_item missing paragraph".into(),
+            ));
+        }
     };
-    let prev_id = prev_list_item.id();
-    let prev_paragraph = prev_list_item.first_child().ok_or(CommandError::Corrupted(
-        "prev list_item missing paragraph".into(),
-    ))?;
     let prev_paragraph_id = prev_paragraph.id();
 
-    // A list_item's content shape is `Paragraph, (BulletList|OrderedList)?`, so
-    // locate any trailing sublist by node type rather than fixed index — batch
-    // operations may shift indices but the type predicate stays valid.
-    let target_sublist_id: Option<NodeId> = prev_list_item
-        .children()
-        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-        .map(|c| c.id());
-    let moved_sublist_id: Option<NodeId> = list_item
-        .children()
-        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-        .map(|c| c.id());
+    let target_sublist_id: Option<Dot> = prev
+        .child_blocks()
+        .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
+        .map(|b| b.id());
+    let moved_sublist_id: Option<Dot> = list_item
+        .child_blocks()
+        .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
+        .map(|b| b.id());
 
-    // Capture the join point (end of prev_paragraph's content) before mutation
-    // so the post-merge cursor lands where prev's text ended.
-    let join_cursor = match prev_paragraph.last_child() {
-        Some(child) => match child.node() {
-            Node::Text(t) => Position {
-                node_id: child.id(),
-                offset: t.text.len(),
-                affinity: Affinity::Upstream,
-            },
-            _ => Position {
-                node_id: prev_paragraph_id,
-                offset: prev_paragraph.entry().children.len(),
-                affinity: Affinity::Upstream,
-            },
-        },
-        None => Position {
-            node_id: prev_paragraph_id,
-            offset: 0,
-            affinity: Affinity::Upstream,
-        },
+    let join_cursor = Position {
+        node: prev_paragraph_id,
+        offset: prev_paragraph.children().count(),
+        affinity: Affinity::Downstream,
     };
 
-    tr.batch::<_, CommandError>(|tr| {
-        // Move current's sublist to the end of prev before merging paragraphs,
-        // so the sublist survives the list_item removal.
-        if let Some(moved_id) = moved_sublist_id {
-            let doc = tr.doc();
-            let prev = doc
-                .node(prev_id)
-                .ok_or(CommandError::NodeNotFound(prev_id))?;
-            let prev_len = prev.entry().children.len();
-            tr.move_node(moved_id, prev_id, prev_len)?;
-        }
+    drop(view);
 
-        // When both sides carried a sublist, fold the moved one into prev's
-        // existing sublist. merge_node preserves the target's list type and
-        // moves the source's list_items in; ListItem has no inner type variant
-        // so this is lossless even across BulletList/OrderedList boundaries.
-        if let (Some(target), Some(moved)) = (target_sublist_id, moved_sublist_id) {
-            tr.merge_node(moved, target)?;
+    tr.batch::<_, CommandError>(|tr| {
+        match (&target_sublist_id, &moved_sublist_id) {
+            (Some(target), Some(moved)) => {
+                let items: Vec<Dot> = {
+                    let view = tr.view();
+                    view.node(*moved)
+                        .map(|m| m.child_blocks().map(|b| b.id()).collect())
+                        .unwrap_or_default()
+                };
+                let base = {
+                    let view = tr.view();
+                    view.node(*target)
+                        .ok_or(CommandError::NodeNotFound(*target))?
+                        .child_blocks()
+                        .count()
+                };
+                for (i, item) in items.into_iter().enumerate() {
+                    tr.move_node(item, *target, base + i)?;
+                }
+            }
+            (None, Some(moved)) => {
+                let prev_len = {
+                    let view = tr.view();
+                    view.node(prev_id)
+                        .ok_or(CommandError::NodeNotFound(prev_id))?
+                        .child_blocks()
+                        .count()
+                };
+                tr.move_node(*moved, prev_id, prev_len)?;
+            }
+            _ => {}
         }
 
         merge_element_cross_parent(tr, paragraph_id, prev_paragraph_id)?;
         tr.remove_subtree(list_item_id)?;
 
-        // Adjacent text runs with matching modifiers were brought together by
-        // the merge; compact stitches them into a single node.
-        let doc = tr.doc();
-        if let Some(p) = doc.node(prev_paragraph_id) {
-            tr.apply_steps(compact(&p))?;
-        }
-
-        let doc = tr.doc();
-        if let Some(prev) = doc.node(prev_id) {
+        let view = tr.view();
+        if let Some(prev) = view.node(prev_id) {
             tr.apply_steps(fulfill(&prev))?;
         }
         Ok(())
@@ -155,8 +144,8 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
-                        list_item { paragraph { t2: text("World") } }
+                        list_item { t1: paragraph { text("Hello") } }
+                        list_item { t2: paragraph { text("World") } }
                     }
                     paragraph {}
                 }
@@ -168,7 +157,7 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("HelloWorld") } }
+                        list_item { t1: paragraph { text("HelloWorld") } }
                     }
                     paragraph {}
                 }
@@ -184,8 +173,8 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
-                        list_item { paragraph { t2: text("B") } }
+                        list_item { t1: paragraph { text("A") } }
+                        list_item { t2: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
@@ -200,7 +189,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { t1: paragraph { text("A") } } }
                     paragraph {}
                 }
             }
@@ -216,7 +205,7 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { t1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
@@ -232,7 +221,7 @@ mod tests {
             doc {
                 root {
                     paragraph { text("A") }
-                    paragraph { t1: text("B") }
+                    t1: paragraph { text("B") }
                 }
             }
             selection: (t1, 0)
@@ -247,10 +236,10 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("A") }
+                            t_a: paragraph { text("A") }
                             bullet_list { list_item { paragraph { text("a1") } } }
                         }
-                        list_item { paragraph { t2: text("B") } }
+                        list_item { t2: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
@@ -263,7 +252,7 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AB") }
+                            t_a: paragraph { text("AB") }
                             bullet_list { list_item { paragraph { text("a1") } } }
                         }
                     }
@@ -281,9 +270,9 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t_a: text("A") } }
+                        list_item { t_a: paragraph { text("A") } }
                         list_item {
-                            paragraph { t2: text("B") }
+                            t2: paragraph { text("B") }
                             bullet_list { list_item { paragraph { text("b1") } } }
                         }
                     }
@@ -298,7 +287,7 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AB") }
+                            t_a: paragraph { text("AB") }
                             bullet_list { list_item { paragraph { text("b1") } } }
                         }
                     }
@@ -317,11 +306,11 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("A") }
+                            t_a: paragraph { text("A") }
                             bullet_list { list_item { paragraph { text("a1") } } }
                         }
                         list_item {
-                            paragraph { t2: text("B") }
+                            t2: paragraph { text("B") }
                             bullet_list { list_item { paragraph { text("b1") } } }
                         }
                     }
@@ -336,7 +325,7 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AB") }
+                            t_a: paragraph { text("AB") }
                             bullet_list {
                                 list_item { paragraph { text("a1") } }
                                 list_item { paragraph { text("b1") } }
@@ -357,7 +346,7 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t_a: text("A") } }
+                        list_item { t_a: paragraph { text("A") } }
                         list_item { p2: paragraph {} }
                     }
                     paragraph {}
@@ -370,7 +359,7 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t_a: text("A") } }
+                        list_item { t_a: paragraph { text("A") } }
                     }
                     paragraph {}
                 }

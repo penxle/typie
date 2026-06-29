@@ -12,28 +12,29 @@ pub fn unset_style_in_selection(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     };
 
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         tr.set_pending_style(Some(PendingStyle::Unset))?;
         return Ok(true);
     }
 
-    let run_ids = collect_run_nodes_in_selection(tr)?;
-    if run_ids.is_empty() {
+    let run_dots = collect_run_nodes_in_selection(tr)?;
+    if run_dots.is_empty() {
         return Ok(false);
     }
 
     let mut changed = false;
-    for node_id in &run_ids {
+    for elem in &run_dots {
+        let Some(op) = elem.as_op_dot() else { continue };
         if tr
             .state()
-            .doc
-            .get_entry(*node_id)
-            .and_then(|e| e.style.get().clone())
+            .projected
+            .node_styles()
+            .value_of(op.dot())
             .is_none()
         {
             continue;
         }
-        tr.set_node_style(*node_id, None)?;
+        tr.set_node_style(*elem, None)?;
         changed = true;
     }
 
@@ -47,7 +48,6 @@ pub fn unset_style_in_selection(tr: &mut Transaction) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
 
     use super::*;
     use crate::commands::apply_style_to_selection;
@@ -56,8 +56,8 @@ mod tests {
     #[test]
     fn unset_clears_style_on_selected_runs() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("HelloWorld") } } }
-            selection: (t1, 0) -> (t1, 10)
+            doc { root { p1: paragraph { text("HelloWorld") } } }
+            selection: (p1, 0) -> (p1, 10)
         };
         let (with_style, ..) = transact!(initial, |tr| crate::commands::define_style(
             &mut tr,
@@ -70,15 +70,19 @@ mod tests {
             "h1".into()
         ));
         let (actual, ..) = transact!(applied, |tr| unset_style_in_selection(&mut tr));
-        let para = actual.doc.root().unwrap().children().next().unwrap();
-        assert!(para.children().all(|c| c.entry().style.get().is_none()));
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("HelloWorld") } } }
+            selection: (p1, 0) -> (p1, 10)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn collapsed_unset_sets_pending_unset() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| unset_style_in_selection(&mut tr));
         assert_eq!(
@@ -91,10 +95,10 @@ mod tests {
     fn clears_styles_on_all_textblocks_in_range() {
         let (initial, ..) = state! {
             doc { root {
-                p1: paragraph { t1: text("Hello") }
-                p2: paragraph { t2: text("World") }
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") }
             } }
-            selection: (t1, 0) -> (t2, 5)
+            selection: (p1, 0) -> (p2, 5)
         };
         let (with_style, ..) = transact!(initial, |tr| crate::commands::define_style(
             &mut tr,
@@ -107,49 +111,44 @@ mod tests {
             "h1".into()
         ));
         let (actual, ..) = transact!(applied, |tr| unset_style_in_selection(&mut tr));
-        let root = actual.doc.root().unwrap();
-        for para in root.children() {
-            for run in para.children() {
-                assert!(
-                    run.entry().style.get().is_none(),
-                    "run {:?} should have no style after unset",
-                    run.id()
-                );
-            }
-        }
+
+        let (expected, ..) = state! {
+            doc { root {
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") }
+            } }
+            selection: (p1, 0) -> (p2, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn clears_inline_font_size_in_range() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [font_size(800)] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [font_size(800)] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| unset_style_in_selection(&mut tr));
-        let para = actual.doc.root().unwrap().children().next().unwrap();
-        let text = para.children().next().unwrap();
-        let has_font_size = text
-            .explicit_modifiers()
-            .any(|m| matches!(m, Modifier::FontSize { .. }));
-        assert!(!has_font_size, "inline font_size should be cleared");
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn preserves_text_color_when_clearing_font_size() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [font_size(800), text_color("#ff0000".to_string())] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [font_size(800), text_color("#ff0000".to_string())] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| unset_style_in_selection(&mut tr));
-        let para = actual.doc.root().unwrap().children().next().unwrap();
-        let text = para.children().next().unwrap();
-        let has_font_size = text
-            .explicit_modifiers()
-            .any(|m| matches!(m, Modifier::FontSize { .. }));
-        let has_color = text
-            .explicit_modifiers()
-            .any(|m| matches!(m, Modifier::TextColor { .. }));
-        assert!(!has_font_size, "font_size should be cleared");
-        assert!(has_color, "text_color should be preserved");
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") [text_color("#ff0000".to_string())] } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 }

@@ -7,72 +7,22 @@ use crate::doc_macro::parse::{
 };
 
 pub struct CodegenParts {
-    pub id_decls: Vec<TokenStream>,
-    pub plain_entries: Vec<TokenStream>,
-    pub bindings: Vec<Ident>,
+    pub root_entry: TokenStream,
+    pub bindings: Vec<(Ident, Vec<usize>)>,
     pub style_entries: Vec<TokenStream>,
 }
 
 pub fn generate_parts(tree: &DocTree) -> CodegenParts {
-    let mut id_decls = Vec::new();
-    let mut plain_entries = Vec::new();
     let mut bindings = Vec::new();
 
-    collect_node(
-        &tree.root,
-        None,
-        &mut id_decls,
-        &mut plain_entries,
-        &mut bindings,
-    );
+    let root_entry = collect_node(&tree.root, &mut Vec::new(), &mut bindings);
 
     let style_entries = tree.styles.iter().map(build_style_entry).collect();
 
     CodegenParts {
-        id_decls,
-        plain_entries,
+        root_entry,
         bindings,
         style_entries,
-    }
-}
-
-pub fn generate(tree: &DocTree) -> TokenStream {
-    let parts = generate_parts(tree);
-    let bindings = &parts.bindings;
-    let scaffold = emit_doc_construction(&parts);
-
-    quote! {
-        {
-            #scaffold
-
-            (doc, #(#bindings),*)
-        }
-    }
-}
-
-pub(crate) fn emit_doc_construction(parts: &CodegenParts) -> TokenStream {
-    let id_decls = &parts.id_decls;
-    let plain_entries = &parts.plain_entries;
-    let style_entries = &parts.style_entries;
-    quote! {
-        use ::editor_model::*;
-        use ::std::collections::BTreeMap;
-
-        #(#id_decls)*
-
-        let __plain = PlainDoc {
-            nodes: {
-                let mut __m: BTreeMap<NodeId, PlainNodeEntry> = BTreeMap::new();
-                #(#plain_entries)*
-                __m
-            },
-            styles: {
-                let mut __s: BTreeMap<String, PlainStyleEntry> = BTreeMap::new();
-                #(#style_entries)*
-                __s
-            },
-        };
-        let (doc, _op_graph) = Doc::from_plain(__plain);
     }
 }
 
@@ -106,53 +56,38 @@ fn build_style_entry(style: &StyleDef) -> TokenStream {
     }
 }
 
-// Returns the TokenStream for this node's id ident (e.g. `quote! { __node_0 }`).
+// Returns the `PlainNodeEntry { .. }` construction TokenStream for this node,
+// building its children inline. Records each user-labeled node's binding ident
+// together with its child-index path from the root.
 fn collect_node(
     node: &NodeDef,
-    parent_id: Option<&TokenStream>,
-    id_decls: &mut Vec<TokenStream>,
-    plain_entries: &mut Vec<TokenStream>,
-    bindings: &mut Vec<Ident>,
+    path: &mut Vec<usize>,
+    bindings: &mut Vec<(Ident, Vec<usize>)>,
 ) -> TokenStream {
-    let is_root = node.node_type == "root";
     let is_text = node.node_type == "text";
 
-    let id_ident = if let Some(ref binding) = node.binding {
-        binding.clone()
-    } else {
-        format_ident!("__node_{}", id_decls.len())
-    };
-
-    if is_root {
-        id_decls.push(quote! { let #id_ident = NodeId::ROOT; });
-    } else {
-        id_decls.push(quote! { let #id_ident = NodeId::new(); });
+    if let Some(ref binding) = node.binding {
+        bindings.push((binding.clone(), path.clone()));
     }
 
-    if node.binding.is_some() {
-        bindings.push(id_ident.clone());
-    }
-
-    let id_ts = quote! { #id_ident };
-
-    // Collect children first (so their id_decls are in DFS order).
-    let child_ids: Vec<TokenStream> = match &node.content {
+    let child_entries: Vec<TokenStream> = match &node.content {
         NodeContent::Children(children) => children
             .iter()
-            .map(|child| collect_node(child, Some(&id_ts), id_decls, plain_entries, bindings))
+            .enumerate()
+            .map(|(i, child)| {
+                path.push(i);
+                let entry = collect_node(child, path, bindings);
+                path.pop();
+                entry
+            })
             .collect(),
         NodeContent::Text(_) | NodeContent::Leaf => vec![],
     };
 
-    let parent_expr = match parent_id {
-        Some(pid) => quote! { Some(#pid) },
-        None => quote! { None },
-    };
-
-    let children_expr = if child_ids.is_empty() {
+    let children_expr = if child_entries.is_empty() {
         quote! { vec![] }
     } else {
-        quote! { vec![#(#child_ids),*] }
+        quote! { vec![#(#child_entries),*] }
     };
 
     let modifiers_expr = build_modifiers_expr(node);
@@ -179,18 +114,15 @@ fn collect_node(
 
     let marker_expr = build_marker_expr(&node.marker);
 
-    plain_entries.push(quote! {
-        __m.insert(#id_ident, PlainNodeEntry {
-            parent: #parent_expr,
-            children: #children_expr,
+    quote! {
+        PlainNodeEntry {
+            node: #plain_node_with_text,
             modifiers: #modifiers_expr,
             style: #style_expr,
             marker: #marker_expr,
-            node: #plain_node_with_text,
-        });
-    });
-
-    id_ts
+            children: #children_expr,
+        }
+    }
 }
 
 // Produces the PlainNode variant expression (excluding Text, which is inlined in collect_node).

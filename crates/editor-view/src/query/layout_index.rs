@@ -1,11 +1,12 @@
 use editor_common::Rect;
-use editor_model::NodeId;
-use editor_state::{Affinity, Position};
+use editor_crdt::Dot;
+use editor_state::Affinity;
+use editor_state::Position;
 use rstar::{AABB, RTree, RTreeObject};
 use std::collections::HashMap;
 
 use crate::page::{LayoutPage, PageRect};
-use crate::paginate::*;
+use crate::paginate::types::{LayoutContent, LayoutLine, LayoutNode, LayoutTree, SpacingKind};
 
 type LayoutEntryId = usize;
 
@@ -14,11 +15,8 @@ pub(crate) struct LayoutIndex {
     tree: LayoutTree,
     pages: Vec<LayoutPage>,
     entries: Vec<LayoutEntry>,
-    boxes_by_node_id: HashMap<NodeId, LayoutEntryId>,
-    entries_by_node: HashMap<NodeId, Vec<LayoutEntryId>>,
-    // `entries_on_page` (render path) only iterates these; the R-tree's spatial
-    // index is built lazily on the first point hit-test (mouse), keeping the
-    // O(N log N) `bulk_load` off the per-keystroke compute path.
+    boxes_by_node_id: HashMap<Dot, LayoutEntryId>,
+    entries_by_node: HashMap<Dot, Vec<LayoutEntryId>>,
     spatial_entries: Vec<SpatialEntry>,
     entries_by_page: Vec<Vec<LayoutEntryId>>,
     rtree: std::sync::OnceLock<RTree<SpatialEntry>>,
@@ -28,7 +26,7 @@ pub(crate) struct LayoutIndex {
 pub(crate) struct LayoutEntry {
     pub(crate) rect: Rect,
     path: Vec<usize>,
-    ancestors: Vec<NodeId>,
+    ancestors: Vec<Dot>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -49,9 +47,9 @@ struct SpatialEntry {
 struct LayoutIndexBuilder<'a> {
     pages: &'a [LayoutPage],
     entries: Vec<LayoutEntry>,
-    boxes_by_node_id: HashMap<NodeId, LayoutEntryId>,
-    entries_by_node: HashMap<NodeId, Vec<LayoutEntryId>>,
-    ancestors: Vec<NodeId>,
+    boxes_by_node_id: HashMap<Dot, LayoutEntryId>,
+    entries_by_node: HashMap<Dot, Vec<LayoutEntryId>>,
+    ancestors: Vec<Dot>,
     path: Vec<usize>,
     spatial: Vec<SpatialEntry>,
     entries_by_page: Vec<Vec<LayoutEntryId>>,
@@ -149,7 +147,7 @@ impl LayoutIndex {
     }
 
     pub(crate) fn entry_for_position(&self, pos: &Position) -> Option<&LayoutEntry> {
-        let candidate_ids = self.entries_by_node.get(&pos.node_id)?;
+        let candidate_ids = self.entries_by_node.get(&pos.node)?;
         let mut candidates = candidate_ids
             .iter()
             .map(|&id| &self.entries[id])
@@ -186,19 +184,19 @@ impl LayoutIndex {
         self.pages.get(page_idx).map(|page| page.y_start)
     }
 
-    pub(crate) fn box_entry(&self, node_id: NodeId) -> Option<&LayoutEntry> {
+    pub(crate) fn box_entry(&self, node: &Dot) -> Option<&LayoutEntry> {
         self.boxes_by_node_id
-            .get(&node_id)
+            .get(node)
             .map(|&entry_id| &self.entries[entry_id])
     }
 
-    pub(crate) fn box_rect(&self, node_id: NodeId) -> Option<Rect> {
-        Some(self.box_entry(node_id)?.rect)
+    pub(crate) fn box_rect(&self, node: &Dot) -> Option<Rect> {
+        Some(self.box_entry(node)?.rect)
     }
 
-    pub(crate) fn box_page_rects(&self, ids: &[NodeId]) -> Vec<PageRect> {
+    pub(crate) fn box_page_rects(&self, ids: &[Dot]) -> Vec<PageRect> {
         let mut rects = Vec::new();
-        for &id in ids {
+        for id in ids {
             let Some(entry) = self.box_entry(id) else {
                 continue;
             };
@@ -224,25 +222,22 @@ impl LayoutIndex {
         rects
     }
 
-    pub(crate) fn nearest_box(&self, point: LayoutPoint, ids: &[NodeId]) -> Option<NodeId> {
+    pub(crate) fn nearest_box(&self, point: LayoutPoint, ids: &[Dot]) -> Option<Dot> {
         ids.iter()
-            .filter_map(|&id| {
+            .filter_map(|id| {
                 self.box_entry(id)
                     .map(|entry| (distance_key(&entry.rect, point.x, point.y), id))
             })
             .min_by(|a, b| compare_distance_key(a.0, b.0))
-            .map(|(_, id)| id)
+            .map(|(_, id)| *id)
     }
 
-    pub(crate) fn box_contains(&self, point: LayoutPoint, node_id: NodeId) -> bool {
-        self.box_entry(node_id)
+    pub(crate) fn box_contains(&self, point: LayoutPoint, node: &Dot) -> bool {
+        self.box_entry(node)
             .is_some_and(|entry| entry.rect.contains(point.x, point.y))
     }
 
     pub(crate) fn entries_on_page(&self, page_idx: usize) -> Vec<&LayoutEntry> {
-        // Per-page entry lists are populated during the build walk in ascending
-        // entry-id (i.e. layout) order with no duplicates, so this is a direct
-        // lookup — no spatial query and no R-tree needed on the render path.
         match self.entries_by_page.get(page_idx) {
             Some(ids) => ids.iter().map(|&id| &self.entries[id]).collect(),
             None => Vec::new(),
@@ -258,22 +253,22 @@ impl LayoutIndex {
         self.entries.iter()
     }
 
-    pub(crate) fn direct_child_entries(
-        &self,
-        node_id: NodeId,
-    ) -> impl Iterator<Item = &LayoutEntry> + '_ {
+    pub(crate) fn direct_child_entries<'a>(
+        &'a self,
+        node: &'a Dot,
+    ) -> impl Iterator<Item = &'a LayoutEntry> + 'a {
         self.entries
             .iter()
-            .filter(move |entry| entry.ancestors.last() == Some(&node_id))
+            .filter(move |entry| entry.ancestors.last() == Some(node))
     }
 
-    pub(crate) fn direct_child_entries_in_y_range(
-        &self,
-        node_id: NodeId,
+    pub(crate) fn direct_child_entries_in_y_range<'a>(
+        &'a self,
+        node: &'a Dot,
         y_start: f32,
         y_end: f32,
-    ) -> impl Iterator<Item = &LayoutEntry> + '_ {
-        self.direct_child_entries(node_id)
+    ) -> impl Iterator<Item = &'a LayoutEntry> + 'a {
+        self.direct_child_entries(node)
             .filter(move |entry| rect_overlaps_y_range(&entry.rect, y_start, y_end))
     }
 
@@ -329,7 +324,7 @@ impl LayoutEntry {
             .is_some_and(|entry_node| std::ptr::eq(entry_node, node))
     }
 
-    pub(crate) fn ancestors(&self) -> &[NodeId] {
+    pub(crate) fn ancestors(&self) -> &[Dot] {
         &self.ancestors
     }
 
@@ -343,11 +338,11 @@ impl LayoutIndexBuilder<'_> {
         match &node.content {
             LayoutContent::Box(b) => {
                 let id = self.add_entry(node.rect);
-                self.boxes_by_node_id.insert(b.node_id, id);
-                if let Some(attachment) = b.attachment {
-                    self.register_match_node(attachment.parent_id, id);
+                self.boxes_by_node_id.insert(b.node, id);
+                if let Some(attachment) = &b.attachment {
+                    self.register_match_node(attachment.parent, id);
                 }
-                self.ancestors.push(b.node_id);
+                self.ancestors.push(b.node);
                 for (idx, child) in b.children.iter().enumerate() {
                     self.path.push(idx);
                     self.build_node(child);
@@ -364,20 +359,17 @@ impl LayoutIndexBuilder<'_> {
             LayoutContent::Spacing(_) => {}
             LayoutContent::Line(line) => {
                 let id = self.add_entry(node.rect);
-                self.register_match_node(line.node_id, id);
-                for run in &line.glyph_runs {
-                    self.register_match_node(run.node_id, id);
-                }
+                self.register_match_node(line.node, id);
             }
             LayoutContent::Atom(atom) => {
                 let id = self.add_entry(node.rect);
-                self.register_match_node(atom.attachment.parent_id, id);
+                self.register_match_node(atom.attachment.parent, id);
             }
         }
     }
 
-    fn register_match_node(&mut self, node_id: NodeId, entry_id: LayoutEntryId) {
-        let entries = self.entries_by_node.entry(node_id).or_default();
+    fn register_match_node(&mut self, node: Dot, entry_id: LayoutEntryId) {
+        let entries = self.entries_by_node.entry(node).or_default();
         if entries.last() != Some(&entry_id) {
             entries.push(entry_id);
         }
@@ -392,9 +384,6 @@ impl LayoutIndexBuilder<'_> {
         });
         if rect.width > 0.0 && rect.height > 0.0 {
             let bounds = AABB::from_corners([rect.x, rect.y], [rect.right(), rect.bottom()]);
-            // Pages are y-sorted and contiguous, so the overlapping range is
-            // found by binary search instead of scanning every page — turns the
-            // index build from O(entries · pages) into O(entries · log pages).
             let first = self.pages.partition_point(|p| p.y_end <= rect.y);
             for page_idx in first..self.pages.len() {
                 let page = &self.pages[page_idx];
@@ -439,34 +428,35 @@ fn rect_overlaps_y_range(rect: &Rect, y_start: f32, y_end: f32) -> bool {
 
 fn position_matches_node(node: &LayoutNode, pos: &Position) -> bool {
     match &node.content {
-        LayoutContent::Box(b) => b.attachment.is_some_and(|attachment| {
-            position_attaches_to_child(pos, attachment.parent_id, attachment.index)
-        }),
+        LayoutContent::Box(b) => b
+            .attachment
+            .as_ref()
+            .is_some_and(|a| position_attaches_to_child(pos, &a.parent, a.index)),
         LayoutContent::Line(line) => position_matches_line(line, pos),
         LayoutContent::Atom(atom) => {
-            position_attaches_to_child(pos, atom.attachment.parent_id, atom.attachment.index)
+            position_attaches_to_child(pos, &atom.attachment.parent, atom.attachment.index)
         }
         LayoutContent::Spacing(_) => false,
     }
 }
 
 fn position_matches_line(line: &LayoutLine, pos: &Position) -> bool {
-    if let Some(range) = &line.child_range
-        && line.node_id == pos.node_id
+    if line.node != pos.node {
+        return false;
+    }
+    if let Some(range) = &line.offset_range
         && pos.offset >= range.start
         && pos.offset <= range.end
     {
         return true;
     }
-    line.glyph_runs.iter().any(|run| {
-        run.node_id == pos.node_id
-            && pos.offset >= run.offset
-            && pos.offset <= run.offset + super::grapheme::run_codepoint_count(run)
-    })
+    line.glyph_runs
+        .iter()
+        .any(|run| pos.offset >= run.offset_range.start && pos.offset <= run.offset_range.end)
 }
 
-fn position_attaches_to_child(pos: &Position, parent_id: NodeId, index: usize) -> bool {
-    if pos.node_id != parent_id {
+fn position_attaches_to_child(pos: &Position, parent: &Dot, index: usize) -> bool {
+    if pos.node != *parent {
         return false;
     }
     match pos.affinity {
@@ -505,345 +495,337 @@ fn rect_area(rect: &Rect) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog,
+        NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+    use editor_state::Affinity;
+
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
+    use crate::paginate::paginator::Paginator;
+
     use super::*;
 
-    use crate::glyph_run::{GlyphRun, GraphemeSpan};
-    use crate::style::{Alignment, BorderMode, BoxStyle, Direction};
-    use editor_common::{EdgeInsets, Size};
-
-    fn page(y_start: f32, y_end: f32) -> LayoutPage {
-        LayoutPage::new(y_start, y_end, Size::new(440.0, y_end - y_start))
-    }
-
-    fn line_node(id: NodeId, x: f32, y: f32, text: &str, char_w: f32) -> LayoutNode {
-        let len = text.chars().count();
-        LayoutNode {
-            rect: Rect::from_xywh(x, y, len as f32 * char_w, 20.0),
-            content: LayoutContent::Line(LayoutLine {
-                node_id: id,
-                baseline: 16.0,
-                ascent: 14.0,
-                descent: 4.0,
-                cursor_ascent: 14.0,
-                cursor_descent: 4.0,
-                glyph_runs: vec![GlyphRun::make_test_run(
-                    id,
-                    0,
-                    text,
-                    0.0,
-                    vec![
-                        GraphemeSpan {
-                            advance: char_w,
-                            codepoints: 1
-                        };
-                        len
-                    ],
-                )],
-                ruby_annotations: vec![],
-                empty_caret_x: 0.0,
-                child_range: None,
-                tab_gaps: vec![],
-                is_phantom: false,
-                content_edge_x: None,
-            }),
-        }
-    }
-
-    fn box_node(id: NodeId, rect: Rect, children: Vec<LayoutNode>) -> LayoutNode {
-        LayoutNode {
-            rect,
-            content: LayoutContent::Box(LayoutBox {
-                node_id: id,
-                style: BoxStyle {
-                    direction: Direction::Vertical,
-                    padding: EdgeInsets::ZERO,
-                    border: EdgeInsets::ZERO,
-                    border_mode: BorderMode::Separate,
-                    alignment: Alignment::Start,
-                    decorations: vec![],
-                    monolithic: false,
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
                 },
-                children,
-                attachment: None,
-            }),
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
         }
     }
 
-    fn attached_box_node(
-        id: NodeId,
-        parent_id: NodeId,
-        index: usize,
-        rect: Rect,
-        children: Vec<LayoutNode>,
-    ) -> LayoutNode {
-        let mut node = box_node(id, rect, children);
-        let LayoutContent::Box(b) = &mut node.content else {
-            unreachable!("box_node creates a box");
-        };
-        b.attachment = Some(ChildAttachment { parent_id, index });
-        node
+    fn build_index(doc: &DocLogs, width: f32) -> (Dot, LayoutIndex) {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let root_id = root_node.id();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        let index = LayoutIndex::new(layout.tree, &layout.pages);
+        (root_id, index)
     }
 
-    fn line_id(layout_index: &LayoutIndex, entry: &LayoutEntry) -> NodeId {
-        match entry.content(layout_index) {
-            Some(LayoutContent::Line(line)) => line.node_id,
-            other => panic!("expected line entry, got {other:?}"),
+    fn para_doc(text: &str, width: f32) -> (DocLogs, Dot, Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, ch) in text.chars().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
         }
+        let doc = logs(&items);
+        let para_id = para;
+        let (root_id, index) = build_index(&doc, width);
+        (doc, root_id, para_id, index)
+    }
+
+    fn all_lines_under_para<'a>(index: &'a LayoutIndex, para_id: &Dot) -> Vec<&'a LayoutNode> {
+        let LayoutContent::Box(ref root_box) = index.tree().root.content else {
+            panic!("root is not a box");
+        };
+        let para_box_node = root_box
+            .children
+            .iter()
+            .find(|n| matches!(&n.content, LayoutContent::Box(b) if &b.node == para_id))
+            .expect("para box not found");
+        let LayoutContent::Box(ref para_box) = para_box_node.content else {
+            panic!("para is not a box");
+        };
+        para_box
+            .children
+            .iter()
+            .filter(|n| matches!(n.content, LayoutContent::Line(_)))
+            .collect()
     }
 
     #[test]
-    fn exact_entry_returns_smallest_containing_node() {
-        let line = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 80.0),
-                vec![line_node(line, 40.0, 20.0, "hello", 10.0)],
-            ),
-        };
-        let pages = [page(0.0, 100.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
-        let point = layout_index.point(0, 45.0, 25.0).unwrap();
-
-        let entry = layout_index.exact_entry(point, |_, _| true).unwrap();
-
-        assert_eq!(line_id(&layout_index, entry), line);
+    fn box_lookup() {
+        let (_, root_id, para_id, index) = para_doc("Hi", 400.0);
+        let rect = index.box_rect(&para_id);
+        assert!(rect.is_some());
+        let rect = rect.unwrap();
+        assert!(rect.width > 0.0);
+        assert!(rect.height > 0.0);
+        assert!(index.box_entry(&root_id).is_some());
     }
 
     #[test]
-    fn exact_entry_can_return_box_background_when_box_is_requested() {
-        let box_id = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 100.0),
-                vec![box_node(
-                    box_id,
-                    Rect::from_xywh(0.0, 20.0, 200.0, 60.0),
-                    vec![line_node(NodeId::new(), 40.0, 50.0, "hello", 10.0)],
-                )],
-            ),
+    fn entry_for_position_line() {
+        let (_, _root_id, para_id, index) = para_doc("Hi", 400.0);
+        let pos = Position {
+            node: para_id,
+            offset: 1,
+            affinity: Affinity::default(),
         };
-        let pages = [page(0.0, 120.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
-        let point = layout_index.point(0, 20.0, 25.0).unwrap();
+        let entry = index.entry_for_position(&pos).expect("entry must exist");
+        let node = entry.node(&index).expect("entry node must exist");
+        assert!(matches!(&node.content, LayoutContent::Line(l) if l.node == para_id));
+    }
 
-        let entry = layout_index
-            .exact_entry(point, |_, node| {
-                matches!(node.content, LayoutContent::Box(_))
-            })
-            .unwrap();
+    #[test]
+    fn wrapped_interior_via_run_fallback() {
+        let text = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let (_, _root_id, para_id, index) = para_doc(text, 40.0);
 
+        let lines = all_lines_under_para(&index, &para_id);
+        assert!(
+            lines.len() >= 3,
+            "must wrap into ≥3 lines, got {}",
+            lines.len()
+        );
+
+        let interior_lines: Vec<_> = lines[1..lines.len() - 1].to_vec();
+        for l in &interior_lines {
+            let LayoutContent::Line(ref ll) = l.content else {
+                panic!()
+            };
+            assert!(
+                ll.offset_range.is_none(),
+                "interior line must have offset_range == None"
+            );
+        }
+
+        let interior_line = interior_lines[0];
+        let LayoutContent::Line(ref interior_ll) = interior_line.content else {
+            panic!()
+        };
+        let run = interior_ll
+            .glyph_runs
+            .first()
+            .expect("interior line must have a glyph run");
+        let interior_offset =
+            run.offset_range.start + (run.offset_range.end - run.offset_range.start) / 2;
+
+        let pos_interior = Position {
+            node: para_id,
+            offset: interior_offset,
+            affinity: Affinity::default(),
+        };
+        let entry = index
+            .entry_for_position(&pos_interior)
+            .expect("interior position must resolve via run fallback");
+        let node = entry.node(&index).expect("entry node must exist");
+        assert!(matches!(&node.content, LayoutContent::Line(l) if l.node == para_id));
+        assert!(
+            std::ptr::eq(node as *const _, interior_line as *const _),
+            "must resolve to the interior line node"
+        );
+
+        let first_line = lines[0];
+        let LayoutContent::Line(ref first_ll) = first_line.content else {
+            panic!()
+        };
+        let first_range = first_ll
+            .offset_range
+            .as_ref()
+            .expect("first line must have offset_range");
+        let pos_boundary = Position {
+            node: para_id,
+            offset: first_range.start,
+            affinity: Affinity::Upstream,
+        };
+        let boundary_entry = index
+            .entry_for_position(&pos_boundary)
+            .expect("boundary position must resolve");
+        let boundary_node = boundary_entry
+            .node(&index)
+            .expect("boundary entry node must exist");
+        assert!(matches!(&boundary_node.content, LayoutContent::Line(l) if l.node == para_id));
+        assert!(
+            std::ptr::eq(boundary_node as *const _, first_line as *const _),
+            "boundary position (offset == first_range.start, Upstream) must resolve to the FIRST line node \
+             via the line-level offset_range branch, not to any other line"
+        );
+    }
+
+    #[test]
+    fn point_hit_test() {
+        let (_, _root_id, para_id, index) = para_doc("Hi", 400.0);
+        let para_rect = index.box_rect(&para_id).unwrap();
+        let mid_x = para_rect.x + para_rect.width / 2.0;
+        let mid_y = para_rect.y + para_rect.height / 2.0;
+
+        let pt = index
+            .point(0, mid_x, mid_y)
+            .expect("point must be on page 0");
+
+        let closest = index
+            .closest_entry(pt, |_, node| matches!(node.content, LayoutContent::Line(_)))
+            .expect("closest entry must exist");
         assert!(matches!(
-            entry.content(&layout_index),
-            Some(LayoutContent::Box(b)) if b.node_id == box_id
+            closest.node(&index).map(|n| &n.content),
+            Some(LayoutContent::Line(l)) if l.node == para_id
+        ));
+
+        let exact = index
+            .exact_entry(pt, |_, node| matches!(node.content, LayoutContent::Line(_)))
+            .expect("exact entry must exist");
+        assert!(matches!(
+            exact.node(&index).map(|n| &n.content),
+            Some(LayoutContent::Line(l)) if l.node == para_id
         ));
     }
 
     #[test]
-    fn entry_for_position_resolves_attached_non_monolithic_box_edges() {
-        let box_id = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                vec![attached_box_node(
-                    box_id,
-                    NodeId::ROOT,
-                    0,
-                    Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                    vec![line_node(NodeId::new(), 0.0, 0.0, "hello", 10.0)],
-                )],
+    fn atom_attachment_position() {
+        let root = Dot::ROOT;
+        let hr = Dot::new(1, 1);
+        let p = Dot::new(1, 2);
+        let items = vec![
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::default(),
+                    },
+                    parents: vec![root],
+                },
             ),
-        };
-        let pages = [page(0.0, 100.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
+            (
+                p,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+        ];
+        let doc = logs(&items);
+        let (root_id, index) = build_index(&doc, 400.0);
 
-        for pos in [
-            Position {
-                node_id: NodeId::ROOT,
-                offset: 0,
-                affinity: Affinity::Downstream,
+        let pos = Position {
+            node: root_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        let entry = index
+            .entry_for_position(&pos)
+            .expect("atom attachment position must resolve");
+        let node = entry.node(&index).expect("atom entry node must exist");
+        assert!(
+            matches!(&node.content, LayoutContent::Atom(a) if a.attachment.parent == root_id && a.attachment.index == 0),
+            "entry must be the HR atom with parent root_id at index 0"
+        );
+    }
+
+    fn two_para_doc(text1: &str, text2: &str, width: f32) -> (Dot, Dot, Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para1 = Dot::new(1, 1);
+        let para2 = Dot::new(1, 2);
+        let mut items = vec![(
+            para1,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
             },
-            Position {
-                node_id: NodeId::ROOT,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        ] {
-            let entry = layout_index.entry_for_position(&pos).unwrap();
-            assert!(matches!(
-                entry.content(&layout_index),
-                Some(LayoutContent::Box(b)) if b.node_id == box_id
-            ));
+        )];
+        let base = 3u64;
+        for (i, ch) in text1.chars().enumerate() {
+            items.push((Dot::new(1, base + i as u64), SeqItem::Char(ch)));
         }
-    }
-
-    #[test]
-    fn closest_entry_prefers_flow_y_before_x() {
-        let nearer_y = NodeId::new();
-        let nearer_x = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 600.0, 400.0),
-                vec![
-                    line_node(nearer_y, 500.0, 100.0, "yy", 10.0),
-                    line_node(nearer_x, 0.0, 300.0, "xx", 10.0),
-                ],
-            ),
-        };
-        let pages = [page(0.0, 400.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
-        let point = layout_index.point(0, 5.0, 130.0).unwrap();
-
-        let entry = layout_index
-            .closest_entry(point, |_, node| {
-                matches!(node.content, LayoutContent::Line(_))
-            })
-            .unwrap();
-
-        assert_eq!(line_id(&layout_index, entry), nearer_y);
-    }
-
-    #[test]
-    fn closest_entry_stays_on_requested_page() {
-        let page_0_line = NodeId::new();
-        let page_1_line = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 200.0),
-                vec![
-                    line_node(page_0_line, 0.0, 0.0, "first", 10.0),
-                    line_node(page_1_line, 0.0, 100.0, "second", 10.0),
-                ],
-            ),
-        };
-        let pages = [page(0.0, 100.0), page(100.0, 200.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
-        let point = layout_index.point(0, 5.0, 95.0).unwrap();
-
-        let entry = layout_index
-            .closest_entry(point, |_, node| {
-                matches!(node.content, LayoutContent::Line(_))
-            })
-            .unwrap();
-
-        assert_eq!(line_id(&layout_index, entry), page_0_line);
-    }
-
-    #[test]
-    fn closest_entry_includes_entry_spanning_requested_page() {
-        let spanning_box = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 200.0),
-                vec![box_node(
-                    spanning_box,
-                    Rect::from_xywh(20.0, 50.0, 100.0, 100.0),
-                    vec![line_node(NodeId::new(), 30.0, 60.0, "inside", 10.0)],
-                )],
-            ),
-        };
-        let pages = [page(0.0, 100.0), page(100.0, 200.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
-        let point = layout_index.point(1, 150.0, 20.0).unwrap();
-
-        let entry = layout_index
-            .closest_entry(point, |_, node| {
-                matches!(&node.content, LayoutContent::Box(b) if b.node_id == spanning_box)
-            })
-            .unwrap();
-
-        assert!(matches!(
-            entry.content(&layout_index),
-            Some(LayoutContent::Box(b)) if b.node_id == spanning_box
+        let base2 = base + text1.len() as u64;
+        items.push((
+            para2,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
         ));
+        for (i, ch) in text2.chars().enumerate() {
+            items.push((Dot::new(1, base2 + 1 + i as u64), SeqItem::Char(ch)));
+        }
+        let doc = logs(&items);
+        let para1_id = para1;
+        let para2_id = para2;
+        let (root_id, index) = build_index(&doc, width);
+        (root_id, para1_id, para2_id, index)
     }
 
     #[test]
-    fn vertical_navigation_candidates_choose_row_before_x() {
-        let (r0c0, r0c1, r1c0, r1c1) = (NodeId::new(), NodeId::new(), NodeId::new(), NodeId::new());
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
-                vec![
-                    box_node(
-                        NodeId::new(),
-                        Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                        vec![
-                            line_node(r0c0, 0.0, 0.0, "test", 25.0),
-                            line_node(r0c1, 100.0, 0.0, "test", 25.0),
-                        ],
-                    ),
-                    box_node(
-                        NodeId::new(),
-                        Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
-                        vec![
-                            line_node(r1c0, 0.0, 20.0, "test", 25.0),
-                            line_node(r1c1, 100.0, 20.0, "test", 25.0),
-                        ],
-                    ),
-                ],
-            ),
-        };
-        let pages = [page(0.0, 100.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
+    fn direct_children_and_nearest() {
+        let (root_id, para1_id, para2_id, index) = two_para_doc("near", "far", 400.0);
 
-        assert_eq!(
-            line_id(
-                &layout_index,
-                crate::query::navigation::navigable_below_at_x(&layout_index, 20.0, 150.0).unwrap()
-            ),
-            r1c1
+        let direct: Vec<_> = index.direct_child_entries(&root_id).collect();
+        assert!(!direct.is_empty(), "root must have direct child entries");
+        for entry in &direct {
+            assert_eq!(
+                entry.ancestors().last(),
+                Some(&root_id),
+                "direct child entry must have root_id as last ancestor"
+            );
+        }
+
+        assert!(
+            direct
+                .iter()
+                .all(|entry| entry.ancestors().last() != Some(&para1_id)),
+            "direct_child_entries must EXCLUDE entries whose last ancestor is para1_id (i.e. no deeper line entries should leak through)"
         );
+
+        let para1_rect = index.box_rect(&para1_id).unwrap();
+        let para2_rect = index.box_rect(&para2_id).unwrap();
+        let mid_x = para1_rect.x + para1_rect.width / 2.0;
+        let mid_y = para1_rect.y + para1_rect.height / 2.0;
+        let pt = index.point(0, mid_x, mid_y).unwrap();
+
+        let nearest = index.nearest_box(pt, &[para1_id, para2_id]);
         assert_eq!(
-            line_id(
-                &layout_index,
-                crate::query::navigation::navigable_above_at_x(&layout_index, 20.0, 150.0).unwrap()
-            ),
-            r0c1
+            nearest,
+            Some(para1_id),
+            "nearest_box must return para1_id (nearer block) not para2_id (farther block at y={})",
+            para2_rect.y
         );
-        assert_eq!(
-            line_id(
-                &layout_index,
-                crate::query::navigation::navigable_below_at_x(&layout_index, 20.0, -50.0).unwrap()
-            ),
-            r1c0
-        );
-    }
 
-    #[test]
-    fn entries_on_page_returns_visible_entries_in_layout_order() {
-        let visible_1 = NodeId::new();
-        let visible_2 = NodeId::new();
-        let page_1_line = NodeId::new();
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                Rect::from_xywh(0.0, 0.0, 200.0, 200.0),
-                vec![
-                    line_node(visible_1, 0.0, 10.0, "a", 10.0),
-                    line_node(visible_2, 0.0, 80.0, "b", 10.0),
-                    line_node(page_1_line, 0.0, 110.0, "c", 10.0),
-                ],
-            ),
-        };
-        let pages = [page(0.0, 100.0), page(100.0, 200.0)];
-        let layout_index = LayoutIndex::new(tree, &pages);
-
-        let line_ids: Vec<_> = layout_index
-            .entries_on_page(0)
-            .into_iter()
-            .filter_map(|entry| match entry.content(&layout_index) {
-                Some(LayoutContent::Line(line)) => Some(line.node_id),
-                _ => None,
-            })
-            .collect();
-
-        assert_eq!(line_ids, vec![visible_1, visible_2]);
+        let page_rects = index.box_page_rects(&[para1_id]);
+        assert!(!page_rects.is_empty(), "box_page_rects must be non-empty");
     }
 }

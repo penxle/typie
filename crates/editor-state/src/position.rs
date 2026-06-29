@@ -1,107 +1,500 @@
+use std::cmp::Ordering;
+
+use editor_common::StrExt;
+use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{Doc, Node, NodeId};
+use editor_model::{ChildView, DocView};
+use editor_resource::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::affinity::Affinity;
-use crate::resolved_position::ResolvedPosition;
+use crate::classify;
+use crate::selection::Selection;
 
-/// A document position: the triple `(node_id, offset, affinity)`.
-///
-/// `Position` is a plain value type (POD) with no automatic validation.
-/// Its invariants are documented below; violating positions either
-/// resolve to `None` via [`Position::resolve`] (value-level invariants)
-/// or produce incorrect behavior in downstream code (structural
-/// invariants).
-///
-/// # Invariants
-///
-/// - `node_id` must refer to a **text node** or a **container node**
-///   (a node whose schema allows children). Non-text leaf nodes
-///   (e.g. `hard_break`, `horizontal_rule`, `image`, `page_break`,
-///   `embed`, `file`) must **never** appear as `node_id`; such
-///   locations are represented by the parent container's boundary
-///   (the offset between the siblings of the leaf).
-///   *Not currently enforced.*
-///
-/// - `offset` must lie within the node's valid range:
-///   - Text node: `0..=char_count` (unicode codepoint units, **not** bytes).
-///   - Container node: `0..=children.len()`.
-///   *Not currently enforced.*
-///
-/// # Semantics of `offset`
-///
-/// `offset` names the **boundary between** elements, not an element itself.
-///
-/// - In a **text node**, `offset` is a unicode codepoint index between
-///   chars. For `"hello"`, offset `0` is before `'h'`, offset `5` is
-///   after `'o'`.
-/// - In a **container node**, `offset` is an index between children.
-///   For `blockquote { p1, p2, p3 }`, `offset: 1` names the boundary
-///   **between `p1` and `p2`** — it does NOT point at `p2` itself.
-///   - Empty container cursor: `offset = 0`.
-///   - End of container: `offset = children.len()` (e.g. 3 in the
-///     example above — the position after `p3`).
-///
-/// # Semantics of `affinity`
-///
-/// See [`Affinity`].
 #[ffi]
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Position {
-    pub node_id: NodeId,
+    pub node: Dot,
     pub offset: usize,
-    #[serde(default)]
     pub affinity: Affinity,
 }
 
 impl Position {
-    pub fn new(node_id: NodeId, offset: usize) -> Self {
+    pub fn new(node: Dot, offset: usize) -> Self {
         Self {
-            node_id,
+            node,
             offset,
             affinity: Affinity::default(),
         }
     }
-
-    pub fn resolve<'a>(&self, doc: &'a Doc) -> Option<ResolvedPosition<'a>> {
-        ResolvedPosition::resolve(doc, *self)
-    }
 }
 
-pub(crate) fn logical_boundary(doc: &Doc, pos: Position) -> Option<Vec<usize>> {
-    let node = doc.node(pos.node_id)?;
-    if let Node::Text(text) = node.node() {
-        let len = text.text.len();
-        let mut path = node.path();
-        if pos.offset == 0 {
-            return Some(path);
+pub struct ResolvedPosition<'a> {
+    view: &'a DocView<'a>,
+    position: Position,
+    path: Vec<usize>,
+}
+
+impl Position {
+    pub fn resolve<'a>(&self, view: &'a DocView<'a>) -> Option<ResolvedPosition<'a>> {
+        let node = view.node(self.node)?;
+        if self.offset > node.children().count() {
+            return None;
         }
-        if pos.offset == len {
-            if let Some(last) = path.last_mut() {
-                *last += 1;
-            }
-            return Some(path);
-        }
-        path.push(pos.offset);
-        return Some(path);
+        let mut chain: Vec<usize> = node.ancestors().filter_map(|n| n.index()).collect();
+        chain.reverse();
+        chain.push(self.offset);
+        Some(ResolvedPosition {
+            view,
+            position: *self,
+            path: chain,
+        })
     }
-
-    let mut path = node.path();
-    path.push(pos.offset);
-    Some(path)
 }
 
-pub fn positions_at_same_logical_boundary(doc: &Doc, a: Position, b: Position) -> bool {
-    logical_boundary(doc, a) == logical_boundary(doc, b)
+impl From<&ResolvedPosition<'_>> for Position {
+    fn from(r: &ResolvedPosition<'_>) -> Self {
+        r.position()
+    }
 }
 
-pub fn position_before_or_same_logical_boundary(doc: &Doc, a: Position, b: Position) -> bool {
-    if positions_at_same_logical_boundary(doc, a, b) {
-        return true;
-    }
-    let (Some(a), Some(b)) = (a.resolve(doc), b.resolve(doc)) else {
-        return false;
+/// Inline leaf ids (chars/atoms) fully covered by the range `[from, to]`, in
+/// document order. The projected model has no text nodes, so this returns the
+/// loose leaf ids themselves.
+pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position) -> Vec<Dot> {
+    let Some(rs) = Selection::new(*from, *to).resolve(view) else {
+        return Vec::new();
     };
-    a <= b
+    let lo = rs.from().position();
+    let hi = rs.to().position();
+    let (Some(lo_r), Some(hi_r)) = (lo.resolve(view), hi.resolve(view)) else {
+        return Vec::new();
+    };
+
+    let mut blocks = Vec::new();
+    if let Some(root) = view.root() {
+        blocks.push(root);
+        for d in root.descendants() {
+            if let ChildView::Block(b) = d {
+                blocks.push(b);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    for block in blocks {
+        let block_id = block.id();
+        for (i, child) in block.children().enumerate() {
+            let ChildView::Leaf(l) = child else { continue };
+            let (Some(start), Some(end)) = (
+                Position::new(block_id, i).resolve(view),
+                Position::new(block_id, i + 1).resolve(view),
+            ) else {
+                continue;
+            };
+            if lo_r <= start && end <= hi_r {
+                out.push(l.dot());
+            }
+        }
+    }
+    out
+}
+
+impl<'a> ResolvedPosition<'a> {
+    pub fn view(&self) -> &'a DocView<'a> {
+        self.view
+    }
+    pub fn node(&self) -> Dot {
+        self.position.node
+    }
+    pub fn position(&self) -> Position {
+        self.position
+    }
+    pub fn offset(&self) -> usize {
+        self.position.offset
+    }
+    pub fn affinity(&self) -> Affinity {
+        self.position.affinity
+    }
+    pub fn path(&self) -> &[usize] {
+        &self.path
+    }
+    pub fn is_inline_position(&self) -> bool {
+        classify::is_inline_position(self)
+    }
+}
+
+impl<'a> ResolvedPosition<'a> {
+    fn grapheme_boundaries(&self, resource: &Resource) -> Vec<usize> {
+        let Some(node) = self.view.node(self.position.node) else {
+            return vec![0];
+        };
+        let children: Vec<ChildView<'a>> = node.children().collect();
+        let mut boundaries = vec![0usize];
+        let mut i = 0usize;
+        while i < children.len() {
+            let run_start = i;
+            let mut run = String::new();
+            while i < children.len() {
+                if let ChildView::Leaf(l) = &children[i]
+                    && let Some(c) = l.as_char()
+                {
+                    run.push(c);
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            if i > run_start {
+                for byte_off in resource.segmenters.grapheme.as_borrowed().segment_str(&run) {
+                    boundaries.push(run_start + run.nth_byte_char_offset(byte_off));
+                }
+            } else {
+                boundaries.push(i);
+                boundaries.push(i + 1);
+                i += 1;
+            }
+        }
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        boundaries
+    }
+
+    pub fn snap_to_grapheme(&self, resource: &Resource) -> ResolvedPosition<'a> {
+        let boundaries = self.grapheme_boundaries(resource);
+        let offset = self.position.offset;
+        if boundaries.contains(&offset) {
+            return self.position.resolve(self.view).unwrap();
+        }
+        let snapped = match self.position.affinity {
+            Affinity::Upstream => boundaries
+                .iter()
+                .copied()
+                .rfind(|&b| b <= offset)
+                .unwrap_or(0),
+            Affinity::Downstream => boundaries
+                .iter()
+                .copied()
+                .find(|&b| b >= offset)
+                .unwrap_or(*boundaries.last().unwrap_or(&0)),
+        };
+        Position {
+            node: self.position.node,
+            offset: snapped,
+            affinity: self.position.affinity,
+        }
+        .resolve(self.view)
+        .unwrap()
+    }
+
+    pub fn next_grapheme(&self, resource: &Resource) -> Option<ResolvedPosition<'a>> {
+        let boundaries = self.grapheme_boundaries(resource);
+        let next = boundaries.into_iter().find(|&b| b > self.position.offset)?;
+        Position::new(self.position.node, next).resolve(self.view)
+    }
+
+    pub fn prev_grapheme(&self, resource: &Resource) -> Option<ResolvedPosition<'a>> {
+        if self.position.offset == 0 {
+            return None;
+        }
+        let boundaries = self.grapheme_boundaries(resource);
+        let prev = boundaries
+            .into_iter()
+            .rfind(|&b| b < self.position.offset)?;
+        Position::new(self.position.node, prev).resolve(self.view)
+    }
+}
+
+impl PartialEq for ResolvedPosition<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path && self.position.affinity == other.position.affinity
+    }
+}
+impl Eq for ResolvedPosition<'_> {}
+impl PartialOrd for ResolvedPosition<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for ResolvedPosition<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.path
+            .cmp(&other.path)
+            .then_with(|| self.position.affinity.cmp(&other.position.affinity))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        DocLogs, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc,
+        SeqItem, SpanLog, StyleLog, project_document,
+    };
+
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn two_paras() -> (ProjectedDoc, Dot, Dot) {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 5);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('H')),
+            (Dot::new(1, 3), SeqItem::Char('i')),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 6), SeqItem::Char('y')),
+        ];
+        (project_document(&logs(&items)).unwrap(), p1, p2)
+    }
+
+    #[test]
+    fn resolve_and_order() {
+        let (pd, p1, p2) = two_paras();
+        let view = DocView::new(&pd);
+        let a = Position::new(p1, 1).resolve(&view).unwrap();
+        let b = Position::new(p2, 0).resolve(&view).unwrap();
+        assert_eq!(a.offset(), 1);
+        assert!(a < b);
+    }
+
+    #[test]
+    fn resolve_exposes_accessors() {
+        let (pd, p1, _p2) = two_paras();
+        let view = DocView::new(&pd);
+        let r = Position::new(p1, 1).resolve(&view).unwrap();
+        assert_eq!(r.node(), p1);
+        assert_eq!(r.offset(), 1);
+        assert_eq!(r.affinity(), Affinity::default());
+        assert_eq!(r.position(), Position::new(p1, 1));
+        assert_eq!(r.path(), &[0, 1]);
+        assert!(r.view().node(p1).is_some());
+    }
+
+    #[test]
+    fn resolve_accepts_end_boundary() {
+        let (pd, p1, _p2) = two_paras();
+        let view = DocView::new(&pd);
+        assert!(Position::new(p1, 2).resolve(&view).is_some());
+    }
+
+    #[test]
+    fn resolve_orders_offsets_within_block() {
+        let (pd, p1, _p2) = two_paras();
+        let view = DocView::new(&pd);
+        let a = Position::new(p1, 0).resolve(&view);
+        let b = Position::new(p1, 1).resolve(&view);
+        assert!(a < b);
+    }
+
+    #[test]
+    fn resolve_orders_affinity_at_same_point() {
+        let (pd, p1, _p2) = two_paras();
+        let view = DocView::new(&pd);
+        let up = Position {
+            node: p1,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        }
+        .resolve(&view)
+        .unwrap();
+        let down = Position {
+            node: p1,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        }
+        .resolve(&view)
+        .unwrap();
+        assert!(up < down);
+        assert!(up != down);
+    }
+
+    fn para_doc(children: &[SeqItem]) -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, c) in children.iter().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), c.clone()));
+        }
+        (project_document(&logs(&items)).unwrap(), para)
+    }
+
+    #[test]
+    fn grapheme_skips_combining_mark() {
+        use editor_model::AtomLeaf;
+        use editor_resource::Resource;
+        let r = Resource::new_test();
+        let (pd, para) = para_doc(&[
+            SeqItem::Char('a'),
+            SeqItem::Char('e'),
+            SeqItem::Char('\u{0301}'),
+            SeqItem::Atom(AtomLeaf::HardBreak),
+            SeqItem::Char('b'),
+        ]);
+        let view = DocView::new(&pd);
+        let at = |off: usize| Position::new(para, off).resolve(&view).unwrap();
+        assert_eq!(at(0).next_grapheme(&r).unwrap().offset(), 1);
+        assert_eq!(at(1).next_grapheme(&r).unwrap().offset(), 3);
+        assert_eq!(at(3).next_grapheme(&r).unwrap().offset(), 4);
+        assert_eq!(at(5).prev_grapheme(&r).unwrap().offset(), 4);
+        assert_eq!(at(3).prev_grapheme(&r).unwrap().offset(), 1);
+    }
+
+    #[test]
+    fn next_grapheme_at_block_end_is_none() {
+        use editor_resource::Resource;
+        let r = Resource::new_test();
+        let (pd, para) = para_doc(&[SeqItem::Char('a'), SeqItem::Char('b')]);
+        let view = DocView::new(&pd);
+        let at = |off: usize| Position::new(para, off).resolve(&view).unwrap();
+        assert!(at(2).next_grapheme(&r).is_none());
+    }
+
+    #[test]
+    fn prev_grapheme_at_offset_zero_is_none() {
+        use editor_resource::Resource;
+        let r = Resource::new_test();
+        let (pd, para) = para_doc(&[SeqItem::Char('a'), SeqItem::Char('b')]);
+        let view = DocView::new(&pd);
+        let at = |off: usize| Position::new(para, off).resolve(&view).unwrap();
+        assert!(at(0).prev_grapheme(&r).is_none());
+    }
+
+    #[test]
+    fn empty_paragraph_has_no_adjacent_graphemes() {
+        use editor_resource::Resource;
+        let r = Resource::new_test();
+        let (pd, para) = para_doc(&[]);
+        let view = DocView::new(&pd);
+        let at = |off: usize| Position::new(para, off).resolve(&view).unwrap();
+        assert!(at(0).next_grapheme(&r).is_none());
+        assert!(at(0).prev_grapheme(&r).is_none());
+    }
+
+    #[test]
+    fn snap_to_grapheme_combining_mark() {
+        use editor_resource::Resource;
+        let r = Resource::new_test();
+        let (pd, para) = para_doc(&[SeqItem::Char('e'), SeqItem::Char('\u{0301}')]);
+        let view = DocView::new(&pd);
+        let snap = |off: usize, aff: Affinity| {
+            Position {
+                node: para,
+                offset: off,
+                affinity: aff,
+            }
+            .resolve(&view)
+            .unwrap()
+            .snap_to_grapheme(&r)
+            .offset()
+        };
+        assert_eq!(snap(1, Affinity::Upstream), 0);
+        assert_eq!(snap(1, Affinity::Downstream), 2);
+        assert_eq!(snap(0, Affinity::Downstream), 0);
+        assert_eq!(snap(2, Affinity::Upstream), 2);
+    }
+
+    fn root_then_blockquote() -> ProjectedDoc {
+        let root = Dot::ROOT;
+        let bq = Dot::new(1, 1);
+        let para = Dot::new(1, 2);
+        let items = vec![
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bq],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+        ];
+        project_document(&logs(&items)).unwrap()
+    }
+
+    #[test]
+    fn resolve_derived_block() {
+        let pd = root_then_blockquote();
+        let view = DocView::new(&pd);
+        let derived = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.id().is_synthetic())
+            .map(|b| b.id())
+            .expect("normalize must synthesize a derived trailing paragraph");
+
+        let r = Position::new(derived, 0)
+            .resolve(&view)
+            .expect("derived block resolves");
+        assert_eq!(r.node(), derived);
+        assert_eq!(r.path(), &[1, 0]);
+
+        let bq = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Blockquote)
+            .map(|b| b.id())
+            .unwrap();
+        let before = Position::new(bq, 0).resolve(&view).unwrap();
+        assert!(before < r);
+    }
+
+    #[test]
+    fn resolve_rejects_unknown_and_out_of_range() {
+        let (pd, p1, _p2) = two_paras();
+        let view = DocView::new(&pd);
+        assert!(Position::new(Dot::new(9, 9), 0).resolve(&view).is_none());
+        assert!(Position::new(p1, 99).resolve(&view).is_none());
+    }
 }

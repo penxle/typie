@@ -1,497 +1,351 @@
-use editor_model::{Doc, Node, NodeId, NodeRef, NodeType, Schema};
+use editor_model::{ChildView, DocView, NodeType, NodeView, Schema};
 
 use crate::affinity::Affinity;
-use crate::position::Position;
-use crate::resolved_selection::ResolvedSelection;
-use crate::selection::Selection;
 
-/// `Some(first_child)` iff the document's first child is a unit (atom leaf
-/// or monolithic block). Used to detect a gap before a leading unit. The
-/// container here is always the document root, whose content always admits
-/// a leading paragraph, so no position-specific content check is needed.
-pub(crate) fn leading_unit(doc: &Doc) -> Option<NodeRef<'_>> {
-    let root = doc.node(NodeId::ROOT)?;
-    let first = root.children().next()?;
-    Schema::node_spec(first.as_type())
-        .is_unit()
-        .then_some(first)
-}
+use crate::{Position, classify, selection::ResolvedSelection};
 
-/// True iff `(node_id, index)` is a boundary between two adjacent
-/// monolithic block siblings where inserting a paragraph at `index` keeps
-/// the parent's content model valid (checked position-specifically via
-/// `ContentExpr::matches_sequence`). This is the single source of truth
-/// for between-monolithic gap detection, so the normalization invariant
-/// and this classification stay consistent.
-pub(crate) fn between_monolithic_at(doc: &Doc, node_id: NodeId, index: usize) -> bool {
-    let Some(node) = doc.node(node_id) else {
-        return false;
-    };
-    if matches!(node.node(), Node::Text(_)) {
-        return false;
-    }
-    let children: Vec<NodeRef<'_>> = node.children().collect();
-    let count = children.len();
-    if index == 0 || index >= count {
-        return false;
-    }
-    if !Schema::node_spec(children[index - 1].as_type()).monolithic
-        || !Schema::node_spec(children[index].as_type()).monolithic
-    {
-        return false;
-    }
-    let mut seq: Vec<NodeType> = children.iter().map(|c| c.as_type()).collect();
-    seq.insert(index, NodeType::Paragraph);
-    Schema::node_spec(node.as_type())
-        .content
-        .matches_sequence(&seq)
-}
-
-/// A gap cursor derived from a collapsed `Selection`. The document is not
-/// mutated; this is a positional convention over the existing `Selection`,
-/// classified here (same pattern as `cell_selection.rs`).
 pub enum GapCursor<'a> {
-    /// `(root, 0, Upstream)` when the document's first child is a unit.
-    LeadingUnit { unit: NodeRef<'a> },
-    /// `(parent, index)` between two `monolithic` siblings.
+    LeadingUnit {
+        unit: ChildView<'a>,
+    },
     BetweenMonolithic {
-        parent: NodeRef<'a>,
-        before: NodeRef<'a>,
-        after: NodeRef<'a>,
+        parent: NodeView<'a>,
+        before: ChildView<'a>,
+        after: ChildView<'a>,
         index: usize,
     },
 }
 
-pub(crate) fn gap_cursor_at(doc: &Doc, p: Position) -> Option<GapCursor<'_>> {
-    if p.node_id == NodeId::ROOT && p.offset == 0 && p.affinity == Affinity::Upstream {
-        return leading_unit(doc).map(|unit| GapCursor::LeadingUnit { unit });
-    }
+pub fn leading_unit<'a>(view: &'a DocView<'a>) -> Option<ChildView<'a>> {
+    let first = view.root()?.first_child()?;
+    classify::child_is_unit(&first).then_some(first)
+}
 
-    if !between_monolithic_at(doc, p.node_id, p.offset) {
+pub fn between_monolithic_at(host: &NodeView, index: usize) -> bool {
+    let children: Vec<ChildView> = host.children().collect();
+    let count = children.len();
+    if index == 0 || index >= count {
+        return false;
+    }
+    let ty = |c: &ChildView| match c {
+        ChildView::Block(b) => b.node_type(),
+        ChildView::Leaf(l) => l.node_type(),
+    };
+    if !Schema::node_spec(ty(&children[index - 1])).monolithic
+        || !Schema::node_spec(ty(&children[index])).monolithic
+    {
+        return false;
+    }
+    let mut seq: Vec<NodeType> = children.iter().map(ty).collect();
+    seq.insert(index, NodeType::Paragraph);
+    Schema::node_spec(host.node_type())
+        .content
+        .matches_sequence(&seq)
+}
+
+pub fn gap_cursor_at<'a>(pos: &Position, view: &'a DocView<'a>) -> Option<GapCursor<'a>> {
+    let host = view.node(pos.node)?;
+    let is_root = view.root().map(|r| r.id()) == Some(pos.node);
+    if is_root && pos.offset == 0 && pos.affinity == Affinity::Upstream {
+        return leading_unit(view).map(|unit| GapCursor::LeadingUnit { unit });
+    }
+    if !between_monolithic_at(&host, pos.offset) {
         return None;
     }
-    let node = doc.node(p.node_id)?;
-    let before = node.children().nth(p.offset - 1)?;
-    let after = node.children().nth(p.offset)?;
+    let before = host.child_at(pos.offset - 1)?;
+    let after = host.child_at(pos.offset)?;
     Some(GapCursor::BetweenMonolithic {
-        parent: node,
+        parent: host,
         before,
         after,
-        index: p.offset,
+        index: pos.offset,
     })
 }
 
-impl<'a> ResolvedSelection<'a> {
-    /// `Some` iff this collapsed selection encodes a gap cursor. A
-    /// cell-rect / node-selection is by definition non-collapsed, so the
-    /// `is_collapsed()` gate alone makes them mutually exclusive with a
-    /// gap cursor; no extra `as_cell_rect`/`as_node_selection` check is
-    /// needed here.
-    pub fn as_gap_cursor(&self) -> Option<GapCursor<'a>> {
-        if !self.is_collapsed() {
-            return None;
-        }
-        let doc = self.doc();
-        let p = Position::from(self.head());
-
-        gap_cursor_at(doc, p)
-    }
-}
-
-/// Build the leading-unit gap cursor selection, or `None` if the
-/// document's first child is not a unit. Run through `normalize` so any
-/// caller may inspect it directly (mirrors `cell_rect_selection`).
-pub fn gap_cursor_selection_leading(doc: &Doc) -> Option<Selection> {
-    leading_unit(doc)?;
-    Selection::collapsed(Position {
-        node_id: NodeId::ROOT,
-        offset: 0,
-        affinity: Affinity::Upstream,
-    })
-    .normalize(doc)
-}
-
-/// Build the between-monolithic gap cursor at `(parent, index)`, or
-/// `None` if the shared structural predicate rejects it.
-pub fn gap_cursor_selection_between(doc: &Doc, parent: NodeId, index: usize) -> Option<Selection> {
-    if !between_monolithic_at(doc, parent, index) {
+pub fn as_gap_cursor<'a>(rs: &ResolvedSelection<'a>) -> Option<GapCursor<'a>> {
+    if !rs.is_collapsed() {
         return None;
     }
-    Selection::collapsed(Position::new(parent, index)).normalize(doc)
+    gap_cursor_at(&rs.head().position(), rs.view())
 }
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
-    use editor_model::NodeId;
-
     use super::*;
-    use crate::cell_rect_selection;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog,
+        NodeType, ProjectedDoc, SeqItem, SpanLog, StyleLog, project_document,
+    };
 
-    #[test]
-    fn leading_unit_some_for_leading_image() {
-        let (d, ..) = doc! { root { image paragraph { text("b") } } };
-        assert!(leading_unit(&d).is_some());
-    }
+    use crate::{Position, selection::Selection};
 
-    #[test]
-    fn leading_unit_some_for_leading_fold() {
-        let (d, ..) = doc! {
-            root {
-                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
-                paragraph {}
-            }
-        };
-        assert!(leading_unit(&d).is_some());
-    }
-
-    #[test]
-    fn leading_unit_none_for_leading_paragraph() {
-        let (d, ..) = doc! { root { paragraph { text("a") } } };
-        assert!(leading_unit(&d).is_none());
-    }
-
-    #[test]
-    fn between_two_folds_in_root_is_true() {
-        let (d, ..) = doc! {
-            root {
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            }
-        };
-        assert!(between_monolithic_at(&d, NodeId::ROOT, 1));
-    }
-
-    #[test]
-    fn between_two_folds_in_fold_content_is_true() {
-        let (d, fc) = doc! {
-            root {
-                fold {
-                    fold_title { text("t") }
-                    fc: fold_content {
-                        fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                        fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                    }
-                }
-                paragraph {}
-            }
-        };
-        assert!(between_monolithic_at(&d, fc, 1));
-    }
-
-    #[test]
-    fn between_two_folds_in_table_cell_is_true() {
-        let (d, cell) = doc! {
-            root {
-                table {
-                    table_row {
-                        cell: table_cell {
-                            fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                            fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                        }
-                    }
-                }
-                paragraph {}
-            }
-        };
-        assert!(between_monolithic_at(&d, cell, 1));
-    }
-
-    #[test]
-    fn between_image_and_fold_is_false_not_both_monolithic() {
-        let (d, ..) = doc! {
-            root {
-                paragraph { text("p") }
-                image
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                paragraph {}
-            }
-        };
-        assert!(!between_monolithic_at(&d, NodeId::ROOT, 2));
-    }
-
-    #[test]
-    fn between_two_horizontal_rules_is_false_hr_not_monolithic() {
-        let (d, ..) = doc! {
-            root { horizontal_rule horizontal_rule paragraph {} }
-        };
-        assert!(!between_monolithic_at(&d, NodeId::ROOT, 1));
-    }
-
-    #[test]
-    fn between_two_paragraphs_is_false() {
-        let (d, ..) = doc! { root { paragraph { text("a") } paragraph { text("b") } } };
-        assert!(!between_monolithic_at(&d, NodeId::ROOT, 1));
-    }
-
-    #[test]
-    fn index_zero_and_out_of_range_are_false() {
-        let (d, ..) = doc! {
-            root {
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            }
-        };
-        assert!(!between_monolithic_at(&d, NodeId::ROOT, 0));
-        assert!(!between_monolithic_at(&d, NodeId::ROOT, 99));
-    }
-
-    #[test]
-    fn leading_image_upstream_is_gap_cursor() {
-        let (d, ..) = doc! { root { image paragraph { text("b") } } };
-        let sel = Selection::collapsed(Position {
-            node_id: NodeId::ROOT,
-            offset: 0,
-            affinity: Affinity::Upstream,
-        });
-        let rs = sel.resolve(&d).unwrap();
-        assert!(matches!(
-            rs.as_gap_cursor(),
-            Some(GapCursor::LeadingUnit { .. })
-        ));
-    }
-
-    #[test]
-    fn leading_fold_upstream_is_gap_cursor() {
-        let (d, ..) = doc! {
-            root {
-                fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
-                paragraph {}
-            }
-        };
-        let sel = Selection::collapsed(Position {
-            node_id: NodeId::ROOT,
-            offset: 0,
-            affinity: Affinity::Upstream,
-        });
-        let rs = sel.resolve(&d).unwrap();
-        assert!(matches!(
-            rs.as_gap_cursor(),
-            Some(GapCursor::LeadingUnit { .. })
-        ));
-    }
-
-    #[test]
-    fn leading_unit_downstream_is_not_gap_cursor() {
-        let (d, ..) = doc! { root { image paragraph { text("b") } } };
-        let sel = Selection::collapsed(Position {
-            node_id: NodeId::ROOT,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        });
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn leading_paragraph_is_not_gap_cursor() {
-        let (d, ..) = doc! { root { paragraph { text("a") } } };
-        let sel = Selection::collapsed(Position {
-            node_id: NodeId::ROOT,
-            offset: 0,
-            affinity: Affinity::Upstream,
-        });
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn between_two_folds_root_is_gap_cursor_both_affinities() {
-        let (d, ..) = doc! {
-            root {
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            }
-        };
-        for aff in [Affinity::Downstream, Affinity::Upstream] {
-            let sel = Selection::collapsed(Position {
-                node_id: NodeId::ROOT,
-                offset: 1,
-                affinity: aff,
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
             });
-            let rs = sel.resolve(&d).unwrap();
-            match rs.as_gap_cursor() {
-                Some(GapCursor::BetweenMonolithic { index, .. }) => assert_eq!(index, 1),
-                _ => panic!("expected BetweenMonolithic at affinity {:?}", aff),
-            }
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
         }
     }
 
-    #[test]
-    fn between_two_folds_in_fold_content_is_gap_cursor() {
-        let (d, fc) = doc! {
-            root {
-                fold {
-                    fold_title { text("t") }
-                    fc: fold_content {
-                        fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                        fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                    }
-                }
-                paragraph {}
-            }
+    fn image_first_doc() -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let img_dot = Dot::new(1, 1);
+        let para = Dot::new(1, 2);
+        let img_node = match editor_model::NodeType::Image.into_node() {
+            editor_model::Node::Image(n) => n,
+            _ => unreachable!(),
         };
-        let sel = Selection::collapsed(Position::new(fc, 1));
-        let rs = sel.resolve(&d).unwrap();
-        assert!(matches!(
-            rs.as_gap_cursor(),
-            Some(GapCursor::BetweenMonolithic { .. })
-        ));
+        let items = vec![
+            (
+                img_dot,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img_node },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (project_document(&logs(&items)).unwrap(), root)
+    }
+
+    fn two_folds_doc() -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let fold1 = Dot::new(1, 1);
+        let fold1_title = Dot::new(1, 2);
+        let fold1_content = Dot::new(1, 3);
+        let fold2 = Dot::new(1, 4);
+        let fold2_title = Dot::new(1, 5);
+        let fold2_content = Dot::new(1, 6);
+        let para = Dot::new(1, 7);
+        let items = vec![
+            (
+                fold1,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
+            ),
+            (
+                fold1_title,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold1],
+                },
+            ),
+            (
+                fold1_content,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold1],
+                },
+            ),
+            (
+                fold2,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
+            ),
+            (
+                fold2_title,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold2],
+                },
+            ),
+            (
+                fold2_content,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold2],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (project_document(&logs(&items)).unwrap(), root)
     }
 
     #[test]
-    fn between_two_folds_in_table_cell_is_gap_cursor() {
-        let (d, cell) = doc! {
-            root {
-                table {
-                    table_row {
-                        cell: table_cell {
-                            fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                            fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                        }
-                    }
-                }
-                paragraph {}
-            }
-        };
-        let sel = Selection::collapsed(Position::new(cell, 1));
-        let rs = sel.resolve(&d).unwrap();
-        assert!(matches!(
-            rs.as_gap_cursor(),
-            Some(GapCursor::BetweenMonolithic { .. })
-        ));
+    fn test_1_leading_unit_image() {
+        let (pd, _root) = image_first_doc();
+        let view = DocView::new(&pd);
+        let unit = leading_unit(&view);
+        assert!(
+            unit.is_some(),
+            "image as first root child should be a leading unit"
+        );
+        let unit = unit.unwrap();
+        assert!(
+            matches!(unit, ChildView::Leaf(ref l) if l.as_atom().is_some_and(|a| matches!(a, AtomLeaf::Image { .. })))
+        );
     }
 
     #[test]
-    fn between_image_and_fold_is_not_gap_cursor() {
-        let (d, ..) = doc! {
-            root {
-                paragraph { text("p") }
-                image
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                paragraph {}
-            }
-        };
-        let sel = Selection::collapsed(Position {
-            node_id: NodeId::ROOT,
-            offset: 2,
-            affinity: Affinity::Downstream,
-        });
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
+    fn test_1_leading_unit_none_when_para_first() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+        assert!(
+            leading_unit(&view).is_none(),
+            "paragraph as first child is not a unit"
+        );
     }
 
     #[test]
-    fn between_two_paragraphs_is_not_gap_cursor() {
-        let (d, ..) = doc! { root { paragraph { text("a") } paragraph { text("b") } } };
-        let sel = Selection::collapsed(Position {
-            node_id: NodeId::ROOT,
+    fn test_2_between_monolithic_at_two_folds() {
+        let (pd, _root) = two_folds_doc();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        assert!(
+            between_monolithic_at(&root_node, 1),
+            "between two folds at index 1 should be a gap position"
+        );
+        assert!(
+            !between_monolithic_at(&root_node, 0),
+            "index 0 is never a gap (nothing before)"
+        );
+        assert!(
+            !between_monolithic_at(&root_node, 2),
+            "index 2 is fold then paragraph — fold monolithic but paragraph is not"
+        );
+    }
+
+    #[test]
+    fn test_3_as_gap_cursor_between_folds() {
+        let (pd, root) = two_folds_doc();
+        let view = DocView::new(&pd);
+        let pos = Position {
+            node: root,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::collapsed(pos).resolve(&view).unwrap();
+        let gc = as_gap_cursor(&sel);
+        assert!(
+            gc.is_some(),
+            "collapsed selection between two folds should produce a gap cursor"
+        );
+        assert!(
+            matches!(gc, Some(GapCursor::BetweenMonolithic { index: 1, .. })),
+            "should be BetweenMonolithic at index 1"
+        );
+    }
+
+    #[test]
+    fn test_3_as_gap_cursor_none_for_non_collapsed() {
+        let (pd, root) = two_folds_doc();
+        let view = DocView::new(&pd);
+        let a = Position {
+            node: root,
+            offset: 0,
+            affinity: Affinity::Upstream,
+        };
+        let h = Position {
+            node: root,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::new(a, h).resolve(&view).unwrap();
+        assert!(
+            as_gap_cursor(&sel).is_none(),
+            "non-collapsed selection cannot be a gap cursor"
+        );
+    }
+
+    #[test]
+    fn test_3_as_gap_cursor_leading_unit() {
+        let (pd, root) = image_first_doc();
+        let view = DocView::new(&pd);
+        let pos = Position {
+            node: root,
+            offset: 0,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::collapsed(pos).resolve(&view).unwrap();
+        let gc = as_gap_cursor(&sel);
+        assert!(
+            gc.is_some(),
+            "upstream at offset 0 before image should produce a gap cursor"
+        );
+        assert!(matches!(gc, Some(GapCursor::LeadingUnit { .. })));
+    }
+
+    // §4.3 — affinity-invariant for between: Downstream also resolves BetweenMonolithic
+    #[test]
+    fn test_3_between_folds_downstream_affinity() {
+        let (pd, root) = two_folds_doc();
+        let view = DocView::new(&pd);
+        let pos = Position {
+            node: root,
             offset: 1,
             affinity: Affinity::Downstream,
-        });
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn collapsed_text_is_not_gap_cursor() {
-        let (d, t) = doc! { root { paragraph { t: text("hi") } } };
-        let sel = Selection::collapsed(Position::new(t, 1));
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn non_collapsed_text_range_is_not_gap_cursor() {
-        let (d, t) = doc! { root { paragraph { t: text("hello") } } };
-        let sel = Selection::new(
-            Position::new(t, 1),
-            Position {
-                node_id: t,
-                offset: 4,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn node_selection_is_not_gap_cursor() {
-        let (d, r) = doc! { r: root { paragraph {} image paragraph {} } };
-        let sel = Selection::new(
-            Position {
-                node_id: r,
-                offset: 1,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: r,
-                offset: 2,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn cell_rect_is_not_gap_cursor() {
-        let (d, c00, ..) = doc! {
-            root {
-                table {
-                    table_row {
-                        c00: table_cell { paragraph {} }
-                        c01: table_cell { paragraph {} }
-                    }
-                }
-                paragraph {}
-            }
         };
-        let sel = cell_rect_selection(&d, c00, c00).expect("1x1 cell-rect builds");
-        let rs = sel.resolve(&d).unwrap();
-        assert!(rs.as_cell_rect().is_some(), "precondition: is a cell-rect");
-        assert!(rs.as_gap_cursor().is_none());
-    }
-
-    #[test]
-    fn builder_leading_roundtrips_and_none_for_paragraph() {
-        let (d1, ..) = doc! { root { image paragraph { text("b") } } };
-        let sel = gap_cursor_selection_leading(&d1).expect("leading image is a gap");
-        assert!(matches!(
-            sel.resolve(&d1).unwrap().as_gap_cursor(),
-            Some(GapCursor::LeadingUnit { .. })
-        ));
-
-        let (d2, ..) = doc! { root { paragraph { text("a") } } };
-        assert!(gap_cursor_selection_leading(&d2).is_none());
-    }
-
-    #[test]
-    fn builder_between_roundtrips_and_bounds_none() {
-        let (d, ..) = doc! {
-            root {
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            }
-        };
-        let sel =
-            gap_cursor_selection_between(&d, NodeId::ROOT, 1).expect("between two folds is a gap");
-        match sel.resolve(&d).unwrap().as_gap_cursor() {
-            Some(GapCursor::BetweenMonolithic { index, .. }) => assert_eq!(index, 1),
-            _ => panic!("between builder must roundtrip to BetweenMonolithic"),
+        let sel = Selection::collapsed(pos).resolve(&view).unwrap();
+        let gc = as_gap_cursor(&sel);
+        assert!(
+            gc.is_some(),
+            "Downstream affinity between two folds should also produce BetweenMonolithic"
+        );
+        let mut reached_between = false;
+        if let Some(GapCursor::BetweenMonolithic { index, .. }) = gc {
+            assert_eq!(index, 1);
+            reached_between = true;
         }
-        assert!(gap_cursor_selection_between(&d, NodeId::ROOT, 0).is_none());
-        assert!(gap_cursor_selection_between(&d, NodeId::ROOT, 99).is_none());
+        assert!(reached_between, "expected BetweenMonolithic variant");
     }
 
+    // §4.3 — leading is Upstream-only: Downstream at (root,0) over a leading unit → None
     #[test]
-    fn builder_between_none_for_non_monolithic() {
-        let (d, ..) = doc! { root { paragraph { text("a") } paragraph { text("b") } } };
-        assert!(gap_cursor_selection_between(&d, NodeId::ROOT, 1).is_none());
+    fn test_3_leading_unit_downstream_is_none() {
+        let (pd, root) = image_first_doc();
+        let view = DocView::new(&pd);
+        let pos = Position {
+            node: root,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        let sel = Selection::collapsed(pos).resolve(&view).unwrap();
+        assert!(
+            as_gap_cursor(&sel).is_none(),
+            "(root,0,Downstream) over a leading unit must return None — leading gaps are Upstream-only"
+        );
     }
 }

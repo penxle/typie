@@ -1,96 +1,61 @@
-use editor_model::NodeId;
-use std::ops::Range;
 use std::sync::Arc;
 
-use crate::glyph_run::{GlyphRun, RubyAnnotation};
+use editor_crdt::Dot;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PageBreakPolicy {
+    #[default]
+    Auto,
+    Avoid,
+}
+use crate::measure::text::measure::MeasuredLine;
 use crate::style::BoxStyle;
 
 #[derive(Debug)]
-pub struct MeasuredTree {
+pub(crate) struct MeasuredTree {
     pub root: MeasuredNode,
 }
 
-/// A container's measured children as an order-statistics sum tree keyed by each
-/// child's height. The container height is the root aggregate (`O(1)`), and a
-/// single re-measured child is swapped in `O(log N)` (incremental measure),
-/// instead of rebuilding the whole `Vec` every keystroke. `block_slots` locates
-/// a child by its `NodeId` so the swap needs no scan.
 #[derive(Debug, Clone, Default)]
-pub struct MeasuredChildren {
+pub(crate) struct MeasuredChildren {
     tree: editor_common::SumTree<Arc<MeasuredNode>, f32>,
-    block_slots: Arc<hashbrown::HashMap<NodeId, usize>>,
-}
-
-fn block_node_id(node: &MeasuredNode) -> Option<NodeId> {
-    match &node.content {
-        MeasuredContent::Box(b) => Some(b.node_id),
-        MeasuredContent::Line(l) => Some(l.node_id),
-        MeasuredContent::Atom(a) => Some(a.node_id),
-        MeasuredContent::Spacing(_) | MeasuredContent::PageBreak => None,
-    }
 }
 
 impl MeasuredChildren {
     pub fn from_blocks(blocks: Vec<Arc<MeasuredNode>>) -> Self {
-        let mut block_slots = hashbrown::HashMap::with_capacity(blocks.len());
         let items = blocks
             .into_iter()
-            .enumerate()
-            .map(|(slot, b)| {
-                if let Some(id) = block_node_id(&b) {
-                    block_slots.insert(id, slot);
-                }
+            .map(|b| {
                 let height = b.height;
                 (b, height)
             })
             .collect();
         Self {
             tree: editor_common::SumTree::from_items(items),
-            block_slots: Arc::new(block_slots),
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.tree.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.tree.is_empty()
-    }
-
-    /// Sum of child heights — `O(1)`.
     pub fn total_height(&self) -> f32 {
         self.tree.total_size()
     }
-
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.tree.is_empty()
+    }
+    #[cfg(test)]
     pub fn get(&self, index: usize) -> Option<&Arc<MeasuredNode>> {
         self.tree.get(index)
     }
-
-    pub fn first(&self) -> Option<&Arc<MeasuredNode>> {
-        self.tree.get(0)
-    }
-
     pub fn iter(&self) -> editor_common::Iter<'_, Arc<MeasuredNode>, f32> {
         self.tree.iter()
     }
-
-    /// Swaps a re-measured child in place (item + height) — `O(log N)`. The
-    /// caller guarantees `node` keeps the same `NodeId`, so `block_slots` stays
-    /// valid.
     pub fn set(&mut self, index: usize, node: Arc<MeasuredNode>) -> bool {
         let height = node.height;
         self.tree.set(index, node, height)
-    }
-
-    /// Swaps a re-measured block child located by `NodeId` — `O(log N)`.
-    /// Returns `false` when `node_id` is not a current block child, signalling
-    /// the caller to fall back to a full rebuild.
-    pub fn set_block(&mut self, node_id: NodeId, node: Arc<MeasuredNode>) -> bool {
-        match self.block_slots.get(&node_id) {
-            Some(&slot) => self.set(slot, node),
-            None => false,
-        }
     }
 }
 
@@ -118,14 +83,14 @@ impl FromIterator<Arc<MeasuredNode>> for MeasuredChildren {
 }
 
 #[derive(Debug, Clone)]
-pub struct MeasuredNode {
+pub(crate) struct MeasuredNode {
     pub width: f32,
     pub height: f32,
     pub content: MeasuredContent,
 }
 
 #[derive(Debug, Clone)]
-pub enum MeasuredContent {
+pub(crate) enum MeasuredContent {
     Box(MeasuredBox),
     Line(MeasuredLine),
     Atom(MeasuredAtom),
@@ -133,14 +98,20 @@ pub enum MeasuredContent {
     PageBreak,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PageBreakPolicy {
-    #[default]
-    Auto,
-    Avoid,
-}
-
 impl MeasuredNode {
+    /// The sole line-wrap path (H1): `height` is taken from the line, `width`
+    /// is the wrapping layout width (the line payload carries no width).
+    pub fn from_line(width: f32, line: MeasuredLine) -> Self {
+        let height = line.height;
+        let node = Self {
+            width,
+            height,
+            content: MeasuredContent::Line(line),
+        };
+        debug_assert_eq!(node.height, height);
+        node
+    }
+
     pub(crate) fn page_break_policy(&self) -> PageBreakPolicy {
         match &self.content {
             MeasuredContent::Box(b) => b.page_break_policy,
@@ -151,44 +122,44 @@ impl MeasuredNode {
 }
 
 #[derive(Debug, Clone)]
-pub struct MeasuredBox {
-    pub node_id: NodeId,
+pub(crate) struct MeasuredBox {
+    pub node: Dot,
     pub style: BoxStyle,
     pub children: MeasuredChildren,
     pub page_break_policy: PageBreakPolicy,
 }
 
 #[derive(Debug, Clone)]
-pub struct MeasuredLine {
-    pub node_id: NodeId,
-    pub baseline: f32,
-    pub ascent: f32,
-    pub descent: f32,
-    pub cursor_ascent: f32,
-    pub cursor_descent: f32,
-    pub glyph_runs: Vec<GlyphRun>,
-    pub ruby_annotations: Vec<RubyAnnotation>,
-    pub empty_caret_x: f32,
-    /// Paragraph child-offset interval this visual line owns for matching
-    /// container-anchored cursor positions. Matching is inclusive of both
-    /// endpoints (`start <= offset && offset <= end`, not `Range::contains`).
-    /// `None` for soft-wrap interior lines of a multi-line text segment —
-    /// those lines own no paragraph boundary.
-    pub child_range: Option<Range<usize>>,
-    pub tab_gaps: Vec<TabGap>,
-    pub is_phantom: bool,
-    pub content_edge_x: Option<f32>,
+pub(crate) struct MeasuredAtom {
+    pub node: Dot,
 }
 
-#[derive(Debug, Clone)]
-pub struct TabGap {
-    pub node_id: NodeId,
-    pub child_index: usize,
-    pub x: f32,
-    pub width: f32,
-}
+#[cfg(test)]
+mod tests {
+    use editor_crdt::Dot;
 
-#[derive(Debug, Clone)]
-pub struct MeasuredAtom {
-    pub node_id: NodeId,
+    use super::*;
+
+    fn atom_node(n: u64, height: f32) -> Arc<MeasuredNode> {
+        Arc::new(MeasuredNode {
+            width: 100.0,
+            height,
+            content: MeasuredContent::Atom(MeasuredAtom {
+                node: Dot::new(1, n),
+            }),
+        })
+    }
+
+    #[test]
+    fn from_blocks_aggregates_height_and_indexes() {
+        let c = MeasuredChildren::from_blocks(vec![
+            atom_node(1, 10.0),
+            atom_node(2, 20.0),
+            atom_node(3, 30.0),
+        ]);
+        assert_eq!(c.len(), 3);
+        assert_eq!(c.total_height(), 60.0);
+        assert_eq!(c[1].height, 20.0);
+        assert_eq!(c.iter().count(), 3);
+    }
 }

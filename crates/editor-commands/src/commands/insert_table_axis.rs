@@ -1,6 +1,7 @@
 use editor_common::Axis;
-use editor_model::NodeId;
-use editor_state::{NodeRefCursorExt, Selection};
+use editor_crdt::Dot;
+use editor_state::Selection;
+use editor_state::first_cursor_position;
 use editor_transaction::Transaction;
 
 use crate::helpers::{insert_empty_table_column, insert_empty_table_row};
@@ -8,7 +9,7 @@ use crate::{CommandError, CommandResult};
 
 pub fn insert_table_axis(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     axis: Axis,
     index: usize,
     before: bool,
@@ -19,19 +20,19 @@ pub fn insert_table_axis(
             insert_empty_table_row(tr, table_id, insertion_index)?;
 
             let pos = {
-                let doc = tr.doc();
-                let table = doc
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
                 let row = table
-                    .children()
+                    .child_blocks()
                     .nth(insertion_index)
                     .ok_or_else(|| CommandError::Corrupted("inserted row not found".into()))?;
                 let cell = row
-                    .children()
+                    .child_blocks()
                     .next()
                     .ok_or_else(|| CommandError::Corrupted("new row has no cells".into()))?;
-                cell.first_cursor_position()
+                first_cursor_position(&cell)
                     .ok_or_else(|| CommandError::Corrupted("cell has no cursor position".into()))?
             };
             tr.set_selection(Some(Selection::collapsed(pos)))?;
@@ -40,19 +41,19 @@ pub fn insert_table_axis(
             insert_empty_table_column(tr, table_id, insertion_index)?;
 
             let pos = {
-                let doc = tr.doc();
-                let table = doc
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
                 let row = table
-                    .children()
+                    .child_blocks()
                     .next()
                     .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
                 let cell = row
-                    .children()
+                    .child_blocks()
                     .nth(insertion_index)
                     .ok_or_else(|| CommandError::Corrupted("new cell not found".into()))?;
-                cell.first_cursor_position()
+                first_cursor_position(&cell)
                     .ok_or_else(|| CommandError::Corrupted("cell has no cursor position".into()))?
             };
             tr.set_selection(Some(Selection::collapsed(pos)))?;
@@ -85,11 +86,11 @@ mod tests {
             0,
             true
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        assert_eq!(table.children().count(), 2);
-        let new_row = table.children().next().unwrap();
-        for cell in new_row.children() {
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        assert_eq!(table.child_blocks().count(), 2);
+        let new_row = table.child_blocks().next().unwrap();
+        for cell in new_row.child_blocks() {
             assert_empty_cell(&cell);
         }
     }
@@ -111,11 +112,11 @@ mod tests {
             0,
             false
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        assert_eq!(table.children().count(), 2);
-        let new_row = table.children().nth(1).unwrap();
-        for cell in new_row.children() {
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        assert_eq!(table.child_blocks().count(), 2);
+        let new_row = table.child_blocks().nth(1).unwrap();
+        for cell in new_row.child_blocks() {
             assert_empty_cell(&cell);
         }
     }
@@ -140,11 +141,11 @@ mod tests {
             0,
             true
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        let row = table.children().next().unwrap();
-        assert_eq!(row.children().count(), 3);
-        assert_empty_cell(&row.children().next().unwrap());
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        let row = table.child_blocks().next().unwrap();
+        assert_eq!(row.child_blocks().count(), 3);
+        assert_empty_cell(&row.child_blocks().next().unwrap());
     }
 
     #[test]
@@ -171,18 +172,18 @@ mod tests {
             1,
             false
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        for row in table.children() {
-            assert_eq!(row.children().count(), 3);
-            assert_empty_cell(&row.children().nth(2).unwrap());
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        for row in table.child_blocks() {
+            assert_eq!(row.child_blocks().count(), 3);
+            assert_empty_cell(&row.child_blocks().nth(2).unwrap());
         }
     }
 
-    fn assert_empty_cell(cell: &editor_model::NodeRef<'_>) {
-        let kids: Vec<_> = cell.children().collect();
-        assert_eq!(kids.len(), 1, "cell should have one child");
-        assert!(matches!(kids[0].node(), editor_model::Node::Paragraph(_)));
-        assert_eq!(kids[0].children().count(), 0, "paragraph should be empty");
+    fn assert_empty_cell(cell: &editor_model::NodeView<'_>) {
+        assert_eq!(cell.child_blocks().count(), 1, "cell should have one child");
+        let para = cell.child_blocks().next().unwrap();
+        assert_eq!(para.node_type(), editor_model::NodeType::Paragraph);
+        assert_eq!(para.children().count(), 0, "paragraph should be empty");
     }
 }

@@ -1,5 +1,4 @@
 use editor_macros::state;
-use editor_model::StableEntryResolution;
 use editor_state::Selection;
 
 use crate::editor::Editor;
@@ -37,28 +36,21 @@ fn outcome_from_events(events: &[EditorEvent], id: &str) -> Option<TrackedRangeR
 }
 
 fn paragraph_text(editor: &Editor) -> String {
-    editor.state().doc.extract_text()
-}
-
-fn visible_entry_dots(
-    editor: &Editor,
-    node_id: editor_model::NodeId,
-) -> Vec<editor_crdt::EntryDot> {
-    editor
-        .state()
-        .doc
-        .text_view(node_id)
-        .expect("text node")
-        .visible_entries()
-        .map(|(entry, _)| entry)
-        .collect()
+    let view = editor.state().view();
+    let mut out = String::new();
+    if let Some(root) = view.root() {
+        for block in root.child_blocks() {
+            out.push_str(&block.inline_text());
+        }
+    }
+    out
 }
 
 #[test]
 fn happy_path_replaces_text_and_emits_replaced() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -73,70 +65,47 @@ fn happy_path_replaces_text_and_emits_replaced() {
     );
     assert!(paragraph_text(&editor).contains("hello earth"));
     assert_eq!(editor.history_undos_len(), before_undos + 1);
-    let _ = t1;
+    let _ = p1;
 }
 
 #[test]
-fn replace_undo_redo_remaps_original_and_replacement_entries() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("abcd") } } }
-        selection: (t1, 1) -> (t1, 3)
+fn replace_undo_redo_round_trips_text() {
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("abcd") } } }
+        selection: (p1, 1) -> (p1, 3)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
     add_range(&mut editor, "r", sel);
-    let original_bc = visible_entry_dots(&editor, t1)[1..3].to_vec();
 
     editor.apply(replace_msg("r", Some("bc"), "xy"));
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "axyd");
-    let first_xy = visible_entry_dots(&editor, t1)[1..3].to_vec();
+    assert_eq!(
+        editor.state().view().node(p1).unwrap().inline_text(),
+        "axyd"
+    );
 
     editor.apply(Message::History {
         op: HistoryOp::Undo,
     });
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "abcd");
-    let fresh_bc = visible_entry_dots(&editor, t1)[1..3].to_vec();
     assert_eq!(
-        original_bc
-            .iter()
-            .map(|entry| editor
-                .state()
-                .doc
-                .text_identity()
-                .resolve_stable_entry(*entry))
-            .collect::<Vec<_>>(),
-        fresh_bc
-            .iter()
-            .map(|entry| StableEntryResolution::Live(*entry))
-            .collect::<Vec<_>>()
+        editor.state().view().node(p1).unwrap().inline_text(),
+        "abcd"
     );
 
     editor.apply(Message::History {
         op: HistoryOp::Redo,
     });
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "axyd");
-    let fresh_xy = visible_entry_dots(&editor, t1)[1..3].to_vec();
     assert_eq!(
-        first_xy
-            .iter()
-            .map(|entry| editor
-                .state()
-                .doc
-                .text_identity()
-                .resolve_stable_entry(*entry))
-            .collect::<Vec<_>>(),
-        fresh_xy
-            .iter()
-            .map(|entry| StableEntryResolution::Live(*entry))
-            .collect::<Vec<_>>()
+        editor.state().view().node(p1).unwrap().inline_text(),
+        "axyd"
     );
 }
 
 #[test]
 fn unknown_id_emits_unknown_id_and_no_op() {
-    let (initial, _t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 0)
+    let (initial, _p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(initial);
     let text_before = paragraph_text(&editor);
@@ -153,9 +122,9 @@ fn unknown_id_emits_unknown_id_and_no_op() {
 
 #[test]
 fn explicitly_invalid_range_emits_invalid_and_no_op() {
-    let (initial, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -176,9 +145,9 @@ fn explicitly_invalid_range_emits_invalid_and_no_op() {
 
 #[test]
 fn collapsed_on_restore_emits_invalid() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -187,8 +156,8 @@ fn collapsed_on_restore_emits_invalid() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 6),
-                editor_state::Position::new(t1, 11),
+                editor_state::Position::new(p1, 6),
+                editor_state::Position::new(p1, 11),
             ),
         },
     });
@@ -208,9 +177,9 @@ fn collapsed_on_restore_emits_invalid() {
 
 #[test]
 fn text_mismatch_emits_text_mismatch_and_no_op() {
-    let (initial, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -228,9 +197,9 @@ fn text_mismatch_emits_text_mismatch_and_no_op() {
 
 #[test]
 fn expected_none_skips_text_comparison() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -242,14 +211,14 @@ fn expected_none_skips_text_comparison() {
         Some(TrackedRangeReplaceOutcome::Replaced)
     );
     assert!(paragraph_text(&editor).contains("hello earth"));
-    let _ = t1;
+    let _ = p1;
 }
 
 #[test]
 fn undo_restores_original_text() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -263,14 +232,14 @@ fn undo_restores_original_text() {
         op: HistoryOp::Undo,
     });
     assert_eq!(paragraph_text(&editor), text_before);
-    let _ = t1;
+    let _ = p1;
 }
 
 #[test]
 fn replacement_with_newline_is_no_op_and_emits_invalid_replacement() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -286,14 +255,14 @@ fn replacement_with_newline_is_no_op_and_emits_invalid_replacement() {
     );
     assert_eq!(paragraph_text(&editor), text_before);
     assert_eq!(editor.history_undos_len(), before_undos);
-    let _ = t1;
+    let _ = p1;
 }
 
 #[test]
 fn replace_with_empty_replacement_deletes_range() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 5) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 5) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -305,5 +274,5 @@ fn replace_with_empty_replacement_deletes_range() {
         Some(TrackedRangeReplaceOutcome::Replaced)
     );
     assert_eq!(paragraph_text(&editor), "hello");
-    let _ = t1;
+    let _ = p1;
 }

@@ -17,8 +17,8 @@ mod tests {
     #[test]
     fn non_collapsed_selection_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 3)
         };
         transact_fail!(initial, |tr| insert_hard_break(&mut tr));
     }
@@ -26,20 +26,20 @@ mod tests {
     #[test]
     fn insert_at_start_of_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
+                    p1: paragraph {
                         hard_break
-                        t1: text("Hello")
+                        text("Hello")
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -47,21 +47,21 @@ mod tests {
     #[test]
     fn insert_in_middle_of_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("He")
+                    p1: paragraph {
+                        text("He")
                         hard_break
-                        t2: text("llo")
+                        text("llo")
                     }
                 }
             }
-            selection: (t2, 0)
+            selection: (p1, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -69,20 +69,20 @@ mod tests {
     #[test]
     fn insert_at_end_of_text() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     p1: paragraph {
-                        t1: text("Hello")
+                        text("Hello")
                         hard_break
                     }
                 }
             }
-            selection: (p1, 2)
+            selection: (p1, 6)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -108,39 +108,10 @@ mod tests {
     }
 
     #[test]
-    fn insert_at_end_with_next_text_sibling() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
-                    }
-                }
-            }
-            selection: (t1, 5)
-        };
-        let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("Hello")
-                        hard_break
-                        t2: text("World")
-                    }
-                }
-            }
-            selection: (t2, 0)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
     fn pending_modifiers_preserved() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
             pending_modifiers: [bold]
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
@@ -150,20 +121,20 @@ mod tests {
     #[test]
     fn insert_hard_break_at_end_attaches_marker_to_paragraph() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     p1: paragraph marker([bold]) {
-                        t1: text("Hello") [bold]
+                        text("Hello") [bold]
                         hard_break
                     }
                 }
             }
-            selection: (p1, 2)
+            selection: (p1, 6)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -171,21 +142,21 @@ mod tests {
     #[test]
     fn insert_hard_break_in_middle_attaches_marker_to_paragraph() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph marker([bold]) {
-                        t1: text("He") [bold]
+                    p1: paragraph marker([bold]) {
+                        text("He") [bold]
                         hard_break
-                        t2: text("llo") [bold]
+                        text("llo") [bold]
                     }
                 }
             }
-            selection: (t2, 0)
+            selection: (p1, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -193,20 +164,20 @@ mod tests {
     #[test]
     fn insert_hard_break_at_start_attaches_no_marker() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_hard_break(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
+                    p1: paragraph {
                         hard_break
-                        t1: text("Hello") [bold]
+                        text("Hello") [bold]
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }

@@ -1,16 +1,19 @@
-use editor_model::{Node, NodeId};
+use editor_crdt::Dot;
+use editor_model::Node;
 use editor_transaction::Transaction;
 
 use crate::helpers::unwrap_block_wrapper;
 use crate::{CommandError, CommandResult};
 
-pub fn unwrap_callout(tr: &mut Transaction, node_id: NodeId) -> CommandResult {
-    let doc = tr.doc();
-    let node = doc
-        .node(node_id)
-        .ok_or(CommandError::NodeNotFound(node_id))?;
-    if !matches!(node.node(), Node::Callout(_)) {
-        return Ok(false);
+pub fn unwrap_callout(tr: &mut Transaction, node_id: Dot) -> CommandResult {
+    {
+        let view = tr.view();
+        let node = view
+            .node(node_id)
+            .ok_or(CommandError::NodeNotFound(node_id))?;
+        if !matches!(node.node(), Node::Callout(_)) {
+            return Ok(false);
+        }
     }
     unwrap_block_wrapper(tr, node_id)
 }
@@ -28,7 +31,7 @@ mod tests {
             doc {
                 root {
                     co: callout {
-                        paragraph { t: text("hello") }
+                        p1: paragraph { text("hello") }
                     }
                     paragraph {}
                 }
@@ -39,11 +42,11 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t: text("hello") }
+                    p1: paragraph { text("hello") }
                     paragraph {}
                 }
             }
-            selection: (t, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -54,7 +57,7 @@ mod tests {
             doc {
                 root {
                     co: callout {
-                        paragraph { t1: text("a") }
+                        p1: paragraph { text("a") }
                         paragraph { text("b") }
                         ordered_list {
                             list_item { paragraph { text("c") } }
@@ -69,7 +72,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    p1: paragraph { text("a") }
                     paragraph { text("b") }
                     ordered_list {
                         list_item { paragraph { text("c") } }
@@ -77,7 +80,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

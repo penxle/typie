@@ -1,13 +1,16 @@
-use editor_model::NodeId;
+use editor_crdt::Dot;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
 use crate::helpers::{delete_selection_range, selection_for_node};
 
-pub fn delete_node(tr: &mut Transaction, node_id: NodeId) -> CommandResult {
-    let doc = tr.doc();
-    let Some(selection) = selection_for_node(&doc, node_id)? else {
-        return Ok(false);
+pub fn delete_node(tr: &mut Transaction, node: Dot) -> CommandResult {
+    let selection = {
+        let view = tr.state().view();
+        match selection_for_node(&view, node)? {
+            Some(selection) => selection,
+            None => return Ok(false),
+        }
     };
     delete_selection_range(tr, selection)
 }
@@ -21,32 +24,32 @@ mod tests {
 
     #[test]
     fn deletes_block_node_and_moves_selection_to_next_text_position() {
-        let (initial, _root, _t1, img, ..) = state! {
+        let (initial, _root, _p1, img, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("Before") }
+                p1: paragraph { text("Before") }
                 img: image
-                paragraph { t2: text("After") }
+                p2: paragraph { text("After") }
             } }
             selection: (r, 1, >) -> (r, 2, <)
         };
         let (actual, ..) = transact!(initial, |tr| delete_node(&mut tr, img));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("Before") }
-                paragraph { t2: text("After") }
+                p1: paragraph { text("Before") }
+                p2: paragraph { text("After") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn fulfills_empty_parent_after_delete() {
-        let (initial, paragraph, ..) = state! {
-            doc { root { paragraph: paragraph { t1: text("Only") } } }
-            selection: (t1, 2)
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { text("Only") } } }
+            selection: (p1, 2)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_node(&mut tr, paragraph));
+        let (actual, ..) = transact!(initial, |tr| delete_node(&mut tr, p1));
         let (expected, ..) = state! {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
@@ -63,16 +66,16 @@ mod tests {
                         table_cell { paragraph { text("cell") } }
                     }
                 }
-                paragraph { t1: text("After") }
+                p1: paragraph { text("After") }
             } }
             selection: (table, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_node(&mut tr, table));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("After") }
+                p1: paragraph { text("After") }
             } }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

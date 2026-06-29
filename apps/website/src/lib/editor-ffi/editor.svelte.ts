@@ -108,7 +108,7 @@ export function browserScaleFactor(): number {
 }
 
 function samePosition(a: Position, b: Position): boolean {
-  return a.node_id === b.node_id && a.offset === b.offset && a.affinity === b.affinity;
+  return a.node === b.node && a.offset === b.offset && a.affinity === b.affinity;
 }
 
 export class EditorContext {
@@ -694,7 +694,7 @@ export class Editor {
   get isSelectionCollapsed(): boolean {
     const sel = this.#selection;
     if (!sel) return true;
-    return sel.anchor.node_id === sel.head.node_id && sel.anchor.offset === sel.head.offset && sel.anchor.affinity === sel.head.affinity;
+    return sel.anchor.node === sel.head.node && sel.anchor.offset === sel.head.offset && sel.anchor.affinity === sel.head.affinity;
   }
 
   get pageSizes() {

@@ -1,182 +1,204 @@
-use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
-use editor_state::{NodeRefCursorExt, Position, Selection};
-use editor_transaction::{Transaction, compact, dissolve, prune};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, NodeType, NodeView};
+use editor_state::first_cursor_position;
+use editor_state::{Position, Selection};
+use editor_transaction::{Transaction, dissolve};
 
-use crate::helpers::merge_element_cross_parent;
+use crate::helpers::{
+    child_elem_id, child_node_type, merge_element_cross_parent, next_sibling, prune_empty_real,
+    remove_child_at,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    let paragraph_id = match node.node() {
-        Node::Text(text_node) => {
-            let text_len = text_node.text.len();
-            if pos.offset < text_len || node.next_sibling().is_some() {
-                return Ok(false);
-            }
-            node.parent()
-                .ok_or(CommandError::NoParent(pos.node_id))?
-                .id()
+    let (
+        paragraph_id,
+        source_paragraph_id,
+        source_parent_id,
+        target_trailing_page_break,
+        target_children_count,
+    ) = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+
+        if node.node_type() != NodeType::Paragraph {
+            return Ok(false);
         }
-        Node::Paragraph(_) => {
-            let children_len = node.entry().children.len();
-            if pos.offset < children_len {
-                return Ok(false);
-            }
-            pos.node_id
+
+        let children_len = node.children().count();
+        if pos.offset < children_len {
+            return Ok(false);
         }
-        _ => return Ok(false),
-    };
+        let paragraph_id = pos.node;
 
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
-
-    let next = match paragraph.next_sibling() {
-        Some(next) => next,
-        None => return Ok(false),
-    };
-
-    // If next sibling is a paragraph, this is handled by join_paragraph_forward
-    if matches!(next.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
-
-    let source_paragraph_id = match find_lift_source(&doc, &next) {
-        Some(id) => id,
-        None => return Ok(false),
-    };
-
-    // Record the parent of the source paragraph (for post-merge cleanup)
-    let source_parent_id = doc
-        .node(source_paragraph_id)
-        .ok_or(CommandError::NodeNotFound(source_paragraph_id))?
-        .parent()
-        .ok_or(CommandError::NoParent(source_paragraph_id))?
-        .id();
-
-    let raw_cursor_selection = selection;
-    // If the target paragraph carries a trailing PageBreak, the pre-batch
-    // cleanup will strip it. Adjust the captured selection now so the
-    // post-batch restore sees a still-valid offset.
-    let (target_trailing_page_break, target_children_count) = {
-        let doc = tr.doc();
-        let target = doc.node(paragraph_id);
-        let last_is_pb = target
-            .and_then(|t| t.last_child())
-            .is_some_and(|c| matches!(c.node(), Node::PageBreak(_)));
-        let count = target.map(|t| t.entry().children.len()).unwrap_or(0);
-        (last_is_pb, count)
-    };
-    let cursor_selection = if target_trailing_page_break {
-        let new_target_count = target_children_count - 1;
-        let adjust = |p: Position| {
-            if p.node_id == paragraph_id && p.offset > new_target_count {
-                Position {
-                    node_id: p.node_id,
-                    offset: new_target_count,
-                    affinity: p.affinity,
-                }
-            } else {
-                p
-            }
+        let next = match next_sibling(&node) {
+            Some(ChildView::Block(b)) => b,
+            _ => return Ok(false),
         };
-        Selection::new(
-            adjust(raw_cursor_selection.anchor),
-            adjust(raw_cursor_selection.head),
+
+        // If next sibling is a paragraph, this is handled by join_paragraph_forward
+        if next.node_type() == NodeType::Paragraph {
+            return Ok(false);
+        }
+
+        let source_paragraph_id = match find_lift_source(&view, &next) {
+            Some(id) => id,
+            None => return Ok(false),
+        };
+
+        let source_parent_id = view
+            .node(source_paragraph_id)
+            .ok_or(CommandError::NodeNotFound(source_paragraph_id))?
+            .parent()
+            .ok_or(CommandError::NoParent(source_paragraph_id))?
+            .id();
+
+        let last_is_pb = matches!(
+            node.last_child(),
+            Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak
+        );
+
+        (
+            paragraph_id,
+            source_paragraph_id,
+            source_parent_id,
+            last_is_pb,
+            children_len,
         )
-    } else {
-        raw_cursor_selection
     };
-    let cursor_on_empty_paragraph = matches!(node.node(), Node::Paragraph(_)) && {
-        // After the planned PageBreak removal the paragraph is empty iff its
-        // only child was the marker (or it was already empty).
-        let count = node.entry().children.len();
-        let last_is_page_break = node
-            .last_child()
-            .is_some_and(|c| matches!(c.node(), Node::PageBreak(_)));
-        let post_cleanup_count = if last_is_page_break { count - 1 } else { count };
+
+    let cursor_selection = selection;
+
+    let cursor_on_empty_paragraph = {
+        let post_cleanup_count = if target_trailing_page_break {
+            target_children_count - 1
+        } else {
+            target_children_count
+        };
         post_cleanup_count == 0
     };
 
     tr.batch::<_, CommandError>(|tr| {
         // Strip a trailing PageBreak from the target before merging.
         // PageBreak is schema-restricted to the trailing slot; once the
-        // source's children are appended the marker would land in the
-        // middle and merge_node would reject the result.
-        let doc = tr.doc();
-        if let Some(target) = doc.node(paragraph_id)
-            && let Some(last) = target.last_child()
-            && matches!(last.node(), Node::PageBreak(_))
-        {
-            let last_id = last.id();
-            tr.remove_subtree(last_id)?;
+        // source's children are appended the marker would land in the middle.
+        let strip_index = {
+            let view = tr.state().view();
+            view.node(paragraph_id).and_then(|target| {
+                let count = target.children().count();
+                match target.last_child() {
+                    Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak => {
+                        Some(count - 1)
+                    }
+                    _ => None,
+                }
+            })
+        };
+        if let Some(idx) = strip_index {
+            remove_child_at(tr, paragraph_id, idx)?;
         }
 
         merge_element_cross_parent(tr, source_paragraph_id, paragraph_id)?;
 
-        let doc = tr.doc();
-        if let Some(p) = doc.node(paragraph_id) {
-            tr.apply_steps(compact(&p))?;
-        }
-
-        let doc = tr.doc();
-        if let Some(source_parent) = doc.node(source_parent_id) {
-            let remaining: Vec<NodeType> = source_parent.children().map(|c| c.as_type()).collect();
-
-            if source_parent.entry().children.is_empty() {
-                tr.apply_steps(prune(&source_parent))?;
-            } else if !source_parent
-                .node()
-                .spec()
-                .content
-                .matches_sequence(&remaining)
-            {
-                tr.apply_steps(dissolve(&source_parent))?;
+        let dissolve_steps = {
+            let view = tr.state().view();
+            match view.node(source_parent_id) {
+                Some(source_parent) => {
+                    let has_real_child = source_parent
+                        .children()
+                        .any(|c| child_elem_id(&c).as_op_dot().is_some());
+                    if has_real_child {
+                        let remaining: Vec<NodeType> = source_parent
+                            .children()
+                            .map(|c| child_node_type(&c))
+                            .collect();
+                        if !source_parent.spec().content.matches_sequence(&remaining) {
+                            dissolve(&source_parent)
+                        } else {
+                            Vec::new()
+                        }
+                    } else {
+                        Vec::new()
+                    }
+                }
+                None => Vec::new(),
             }
+        };
+        if dissolve_steps.is_empty() {
+            // Empty source container (only a Derived placeholder remains): remove
+            // it and cascade to ancestors that empty out as a result.
+            prune_empty_real(tr, source_parent_id)?;
+        } else {
+            tr.apply_steps(dissolve_steps)?;
         }
         Ok(())
     })?;
 
     if cursor_on_empty_paragraph {
-        let doc = tr.doc();
-        if let Some(p) = doc.node(paragraph_id)
-            && let Some(pos) = p.first_cursor_position()
-        {
+        let restored = {
+            let view = tr.state().view();
+            view.node(paragraph_id)
+                .and_then(|p| first_cursor_position(&p))
+        };
+        if let Some(pos) = restored {
             tr.set_selection(Some(Selection::collapsed(pos)))?;
             return Ok(true);
         }
     }
-    tr.set_selection(Some(cursor_selection))?;
+    // The strip+merge keeps the target paragraph's content valid, but clamp the
+    // captured offsets to the post-edit child count in case the merged content
+    // was shorter than the stripped marker.
+    let final_selection = {
+        let view = tr.state().view();
+        let count = view
+            .node(paragraph_id)
+            .map(|p| p.children().count())
+            .unwrap_or(0);
+        let clamp = |p: Position| -> Position {
+            if p.node == paragraph_id && p.offset > count {
+                Position {
+                    node: p.node,
+                    offset: count,
+                    affinity: p.affinity,
+                }
+            } else {
+                p
+            }
+        };
+        Selection::new(clamp(cursor_selection.anchor), clamp(cursor_selection.head))
+    };
+    tr.set_selection(Some(final_selection))?;
 
     Ok(true)
 }
 
-fn find_lift_source(doc: &Doc, container: &NodeRef) -> Option<NodeId> {
+fn find_lift_source(view: &DocView, container: &NodeView) -> Option<Dot> {
     let mut current_id = container.id();
     loop {
-        let current = doc.node(current_id)?;
-        let spec = current.spec();
-        if spec.isolating {
+        let current = view.node(current_id)?;
+        if current.spec().isolating {
             return None;
         }
-        let first_child = current.first_child()?;
-        if matches!(first_child.node(), Node::Paragraph(_)) {
-            return Some(first_child.id());
+        match current.first_child()? {
+            ChildView::Block(b) => {
+                if b.node_type() == NodeType::Paragraph {
+                    return Some(b.id());
+                }
+                current_id = b.id();
+            }
+            ChildView::Leaf(_) => return None,
         }
-        current_id = first_child.id();
     }
 }
 
@@ -192,11 +214,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    blockquote { paragraph { t2: text("A") } }
+                    p1: paragraph { text("Hello") }
+                    blockquote { p2: paragraph { text("A") } }
                 }
             }
-            selection: (t1, 0) -> (t1, 3)
+            selection: (p1, 0) -> (p1, 3)
         };
         transact_fail!(initial, |tr| lift_paragraph_forward(&mut tr));
     }
@@ -206,28 +228,28 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                     blockquote {
-                        paragraph { t2: text("A") }
-                        paragraph { t3: text("B") }
+                        p2: paragraph { text("A") }
+                        p3: paragraph { text("B") }
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| lift_paragraph_forward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("HelloA")
+                    p1: paragraph {
+                        text("HelloA")
                     }
                     blockquote {
-                        paragraph { t3: text("B") }
+                        p3: paragraph { text("B") }
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -237,24 +259,24 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                     blockquote {
-                        paragraph { t2: text("A") }
+                        p2: paragraph { text("A") }
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| lift_paragraph_forward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("HelloA")
+                    p1: paragraph {
+                        text("HelloA")
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -264,11 +286,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| lift_paragraph_forward(&mut tr));
     }
@@ -278,10 +300,10 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| lift_paragraph_forward(&mut tr));
     }
@@ -291,11 +313,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    blockquote { paragraph { t2: text("A") } }
+                    p1: paragraph { text("Hello") }
+                    blockquote { p2: paragraph { text("A") } }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         transact_fail!(initial, |tr| lift_paragraph_forward(&mut tr));
     }
@@ -307,7 +329,7 @@ mod tests {
                 root {
                     p1: paragraph {}
                     blockquote {
-                        paragraph { t1: text("A") }
+                        p2: paragraph { text("A") }
                     }
                 }
             }
@@ -317,10 +339,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -332,7 +354,7 @@ mod tests {
                 root {
                     p1: paragraph {}
                     callout {
-                        paragraph { t1: text("Hello, World!") }
+                        p2: paragraph { text("Hello, World!") }
                         paragraph { text("안녕하세요!") }
                     }
                     paragraph {}
@@ -344,22 +366,24 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello, World!") }
+                    p1: paragraph { text("Hello, World!") }
                     callout {
                         paragraph { text("안녕하세요!") }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
+    // GAP F: page_break is an inline atom; the substrate cannot delete it
+    // (remove_text is char-count based and no-ops on atoms, remove_subtree
+    // rejects non-block children). These two tests exercise trailing-page-break
+    // stripping and therefore CANNOT pass until inline-atom deletion lands.
     #[test]
     fn trailing_page_break_dropped_during_lift() {
-        // Without the inline cleanup the lift's merge places PageBreak in the
-        // middle of p1's children and merge_node would reject the result.
         let (initial, ..) = state! {
             doc {
                 root {
@@ -377,26 +401,23 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("ab") }
+                    p1: paragraph { text("ab") }
                 }
             }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn page_break_only_paragraph_lifts_into_merged_text() {
-        // p1 has only a page_break, so the recomputed `cursor_on_empty_paragraph`
-        // branch fires after cleanup: cursor restores via `first_cursor_position`
-        // on the merged paragraph, landing at the start of the source's text.
         let (initial, ..) = state! {
             doc {
                 root {
                     p1: paragraph { page_break }
                     bullet_list {
                         list_item {
-                            paragraph { t_b: text("b") }
+                            p2: paragraph { text("b") }
                         }
                     }
                 }
@@ -407,10 +428,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    p1: paragraph { t_b: text("b") }
+                    p1: paragraph { text("b") }
                 }
             }
-            selection: (t_b, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

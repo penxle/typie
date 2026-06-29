@@ -27,6 +27,7 @@ wasm = [
 [dependencies]
 editor-clipboard = { path = "../editor-clipboard" }
 editor-common = { path = "../editor-common" }
+editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-resource = { path = "../editor-resource" }

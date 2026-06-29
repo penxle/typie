@@ -1,6 +1,5 @@
-use editor_macros::{ffi, ffi_export};
+use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
 
 use crate::prelude::*;
 
@@ -19,15 +18,16 @@ pub struct Materialized {
     pub text: String,
 }
 
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct EditorServer;
 
-#[ffi_export(wasm)]
+#[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl EditorServer {
     pub fn create() -> Owned<Self> {
         into_owned(Self)
     }
 
+    #[cfg(feature = "wasm-server")]
     pub fn get_font_metadata(
         &self,
         data: Vec<u8>,
@@ -37,14 +37,17 @@ impl EditorServer {
             .map_err(Into::into)
     }
 
+    #[cfg(feature = "wasm-server")]
     pub fn get_font_codepoints(&self, ttf_data: Vec<u8>) -> EditorResult<Vec<u32>> {
         Ok(editor_server::font::get_font_codepoints(&ttf_data)?)
     }
 
+    #[cfg(feature = "wasm-server")]
     pub fn outline_text_to_svg(&self, font_data: Vec<u8>, text: String) -> EditorResult<String> {
         Ok(editor_server::font::outline_text_to_svg(&font_data, &text)?)
     }
 
+    #[cfg(feature = "wasm-server")]
     pub fn build_font(
         &self,
         ttf_data: Vec<u8>,
@@ -58,8 +61,10 @@ impl EditorServer {
 
     pub fn extract_text(&self, doc: Complex<editor_model::PlainDoc>) -> EditorResult<String> {
         let plain: editor_model::PlainDoc = doc.from_ffi()?;
-        let (doc, _) = editor_model::Doc::from_plain(plain);
-        Ok(doc.extract_text())
+        let state = editor_state::State::from_plain(&plain).map_err(|e| EditorError::General {
+            msg: format!("{e:?}"),
+        })?;
+        Ok(extract_text_from_view(&state.view()))
     }
 
     pub fn default_doc_with_preset(
@@ -73,10 +78,10 @@ impl EditorServer {
     }
 
     pub fn apply(&self, existing: Vec<u8>, new: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let existing_cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&existing[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let new_cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let new_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&new[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
 
@@ -150,7 +155,7 @@ impl EditorServer {
         all_changesets: Vec<u8>,
         remote_heads_payload: Vec<u8>,
     ) -> EditorResult<Vec<u8>> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&all_changesets[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let heads_vec = editor_crdt::wire::decode_dots(&remote_heads_payload[..])
@@ -167,8 +172,10 @@ impl EditorServer {
 
     pub fn to_graph(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<Vec<u8>> {
         let plain: editor_model::PlainDoc = plain.from_ffi()?;
-        let (_, graph) = editor_model::Doc::from_plain(plain);
-        let bytes = editor_crdt::wire::encode(&graph.changesets_as_vec())
+        let state = editor_state::State::from_plain(&plain).map_err(|e| EditorError::General {
+            msg: format!("{e:?}"),
+        })?;
+        let bytes = editor_crdt::wire::encode(&state.graph().changesets_as_vec())
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
@@ -177,28 +184,26 @@ impl EditorServer {
         &self,
         changeset_payloads: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainDoc>> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
-        let doc = editor_model::Doc::from_op_graph(&graph)?;
-        Ok(doc.to_plain().into_ffi()?)
+        let state = editor_state::State::from_changesets(cs, None)?;
+        Ok(state.to_plain().into_ffi()?)
     }
 
     pub fn to_plain_resolved(
         &self,
         changeset_payloads: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainDoc>> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
-        let doc = editor_model::Doc::from_op_graph(&graph)?;
-        Ok(editor_view::export::to_plain_resolved(&doc).into_ffi()?)
+        let state = editor_state::State::from_changesets(cs, None)?;
+        Ok(state.to_plain().into_ffi()?)
     }
 
     pub fn heads(&self, changeset_payloads: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let g = editor_crdt::OpGraph::from_changesets(cs)?;
@@ -209,7 +214,7 @@ impl EditorServer {
     }
 
     pub fn revert(&self, graph: Vec<u8>, target_heads: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&graph[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let target_vec = editor_crdt::wire::decode_dots(&target_heads[..])
@@ -219,15 +224,15 @@ impl EditorServer {
         let state = editor_state::State::from_changesets(css, None)
             .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
         let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
-            state.graph.current_heads().copied().collect();
+            state.graph().current_heads().copied().collect();
 
-        let target_doc = editor_model::Doc::from_op_graph_at(&state.graph, &target_set)?;
+        let target_state = state_at_heads(state.graph(), &target_set)?;
 
-        let tr = editor_transaction::build_revert_transaction(&state, &target_doc)
+        let tr = editor_transaction::build_revert_transaction(&state, &target_state)
             .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
         let (new_state, ..) = tr.commit();
 
-        let revert_css = new_state.graph.local_changesets_since(&current_heads)?;
+        let revert_css = new_state.graph().local_changesets_since(&current_heads)?;
 
         let bytes = editor_crdt::wire::encode(&revert_css)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
@@ -236,68 +241,111 @@ impl EditorServer {
 
     /// Returns the total ops count in a Changesets bundle. Used by push light validation.
     pub fn peek_changeset_ops_count(&self, bundle: Vec<u8>) -> EditorResult<u32> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&bundle[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let count: u32 = cs.iter().map(|c| c.ops.len() as u32).sum();
         Ok(count)
     }
 
-    /// Verifies a PlainDoc's structural invariants (root uniqueness, tree reciprocity).
+    /// Verifies a PlainDoc's structural invariants by attempting to load it.
     pub fn verify_plain(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<()> {
         let plain: editor_model::PlainDoc = plain.from_ffi()?;
-        let (doc, _) = editor_model::Doc::from_plain(plain);
-        doc.verify().map_err(Into::into)
+        editor_state::State::from_plain(&plain)
+            .map(|_| ())
+            .map_err(|e| EditorError::General {
+                msg: format!("{e:?}"),
+            })
     }
 
     pub fn materialize(&self, changeset_payloads: Vec<u8>) -> EditorResult<Complex<Materialized>> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
-        let doc = editor_model::Doc::from_op_graph(&graph)?;
-        doc.verify()?;
-        let plain = doc.to_plain();
-        let text = doc.extract_text();
+        let state = editor_state::State::from_changesets(cs, None)?;
+        let plain = state.to_plain();
+        let text = extract_text_from_view(&state.view());
         Ok(Materialized { plain, text }.into_ffi()?)
     }
 
     pub fn validate_and_extract_text(&self, changeset_payloads: Vec<u8>) -> EditorResult<String> {
-        let cs: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let graph = editor_crdt::OpGraph::from_changesets(cs)?;
-        let doc = editor_model::Doc::from_op_graph(&graph)?;
-        doc.verify()?;
-        Ok(doc.extract_text())
+        let state = editor_state::State::from_changesets(cs, None)?;
+        Ok(extract_text_from_view(&state.view()))
     }
+}
+
+/// Builds a `State` whose graph contains only the ops that are ancestors of
+/// (or equal to) `heads`. Used by `revert` to project the document at a past
+/// point without requiring a bespoke `from_op_graph_at` on the new model.
+fn state_at_heads(
+    graph: &editor_crdt::OpGraph<editor_model::EditOp>,
+    heads: &hashbrown::HashSet<editor_crdt::Dot>,
+) -> Result<editor_state::State, FfiError> {
+    for h in heads {
+        if !graph.contains(h) {
+            return Err(FfiError::RevertFailed(format!(
+                "unknown target head: {h:?}"
+            )));
+        }
+    }
+    let ancestry = graph.ancestry_of(heads);
+    let ordered = graph.topo_sort(&ancestry);
+    let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> = ordered
+        .into_iter()
+        .map(|op| editor_crdt::Changeset { ops: vec![op] })
+        .collect();
+    editor_state::State::from_changesets(css, None)
+        .map_err(|e| FfiError::RevertFailed(e.to_string()))
+}
+
+fn extract_text_from_view(view: &editor_model::DocView<'_>) -> String {
+    fn walk(nv: editor_model::NodeView<'_>, out: &mut String) {
+        if nv.spec().is_leaf() {
+            return;
+        }
+        for child in nv.children() {
+            match child {
+                editor_model::ChildView::Block(b) => walk(b, out),
+                editor_model::ChildView::Leaf(l) => {
+                    if let Some(ch) = l.as_char() {
+                        out.push(ch);
+                    }
+                }
+            }
+        }
+        out.push('\n');
+    }
+    let mut out = String::new();
+    if let Some(root) = view.root() {
+        walk(root, &mut out);
+    }
+    out.trim_end_matches('\n').to_string()
 }
 
 use crate::doc_builder::build_default_doc;
 
 #[cfg(test)]
 mod tests {
-    use editor_crdt::{Changeset, Dot, Op};
-    use editor_model::{DocOp, NodeId, NodeType};
+    use editor_crdt::{Changeset, Dot, ListOp, Op};
+    use editor_model::{EditOp, SeqItem};
 
     use super::*;
     use crate::error::EditorError;
 
-    fn dummy_payload() -> DocOp {
-        let id = NodeId::new();
-        DocOp::Presence {
-            node_id: id,
-            op: editor_crdt::OrMapOp::Set {
-                key: id,
-                value: NodeType::Paragraph,
-            },
-        }
+    fn dummy_payload() -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos: 0,
+            item: SeqItem::Char('x'),
+        })
     }
 
-    fn enc_css(css: &[Changeset<DocOp>]) -> Vec<u8> {
+    fn enc_css(css: &[Changeset<EditOp>]) -> Vec<u8> {
         editor_crdt::wire::encode(css).unwrap()
     }
-    fn dec_css(b: &[u8]) -> Vec<Changeset<DocOp>> {
+    fn dec_css(b: &[u8]) -> Vec<Changeset<EditOp>> {
         editor_crdt::wire::decode(b).unwrap()
     }
     fn enc_dots(dots: &[Dot]) -> Vec<u8> {
@@ -307,6 +355,7 @@ mod tests {
         editor_crdt::wire::decode_dots(b).unwrap()
     }
 
+    #[cfg(feature = "wasm-server")]
     fn load_test_font() -> Vec<u8> {
         std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -317,31 +366,38 @@ mod tests {
 
     #[test]
     fn apply_concatenates_distinct_changesets() {
-        let cs_a = Changeset::<DocOp> {
+        // cs_b causally follows cs_a so the wire format's implicit-prev round-trips cleanly.
+        let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
                 parents: vec![],
                 payload: dummy_payload(),
             }],
         };
-        let cs_b = Changeset::<DocOp> {
+        let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![],
+                parents: vec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
         let server = EditorServer;
         let merged_bytes = server
-            .apply(enc_css(&[cs_a.clone()]), enc_css(&[cs_b.clone()]))
+            .apply(
+                enc_css(std::slice::from_ref(&cs_a)),
+                enc_css(std::slice::from_ref(&cs_b)),
+            )
             .unwrap();
         let merged = dec_css(&merged_bytes);
-        assert_eq!(merged, vec![cs_a, cs_b]);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].ops[0].id, cs_a.ops[0].id);
+        assert_eq!(merged[1].ops[0].id, cs_b.ops[0].id);
+        assert_eq!(merged[1].ops[0].parents, vec![Dot::new(1, 0)]);
     }
 
     #[test]
     fn apply_skips_full_duplicate_changesets() {
-        let cs = Changeset::<DocOp> {
+        let cs = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
                 parents: vec![],
@@ -350,7 +406,10 @@ mod tests {
         };
         let server = EditorServer;
         let merged_bytes = server
-            .apply(enc_css(&[cs.clone()]), enc_css(&[cs.clone()]))
+            .apply(
+                enc_css(std::slice::from_ref(&cs)),
+                enc_css(std::slice::from_ref(&cs)),
+            )
             .unwrap();
         let merged = dec_css(&merged_bytes);
         assert_eq!(merged, vec![cs]);
@@ -358,7 +417,9 @@ mod tests {
 
     #[test]
     fn apply_dedups_duplicates_within_new_payload() {
-        let cs = Changeset::<DocOp> {
+        // Encode the same cs twice as independent bundles so the wire format
+        // doesn't inject implicit-prev parents on the second copy.
+        let cs = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(7, 0),
                 parents: vec![],
@@ -366,11 +427,16 @@ mod tests {
             }],
         };
         let server = EditorServer;
+        // existing already has cs; new payload re-sends the same cs
         let merged_bytes = server
-            .apply(enc_css(&[]), enc_css(&[cs.clone(), cs.clone()]))
+            .apply(
+                enc_css(std::slice::from_ref(&cs)),
+                enc_css(std::slice::from_ref(&cs)),
+            )
             .unwrap();
         let merged = dec_css(&merged_bytes);
-        assert_eq!(merged, vec![cs]);
+        assert_eq!(merged.len(), 1, "duplicate should be silently dropped");
+        assert_eq!(merged[0].ops[0].id, Dot::new(7, 0));
     }
 
     #[test]
@@ -385,8 +451,8 @@ mod tests {
             parents: vec![parent.id],
             payload: dummy_payload(),
         };
-        let parent_cs = Changeset::<DocOp> { ops: vec![parent] };
-        let child_cs = Changeset::<DocOp> { ops: vec![child] };
+        let parent_cs = Changeset::<EditOp> { ops: vec![parent] };
+        let child_cs = Changeset::<EditOp> { ops: vec![child] };
         let server = EditorServer;
         let result = server.apply(enc_css(&[]), enc_css(&[child_cs, parent_cs]));
         assert!(matches!(
@@ -407,8 +473,8 @@ mod tests {
             parents: vec![parent.id],
             payload: dummy_payload(),
         };
-        let parent_cs = Changeset::<DocOp> { ops: vec![parent] };
-        let child_cs = Changeset::<DocOp> { ops: vec![child] };
+        let parent_cs = Changeset::<EditOp> { ops: vec![parent] };
+        let child_cs = Changeset::<EditOp> { ops: vec![child] };
         let server = EditorServer;
         let merged_bytes = server
             .apply(
@@ -432,11 +498,13 @@ mod tests {
             parents: vec![op1.id],
             payload: dummy_payload(),
         };
-        let cs = Changeset::<DocOp> {
+        let cs = Changeset::<EditOp> {
             ops: vec![op1, op2],
         };
         let server = EditorServer;
-        let merged_bytes = server.apply(enc_css(&[]), enc_css(&[cs.clone()])).unwrap();
+        let merged_bytes = server
+            .apply(enc_css(&[]), enc_css(std::slice::from_ref(&cs)))
+            .unwrap();
         let merged = dec_css(&merged_bytes);
         assert_eq!(merged, vec![cs]);
     }
@@ -449,7 +517,7 @@ mod tests {
             parents: vec![dot],
             payload: dummy_payload(),
         };
-        let cs = Changeset::<DocOp> { ops: vec![bad] };
+        let cs = Changeset::<EditOp> { ops: vec![bad] };
         let server = EditorServer;
         let result = server.apply(enc_css(&[]), enc_css(&[cs]));
         assert!(matches!(
@@ -461,7 +529,7 @@ mod tests {
     #[test]
     fn apply_rejects_non_first_dot_reuse() {
         let x = Dot::new(20, 0);
-        let cs_a = Changeset::<DocOp> {
+        let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: x,
                 parents: vec![],
@@ -478,7 +546,7 @@ mod tests {
             parents: vec![new_first.id],
             payload: dummy_payload(),
         };
-        let cs_bad = Changeset::<DocOp> {
+        let cs_bad = Changeset::<EditOp> {
             ops: vec![new_first, new_reuse],
         };
         let server = EditorServer;
@@ -491,20 +559,22 @@ mod tests {
 
     #[test]
     fn missing_for_returns_only_missing_changesets() {
-        let cs_a = Changeset::<DocOp> {
+        // cs_b causally follows cs_a so the wire format's implicit-prev round-trips cleanly.
+        let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
                 parents: vec![],
                 payload: dummy_payload(),
             }],
         };
-        let cs_b = Changeset::<DocOp> {
+        let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![],
+                parents: vec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
+        // Remote peer knows cs_a but not cs_b
         let known_heads = vec![Dot::new(1, 0)];
 
         let server = EditorServer;
@@ -515,12 +585,14 @@ mod tests {
             )
             .unwrap();
         let missing = dec_css(&missing_bytes);
-        assert_eq!(missing, vec![cs_b]);
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].ops[0].id, cs_b.ops[0].id);
+        assert_eq!(missing[0].ops[0].parents, vec![Dot::new(1, 0)]);
     }
 
     #[test]
     fn heads_returns_dot_set() {
-        let cs_a = Changeset::<DocOp> {
+        let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
                 parents: vec![],
@@ -528,7 +600,7 @@ mod tests {
             }],
         };
         let server = EditorServer;
-        let heads_bytes = server.heads(enc_css(&[cs_a.clone()])).unwrap();
+        let heads_bytes = server.heads(enc_css(std::slice::from_ref(&cs_a))).unwrap();
         let heads = dec_dots(&heads_bytes);
         assert_eq!(heads, vec![Dot::new(1, 0)]);
     }
@@ -536,29 +608,22 @@ mod tests {
     #[test]
     fn apply_rejects_same_dot_different_content() {
         let dot = Dot::new(11, 0);
-        let id = NodeId::default();
-        let payload_a = DocOp::Presence {
-            node_id: id,
-            op: editor_crdt::OrMapOp::Set {
-                key: id,
-                value: NodeType::Paragraph,
-            },
-        };
-        let payload_b = DocOp::Presence {
-            node_id: id,
-            op: editor_crdt::OrMapOp::Set {
-                key: id,
-                value: NodeType::Text,
-            },
-        };
-        let cs_v1 = Changeset::<DocOp> {
+        let payload_a = EditOp::Seq(ListOp::Ins {
+            pos: 0,
+            item: SeqItem::Char('a'),
+        });
+        let payload_b = EditOp::Seq(ListOp::Ins {
+            pos: 0,
+            item: SeqItem::Char('b'),
+        });
+        let cs_v1 = Changeset::<EditOp> {
             ops: vec![Op {
                 id: dot,
                 parents: vec![],
                 payload: payload_a,
             }],
         };
-        let cs_v2 = Changeset::<DocOp> {
+        let cs_v2 = Changeset::<EditOp> {
             ops: vec![Op {
                 id: dot,
                 parents: vec![],
@@ -573,9 +638,9 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "wasm-server")]
     #[test]
     fn outline_text_to_svg_forwards_svg_document() {
-        // FFI 래퍼가 outline_text_to_svg 결과를 그대로 전달해 SVG 문서를 반환하는지 확인한다.
         let server = EditorServer;
         let svg = server
             .outline_text_to_svg(load_test_font(), "A".to_string())
@@ -584,152 +649,109 @@ mod tests {
         assert!(svg.contains("<path d=\""));
     }
 
+    #[cfg(feature = "wasm-server")]
     #[test]
     fn outline_text_to_svg_rejects_invalid_font_data() {
-        // 잘못된 폰트 바이트를 넘기면 FFI 래퍼도 에러를 그대로 반환해야 한다.
         let server = EditorServer;
         let result = server.outline_text_to_svg(vec![0, 1, 2, 3], "A".to_string());
         assert!(result.is_err());
     }
 
+    fn make_state_with_text(text: &str) -> editor_state::State {
+        let mut state = editor_state::State::empty();
+        for (i, ch) in text.chars().enumerate() {
+            state
+                .projected
+                .apply(EditOp::Seq(ListOp::Ins {
+                    pos: 1 + i,
+                    item: SeqItem::Char(ch),
+                }))
+                .unwrap();
+        }
+        state.projected.commit();
+        state
+    }
+
     #[test]
-    fn revert_produces_changeset_that_restores_past_state() {
-        use editor_crdt::OpGraph;
-        use editor_model::{Doc, DocOp};
+    fn extract_text_from_plain_doc() {
+        let state = make_state_with_text("hello world");
+        let plain = state.to_plain();
+        let server = EditorServer;
+        let result = server.extract_text(plain).unwrap();
+        assert_eq!(result, "hello world");
+    }
 
-        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
-        let root = NodeId::ROOT;
-        let para = NodeId::new();
-        let txt = NodeId::new();
-        let add = |g: &mut OpGraph<DocOp>, p: DocOp| {
-            let (ng, op) = g.clone().add(p).unwrap();
-            *g = ng;
-            op.id
-        };
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: root,
-                op: editor_crdt::OrMapOp::Set {
-                    key: root,
-                    value: NodeType::Root,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: para,
-                op: editor_crdt::OrMapOp::Set {
-                    key: para,
-                    value: NodeType::Paragraph,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Parent {
-                node_id: para,
-                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Children {
-                node_id: root,
-                op: editor_crdt::RgaOp::Insert {
-                    after: None,
-                    value: para,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: txt,
-                op: editor_crdt::OrMapOp::Set {
-                    key: txt,
-                    value: NodeType::Text,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Parent {
-                node_id: txt,
-                op: editor_crdt::LwwRegOp::Set { value: Some(para) },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Children {
-                node_id: para,
-                op: editor_crdt::RgaOp::Insert {
-                    after: None,
-                    value: txt,
-                },
-            },
-        );
-        let a_dot = add(
-            &mut g,
-            DocOp::Text {
-                node_id: txt,
-                op: editor_crdt::TextOp::InsertChar {
-                    after: None,
-                    ch: 'a',
-                },
-            },
-        );
-        let _b = add(
-            &mut g,
-            DocOp::Text {
-                node_id: txt,
-                op: editor_crdt::TextOp::InsertChar {
-                    after: Some(editor_crdt::PlacementId(a_dot)),
-                    ch: 'b',
-                },
-            },
-        );
-        let g = g.commit();
-
-        let graph_bytes = editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap();
-        let target_heads = editor_crdt::wire::encode_dots(&[a_dot]).unwrap();
+    #[test]
+    fn to_plain_round_trip_via_graph() {
+        let state = make_state_with_text("round trip");
+        let plain = state.to_plain();
 
         let server = EditorServer;
-        let revert_bytes = server.revert(graph_bytes.clone(), target_heads).unwrap();
+        let graph_bytes = server.to_graph(plain).unwrap();
+        let recovered = server.to_plain(graph_bytes).unwrap();
+
+        let state2 = editor_state::State::from_plain(&recovered).unwrap();
+        let view = state2.view();
+        let para_view = view.root().unwrap().child_blocks().next().unwrap();
+        assert_eq!(para_view.inline_text(), "round trip");
+    }
+
+    #[test]
+    fn revert_produces_changeset_that_restores_past_text() {
+        use editor_state::{ProjectedState, State};
+
+        let mut ps = ProjectedState::empty();
+        ps.commit();
+
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Char('a'),
+        }))
+        .unwrap();
+        ps.commit();
+
+        let target_heads: Vec<Dot> = ps.graph().current_heads().copied().collect();
+
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 2,
+            item: SeqItem::Char('b'),
+        }))
+        .unwrap();
+        ps.commit();
+
+        let graph_bytes = editor_crdt::wire::encode(&ps.graph().changesets_as_vec()).unwrap();
+        let target_bytes = editor_crdt::wire::encode_dots(&target_heads).unwrap();
+
+        let server = EditorServer;
+        let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
 
         let merged = server.apply(graph_bytes, revert_bytes).unwrap();
-        let merged_cs: Vec<editor_crdt::Changeset<DocOp>> =
-            editor_crdt::wire::decode(&merged).unwrap();
-        let merged_graph = OpGraph::from_changesets(merged_cs).unwrap();
-        let doc = Doc::from_op_graph(&merged_graph).unwrap();
-        assert_eq!(doc.extract_text(), "a");
+        let merged_css: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&merged).unwrap();
+        let state = State::from_changesets(merged_css, None).unwrap();
+        let view = state.view();
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        assert_eq!(para.inline_text(), "a");
     }
 
     #[test]
     fn revert_to_current_heads_is_empty_noop() {
-        use editor_crdt::OpGraph;
-        use editor_model::DocOp;
-        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
-        let root = NodeId::ROOT;
-        let (ng, _op) = g
-            .clone()
-            .add(DocOp::Presence {
-                node_id: root,
-                op: editor_crdt::OrMapOp::Set {
-                    key: root,
-                    value: NodeType::Root,
-                },
-            })
-            .unwrap();
-        g = ng;
-        let g = g.commit();
-        let graph_bytes = editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap();
-        let heads_now = EditorServer.heads(graph_bytes.clone()).unwrap();
+        use editor_state::ProjectedState;
+
+        let mut ps = ProjectedState::empty();
+        ps.commit();
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Char('a'),
+        }))
+        .unwrap();
+        ps.commit();
+
+        let graph_bytes = editor_crdt::wire::encode(&ps.graph().changesets_as_vec()).unwrap();
+        let heads_bytes = EditorServer.heads(graph_bytes.clone()).unwrap();
+
         let server = EditorServer;
-        let revert_bytes = server.revert(graph_bytes, heads_now).unwrap();
-        let revert_cs: Vec<editor_crdt::Changeset<DocOp>> =
-            editor_crdt::wire::decode(&revert_bytes).unwrap();
+        let revert_bytes = server.revert(graph_bytes, heads_bytes).unwrap();
+        let revert_cs: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&revert_bytes).unwrap();
         assert!(
             revert_cs.is_empty(),
             "revert to current heads must be empty (no-op)"
@@ -737,247 +759,61 @@ mod tests {
     }
 
     #[test]
-    fn revert_revives_deleted_node_ignoring_concurrent_edits() {
-        use editor_crdt::{Changeset, Dot, Op, OpGraph};
-        use editor_model::{Doc, DocOp};
+    fn revert_restores_deleted_paragraph() {
+        use editor_state::{ProjectedState, State};
 
-        // actor 1: root > [p1("a"), p2("b")]. p2 alive at THIS point = revert target.
-        let mut g: OpGraph<DocOp> = OpGraph::with_actor(1);
-        let root = NodeId::ROOT;
-        let p1 = NodeId::new();
-        let t1 = NodeId::new();
-        let p2 = NodeId::new();
-        let t2 = NodeId::new();
-        let add = |g: &mut OpGraph<DocOp>, p: DocOp| {
-            let (ng, op) = g.clone().add(p).unwrap();
-            *g = ng;
-            op.id
-        };
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: root,
-                op: editor_crdt::OrMapOp::Set {
-                    key: root,
-                    value: NodeType::Root,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: p1,
-                op: editor_crdt::OrMapOp::Set {
-                    key: p1,
-                    value: NodeType::Paragraph,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Parent {
-                node_id: p1,
-                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
-            },
-        );
-        let p1_children_dot = add(
-            &mut g,
-            DocOp::Children {
-                node_id: root,
-                op: editor_crdt::RgaOp::Insert {
-                    after: None,
-                    value: p1,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: t1,
-                op: editor_crdt::OrMapOp::Set {
-                    key: t1,
-                    value: NodeType::Text,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Parent {
-                node_id: t1,
-                op: editor_crdt::LwwRegOp::Set { value: Some(p1) },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Children {
-                node_id: p1,
-                op: editor_crdt::RgaOp::Insert {
-                    after: None,
-                    value: t1,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Text {
-                node_id: t1,
-                op: editor_crdt::TextOp::InsertChar {
-                    after: None,
-                    ch: 'a',
-                },
-            },
-        );
-        let p2_presence_dot = add(
-            &mut g,
-            DocOp::Presence {
-                node_id: p2,
-                op: editor_crdt::OrMapOp::Set {
-                    key: p2,
-                    value: NodeType::Paragraph,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Parent {
-                node_id: p2,
-                op: editor_crdt::LwwRegOp::Set { value: Some(root) },
-            },
-        );
-        let p2_children_dot = add(
-            &mut g,
-            DocOp::Children {
-                node_id: root,
-                op: editor_crdt::RgaOp::Insert {
-                    after: Some(p1_children_dot),
-                    value: p2,
-                },
-            },
-        );
-        let t2_presence_dot = add(
-            &mut g,
-            DocOp::Presence {
-                node_id: t2,
-                op: editor_crdt::OrMapOp::Set {
-                    key: t2,
-                    value: NodeType::Text,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Parent {
-                node_id: t2,
-                op: editor_crdt::LwwRegOp::Set { value: Some(p2) },
-            },
-        );
-        let t2_children_dot = add(
-            &mut g,
-            DocOp::Children {
-                node_id: p2,
-                op: editor_crdt::RgaOp::Insert {
-                    after: None,
-                    value: t2,
-                },
-            },
-        );
-        let t2_a = add(
-            &mut g,
-            DocOp::Text {
-                node_id: t2,
-                op: editor_crdt::TextOp::InsertChar {
-                    after: None,
-                    ch: 'b',
-                },
-            },
-        );
-        let g = g.commit();
+        let mut ps = ProjectedState::empty();
+        ps.commit();
+        // seq: [Para1]
 
-        let target_heads: Vec<Dot> = g.current_heads().copied().collect();
+        // Insert Para2 as sibling of Para1 (both children of ROOT)
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Block {
+                node_type: editor_model::NodeType::Paragraph,
+                parents: vec![Dot::ROOT],
+            },
+        }))
+        .unwrap();
+        ps.commit();
+        // seq: [Para1(0), Para2(1)]
 
-        // actor 1: delete p2 like remove_subtree (teardown subtree + presence + children link).
-        let mut g = g;
-        add(
-            &mut g,
-            DocOp::Text {
-                node_id: t2,
-                op: editor_crdt::TextOp::RemoveChar {
-                    observed: editor_crdt::EntryDot(t2_a),
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Children {
-                node_id: p2,
-                op: editor_crdt::RgaOp::Remove {
-                    observed: t2_children_dot,
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: t2,
-                op: editor_crdt::OrMapOp::Unset {
-                    observed: vec![t2_presence_dot],
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Presence {
-                node_id: p2,
-                op: editor_crdt::OrMapOp::Unset {
-                    observed: vec![p2_presence_dot],
-                },
-            },
-        );
-        add(
-            &mut g,
-            DocOp::Children {
-                node_id: root,
-                op: editor_crdt::RgaOp::Remove {
-                    observed: p2_children_dot,
-                },
-            },
-        );
-        let g = g.commit();
+        // 'a' goes between Para1 and Para2 → inside Para1
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Char('a'),
+        }))
+        .unwrap();
+        // 'b' goes after Para2 (which shifted to pos 2) → inside Para2
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 3,
+            item: SeqItem::Char('b'),
+        }))
+        .unwrap();
+        ps.commit();
+        // seq: [Para1(0), 'a'(1), Para2(2), 'b'(3)]
 
-        // actor 2: concurrent insert 'Z' into t2 (parent = t2_a). merged in.
-        let concurrent = Op {
-            id: Dot::new(2, 0),
-            parents: vec![t2_a],
-            payload: DocOp::Text {
-                node_id: t2,
-                op: editor_crdt::TextOp::InsertChar {
-                    after: Some(editor_crdt::PlacementId(t2_a)),
-                    ch: 'Z',
-                },
-            },
-        };
-        let g = g
-            .receive_changeset(Changeset {
-                ops: vec![concurrent],
-            })
+        let target_heads: Vec<Dot> = ps.graph().current_heads().copied().collect();
+
+        // Delete Para2 and its content (2 flat items: the Block item + 'b')
+        ps.apply(EditOp::Seq(ListOp::Del { pos: 2, len: 2 }))
             .unwrap();
+        ps.commit();
 
-        let graph_bytes = editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap();
+        let graph_bytes = editor_crdt::wire::encode(&ps.graph().changesets_as_vec()).unwrap();
         let target_bytes = editor_crdt::wire::encode_dots(&target_heads).unwrap();
 
         let server = EditorServer;
         let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
-        let merged = server.apply(graph_bytes, revert_bytes).unwrap();
-        let merged_cs: Vec<Changeset<DocOp>> = editor_crdt::wire::decode(&merged).unwrap();
-        let merged_graph = OpGraph::from_changesets(merged_cs).unwrap();
 
-        let target_set: hashbrown::HashSet<Dot> = target_heads.into_iter().collect();
-        let expected = Doc::from_op_graph_at(&merged_graph, &target_set).unwrap();
-        let actual = Doc::from_op_graph(&merged_graph).unwrap();
-        assert_eq!(
-            actual.to_plain(),
-            expected.to_plain(),
-            "revert result must equal target point (p2 alive, t2=\"b\"); concurrent 'Z' dropped"
-        );
+        let merged = server.apply(graph_bytes, revert_bytes).unwrap();
+        let merged_css: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&merged).unwrap();
+        let state = State::from_changesets(merged_css, None).unwrap();
+        let view = state.view();
+        let root = view.root().unwrap();
+        let paras: Vec<_> = root.child_blocks().collect();
+        assert_eq!(paras.len(), 2, "both paragraphs should be restored");
+        assert_eq!(paras[0].inline_text(), "a");
+        assert_eq!(paras[1].inline_text(), "b");
     }
 }

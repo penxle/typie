@@ -61,9 +61,9 @@ fn both_style() -> DecorationStyle {
 }
 
 fn init_editor_with_range(group: &str) -> Editor {
-    let (initial, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -151,9 +151,9 @@ fn invalidated_range_produces_no_marks() {
 
 #[test]
 fn collapsed_on_restore_produces_no_marks() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -166,7 +166,7 @@ fn collapsed_on_restore_produces_no_marks() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::new(Position::new(t1, 1), Position::new(t1, 4)),
+            selection: Selection::new(Position::new(p1, 1), Position::new(p1, 4)),
         },
     });
     editor.apply(Message::Deletion {
@@ -204,9 +204,9 @@ fn other_group_is_independent() {
 
 #[test]
 fn rects_shift_after_text_insertion() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -220,7 +220,7 @@ fn rects_shift_after_text_insertion() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(Position::new(t1, 0)),
+            selection: Selection::collapsed(Position::new(p1, 0)),
         },
     });
     editor.apply(Message::Insertion {
@@ -238,9 +238,9 @@ fn rects_shift_after_text_insertion() {
 
 #[test]
 fn rects_restored_after_undo() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -254,7 +254,7 @@ fn rects_restored_after_undo() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(Position::new(t1, 0)),
+            selection: Selection::collapsed(Position::new(p1, 0)),
         },
     });
     editor.apply(Message::Insertion {

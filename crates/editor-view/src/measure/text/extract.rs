@@ -1,16 +1,29 @@
+#[derive(Debug, Clone, Copy)]
+pub struct LineHeightConfig {
+    pub line_height_ratio: f32,
+    pub base_font_size: f32,
+}
+
+use std::collections::BTreeMap;
+use std::ops::Range;
+
 use editor_common::StrExt;
-use editor_model::{Doc, Modifier, ModifierType, NodeId, NodeRef};
-use editor_resource::TextBrush;
+use editor_model::{Modifier, ModifierType, OwnModifier};
 use icu_segmenter::GraphemeClusterSegmenter;
 use parley::Layout;
 
+use editor_resource::TextBrush;
+
+use super::inline::{TabMark, TextRun};
 use super::strut::StrutMetrics;
 use super::style_run::StyleRun;
-use super::text_run::{TabMark, TextRun};
-use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis, TextDecoration};
-use crate::measure::resolve::resolve_inherited;
+use crate::glyph_run::GlyphRun;
+use crate::glyph_run::{Glyph, GraphemeSpan, Synthesis, TextDecoration};
 
-pub struct ExtractedLine {
+const LINK_COLOR: &str = "text.blue";
+const ITALIC_SKEW_DEGREES: f32 = 14.0;
+
+pub(crate) struct ExtractedLine {
     pub height: f32,
     pub baseline: f32,
     pub ascent: f32,
@@ -18,17 +31,7 @@ pub struct ExtractedLine {
     pub glyph_runs: Vec<GlyphRun>,
     pub tab_gaps_raw: Vec<(u64, f32, f32)>,
     pub is_phantom: bool,
-    /// Some(content_edge_x) for a real line whose trailing whitespace was hung
-    /// past content_width: cursor / selection X computations clamp to this
-    /// value so they stay at the page's content edge instead of following the
-    /// hung whitespace's glyph X. The phantom line that follows owns the
-    /// paragraph-end caret on its own row. None for normal lines.
     pub content_edge_x: Option<f32>,
-}
-
-pub struct LineHeightConfig {
-    pub line_height_ratio: f32,
-    pub base_font_size: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -36,82 +39,6 @@ struct LineTypographyMetrics {
     ascent: f32,
     descent: f32,
     max_run_font_size: f32,
-}
-
-const ITALIC_SKEW_DEGREES: f32 = 14.0;
-
-fn resolve_synthesis(doc: &Doc, node_id: NodeId) -> Synthesis {
-    let (bold, italic) = doc
-        .node(node_id)
-        .map(|node_ref| {
-            let bold = resolve_inherited(&node_ref, ModifierType::Bold).is_some();
-            let italic = resolve_inherited(&node_ref, ModifierType::Italic).is_some();
-            (bold, italic)
-        })
-        .unwrap_or_default();
-
-    Synthesis {
-        embolden: bold,
-        skew: if italic {
-            Some(ITALIC_SKEW_DEGREES)
-        } else {
-            None
-        },
-    }
-}
-
-const LINK_COLOR: &str = "text.blue";
-
-fn has_link_modifier(node_ref: &NodeRef<'_>) -> bool {
-    node_ref
-        .modifiers()
-        .any(|m| matches!(m, Modifier::Link { .. }))
-}
-
-fn resolve_decoration(doc: &Doc, node_id: NodeId) -> TextDecoration {
-    doc.node(node_id)
-        .map(|node_ref| {
-            let underline = has_link_modifier(&node_ref)
-                || resolve_inherited(&node_ref, ModifierType::Underline).is_some();
-            TextDecoration {
-                underline,
-                strikethrough: resolve_inherited(&node_ref, ModifierType::Strikethrough).is_some(),
-            }
-        })
-        .unwrap_or_default()
-}
-
-pub fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
-    let node_ref = doc.node(node_id);
-
-    let color = node_ref
-        .as_ref()
-        .map(resolve_text_color)
-        .unwrap_or_else(|| "text.black".to_string());
-
-    let background_color = node_ref.as_ref().and_then(|nr| {
-        resolve_inherited(nr, ModifierType::BackgroundColor).and_then(|m| match m {
-            Modifier::BackgroundColor { value } if value != "none" => Some(format!("bg.{value}")),
-            _ => None,
-        })
-    });
-
-    (color, background_color)
-}
-
-fn resolve_text_color(node_ref: &NodeRef<'_>) -> String {
-    if let Some(Modifier::TextColor { value }) = node_ref.own_modifier(ModifierType::TextColor) {
-        return format!("text.{value}");
-    }
-    if has_link_modifier(node_ref) {
-        return LINK_COLOR.to_string();
-    }
-    if let Some(Modifier::TextColor { value }) =
-        node_ref.inherited_modifier(ModifierType::TextColor)
-    {
-        return format!("text.{value}");
-    }
-    "text.black".to_string()
 }
 
 fn segment_graphemes(
@@ -181,12 +108,11 @@ fn resolve_line_typography_metrics(
     }
 }
 
-pub fn extract_lines(
-    doc: &Doc,
+pub(crate) fn extract_lines(
     text: &str,
     layout: &Layout<TextBrush>,
     style_runs: &[StyleRun],
-    text_runs: &[TextRun],
+    runs: &[TextRun],
     strut: &StrutMetrics,
     height_config: LineHeightConfig,
     grapheme_segmenter: &GraphemeClusterSegmenter,
@@ -201,11 +127,6 @@ pub fn extract_lines(
 
     for line in layout.lines() {
         let metrics = line.metrics();
-        // metrics.advance excludes the line indent; the absolute right edge of
-        // the line is `metrics.offset + metrics.advance`. The page's content
-        // edge sits at X = content_width regardless of indent, so we only need
-        // to compare absolute edges. Without adding metrics.offset, indented
-        // first lines fail to detect their hung trailing whitespace.
         let hung_clamp_x = (metrics.trailing_whitespace > 0.0
             && metrics.offset + metrics.advance > content_width)
             .then_some(content_width);
@@ -250,6 +171,9 @@ pub fn extract_lines(
             {
                 let run = glyph_run.run();
                 let font_size = run.font_size();
+                let safe_base = height_config.base_font_size.max(1.0);
+                let run_cursor_ascent = (strut.ascent.max(0.0) / safe_base) * font_size;
+                let run_cursor_descent = (strut.descent.max(0.0) / safe_base) * font_size;
 
                 let run_x = glyph_run.offset();
                 let mut glyph_x_advance = 0.0;
@@ -291,16 +215,17 @@ pub fn extract_lines(
                 }
 
                 let byte_start = first_byte_start.unwrap_or(0);
-                let node_id = glyph_run.style().brush.node_id;
-                let node_byte_start = text_runs
-                    .iter()
-                    .find(|tr| tr.node_id == node_id)
-                    .map(|tr| tr.byte_range.start)
-                    .unwrap_or(0);
-                let char_offset = text[node_byte_start..byte_start].char_count();
-                let synthesis = resolve_synthesis(doc, node_id);
-                let decoration = resolve_decoration(doc, node_id);
-                let (color, background_color) = resolve_text_colors(doc, node_id);
+                let run_index = glyph_run.style().brush.run_index;
+                let src = &runs[run_index];
+                let char_offset = text[src.byte_range.start..byte_start].char_count();
+                let run_char_count = run_text.chars().count();
+                let offset_range: Range<usize> = (src.offset_range.start + char_offset)
+                    ..(src.offset_range.start + char_offset + run_char_count);
+
+                let synthesis = resolve_synthesis(src.effective);
+                let decoration = resolve_decoration(src.own_modifiers, src.effective);
+                let (color, background_color) = resolve_colors(src.own_modifiers, src.effective);
+                let link = resolve_link(src.own_modifiers);
 
                 let (family_id, weight) = style_runs
                     .iter()
@@ -319,12 +244,14 @@ pub fn extract_lines(
                     background_color,
                     glyphs,
                     decoration,
-                    node_id,
-                    offset: char_offset,
+                    offset_range,
+                    link,
                     text: run_text,
                     x: run_x + shift,
                     width: run_advance,
                     graphemes,
+                    cursor_ascent: run_cursor_ascent,
+                    cursor_descent: run_cursor_descent,
                 });
             }
         }
@@ -341,14 +268,6 @@ pub fn extract_lines(
         });
     }
 
-    // Hanging trailing whitespace needs a 0-height phantom row to host the
-    // paragraph-end caret, otherwise the cursor sits past content_width inside
-    // the hung whitespace. Parley emits an empty trailing line for this only
-    // when the hung whitespace was followed by `start_new_line`; if the line
-    // is the very last (no further content), Parley leaves it as a single
-    // overflowed line and we synthesize the phantom ourselves. Either way the
-    // phantom is skipped by navigation/hit-testing and only owns offset→line
-    // lookup at the paragraph end.
     if lines.len() > 1
         && lines
             .last()
@@ -376,317 +295,465 @@ pub fn extract_lines(
 
     lines
 }
+
+pub(crate) fn own_no_style(
+    own: &BTreeMap<ModifierType, OwnModifier>,
+    ty: ModifierType,
+) -> Option<&Modifier> {
+    own.get(&ty).filter(|o| !o.from_style).map(|o| &o.value)
+}
+
+pub(crate) fn resolve_synthesis(eff: &BTreeMap<ModifierType, Modifier>) -> Synthesis {
+    Synthesis {
+        embolden: eff.contains_key(&ModifierType::Bold),
+        skew: eff
+            .contains_key(&ModifierType::Italic)
+            .then_some(ITALIC_SKEW_DEGREES),
+    }
+}
+
+pub(crate) fn resolve_decoration(
+    own: &BTreeMap<ModifierType, OwnModifier>,
+    eff: &BTreeMap<ModifierType, Modifier>,
+) -> TextDecoration {
+    TextDecoration {
+        underline: own_no_style(own, ModifierType::Link).is_some()
+            || eff.contains_key(&ModifierType::Underline),
+        strikethrough: eff.contains_key(&ModifierType::Strikethrough),
+    }
+}
+
+pub(crate) fn resolve_colors(
+    own: &BTreeMap<ModifierType, OwnModifier>,
+    eff: &BTreeMap<ModifierType, Modifier>,
+) -> (String, Option<String>) {
+    let color = if let Some(Modifier::TextColor { value }) =
+        own.get(&ModifierType::TextColor).map(|o| &o.value)
+    {
+        format!("text.{value}")
+    } else if own_no_style(own, ModifierType::Link).is_some() {
+        LINK_COLOR.to_string()
+    } else if let Some(Modifier::TextColor { value }) = eff.get(&ModifierType::TextColor) {
+        format!("text.{value}")
+    } else {
+        "text.black".to_string()
+    };
+    let background = match eff.get(&ModifierType::BackgroundColor) {
+        Some(Modifier::BackgroundColor { value }) if value != "none" => Some(format!("bg.{value}")),
+        _ => None,
+    };
+    (color, background)
+}
+
+pub(crate) fn resolve_link(own: &BTreeMap<ModifierType, OwnModifier>) -> Option<String> {
+    match own_no_style(own, ModifierType::Link) {
+        Some(Modifier::Link { href }) => Some(href.clone()),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use std::sync::Arc;
+
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        Anchor, AtomLeaf, Bias, DocLogs, DocView, ModifierAttrLog, ModifierAttrOp, NodeAttrLog,
+        NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, SpanOp, StyleLog,
+        project_document,
+    };
+    use editor_resource::Resource;
+
+    use super::super::inline::collect_text_runs;
+    use super::super::layout::build_layout;
+    use super::super::resolve::ResolvedTextStyle;
+    use super::super::strut::compute_strut;
+    use super::super::style_run::resolve_style_runs;
+    use super::super::tab_metric::tab_px;
+    use editor_model::Alignment;
 
     use super::*;
 
-    fn segmenter() -> GraphemeClusterSegmenter {
-        GraphemeClusterSegmenter::new().static_to_owned()
+    fn own(pairs: Vec<(ModifierType, Modifier, bool)>) -> BTreeMap<ModifierType, OwnModifier> {
+        pairs
+            .into_iter()
+            .map(|(t, m, fs)| {
+                (
+                    t,
+                    OwnModifier {
+                        value: m,
+                        from_style: fs,
+                    },
+                )
+            })
+            .collect()
+    }
+    fn eff(pairs: Vec<(ModifierType, Modifier)>) -> BTreeMap<ModifierType, Modifier> {
+        pairs.into_iter().collect()
+    }
+    fn tc(v: &str) -> Modifier {
+        Modifier::TextColor {
+            value: v.to_string(),
+        }
+    }
+    fn bg(v: &str) -> Modifier {
+        Modifier::BackgroundColor {
+            value: v.to_string(),
+        }
+    }
+    fn link(h: &str) -> Modifier {
+        Modifier::Link {
+            href: h.to_string(),
+        }
     }
 
     #[test]
-    fn resolve_text_colors_default_uses_root_text_color() {
-        let (doc, t1) = doc! {
-            root { paragraph { t1: text("hello") } }
-        };
-        let (color, bg) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.black");
-        assert_eq!(bg, None);
+    fn color_own_text_color_wins() {
+        let o = own(vec![(ModifierType::TextColor, tc("red"), false)]);
+        let e = eff(vec![(ModifierType::TextColor, tc("red"))]);
+        assert_eq!(resolve_colors(&o, &e).0, "text.red");
     }
 
     #[test]
-    fn resolve_text_colors_prefixes_modifier_values() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {
-                    t1: text("hello") [
-                        text_color("red".to_string()),
-                        background_color("yellow".to_string())
-                    ]
-                }
-            }
-        };
-        let (color, bg) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.red");
-        assert_eq!(bg.as_deref(), Some("bg.yellow"));
+    fn color_own_style_text_color_still_wins() {
+        let o = own(vec![(ModifierType::TextColor, tc("red"), true)]); // from_style
+        let e = eff(vec![(ModifierType::TextColor, tc("green"))]);
+        assert_eq!(resolve_colors(&o, &e).0, "text.red");
     }
 
     #[test]
-    fn resolve_text_colors_filters_none_background() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {
-                    t1: text("hello") [background_color("none".to_string())]
-                }
-            }
-        };
-        let (_color, bg) = resolve_text_colors(&doc, t1);
-        assert_eq!(bg, None);
+    fn color_own_text_color_beats_own_link() {
+        // own TextColor AND own no-style Link both present → TextColor wins (branch 1 before
+        // branch 2). The link is still resolved separately (resolve_link), and decoration
+        // still underlines. Guards against a reordered color cascade.
+        let o = own(vec![
+            (ModifierType::TextColor, tc("red"), false),
+            (ModifierType::Link, link("h"), false),
+        ]);
+        let e = eff(vec![
+            (ModifierType::TextColor, tc("red")),
+            (ModifierType::Link, link("h")),
+        ]);
+        assert_eq!(resolve_colors(&o, &e).0, "text.red"); // NOT LINK_COLOR
+        assert_eq!(resolve_link(&o), Some("h".to_string())); // link still resolved
+        assert!(resolve_decoration(&o, &e).underline); // and still underlines
     }
 
     #[test]
-    fn text_color_message_sent_with_seeded_root_modifier() {
-        let (doc, t1) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::MessageSent) {
-                    paragraph { t1: text("hello") }
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.bright");
+    fn color_own_no_style_link_uses_link_color() {
+        let o = own(vec![(ModifierType::Link, link("h"), false)]);
+        let e = eff(vec![(ModifierType::TextColor, tc("blue"))]); // inherited, but link beats it
+        assert_eq!(resolve_colors(&o, &e).0, LINK_COLOR);
     }
 
     #[test]
-    fn text_color_message_sent_overrides_explicit_root_modifier() {
-        let (doc, t1) = doc! {
-            root [text_color("red".to_string())] {
-                blockquote(variant: BlockquoteVariant::MessageSent) {
-                    paragraph { t1: text("hello") }
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.bright");
+    fn color_inherited_effective_text_color() {
+        let o = own(vec![]);
+        let e = eff(vec![(ModifierType::TextColor, tc("green"))]);
+        assert_eq!(resolve_colors(&o, &e).0, "text.green");
     }
 
     #[test]
-    fn text_color_message_sent_respects_explicit_paragraph_modifier() {
-        let (doc, t1) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::MessageSent) {
-                    paragraph [text_color("red".to_string())] {
-                        t1: text("hello")
-                    }
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.red");
+    fn color_default_black() {
+        assert_eq!(resolve_colors(&own(vec![]), &eff(vec![])).0, "text.black");
     }
 
     #[test]
-    fn text_color_message_received_uses_root() {
-        let (doc, t1) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::MessageReceived) {
-                    paragraph { t1: text("hello") }
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.black");
+    fn color_style_link_does_not_trigger_link_color() {
+        let o = own(vec![(ModifierType::Link, link("h"), true)]); // style-derived link
+        let e = eff(vec![(ModifierType::Link, link("h"))]); // present in effective too
+        assert_eq!(resolve_colors(&o, &e).0, "text.black"); // own_no_style filters it out
     }
 
     #[test]
-    fn text_color_message_sent_through_nested_container() {
-        let (doc, t1) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::MessageSent) {
-                    bullet_list {
-                        list_item {
-                            paragraph { t1: text("hello") }
-                        }
-                    }
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.bright");
+    fn background_effective_none_suppress_prefix() {
+        assert_eq!(
+            resolve_colors(
+                &own(vec![]),
+                &eff(vec![(ModifierType::BackgroundColor, bg("yellow"))])
+            )
+            .1,
+            Some("bg.yellow".to_string())
+        );
+        assert_eq!(
+            resolve_colors(
+                &own(vec![]),
+                &eff(vec![(ModifierType::BackgroundColor, bg("none"))])
+            )
+            .1,
+            None
+        );
+        assert_eq!(resolve_colors(&own(vec![]), &eff(vec![])).1, None);
     }
 
     #[test]
-    fn text_color_inherits_from_root_outside_message_sent() {
-        let (doc, t1) = doc! {
-            root [text_color("red".to_string())] {
-                paragraph { t1: text("hello") }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.red");
-    }
-
-    #[test]
-    fn resolve_decoration_none_by_default() {
-        let (doc, t1) = doc! {
-            root { paragraph { t1: text("hello") } }
-        };
-        let d = resolve_decoration(&doc, t1);
+    fn decoration_underline_via_link_or_effective() {
+        // own-no-style Link → underline
+        let d = resolve_decoration(
+            &own(vec![(ModifierType::Link, link("h"), false)]),
+            &eff(vec![]),
+        );
+        assert!(d.underline);
+        // effective Underline → underline
+        let d = resolve_decoration(
+            &own(vec![]),
+            &eff(vec![(ModifierType::Underline, Modifier::Underline)]),
+        );
+        assert!(d.underline);
+        // neither → no underline
+        assert!(!resolve_decoration(&own(vec![]), &eff(vec![])).underline);
+        // style-derived Link does NOT underline
+        let d = resolve_decoration(
+            &own(vec![(ModifierType::Link, link("h"), true)]),
+            &eff(vec![]),
+        );
         assert!(!d.underline);
-        assert!(!d.strikethrough);
     }
 
     #[test]
-    fn resolve_decoration_underline_only() {
-        let (doc, t1) = doc! {
-            root { paragraph { t1: text("hello") [underline] } }
-        };
-        let d = resolve_decoration(&doc, t1);
-        assert!(d.underline);
-        assert!(!d.strikethrough);
-    }
-
-    #[test]
-    fn resolve_decoration_strikethrough_only() {
-        let (doc, t1) = doc! {
-            root { paragraph { t1: text("hello") [strikethrough] } }
-        };
-        let d = resolve_decoration(&doc, t1);
-        assert!(!d.underline);
+    fn decoration_strikethrough_from_effective() {
+        let d = resolve_decoration(
+            &own(vec![]),
+            &eff(vec![(ModifierType::Strikethrough, Modifier::Strikethrough)]),
+        );
         assert!(d.strikethrough);
+        assert!(!resolve_decoration(&own(vec![]), &eff(vec![])).strikethrough);
     }
 
     #[test]
-    fn resolve_decoration_both() {
-        let (doc, t1) = doc! {
-            root { paragraph { t1: text("hello") [underline, strikethrough] } }
+    fn synthesis_bold_italic_from_effective() {
+        let s = resolve_synthesis(&eff(vec![(ModifierType::Bold, Modifier::Bold)]));
+        assert!(s.embolden && s.skew.is_none());
+        let s = resolve_synthesis(&eff(vec![(ModifierType::Italic, Modifier::Italic)]));
+        assert!(!s.embolden && s.skew == Some(ITALIC_SKEW_DEGREES));
+        let s = resolve_synthesis(&eff(vec![
+            (ModifierType::Bold, Modifier::Bold),
+            (ModifierType::Italic, Modifier::Italic),
+        ]));
+        assert!(s.embolden && s.skew == Some(ITALIC_SKEW_DEGREES));
+        let s = resolve_synthesis(&eff(vec![]));
+        assert!(!s.embolden && s.skew.is_none());
+    }
+
+    #[test]
+    fn link_own_no_style_href() {
+        assert_eq!(
+            resolve_link(&own(vec![(ModifierType::Link, link("u"), false)])),
+            Some("u".to_string())
+        );
+        assert_eq!(
+            resolve_link(&own(vec![(ModifierType::Link, link("u"), true)])),
+            None
+        );
+        assert_eq!(resolve_link(&own(vec![])), None);
+    }
+
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+    fn build_logs(children: Vec<SeqItem>) -> DocLogs {
+        let root = Dot::ROOT;
+        let p = Dot::new(1, 1);
+        let mut items = vec![(
+            p,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, c) in children.into_iter().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), c));
+        }
+        logs(&items)
+    }
+    fn ch(c: char) -> SeqItem {
+        SeqItem::Char(c)
+    }
+    fn leaf(i: u64) -> Dot {
+        Dot::new(1, 2 + i)
+    }
+    fn anc(d: Dot, b: Bias) -> Anchor {
+        Anchor { id: d, bias: b }
+    }
+
+    fn pipeline_extract(l: &DocLogs) -> Vec<ExtractedLine> {
+        let pd = project_document(l).unwrap();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        let (text, runs, tabs) = collect_text_runs(&para);
+        let mut resource = Resource::new_test();
+        let base = ResolvedTextStyle {
+            font_family: String::new(),
+            font_weight: 400,
+            font_size: 16.0,
+            letter_spacing: 0.0,
+            line_height: 1.6,
         };
-        let d = resolve_decoration(&doc, t1);
-        assert!(d.underline);
-        assert!(d.strikethrough);
+        let strut = compute_strut(&mut resource, &base).expect("strut");
+        let style_runs = resolve_style_runs(&text, &runs, &mut resource.font_registry);
+        let tab_boxes: Vec<(TabMark, f32)> = tabs
+            .into_iter()
+            .map(|t| {
+                let px = tab_px(&t.style, &mut resource);
+                (t, px)
+            })
+            .collect();
+        let layout = build_layout(
+            &text,
+            &style_runs,
+            Alignment::Left,
+            0.0,
+            1.0e6,
+            &mut resource,
+            &tab_boxes,
+        );
+        let segmenters = Arc::clone(&resource.segmenters);
+        drop(resource);
+        extract_lines(
+            &text,
+            &layout,
+            &style_runs,
+            &runs,
+            &strut,
+            LineHeightConfig {
+                line_height_ratio: base.line_height,
+                base_font_size: base.font_size,
+            },
+            &segmenters.grapheme,
+            &tab_boxes,
+        )
+    }
+
+    fn glyph_runs(lines: &[ExtractedLine]) -> Vec<&GlyphRun> {
+        lines.iter().flat_map(|l| l.glyph_runs.iter()).collect()
     }
 
     #[test]
-    fn resolve_decoration_inherits_from_ancestor() {
-        let (doc, t1) = doc! {
-            root [underline] {
-                paragraph { t1: text("hello") }
-            }
+    fn render_fields_from_effective() {
+        let mut l = build_logs(vec![ch('a')]);
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(50, 1),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: editor_model::Modifier::TextColor {
+                        value: "red".to_string(),
+                    },
+                },
+            )
+            .unwrap();
+        l.spans = SpanLog::new()
+            .apply(
+                Dot::new(51, 1),
+                SpanOp::AddSpan {
+                    start: anc(leaf(0), Bias::Before),
+                    end: anc(leaf(0), Bias::After),
+                    modifier: editor_model::Modifier::Bold,
+                },
+            )
+            .unwrap();
+        let lines = pipeline_extract(&l);
+        let grs = glyph_runs(&lines);
+        assert!(!grs.is_empty());
+        assert!(
+            grs.iter()
+                .any(|g| g.color == "text.red" && g.synthesis.embolden)
+        );
+    }
+
+    #[test]
+    fn offset_range_is_paragraph_absolute_with_leading_atom() {
+        let l = build_logs(vec![
+            SeqItem::Atom(AtomLeaf::Tab),
+            ch('a'),
+            ch('b'),
+            ch('c'),
+        ]);
+        let lines = pipeline_extract(&l);
+        let grs = glyph_runs(&lines);
+        assert!(!grs.is_empty(), "expected at least one text glyph run");
+        assert!(grs.iter().all(|g| g.offset_range.start >= 1));
+        assert!(grs.iter().any(|g| g.offset_range == (1..4)));
+    }
+
+    #[test]
+    fn link_carried_and_link_color() {
+        let mut l = build_logs(vec![ch('a')]);
+        l.spans = SpanLog::new()
+            .apply(
+                Dot::new(52, 1),
+                SpanOp::AddSpan {
+                    start: anc(leaf(0), Bias::Before),
+                    end: anc(leaf(0), Bias::After),
+                    modifier: editor_model::Modifier::Link {
+                        href: "https://x".to_string(),
+                    },
+                },
+            )
+            .unwrap();
+        let lines = pipeline_extract(&l);
+        let grs = glyph_runs(&lines);
+        assert!(
+            grs.iter()
+                .any(|g| g.link.as_deref() == Some("https://x") && g.color == LINK_COLOR)
+        );
+    }
+
+    #[test]
+    fn two_runs_distinct_render_by_offset_range() {
+        let mut l = build_logs(vec![ch('a'), ch('b')]);
+        l.spans = SpanLog::new()
+            .apply(
+                Dot::new(53, 1),
+                SpanOp::AddSpan {
+                    start: anc(leaf(0), Bias::Before),
+                    end: anc(leaf(0), Bias::After),
+                    modifier: editor_model::Modifier::TextColor {
+                        value: "red".to_string(),
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(54, 1),
+                SpanOp::AddSpan {
+                    start: anc(leaf(1), Bias::Before),
+                    end: anc(leaf(1), Bias::After),
+                    modifier: editor_model::Modifier::TextColor {
+                        value: "blue".to_string(),
+                    },
+                },
+            )
+            .unwrap();
+        let lines = pipeline_extract(&l);
+        let grs = glyph_runs(&lines);
+        let color_at = |off: usize| -> Option<&str> {
+            grs.iter()
+                .find(|g| g.offset_range.contains(&off))
+                .map(|g| g.color.as_str())
         };
-        let d = resolve_decoration(&doc, t1);
-        assert!(d.underline);
-        assert!(!d.strikethrough);
-    }
-
-    #[test]
-    fn resolve_decoration_inherits_strikethrough_from_ancestor() {
-        let (doc, t1) = doc! {
-            root [strikethrough] {
-                paragraph { t1: text("hello") }
-            }
-        };
-        let d = resolve_decoration(&doc, t1);
-        assert!(!d.underline);
-        assert!(d.strikethrough);
-    }
-
-    #[test]
-    fn link_modifier_underlines_text() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {
-                    t1: text("hello") [link(href: "https://example.com".into())]
-                }
-            }
-        };
-        let d = resolve_decoration(&doc, t1);
-        assert!(d.underline);
-    }
-
-    #[test]
-    fn link_modifier_uses_link_color() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {
-                    t1: text("hello") [link(href: "https://example.com".into())]
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, LINK_COLOR);
-    }
-
-    #[test]
-    fn explicit_text_color_overrides_link_color() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {
-                    t1: text("hello") [
-                        link(href: "https://example.com".into()),
-                        text_color("red".to_string())
-                    ]
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, "text.red");
-    }
-
-    #[test]
-    fn link_color_takes_precedence_over_inherited_text_color() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph [text_color("ff0000".to_string())] {
-                    t1: text("x") [link(href: "https://a".to_string())]
-                }
-            }
-        };
-        assert_eq!(resolve_text_color(&doc.node(t1).unwrap()), LINK_COLOR);
-    }
-
-    #[test]
-    fn link_color_overrides_inherited_text_color() {
-        let (doc, t1) = doc! {
-            root [text_color("red".to_string())] {
-                paragraph {
-                    t1: text("hello") [link(href: "https://example.com".into())]
-                }
-            }
-        };
-        let (color, _) = resolve_text_colors(&doc, t1);
-        assert_eq!(color, LINK_COLOR);
-    }
-
-    #[test]
-    fn link_underline_combines_with_explicit_underline() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {
-                    t1: text("hello") [
-                        link(href: "https://example.com".into()),
-                        underline
-                    ]
-                }
-            }
-        };
-        let d = resolve_decoration(&doc, t1);
-        assert!(d.underline);
-    }
-
-    #[test]
-    fn segment_single_ascii_char() {
-        let spans = segment_graphemes("h", 10.0, &segmenter());
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].codepoints, 1);
-        assert_eq!(spans[0].advance, 10.0);
-    }
-
-    #[test]
-    fn segment_multiple_ascii_chars() {
-        let spans = segment_graphemes("ab", 20.0, &segmenter());
-        assert_eq!(spans.len(), 2);
-        assert_eq!(spans[0].codepoints, 1);
-        assert_eq!(spans[0].advance, 10.0);
-        assert_eq!(spans[1].codepoints, 1);
-        assert_eq!(spans[1].advance, 10.0);
-    }
-
-    #[test]
-    fn segment_multi_codepoint_grapheme() {
-        // 👨‍👩 = U+1F468 U+200D U+1F469 (3 codepoints, 1 grapheme cluster)
-        let text = "\u{1F468}\u{200D}\u{1F469}";
-        let spans = segment_graphemes(text, 20.0, &segmenter());
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].codepoints, 3);
-        assert_eq!(spans[0].advance, 20.0);
-    }
-
-    #[test]
-    fn segment_no_zero_codepoint_span() {
-        let spans = segment_graphemes("hello", 50.0, &segmenter());
-        assert!(spans.iter().all(|s| s.codepoints > 0));
-        assert_eq!(spans.len(), 5);
+        assert_eq!(color_at(0), Some("text.red"));
+        assert_eq!(color_at(1), Some("text.blue"));
     }
 }

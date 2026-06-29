@@ -1,51 +1,50 @@
 editor_macros::preamble!();
 
 mod alignment;
+mod attr;
 mod canonical;
-mod doc;
-mod doc_op;
-mod doc_text_store;
-mod entry;
+mod edit_op;
 mod error;
 mod fragment;
-mod id;
 mod marker;
 mod modifier;
-mod node_ref;
+mod node_attr;
+mod node_lww;
 mod nodes;
 mod plain;
+mod projection;
 mod schema;
-mod stable_position_remap;
+mod seq;
+mod span;
 mod style;
+mod style_log;
 mod subtree;
-mod text_entry_store;
-mod text_index;
-mod text_view;
-mod validate;
+mod view;
 
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 
 pub use alignment::*;
+pub use attr::*;
 pub use canonical::*;
-pub use doc::*;
-pub use doc_op::*;
-pub use entry::*;
+pub use edit_op::*;
 pub use error::*;
 pub use fragment::*;
-pub use id::*;
 pub use imbl;
 pub use marker::Marker;
 pub use modifier::*;
-pub use node_ref::*;
+pub use node_attr::*;
+pub use node_lww::*;
 pub use nodes::*;
 pub use plain::*;
+pub use projection::*;
 pub use schema::*;
-pub use stable_position_remap::*;
+pub use seq::*;
+pub use span::*;
 pub use style::*;
+pub use style_log::*;
 pub use subtree::*;
-pub use text_view::*;
-pub use validate::*;
+pub use view::{ChildView, DocView, InlineItem, InlineKind, LeafView, NodeView};
 
 #[cfg(any(test, feature = "test-utils"))]
 pub use test_utils::*;

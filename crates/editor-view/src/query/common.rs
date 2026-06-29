@@ -1,8 +1,8 @@
-use editor_model::NodeId;
-use editor_state::{Affinity, Position, Selection};
+use editor_crdt::Dot;
+use editor_state::Affinity;
 
 use crate::page::LayoutPage;
-use crate::paginate::LayoutLine;
+use crate::paginate::types::LayoutLine;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Phase {
@@ -11,10 +11,10 @@ pub enum Phase {
     After,
 }
 
-pub type SelectionKey = ((NodeId, usize, Affinity), (NodeId, usize, Affinity));
+pub type SelectionKey = ((Dot, usize, Affinity), (Dot, usize, Affinity));
 
-pub fn selection_key(selection: &Selection) -> SelectionKey {
-    let key = |pos: &Position| (pos.node_id, pos.offset, pos.affinity);
+pub fn selection_key(selection: &editor_state::Selection) -> SelectionKey {
+    let key = |pos: &editor_state::Position| (pos.node, pos.offset, pos.affinity);
     (key(&selection.anchor), key(&selection.head))
 }
 

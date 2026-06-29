@@ -1,14 +1,14 @@
+use editor_crdt::Dot;
 use editor_model::{
-    ContextExpr, Doc, Expand, Modifier, ModifierType, Node, NodeId, NodeRef, NodeType, Schema,
+    ChildView, DocView, Expand, LeafView, Modifier, ModifierType, NodeType, NodeView, Schema,
 };
 use editor_state::{PendingModifier, PendingModifiers, Position, ResolvedSelection};
-use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
 
 use crate::CommandError;
 
 pub(crate) fn resolve_effective_modifiers(
-    node: &NodeRef,
+    node: &NodeView,
     offset: usize,
     pending_modifiers: &PendingModifiers,
 ) -> Vec<Modifier> {
@@ -16,59 +16,69 @@ pub(crate) fn resolve_effective_modifiers(
     apply_pending_delta(base_modifiers, pending_modifiers)
 }
 
-pub(crate) fn resolve_base_modifiers(node: &NodeRef, offset: usize) -> Vec<Modifier> {
-    match node.node() {
-        Node::Text(text_node) => {
-            let node_len = text_node.text.len();
-            let at_start = offset == 0 && node_len > 0;
-            let at_end = offset == node_len && node_len > 0;
-
-            if !at_start && !at_end {
-                return node.modifiers().cloned().collect();
-            }
-
-            let mut out: Vec<Modifier> = node
-                .modifiers()
-                .filter(|m| {
-                    let expand = &m.spec().expand;
-                    match expand {
-                        Expand::After => at_end,
-                        Expand::Before => at_start,
-                        Expand::Both => true,
-                        Expand::None => false,
-                    }
-                })
-                .cloned()
-                .collect();
-
-            if at_start {
-                fold_prev_sibling_carryover(node, &mut out);
-            }
-
-            out
-        }
-        Node::Paragraph(_) => node.modifiers().cloned().collect(),
-        _ => vec![],
+fn char_leaf_at<'a>(node: &NodeView<'a>, index: usize) -> Option<LeafView<'a>> {
+    match node.child_at(index) {
+        Some(ChildView::Leaf(l)) if l.as_char().is_some() => Some(l),
+        _ => None,
     }
 }
 
-fn fold_prev_sibling_carryover(node: &NodeRef, out: &mut Vec<Modifier>) {
-    let Some(prev) = node.prev_sibling() else {
-        return;
+fn own_no_style(leaf: &LeafView) -> Vec<(ModifierType, Modifier)> {
+    leaf.own_modifiers()
+        .iter()
+        .filter(|(_, o)| !o.from_style)
+        .map(|(t, o)| (*t, o.value.clone()))
+        .collect()
+}
+
+/// Modifiers a fresh char inserted at `offset` within `node` should carry.
+/// Derived from the inline leaves adjacent to the caret: the left leaf
+/// contributes its rightward-expanding modifiers, the right leaf its
+/// leftward-expanding ones; strictly inside a uniform run all of the run's
+/// modifiers carry. Empty paragraphs fall back to their block modifiers.
+pub(crate) fn resolve_base_modifiers(node: &NodeView, offset: usize) -> Vec<Modifier> {
+    let left = offset.checked_sub(1).and_then(|i| char_leaf_at(node, i));
+    let right = char_leaf_at(node, offset);
+
+    let mid = match (&left, &right) {
+        (Some(l), Some(r)) => own_no_style(l) == own_no_style(r),
+        _ => false,
     };
-    if !matches!(prev.node(), Node::Text(_)) {
-        return;
-    }
-    for m in prev.modifiers() {
-        if !matches!(m.spec().expand, Expand::After | Expand::Both) {
-            continue;
+
+    let mut out: Vec<Modifier> = Vec::new();
+    let push_unique = |m: Modifier, out: &mut Vec<Modifier>| {
+        if !out.iter().any(|e| e.as_type() == m.as_type()) {
+            out.push(m);
         }
-        let t = m.as_type();
-        if out.iter().any(|e| e.as_type() == t) {
-            continue;
+    };
+
+    if let Some(l) = &left {
+        for (ty, value) in own_no_style(l) {
+            let keep = if mid {
+                true
+            } else {
+                matches!(
+                    Schema::modifier_spec(ty).expand,
+                    Expand::After | Expand::Both
+                )
+            };
+            if keep {
+                push_unique(value, &mut out);
+            }
         }
-        out.push(m.clone());
     }
+    if !mid && let Some(r) = &right {
+        for (ty, value) in own_no_style(r) {
+            if matches!(
+                Schema::modifier_spec(ty).expand,
+                Expand::Before | Expand::Both
+            ) {
+                push_unique(value, &mut out);
+            }
+        }
+    }
+
+    out
 }
 
 fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers) -> Vec<Modifier> {
@@ -83,16 +93,18 @@ fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers)
             }
         }
     }
-
     modifiers
 }
 
-/// Collects inherited modifiers (ancestor-provided, self excluded) per type.
-/// `inherited_modifier` already encodes inheritable/nearest-target semantics.
-pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
+/// Inheritable modifiers provided by ancestors (self excluded), per type.
+pub(crate) fn resolve_inherited_modifiers(node: &NodeView) -> Vec<Modifier> {
+    let Some(parent) = node.parent() else {
+        return Vec::new();
+    };
+    let parent_eff = parent.effective();
     ModifierType::iter()
         .filter(|&ty| Schema::modifier_spec(ty).inheritable)
-        .filter_map(|ty| node.inherited_modifier(ty).cloned())
+        .filter_map(|ty| parent_eff.get(&ty).cloned())
         .collect()
 }
 
@@ -113,104 +125,76 @@ pub(crate) fn is_text_applicable(modifier_type: ModifierType) -> bool {
         .contains(&NodeType::Text)
 }
 
-pub(crate) fn is_modifier_applicable_to_node(node: &NodeRef, modifier_type: ModifierType) -> bool {
+pub(crate) fn resolve_applicable_target_collapsed(
+    view: &DocView,
+    cursor_node_id: Dot,
+    modifier_type: ModifierType,
+) -> Option<Dot> {
     let target = &Schema::modifier_spec(modifier_type).target;
     let targets = target.rightmost_node_types();
-    if !targets.contains(&node.as_type()) {
-        return false;
-    }
 
-    let mut path: Vec<NodeType> = node.ancestors().map(|a| a.as_type()).collect();
-    path.reverse();
-    target.matches(&path)
-}
-
-pub(crate) fn filter_applicable_node_ids(
-    doc: &Doc,
-    node_ids: &[NodeId],
-    modifier_type: ModifierType,
-) -> Vec<NodeId> {
-    node_ids
-        .iter()
-        .copied()
-        .filter(|node_id| {
-            doc.node(*node_id)
-                .is_some_and(|node| is_modifier_applicable_to_node(&node, modifier_type))
-        })
-        .collect()
-}
-
-pub(crate) fn resolve_applicable_target_collapsed<'a>(
-    doc: &'a Doc,
-    cursor_node_id: NodeId,
-    modifier_type: ModifierType,
-) -> Option<NodeRef<'a>> {
-    let target = &Schema::modifier_spec(modifier_type).target;
-    let targets = target.rightmost_node_types();
-    debug_assert!(
-        !targets.is_empty(),
-        "modifier {modifier_type:?} has no resolvable target types from {target:?}"
-    );
-
-    let cursor = doc.node(cursor_node_id)?;
+    let cursor = view.node(cursor_node_id)?;
     for n in cursor.ancestors() {
-        if !targets.contains(&n.as_type()) {
+        if !targets.contains(&n.node_type()) {
             continue;
         }
-        let mut path: Vec<NodeType> = n.ancestors().map(|a| a.as_type()).collect();
+        let mut path: Vec<NodeType> = n.ancestors().map(|a| a.node_type()).collect();
         path.reverse();
         if target.matches(&path) {
-            return Some(n);
+            return Some(n.id());
         }
     }
     None
 }
 
-pub(crate) fn collect_applicable_targets_in_range<'a>(
-    doc: &'a Doc,
-    resolved: &ResolvedSelection<'a>,
+pub(crate) fn collect_applicable_targets_in_range(
+    view: &DocView,
+    resolved: &ResolvedSelection,
     modifier_type: ModifierType,
-) -> Vec<NodeRef<'a>> {
+) -> Vec<Dot> {
     let target = &Schema::modifier_spec(modifier_type).target;
     let targets = target.rightmost_node_types();
-    debug_assert!(
-        !targets.is_empty(),
-        "modifier {modifier_type:?} has no resolvable target types from {target:?}"
-    );
     let mut out = Vec::new();
-    let Some(root) = doc.root() else {
+    let Some(root) = view.root() else {
         return out;
     };
-    walk_collect_targets(&root, resolved, &targets, target, &mut out);
-    out
-}
+    let (Some(lo_r), Some(hi_r)) = (
+        resolved.from().position().resolve(view),
+        resolved.to().position().resolve(view),
+    ) else {
+        return out;
+    };
 
-fn walk_collect_targets<'a>(
-    node: &NodeRef<'a>,
-    rs: &ResolvedSelection<'a>,
-    targets: &[NodeType],
-    target: &ContextExpr,
-    out: &mut Vec<NodeRef<'a>>,
-) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-    if targets.contains(&node.as_type()) {
-        let mut path: Vec<NodeType> = node.ancestors().map(|a| a.as_type()).collect();
-        path.reverse();
-        if target.matches(&path) {
-            out.push(*node);
+    let mut blocks = vec![root];
+    if let Some(root) = view.root() {
+        for d in root.descendants() {
+            if let ChildView::Block(b) = d {
+                blocks.push(b);
+            }
         }
     }
-    for child in node.children() {
-        walk_collect_targets(&child, rs, targets, target, out);
-    }
-}
 
-pub(crate) fn check_range_all_has_modifier(nodes: &[NodeRef], modifier_type: ModifierType) -> bool {
-    nodes
-        .iter()
-        .all(|node| node.modifiers().any(|m| m.as_type() == modifier_type))
+    for node in blocks {
+        let id = node.id();
+        let count = node.children().count();
+        let (Some(start), Some(end)) = (
+            Position::new(id, 0).resolve(view),
+            Position::new(id, count).resolve(view),
+        ) else {
+            continue;
+        };
+        if !(start <= hi_r && lo_r <= end) {
+            continue;
+        }
+        if targets.contains(&node.node_type()) {
+            let mut path: Vec<NodeType> = node.ancestors().map(|a| a.node_type()).collect();
+            path.reverse();
+            if target.matches(&path) {
+                out.push(id);
+            }
+        }
+    }
+    out
 }
 
 pub(crate) fn is_unit_variant(modifier: &Modifier) -> bool {
@@ -221,24 +205,27 @@ pub(crate) fn is_unit_variant(modifier: &Modifier) -> bool {
 }
 
 pub(crate) fn apply_modifier_to_node(
-    tr: &mut Transaction,
-    target: &NodeRef<'_>,
+    tr: &mut editor_transaction::Transaction,
+    target_id: Dot,
     modifier: &Modifier,
 ) -> Result<(), CommandError> {
     let modifier_type = modifier.as_type();
-    let target_id = target.id();
+    let (existing, inherited_value) = {
+        let view = tr.state().view();
+        let target = view
+            .node(target_id)
+            .ok_or(CommandError::NodeNotFound(target_id))?;
+        let existing = target.block_modifier(modifier_type).cloned();
+        let inherited = resolve_inherited_modifiers(&target);
+        let inherited_value = inherited.into_iter().find(|m| m.as_type() == modifier_type);
+        (existing, inherited_value)
+    };
 
-    let inherited = resolve_inherited_modifiers(target);
-    let inherited_value = inherited.iter().find(|m| m.as_type() == modifier_type);
-
-    if let Some(existing) = target
-        .explicit_modifiers()
-        .find(|m| m.as_type() == modifier_type)
-    {
-        tr.remove_modifier(target_id, existing.clone())?;
+    if let Some(existing) = existing {
+        tr.remove_modifier(target_id, existing)?;
     }
 
-    if inherited_value != Some(modifier) {
+    if inherited_value.as_ref() != Some(modifier) {
         tr.add_modifier(target_id, modifier.clone())?;
     }
 
@@ -246,11 +233,11 @@ pub(crate) fn apply_modifier_to_node(
 }
 
 pub(crate) fn carryable_modifiers_at(
-    doc: &Doc,
+    view: &DocView,
     pos: Position,
     pending: &PendingModifiers,
 ) -> Vec<Modifier> {
-    let Some(node) = doc.node(pos.node_id) else {
+    let Some(node) = view.node(pos.node) else {
         return vec![];
     };
     let effective = resolve_effective_modifiers(&node, pos.offset, pending);
@@ -265,554 +252,9 @@ pub(crate) fn carryable_modifiers_at(
         .collect()
 }
 
-pub(crate) fn find_enclosing_paragraph_id(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
-    doc.node(node_id)?
+pub(crate) fn find_enclosing_paragraph_id(view: &DocView, node: Dot) -> Option<Dot> {
+    view.node(node)?
         .ancestors()
-        .find(|n| matches!(n.node(), Node::Paragraph(_)))
+        .find(|n| n.node_type() == NodeType::Paragraph)
         .map(|n| n.id())
-}
-
-#[cfg(test)]
-mod tests {
-    use editor_macros::state;
-    use editor_model::ModifierType;
-
-    use super::*;
-
-    fn node_at(state: &editor_state::State) -> NodeRef<'_> {
-        state
-            .doc
-            .node(state.selection.as_ref().unwrap().head.node_id)
-            .unwrap()
-    }
-
-    #[test]
-    fn middle_of_bold_text_inherits_bold() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 2)
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 2, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn end_of_bold_text_inherits_bold() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 5)
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 5, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn start_of_bold_text_does_not_inherit() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 0)
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 0, &state.pending_modifiers);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn end_of_link_does_not_inherit() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Click") [link(href: "https://example.com".to_string())] } } }
-            selection: (t1, 5)
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 5, &state.pending_modifiers);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn middle_of_link_inherits() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Click") [link(href: "https://example.com".to_string())] } } }
-            selection: (t1, 2)
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 2, &state.pending_modifiers);
-        assert_eq!(
-            result,
-            vec![Modifier::Link {
-                href: "https://example.com".into()
-            }]
-        );
-    }
-
-    #[test]
-    fn pending_set_adds_modifier() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
-            pending_modifiers: [bold]
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 2, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn pending_unset_removes_modifier() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 2)
-            pending_modifiers: [!bold]
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 2, &state.pending_modifiers);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn non_text_node_returns_only_pending() {
-        let (state, ..) = state! {
-            doc { root { p1: paragraph {} } }
-            selection: (p1, 0)
-            pending_modifiers: [bold]
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 0, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn empty_text_node_inherits_all() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("") [bold] } } }
-            selection: (t1, 0)
-        };
-        let result = resolve_effective_modifiers(&node_at(&state), 0, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn inherited_weight_from_root_modifiers() {
-        let (state, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello")
-                    }
-                }
-            }
-            selection: (t1, 0)
-        };
-        let inherited = resolve_inherited_modifiers(&node_at(&state));
-        assert!(
-            inherited
-                .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 400 }))
-        );
-    }
-
-    #[test]
-    fn inherited_weight_from_parent_overrides_root() {
-        let (state, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph [font_weight(700)] {
-                        t1: text("Hello")
-                    }
-                }
-            }
-            selection: (t1, 0)
-        };
-        let inherited = resolve_inherited_modifiers(&node_at(&state));
-        assert!(
-            inherited
-                .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
-        );
-    }
-
-    #[test]
-    fn check_range_all_has_italic() {
-        let (state, t1, t2) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [italic]
-                t2: text("World") [italic]
-            } } }
-            selection: (t1, 0)
-        };
-        let nodes: Vec<_> = [t1, t2]
-            .iter()
-            .filter_map(|id| state.doc.node(*id))
-            .collect();
-        assert!(check_range_all_has_modifier(&nodes, ModifierType::Italic));
-    }
-
-    #[test]
-    fn check_range_not_all_has_italic() {
-        let (state, t1, t2) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [italic]
-                t2: text("World")
-            } } }
-            selection: (t1, 0)
-        };
-        let nodes: Vec<_> = [t1, t2]
-            .iter()
-            .filter_map(|id| state.doc.node(*id))
-            .collect();
-        assert!(!check_range_all_has_modifier(&nodes, ModifierType::Italic));
-    }
-
-    #[test]
-    fn check_range_empty_is_true() {
-        let nodes: Vec<NodeRef> = vec![];
-        assert!(check_range_all_has_modifier(&nodes, ModifierType::Italic));
-    }
-
-    #[test]
-    fn applicable_target_for_line_height_in_text_returns_paragraph() {
-        let (state, p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
-        };
-        let target = resolve_applicable_target_collapsed(&state.doc, t1, ModifierType::LineHeight);
-        assert_eq!(target.map(|n| n.id()), Some(p1));
-    }
-
-    #[test]
-    fn applicable_target_for_block_gap_returns_root() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
-        };
-        let target = resolve_applicable_target_collapsed(&state.doc, t1, ModifierType::BlockGap);
-        assert_eq!(target.map(|n| n.id()), Some(editor_model::NodeId::ROOT));
-    }
-
-    #[test]
-    fn applicable_target_for_bold_in_text_returns_text_self() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
-        };
-        let target = resolve_applicable_target_collapsed(&state.doc, t1, ModifierType::Bold);
-        assert_eq!(target.map(|n| n.id()), Some(t1));
-    }
-
-    #[test]
-    fn applicable_target_for_line_height_on_hr_returns_none() {
-        let (state, hr) = state! {
-            doc { root { hr: horizontal_rule {} paragraph { text("Hello") } } }
-            selection: (hr, 0)
-        };
-        let target = resolve_applicable_target_collapsed(&state.doc, hr, ModifierType::LineHeight);
-        assert!(target.is_none());
-    }
-
-    #[test]
-    fn applicable_target_when_cursor_is_paragraph_itself_returns_paragraph() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph {} } }
-            selection: (p1, 0)
-        };
-        let target = resolve_applicable_target_collapsed(&state.doc, p1, ModifierType::LineHeight);
-        assert_eq!(target.map(|n| n.id()), Some(p1));
-    }
-
-    #[test]
-    fn collect_targets_line_height_two_paragraphs() {
-        let (state, p1, _, p2, ..) = state! {
-            doc { root {
-                p1: paragraph { t1: text("Hello") }
-                p2: paragraph { t2: text("World") }
-            } }
-            selection: (t1, 2) -> (t2, 3)
-        };
-        let resolved = state
-            .selection
-            .as_ref()
-            .unwrap()
-            .resolve(&state.doc)
-            .unwrap();
-        let ids: Vec<_> =
-            collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::LineHeight)
-                .into_iter()
-                .map(|n| n.id())
-                .collect();
-        assert_eq!(ids, vec![p1, p2]);
-    }
-
-    #[test]
-    fn collect_targets_block_gap_returns_root_only() {
-        let (state, ..) = state! {
-            doc { root {
-                paragraph { t1: text("Hello") }
-                paragraph { t2: text("World") }
-            } }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        let resolved = state
-            .selection
-            .as_ref()
-            .unwrap()
-            .resolve(&state.doc)
-            .unwrap();
-        let ids: Vec<_> =
-            collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::BlockGap)
-                .into_iter()
-                .map(|n| n.id())
-                .collect();
-        assert_eq!(ids, vec![editor_model::NodeId::ROOT]);
-    }
-
-    #[test]
-    fn collect_targets_alignment_paragraph_image_paragraph() {
-        let (state, p1, _, img, p2, ..) = state! {
-            doc { root {
-                p1: paragraph { t1: text("A") }
-                img: image
-                p2: paragraph { t2: text("B") }
-            } }
-            selection: (t1, 0) -> (t2, 1)
-        };
-        let resolved = state
-            .selection
-            .as_ref()
-            .unwrap()
-            .resolve(&state.doc)
-            .unwrap();
-        let ids: Vec<_> =
-            collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::Alignment)
-                .into_iter()
-                .map(|n| n.id())
-                .collect();
-        assert_eq!(ids, vec![p1, img, p2]);
-    }
-
-    #[test]
-    fn collect_targets_line_height_partial_overlap_includes_paragraph() {
-        let (state, p1, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 1) -> (t1, 4)
-        };
-        let resolved = state
-            .selection
-            .as_ref()
-            .unwrap()
-            .resolve(&state.doc)
-            .unwrap();
-        let ids: Vec<_> =
-            collect_applicable_targets_in_range(&state.doc, &resolved, ModifierType::LineHeight)
-                .into_iter()
-                .map(|n| n.id())
-                .collect();
-        assert_eq!(ids, vec![p1]);
-    }
-
-    #[test]
-    fn inherits_font_size_from_root_base_style() {
-        use editor_model::Modifier;
-        let (state, _p, t1) = state! {
-            doc {
-                styles { base: "기본" [font_size(1600)] }
-                root @base [] { p: paragraph { t1: text("Hello") } }
-            }
-            selection: (t1, 0)
-        };
-        let text = state.doc.node(t1).unwrap();
-        let inherited = resolve_inherited_modifiers(&text);
-        assert!(
-            inherited
-                .iter()
-                .any(|m| matches!(m, Modifier::FontSize { value: 1600 })),
-            "base style on root must be visible to command-side inheritance"
-        );
-    }
-
-    #[test]
-    fn inherits_base_font_for_apply() {
-        let (state, _p, t1) = state! {
-            doc {
-                styles { base: "기본" [font_size(1600)] }
-                root @base [] { p: paragraph { t1: text("Hello") } }
-            }
-            selection: (t1, 0)
-        };
-        let text = state.doc.node(t1).unwrap();
-        assert!(text.inherited_modifier(ModifierType::FontSize).is_some());
-    }
-
-    #[test]
-    fn inherited_modifiers_skip_non_inheritable_ancestor() {
-        let (state, ..) = state! {
-            doc {
-                root {
-                    paragraph [alignment(Alignment::Right)] {
-                        t1: text("Hello")
-                    }
-                }
-            }
-            selection: (t1, 0)
-        };
-        let inherited = resolve_inherited_modifiers(&node_at(&state));
-        assert!(
-            !inherited
-                .iter()
-                .any(|m| matches!(m, Modifier::Alignment { .. })),
-            "Alignment is inheritable: false; ancestor value must not appear as inherited"
-        );
-    }
-
-    #[test]
-    fn cursor_on_paragraph_with_marker_returns_marker_as_effective() {
-        let (state, ..) = state! {
-            doc { root { p1: paragraph [bold] {} } }
-            selection: (p1, 0)
-        };
-        let node = node_at(&state);
-        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn carryable_at_end_of_bold_text_returns_bold() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 5)
-        };
-        let head = state.selection.as_ref().unwrap().head;
-        let result = carryable_modifiers_at(&state.doc, head, &state.pending_modifiers);
-        assert_eq!(result, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn carryable_excludes_link_at_end_of_link_text() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("X") [link(href: "https://e.com".to_string())] } } }
-            selection: (t1, 1)
-        };
-        let head = state.selection.as_ref().unwrap().head;
-        let result = carryable_modifiers_at(&state.doc, head, &state.pending_modifiers);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn carryable_at_start_of_bold_text_returns_empty() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 0)
-        };
-        let head = state.selection.as_ref().unwrap().head;
-        let result = carryable_modifiers_at(&state.doc, head, &state.pending_modifiers);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn enclosing_paragraph_from_text_returns_paragraph() {
-        let (state, p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
-        };
-        assert_eq!(find_enclosing_paragraph_id(&state.doc, t1), Some(p1));
-    }
-
-    #[test]
-    fn enclosing_paragraph_from_paragraph_itself_returns_self() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph {} } }
-            selection: (p1, 0)
-        };
-        assert_eq!(find_enclosing_paragraph_id(&state.doc, p1), Some(p1));
-    }
-
-    #[test]
-    fn enclosing_paragraph_from_fold_title_returns_none() {
-        let (state, ft1) = state! {
-            doc { root { fold { ft1: fold_title { text("T") } fold_content { paragraph {} } } } }
-            selection: (ft1, 0)
-        };
-        assert!(find_enclosing_paragraph_id(&state.doc, ft1).is_none());
-    }
-
-    #[test]
-    fn tab_metric_modifier_set() {
-        assert!(is_tab_metric_modifier(ModifierType::FontFamily));
-        assert!(is_tab_metric_modifier(ModifierType::FontWeight));
-        assert!(is_tab_metric_modifier(ModifierType::FontSize));
-        assert!(is_tab_metric_modifier(ModifierType::LetterSpacing));
-        assert!(!is_tab_metric_modifier(ModifierType::Bold));
-        assert!(!is_tab_metric_modifier(ModifierType::TextColor));
-    }
-
-    #[test]
-    fn boundary_at_start_of_next_text_inherits_preceding_font_size() {
-        let (state, ..) = state! {
-            doc { root { paragraph {
-                t1: text("hello") [font_size(3000)]
-                t2: text("world") [font_size(1200)]
-            } } }
-            selection: (t2, 0)
-        };
-        let node = node_at(&state);
-        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
-        assert!(
-            result
-                .iter()
-                .any(|m| matches!(m, Modifier::FontSize { value: 3000 })),
-            "preceding sibling's font_size must carry to caret at start of next text"
-        );
-        assert!(
-            !result
-                .iter()
-                .any(|m| matches!(m, Modifier::FontSize { value: 1200 })),
-            "current node's Expand::After modifier must not appear at offset 0"
-        );
-    }
-
-    #[test]
-    fn boundary_at_start_does_not_double_count_existing_modifier_type() {
-        let (state, ..) = state! {
-            doc { root { paragraph {
-                t1: text("hello") [bold]
-                t2: text("world") [bold]
-            } } }
-            selection: (t2, 0)
-        };
-        let node = node_at(&state);
-        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
-        let bolds = result
-            .iter()
-            .filter(|m| matches!(m, Modifier::Bold))
-            .count();
-        assert_eq!(bolds, 1, "prev sibling carryover must not duplicate types");
-    }
-
-    #[test]
-    fn boundary_at_start_excludes_link_from_preceding_sibling() {
-        let (state, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Click") [link(href: "https://example.com".to_string())]
-                t2: text("World")
-            } } }
-            selection: (t2, 0)
-        };
-        let node = node_at(&state);
-        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
-        assert!(
-            !result.iter().any(|m| matches!(m, Modifier::Link { .. })),
-            "Expand::None modifiers must not bleed across sibling boundary"
-        );
-    }
-
-    #[test]
-    fn boundary_skips_fold_when_prev_sibling_is_not_text() {
-        let (state, ..) = state! {
-            doc { root { paragraph {
-                hard_break {}
-                t2: text("world") [font_size(3000)]
-            } } }
-            selection: (t2, 0)
-        };
-        let node = node_at(&state);
-        let result = resolve_effective_modifiers(&node, 0, &state.pending_modifiers);
-        assert!(
-            !result
-                .iter()
-                .any(|m| matches!(m, Modifier::FontSize { value: 3000 })),
-            "non-text prev sibling must not trigger carryover"
-        );
-    }
 }

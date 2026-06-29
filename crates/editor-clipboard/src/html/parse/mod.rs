@@ -81,18 +81,21 @@ fn fallback_body_parse(doc: &Html, resource: &Resource) -> Slice {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_doc::DocBuilder;
+    use editor_crdt::Dot;
     use editor_macros::state;
-    use editor_model::{Modifier, PlainParagraphNode, PlainTextNode};
+    use editor_model::{AtomLeaf, Modifier, NodeType, PlainParagraphNode, PlainTextNode};
     use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource, ThemeVariant};
+    use editor_state::{Position, Selection};
 
     #[test]
     fn from_html_round_trip_via_meta() {
         let (s, ..) = state! {
             doc { root {
-                paragraph { t1: text("Hello") }
-                paragraph { t2: text("World") }
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") }
             } }
-            selection: (t1, 1) -> (t2, 3)
+            selection: (p1, 1) -> (p2, 3)
         };
         let original = Slice::extract(&s).unwrap();
         let html = original.to_html();
@@ -1280,10 +1283,16 @@ mod tests {
 
     #[test]
     fn html_tab_roundtrips() {
-        let (s, ..) = state! {
-            doc { root { paragraph { t1: text("a") tab {} t2: text("b") } } }
-            selection: (t1, 0) -> (t2, 1)
-        };
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let para = b.block(NodeType::Paragraph, &[root]);
+        b.text("a");
+        b.atom(AtomLeaf::Tab, &[]);
+        b.text("b");
+        let s = b.finish(Some(Selection::new(
+            Position::new(para, 0),
+            Position::new(para, 3),
+        )));
         let slice = Slice::extract(&s).unwrap();
         let html = slice.to_html();
         assert!(

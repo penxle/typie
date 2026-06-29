@@ -1,12 +1,12 @@
 use editor_common::Axis;
-use editor_model::NodeId;
+use editor_crdt::Dot;
 use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
 pub fn move_table_axis(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     axis: Axis,
     from: usize,
     to: usize,
@@ -17,12 +17,12 @@ pub fn move_table_axis(
     match axis {
         Axis::Horizontal => {
             let row_id = {
-                let doc = tr.doc();
-                let table = doc
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
                 table
-                    .children()
+                    .child_blocks()
                     .nth(from)
                     .ok_or_else(|| CommandError::Corrupted("row index out of range".into()))?
                     .id()
@@ -30,20 +30,20 @@ pub fn move_table_axis(
             tr.move_node(row_id, table_id, to)?;
         }
         Axis::Vertical => {
-            let row_ids: Vec<NodeId> = {
-                let doc = tr.doc();
-                let table = doc
+            let row_ids: Vec<Dot> = {
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
-                table.children().map(|r| r.id()).collect()
+                table.child_blocks().map(|r| r.id()).collect()
             };
             for row_id in &row_ids {
                 let cell_id = {
-                    let doc = tr.doc();
-                    let row = doc
+                    let view = tr.view();
+                    let row = view
                         .node(*row_id)
                         .ok_or(CommandError::NodeNotFound(*row_id))?;
-                    row.children()
+                    row.child_blocks()
                         .nth(from)
                         .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
                         .id()
@@ -84,12 +84,11 @@ mod tests {
 
     #[test]
     fn move_row_down() {
-        // depth-first extraction: tbl, row0, t1, row1
-        let (initial, tbl, row0, _t1, row1, ..) = state! {
+        let (initial, tbl, ..) = state! {
             doc { root {
                 tbl: table {
-                    row0: table_row { t1: table_cell { paragraph { text("A") } } }
-                    row1: table_row { table_cell { paragraph { text("B") } } }
+                    table_row { t1: table_cell { paragraph { text("A") } } }
+                    table_row { table_cell { paragraph { text("B") } } }
                 }
             } }
             selection: (t1, 0)
@@ -101,10 +100,20 @@ mod tests {
             0,
             1
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        let children: Vec<NodeId> = table.children().map(|r| r.id()).collect();
-        assert_eq!(children, vec![row1, row0]);
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        // move_node re-mints block ids, so assert row order by cell content.
+        let texts: Vec<String> = table
+            .child_blocks()
+            .map(|row| {
+                row.child_blocks()
+                    .next()
+                    .and_then(|cell| cell.child_blocks().next())
+                    .map(|para| para.inline_text())
+                    .unwrap_or_default()
+            })
+            .collect();
+        assert_eq!(texts, vec!["B".to_string(), "A".to_string()]);
     }
 
     #[test]
@@ -133,10 +142,10 @@ mod tests {
             0,
             2
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        for row in table.children() {
-            assert_eq!(row.children().count(), 3);
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        for row in table.child_blocks() {
+            assert_eq!(row.child_blocks().count(), 3);
         }
     }
 }

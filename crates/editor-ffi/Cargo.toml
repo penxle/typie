@@ -8,6 +8,7 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 
 [features]
 default = []
+elemid_serde = ["editor-model/elemid_serde"]
 uniffi = [
   "dep:uniffi",
   "dep:android_logger",
@@ -91,3 +92,4 @@ objc2-metal.workspace = true
 [dev-dependencies]
 editor-core = { path = "../editor-core", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }

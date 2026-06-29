@@ -87,13 +87,13 @@ mod tests {
 
     #[test]
     fn initialize_populates_pending_fonts() {
-        let (state, t1) = state! {
+        let (state, p1) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("AB") }
+                    p1: paragraph { text("AB") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -103,7 +103,7 @@ mod tests {
 
         let key = ("TestFont".to_string(), 400u16);
         assert!(editor.pending_fonts.contains_key(&key));
-        assert!(editor.pending_fonts[&key].contains_key(&t1));
+        assert!(editor.pending_fonts[&key].contains_key(&p1));
     }
 
     #[test]
@@ -111,10 +111,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -147,10 +147,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -166,10 +166,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -186,10 +186,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -203,13 +203,13 @@ mod tests {
 
     #[test]
     fn font_base_loaded_removes_codepoints_from_pending() {
-        let (state, t1) = state! {
+        let (state, p1) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("AB") }
+                    p1: paragraph { text("AB") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -241,8 +241,8 @@ mod tests {
 
         let key = ("TestFont".to_string(), 400u16);
         assert!(editor.pending_fonts.contains_key(&key));
-        assert!(editor.pending_fonts[&key][&t1].contains(&('B' as u32)));
-        assert!(!editor.pending_fonts[&key][&t1].contains(&('A' as u32)));
+        assert!(editor.pending_fonts[&key][&p1].contains(&('B' as u32)));
+        assert!(!editor.pending_fonts[&key][&p1].contains(&('A' as u32)));
     }
 
     #[test]
@@ -250,10 +250,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -291,14 +291,14 @@ mod tests {
 
     #[test]
     fn font_base_loaded_does_not_invalidate_unaffected_node() {
-        let (state, t1, t2) = state! {
+        let (state, p1, p2) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
-                    paragraph { t2: text("B") }
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -333,13 +333,13 @@ mod tests {
             !editor
                 .pending_fonts
                 .get(&key)
-                .is_some_and(|n| n.contains_key(&t1))
+                .is_some_and(|n| n.contains_key(&p1))
         );
         assert!(
             editor
                 .pending_fonts
                 .get(&key)
-                .is_some_and(|n| n.contains_key(&t2))
+                .is_some_and(|n| n.contains_key(&p2))
         );
 
         assert!(
@@ -416,10 +416,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -475,14 +475,14 @@ mod tests {
 
     #[test]
     fn set_external_height_relayouts_and_emits_host_state_change() {
-        let (state, img, _text) = state! {
+        let (state, img, _p1) = state! {
             doc {
                 root {
                     img: image
-                    paragraph { text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
-            selection: (text, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -490,12 +490,20 @@ mod tests {
             event: SystemEvent::Initialize,
         });
 
-        let before = editor
-            .view
-            .external_elements(&editor.state.doc, editor.state.selection.as_ref())
-            .into_iter()
-            .find(|element| element.node_id == img)
-            .expect("image external element before height update");
+        let before = {
+            let view = editor.state.view();
+            let resolved = editor
+                .state
+                .selection
+                .as_ref()
+                .and_then(|s| s.resolve(&view));
+            editor
+                .view
+                .external_elements(&editor.state, resolved.as_ref())
+                .into_iter()
+                .find(|element| element.node == img)
+                .expect("image external element before height update")
+        };
         assert_eq!(before.bounds.height, 1.0);
 
         let events = editor.apply(Message::System {
@@ -523,25 +531,33 @@ mod tests {
             "external height changes must tell hosts to re-query geometry"
         );
 
-        let after = editor
-            .view
-            .external_elements(&editor.state.doc, editor.state.selection.as_ref())
-            .into_iter()
-            .find(|element| element.node_id == img)
-            .expect("image external element after height update");
+        let after = {
+            let view = editor.state.view();
+            let resolved = editor
+                .state
+                .selection
+                .as_ref()
+                .and_then(|s| s.resolve(&view));
+            editor
+                .view
+                .external_elements(&editor.state, resolved.as_ref())
+                .into_iter()
+                .find(|element| element.node == img)
+                .expect("image external element after height update")
+        };
         assert_eq!(after.bounds.height, 72.0);
     }
 
     #[test]
     fn set_external_height_ignores_zero_height() {
-        let (state, img, _text) = state! {
+        let (state, img, _p1) = state! {
             doc {
                 root {
                     img: image
-                    paragraph { text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
-            selection: (text, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -557,12 +573,20 @@ mod tests {
         });
 
         assert!(events.is_empty());
-        let element = editor
-            .view
-            .external_elements(&editor.state.doc, editor.state.selection.as_ref())
-            .into_iter()
-            .find(|element| element.node_id == img)
-            .expect("image external element");
+        let element = {
+            let view = editor.state.view();
+            let resolved = editor
+                .state
+                .selection
+                .as_ref()
+                .and_then(|s| s.resolve(&view));
+            editor
+                .view
+                .external_elements(&editor.state, resolved.as_ref())
+                .into_iter()
+                .find(|element| element.node == img)
+                .expect("image external element")
+        };
         assert_eq!(element.bounds.height, 1.0);
     }
 
@@ -571,10 +595,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -612,13 +636,13 @@ mod tests {
 
     #[test]
     fn full_font_pipeline_with_chunks_and_fallback() {
-        let (state, t1) = state! {
+        let (state, p1) = state! {
             doc {
                 root [font_family("Primary".to_string()), font_weight(400)] {
-                    paragraph { t1: text("AB") }
+                    p1: paragraph { text("AB") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -726,7 +750,7 @@ mod tests {
 
         let key = ("Primary".to_string(), 400u16);
         assert!(editor.pending_fonts.get(&key).is_some_and(|n| {
-            n.get(&t1)
+            n.get(&p1)
                 .is_some_and(|cps| cps.contains(&('B' as u32)) && !cps.contains(&('A' as u32)))
         }));
 
@@ -759,10 +783,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("Arial".to_string()), font_weight(400)] {
-                    paragraph { t1: text("AB") }
+                    p1: paragraph { text("AB") }
                 }
             }
-            selection: (t1, 0) -> (t1, 2)
+            selection: (p1, 0) -> (p1, 2)
         };
 
         let mut editor = Editor::new_test(state);
@@ -830,10 +854,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
 
         let mut editor = Editor::new_test(state);
@@ -885,13 +909,13 @@ mod tests {
 
     #[test]
     fn font_base_loaded_does_not_clear_cp_without_chunk() {
-        let (state, t1) = state! {
+        let (state, p1) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -922,7 +946,7 @@ mod tests {
         let still_pending = editor
             .pending_fonts
             .get(&key)
-            .and_then(|n| n.get(&t1))
+            .and_then(|n| n.get(&p1))
             .is_some_and(|cps| cps.contains(&('A' as u32)));
         assert!(
             still_pending,
@@ -935,10 +959,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -997,10 +1021,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -1027,10 +1051,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -1081,10 +1105,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
 
         let mut editor = Editor::new_test(state);
@@ -1119,7 +1143,7 @@ mod tests {
 
     #[test]
     fn resize_paginated_emits_no_render_invalidated() {
-        let (state, _t1) = state! {
+        let (state, _p1) = state! {
             doc {
                 root (
                     layout_mode: LayoutMode::Paginated {
@@ -1131,10 +1155,10 @@ mod tests {
                         page_margin_right: 20,
                     }
                 ) [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         // Establish initial layout fingerprint so the assertion-target resize is a no-op,
@@ -1166,15 +1190,15 @@ mod tests {
 
     #[test]
     fn resize_continuous_width_change_emits_layout_geometry_fields_and_render_invalidated() {
-        let (state, _t1) = state! {
+        let (state, _p1) = state! {
             doc {
                 root (
                     layout_mode: LayoutMode::Continuous { max_width: 800 }
                 ) [font_family("TestFont".to_string()), font_weight(400)] {
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         // Establish initial layout fingerprint at effective_width=800 so the second resize
@@ -1226,8 +1250,8 @@ mod tests {
     #[test]
     fn probe_resize_same_viewport_noop() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1252,8 +1276,8 @@ mod tests {
     #[test]
     fn probe_resize_different_viewport() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1278,8 +1302,8 @@ mod tests {
     #[test]
     fn probe_set_focused_same_value() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         let probed = editor
@@ -1293,8 +1317,8 @@ mod tests {
     #[test]
     fn probe_set_focused_different() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         let probed = editor
@@ -1308,8 +1332,8 @@ mod tests {
     #[test]
     fn probe_set_external_height_same_value() {
         let (state, img, _) = state! {
-            doc { root { img: image paragraph { text: text("x") } } }
-            selection: (text, 0)
+            doc { root { img: image p1: paragraph { text("x") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1335,8 +1359,8 @@ mod tests {
     #[test]
     fn probe_set_external_height_different_value() {
         let (state, img, _) = state! {
-            doc { root { img: image paragraph { text: text("x") } } }
-            selection: (text, 0)
+            doc { root { img: image p1: paragraph { text("x") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1356,8 +1380,8 @@ mod tests {
     #[test]
     fn probe_set_external_height_zero_is_noop() {
         let (state, img, _) = state! {
-            doc { root { img: image paragraph { text: text("x") } } }
-            selection: (text, 0)
+            doc { root { img: image p1: paragraph { text("x") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1377,8 +1401,8 @@ mod tests {
     #[test]
     fn probe_initialize_after_initialize_is_false() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1395,8 +1419,8 @@ mod tests {
     #[test]
     fn probe_fonts_changed_is_false_with_no_pending() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1413,8 +1437,8 @@ mod tests {
     #[test]
     fn probe_font_base_loaded_for_unknown_family_is_false() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {
@@ -1434,8 +1458,8 @@ mod tests {
     #[test]
     fn probe_font_chunk_loaded_for_unknown_family_is_false() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System {

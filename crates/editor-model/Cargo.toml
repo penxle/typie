@@ -4,11 +4,8 @@ version.workspace = true
 edition.workspace = true
 autobenches = false
 
-[[example]]
-name = "wire_size_bench"
-path = "benches/wire_size.rs"
-
 [features]
+elemid_serde = []
 test-utils = []
 uniffi = ["dep:uniffi", "editor-common/uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-common/wasm"]

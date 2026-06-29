@@ -1,6 +1,7 @@
 pub use editor_common::{Axis, DecorationStyle, Direction, Movement};
+use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{Fragment, Modifier, ModifierType, NodeId, PlainNode, TableBorderStyle};
+use editor_model::{Fragment, Modifier, ModifierType, PlainNode, TableBorderStyle};
 use editor_state::{Position, Selection, StableSelection};
 use serde::{Deserialize, Serialize};
 
@@ -124,7 +125,7 @@ pub enum ModifierOp {
         modifier: Modifier,
     },
     SetOnNode {
-        id: NodeId,
+        id: Dot,
         modifier: Modifier,
     },
     Edit {
@@ -273,16 +274,16 @@ pub enum TableOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeOp {
-    Delete { id: NodeId },
-    SetAttrs { id: NodeId, attrs: PlainNode },
-    Table { id: NodeId, op: TableOp },
+    Delete { id: Dot },
+    SetAttrs { id: Dot, attrs: PlainNode },
+    Table { id: Dot, op: TableOp },
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewOp {
-    ToggleFold { id: NodeId },
+    ToggleFold { id: Dot },
 }
 
 #[ffi]
@@ -333,7 +334,7 @@ pub enum SystemEvent {
         chunk_id: u16,
     },
     SetExternalHeight {
-        node_id: NodeId,
+        node_id: Dot,
         height: f32,
     },
     FontsChanged,
@@ -463,6 +464,6 @@ pub enum Message {
 
     #[ffi(skip)]
     Remote {
-        changeset: editor_crdt::Changeset<editor_model::DocOp>,
+        changeset: editor_crdt::Changeset<editor_model::EditOp>,
     },
 }

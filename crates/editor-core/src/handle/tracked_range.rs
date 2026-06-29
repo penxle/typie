@@ -1,4 +1,5 @@
 use editor_commands::{self as commands};
+use editor_state::StableSelection;
 use editor_view::GroupDecoration;
 
 use crate::editor::Editor;
@@ -16,14 +17,15 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             selection,
             metadata,
         } => {
-            let doc = &editor.state().doc;
-            if selection.anchor.resolve(doc).is_none() || selection.head.resolve(doc).is_none() {
+            let view = editor.state().view();
+            if selection.anchor.resolve(&view).is_none() || selection.head.resolve(&view).is_none()
+            {
                 return Err(EditorError::General {
                     msg: "TrackedRange::Add: selection must resolve against current doc".into(),
                 });
             }
-            let selection = selection.capture(doc);
-            let new_range = TrackedRange::new(id.clone(), group, selection, metadata, doc);
+            let stable = StableSelection::capture(&selection, &view);
+            let new_range = TrackedRange::new(id.clone(), group, stable, metadata, editor.state());
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -39,8 +41,8 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             selection,
             metadata,
         } => {
-            let doc = &editor.state().doc;
-            let new_range = TrackedRange::new(id.clone(), group, selection, metadata, doc);
+            let new_range =
+                TrackedRange::new(id.clone(), group, selection, metadata, editor.state());
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -57,11 +59,22 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             });
         }
         TrackedRangeOp::SetGroup { id, group } => {
-            let would_change = editor
-                .tracked_ranges()
-                .get(&id)
-                .is_some_and(|range| range.group != group);
+            // Re-anchor the range to its current resolved extent so a stale
+            // binding to a since-deleted boundary character is dropped; without
+            // this, a later insert at the collapsed boundary would be recaptured.
+            let recaptured = editor.tracked_ranges().get(&id).and_then(|range| {
+                let state = editor.state();
+                let located = range.locate(state)?;
+                let view = state.view();
+                Some(StableSelection::capture(&located, &view))
+            });
+            let would_change = editor.tracked_ranges().get(&id).is_some_and(|range| {
+                range.group != group || recaptured.as_ref().is_some_and(|s| s != &range.selection)
+            });
             commit_or_probe(editor, would_change, |reg| {
+                if let Some(selection) = recaptured {
+                    reg.set_selection(&id, selection);
+                }
                 reg.set_group(&id, group);
             });
         }
@@ -157,7 +170,7 @@ fn classify_replace_text(
             selection: None,
         };
     };
-    let Some(selection) = range.locate(&editor.state.doc) else {
+    let Some(selection) = range.locate(&editor.state) else {
         return ReplaceTextClassification {
             outcome: TrackedRangeReplaceOutcome::Invalid,
             selection: None,
@@ -170,13 +183,16 @@ fn classify_replace_text(
         };
     }
     if let Some(expected) = expected_text {
-        let Some(resolved) = selection.resolve(&editor.state.doc) else {
+        use editor_state::ResolvedPositionFlatExt;
+        let view = editor.state.view();
+        let Some(resolved) = selection.resolve(&view) else {
             return ReplaceTextClassification {
                 outcome: TrackedRangeReplaceOutcome::Invalid,
                 selection: None,
             };
         };
-        if resolved.collect_text() != expected {
+        let range = resolved.from().to_flat()..resolved.to().to_flat();
+        if editor_state::flat_text(&view, range) != expected {
             return ReplaceTextClassification {
                 outcome: TrackedRangeReplaceOutcome::TextMismatch,
                 selection: None,
@@ -255,8 +271,8 @@ mod tests {
     #[test]
     fn add_inserts_range_and_emits_state_changed() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let mut editor = Editor::new_test(state);
@@ -271,8 +287,8 @@ mod tests {
     #[test]
     fn add_same_range_twice_is_idempotent() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let mut editor = Editor::new_test(state);
@@ -287,8 +303,8 @@ mod tests {
     #[test]
     fn remove_drops_range_and_emits_state_changed() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let mut editor = Editor::new_test(state);
@@ -306,8 +322,8 @@ mod tests {
     #[test]
     fn remove_nonexistent_does_not_emit_event() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let mut editor = Editor::new_test(state);
         let events = editor.apply(Message::TrackedRange {
@@ -322,8 +338,8 @@ mod tests {
     #[test]
     fn invalidate_sets_flag() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let mut editor = Editor::new_test(state);
@@ -337,8 +353,8 @@ mod tests {
     #[test]
     fn clear_group_empties_group() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let mut editor = Editor::new_test(state);
@@ -353,8 +369,8 @@ mod tests {
     #[test]
     fn probe_add_predicts_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         assert_probe_predicts_apply(state, add_op("a", sel));
@@ -363,8 +379,8 @@ mod tests {
     #[test]
     fn probe_remove_nonexistent_predicts_no_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         assert_probe_predicts_apply(
             state,
@@ -377,8 +393,8 @@ mod tests {
     #[test]
     fn probe_clear_empty_group_predicts_no_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         assert_probe_predicts_apply(
             state,
@@ -393,8 +409,8 @@ mod tests {
     #[test]
     fn probe_invalidate_already_invalid_predicts_no_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let mut editor = Editor::new_test(state);
@@ -413,11 +429,11 @@ mod tests {
     #[test]
     fn add_frozen_inserts_range_and_emits_events() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.view());
         let mut editor = Editor::new_test(state);
         let events = editor.apply(add_frozen_op("a", stable));
         assert!(editor.tracked_ranges().contains("a"));
@@ -436,11 +452,11 @@ mod tests {
     #[test]
     fn add_frozen_same_range_twice_is_idempotent() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.view());
         let mut editor = Editor::new_test(state);
         editor.apply(add_frozen_op("a", stable.clone()));
         let events = editor.apply(add_frozen_op("a", stable));
@@ -453,11 +469,11 @@ mod tests {
     #[test]
     fn add_frozen_yields_same_registry_as_add() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.view());
 
         let mut a = Editor::new_test(state.clone());
         a.apply(add_op("r", sel));
@@ -471,22 +487,22 @@ mod tests {
     #[test]
     fn probe_add_frozen_predicts_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.view());
         assert_probe_predicts_apply(state, add_frozen_op("a", stable));
     }
 
     #[test]
     fn probe_add_frozen_same_id_same_content_predicts_no_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
-        let stable = editor_state::StableSelection::capture(&sel, &state.doc);
+        let stable = editor_state::StableSelection::capture(&sel, &state.view());
 
         let mut editor = Editor::new_test(state);
         editor.apply(add_frozen_op("a", stable.clone()));
@@ -520,8 +536,8 @@ mod tests {
     #[test]
     fn set_group_decoration_stores_in_view_state() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         let events = editor.apply(set_group_op("g1", sample_style(), true));
@@ -537,8 +553,8 @@ mod tests {
     #[test]
     fn set_group_decoration_same_value_is_idempotent() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(set_group_op("g1", sample_style(), true));
@@ -552,8 +568,8 @@ mod tests {
     #[test]
     fn set_group_decoration_toggle_enabled_emits_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(set_group_op("g1", sample_style(), true));
@@ -569,8 +585,8 @@ mod tests {
     #[test]
     fn remove_group_decoration_drops_entry() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(set_group_op("g1", sample_style(), true));
@@ -587,8 +603,8 @@ mod tests {
     #[test]
     fn remove_unknown_group_decoration_is_noop() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         let events = editor.apply(Message::TrackedRange {
@@ -605,8 +621,8 @@ mod tests {
     #[test]
     fn probe_set_group_decoration_predicts_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         assert_probe_predicts_apply(state, set_group_op("g1", sample_style(), true));
     }
@@ -614,8 +630,8 @@ mod tests {
     #[test]
     fn probe_remove_unknown_group_decoration_predicts_no_change() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         assert_probe_predicts_apply(
             state,

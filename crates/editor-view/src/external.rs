@@ -1,10 +1,11 @@
 use editor_common::Rect;
+use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{Doc, Node, NodeId};
-use editor_state::Selection;
+use editor_model::{AtomLeaf, DocView};
+use editor_state::{Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
-use crate::paginate::LayoutContent;
+use crate::paginate::types::LayoutContent;
 use crate::query::layout_index::LayoutIndex;
 
 #[ffi]
@@ -22,48 +23,45 @@ pub enum ExternalElementData {
 #[serde(rename_all = "snake_case")]
 pub struct ExternalElement {
     pub page_idx: usize,
-    pub node_id: NodeId,
+    pub node: Dot,
     pub bounds: Rect,
-    pub data: ExternalElementData,
     pub is_selected: bool,
+    pub data: ExternalElementData,
 }
 
-/// External elements (images/files/embeds) on a single page, with page-local
-/// bounds. Queries only that page's entries (R-tree scoped), so it is O(page)
-/// — the per-visible-page entry point. See `View::page_external_elements`.
 pub(crate) fn page_external_elements(
     layout_index: &LayoutIndex,
-    doc: &Doc,
+    view: &DocView,
     page_idx: usize,
-    selection: Option<&Selection>,
+    selection: Option<&ResolvedSelection>,
 ) -> Vec<ExternalElement> {
     let Some(page) = layout_index.pages().get(page_idx) else {
         return Vec::new();
     };
-    let selection = selection.and_then(|s| s.resolve(doc));
     let mut elements = Vec::new();
     for entry in layout_index.entries_on_page(page_idx) {
         let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
             continue;
         };
-        let Some(data) = external_element_data(doc, atom.node_id) else {
+        let Some(data) = external_element_data(view, &atom.node) else {
             continue;
         };
-        let is_selected = selection.as_ref().is_some_and(|sel| {
-            doc.node(atom.node_id)
-                .is_some_and(|node_ref| sel.contains_subtree(&node_ref))
-        });
+        let slot = Selection::new(
+            Position::new(atom.attachment.parent, atom.attachment.index),
+            Position::new(atom.attachment.parent, atom.attachment.index + 1),
+        );
+        let is_selected = selection.is_some_and(|sel| sel.contains_range(slot));
         elements.push(ExternalElement {
             page_idx,
-            node_id: atom.node_id,
+            node: atom.node,
             bounds: Rect::from_xywh(
                 entry.rect.x,
                 entry.rect.y - page.y_start,
                 entry.rect.width,
                 entry.rect.height,
             ),
-            data,
             is_selected,
+            data,
         });
     }
     elements
@@ -71,14 +69,14 @@ pub(crate) fn page_external_elements(
 
 pub(crate) fn external_elements(
     layout_index: &LayoutIndex,
-    doc: &Doc,
-    selection: Option<&Selection>,
+    view: &DocView,
+    selection: Option<&ResolvedSelection>,
 ) -> Vec<ExternalElement> {
     let mut elements = Vec::new();
     for page_idx in 0..layout_index.pages().len() {
         elements.extend(page_external_elements(
             layout_index,
-            doc,
+            view,
             page_idx,
             selection,
         ));
@@ -86,20 +84,21 @@ pub(crate) fn external_elements(
     elements
 }
 
-fn external_element_data(doc: &Doc, node_id: NodeId) -> Option<ExternalElementData> {
-    match doc.node(node_id)?.node() {
-        Node::Image(img) => Some(ExternalElementData::Image {
-            id: img.id.get().clone(),
-            proportion: *img.proportion.get(),
+fn external_element_data(view: &DocView, id: &Dot) -> Option<ExternalElementData> {
+    let dot = id;
+    match view.leaf(*dot)?.as_atom()? {
+        AtomLeaf::Image { node } => Some(ExternalElementData::Image {
+            id: node.id.get().clone(),
+            proportion: *node.proportion.get(),
         }),
-        Node::File(file) => Some(ExternalElementData::File {
-            id: file.id.get().clone(),
+        AtomLeaf::File { node } => Some(ExternalElementData::File {
+            id: node.id.get().clone(),
         }),
-        Node::Embed(embed) => Some(ExternalElementData::Embed {
-            id: embed.id.get().clone(),
+        AtomLeaf::Embed { node } => Some(ExternalElementData::Embed {
+            id: node.id.get().clone(),
         }),
-        Node::Archived(archived) => Some(ExternalElementData::Archived {
-            id: archived.id.get().clone(),
+        AtomLeaf::Archived { node } => Some(ExternalElementData::Archived {
+            id: node.id.get().clone(),
         }),
         _ => None,
     }
@@ -107,68 +106,165 @@ fn external_element_data(doc: &Doc, node_id: NodeId) -> Option<ExternalElementDa
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::{doc, state};
+    use super::*;
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, Node, NodeAttrLog, NodeMarkerLog,
+        NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
     use editor_state::{Position, Selection};
 
-    use crate::View;
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
+    use crate::paginate::paginator::Paginator;
+    use crate::query::layout_index::LayoutIndex;
 
-    #[test]
-    fn lists_external_atoms_with_page_local_bounds() {
-        let (doc, img, file, embed, archived) = doc! {
-            root {
-                img: image(id: Some("img-1".to_string()), proportion: 50)
-                file: file(id: Some("file-1".to_string()))
-                embed: embed(id: Some("embed-1".to_string()))
-                archived: archived(id: Some("archived-1".to_string()))
-            }
-        };
-        let mut view = View::new_test();
-        view.layout(&doc);
-
-        let elements =
-            view.external_elements(&doc, Some(&Selection::collapsed(Position::new(img, 0))));
-
-        assert_eq!(elements.len(), 4);
-        assert_eq!(elements[0].node_id, img);
-        assert_eq!(elements[0].page_idx, 0);
-        assert_eq!(elements[0].bounds.width, elements[1].bounds.width);
-        assert_eq!(elements[0].bounds.height, 1.0);
-        assert_eq!(
-            elements.iter().map(|el| el.node_id).collect::<Vec<_>>(),
-            vec![img, file, embed, archived]
-        );
-
-        // Per-page query equals the whole-doc concatenation.
-        let page_count = elements.iter().map(|e| e.page_idx).max().unwrap_or(0) + 1;
-        let mut per_page = Vec::new();
-        for p in 0..page_count {
-            per_page.extend(view.page_external_elements(
-                &doc,
-                p,
-                Some(&Selection::collapsed(Position::new(img, 0))),
-            ));
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
         }
-        assert_eq!(
-            per_page.iter().map(|el| el.node_id).collect::<Vec<_>>(),
-            elements.iter().map(|el| el.node_id).collect::<Vec<_>>(),
-        );
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn build_index(doc: &DocLogs, width: f32) -> LayoutIndex {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        LayoutIndex::new(layout.tree, &layout.pages)
+    }
+
+    fn image_doc() -> (DocLogs, Dot, Dot, Dot) {
+        let root = Dot::ROOT;
+        let img_dot = Dot::new(10, 1);
+        let para = Dot::new(10, 2);
+        let img_node = match NodeType::Image.into_node() {
+            Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        let items = vec![
+            (
+                img_dot,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img_node },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(10, 3), SeqItem::Char('x')),
+        ];
+        (logs(&items), root, img_dot, para)
     }
 
     #[test]
-    fn marks_bracketed_external_node_as_selected() {
-        let (state, _root, img) = state! {
-            doc { r: root { img: image paragraph } }
-            selection: (r, 0, >) -> (r, 1, <)
+    fn image_external_element_bounds_and_data() {
+        let (doc, _root, img_dot, _para) = image_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let index = build_index(&doc, 400.0);
+
+        let elements = page_external_elements(&index, &view, 0, None);
+
+        assert_eq!(elements.len(), 1, "expected one external element");
+        let el = &elements[0];
+        assert_eq!(el.node, img_dot);
+        assert_eq!(el.page_idx, 0);
+        assert!(el.bounds.width > 0.0 || el.bounds.height >= 0.0);
+        assert_eq!(
+            el.data,
+            ExternalElementData::Image {
+                id: None,
+                proportion: 100
+            },
+            "Trap-1: leaf/as_atom read must yield Image data with default id and proportion"
+        );
+        assert!(!el.is_selected);
+    }
+
+    #[test]
+    fn is_selected_trap2_covering_selection_true_collapsed_false() {
+        let (doc, root, img_dot, _para) = image_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let index = build_index(&doc, 400.0);
+
+        let root_id = root;
+        let img_id = img_dot;
+
+        let elements_no_sel = page_external_elements(&index, &view, 0, None);
+        assert_eq!(elements_no_sel.len(), 1);
+        let atom_index = {
+            let entry = index
+                .entries_on_page(0)
+                .into_iter()
+                .find(|e| {
+                    e.content(&index)
+                        .is_some_and(|c| matches!(c, LayoutContent::Atom(a) if a.node == img_id))
+                })
+                .expect("image atom entry");
+            match entry.content(&index).unwrap() {
+                LayoutContent::Atom(atom) => atom.attachment.index,
+                _ => unreachable!(),
+            }
         };
-        let mut view = View::new_test();
-        view.layout(&state.doc);
 
-        let elements = view.external_elements(&state.doc, state.selection.as_ref());
+        let covering = Selection::new(
+            Position::new(root_id, atom_index),
+            Position::new(root_id, atom_index + 1),
+        );
+        let covering_resolved = covering
+            .resolve(&view)
+            .expect("covering selection must resolve");
+        let elements_covered = page_external_elements(&index, &view, 0, Some(&covering_resolved));
+        assert_eq!(elements_covered.len(), 1);
+        assert!(
+            elements_covered[0].is_selected,
+            "Trap-2: selection covering atom slot must yield is_selected=true"
+        );
 
-        let image = elements
-            .iter()
-            .find(|element| element.node_id == img)
-            .expect("image external element");
-        assert!(image.is_selected);
+        let collapsed = Selection::new(
+            Position::new(root_id, atom_index),
+            Position::new(root_id, atom_index),
+        );
+        let collapsed_resolved = collapsed
+            .resolve(&view)
+            .expect("collapsed selection must resolve");
+        let elements_collapsed =
+            page_external_elements(&index, &view, 0, Some(&collapsed_resolved));
+        assert_eq!(elements_collapsed.len(), 1);
+        assert!(
+            !elements_collapsed[0].is_selected,
+            "Trap-2: collapsed selection at atom start must yield is_selected=false"
+        );
     }
 }

@@ -417,12 +417,14 @@ mod tests {
                 y: 0.0,
             }],
             decoration: TextDecoration::default(),
-            node_id: editor_model::NodeId::ROOT,
-            offset: 0,
+            offset_range: 0..0,
+            link: None,
             text: "A".to_string(),
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
 
         let mut sink = VectorSink::new();
@@ -460,12 +462,14 @@ mod tests {
                 y: 0.0,
             }],
             decoration: TextDecoration::default(),
-            node_id: editor_model::NodeId::ROOT,
-            offset: 0,
+            offset_range: 0..0,
+            link: None,
             text: "A".to_string(),
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
 
         let mut sink = VectorSink::new();
@@ -503,12 +507,14 @@ mod tests {
                 y: 0.0,
             }],
             decoration: TextDecoration::default(),
-            node_id: editor_model::NodeId::ROOT,
-            offset: 0,
+            offset_range: 0..0,
+            link: None,
             text: "A".to_string(),
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
         let mut sink = VectorSink::new();
         sink.draw_glyph_run(&run, red(), Transform::IDENTITY, &resource.font_registry);
@@ -539,12 +545,14 @@ mod tests {
                 y: 8.0,
             }],
             decoration: TextDecoration::default(),
-            node_id: editor_model::NodeId::ROOT,
-            offset: 0,
+            offset_range: 0..0,
+            link: None,
             text: "A".to_string(),
             x: 99.0,
             width: 10.0,
             graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
         let mut sink = VectorSink::new();
         sink.draw_glyph_run(
@@ -592,12 +600,14 @@ mod tests {
                 y: baseline_y,
             }],
             decoration: TextDecoration::default(),
-            node_id: editor_model::NodeId::ROOT,
-            offset: 0,
+            offset_range: 0..0,
+            link: None,
             text: "A".to_string(),
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
 
         let mut sink = VectorSink::new();

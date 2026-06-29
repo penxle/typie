@@ -1,5 +1,6 @@
-use editor_model::NodeId;
-use editor_state::{Affinity, GapCursor, Position, Selection};
+use editor_crdt::Dot;
+use editor_state::{Affinity, Position, Selection};
+use editor_state::{GapCursor, as_gap_cursor};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -8,25 +9,29 @@ pub fn select_unit_across_gap_backward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let doc = tr.doc();
 
-    let (parent_id, anchor_off, head_off): (NodeId, usize, usize) = match selection
-        .resolve(&doc)
-        .and_then(|rs| rs.as_gap_cursor())
-    {
-        None => return Ok(false),
-        Some(GapCursor::LeadingUnit { .. }) => (NodeId::ROOT, 0, 1),
-        Some(GapCursor::BetweenMonolithic { parent, index, .. }) => (parent.id(), index - 1, index),
+    let (parent_id, anchor_off, head_off): (Dot, usize, usize) = {
+        let view = tr.state().view();
+        let Some(rs) = selection.resolve(&view) else {
+            return Ok(false);
+        };
+        match as_gap_cursor(&rs) {
+            None => return Ok(false),
+            Some(GapCursor::LeadingUnit { .. }) => (view.root().unwrap().id(), 0, 1),
+            Some(GapCursor::BetweenMonolithic { parent, index, .. }) => {
+                (parent.id(), index - 1, index)
+            }
+        }
     };
 
     tr.set_selection(Some(Selection::new(
         Position {
-            node_id: parent_id,
+            node: parent_id,
             offset: anchor_off,
             affinity: Affinity::Downstream,
         },
         Position {
-            node_id: parent_id,
+            node: parent_id,
             offset: head_off,
             affinity: Affinity::Upstream,
         },
@@ -182,8 +187,8 @@ mod tests {
     #[test]
     fn collapsed_text_selection_is_noop() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| select_unit_across_gap_backward(&mut tr));
     }
@@ -191,8 +196,8 @@ mod tests {
     #[test]
     fn non_collapsed_text_range_is_noop() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 1) -> (t, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         transact_fail!(initial, |tr| select_unit_across_gap_backward(&mut tr));
     }

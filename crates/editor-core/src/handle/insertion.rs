@@ -134,8 +134,8 @@ mod tests {
     #[test]
     fn probe_insert_text_into_paragraph() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         assert_probe_predicts_apply(
             state,
@@ -148,8 +148,8 @@ mod tests {
     #[test]
     fn probe_insert_break_paragraph() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         assert_probe_predicts_apply(
             state,
@@ -164,8 +164,8 @@ mod tests {
     #[test]
     fn insert_text() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
@@ -174,8 +174,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 11)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 11)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -183,8 +183,8 @@ mod tests {
     #[test]
     fn insert_break_block() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
@@ -193,8 +193,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { text("hel") } paragraph { t1: text("lo") } } }
-            selection: (t1, 0)
+            doc { root { paragraph { text("hel") } p1: paragraph { text("lo") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -202,16 +202,16 @@ mod tests {
     #[test]
     fn insert_break_line() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
             op: InsertionOp::Break { kind: Break::Line },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { text("hel") hard_break {} t1: text("lo") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hel") hard_break {} text("lo") } } }
+            selection: (p1, 4)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -219,8 +219,8 @@ mod tests {
     #[test]
     fn insert_break_page() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
@@ -229,9 +229,9 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("hel") page_break {} }
-                paragraph { t2: text("lo") }
+                p2: paragraph { text("lo") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -254,10 +254,10 @@ mod tests {
             doc { root {
                 paragraph { text("a") }
                 horizontal_rule
-                paragraph { t1: text("b") }
+                p1: paragraph { text("b") }
                 paragraph { text("c") }
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -277,9 +277,9 @@ mod tests {
         });
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("b") }
+                p1: paragraph { text("b") }
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -418,8 +418,8 @@ mod tests {
             op: InsertionOp::Text { text: "hi".into() },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } image paragraph { text("b") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hi") } image paragraph { text("b") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -444,11 +444,11 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
-                paragraph { t1: text("z") }
+                p1: paragraph { text("z") }
                 fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
                 paragraph {}
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -470,18 +470,26 @@ mod tests {
                 )),
             },
         });
-        let root = editor.state().doc.node(editor_model::NodeId::ROOT).unwrap();
-        let kinds: Vec<_> = root.children().map(|c| c.node().clone()).collect();
-        assert!(
-            matches!(kinds.first(), Some(editor_model::Node::HorizontalRule(_))),
+        let view = editor.state().view();
+        let root = view.node(editor_crdt::Dot::ROOT).unwrap();
+        let kinds: Vec<editor_model::NodeType> = root
+            .children()
+            .map(|c| match c {
+                editor_model::ChildView::Block(b) => b.node_type(),
+                editor_model::ChildView::Leaf(l) => l.node_type(),
+            })
+            .collect();
+        assert_eq!(
+            kinds.first(),
+            Some(&editor_model::NodeType::HorizontalRule),
             "gap fragment must place the block at index 0 (no leftover empty paragraph)"
         );
-        assert!(matches!(kinds.get(1), Some(editor_model::Node::Image(_))));
+        assert_eq!(kinds.get(1), Some(&editor_model::NodeType::Image));
         assert!(
             !root
-                .children()
-                .any(|c| matches!(c.node(), editor_model::Node::Paragraph(_))
-                    && c.children().next().is_none()),
+                .child_blocks()
+                .any(|b| b.node_type() == editor_model::NodeType::Paragraph
+                    && b.children().next().is_none()),
             "no leftover empty paragraph from materialization"
         );
         // Caret position is insert_fragment-internal behavior already
@@ -494,16 +502,16 @@ mod tests {
         // Non-gap caret: materialize_gap_paragraph returns Ok(false) so
         // the existing first! fallback path is preserved exactly.
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
             op: InsertionOp::Text { text: " w".into() },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello w") } } }
-            selection: (t1, 7)
+            doc { root { p1: paragraph { text("hello w") } } }
+            selection: (p1, 7)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -511,26 +519,26 @@ mod tests {
     #[test]
     fn auto_surround_wraps_selection_with_parens() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 6) -> (t1, 11)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6) -> (p1, 11)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
             op: InsertionOp::Text { text: "(".into() },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello (world)") } } }
-            selection: (t1, 6) -> (t1, 13)
+            doc { root { p1: paragraph { text("hello (world)") } } }
+            selection: (p1, 6) -> (p1, 13)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert!(editor.history.can_undo());
+        assert!(editor.undo_history.can_undo());
     }
 
     #[test]
     fn auto_surround_disabled_replaces_selection_normally() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 6) -> (t1, 11)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6) -> (p1, 11)
         };
         let mut editor = Editor::new_test(state);
         editor
@@ -542,8 +550,8 @@ mod tests {
             op: InsertionOp::Text { text: "(".into() },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello (") } } }
-            selection: (t1, 7)
+            doc { root { p1: paragraph { text("hello (") } } }
+            selection: (p1, 7)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -551,16 +559,16 @@ mod tests {
     #[test]
     fn auto_surround_collapsed_selection_inserts_normally() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Insertion {
             op: InsertionOp::Text { text: "(".into() },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello(") } } }
-            selection: (t1, 6)
+            doc { root { p1: paragraph { text("hello(") } } }
+            selection: (p1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -570,12 +578,12 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello") [font_family("KoPubBatang".to_string()), font_weight(700)]
+                    p1: paragraph {
+                        text("Hello") [font_family("KoPubBatang".to_string()), font_weight(700)]
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
 
@@ -590,18 +598,22 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.root().unwrap();
-        let second = root.children().nth(1).expect("second paragraph");
-        let text_in_second = second
-            .children()
-            .find(|c| matches!(c.node(), editor_model::Node::Text(_)))
-            .expect("text exists in second paragraph");
-        let mods: Vec<_> = text_in_second.modifiers().cloned().collect();
-        assert!(mods.iter().any(
+        let view = editor.state().view();
+        let second = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .nth(1)
+            .expect("second paragraph");
+        let items = second.inline();
+        let first = items.first().expect("text exists in second paragraph");
+        assert!(first.effective.values().any(
             |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "KoPubBatang")
         ));
         assert!(
-            mods.iter()
+            first
+                .effective
+                .values()
                 .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
         );
     }
@@ -611,12 +623,12 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello") [font_family("KoPubBatang".to_string()), font_weight(700)]
+                    p1: paragraph {
+                        text("Hello") [font_family("KoPubBatang".to_string()), font_weight(700)]
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
 
@@ -629,19 +641,19 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.root().unwrap();
-        let paragraph = root.first_child().unwrap();
-        let world_text = paragraph
-            .children()
-            .filter(|c| matches!(c.node(), editor_model::Node::Text(_)))
-            .nth(1)
-            .expect("second text node (after hard_break)");
-        let mods: Vec<_> = world_text.modifiers().cloned().collect();
-        assert!(mods.iter().any(
+        let view = editor.state().view();
+        let paragraph = view.root().unwrap().child_blocks().next().unwrap();
+        // The "World" run sits after the hard-break atom; its last leaf carries the
+        // preserved font in its effective modifiers.
+        let items = paragraph.inline();
+        let world_leaf = items.last().expect("text after hard_break");
+        assert!(world_leaf.effective.values().any(
             |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "KoPubBatang")
         ));
         assert!(
-            mods.iter()
+            world_leaf
+                .effective
+                .values()
                 .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
         );
     }
@@ -651,11 +663,11 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") [bold] }
+                    p1: paragraph { text("Hello") [bold] }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let mut editor = Editor::new_test(state);
 
@@ -665,8 +677,10 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.root().unwrap();
-        let third_paragraph_id = root.children().nth(2).unwrap().id();
+        let third_paragraph_id = {
+            let view = editor.state().view();
+            view.root().unwrap().child_blocks().nth(2).unwrap().id()
+        };
         editor.apply(Message::Selection {
             op: SelectionOp::Set {
                 selection: editor_state::Selection::collapsed(editor_state::Position::new(
@@ -676,8 +690,10 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.root().unwrap();
-        let second_paragraph_id = root.children().nth(1).unwrap().id();
+        let second_paragraph_id = {
+            let view = editor.state().view();
+            view.root().unwrap().child_blocks().nth(1).unwrap().id()
+        };
         editor.apply(Message::Selection {
             op: SelectionOp::Set {
                 selection: editor_state::Selection::collapsed(editor_state::Position::new(
@@ -691,14 +707,14 @@ mod tests {
             op: InsertionOp::Text { text: "X".into() },
         });
 
-        let root = editor.state().doc.root().unwrap();
-        let second = root.children().nth(1).unwrap();
-        let text = second
-            .children()
-            .find(|c| matches!(c.node(), editor_model::Node::Text(_)))
-            .unwrap();
+        let view = editor.state().view();
+        let second = view.root().unwrap().child_blocks().nth(1).unwrap();
+        let items = second.inline();
+        let first = items.first().expect("typed text in second paragraph");
         assert!(
-            text.modifiers()
+            first
+                .effective
+                .values()
                 .any(|m| matches!(m, editor_model::Modifier::Bold))
         );
     }
@@ -706,8 +722,8 @@ mod tests {
     #[test]
     fn delete_all_restores_marker_then_retype() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("X") [bold] } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("X") [bold] } } }
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(state);
 
@@ -722,14 +738,14 @@ mod tests {
             op: InsertionOp::Text { text: "Y".into() },
         });
 
-        let root = editor.state().doc.root().unwrap();
-        let paragraph = root.first_child().unwrap();
-        let text = paragraph
-            .children()
-            .find(|c| matches!(c.node(), editor_model::Node::Text(_)))
-            .unwrap();
+        let view = editor.state().view();
+        let paragraph = view.root().unwrap().child_blocks().next().unwrap();
+        let items = paragraph.inline();
+        let first = items.first().expect("retyped text in paragraph");
         assert!(
-            text.modifiers()
+            first
+                .effective
+                .values()
                 .any(|m| matches!(m, editor_model::Modifier::Bold))
         );
     }

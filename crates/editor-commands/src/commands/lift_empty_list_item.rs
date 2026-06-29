@@ -1,4 +1,4 @@
-use editor_model::Node;
+use editor_model::NodeType;
 use editor_transaction::Transaction;
 
 use crate::helpers::lift_list_item_inner;
@@ -8,32 +8,31 @@ pub fn lift_empty_list_item(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let list_item_id = {
+        let view = tr.view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
 
-    // Cursor must point at the paragraph node directly. Because the paragraph
-    // must also be empty, there is no text node to anchor into.
-    if !matches!(node.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
+        if node.node_type() != NodeType::Paragraph {
+            return Ok(false);
+        }
+        if node.first_child().is_some() {
+            return Ok(false);
+        }
 
-    if node.first_child().is_some() {
-        return Ok(false);
-    }
+        let parent = node.parent().ok_or(CommandError::NoParent(pos.node))?;
+        if parent.node_type() != NodeType::ListItem {
+            return Ok(false);
+        }
+        parent.id()
+    };
 
-    let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
-    if !matches!(parent.node(), Node::ListItem(_)) {
-        return Ok(false);
-    }
-
-    let list_item_id = parent.id();
     lift_list_item_inner(tr, list_item_id)
 }
 
@@ -97,12 +96,12 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
+                        list_item { p1: paragraph { text("A") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| lift_empty_list_item(&mut tr));
     }

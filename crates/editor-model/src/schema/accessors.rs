@@ -1,4 +1,4 @@
-use crate::{Modifier, ModifierType, Node, NodeRef, NodeType};
+use crate::{Modifier, ModifierType, Node, NodeType};
 
 use super::{ModifierSpec, NodeSpec, Schema};
 
@@ -9,12 +9,6 @@ impl NodeType {
 }
 
 impl Node {
-    pub fn spec(&self) -> &'static NodeSpec {
-        Schema::node_spec(self.as_type())
-    }
-}
-
-impl NodeRef<'_> {
     pub fn spec(&self) -> &'static NodeSpec {
         Schema::node_spec(self.as_type())
     }

@@ -20,9 +20,8 @@ function layoutFromRoot(root: PlainRootNode): PageLayout | undefined {
 }
 export async function parseDocumentV2(graph: Uint8Array): Promise<ParsedDocumentV2> {
   const plain = (await wasm.to_plain_resolved(graph)) as PlainDoc;
-  const rootId = Object.keys(plain.nodes).find((id) => plain.nodes[id].node.type === 'root');
-  if (!rootId) throw new Error('Root node not found in resolved PlainDoc');
-  const rootEntry = plain.nodes[rootId];
+  const rootEntry = plain.root;
+  if (rootEntry.node.type !== 'root') throw new Error('Root node not found in resolved PlainDoc');
   const rootMods = rootEntry.modifiers;
   const ff = rootMods['font_family'];
   const fs = rootMods['font_size'];
@@ -38,5 +37,5 @@ export async function parseDocumentV2(graph: Uint8Array): Promise<ParsedDocument
   };
   const { imageIds, embedIds } = extractAssetIdsFromPlainDoc(plain);
   const [images, embeds] = await Promise.all([loadImageAssets(imageIds), loadEmbeds(embedIds)]);
-  return { plain, rootId, defaults, layout: layoutFromRoot(rootEntry.node as PlainRootNode), images, embeds };
+  return { plain, root: rootEntry, defaults, layout: layoutFromRoot(rootEntry.node as PlainRootNode), images, embeds };
 }

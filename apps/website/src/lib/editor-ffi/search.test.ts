@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { pickMatchSelection } from './editor.svelte';
 
 const matchSelection = {
-  anchor: { node_id: 't1', offset: 4 },
-  head: { node_id: 't1', offset: 6 },
+  anchor: { node: 't1', offset: 4, affinity: 'downstream' },
+  head: { node: 't1', offset: 6, affinity: 'downstream' },
 } as const;
 
 describe('pickMatchSelection', () => {
   it('uses the live range when it is present (reflects positions shifted by edits)', () => {
     const liveRange = {
-      anchor: { node_id: 't1', offset: 10 },
-      head: { node_id: 't1', offset: 12 },
+      anchor: { node: 't1', offset: 10, affinity: 'downstream' as const },
+      head: { node: 't1', offset: 12, affinity: 'downstream' as const },
     };
     expect(pickMatchSelection(matchSelection, liveRange)).toEqual({
       anchor: liveRange.anchor,

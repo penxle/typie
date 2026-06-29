@@ -4,7 +4,7 @@ use crate::helpers::capture_style_entry;
 use crate::{CommandError, CommandResult};
 
 pub fn rename_style(tr: &mut Transaction, style_id: String, new_name: String) -> CommandResult {
-    let Some(mut entry) = capture_style_entry(&tr.state().doc, &style_id) else {
+    let Some(mut entry) = capture_style_entry(tr.state(), &style_id) else {
         return Err(CommandError::InvalidArgument(format!(
             "style {style_id:?} not defined"
         )));
@@ -28,8 +28,8 @@ mod tests {
     #[test]
     fn updates_name() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (defined, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -43,7 +43,14 @@ mod tests {
             "Heading One".into()
         ));
         assert_eq!(
-            renamed.doc.style_entry("heading-1").unwrap().name.get(),
+            renamed
+                .projected
+                .styles()
+                .style_entry("heading-1")
+                .unwrap()
+                .name
+                .get()
+                .as_str(),
             "Heading One"
         );
     }

@@ -1,20 +1,32 @@
-use editor_model::{Doc, Node, NodeId};
+use std::collections::HashSet;
+
+use editor_crdt::Dot;
+use editor_model::Modifier;
 use editor_state::State;
 
+use crate::steps::{set_style, support};
 use crate::{HistoryMeta, StepError, Transaction};
 
-pub fn build_revert_transaction(state: &State, target: &Doc) -> Result<Transaction, StepError> {
+/// Builds a transaction that transforms `state` back into `target`. Both states
+/// must share dot lineage (i.e. `state` was produced by applying ops on top of
+/// `target`); nodes are reconciled by their shared `Dot`.
+pub fn build_revert_transaction(state: &State, target: &State) -> Result<Transaction, StepError> {
     let mut tr = Transaction::new(state);
     tr.update_meta(|m| m.history = HistoryMeta::Skip);
     tr.batch::<_, StepError>(|tr| {
         reconcile_styles(tr, target)?;
-        reconcile_node(tr, target, NodeId::ROOT)?;
+        let root = tr
+            .view()
+            .root()
+            .map(|r| r.id())
+            .ok_or(StepError::NodeNotFound(Dot::ROOT))?;
+        reconcile_node(tr, target, root)?;
         Ok(())
     })?;
     Ok(tr)
 }
 
-fn reconcile_node(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
+fn reconcile_node(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
     reconcile_attrs(tr, target, id)?;
     reconcile_modifiers(tr, target, id)?;
     reconcile_node_style(tr, target, id)?;
@@ -24,9 +36,24 @@ fn reconcile_node(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), 
     Ok(())
 }
 
-fn reconcile_children(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
-    let target_children = children_ids(target, id);
-    let target_set: std::collections::HashSet<NodeId> = target_children.iter().copied().collect();
+fn target_children(target: &State, id: Dot) -> Vec<Dot> {
+    target
+        .view()
+        .node(id)
+        .map(|n| n.child_blocks().map(|b| b.id()).collect())
+        .unwrap_or_default()
+}
+
+fn current_children(tr: &Transaction, id: Dot) -> Vec<Dot> {
+    tr.view()
+        .node(id)
+        .map(|n| n.child_blocks().map(|b| b.id()).collect())
+        .unwrap_or_default()
+}
+
+fn reconcile_children(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+    let target_ids = target_children(target, id);
+    let target_set: HashSet<Dot> = target_ids.iter().copied().collect();
 
     for cid in current_children(tr, id) {
         if !target_set.contains(&cid) {
@@ -34,100 +61,77 @@ fn reconcile_children(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<
         }
     }
 
-    for (index, &cid) in target_children.iter().enumerate() {
-        let live_somewhere = tr.doc().get_entry(cid).is_some();
-        if live_somewhere {
+    for (index, cid) in target_ids.iter().enumerate() {
+        let cid = *cid;
+        let live = tr.view().node(cid).is_some();
+        if live {
             let cur = current_children(tr, id);
-            let cur_index = cur.iter().position(|&x| x == cid);
-            if cur_index != Some(index) {
+            if cur.iter().position(|x| *x == cid) != Some(index) {
                 tr.move_node(cid, id, index)?;
             }
+            reconcile_node(tr, target, cid)?;
         } else {
             revive_node(tr, target, cid, id, index)?;
         }
-        reconcile_node(tr, target, cid)?;
     }
     Ok(())
 }
 
 fn revive_node(
     tr: &mut Transaction,
-    target: &Doc,
-    cid: NodeId,
-    parent: NodeId,
+    target: &State,
+    cid: Dot,
+    parent: Dot,
     index: usize,
 ) -> Result<(), StepError> {
-    let node_type = target
-        .get_entry(cid)
-        .expect("revive_node: target must contain cid")
-        .node
-        .as_type();
-    let empty = node_type.into_node().to_plain();
-    tr.insert_subtree(parent, index, editor_model::Subtree::leaf(cid, empty))?;
+    let subtree =
+        support::capture_subtree(&target.projected, cid).ok_or(StepError::NodeNotFound(cid))?;
+    tr.insert_subtree(parent, index, subtree)?;
     Ok(())
 }
 
-fn children_ids(doc: &Doc, id: NodeId) -> Vec<NodeId> {
-    match doc.get_entry(id) {
-        Some(e) => e.children.iter().copied().collect(),
-        None => Vec::new(),
-    }
+fn block_dot(id: Dot) -> Option<Dot> {
+    id.as_op_dot().map(|d| d.dot())
 }
 
-fn current_children(tr: &Transaction, id: NodeId) -> Vec<NodeId> {
-    match tr.doc().get_entry(id) {
-        Some(e) => e.children.iter().copied().collect(),
-        None => Vec::new(),
-    }
-}
-
-fn reconcile_modifiers(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
-    use editor_model::ModifierType;
-    use std::collections::BTreeMap;
-
-    let Some(target_entry) = target.get_entry(id) else {
+fn reconcile_modifiers(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+    let Some(dot) = block_dot(id) else {
         return Ok(());
     };
-    let target_mods: BTreeMap<ModifierType, editor_model::Modifier> = target_entry
-        .modifiers
-        .iter()
-        .map(|(k, m)| (*k, m.clone()))
-        .collect();
-    let current_mods: BTreeMap<ModifierType, editor_model::Modifier> = {
-        let current_doc = tr.doc();
-        let Some(current_entry) = current_doc.get_entry(id) else {
-            return Ok(());
-        };
-        current_entry
-            .modifiers
-            .iter()
-            .map(|(k, m)| (*k, m.clone()))
-            .collect()
-    };
-
-    for (ty, m) in &target_mods {
-        if current_mods.get(ty) != Some(m) {
-            tr.add_modifier(id, m.clone())?;
-        }
+    if tr.view().node(id).is_none() {
+        return Ok(());
     }
-    for (ty, m) in &current_mods {
-        if !target_mods.contains_key(ty) {
-            tr.remove_modifier(id, m.clone())?;
-        }
+    let target_mods = target.projected.block_modifiers().modifiers_of(dot);
+    let current_mods = tr.state().projected.block_modifiers().modifiers_of(dot);
+
+    let add: Vec<Modifier> = target_mods
+        .iter()
+        .filter(|(ty, m)| current_mods.get(ty) != Some(*m))
+        .map(|(_, m)| m.clone())
+        .collect();
+    let remove: Vec<Modifier> = current_mods
+        .iter()
+        .filter(|(ty, _)| !target_mods.contains_key(ty))
+        .map(|(_, m)| m.clone())
+        .collect();
+
+    for m in add {
+        tr.add_modifier(id, m)?;
+    }
+    for m in remove {
+        tr.remove_modifier(id, m)?;
     }
     Ok(())
 }
 
-fn node_text(doc: &Doc, id: NodeId) -> Option<String> {
-    match &doc.get_entry(id)?.node {
-        editor_model::Node::Text(t) => Some(t.text.to_string()),
-        _ => None,
-    }
-}
-
-fn reconcile_text(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
-    let cur_doc = tr.doc();
-    let (Some(cur), Some(tgt)) = (node_text(&cur_doc, id), node_text(target, id)) else {
+fn reconcile_text(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+    let (Some(cur), tgt) = (
+        tr.view().node(id).map(|n| n.inline_text()),
+        target.view().node(id).map(|n| n.inline_text()),
+    ) else {
+        return Ok(());
+    };
+    let Some(tgt) = tgt else {
         return Ok(());
     };
     if cur == tgt {
@@ -158,17 +162,12 @@ fn reconcile_text(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), 
     Ok(())
 }
 
-fn reconcile_attrs(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
-    let Some(target_entry) = target.get_entry(id) else {
+fn reconcile_attrs(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+    let Some(target_plain) = target.view().node(id).map(|n| n.node().to_plain()) else {
         return Ok(());
     };
-    if matches!(target_entry.node, Node::Text(_)) {
+    let Some(current_plain) = tr.view().node(id).map(|n| n.node().to_plain()) else {
         return Ok(());
-    }
-    let target_plain = target_entry.node.to_plain();
-    let current_plain = match tr.doc().get_entry(id) {
-        Some(e) => e.node.to_plain(),
-        None => return Ok(()),
     };
     if current_plain != target_plain {
         tr.set_node(id, target_plain)?;
@@ -176,63 +175,63 @@ fn reconcile_attrs(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(),
     Ok(())
 }
 
-fn to_plain_style(entry: &editor_model::StyleEntry) -> editor_model::PlainStyleEntry {
-    editor_model::PlainStyleEntry {
-        name: entry.name.get().clone(),
-        modifiers: entry.modifiers.iter().cloned().collect(),
-    }
-}
-
-fn reconcile_styles(tr: &mut Transaction, target: &Doc) -> Result<(), StepError> {
-    let target_ids: Vec<String> = target.styles_iter().map(|(id, _)| id.clone()).collect();
+fn reconcile_styles(tr: &mut Transaction, target: &State) -> Result<(), StepError> {
+    let target_ids: Vec<String> = target
+        .projected
+        .styles()
+        .registered_entries()
+        .keys()
+        .cloned()
+        .collect();
     for id in &target_ids {
-        let Some(target_entry) = target.style_entry(id) else {
+        let Some(target_plain) = set_style::capture_style_entry(&target.projected, id) else {
             continue;
         };
-        let target_plain = to_plain_style(target_entry);
-        // presence를 먼저 확인 — Doc은 style_entry와 presence를 분리 관리.
-        let current_plain = if tr.doc().style_present(id) {
-            tr.doc().style_entry(id).map(to_plain_style)
-        } else {
-            None
-        };
+        let current_plain = set_style::capture_style_entry(&tr.state().projected, id);
         if current_plain.as_ref() != Some(&target_plain) {
             tr.set_style(id.clone(), Some(target_plain))?;
         }
     }
-    let current_ids: Vec<String> = tr.doc().styles_iter().map(|(id, _)| id.clone()).collect();
+    let current_ids: Vec<String> = tr
+        .state()
+        .projected
+        .styles()
+        .registered_entries()
+        .keys()
+        .cloned()
+        .collect();
     for id in current_ids {
-        if !target.style_present(&id) {
+        if !target.projected.styles().registered(&id) {
             tr.set_style(id, None)?;
         }
     }
     Ok(())
 }
 
-fn reconcile_node_style(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
-    let Some(target_entry) = target.get_entry(id) else {
+fn reconcile_node_style(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+    let Some(dot) = block_dot(id) else {
         return Ok(());
     };
-    let target_style = target_entry.style.get().clone();
-    let current_style = match tr.doc().get_entry(id) {
-        Some(e) => e.style.get().clone(),
-        None => return Ok(()),
-    };
+    if tr.view().node(id).is_none() {
+        return Ok(());
+    }
+    let target_style = target.projected.node_styles().value_of(dot);
+    let current_style = tr.state().projected.node_styles().value_of(dot);
     if current_style != target_style {
         tr.set_node_style(id, target_style)?;
     }
     Ok(())
 }
 
-fn reconcile_node_marker(tr: &mut Transaction, target: &Doc, id: NodeId) -> Result<(), StepError> {
-    let Some(target_entry) = target.get_entry(id) else {
+fn reconcile_node_marker(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+    let Some(dot) = block_dot(id) else {
         return Ok(());
     };
-    let target_marker = target_entry.marker.get().clone();
-    let current_marker = match tr.doc().get_entry(id) {
-        Some(e) => e.marker.get().clone(),
-        None => return Ok(()),
-    };
+    if tr.view().node(id).is_none() {
+        return Ok(());
+    }
+    let target_marker = target.projected.node_markers().value_of(dot);
+    let current_marker = tr.state().projected.node_markers().value_of(dot);
     if current_marker != target_marker {
         tr.set_marker(id, target_marker)?;
     }
@@ -242,382 +241,136 @@ fn reconcile_node_marker(tr: &mut Transaction, target: &Doc, id: NodeId) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Transaction;
     use editor_macros::state;
-    use editor_model::{CalloutVariant, Node, PlainCalloutNode, PlainNode};
+    use editor_model::{
+        CalloutVariant, ModifierType, Node, NodeType, NodeView, PlainCalloutNode, PlainNode,
+        PlainParagraphNode, PlainStyleEntry, Subtree,
+    };
 
-    #[test]
-    fn reverts_modifier_change() {
-        use editor_model::Modifier;
-        let (target_state, t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.add_modifier(t1, Modifier::Bold).unwrap();
-        let (changed_state, ..) = pre.commit();
-        assert!(
-            changed_state
-                .doc
-                .get_entry(t1)
-                .unwrap()
-                .modifiers
-                .iter()
-                .count()
-                == 1
-        );
+    fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
+        fn walk(nv: &NodeView, depth: usize, out: &mut Vec<(usize, NodeType, String)>) {
+            out.push((depth, nv.node_type(), nv.inline_text()));
+            for b in nv.child_blocks() {
+                walk(&b, depth + 1, out);
+            }
+        }
+        let view = state.view();
+        let mut out = Vec::new();
+        if let Some(root) = view.root() {
+            walk(&root, 0, &mut out);
+        }
+        out
+    }
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(
-            reverted.doc.get_entry(t1).unwrap().modifiers.iter().count(),
-            0
-        );
+    fn block_mod(state: &State, id: &Dot, ty: ModifierType) -> Option<Modifier> {
+        state
+            .view()
+            .node(*id)
+            .and_then(|n| n.block_modifier(ty).cloned())
     }
 
     #[test]
-    fn reverts_modifier_value_change() {
-        use editor_model::Modifier;
-        let (target_state, t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+    fn reverts_modifier_change() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
-        let mut setup = Transaction::new(&target_state);
-        setup
-            .add_modifier(t1, Modifier::FontSize { value: 1600 })
-            .unwrap();
-        let (target_state, ..) = setup.commit();
+        let mut pre = Transaction::new(&target);
+        pre.add_modifier(p1, Modifier::Bold).unwrap();
+        let (changed, ..) = pre.commit();
+        assert!(block_mod(&changed, &p1, ModifierType::Bold).is_some());
 
-        let mut pre = Transaction::new(&target_state);
-        pre.add_modifier(t1, Modifier::FontSize { value: 1200 })
-            .unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-
-        let mods: Vec<Modifier> = reverted
-            .doc
-            .get_entry(t1)
-            .unwrap()
-            .modifiers
-            .iter()
-            .map(|(_, m)| m.clone())
-            .collect();
-        assert_eq!(mods, vec![Modifier::FontSize { value: 1600 }]);
+        assert!(block_mod(&reverted, &p1, ModifierType::Bold).is_none());
     }
 
     #[test]
     fn reverts_text_change_preserving_common_affixes() {
-        let (target_state, t1) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 0)
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
-        pre.insert_text(t1, 6, "BRAVE ").unwrap();
-        let (changed_state, ..) = pre.commit();
-        let cur_text = match &changed_state.doc.get_entry(t1).unwrap().node {
-            editor_model::Node::Text(t) => t.text.to_string(),
-            _ => unreachable!(),
-        };
-        assert_eq!(cur_text, "hello BRAVE world");
+        let mut pre = Transaction::new(&target);
+        pre.insert_text(p1, 6, "BRAVE ").unwrap();
+        let (changed, ..) = pre.commit();
+        assert_eq!(
+            changed.view().node(p1).unwrap().inline_text(),
+            "hello BRAVE world"
+        );
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-        let rev_text = match &reverted.doc.get_entry(t1).unwrap().node {
-            editor_model::Node::Text(t) => t.text.to_string(),
-            _ => unreachable!(),
-        };
-        assert_eq!(rev_text, "hello world");
+        assert_eq!(
+            reverted.view().node(p1).unwrap().inline_text(),
+            "hello world"
+        );
     }
 
     #[test]
-    fn reverts_text_full_replace() {
-        let (target_state, t1) = state! {
-            doc { root { paragraph { t1: text("abc") } } }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.remove_text(t1, 0, 3).unwrap();
-        pre.insert_text(t1, 0, "xyz").unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        let rev = match &reverted.doc.get_entry(t1).unwrap().node {
-            editor_model::Node::Text(t) => t.text.to_string(),
-            _ => unreachable!(),
-        };
-        assert_eq!(rev, "abc");
-    }
-
-    #[test]
-    fn reverts_text_hangul_char_offsets() {
-        let (target_state, t1) = state! {
-            doc { root { paragraph { t1: text("안녕") } } }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.insert_text(t1, 2, "하세요").unwrap();
-        let (changed_state, ..) = pre.commit();
-        let cur = match &changed_state.doc.get_entry(t1).unwrap().node {
-            editor_model::Node::Text(t) => t.text.to_string(),
-            _ => unreachable!(),
-        };
-        assert_eq!(cur, "안녕하세요");
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        let rev = match &reverted.doc.get_entry(t1).unwrap().node {
-            editor_model::Node::Text(t) => t.text.to_string(),
-            _ => unreachable!(),
-        };
-        assert_eq!(rev, "안녕");
-    }
-
-    #[test]
-    fn reverts_block_deletion() {
-        let (target_state, _p1, p2) = state! {
+    fn reverts_block_deletion_via_revival() {
+        let (target, _p1, p2) = state! {
             doc { root { p1: paragraph { text("first") } p2: paragraph { text("second") } } }
             selection: (p1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
+        let before = snapshot(&target);
+        let mut pre = Transaction::new(&target);
         pre.remove_subtree(p2).unwrap();
-        let (changed_state, ..) = pre.commit();
-        assert_eq!(
-            changed_state
-                .doc
-                .get_entry(NodeId::ROOT)
-                .unwrap()
-                .children
-                .iter()
-                .count(),
-            1
-        );
+        let (changed, ..) = pre.commit();
+        assert_eq!(changed.view().root().unwrap().child_blocks().count(), 1);
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
+        assert_eq!(snapshot(&reverted), before);
     }
 
     #[test]
     fn reverts_block_insertion() {
-        let (target_state, _p1) = state! {
+        let (target, ..) = state! {
             doc { root { p1: paragraph { text("only") } } }
             selection: (p1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
-        let newp = NodeId::new();
+        let before = snapshot(&target);
+        let root = target.view().root().unwrap().id();
+        let mut pre = Transaction::new(&target);
         pre.insert_subtree(
-            NodeId::ROOT,
+            root,
             1,
-            editor_model::Subtree::leaf(
-                newp,
-                editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
-            ),
+            Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default())),
         )
         .unwrap();
-        let (changed_state, ..) = pre.commit();
+        let (changed, ..) = pre.commit();
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
+        assert_eq!(snapshot(&reverted), before);
     }
 
     #[test]
     fn reverts_sibling_reorder() {
-        let (target_state, _p1, p2) = state! {
+        let (target, _p1, p2) = state! {
             doc { root { p1: paragraph { text("one") } p2: paragraph { text("two") } } }
             selection: (p1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
-        pre.move_node(p2, NodeId::ROOT, 0).unwrap();
-        let (changed_state, ..) = pre.commit();
+        let before = snapshot(&target);
+        let root = target.view().root().unwrap().id();
+        let mut pre = Transaction::new(&target);
+        pre.move_node(p2, root, 0).unwrap();
+        let (changed, ..) = pre.commit();
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
-    }
-
-    #[test]
-    fn reverts_deletion_then_revival_with_correct_content() {
-        let (target_state, _p1, t1, p2) = state! {
-            doc { root { p1: paragraph { t1: text("alpha") } p2: paragraph { text("beta") } } }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.insert_text(t1, 5, "X").unwrap();
-        pre.remove_subtree(p2).unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        let result = editor_model::Doc::from_op_graph(&reverted.graph).unwrap();
-        assert_eq!(result.to_plain(), target_state.doc.to_plain());
-        assert_eq!(result.extract_text(), target_state.doc.extract_text());
-    }
-
-    #[test]
-    fn revert_converges_after_mixed_edits() {
-        let (target_state, _p1, t1, p2) = state! {
-            doc { root { p1: paragraph { t1: text("alpha") } p2: paragraph { text("beta") } } }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.insert_text(t1, 5, " inserted").unwrap();
-        pre.add_modifier(t1, editor_model::Modifier::Bold).unwrap();
-        pre.remove_subtree(p2).unwrap();
-        let np = NodeId::new();
-        pre.insert_subtree(
-            NodeId::ROOT,
-            1,
-            editor_model::Subtree::leaf(
-                np,
-                editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
-            ),
-        )
-        .unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain(),
-            "revert 후 문서가 대상 시점과 정확히 일치해야 한다"
-        );
-    }
-
-    #[test]
-    fn reverts_cross_parent_move() {
-        let (target_state, _bq1, pp, _keep, bq2, _other) = state! {
-            doc {
-                root {
-                    bq1: blockquote { pp: paragraph { text("x") } keep: paragraph { text("k") } }
-                    bq2: blockquote { other: paragraph { text("y") } }
-                }
-            }
-            selection: (pp, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.move_node(pp, bq2, 1).unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
-    }
-
-    #[test]
-    fn reverts_nested_grandchild_change() {
-        let (target_state, _c1, _pp, t1) = state! {
-            doc { root { c1: callout { pp: paragraph { t1: text("deep") } } } }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.insert_text(t1, 4, " edit").unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
-    }
-
-    #[test]
-    fn reverts_revives_void_image_node_with_attrs() {
-        let (target_state, _p1) = state! {
-            doc { root { p1: paragraph { text("keep") } } }
-            selection: (p1, 0)
-        };
-        let img = NodeId::new();
-        let mut setup = Transaction::new(&target_state);
-        setup
-            .insert_subtree(
-                NodeId::ROOT,
-                0,
-                editor_model::Subtree::leaf(
-                    img,
-                    editor_model::PlainNode::Image(editor_model::PlainImageNode {
-                        id: Some("img-1".to_string()),
-                        proportion: 50,
-                    }),
-                ),
-            )
-            .unwrap();
-        let (target_state, ..) = setup.commit();
-
-        let mut pre = Transaction::new(&target_state);
-        pre.remove_subtree(img).unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
-    }
-
-    #[test]
-    fn reverts_revives_deleted_table_subtree() {
-        let (target_state, tbl, _after) = state! {
-            doc {
-                root {
-                    tbl: table { table_row { table_cell { paragraph { text("cell") } } } }
-                    paragraph { after: text("after") }
-                }
-            }
-            selection: (after, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.remove_subtree(tbl).unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(
-            editor_model::Doc::from_op_graph(&reverted.graph)
-                .unwrap()
-                .to_plain(),
-            target_state.doc.to_plain()
-        );
+        assert_eq!(snapshot(&reverted), before);
     }
 
     #[test]
     fn reverts_node_attr_change() {
-        let (target_state, c1) = state! {
+        let (target, c1) = state! {
             doc { root { c1: callout { paragraph { text("x") } } } }
             selection: (c1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
+        let mut pre = Transaction::new(&target);
         pre.set_node(
             c1,
             PlainNode::Callout(PlainCalloutNode {
@@ -625,13 +378,12 @@ mod tests {
             }),
         )
         .unwrap();
-        let (changed_state, ..) = pre.commit();
+        let (changed, ..) = pre.commit();
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, _, _, _, meta) = tr.commit();
         assert!(matches!(meta.history, HistoryMeta::Skip));
-
-        if let Node::Callout(n) = &reverted.doc.get_entry(c1).unwrap().node {
+        if let Node::Callout(n) = reverted.view().node(c1).unwrap().node() {
             assert_eq!(*n.variant.get(), CalloutVariant::Info);
         } else {
             panic!("expected callout");
@@ -639,93 +391,12 @@ mod tests {
     }
 
     #[test]
-    fn reverts_base_style_modifier_change() {
-        use editor_model::{Modifier, PlainStyleEntry};
-        let (target_state, _t1) = state! {
-            doc {
-                styles { base: "기본" [font_size(1600)] }
-                root @base [] { paragraph { t1: text("hi") } }
-            }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.set_style(
-            "base".into(),
-            Some(PlainStyleEntry {
-                name: "기본".into(),
-                modifiers: std::iter::once(Modifier::FontSize { value: 2400 }).collect(),
-            }),
-        )
-        .unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-
-        let mods: Vec<Modifier> = reverted
-            .doc
-            .style_entry("base")
-            .unwrap()
-            .modifiers
-            .iter()
-            .cloned()
-            .collect();
-        assert_eq!(mods, vec![Modifier::FontSize { value: 1600 }]);
-    }
-
-    #[test]
-    fn reverts_node_style_ref_change() {
-        let (target_state, t1) = state! {
-            doc {
-                styles { s: "s" [bold] }
-                root { paragraph { t1: text("hi") } }
-            }
-            selection: (t1, 0)
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.set_node_style(t1, Some("s".into())).unwrap();
-        let (changed_state, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-
-        assert_eq!(
-            reverted.doc.node(t1).unwrap().entry().style.get().clone(),
-            None
-        );
-    }
-
-    #[test]
-    fn set_marker_and_revert() {
-        use editor_model::{Marker, Modifier};
-        let (target_state, p1, _t1) = state! {
-            doc {
-                root { p1: paragraph { t1: text("hi") } }
-            }
-            selection: (t1, 0)
-        };
-        let m = Marker {
-            modifiers: vec![Modifier::Bold],
-            style: None,
-        };
-        let mut pre = Transaction::new(&target_state);
-        pre.set_marker(p1, Some(m.clone())).unwrap();
-        let (changed_state, ..) = pre.commit();
-        assert_eq!(changed_state.doc.node(p1).unwrap().marker(), Some(&m));
-
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(reverted.doc.node(p1).unwrap().marker(), None);
-    }
-
-    #[test]
     fn reverts_style_creation() {
-        use editor_model::{Modifier, PlainStyleEntry};
-        let (target_state, _t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+        let (target, ..) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
+        let mut pre = Transaction::new(&target);
         pre.set_style(
             "s2".into(),
             Some(PlainStyleEntry {
@@ -734,40 +405,34 @@ mod tests {
             }),
         )
         .unwrap();
-        let (changed_state, ..) = pre.commit();
-        assert!(changed_state.doc.style_present("s2"));
+        let (changed, ..) = pre.commit();
+        assert!(changed.projected.styles().registered("s2"));
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-        assert!(
-            !reverted.doc.style_present("s2"),
-            "created style must be removed on revert"
-        );
+        assert!(!reverted.projected.styles().registered("s2"));
     }
 
     #[test]
     fn reverts_style_deletion() {
-        use editor_model::Modifier;
-        let (target_state, _t1) = state! {
+        let (target, ..) = state! {
             doc {
                 styles { s: "s" [bold] }
-                root { paragraph { t1: text("hi") } }
+                root { p1: paragraph { text("hi") } }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
-        let mut pre = Transaction::new(&target_state);
+        let mut pre = Transaction::new(&target);
         pre.set_style("s".into(), None).unwrap();
-        let (changed_state, ..) = pre.commit();
-        assert!(!changed_state.doc.style_present("s"));
+        let (changed, ..) = pre.commit();
+        assert!(!changed.projected.styles().registered("s"));
 
-        let tr = build_revert_transaction(&changed_state, &target_state.doc).unwrap();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
         let (reverted, ..) = tr.commit();
-        assert!(
-            reverted.doc.style_present("s"),
-            "deleted style must be restored on revert"
-        );
+        assert!(reverted.projected.styles().registered("s"));
         let mods: Vec<Modifier> = reverted
-            .doc
+            .projected
+            .styles()
             .style_entry("s")
             .unwrap()
             .modifiers
@@ -775,5 +440,23 @@ mod tests {
             .cloned()
             .collect();
         assert_eq!(mods, vec![Modifier::Bold]);
+    }
+
+    #[test]
+    fn reverts_node_style_ref_change() {
+        let (target, p1) = state! {
+            doc {
+                styles { s: "s" [bold] }
+                root { p1: paragraph { text("hi") } }
+            }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.set_node_style(p1, Some("s".into())).unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert_eq!(reverted.projected.node_styles().value_of(p1), None);
     }
 }

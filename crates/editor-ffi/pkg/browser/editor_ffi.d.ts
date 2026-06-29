@@ -1,127 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A CRDT-dot-anchored position. The chain is always root-to-leaf inclusive;
- * `chain.last().node_id` is the host of the binding (text node for `Char`,
- * container for `Child` and `ContainerStart`).
- */
-export type StablePosition = { kind: "char"; chain: ChainLink[]; char_dot: Dot; offset: number; bind: Bind; affinity: Affinity } | { kind: "child"; chain: ChainLink[]; child_dot: Dot; offset: number; bind: Bind; affinity: Affinity } | { kind: "container_start"; chain: ChainLink[]; affinity: Affinity };
-
-/**
- * A document position: the triple `(node_id, offset, affinity)`.
- *
- * `Position` is a plain value type (POD) with no automatic validation.
- * Its invariants are documented below; violating positions either
- * resolve to `None` via [`Position::resolve`] (value-level invariants)
- * or produce incorrect behavior in downstream code (structural
- * invariants).
- *
- * # Invariants
- *
- * - `node_id` must refer to a **text node** or a **container node**
- *   (a node whose schema allows children). Non-text leaf nodes
- *   (e.g. `hard_break`, `horizontal_rule`, `image`, `page_break`,
- *   `embed`, `file`) must **never** appear as `node_id`; such
- *   locations are represented by the parent container's boundary
- *   (the offset between the siblings of the leaf).
- *   *Not currently enforced.*
- *
- * - `offset` must lie within the node's valid range:
- *   - Text node: `0..=char_count` (unicode codepoint units, **not** bytes).
- *   - Container node: `0..=children.len()`.
- *   *Not currently enforced.*
- *
- * # Semantics of `offset`
- *
- * `offset` names the **boundary between** elements, not an element itself.
- *
- * - In a **text node**, `offset` is a unicode codepoint index between
- *   chars. For `"hello"`, offset `0` is before `'h'`, offset `5` is
- *   after `'o'`.
- * - In a **container node**, `offset` is an index between children.
- *   For `blockquote { p1, p2, p3 }`, `offset: 1` names the boundary
- *   **between `p1` and `p2`** — it does NOT point at `p2` itself.
- *   - Empty container cursor: `offset = 0`.
- *   - End of container: `offset = children.len()` (e.g. 3 in the
- *     example above — the position after `p3`).
- *
- * # Semantics of `affinity`
- *
- * See [`Affinity`].
- */
-export interface Position {
-    node_id: NodeId;
-    offset: number;
-    affinity?: Affinity;
-}
-
-/**
- * A document selection: an ordered pair of positions with directional intent.
- *
- * `Selection` is a plain value type (POD) with no automatic validation.
- * Structural invariants (subtree constraint, affinity mutual
- * exclusion, affinity agreement) are the responsibility of
- * command/transaction implementations; constructors do **not**
- * enforce them.
- *
- * # `anchor` vs `head`
- *
- * - `anchor`: the fixed endpoint of the selection. It stays in place
- *   under range-extension operations (shift+arrow, shift+click, etc.).
- * - `head`: the moving endpoint — the caret.
- *
- * Direction is **preserved, never normalized**. A selection where
- * `anchor` sorts after `head` (a backward selection) is a distinct,
- * valid state from its forward counterpart. The two differ in which
- * endpoint future range extensions will move, so normalizing would
- * lose user intent.
- *
- * # Invariants
- *
- * - **Subtree constraint**: `anchor` and `head` must not lie in each
- *   other's subtrees. A selection that starts outside a nested node
- *   and ends inside it (or vice versa) is not representable.
- *   *Upheld by command/transaction implementations; constructors do
- *   not enforce this.*
- *
- * - **Affinity convention (non-collapsed)**: at structural boundaries,
- *   `anchor.affinity` typically points toward `head` and `head.affinity`
- *   toward `anchor`. Text-interior positions may preserve their original
- *   affinity because it disambiguates visual ownership without changing the
- *   document range.
- *   *Upheld by command/transaction implementations where boundary ownership
- *   matters.*
- *
- * - **Affinity agreement (collapsed)**: when `anchor == head` (all
- *   three fields of `Position` match), the two affinities are equal.
- *   A caret has a single direction; the specific value (Up/Down) is
- *   free.
- *   *Upheld by command/transaction implementations.*
- *
- * # Node selection
- *
- * Selecting a non-text node (e.g. clicking an image) is represented
- * the same way as selecting a range of text: by two positions that
- * bracket the target. For `root { paragraph, image, paragraph }`,
- * selecting the image forward produces
- *
- * ```text
- * Selection {
- *     anchor: Position { node: root, offset: 1, affinity: Downstream },
- *     head:   Position { node: root, offset: 2, affinity: Upstream },
- * }
- * ```
- *
- * The backward form — `anchor` at offset 2 `Upstream`, `head` at
- * offset 1 `Downstream` — is a distinct valid state representing the
- * same visual selection with the opposite user intent.
- */
-export interface Selection {
-    anchor: Position;
-    head: Position;
-}
-
-/**
  * An IME composition range, expressed in flat-offset coordinates.
  *
  * `start` and `end` are **flat offsets** — absolute positions over the
@@ -151,18 +30,6 @@ export interface Composition {
  */
 export interface Changeset<P> {
     ops: Op<P>[];
-}
-
-/**
- * One link in the structural chain from root to the cursor's leaf node.
- *
- * `child_dot` is this node's dot in its parent's `children` RGA. For the
- * root link, `child_dot` is unused (capture writes `Dot::new(0, 0)`, restore
- * ignores).
- */
-export interface ChainLink {
-    node_id: NodeId;
-    child_dot: Dot;
 }
 
 /**
@@ -229,7 +96,7 @@ export interface BackgroundColorValue {
 }
 
 export interface Block {
-    id: NodeId;
+    id: Dot;
     node: PlainNode;
 }
 
@@ -271,10 +138,10 @@ export interface DecorationStyle {
 
 export interface ExternalElement {
     page_idx: number;
-    node_id: NodeId;
+    node: Dot;
     bounds: Rect;
-    data: ExternalElementData;
     is_selected: boolean;
+    data: ExternalElementData;
 }
 
 export interface FontFamily {
@@ -339,7 +206,6 @@ export interface LineHeightValue {
 }
 
 export interface LinkRect {
-    node_id: NodeId;
     page_idx: number;
     href: string;
     rects: Rect[];
@@ -407,7 +273,7 @@ export interface PlainCalloutNode {
 }
 
 export interface PlainDoc {
-    nodes: Record<NodeId, PlainNodeEntry>;
+    root: PlainNodeEntry;
     styles?: Record<string, PlainStyleEntry>;
 }
 
@@ -439,12 +305,11 @@ export interface PlainImageNode {
 export interface PlainListItemNode {}
 
 export interface PlainNodeEntry {
-    parent: NodeId | undefined;
-    children: NodeId[];
+    node: PlainNode;
     modifiers: Record<ModifierType, Modifier>;
     style?: string | undefined;
     marker?: Marker | undefined;
-    node: PlainNode;
+    children: PlainNodeEntry[];
 }
 
 export interface PlainOrderedListNode {}
@@ -480,6 +345,12 @@ export interface PlainTextNode {
     text: string;
 }
 
+export interface Position {
+    node: Dot;
+    offset: number;
+    affinity: Affinity;
+}
+
 export interface RawTextReplacementRule {
     id: string;
     matchPattern: string;
@@ -500,6 +371,11 @@ export interface RubyValue {
 
 export interface SearchOptions {
     match_whole_word?: boolean;
+}
+
+export interface Selection {
+    anchor: Position;
+    head: Position;
 }
 
 export interface SelectionEndpoints {
@@ -530,7 +406,7 @@ export interface StyleRefValue {
 }
 
 export interface TableOverlay {
-    table_id: NodeId;
+    table_id: Dot;
     page_idx: number;
     bounds: Rect;
     border_style: TableBorderStyle;
@@ -669,7 +545,7 @@ export type HistoryMeta = { type: "record" } | { type: "tagged"; tag: HistoryTag
 
 export type HistoryOp = { type: "undo" } | { type: "redo" };
 
-export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; plain_text: string };
+export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; plain_text: string; start: number | undefined };
 
 export type HorizontalRuleNodeAttr = { type: "variant" } & HorizontalRuleVariant;
 
@@ -679,7 +555,7 @@ export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "pr
 
 export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
 
-export type InteractiveHit = { type: "fold_title"; id: NodeId; text_rect: Rect | undefined } | { type: "callout_icon"; id: NodeId; next_variant: CalloutVariant };
+export type InteractiveHit = { type: "fold_title"; id: Dot; text_rect: Rect | undefined } | { type: "callout_icon"; id: Dot; next_variant: CalloutVariant };
 
 export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
@@ -691,7 +567,7 @@ export type Message = { type: "key"; event: KeyEvent } | { type: "insertion"; op
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 
-export type ModifierOp = { type: "toggle"; modifier_type: ModifierType } | { type: "set"; modifier: Modifier } | { type: "set_on_node"; id: NodeId; modifier: Modifier } | { type: "edit"; modifier_type: ModifierType; modifier: Modifier | undefined } | { type: "clear_all" };
+export type ModifierOp = { type: "toggle"; modifier_type: ModifierType } | { type: "set"; modifier: Modifier } | { type: "set_on_node"; id: Dot; modifier: Modifier } | { type: "edit"; modifier_type: ModifierType; modifier: Modifier | undefined } | { type: "clear_all" };
 
 export type Movement = { type: "grapheme"; direction: Direction } | { type: "word"; direction: Direction } | { type: "sentence"; direction: Direction } | { type: "line"; direction: Direction; axis: Axis } | { type: "page"; direction: Direction } | { type: "document"; direction: Direction };
 
@@ -699,9 +575,7 @@ export type NavigationOp = { type: "move"; movement: Movement; extend: boolean }
 
 export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph"; attr: ParagraphNodeAttr } | { type: "blockquote"; attr: BlockquoteNodeAttr } | { type: "callout"; attr: CalloutNodeAttr } | { type: "text"; attr: TextNodeAttr } | { type: "bullet_list"; attr: BulletListNodeAttr } | { type: "ordered_list"; attr: OrderedListNodeAttr } | { type: "list_item"; attr: ListItemNodeAttr } | { type: "fold"; attr: FoldNodeAttr } | { type: "fold_title"; attr: FoldTitleNodeAttr } | { type: "fold_content"; attr: FoldContentNodeAttr } | { type: "table"; attr: TableNodeAttr } | { type: "table_row"; attr: TableRowNodeAttr } | { type: "table_cell"; attr: TableCellNodeAttr } | { type: "image"; attr: ImageNodeAttr } | { type: "file"; attr: FileNodeAttr } | { type: "embed"; attr: EmbedNodeAttr } | { type: "archived"; attr: ArchivedNodeAttr } | { type: "hard_break"; attr: HardBreakNodeAttr } | { type: "horizontal_rule"; attr: HorizontalRuleNodeAttr } | { type: "page_break"; attr: PageBreakNodeAttr } | { type: "tab"; attr: TabNodeAttr };
 
-export type NodeId = string;
-
-export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: PlainNode } | { type: "table"; id: NodeId; op: TableOp };
+export type NodeOp = { type: "delete"; id: Dot } | { type: "set_attrs"; id: Dot; attrs: PlainNode } | { type: "table"; id: Dot; op: TableOp };
 
 export type OrderedListNodeAttr = void;
 
@@ -731,7 +605,7 @@ export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_s
 
 export type StyleOp = { type: "apply_to_selection"; style_id: string } | { type: "unset_in_selection" } | { type: "create_from_selection"; style_id: string; name: string } | { type: "update_from_selection" } | { type: "define"; style_id: string; name: string; modifiers: Modifier[] } | { type: "delete"; style_id: string } | { type: "rename"; style_id: string; name: string } | { type: "set_modifier"; style_id: string; modifier: Modifier } | { type: "unset_modifier"; style_id: string; modifier_type: ModifierType };
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: Dot; height: number } | { type: "fonts_changed" };
 
 export type TabNodeAttr = void;
 
@@ -757,7 +631,7 @@ export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type
 
 export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
-export type ViewOp = { type: "toggle_fold"; id: NodeId };
+export type ViewOp = { type: "toggle_fold"; id: Dot };
 
 
 declare class Editor {

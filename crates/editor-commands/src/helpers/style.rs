@@ -1,20 +1,24 @@
-use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, PlainStyleEntry};
+use std::collections::BTreeMap;
+
+use editor_crdt::Dot;
+use editor_model::{Modifier, ModifierType, PlainStyleEntry};
 use editor_state::{Position, State};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
-use crate::helpers::{collect_text_nodes_in_range, compact_textblocks_for_nodes};
+use crate::helpers::inline_leaf_dots_in_range;
 
 /// Collects textblock node ids whose subtree intersects the selection.
 /// Includes textblocks that are only partially covered. For a collapsed
 /// selection, returns the nearest textblock ancestor of the cursor.
-pub(crate) fn collect_textblocks_in_selection(state: &State) -> Vec<NodeId> {
+pub(crate) fn collect_textblocks_in_selection(state: &State) -> Vec<Dot> {
     let Some(sel) = state.selection.as_ref() else {
         return Vec::new();
     };
+    let view = state.view();
 
-    if sel.is_collapsed() {
-        let Some(node) = state.doc.node(sel.head.node_id) else {
+    if sel.anchor == sel.head {
+        let Some(node) = view.node(sel.head.node) else {
             return Vec::new();
         };
         return node
@@ -24,49 +28,79 @@ pub(crate) fn collect_textblocks_in_selection(state: &State) -> Vec<NodeId> {
             .unwrap_or_default();
     }
 
-    let Some(rs) = sel.resolve(&state.doc) else {
+    let Some(rs) = sel.resolve(&view) else {
         return Vec::new();
     };
+    let lo = rs.from().position();
+    let hi = rs.to().position();
+    let (Some(lo_r), Some(hi_r)) = (lo.resolve(&view), hi.resolve(&view)) else {
+        return Vec::new();
+    };
+
     let mut out = Vec::new();
-    rs.visit_intersecting_nodes(|node| {
-        if node.spec().is_textblock() {
-            out.push(node.id());
-            return false;
+    if let Some(root) = view.root() {
+        let mut blocks = vec![root];
+        for d in view.root().unwrap().descendants() {
+            if let editor_model::ChildView::Block(b) = d {
+                blocks.push(b);
+            }
         }
-        true
-    });
+        for block in blocks {
+            if !block.spec().is_textblock() {
+                continue;
+            }
+            let id = block.id();
+            let count = block.children().count();
+            let (Some(start), Some(end)) = (
+                Position::new(id, 0).resolve(&view),
+                Position::new(id, count).resolve(&view),
+            ) else {
+                continue;
+            };
+            if start <= hi_r && lo_r <= end {
+                out.push(id);
+            }
+        }
+    }
     out
 }
 
-/// Collects inline modifiers from text nodes intersecting the selection,
-/// returning only those that are uniformly present across every text node.
-/// A modifier type is uniform iff every text node in the selection has an
-/// explicit modifier of that type with the same value. Mixed or partially
-/// present modifiers are dropped. For a collapsed selection, returns the
-/// explicit modifiers of the text node at the caret.
+/// Collects inline modifiers uniformly present across every inline leaf in the
+/// selection (same type and value on all). For a collapsed selection, returns
+/// the own (non-style) modifiers of the leaf immediately left of the caret.
 pub(crate) fn collect_uniform_text_modifiers_in_selection(state: &State) -> Vec<Modifier> {
-    use std::collections::BTreeMap;
-
     let Some(sel) = state.selection.as_ref() else {
         return Vec::new();
     };
+    let view = state.view();
 
-    if sel.is_collapsed() {
-        let Some(node) = state.doc.node(sel.head.node_id) else {
+    if sel.anchor == sel.head {
+        let pos = &sel.head;
+        let Some(node) = view.node(pos.node) else {
             return Vec::new();
         };
-        if !matches!(node.node(), Node::Text(_)) {
-            return Vec::new();
-        }
-        return node.explicit_modifiers().cloned().collect();
+        let idx = pos.offset.checked_sub(1);
+        let leaf = idx
+            .and_then(|i| node.child_at(i))
+            .or_else(|| node.child_at(pos.offset));
+        return match leaf {
+            Some(editor_model::ChildView::Leaf(l)) => l
+                .own_modifiers()
+                .iter()
+                .filter(|(_, o)| !o.from_style)
+                .map(|(_, o)| o.value.clone())
+                .collect(),
+            _ => Vec::new(),
+        };
     }
 
-    let Some(rs) = sel.resolve(&state.doc) else {
+    let Some(rs) = sel.resolve(&view) else {
         return Vec::new();
     };
-    let mut text_nodes = Vec::new();
-    rs.for_each_text_node(|node, _span| text_nodes.push(node));
-    if text_nodes.is_empty() {
+    let from = rs.from().position();
+    let to = rs.to().position();
+    let dots = inline_leaf_dots_in_range(&view, &from, &to);
+    if dots.is_empty() {
         return Vec::new();
     }
 
@@ -76,19 +110,24 @@ pub(crate) fn collect_uniform_text_modifiers_in_selection(state: &State) -> Vec<
     }
     let mut by_type: BTreeMap<ModifierType, Agg> = BTreeMap::new();
     let mut seen_count: BTreeMap<ModifierType, usize> = BTreeMap::new();
-    let total = text_nodes.len();
+    let total = dots.len();
 
-    for node in &text_nodes {
-        for m in node.explicit_modifiers() {
-            let ty = m.as_type();
-            *seen_count.entry(ty).or_insert(0) += 1;
-            match by_type.get(&ty) {
+    for dot in &dots {
+        let Some(leaf) = view.leaf(*dot) else {
+            continue;
+        };
+        for (ty, own) in leaf.own_modifiers() {
+            if own.from_style {
+                continue;
+            }
+            *seen_count.entry(*ty).or_insert(0) += 1;
+            match by_type.get(ty) {
                 None => {
-                    by_type.insert(ty, Agg::Uniform(m.clone()));
+                    by_type.insert(*ty, Agg::Uniform(own.value.clone()));
                 }
-                Some(Agg::Uniform(existing)) if existing == m => {}
+                Some(Agg::Uniform(existing)) if *existing == own.value => {}
                 Some(Agg::Uniform(_)) => {
-                    by_type.insert(ty, Agg::Mixed);
+                    by_type.insert(*ty, Agg::Mixed);
                 }
                 Some(Agg::Mixed) => {}
             }
@@ -109,8 +148,8 @@ pub(crate) fn collect_uniform_text_modifiers_in_selection(state: &State) -> Vec<
         .collect()
 }
 
-/// Removes inline modifiers whose type is in `types` from text nodes within
-/// the current range selection. No-op for collapsed selections.
+/// Removes inline modifiers whose type is in `types` from the inline leaves
+/// within the current range selection. No-op for collapsed selections.
 pub(crate) fn clear_inline_modifier_types_in_selection(
     tr: &mut Transaction,
     types: &[ModifierType],
@@ -121,80 +160,75 @@ pub(crate) fn clear_inline_modifier_types_in_selection(
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         return Ok(false);
     }
 
-    let (from, to) = {
-        let doc = tr.doc();
-        let resolved = selection
-            .resolve(&doc)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        (
-            Position::from(resolved.from()),
-            Position::from(resolved.to()),
-        )
+    let to_remove: Vec<(Dot, Modifier)> = {
+        let view = tr.state().view();
+        let Some(resolved) = selection.resolve(&view) else {
+            return Err(CommandError::Corrupted("cannot resolve selection".into()));
+        };
+        let from = resolved.from().position();
+        let to = resolved.to().position();
+        let dots = inline_leaf_dots_in_range(&view, &from, &to);
+        let mut acc = Vec::new();
+        for dot in dots {
+            let Some(leaf) = view.leaf(dot) else { continue };
+            for (ty, own) in leaf.own_modifiers() {
+                if own.from_style {
+                    continue;
+                }
+                if types.contains(ty) {
+                    acc.push((dot, own.value.clone()));
+                }
+            }
+        }
+        acc
     };
 
-    let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
-    if node_ids.is_empty() {
+    if to_remove.is_empty() {
         return Ok(false);
     }
 
     let mut changed = false;
-    for &node_id in &node_ids {
-        let to_remove: Vec<Modifier> = {
-            let doc = tr.doc();
-            let node = doc
-                .node(node_id)
-                .ok_or(CommandError::NodeNotFound(node_id))?;
-            node.explicit_modifiers()
-                .filter(|m| types.contains(&m.as_type()))
-                .cloned()
-                .collect()
-        };
-        for modifier in to_remove {
-            tr.remove_modifier(node_id, modifier)?;
-            changed = true;
-        }
+    for (id, modifier) in to_remove {
+        let Some(op) = id.as_op_dot() else { continue };
+        let d = op.dot();
+        tr.remove_span_modifier(d, d, modifier)?;
+        changed = true;
     }
-
-    compact_textblocks_for_nodes(tr, &node_ids)?;
     Ok(changed)
 }
 
-/// Inline run (text/tab) node ids intersecting the current range selection,
-/// with boundary splits applied. Empty for a collapsed selection.
+/// Inline leaf dots intersecting the current range selection. Empty for a
+/// collapsed selection.
 pub(crate) fn collect_run_nodes_in_selection(
     tr: &mut Transaction,
-) -> Result<Vec<NodeId>, CommandError> {
+) -> Result<Vec<Dot>, CommandError> {
     let Some(selection) = tr.selection() else {
         return Ok(Vec::new());
     };
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         return Ok(Vec::new());
     }
-    let (from, to) = {
-        let doc = tr.doc();
-        let resolved = selection
-            .resolve(&doc)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        (
-            Position::from(resolved.from()),
-            Position::from(resolved.to()),
-        )
-    };
-    collect_text_nodes_in_range(tr, &from, &to)
+    let view = tr.state().view();
+    let resolved = selection
+        .resolve(&view)
+        .ok_or_else(|| CommandError::Corrupted("cannot resolve selection".into()))?;
+    let from = resolved.from().position();
+    let to = resolved.to().position();
+    Ok(inline_leaf_dots_in_range(&view, &from, &to))
 }
 
 /// Snapshot of a style entry's current values, or `None` if the style is not
-/// present (no entry in `Doc.styles`). Useful as the `old` capture for
-/// `Step::SetStyle` and as the read path for command-level edits.
-pub(crate) fn capture_style_entry(doc: &Doc, style_id: &str) -> Option<PlainStyleEntry> {
-    if !doc.style_present(style_id) {
+/// registered.
+pub(crate) fn capture_style_entry(state: &State, style_id: &str) -> Option<PlainStyleEntry> {
+    let log = state.projected.styles();
+    if !log.registered(style_id) {
         return None;
     }
-    let entry = doc.style_entry(style_id)?;
+    let entry = log.style_entry(style_id)?;
     Some(PlainStyleEntry {
         name: entry.name.get().clone(),
         modifiers: entry.modifiers.iter().cloned().collect(),

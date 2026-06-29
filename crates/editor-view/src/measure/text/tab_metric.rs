@@ -1,23 +1,31 @@
+use std::collections::BTreeMap;
+
+use editor_model::{Alignment, Modifier, ModifierType, OwnModifier};
 use editor_resource::Resource;
 
+use super::inline::TextRun;
+use super::layout::build_layout;
 use super::resolve::ResolvedTextStyle;
-use super::text_run::TextRun;
+use super::style_run::resolve_style_runs;
 
 pub const TAB_STOP_SPACES: f32 = 8.0;
 
 pub fn tab_px(style: &ResolvedTextStyle, resource: &mut Resource) -> f32 {
     let space = " ";
+    let own: BTreeMap<ModifierType, OwnModifier> = BTreeMap::new();
+    let eff: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
     let runs = vec![TextRun {
-        node_id: editor_model::NodeId::new(),
         byte_range: 0..space.len(),
+        offset_range: 0..0,
+        own_modifiers: &own,
+        effective: &eff,
         style: style.clone(),
     }];
-    let style_runs =
-        super::style_run::resolve_style_runs(space, &runs, &mut resource.font_registry);
-    let layout = super::layout::build_layout(
+    let style_runs = resolve_style_runs(space, &runs, &mut resource.font_registry);
+    let layout = build_layout(
         space,
         &style_runs,
-        editor_model::Alignment::Left,
+        Alignment::Left,
         0.0,
         1.0e6,
         resource,
@@ -39,12 +47,10 @@ pub fn tab_px(style: &ResolvedTextStyle, resource: &mut Resource) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::measure::Measurer;
 
     #[test]
     fn tab_px_scales_with_font_size() {
-        let measurer = Measurer::new_test();
-        let mut resource = measurer.resource.lock().unwrap();
+        let mut resource = editor_resource::Resource::new_test();
         let small = ResolvedTextStyle {
             font_family: String::new(),
             font_weight: 400,

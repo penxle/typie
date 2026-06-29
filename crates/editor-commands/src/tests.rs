@@ -18,20 +18,16 @@ use crate::test_utils::*;
 
 #[test]
 fn select_all_over_a_table_is_not_a_cell_rect() {
-    let (initial, ..) = state! {
+    let (initial, _p1) = state! {
         doc { root { table { table_row {
-            table_cell { paragraph { t: text("a") } }
+            table_cell { p1: paragraph { text("a") } }
             table_cell { paragraph { text("b") } }
         } } } }
-        selection: (t, 0)
+        selection: (p1, 0)
     };
     let (actual, ..) = transact!(initial, |tr| select_all(&mut tr));
-    let rs = actual
-        .selection
-        .as_ref()
-        .unwrap()
-        .resolve(&actual.doc)
-        .unwrap();
+    let view = actual.view();
+    let rs = actual.selection.as_ref().unwrap().resolve(&view).unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "select_all must not produce the cell-rect discriminator shape"
@@ -40,17 +36,18 @@ fn select_all_over_a_table_is_not_a_cell_rect() {
 
 #[test]
 fn select_node_forward_inside_a_cell_is_not_a_cell_rect() {
-    let (initial, ..) = state! {
+    let (initial, _p1) = state! {
         doc { root { table { table_row {
-            table_cell { paragraph { t: text("hi") } }
+            table_cell { p1: paragraph { text("hi") } }
             table_cell { paragraph { text("b") } }
         } } } }
-        selection: (t, 2)
+        selection: (p1, 2)
     };
     let mut tr = editor_transaction::Transaction::new(&initial);
     let _ = select_node_forward(&mut tr);
     let (next, ..) = tr.commit();
-    let rs = next.selection.as_ref().unwrap().resolve(&next.doc).unwrap();
+    let view = next.view();
+    let rs = next.selection.as_ref().unwrap().resolve(&view).unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "select_node_forward must not produce the cell-rect discriminator shape"
@@ -59,17 +56,18 @@ fn select_node_forward_inside_a_cell_is_not_a_cell_rect() {
 
 #[test]
 fn select_node_backward_inside_a_cell_is_not_a_cell_rect() {
-    let (initial, ..) = state! {
+    let (initial, _p1) = state! {
         doc { root { table { table_row {
             table_cell { paragraph { text("a") } }
-            table_cell { paragraph { t: text("hi") } }
+            table_cell { p1: paragraph { text("hi") } }
         } } } }
-        selection: (t, 0)
+        selection: (p1, 0)
     };
     let mut tr = editor_transaction::Transaction::new(&initial);
     let _ = select_node_backward(&mut tr);
     let (next, ..) = tr.commit();
-    let rs = next.selection.as_ref().unwrap().resolve(&next.doc).unwrap();
+    let view = next.view();
+    let rs = next.selection.as_ref().unwrap().resolve(&view).unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "select_node_backward must not produce the cell-rect discriminator shape"
@@ -78,16 +76,16 @@ fn select_node_backward_inside_a_cell_is_not_a_cell_rect() {
 
 #[test]
 fn normalized_cross_cell_text_range_is_not_a_cell_rect() {
-    let (state, ta, tb) = state! {
+    let (state, p1, p2) = state! {
         doc { root { table { table_row {
-            table_cell { paragraph { ta: text("hello") } }
-            table_cell { paragraph { tb: text("world") } }
+            table_cell { p1: paragraph { text("hello") } }
+            table_cell { p2: paragraph { text("world") } }
         } } } }
-        selection: (ta, 0)
+        selection: (p1, 0)
     };
-    let sel = Selection::new(Position::new(ta, 5), Position::new(tb, 0));
-    let normalized = sel.normalize(&state.doc).expect("range normalizes");
-    let rs = normalized.resolve(&state.doc).unwrap();
+    let sel = Selection::new(Position::new(p1, 5), Position::new(p2, 0));
+    let view = state.view();
+    let rs = sel.resolve(&view).unwrap();
     assert!(
         rs.as_cell_rect().is_none(),
         "normalize must not produce the cell-rect discriminator shape"

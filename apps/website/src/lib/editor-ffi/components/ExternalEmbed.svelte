@@ -33,7 +33,7 @@
 
   const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
   const isOnlySelectedElement = $derived(
-    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node_id,
+    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
   );
   const showUrlInput = $derived(isOnlySelectedElement && !embedId && !inflight && canEdit);
 
@@ -79,7 +79,7 @@
 
       ctx.editor.enqueue({
         type: 'node',
-        op: { type: 'set_attrs', id: element.node_id, attrs: { type: 'embed', id: result.unfurlEmbed.id } },
+        op: { type: 'set_attrs', id: element.node, attrs: { type: 'embed', id: result.unfurlEmbed.id } },
       });
 
       ctx.editor.focus();
@@ -93,7 +93,7 @@
   };
 
   const deleteNode = () => {
-    ctx.editor?.enqueue({ type: 'node', op: { type: 'delete', id: element.node_id } });
+    ctx.editor?.enqueue({ type: 'node', op: { type: 'delete', id: element.node } });
     ctx.editor?.focus();
   };
 </script>

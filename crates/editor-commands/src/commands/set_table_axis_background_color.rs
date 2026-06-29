@@ -1,35 +1,36 @@
 use editor_common::Axis;
-use editor_model::{Modifier, NodeId};
+use editor_crdt::Dot;
+use editor_model::Modifier;
 use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
 pub fn set_table_axis_background_color(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     axis: Axis,
     index: usize,
     color: Option<String>,
 ) -> CommandResult {
-    let cell_ids: Vec<NodeId> = {
-        let doc = tr.doc();
-        let table = doc
+    let cell_ids: Vec<Dot> = {
+        let view = tr.view();
+        let table = view
             .node(table_id)
             .ok_or(CommandError::NodeNotFound(table_id))?;
 
         match axis {
             Axis::Horizontal => {
                 let row = table
-                    .children()
+                    .child_blocks()
                     .nth(index)
                     .ok_or_else(|| CommandError::Corrupted("row index out of range".into()))?;
-                row.children().map(|cell| cell.id()).collect()
+                row.child_blocks().map(|cell| cell.id()).collect()
             }
             Axis::Vertical => table
-                .children()
-                .map(|row| -> Result<NodeId, CommandError> {
+                .child_blocks()
+                .map(|row| -> Result<Dot, CommandError> {
                     let cell = row
-                        .children()
+                        .child_blocks()
                         .nth(index)
                         .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?;
                     Ok(cell.id())
@@ -60,18 +61,18 @@ pub fn set_table_axis_background_color(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
 
     use super::*;
     use crate::test_utils::*;
 
-    fn cell_bg(doc: &editor_model::Doc, cell_id: NodeId) -> Option<String> {
-        doc.node(cell_id)?
-            .explicit_modifiers()
-            .find_map(|m| match m {
-                Modifier::BackgroundColor { value } => Some(value.clone()),
-                _ => None,
-            })
+    fn cell_bg(view: &editor_model::DocView, id: Dot) -> Option<String> {
+        match view
+            .node(id)?
+            .block_modifier(editor_model::ModifierType::BackgroundColor)?
+        {
+            Modifier::BackgroundColor { value } => Some(value.clone()),
+            _ => None,
+        }
     }
 
     #[test]
@@ -98,11 +99,11 @@ mod tests {
             0,
             Some("red".to_string())
         ));
-        let doc = &actual.doc;
-        assert_eq!(cell_bg(doc, r0c0), Some("red".to_string()));
-        assert_eq!(cell_bg(doc, r0c1), Some("red".to_string()));
-        assert_eq!(cell_bg(doc, r1c0), None);
-        assert_eq!(cell_bg(doc, r1c1), None);
+        let view = actual.view();
+        assert_eq!(cell_bg(&view, r0c0), Some("red".to_string()));
+        assert_eq!(cell_bg(&view, r0c1), Some("red".to_string()));
+        assert_eq!(cell_bg(&view, r1c0), None);
+        assert_eq!(cell_bg(&view, r1c1), None);
     }
 
     #[test]
@@ -129,11 +130,11 @@ mod tests {
             1,
             Some("blue".to_string())
         ));
-        let doc = &actual.doc;
-        assert_eq!(cell_bg(doc, r0c0), None);
-        assert_eq!(cell_bg(doc, r0c1), Some("blue".to_string()));
-        assert_eq!(cell_bg(doc, r1c0), None);
-        assert_eq!(cell_bg(doc, r1c1), Some("blue".to_string()));
+        let view = actual.view();
+        assert_eq!(cell_bg(&view, r0c0), None);
+        assert_eq!(cell_bg(&view, r0c1), Some("blue".to_string()));
+        assert_eq!(cell_bg(&view, r1c0), None);
+        assert_eq!(cell_bg(&view, r1c1), Some("blue".to_string()));
     }
 
     #[test]
@@ -160,6 +161,7 @@ mod tests {
             0,
             None
         ));
-        assert_eq!(cell_bg(&cleared.doc, r0c0), None);
+        let view = cleared.view();
+        assert_eq!(cell_bg(&view, r0c0), None);
     }
 }

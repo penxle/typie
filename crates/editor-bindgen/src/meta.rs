@@ -116,7 +116,7 @@ mod tests {
                     FfiField {
                         name: "node_id".into(),
                         serde_rename: None,
-                        ty: "NodeId".into(),
+                        ty: "Dot".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn roundtrip_custom() {
         let meta = FfiMeta {
-            name: "NodeId".into(),
+            name: "Dot".into(),
             serde_rename_all: None,
             kind: FfiKind::Custom {
                 target: "String".into(),

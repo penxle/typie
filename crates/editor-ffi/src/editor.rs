@@ -69,9 +69,10 @@ fn public_tracked_range(
     editor: &editor_core::Editor,
     range: &editor_core::TrackedRange,
 ) -> Option<TrackedRange> {
-    let doc = &editor.state().doc;
-    let sel = range.locate(doc)?;
-    let resolved = sel.resolve(doc)?;
+    let state = editor.state();
+    let view = state.view();
+    let sel = range.locate(state)?;
+    let resolved = sel.resolve(&view)?;
     let rects = editor
         .view()
         .selection_rects(&resolved)
@@ -91,10 +92,10 @@ fn public_tracked_range(
 }
 
 fn public_tracked_range_endpoints(
-    doc: &editor_model::Doc,
+    state: &editor_state::State,
     range: &editor_core::TrackedRange,
 ) -> Option<TrackedRangeEndpoints> {
-    let sel = range.locate(doc)?;
+    let sel = range.locate(state)?;
     Some(TrackedRangeEndpoints {
         id: range.id.clone(),
         group: range.group.clone(),
@@ -117,10 +118,8 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.can(message.from_ffi()?)?))
     }
 
-    pub fn last_history_tag(
-        &self,
-    ) -> EditorResult<Option<Complex<editor_transaction::HistoryTag>>> {
-        self.with_inner(|inner| Ok(inner.editor.last_history_tag().cloned().into_ffi()?))
+    pub fn last_history_tag(&self) -> EditorResult<Option<Complex<editor_common::HistoryTag>>> {
+        self.with_inner(|inner| Ok(inner.editor.last_history_tag().into_ffi()?))
     }
 
     pub fn tick(&self) -> EditorResult<Vec<Complex<editor_core::EditorEvent>>> {
@@ -148,11 +147,7 @@ impl Editor {
     pub fn placeholder(&self) -> EditorResult<Option<Complex<editor_view::PlaceholderMetrics>>> {
         self.with_inner(|inner| {
             let state = inner.editor.state();
-            Ok(inner
-                .editor
-                .view()
-                .placeholder_metrics(&state.doc)
-                .into_ffi()?)
+            Ok(inner.editor.view().placeholder_metrics(state).into_ffi()?)
         })
     }
 
@@ -172,15 +167,15 @@ impl Editor {
 
     pub fn root_attrs(&self) -> EditorResult<Complex<editor_model::PlainRootNode>> {
         self.with_inner(|inner| {
-            let doc = &inner.editor.state().doc;
-            let root = crate::root::attrs(doc).expect("root entry must exist");
+            let view = inner.editor.state().view();
+            let root = crate::root::attrs(&view).expect("root entry must exist");
             Ok(root.into_ffi()?)
         })
     }
 
     pub fn root_modifiers(&self) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
         self.with_inner(|inner| {
-            Ok(crate::root::base_style_modifiers(&inner.editor.state().doc).into_ffi()?)
+            Ok(crate::root::base_style_modifiers(inner.editor.state()).into_ffi()?)
         })
     }
 
@@ -338,10 +333,12 @@ impl Editor {
     pub fn external_elements(&self) -> EditorResult<Vec<Complex<editor_view::ExternalElement>>> {
         self.with_inner(|inner| {
             let state = inner.editor.state();
+            let view = state.view();
+            let resolved = state.selection.as_ref().and_then(|s| s.resolve(&view));
             Ok(inner
                 .editor
                 .view()
-                .external_elements(&state.doc, state.selection.as_ref())
+                .external_elements(state, resolved.as_ref())
                 .into_ffi()?)
         })
     }
@@ -352,23 +349,25 @@ impl Editor {
     ) -> EditorResult<Vec<Complex<editor_view::ExternalElement>>> {
         self.with_inner(|inner| {
             let state = inner.editor.state();
+            let view = state.view();
+            let resolved = state.selection.as_ref().and_then(|s| s.resolve(&view));
             Ok(inner
                 .editor
                 .view()
-                .page_external_elements(&state.doc, page as usize, state.selection.as_ref())
+                .page_external_elements(state, page as usize, resolved.as_ref())
                 .into_ffi()?)
         })
     }
 
     pub fn table_overlays(&self) -> EditorResult<Vec<Complex<editor_view::TableOverlay>>> {
         self.with_inner(|inner| {
+            let state = inner.editor.state();
+            let view = state.view();
+            let resolved = state.selection.as_ref().and_then(|s| s.resolve(&view));
             Ok(inner
                 .editor
                 .view()
-                .table_overlays(
-                    &inner.editor.state().doc,
-                    inner.editor.state().selection.as_ref(),
-                )
+                .table_overlays(state, resolved.as_ref())
                 .into_ffi()?)
         })
     }
@@ -378,14 +377,13 @@ impl Editor {
         page: u32,
     ) -> EditorResult<Vec<Complex<editor_view::TableOverlay>>> {
         self.with_inner(|inner| {
+            let state = inner.editor.state();
+            let view = state.view();
+            let resolved = state.selection.as_ref().and_then(|s| s.resolve(&view));
             Ok(inner
                 .editor
                 .view()
-                .page_table_overlays(
-                    &inner.editor.state().doc,
-                    page as usize,
-                    inner.editor.state().selection.as_ref(),
-                )
+                .page_table_overlays(state, page as usize, resolved.as_ref())
                 .into_ffi()?)
         })
     }
@@ -400,7 +398,7 @@ impl Editor {
 
     pub fn receive_remote_changeset(&self, payload: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            let css: Vec<editor_crdt::Changeset<editor_model::DocOp>> =
+            let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
                 editor_crdt::wire::decode(&payload[..])
                     .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             for changeset in css {
@@ -440,10 +438,11 @@ impl Editor {
 
     pub fn insert_template_fragment(&self, changesets: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            let (template_doc, _) = crate::graph::doc_from_changesets(changesets)?;
-            inner
-                .editor
-                .insert_template_fragment(template_doc.to_plain())?;
+            let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+                editor_crdt::wire::decode(&changesets[..])
+                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            let template = editor_state::State::from_changesets(css, None)?;
+            inner.editor.insert_template_fragment(template.to_plain())?;
             Ok(())
         })
     }
@@ -453,9 +452,23 @@ impl Editor {
             let heads_vec = editor_crdt::wire::decode_dots(&heads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
-            let graph = &inner.editor.state().graph;
-            let doc = editor_model::Doc::from_op_graph_at(graph, &heads_set)?;
-            Ok(doc.to_plain().into_ffi()?)
+            let state = inner.editor.state();
+            let graph = state.graph();
+            if let Some(missing) = heads_set.iter().find(|d| !graph.contains(d)) {
+                return Err(EditorError::General {
+                    msg: format!("unknown head: {missing:?}"),
+                });
+            }
+            let ancestry = graph.ancestry_of(&heads_set);
+            let ops = graph.topo_sort(&ancestry);
+            let subgraph =
+                editor_crdt::OpGraph::from_changesets(vec![editor_crdt::Changeset { ops }])?;
+            let projected = editor_state::ProjectedState::from_graph(subgraph).map_err(|e| {
+                EditorError::General {
+                    msg: format!("materialize projection failed: {e:?}"),
+                }
+            })?;
+            Ok(editor_state::to_plain(projected.projected()).into_ffi()?)
         })
     }
 
@@ -465,14 +478,14 @@ impl Editor {
     ) -> EditorResult<Option<Complex<editor_state::StableSelection>>> {
         self.with_inner(|inner| {
             let sel: editor_state::Selection = selection.from_ffi()?;
-            let doc = &inner.editor.state().doc;
-            if !position_is_addressable(&sel.anchor, doc)
-                || !position_is_addressable(&sel.head, doc)
+            let view = inner.editor.state().view();
+            if !position_is_addressable(&sel.anchor, &view)
+                || !position_is_addressable(&sel.head, &view)
             {
                 return Ok(None);
             }
             Ok(Some(
-                editor_state::StableSelection::capture(&sel, doc).into_ffi()?,
+                editor_state::StableSelection::capture(&sel, &view).into_ffi()?,
             ))
         })
     }
@@ -515,13 +528,13 @@ impl Editor {
     ) -> EditorResult<Vec<Complex<TrackedRangeEndpoints>>> {
         self.with_inner(|inner| {
             let position = position.from_ffi()?;
-            let doc = &inner.editor.state().doc;
+            let state = inner.editor.state();
             let ranges = inner
                 .editor
                 .tracked_ranges_containing_position(position, group.as_deref());
             let result: Vec<TrackedRangeEndpoints> = ranges
                 .iter()
-                .filter_map(|r| public_tracked_range_endpoints(doc, r))
+                .filter_map(|r| public_tracked_range_endpoints(state, r))
                 .collect();
             Ok(result.into_ffi()?)
         })
@@ -555,8 +568,10 @@ impl Editor {
     }
 
     pub fn prose_text(&self) -> EditorResult<String> {
-        use editor_state::DocProseExt;
-        self.with_inner(|inner| Ok(inner.editor.state().doc.prose().text().to_string()))
+        self.with_inner(|inner| {
+            let view = inner.editor.state().view();
+            Ok(editor_state::prose(&view).text().to_string())
+        })
     }
 
     pub fn prose_to_selection(
@@ -565,19 +580,19 @@ impl Editor {
         end: u32,
     ) -> EditorResult<Option<Complex<editor_state::Selection>>> {
         use editor_state::{
-            Affinity, DocProseExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+            Affinity, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
         };
 
         self.with_inner(|inner| {
-            let doc = &inner.editor.state().doc;
-            let prose = doc.prose();
+            let view = inner.editor.state().view();
+            let prose = editor_state::prose(&view);
             let Some(flat) = prose.to_flat_range((start as usize)..(end as usize)) else {
                 return Ok(None);
             };
-            let Some(anchor_rp) = ResolvedPosition::from_flat(doc, flat.start) else {
+            let Some(anchor_rp) = ResolvedPosition::from_flat(&view, flat.start) else {
                 return Ok(None);
             };
-            let Some(head_rp) = ResolvedPosition::from_flat(doc, flat.end) else {
+            let Some(head_rp) = ResolvedPosition::from_flat(&view, flat.end) else {
                 return Ok(None);
             };
 
@@ -589,12 +604,12 @@ impl Editor {
 
             let selection = Selection {
                 anchor: Position {
-                    node_id: anchor_rp.node_id(),
+                    node: anchor_rp.node(),
                     offset: anchor_rp.offset(),
                     affinity: anchor_aff,
                 },
                 head: Position {
-                    node_id: head_rp.node_id(),
+                    node: head_rp.node(),
                     offset: head_rp.offset(),
                     affinity: head_aff,
                 },
@@ -702,14 +717,8 @@ impl Editor {
     }
 }
 
-fn position_is_addressable(pos: &editor_state::Position, doc: &editor_model::Doc) -> bool {
-    let Some(entry) = doc.get_entry(pos.node_id) else {
-        return false;
-    };
-    match &entry.node {
-        editor_model::Node::Text(text) => pos.offset <= text.text.len(),
-        _ => pos.offset <= entry.children.len(),
-    }
+fn position_is_addressable(pos: &editor_state::Position, view: &editor_model::DocView) -> bool {
+    pos.resolve(view).is_some()
 }
 
 #[cfg(test)]
@@ -728,8 +737,8 @@ mod tests {
     #[test]
     fn ffi_selection_endpoints_resolves_and_forwards() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 1) -> (t, 8)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 1) -> (p1, 8)
         };
         let editor = make_ffi_editor(initial);
         let result = editor.selection_endpoints().expect("ffi call returns Ok");
@@ -742,8 +751,8 @@ mod tests {
     #[test]
     fn ffi_selection_endpoints_collapsed_is_none() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let editor = make_ffi_editor(initial);
         let result = editor.selection_endpoints().expect("ffi call returns Ok");
@@ -753,8 +762,8 @@ mod tests {
     #[test]
     fn ffi_selection_hit_test_resolves_and_forwards() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 0) -> (t, 5)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let editor = make_ffi_editor(initial);
         let endpoints = editor
@@ -775,8 +784,8 @@ mod tests {
     #[test]
     fn copy_selection_returns_payload_for_text_range() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let editor = make_ffi_editor(state);
         let payload = editor
@@ -790,8 +799,8 @@ mod tests {
     #[test]
     fn copy_selection_returns_none_for_collapsed() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let editor = make_ffi_editor(state);
         assert!(
@@ -805,8 +814,8 @@ mod tests {
     #[test]
     fn ffi_cursor_hit_test_resolves_and_forwards() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let editor = make_ffi_editor(initial);
         let cursor = editor
@@ -830,7 +839,7 @@ mod tests {
     #[test]
     fn ffi_selection_returns_none_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -844,7 +853,7 @@ mod tests {
     #[test]
     fn ffi_cursor_returns_none_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -855,7 +864,7 @@ mod tests {
     #[test]
     fn ffi_copy_selection_returns_none_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -866,7 +875,7 @@ mod tests {
     #[test]
     fn ffi_selection_endpoints_returns_none_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -877,7 +886,7 @@ mod tests {
     #[test]
     fn ffi_modifier_state_returns_none_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -890,9 +899,9 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 styles { base: "기본" [font_size(1600), block_gap(120)] }
-                root @base [] { p: paragraph { t1: text("hello") } }
+                root @base [] { p: paragraph { text("hello") } }
             }
-            selection: (t1, 0)
+            selection: (p, 0)
         };
         let editor = make_ffi_editor(initial);
 
@@ -905,7 +914,7 @@ mod tests {
     #[test]
     fn ffi_block_state_returns_none_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -916,16 +925,16 @@ mod tests {
     #[test]
     fn ffi_last_history_tag_reports_repaste_as_text_availability() {
         let (source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = editor_clipboard::Slice::extract(&source)
             .unwrap()
             .to_payload();
 
         let (initial, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let editor = make_ffi_editor(initial);
         let expected_text = payload.text.clone();
@@ -948,14 +957,14 @@ mod tests {
 
         assert!(matches!(
             editor.last_history_tag().expect("ffi call returns Ok"),
-            Some(editor_transaction::HistoryTag::PasteHtml { plain_text }) if plain_text == expected_text
+            Some(editor_common::HistoryTag::PasteHtml { plain_text, .. }) if plain_text == expected_text
         ));
     }
 
     #[test]
     fn ffi_external_elements_returns_empty_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -977,7 +986,7 @@ mod tests {
     #[test]
     fn ffi_selection_hit_test_returns_false_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -993,7 +1002,7 @@ mod tests {
     #[test]
     fn ffi_cursor_hit_test_returns_false_for_no_selection_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let editor = make_ffi_editor(initial);
@@ -1011,9 +1020,9 @@ mod tests {
         use editor_core::{Message, SelectionOp};
         use editor_state::{Position, Selection};
 
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
         };
         let editor = make_ffi_editor(initial);
 
@@ -1028,7 +1037,7 @@ mod tests {
             "Unset must clear selection through FFI",
         );
 
-        let new_sel = Selection::collapsed(Position::new(t1, 1));
+        let new_sel = Selection::collapsed(Position::new(p1, 1));
         editor
             .enqueue(Message::Selection {
                 op: SelectionOp::Set { selection: new_sel },
@@ -1045,8 +1054,8 @@ mod tests {
     #[test]
     fn ffi_can_returns_true_for_insertion_with_selection() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let msg = editor_core::Message::Insertion {
@@ -1059,8 +1068,8 @@ mod tests {
     #[test]
     fn ffi_can_returns_false_for_undo_empty_history() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let msg = editor_core::Message::History {
@@ -1072,12 +1081,12 @@ mod tests {
 
     #[test]
     fn ffi_can_returns_false_for_same_selection_set() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let editor = make_ffi_editor(initial);
-        let same = editor_state::Selection::collapsed(editor_state::Position::new(t1, 2));
+        let same = editor_state::Selection::collapsed(editor_state::Position::new(p1, 2));
         let msg = editor_core::Message::Selection {
             op: editor_core::SelectionOp::Set { selection: same },
         };
@@ -1088,8 +1097,8 @@ mod tests {
     #[test]
     fn ffi_can_does_not_mutate_observable_state() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
@@ -1108,9 +1117,9 @@ mod tests {
 
     #[test]
     fn ffi_freeze_selection_returns_stable_selection() {
-        let (initial, _t1) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 1) -> (t1, 8)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 1) -> (p1, 8)
         };
         let editor = make_ffi_editor(initial.clone());
         let sel = initial.selection.unwrap();
@@ -1144,9 +1153,9 @@ mod tests {
 
     #[test]
     fn ffi_tracked_ranges_exports_resolved_endpoints_after_history_remap() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
-            selection: (t1, 4) -> (t1, 6)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
+            selection: (p1, 4) -> (p1, 6)
         };
         let editor = make_ffi_editor(initial.clone());
         let stable = editor
@@ -1175,8 +1184,8 @@ mod tests {
                 editor_core::Message::Selection {
                     op: editor_core::SelectionOp::Set {
                         selection: editor_state::Selection::new(
-                            editor_state::Position::new(t1, 0),
-                            editor_state::Position::new(t1, 7),
+                            editor_state::Position::new(p1, 0),
+                            editor_state::Position::new(p1, 7),
                         ),
                     },
                 }
@@ -1211,7 +1220,7 @@ mod tests {
                 editor_core::Message::Selection {
                     op: editor_core::SelectionOp::Set {
                         selection: editor_state::Selection::collapsed(editor_state::Position::new(
-                            t1, 6,
+                            p1, 6,
                         )),
                     },
                 }
@@ -1243,9 +1252,9 @@ mod tests {
 
     #[test]
     fn ffi_tracked_ranges_omits_unresolved_ranges() {
-        let (state_a, _t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+        let (state_a, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let editor_a = make_ffi_editor(state_a.clone());
         let stable = editor_a
@@ -1254,8 +1263,8 @@ mod tests {
             .expect("valid selection");
 
         let (state_b, ..) = state! {
-            doc { root { paragraph { t2: text("world") } } }
-            selection: (t2, 0)
+            doc { root { p2: paragraph { text("") } } }
+            selection: (p2, 0)
         };
         let editor_b = make_ffi_editor(state_b);
         editor_b
@@ -1280,13 +1289,13 @@ mod tests {
 
     #[test]
     fn ffi_freeze_selection_returns_none_for_unresolvable() {
-        let (initial, _t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
-        let bogus = editor_model::NodeId::new();
+        let bogus = editor_crdt::Dot::new(9999, 0);
         let bogus_sel = editor_state::Selection::new(
             editor_state::Position::new(bogus, 0),
             editor_state::Position::new(bogus, 0),
@@ -1306,8 +1315,8 @@ mod tests {
         use editor_core::{DndOp, EditorEvent, ExternalDndPayloadKind, InputModifiers, Message};
 
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let editor = make_ffi_editor(initial);
         let cursor = editor
@@ -1344,9 +1353,9 @@ mod tests {
 
     #[test]
     fn ffi_tracked_ranges_at_returns_hits() {
-        let (initial, _t1) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let editor = make_ffi_editor(initial.clone());
         let sel = initial.selection.unwrap();
@@ -1391,8 +1400,8 @@ mod tests {
     fn ffi_export_page_vector_returns_nonempty_bytes() {
         // export 결과가 비어있지 않은 바이너리여야 호스트가 파일로 저장할 수 있다.
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor
@@ -1405,8 +1414,8 @@ mod tests {
     fn ffi_export_page_vector_starts_with_magic() {
         // TVE1(0x3156_4554) magic으로 시작해야 외부 변환기가 포맷을 식별할 수 있다.
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor
@@ -1418,15 +1427,15 @@ mod tests {
 
     #[test]
     fn ffi_prose_to_selection_within_single_paragraph() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
         let sel = editor.prose_to_selection(0, 5).expect("ok").expect("some");
         assert_eq!(
-            sel.anchor.node_id, sel.head.node_id,
+            sel.anchor.node, sel.head.node,
             "single-block range must share nodeId"
         );
         assert_eq!(
@@ -1443,29 +1452,29 @@ mod tests {
             editor_state::Affinity::Upstream
         ));
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
     fn ffi_prose_to_selection_handles_multibyte_codepoints() {
         // "한글" → 2 codepoints, "ñ" → 1 codepoint, total 3.
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("한글ñ") } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("한글ñ") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
         let sel = editor.prose_to_selection(0, 3).expect("ok").expect("some");
         assert_eq!(sel.head.offset - sel.anchor.offset, 3, "3 codepoints");
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
     fn ffi_prose_to_selection_empty_range_is_collapsed() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
@@ -1475,35 +1484,35 @@ mod tests {
             "empty range must produce collapsed selection (anchor==head incl. affinity)"
         );
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
     fn ffi_prose_to_selection_out_of_range_returns_none() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
         let sel = editor.prose_to_selection(0, 5).expect("ok");
         assert!(sel.is_none(), "OOB range returns None");
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
     fn ffi_prose_to_selection_inverted_returns_none() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
         let sel = editor.prose_to_selection(3, 1).expect("ok");
         assert!(sel.is_none(), "inverted range returns None");
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
@@ -1511,15 +1520,15 @@ mod tests {
         // "a😀b" — 3 codepoints, 6 UTF-8 bytes ('a'=1, '😀'=4, 'b'=1).
         // Position.offset is a codepoint index (Text::len() == chars().count()), so
         // the full range 0..3 spans 3 codepoints and the delta must be 3.
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("a😀b") } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("a😀b") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
         let sel = editor.prose_to_selection(0, 3).expect("ok").expect("some");
         assert_eq!(
-            sel.anchor.node_id, sel.head.node_id,
+            sel.anchor.node, sel.head.node,
             "single-block range must share nodeId"
         );
         assert_eq!(
@@ -1530,39 +1539,39 @@ mod tests {
 
         // 0..2 covers "a" and "😀" — 2 codepoints
         let sel2 = editor.prose_to_selection(0, 2).expect("ok").expect("some");
-        assert_eq!(sel2.anchor.node_id, sel2.head.node_id);
+        assert_eq!(sel2.anchor.node, sel2.head.node);
         assert_eq!(
             sel2.head.offset - sel2.anchor.offset,
             2,
             "offset unit is codepoints: 'a'(1) + '😀'(1) = 2"
         );
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
     fn ffi_prose_to_selection_across_blocks() {
         // Two paragraphs: prose text is "a\n\nb" — 4 codepoints across two blocks.
-        // anchor resolves to t1 (first paragraph text node) and head to t2 (second),
+        // anchor resolves to p1 (first paragraph text node) and head to p2 (second),
         // so anchor.node_id != head.node_id.
-        let (initial, t1, _t2) = state! {
+        let (initial, p1, _p2) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
-                    paragraph { t2: text("b") }
+                    p1: paragraph { text("a") }
+                    p2: paragraph { text("b") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
         let sel = editor.prose_to_selection(0, 4).expect("ok").expect("some");
         assert_ne!(
-            sel.anchor.node_id, sel.head.node_id,
+            sel.anchor.node, sel.head.node,
             "cross-block range must have distinct anchor/head nodeIds"
         );
 
-        let _ = t1;
+        let _ = p1;
     }
 
     #[test]
@@ -1570,11 +1579,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("안녕") }
-                    paragraph { _t2: text("Hello") }
+                    p1: paragraph { text("안녕") }
+                    p2: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
@@ -1596,8 +1605,8 @@ mod tests {
     fn ffi_export_page_vector_has_valid_dimensions() {
         // width/height가 양수여야 외부 변환기가 페이지 크기를 올바르게 재현할 수 있다.
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
@@ -1609,9 +1618,9 @@ mod tests {
     #[test]
     fn ffi_export_page_vector_shape_produces_ops() {
         // horizontal_rule이 FillPath/StrokePath op으로 수집되어야 외부 변환기가 재현 가능하다.
-        let (initial, _t) = state! {
-            doc { root { paragraph { t: text("a") } horizontal_rule } }
-            selection: (t, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("a") } horizontal_rule } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
@@ -1624,12 +1633,12 @@ mod tests {
     #[test]
     fn ffi_export_page_vector_table_border_produces_ops() {
         // table border가 벡터 op으로 수집되어야 외부 변환기가 재현 가능하다.
-        let (initial, _t) = state! {
+        let (initial, _p1) = state! {
             doc { root {
-                paragraph { t: text("a") }
+                p1: paragraph { text("a") }
                 table { table_row { table_cell { paragraph } table_cell { paragraph } } }
             } }
-            selection: (t, 0)
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
@@ -1643,8 +1652,8 @@ mod tests {
     fn ffi_export_page_vector_text_page_produces_valid_binary() {
         // 텍스트 페이지도 글리프 outline 기반 벡터 op와 유효한 헤더를 포함한 바이너리를 반환해야 한다.
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
@@ -1691,13 +1700,13 @@ mod tests {
     fn ffi_export_page_vector_image_node_emits_no_image_ops() {
         // image 노드는 headless export에서 픽셀 데이터가 없으므로 tag=2 Image op를 방출하지 않아야 한다.
         // horizontal_rule을 함께 배치해 op_count > 0 조건을 보장한다 (비-공허 검증).
-        let (initial, _t) = state! {
+        let (initial, _p1) = state! {
             doc { root {
-                paragraph { t: text("a") }
+                p1: paragraph { text("a") }
                 image
                 horizontal_rule
             } }
-            selection: (t, 0)
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
@@ -1712,12 +1721,12 @@ mod tests {
     fn ffi_export_page_vector_emoji_text_emits_no_image_ops() {
         // 이모지 텍스트는 VectorExport 모드에서 draw_glyph_run으로 처리되며 tag=2 Image op를 방출하지 않아야 한다.
         // horizontal_rule을 함께 배치해 op_count > 0 조건을 보장한다 (비-공허 검증).
-        let (initial, _t) = state! {
+        let (initial, _p1) = state! {
             doc { root {
-                paragraph { t: text("Hello 😀 World 🎉") }
+                p1: paragraph { text("Hello 😀 World 🎉") }
                 horizontal_rule
             } }
-            selection: (t, 0)
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");
@@ -1732,12 +1741,12 @@ mod tests {
     fn ffi_export_page_vector_ruby_text_emits_no_image_ops() {
         // ruby 어노테이션이 있는 텍스트도 headless export에서 tag=2 Image op를 방출하지 않아야 한다.
         // horizontal_rule을 함께 배치해 op_count > 0 조건을 보장한다 (비-공허 검증).
-        let (initial, _t) = state! {
+        let (initial, _p1) = state! {
             doc { root {
-                paragraph { t: text("漢字") [ruby(text: "かんじ".into())] }
+                p1: paragraph { text("漢字") [ruby(text: "かんじ".into())] }
                 horizontal_rule
             } }
-            selection: (t, 0)
+            selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor.export_page_vector(0, 1.0).expect("must return Ok");

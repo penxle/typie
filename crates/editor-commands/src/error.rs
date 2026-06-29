@@ -1,4 +1,4 @@
-use editor_model::NodeId;
+use editor_crdt::Dot;
 use editor_transaction::StepError;
 
 #[derive(Debug, thiserror::Error)]
@@ -8,17 +8,17 @@ pub enum CommandError {
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
     #[error("node not found: {0:?}")]
-    NodeNotFound(NodeId),
+    NodeNotFound(Dot),
     #[error("node has no parent: {0:?}")]
-    NoParent(NodeId),
+    NoParent(Dot),
     #[error("corrupted document: {0}")]
     Corrupted(String),
     #[error("expected element node, got {0:?}")]
-    ExpectedElementNode(NodeId),
+    ExpectedElementNode(Dot),
 }
 
 impl CommandError {
-    pub fn orphan_child(child: NodeId, parent: NodeId) -> Self {
+    pub fn orphan_child(child: Dot, parent: Dot) -> Self {
         Self::Corrupted(format!(
             "node {child:?} not found in children of {parent:?}"
         ))

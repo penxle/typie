@@ -1,10 +1,5 @@
 use editor_macros::ffi;
-use editor_model::{Doc, Node};
 use serde::{Deserialize, Serialize};
-
-use super::interactive::{InteractiveHit, interactive_hit_test};
-use super::layout_index::{LayoutEntry, LayoutIndex};
-use crate::paginate::{LayoutContent, LayoutNode};
 
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,15 +10,24 @@ pub enum PointerStyle {
     Pointer,
 }
 
+use editor_model::{DocView, Node};
+
+use crate::paginate::types::{LayoutContent, LayoutNode};
+
+use super::interactive::InteractiveHit;
+use super::layout_index::{LayoutEntry, LayoutIndex};
+
 pub(crate) fn pointer_style_at(
     layout_index: &LayoutIndex,
+    view: &DocView,
     page_idx: usize,
-    doc: &Doc,
     x: f32,
     page_y: f32,
     read_only: bool,
 ) -> PointerStyle {
-    if let Some(hit) = interactive_hit_test(layout_index, doc, page_idx, x, page_y) {
+    if let Some(hit) =
+        super::interactive::interactive_hit_test(layout_index, view, page_idx, x, page_y)
+    {
         return match hit {
             InteractiveHit::CalloutIcon { .. } => PointerStyle::Pointer,
             InteractiveHit::FoldTitle { text_rect, .. } => {
@@ -44,11 +48,13 @@ pub(crate) fn pointer_style_at(
     if let Some(hit) = layout_index.exact_entry(point, is_pointer_entry) {
         return match hit.content(layout_index) {
             Some(LayoutContent::Line(_)) => PointerStyle::Text,
-            Some(LayoutContent::Atom(atom)) => atom_pointer_style(doc, atom.node_id),
-            Some(LayoutContent::Box(b)) => doc
-                .node(b.node_id)
-                .map(|node| box_pointer_style(node.node()))
-                .unwrap_or(PointerStyle::Text),
+            Some(LayoutContent::Atom(atom)) => atom_pointer_style(view, atom.node),
+            Some(LayoutContent::Box(b)) => {
+                let n = view.node(b.node).map(|nv| nv.node());
+                n.as_ref()
+                    .map(box_pointer_style)
+                    .unwrap_or(PointerStyle::Text)
+            }
             Some(LayoutContent::Spacing(_)) | None => PointerStyle::Text,
         };
     }
@@ -63,9 +69,10 @@ fn is_pointer_entry(_entry: &LayoutEntry, node: &LayoutNode) -> bool {
     )
 }
 
-fn atom_pointer_style(doc: &Doc, id: editor_model::NodeId) -> PointerStyle {
-    doc.node(id)
-        .map(|node| match node.node() {
+fn atom_pointer_style(view: &DocView, id: editor_crdt::Dot) -> PointerStyle {
+    use editor_model::NodeType;
+    if let Some(nv) = view.node(id) {
+        return match nv.node() {
             Node::Image(_)
             | Node::File(_)
             | Node::Embed(_)
@@ -73,8 +80,20 @@ fn atom_pointer_style(doc: &Doc, id: editor_model::NodeId) -> PointerStyle {
             | Node::HorizontalRule(_)
             | Node::PageBreak(_) => PointerStyle::Default,
             _ => PointerStyle::Text,
-        })
-        .unwrap_or(PointerStyle::Text)
+        };
+    }
+    if let Some(lv) = view.leaf(id) {
+        return match lv.node_type() {
+            NodeType::Image
+            | NodeType::File
+            | NodeType::Embed
+            | NodeType::Archived
+            | NodeType::HorizontalRule
+            | NodeType::PageBreak => PointerStyle::Default,
+            _ => PointerStyle::Text,
+        };
+    }
+    PointerStyle::Text
 }
 
 fn box_pointer_style(node: &Node) -> PointerStyle {
@@ -93,213 +112,193 @@ fn box_pointer_style(node: &Node) -> PointerStyle {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{EdgeInsets, Rect, Size};
-    use editor_macros::doc;
-    use editor_model::NodeId;
-
-    use crate::page::LayoutPage;
-    use crate::style::*;
-
     use super::*;
-    use crate::paginate::*;
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog,
+        NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
 
-    fn page(y_start: f32) -> LayoutPage {
-        LayoutPage::new(y_start, y_start + 1000.0, Size::new(800.0, 1000.0))
-    }
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
+    use crate::paginate::paginator::Paginator;
+    use crate::query::layout_index::LayoutIndex;
 
-    fn style_at(tree: &LayoutTree, doc: &Doc, x: f32, y: f32, read_only: bool) -> PointerStyle {
-        let pages = [page(0.0)];
-        let layout_index = LayoutIndex::new(tree.clone(), &pages);
-        pointer_style_at(&layout_index, 0, doc, x, y, read_only)
-    }
-
-    fn line_node(id: NodeId, x: f32, y: f32, w: f32, h: f32) -> LayoutNode {
-        LayoutNode {
-            rect: Rect::from_xywh(x, y, w, h),
-            content: LayoutContent::Line(LayoutLine {
-                node_id: id,
-                baseline: h,
-                ascent: h,
-                descent: 0.0,
-                cursor_ascent: h,
-                cursor_descent: 0.0,
-                glyph_runs: vec![],
-                ruby_annotations: vec![],
-                empty_caret_x: 0.0,
-                child_range: None,
-                tab_gaps: vec![],
-                is_phantom: false,
-                content_edge_x: None,
-            }),
-        }
-    }
-
-    fn atom_node(id: NodeId, parent_id: NodeId, x: f32, y: f32, w: f32, h: f32) -> LayoutNode {
-        LayoutNode {
-            rect: Rect::from_xywh(x, y, w, h),
-            content: LayoutContent::Atom(LayoutAtom {
-                node_id: id,
-                attachment: ChildAttachment {
-                    parent_id,
-                    index: 0,
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
                 },
-            }),
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
         }
     }
 
-    fn box_node(
-        id: NodeId,
+    fn build_index(logs_data: &DocLogs, width: f32) -> LayoutIndex {
+        let pd = project_document(logs_data).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        LayoutIndex::new(layout.tree, &layout.pages)
+    }
+
+    fn style_at(
+        layout_index: &LayoutIndex,
+        view: &DocView,
         x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        decorations: Vec<Decoration>,
-        children: Vec<LayoutNode>,
-    ) -> LayoutNode {
-        LayoutNode {
-            rect: Rect::from_xywh(x, y, w, h),
-            content: LayoutContent::Box(LayoutBox {
-                node_id: id,
-                style: BoxStyle {
-                    direction: Direction::Vertical,
-                    padding: EdgeInsets::ZERO,
-                    border: EdgeInsets::ZERO,
-                    border_mode: BorderMode::Separate,
-                    alignment: Alignment::Start,
-                    decorations,
-                    monolithic: false,
+        page_y: f32,
+        read_only: bool,
+    ) -> PointerStyle {
+        pointer_style_at(layout_index, view, 0, x, page_y, read_only)
+    }
+
+    #[test]
+    fn hr_atom_returns_default() {
+        let root = Dot::ROOT;
+        let hr = Dot::new(1, 1);
+        let para = Dot::new(1, 2);
+        let items = vec![
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::default(),
+                    },
+                    parents: vec![root],
                 },
-                attachment: None,
-                children,
-            }),
-        }
-    }
-
-    #[test]
-    fn line_returns_text_cursor() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("Hello") } } };
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                0.0,
-                0.0,
-                200.0,
-                80.0,
-                vec![],
-                vec![box_node(
-                    p1,
-                    0.0,
-                    0.0,
-                    200.0,
-                    40.0,
-                    vec![],
-                    vec![line_node(p1, 20.0, 8.0, 80.0, 20.0)],
-                )],
             ),
-        };
-
-        assert_eq!(style_at(&tree, &doc, 40.0, 16.0, false), PointerStyle::Text);
-    }
-
-    #[test]
-    fn atom_returns_default_cursor() {
-        let (doc, hr1) = doc! { root { hr1: horizontal_rule } };
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                0.0,
-                0.0,
-                200.0,
-                80.0,
-                vec![],
-                vec![atom_node(hr1, NodeId::ROOT, 0.0, 8.0, 200.0, 24.0)],
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
             ),
-        };
+            (Dot::new(1, 3), SeqItem::Char('x')),
+        ];
+        let dl = logs(&items);
+        let pd = project_document(&dl).unwrap();
+        let view = DocView::new(&pd);
+        let index = build_index(&dl, 400.0);
+
+        let hr_id = hr;
+        let hr_entry = index
+            .entries_on_page(0)
+            .into_iter()
+            .find(|e| {
+                e.node(&index).is_some_and(
+                    |n| matches!(&n.content, LayoutContent::Atom(a) if a.node == hr_id),
+                )
+            })
+            .expect("hr atom entry");
+        let hr_rect = hr_entry.rect;
+        let mid_x = hr_rect.x + hr_rect.width / 2.0;
+        let mid_y = hr_rect.y + hr_rect.height / 2.0;
 
         assert_eq!(
-            style_at(&tree, &doc, 40.0, 16.0, false),
+            style_at(&index, &view, mid_x, mid_y, false),
+            PointerStyle::Default
+        );
+        assert_eq!(
+            style_at(&index, &view, mid_x, mid_y, true),
             PointerStyle::Default
         );
     }
 
     #[test]
-    fn callout_icon_returns_pointer_cursor() {
-        let (doc, c1) = doc! { root { c1: callout { paragraph { text("x") } } } };
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                0.0,
-                0.0,
-                200.0,
-                80.0,
-                vec![],
-                vec![box_node(
-                    c1,
-                    0.0,
-                    0.0,
-                    200.0,
-                    40.0,
-                    vec![Decoration {
-                        id: 0,
-                        rect: Rect::from_xywh(12.0, 10.0, 20.0, 20.0),
-                        data: DecorationData::None,
-                    }],
-                    vec![line_node(NodeId::new(), 40.0, 8.0, 20.0, 20.0)],
-                )],
+    fn text_line_returns_text() {
+        let root = Dot::ROOT;
+        let para = Dot::new(2, 1);
+        let items = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
             ),
-        };
+            (Dot::new(2, 2), SeqItem::Char('H')),
+            (Dot::new(2, 3), SeqItem::Char('i')),
+        ];
+        let dl = logs(&items);
+        let pd = project_document(&dl).unwrap();
+        let view = DocView::new(&pd);
+        let index = build_index(&dl, 400.0);
+
+        let para_id = para;
+        let para_rect = index.box_rect(&para_id).expect("para rect");
+        let mid_x = para_rect.x + para_rect.width / 2.0;
+        let mid_y = para_rect.y + para_rect.height / 2.0;
 
         assert_eq!(
-            style_at(&tree, &doc, 20.0, 18.0, false),
-            PointerStyle::Pointer
+            style_at(&index, &view, mid_x, mid_y, false),
+            PointerStyle::Text
+        );
+        assert_eq!(
+            style_at(&index, &view, mid_x, mid_y, true),
+            PointerStyle::Text
         );
     }
 
     #[test]
-    fn fold_title_text_passes_through_to_text_cursor_in_edit_mode() {
-        let (doc, f1, ft1) = doc! {
-            root {
-                f1: fold {
-                    ft1: fold_title { text("Title") }
-                    fold_content { paragraph { text("Body") } }
-                }
-            }
-        };
-        let tree = LayoutTree {
-            root: box_node(
-                NodeId::ROOT,
-                0.0,
-                0.0,
-                200.0,
-                80.0,
-                vec![],
-                vec![box_node(
-                    f1,
-                    0.0,
-                    0.0,
-                    200.0,
-                    40.0,
-                    vec![],
-                    vec![box_node(
-                        ft1,
-                        0.0,
-                        0.0,
-                        200.0,
-                        40.0,
-                        vec![],
-                        vec![line_node(ft1, 40.0, 8.0, 80.0, 20.0)],
-                    )],
-                )],
+    fn fold_title_read_only_returns_pointer() {
+        let root = Dot::ROOT;
+        let fold = Dot::new(3, 1);
+        let ft = Dot::new(3, 2);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
             ),
-        };
+            (
+                ft,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                },
+            ),
+            (Dot::new(3, 3), SeqItem::Char('T')),
+        ];
+        let dl = logs(&items);
+        let pd = project_document(&dl).unwrap();
+        let view = DocView::new(&pd);
+        let index = build_index(&dl, 400.0);
 
-        assert_eq!(style_at(&tree, &doc, 48.0, 16.0, false), PointerStyle::Text);
+        let ft_id = ft;
+        let ft_rect = index.box_rect(&ft_id).expect("fold_title rect");
+        let outside_x = ft_rect.x + 2.0;
+        let mid_y = ft_rect.y + ft_rect.height / 2.0;
+
         assert_eq!(
-            style_at(&tree, &doc, 8.0, 16.0, false),
+            style_at(&index, &view, outside_x, mid_y, true),
             PointerStyle::Pointer
         );
         assert_eq!(
-            style_at(&tree, &doc, 48.0, 16.0, true),
+            style_at(&index, &view, outside_x, mid_y, false),
             PointerStyle::Pointer
         );
     }

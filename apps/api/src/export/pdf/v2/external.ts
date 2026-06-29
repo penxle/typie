@@ -13,7 +13,7 @@ export function mapExternalElement(e: EngineExternalElement): ExternalElement {
           : { type: 'archived' as const, id: d.id ?? undefined };
   return {
     pageIdx: e.page_idx,
-    nodeId: e.node_id,
+    nodeId: e.node,
     bounds: { x: e.bounds.x, y: e.bounds.y, width: e.bounds.width, height: e.bounds.height },
     data,
   };

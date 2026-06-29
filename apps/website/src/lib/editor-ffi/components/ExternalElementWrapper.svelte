@@ -43,7 +43,7 @@
 
       debounceTimer = setTimeout(() => {
         reportedHeight = height;
-        editor.setExternalElementHeight(element.node_id, height);
+        editor.setExternalElementHeight(element.node, height);
         debounceTimer = null;
       }, 100);
     });
@@ -72,7 +72,7 @@
     visibility: reportedHeight === undefined ? 'hidden' : 'visible',
   })}
   data-external-element
-  data-node-id={element.node_id}
+  data-node-id={element.node}
 >
   <div bind:this={containerEl} class={css({ width: 'full' })}>
     {@render children()}

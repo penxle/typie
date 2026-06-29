@@ -657,17 +657,17 @@ mod tests {
     fn map_imbl_vector() {
         let ct = empty_custom_types();
         let kt = empty_known_types();
-        assert_eq!(map_type("imbl::Vector<NodeId>", &ct, &kt), "List<NodeId>");
+        assert_eq!(map_type("imbl::Vector<Dot>", &ct, &kt), "List<Dot>");
     }
 
     #[test]
     fn map_custom_type() {
         let mut ct = HashMap::new();
-        ct.insert("NodeId".into(), "String".into());
+        ct.insert("Dot".into(), "String".into());
         let kt = empty_known_types();
-        assert_eq!(map_type("NodeId", &ct, &kt), "String");
-        assert_eq!(map_type("Option<NodeId>", &ct, &kt), "String?");
-        assert_eq!(map_type("Vec<NodeId>", &ct, &kt), "List<String>");
+        assert_eq!(map_type("Dot", &ct, &kt), "String");
+        assert_eq!(map_type("Option<Dot>", &ct, &kt), "String?");
+        assert_eq!(map_type("Vec<Dot>", &ct, &kt), "List<String>");
     }
 
     #[test]
@@ -827,7 +827,7 @@ mod tests {
     #[test]
     fn generate_struct_with_custom_type() {
         let mut ctx = test_context(&[]);
-        ctx.custom_types.insert("NodeId".into(), "String".into());
+        ctx.custom_types.insert("Dot".into(), "String".into());
         let meta = FfiMeta {
             name: "Position".into(),
             serde_rename_all: Some("snake_case".into()),
@@ -836,7 +836,7 @@ mod tests {
                     FfiField {
                         name: "node_id".into(),
                         serde_rename: None,
-                        ty: "NodeId".into(),
+                        ty: "Dot".into(),
                         has_serde_default: false,
                         ffi_default_override: None,
                     },

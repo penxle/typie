@@ -1,25 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
 import { openLinkEditorFromTooltip } from './link';
 
+const caret = { node: 't1', offset: 0, affinity: 'downstream' as const };
+const point = { page: 0, x: 25, y: 25 };
+
 describe('openLinkEditorFromTooltip', () => {
   it('extends the selection over the whole link span and opens the toolbar editor', async () => {
     const span = {
-      anchor: { node_id: 't1', offset: 0 },
-      head: { node_id: 't2', offset: 5 },
+      anchor: { node: 't1', offset: 0, affinity: 'downstream' as const },
+      head: { node: 't2', offset: 5, affinity: 'downstream' as const },
     };
     const editor = {
       enqueue: vi.fn(),
       flush: vi.fn(),
       focus: vi.fn(),
       modifierSpanSelection: vi.fn(() => span),
+      selection: { anchor: caret, head: caret },
     };
     const ctx = { linkEditorOpen: false };
     const closeTooltip = vi.fn();
 
-    const opened = await openLinkEditorFromTooltip({ closeTooltip, ctx, editor, nodeId: 't1' });
+    const opened = await openLinkEditorFromTooltip({ closeTooltip, ctx, editor, point });
 
     expect(opened).toBe(true);
-    expect(editor.modifierSpanSelection).toHaveBeenCalledWith({ node_id: 't1', offset: 0 }, 'link');
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 25, y: 25 } });
+    expect(editor.modifierSpanSelection).toHaveBeenCalledWith(caret, 'link');
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set', selection: span } });
     expect(editor.flush).toHaveBeenCalled();
     expect(closeTooltip).toHaveBeenCalled();
@@ -32,12 +37,12 @@ describe('openLinkEditorFromTooltip', () => {
       flush: vi.fn(),
       focus: vi.fn(),
       modifierSpanSelection: vi.fn(),
+      selection: { anchor: caret, head: caret },
     };
     const ctx = { linkEditorOpen: false };
 
-    await openLinkEditorFromTooltip({ closeTooltip: vi.fn(), ctx, editor, nodeId: 't1' });
+    await openLinkEditorFromTooltip({ closeTooltip: vi.fn(), ctx, editor, point });
 
-    const caret = { node_id: 't1', offset: 0 };
     expect(editor.enqueue).toHaveBeenCalledWith({
       type: 'selection',
       op: { type: 'set', selection: { anchor: caret, head: caret } },
@@ -48,7 +53,7 @@ describe('openLinkEditorFromTooltip', () => {
     const ctx = { linkEditorOpen: false };
     const closeTooltip = vi.fn();
 
-    const opened = await openLinkEditorFromTooltip({ closeTooltip, ctx, editor: undefined, nodeId: 't1' });
+    const opened = await openLinkEditorFromTooltip({ closeTooltip, ctx, editor: undefined, point });
 
     expect(opened).toBe(false);
     expect(closeTooltip).not.toHaveBeenCalled();

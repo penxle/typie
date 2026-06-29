@@ -1,170 +1,250 @@
 use std::collections::HashSet;
 
-use editor_model::{Doc, Node, NodeId, NodeType, Subtree};
+use editor_crdt::Dot;
+use editor_model::{DocView, NodeType, Subtree};
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, fulfill, prune};
+use editor_transaction::{Transaction, fulfill};
 
 use crate::{CommandError, CommandResult};
 
-pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: NodeId) -> CommandResult {
-    let doc = tr.doc();
-    let list_item = doc
-        .node(list_item_id)
-        .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    if !matches!(list_item.node(), Node::ListItem(_)) {
-        return Ok(false);
-    }
+fn is_list_type(ty: NodeType) -> bool {
+    matches!(ty, NodeType::BulletList | NodeType::OrderedList)
+}
 
-    let list = list_item
-        .parent()
-        .ok_or(CommandError::NoParent(list_item_id))?;
-    let list_id = list.id();
-    let list_type = list.as_type();
-    if !matches!(list_type, NodeType::BulletList | NodeType::OrderedList) {
-        return Ok(false);
-    }
+pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> CommandResult {
+    let (
+        list_id,
+        list_type,
+        owner_id,
+        owner_is_list_item,
+        list_index,
+        list_item_index,
+        after_items,
+        lifted_paragraph_id,
+        existing_sublist_id,
+    ) = {
+        let view = tr.state().view();
+        let list_item = view
+            .node(list_item_id)
+            .ok_or(CommandError::NodeNotFound(list_item_id))?;
+        if list_item.node_type() != NodeType::ListItem {
+            return Ok(false);
+        }
 
-    let owner = list.parent().ok_or(CommandError::NoParent(list_id))?;
-    let owner_id = owner.id();
-    let owner_is_list_item = matches!(owner.node(), Node::ListItem(_));
+        let list = list_item
+            .parent()
+            .ok_or(CommandError::NoParent(list_item_id))?;
+        let list_id = list.id();
+        let list_type = list.node_type();
+        if !is_list_type(list_type) {
+            return Ok(false);
+        }
 
-    let list_item_index = list_item
-        .index()
-        .ok_or(CommandError::orphan_child(list_item_id, list_id))?;
-    let list_index = list
-        .index()
-        .ok_or(CommandError::orphan_child(list_id, owner_id))?;
+        let owner = list.parent().ok_or(CommandError::NoParent(list_id))?;
+        let owner_id = owner.id();
+        let owner_is_list_item = owner.node_type() == NodeType::ListItem;
 
-    let after_items: Vec<NodeId> = list
-        .children()
-        .skip(list_item_index + 1)
-        .map(|c| c.id())
-        .collect();
+        let list_item_index = list_item
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(list_item_id, list_id))?;
+        let list_index = list
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(list_id, owner_id))?;
 
-    let lifted_paragraph_id: Option<NodeId> = list_item.first_child().map(|c| c.id());
+        let after_items: Vec<Dot> = list
+            .child_blocks()
+            .skip(list_item_index + 1)
+            .map(|c| c.id())
+            .collect();
 
-    // A list_item's content is `Paragraph, (BulletList|OrderedList)?` — at most one
-    // trailing sublist. Locate it by node type rather than fixed index.
-    let existing_sublist_id: Option<NodeId> = list_item
-        .children()
-        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-        .map(|c| c.id());
+        let lifted_paragraph_id: Option<Dot> = list_item.child_blocks().next().map(|c| c.id());
+
+        let existing_sublist_id: Option<Dot> = list_item
+            .child_blocks()
+            .find(|c| is_list_type(c.node_type()))
+            .map(|c| c.id());
+
+        (
+            list_id,
+            list_type,
+            owner_id,
+            owner_is_list_item,
+            list_index,
+            list_item_index,
+            after_items,
+            lifted_paragraph_id,
+            existing_sublist_id,
+        )
+    };
+    let _ = list_item_index;
+    let _ = &existing_sublist_id;
+
+    let (sel_offset, sel_affinity) = match (tr.selection(), &lifted_paragraph_id) {
+        (Some(sel), Some(para)) if sel.head.node == *para => (sel.head.offset, sel.head.affinity),
+        _ => (0, Affinity::Downstream),
+    };
+    let mut new_para_id: Option<Dot> = None;
 
     tr.batch::<_, CommandError>(|tr| {
         if owner_is_list_item {
-            let doc = tr.doc();
-            let outer_list_item = doc
-                .node(owner_id)
-                .ok_or(CommandError::NodeNotFound(owner_id))?;
-            let outer_list = outer_list_item
-                .parent()
-                .ok_or(CommandError::NoParent(owner_id))?;
-            let outer_list_id = outer_list.id();
-            let outer_index = outer_list_item
-                .index()
-                .ok_or(CommandError::orphan_child(owner_id, outer_list_id))?;
+            let (outer_list_id, outer_index) = {
+                let view = tr.state().view();
+                let outer_list_item = view
+                    .node(owner_id)
+                    .ok_or(CommandError::NodeNotFound(owner_id))?;
+                let outer_list = outer_list_item
+                    .parent()
+                    .ok_or(CommandError::NoParent(owner_id))?;
+                let outer_list_id = outer_list.id();
+                let outer_index = outer_list_item
+                    .index()
+                    .ok_or_else(|| CommandError::orphan_child(owner_id, outer_list_id))?;
+                (outer_list_id, outer_index)
+            };
             tr.move_node(list_item_id, outer_list_id, outer_index + 1)?;
 
-            // A list_item allows at most one trailing sublist. If the lifted item
-            // already carries one, append after_items to it instead of creating a
-            // second sublist.
+            // move_node re-emits the moved subtree with fresh dots; re-resolve
+            // the lifted item (and its first paragraph) from the view.
+            let moved_item_id = {
+                let view = tr.state().view();
+                view.node(outer_list_id)
+                    .and_then(|l| l.child_blocks().nth(outer_index + 1))
+                    .map(|b| b.id())
+                    .ok_or(CommandError::NodeNotFound(outer_list_id))?
+            };
+            new_para_id = {
+                let view = tr.state().view();
+                view.node(moved_item_id)
+                    .and_then(|li| li.child_blocks().next())
+                    .map(|p| p.id())
+            };
+
             if !after_items.is_empty() {
-                let target_sublist_id = match existing_sublist_id {
+                let existing = {
+                    let view = tr.state().view();
+                    view.node(moved_item_id)
+                        .and_then(|li| li.child_blocks().find(|c| is_list_type(c.node_type())))
+                        .map(|c| c.id())
+                };
+                let target_sublist_id = match existing {
                     Some(id) => id,
                     None => {
-                        let new_sublist_id = NodeId::new();
                         let new_sublist_node = list_type.into_node().to_plain();
-                        let doc = tr.doc();
-                        let lifted = doc
-                            .node(list_item_id)
-                            .ok_or(CommandError::NodeNotFound(list_item_id))?;
-                        let insert_at = lifted.entry().children.len();
+                        let insert_at = {
+                            let view = tr.state().view();
+                            view.node(moved_item_id)
+                                .ok_or(CommandError::NodeNotFound(moved_item_id))?
+                                .child_blocks()
+                                .count()
+                        };
                         tr.insert_subtree(
-                            list_item_id,
+                            moved_item_id,
                             insert_at,
-                            Subtree::leaf(new_sublist_id, new_sublist_node),
+                            Subtree::leaf(new_sublist_node),
                         )?;
-                        new_sublist_id
+                        let view = tr.state().view();
+                        view.node(moved_item_id)
+                            .and_then(|li| li.child_blocks().last())
+                            .map(|b| b.id())
+                            .ok_or(CommandError::NodeNotFound(moved_item_id))?
                     }
                 };
-                let doc = tr.doc();
-                let target_sublist = doc
-                    .node(target_sublist_id)
-                    .ok_or(CommandError::NodeNotFound(target_sublist_id))?;
-                let base = target_sublist.entry().children.len();
+                let base = {
+                    let view = tr.state().view();
+                    view.node(target_sublist_id)
+                        .ok_or(CommandError::NodeNotFound(target_sublist_id))?
+                        .child_blocks()
+                        .filter(|b| b.id().as_op_dot().is_some())
+                        .count()
+                };
                 for (offset, item_id) in after_items.iter().enumerate() {
                     tr.move_node(*item_id, target_sublist_id, base + offset)?;
                 }
             }
         } else {
-            let doc = tr.doc();
-            let list_item_ref = doc
-                .node(list_item_id)
-                .ok_or(CommandError::NodeNotFound(list_item_id))?;
-            let children: Vec<NodeId> = list_item_ref.children().map(|c| c.id()).collect();
-            let child_count = children.len();
+            let (children, child_count) = {
+                let view = tr.state().view();
+                let list_item_ref = view
+                    .node(list_item_id)
+                    .ok_or(CommandError::NodeNotFound(list_item_id))?;
+                let children: Vec<Dot> = list_item_ref.child_blocks().map(|c| c.id()).collect();
+                let child_count = children.len();
+                (children, child_count)
+            };
             for (i, child_id) in children.iter().enumerate() {
                 tr.move_node(*child_id, owner_id, list_index + 1 + i)?;
+                if i == 0 {
+                    new_para_id = {
+                        let view = tr.state().view();
+                        view.node(owner_id)
+                            .and_then(|o| o.child_blocks().nth(list_index + 1))
+                            .map(|p| p.id())
+                    };
+                }
             }
             tr.remove_subtree(list_item_id)?;
 
             if !after_items.is_empty() {
-                let new_list_id = NodeId::new();
                 let new_list_node = list_type.into_node().to_plain();
                 tr.insert_subtree(
                     owner_id,
                     list_index + 1 + child_count,
-                    Subtree::leaf(new_list_id, new_list_node),
+                    Subtree::leaf(new_list_node),
                 )?;
+                let new_list_elem = {
+                    let view = tr.state().view();
+                    view.node(owner_id)
+                        .and_then(|o| o.child_blocks().nth(list_index + 1 + child_count))
+                        .map(|b| b.id())
+                        .ok_or(CommandError::NodeNotFound(owner_id))?
+                };
                 for (i, item_id) in after_items.iter().enumerate() {
-                    tr.move_node(*item_id, new_list_id, i)?;
+                    tr.move_node(*item_id, new_list_elem, i)?;
                 }
             }
         }
 
-        let doc = tr.doc();
-        if let Some(original_list) = doc.node(list_id)
-            && original_list.entry().children.is_empty()
-        {
-            tr.apply_steps(prune(&original_list))?;
+        // The original list, once emptied of real items, projects a derived
+        // scaffold list_item, so `prune` (which bails on any child) can't drop
+        // it; remove the now-empty list directly.
+        let remove_empty_list = {
+            let view = tr.state().view();
+            view.node(list_id)
+                .map(|l| !l.child_blocks().any(|b| b.id().as_op_dot().is_some()))
+                .unwrap_or(false)
+        };
+        if remove_empty_list {
+            tr.remove_subtree(list_id)?;
         }
 
-        let doc = tr.doc();
-        if let Some(owner) = doc.node(owner_id) {
-            tr.apply_steps(fulfill(&owner))?;
-        }
+        let fulfill_steps = {
+            let view = tr.state().view();
+            view.node(owner_id).map(|o| fulfill(&o)).unwrap_or_default()
+        };
+        tr.apply_steps(fulfill_steps)?;
         Ok(())
     })?;
 
-    let doc = tr.doc();
-    if let Some(para_id) = lifted_paragraph_id
-        && let Some(para) = doc.node(para_id)
+    if let Some(para_id) = new_para_id
+        && tr.state().view().node(para_id).is_some()
     {
-        let cursor_pos = match para.first_child() {
-            Some(child) if matches!(child.node(), Node::Text(_)) => Position {
-                node_id: child.id(),
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            _ => Position {
-                node_id: para_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-        };
-        tr.set_selection(Some(Selection::collapsed(cursor_pos)))?;
+        tr.set_selection(Some(Selection::collapsed(Position {
+            node: para_id,
+            offset: sel_offset,
+            affinity: sel_affinity,
+        })))?;
     }
 
     Ok(true)
 }
 
 pub(crate) fn collect_top_level_list_items_in_selection(
-    doc: &Doc,
+    view: &DocView,
     from: Position,
     to: Position,
-) -> Vec<NodeId> {
-    let from_list_item = find_enclosing_list_item_id(doc, from.node_id);
-    let to_list_item = find_enclosing_list_item_id(doc, to.node_id);
+) -> Vec<Dot> {
+    let from_list_item = find_enclosing_list_item_id(view, from.node);
+    let to_list_item = find_enclosing_list_item_id(view, to.node);
 
     let (Some(from_li), Some(to_li)) = (from_list_item, to_list_item) else {
         return Vec::new();
@@ -174,18 +254,18 @@ pub(crate) fn collect_top_level_list_items_in_selection(
         return vec![from_li];
     }
 
-    let Some(common_list_id) = lowest_common_list_ancestor(doc, from_li, to_li) else {
+    let Some(common_list_id) = lowest_common_list_ancestor(view, from_li, to_li) else {
         return Vec::new();
     };
 
-    let common_list = match doc.node(common_list_id) {
+    let common_list = match view.node(common_list_id) {
         Some(n) => n,
         None => return Vec::new(),
     };
 
-    let children: Vec<NodeId> = common_list.children().map(|c| c.id()).collect();
-    let from_idx = ancestor_index_within(doc, from_li, common_list_id);
-    let to_idx = ancestor_index_within(doc, to_li, common_list_id);
+    let children: Vec<Dot> = common_list.child_blocks().map(|c| c.id()).collect();
+    let from_idx = ancestor_index_within(view, from_li, common_list_id);
+    let to_idx = ancestor_index_within(view, to_li, common_list_id);
     let (Some(a), Some(b)) = (from_idx, to_idx) else {
         return Vec::new();
     };
@@ -194,25 +274,26 @@ pub(crate) fn collect_top_level_list_items_in_selection(
     children[lo..=hi].to_vec()
 }
 
-pub(crate) fn find_enclosing_list_item_id(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
-    let mut current = doc.node(node_id)?;
+pub(crate) fn find_enclosing_list_item_id(view: &DocView, node: Dot) -> Option<Dot> {
+    let mut current = view.node(node)?;
     loop {
-        if matches!(current.node(), Node::ListItem(_)) {
+        if current.node_type() == NodeType::ListItem {
             return Some(current.id());
         }
         current = current.parent()?;
     }
 }
 
-fn lowest_common_list_ancestor(doc: &Doc, a: NodeId, b: NodeId) -> Option<NodeId> {
-    let ancestors_a: Vec<NodeId> = doc.node(a)?.ancestors().map(|n| n.id()).collect();
-    let ancestors_b: HashSet<NodeId> = doc.node(b)?.ancestors().map(|n| n.id()).collect();
+fn lowest_common_list_ancestor(view: &DocView, a: Dot, b: Dot) -> Option<Dot> {
+    let ancestors_a: Vec<Dot> = view.node(a)?.ancestors().map(|n| n.id()).collect();
+    let ancestors_b: HashSet<Dot> = view.node(b)?.ancestors().map(|n| n.id()).collect();
 
     for la in ancestors_a.iter() {
-        if matches!(
-            doc.node(*la).map(|n| n.as_type()),
-            Some(NodeType::BulletList | NodeType::OrderedList)
-        ) && ancestors_b.contains(la)
+        if view
+            .node(*la)
+            .map(|n| is_list_type(n.node_type()))
+            .unwrap_or(false)
+            && ancestors_b.contains(la)
         {
             return Some(*la);
         }
@@ -220,147 +301,185 @@ fn lowest_common_list_ancestor(doc: &Doc, a: NodeId, b: NodeId) -> Option<NodeId
     None
 }
 
-fn ancestor_index_within(doc: &Doc, node_id: NodeId, ancestor_id: NodeId) -> Option<usize> {
-    let mut current_id = node_id;
+fn ancestor_index_within(view: &DocView, node: Dot, ancestor: Dot) -> Option<usize> {
+    let mut current_id = node;
     loop {
-        let current = doc.node(current_id)?;
+        let current = view.node(current_id)?;
         let parent = current.parent()?;
-        if parent.id() == ancestor_id {
+        if parent.id() == ancestor {
             return current.index();
         }
         current_id = parent.id();
     }
 }
 
-pub(crate) fn is_at_list_item_content_start(doc: &Doc, selection: &Selection) -> bool {
-    if !selection.is_collapsed() {
+pub(crate) fn is_at_list_item_content_start(view: &DocView, selection: &Selection) -> bool {
+    if selection.anchor != selection.head {
         return false;
     }
-    let pos = selection.head;
-    let Some(item_id) = find_enclosing_list_item_id(doc, pos.node_id) else {
+    let pos = &selection.head;
+    let Some(item_id) = find_enclosing_list_item_id(view, pos.node) else {
         return false;
     };
-    let Some(item) = doc.node(item_id) else {
+    let Some(item) = view.node(item_id) else {
         return false;
     };
-    let Some(para) = item.first_child() else {
+    let Some(para) = item.child_blocks().next() else {
         return false;
     };
-    if pos.node_id == para.id() {
-        return pos.offset == 0;
-    }
-    if let Some(first_inline) = para.first_child() {
-        return pos.node_id == first_inline.id() && pos.offset == 0;
-    }
-    false
+    pos.node == para.id() && pos.offset == 0
 }
 
-pub(crate) fn sink_list_item_inner(tr: &mut Transaction, list_item_id: NodeId) -> CommandResult {
-    let doc = tr.doc();
-    let list_item = doc
-        .node(list_item_id)
-        .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    if !matches!(list_item.node(), Node::ListItem(_)) {
-        return Ok(false);
-    }
+/// Sinks `list_item_id` into the preceding sibling's sublist. Returns the moved
+/// item's fresh id (move_node re-emits the subtree), or `None` when the item
+/// cannot sink (no previous sibling). Selection is preserved by the caller.
+pub(crate) fn sink_list_item_inner(
+    tr: &mut Transaction,
+    list_item_id: Dot,
+) -> Result<Option<Dot>, CommandError> {
+    let (prev_id, list_type, target_sublist_id) = {
+        let view = tr.state().view();
+        let list_item = view
+            .node(list_item_id)
+            .ok_or(CommandError::NodeNotFound(list_item_id))?;
+        if list_item.node_type() != NodeType::ListItem {
+            return Ok(None);
+        }
 
-    let prev = match list_item.prev_sibling() {
-        Some(p) => p,
-        None => return Ok(false),
+        let prev = match super::prev_sibling(&list_item) {
+            Some(editor_model::ChildView::Block(p)) => p,
+            _ => return Ok(None),
+        };
+        let prev_id = prev.id();
+
+        let list = list_item
+            .parent()
+            .ok_or(CommandError::NoParent(list_item_id))?;
+        let list_type = list.node_type();
+        if !is_list_type(list_type) {
+            return Ok(None);
+        }
+
+        let target_sublist_id = prev
+            .child_blocks()
+            .find(|c| is_list_type(c.node_type()))
+            .map(|c| c.id());
+
+        (prev_id, list_type, target_sublist_id)
     };
-    let prev_id = prev.id();
 
-    let list = list_item
-        .parent()
-        .ok_or(CommandError::NoParent(list_item_id))?;
-    let list_type = list.as_type();
-    if !matches!(list_type, NodeType::BulletList | NodeType::OrderedList) {
-        return Ok(false);
-    }
-
-    // A list_item allows at most one trailing sublist. Reuse any existing one
-    // regardless of its type — creating a second sublist would violate the
-    // schema, so type-matching can't be enforced here.
-    let target_sublist_id = prev
-        .children()
-        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-        .map(|c| c.id());
-
+    let mut new_item_id: Option<Dot> = None;
     tr.batch::<_, CommandError>(|tr| {
         let target_id = match target_sublist_id {
             Some(id) => id,
             None => {
-                let new_sublist_id = NodeId::new();
                 let new_node = list_type.into_node().to_plain();
-                let doc = tr.doc();
-                let prev = doc
-                    .node(prev_id)
-                    .ok_or(CommandError::NodeNotFound(prev_id))?;
-                let insert_at = prev.entry().children.len();
-                tr.insert_subtree(prev_id, insert_at, Subtree::leaf(new_sublist_id, new_node))?;
-                new_sublist_id
+                let insert_at = {
+                    let view = tr.state().view();
+                    view.node(prev_id)
+                        .ok_or(CommandError::NodeNotFound(prev_id))?
+                        .child_blocks()
+                        .count()
+                };
+                tr.insert_subtree(prev_id, insert_at, Subtree::leaf(new_node))?;
+                let view = tr.state().view();
+                view.node(prev_id)
+                    .and_then(|p| p.child_blocks().last())
+                    .map(|b| b.id())
+                    .ok_or(CommandError::NodeNotFound(prev_id))?
             }
         };
 
-        let doc = tr.doc();
-        let target = doc
-            .node(target_id)
-            .ok_or(CommandError::NodeNotFound(target_id))?;
-        let target_len = target.entry().children.len();
+        // A freshly created sublist projects a derived scaffold item; count only
+        // real items so the move targets the true end slot.
+        let target_len = {
+            let view = tr.state().view();
+            view.node(target_id)
+                .ok_or(CommandError::NodeNotFound(target_id))?
+                .child_blocks()
+                .filter(|b| b.id().as_op_dot().is_some())
+                .count()
+        };
         tr.move_node(list_item_id, target_id, target_len)?;
 
-        let doc = tr.doc();
-        if let Some(prev) = doc.node(prev_id) {
-            tr.apply_steps(fulfill(&prev))?;
-        }
+        new_item_id = {
+            let view = tr.state().view();
+            view.node(target_id)
+                .and_then(|t| t.child_blocks().nth(target_len))
+                .map(|b| b.id())
+        };
+
+        let fulfill_steps = {
+            let view = tr.state().view();
+            view.node(prev_id).map(|p| fulfill(&p)).unwrap_or_default()
+        };
+        tr.apply_steps(fulfill_steps)?;
         Ok(())
     })?;
 
-    Ok(true)
+    Ok(new_item_id)
 }
 
-#[cfg(test)]
-mod tests {
-    use editor_macros::state;
+pub(crate) struct SelectionAnchor {
+    item_index: usize,
+    path: Vec<usize>,
+    offset: usize,
+    affinity: Affinity,
+}
 
-    use super::*;
+/// Captures the anchor/head positions relative to the top-level `items` being
+/// restructured, so they can be re-resolved after `move_node` re-emits the
+/// items with fresh dots.
+pub(crate) fn capture_selection_anchors(
+    view: &DocView,
+    items: &[Dot],
+    selection: &Selection,
+) -> Option<(SelectionAnchor, SelectionAnchor)> {
+    Some((
+        capture_anchor(view, items, &selection.anchor)?,
+        capture_anchor(view, items, &selection.head)?,
+    ))
+}
 
-    #[test]
-    fn at_list_item_start_true_at_offset_zero() {
-        let (state, ..) = state! {
-            doc { root { bullet_list {
-                list_item { paragraph { t1: text("A") } }
-                list_item { paragraph { t2: text("B") } }
-            } } }
-            selection: (t2, 0)
-        };
-        assert!(is_at_list_item_content_start(
-            &state.doc,
-            state.selection.as_ref().unwrap()
-        ));
+fn capture_anchor(view: &DocView, items: &[Dot], pos: &Position) -> Option<SelectionAnchor> {
+    items.iter().enumerate().find_map(|(item_index, item)| {
+        super::path_from_ancestor(view, pos.node, *item).map(|path| SelectionAnchor {
+            item_index,
+            path,
+            offset: pos.offset,
+            affinity: pos.affinity,
+        })
+    })
+}
+
+pub(crate) fn restore_selection_anchors(
+    view: &DocView,
+    new_items: &[Option<Dot>],
+    anchor: &SelectionAnchor,
+    head: &SelectionAnchor,
+) -> Option<Selection> {
+    Some(Selection::new(
+        restore_anchor(view, new_items, anchor)?,
+        restore_anchor(view, new_items, head)?,
+    ))
+}
+
+fn restore_anchor(
+    view: &DocView,
+    new_items: &[Option<Dot>],
+    cap: &SelectionAnchor,
+) -> Option<Position> {
+    let item = new_items.get(cap.item_index)?.as_ref()?;
+    let mut node = *item;
+    for &idx in &cap.path {
+        match view.node(node)?.child_at(idx)? {
+            editor_model::ChildView::Block(b) => node = b.id(),
+            editor_model::ChildView::Leaf(_) => return None,
+        }
     }
-
-    #[test]
-    fn at_list_item_start_false_mid_text() {
-        let (state, ..) = state! {
-            doc { root { bullet_list { list_item { paragraph { t1: text("AB") } } } } }
-            selection: (t1, 1)
-        };
-        assert!(!is_at_list_item_content_start(
-            &state.doc,
-            state.selection.as_ref().unwrap()
-        ));
-    }
-
-    #[test]
-    fn at_list_item_start_false_outside_list() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("A") } } }
-            selection: (t1, 0)
-        };
-        assert!(!is_at_list_item_content_start(
-            &state.doc,
-            state.selection.as_ref().unwrap()
-        ));
-    }
+    Some(Position {
+        node,
+        offset: cap.offset,
+        affinity: cap.affinity,
+    })
 }

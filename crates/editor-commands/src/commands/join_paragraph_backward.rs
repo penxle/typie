@@ -1,6 +1,6 @@
-use editor_model::Node;
+use editor_model::{ChildView, NodeType};
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, compact};
+use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
@@ -8,100 +8,66 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    let paragraph_id = match node.node() {
-        Node::Text(_) => {
-            if pos.offset > 0 || node.prev_sibling().is_some() {
-                return Ok(false);
-            }
-            node.parent()
-                .ok_or(CommandError::NoParent(pos.node_id))?
-                .id()
+    let (prev_id, prev_was_empty, prev_child_count, prev_last_is_char) = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if node.node_type() != NodeType::Paragraph {
+            return Ok(false);
         }
-        Node::Paragraph(_) => {
-            if pos.offset > 0 {
-                return Ok(false);
-            }
-            pos.node_id
+        if pos.offset > 0 {
+            return Ok(false);
         }
-        _ => return Ok(false),
+        let parent = node.parent().ok_or(CommandError::NoParent(pos.node))?;
+        let index = parent
+            .child_blocks()
+            .position(|b| b.id() == pos.node)
+            .ok_or_else(|| CommandError::orphan_child(pos.node, parent.id()))?;
+        if index == 0 {
+            return Ok(false);
+        }
+        let prev = parent
+            .child_blocks()
+            .nth(index - 1)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if prev.node_type() != NodeType::Paragraph {
+            return Ok(false);
+        }
+        let prev_id = prev.id();
+        let prev_child_count = prev.children().count();
+        let prev_was_empty = prev_child_count == 0;
+        let prev_last_is_char = matches!(
+            prev.last_child(),
+            Some(ChildView::Leaf(l)) if l.as_char().is_some()
+        );
+        (prev_id, prev_was_empty, prev_child_count, prev_last_is_char)
     };
 
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
+    tr.merge_node(prev_id)?;
 
-    let prev = match paragraph.prev_sibling() {
-        Some(prev) => prev,
-        None => return Ok(false),
-    };
-
-    if !matches!(prev.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
-
-    let prev_id = prev.id();
-
-    // Calculate join point cursor before merge
-    let prev_was_empty = prev.entry().children.is_empty();
-    let join_cursor = if let Some(last_child) = prev.last_child() {
-        match last_child.node() {
-            Node::Text(t) => Some((last_child.id(), t.text.len())),
-            _ => None,
-        }
-    } else {
-        None
-    };
-    let prev_children_count = prev.entry().children.len();
-
-    tr.merge_node(paragraph_id, prev_id)?;
-
-    let doc = tr.doc();
-    if let Some(p) = doc.node(prev_id) {
-        tr.apply_steps(compact(&p))?;
-    }
-
-    let new_selection = if let Some((cursor_node, cursor_offset)) = join_cursor {
+    let new_selection = if prev_was_empty {
         Selection::collapsed(Position {
-            node_id: cursor_node,
-            offset: cursor_offset,
-            affinity: Affinity::Upstream,
-        })
-    } else if prev_was_empty {
-        // prev was empty — check if merged children start with text
-        let doc = tr.doc();
-        let prev = doc
-            .node(prev_id)
-            .ok_or(CommandError::NodeNotFound(prev_id))?;
-        match prev.first_child() {
-            Some(child) if matches!(child.node(), Node::Text(_)) => {
-                Selection::collapsed(Position {
-                    node_id: child.id(),
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                })
-            }
-            _ => Selection::collapsed(Position {
-                node_id: prev_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            }),
-        }
-    } else {
-        Selection::collapsed(Position {
-            node_id: prev_id,
-            offset: prev_children_count,
+            node: prev_id,
+            offset: 0,
             affinity: Affinity::Downstream,
+        })
+    } else {
+        let affinity = if prev_last_is_char {
+            Affinity::Upstream
+        } else {
+            Affinity::Downstream
+        };
+        Selection::collapsed(Position {
+            node: prev_id,
+            offset: prev_child_count,
+            affinity,
         })
     };
     tr.set_selection(Some(new_selection))?;
@@ -121,11 +87,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t2, 0) -> (t2, 3)
+            selection: (p2, 0) -> (p2, 3)
         };
         transact_fail!(initial, |tr| join_paragraph_backward(&mut tr));
     }
@@ -135,22 +101,22 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| join_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("HelloWorld")
+                    p1: paragraph {
+                        text("HelloWorld")
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -161,19 +127,19 @@ mod tests {
             doc {
                 root {
                     paragraph {}
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| join_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -183,7 +149,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                     p2: paragraph {}
                 }
             }
@@ -193,10 +159,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -229,10 +195,10 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| join_paragraph_backward(&mut tr));
     }
@@ -243,10 +209,10 @@ mod tests {
             doc {
                 root {
                     horizontal_rule
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| join_paragraph_backward(&mut tr));
     }
@@ -256,11 +222,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t2, 3)
+            selection: (p2, 3)
         };
         transact_fail!(initial, |tr| join_paragraph_backward(&mut tr));
     }
@@ -271,29 +237,28 @@ mod tests {
             doc {
                 root {
                     paragraph {
-                        t1: text("A")
-                        t2: text("B") [bold]
+                        text("A")
+                        text("B") [bold]
                     }
-                    paragraph {
-                        t3: text("C")
-                        t4: text("D")
+                    cur: paragraph {
+                        text("CD")
                     }
                 }
             }
-            selection: (t3, 0)
+            selection: (cur, 0)
         };
         let (actual, ..) = transact!(initial, |tr| join_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("A")
-                        t2: text("B") [bold]
-                        t3: text("CD")
+                    m: paragraph {
+                        text("A")
+                        text("B") [bold]
+                        text("CD")
                     }
                 }
             }
-            selection: (t2, 1)
+            selection: (m, 2, <)
         };
         assert_state_eq!(&actual, &expected);
     }

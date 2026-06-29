@@ -1,4 +1,4 @@
-import type { Alignment, PlainDoc } from '@typie/editor-ffi/server';
+import type { Alignment, PlainDoc, PlainNodeEntry } from '@typie/editor-ffi/server';
 import type { EmbedInfo, ImageAsset, PageLayout } from '../types.ts';
 
 export type RunStyle = {
@@ -34,7 +34,7 @@ export type DocDefaultsV2 = {
 };
 export type ParsedDocumentV2 = {
   plain: PlainDoc;
-  rootId: string;
+  root: PlainNodeEntry;
   defaults: DocDefaultsV2;
   layout: PageLayout | undefined;
   images: Map<string, ImageAsset>;

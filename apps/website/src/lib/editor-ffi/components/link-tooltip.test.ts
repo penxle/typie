@@ -6,7 +6,6 @@ describe('resolveSelectionTarget', () => {
     const target = resolveSelectionTarget({
       linkRects: [
         {
-          node_id: 't1',
           href: 'https://a.com',
           page_idx: 0,
           rects: [{ x: 10, y: 20, width: 30, height: 10 }],
@@ -17,8 +16,8 @@ describe('resolveSelectionTarget', () => {
         value: { href: 'https://a.com' },
       },
       selection: {
-        anchor: { node_id: 't1', offset: 0 },
-        head: { node_id: 't1', offset: 5 },
+        anchor: { node: 't1', offset: 0, affinity: 'downstream' },
+        head: { node: 't1', offset: 5, affinity: 'downstream' },
       },
       selectionHeadRect: {
         page_idx: 0,
@@ -26,15 +25,14 @@ describe('resolveSelectionTarget', () => {
       },
     });
 
-    expect(target?.link.node_id).toBe('t1');
     expect(target?.link.href).toBe('https://a.com');
+    expect(target?.page).toBe(0);
   });
 
-  it('falls back to href matching when paragraph selection endpoints are container positions', () => {
+  it('resolves the occurrence from the selection head when endpoints are container positions', () => {
     const target = resolveSelectionTarget({
       linkRects: [
         {
-          node_id: 't1',
           href: 'https://a.com',
           page_idx: 0,
           rects: [{ x: 10, y: 20, width: 30, height: 10 }],
@@ -45,8 +43,8 @@ describe('resolveSelectionTarget', () => {
         value: { href: 'https://a.com' },
       },
       selection: {
-        anchor: { node_id: 'p1', offset: 0 },
-        head: { node_id: 'p1', offset: 2 },
+        anchor: { node: 'p1', offset: 0, affinity: 'downstream' },
+        head: { node: 'p1', offset: 2, affinity: 'downstream' },
       },
       selectionHeadRect: {
         page_idx: 0,
@@ -54,14 +52,13 @@ describe('resolveSelectionTarget', () => {
       },
     });
 
-    expect(target?.link.node_id).toBe('t1');
+    expect(target?.link.href).toBe('https://a.com');
   });
 
   it('anchors to the link first rect regardless of where the selection head landed', () => {
     const target = resolveSelectionTarget({
       linkRects: [
         {
-          node_id: 't1',
           href: 'https://a.com',
           page_idx: 0,
           rects: [
@@ -75,8 +72,8 @@ describe('resolveSelectionTarget', () => {
         value: { href: 'https://a.com' },
       },
       selection: {
-        anchor: { node_id: 't1', offset: 0 },
-        head: { node_id: 't1', offset: 8 },
+        anchor: { node: 't1', offset: 0, affinity: 'downstream' },
+        head: { node: 't1', offset: 8, affinity: 'downstream' },
       },
       // Head landed on the second visual line of the link.
       selectionHeadRect: {

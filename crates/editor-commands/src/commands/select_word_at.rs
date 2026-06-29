@@ -1,5 +1,6 @@
 use editor_resource::Resource;
-use editor_state::{Selection, resolve_word_selection_expansion};
+use editor_state::Selection;
+use editor_state::resolve_word_selection_expansion;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -10,11 +11,11 @@ pub fn select_word_at(
     selection: Selection,
     resource: &Resource,
 ) -> CommandResult {
-    let doc = tr.doc();
-    set_selection_if_changed(
-        tr,
-        resolve_word_selection_expansion(&doc, selection, resource),
-    )
+    let resolved = {
+        let view = tr.view();
+        resolve_word_selection_expansion(&selection, &view, resource)
+    };
+    set_selection_if_changed(tr, resolved)
 }
 
 #[cfg(test)]
@@ -29,9 +30,9 @@ mod tests {
     #[test]
     fn select_word_at_sets_resolved_selection() {
         let resource = Resource::new_test();
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 2)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 2)
         };
 
         let (actual, ..) = transact!(initial, |tr| {
@@ -42,9 +43,9 @@ mod tests {
         assert_eq!(
             actual.selection,
             Some(Selection::new(
-                Position::new(t, 0),
+                Position::new(p1, 0),
                 Position {
-                    node_id: t,
+                    node: p1,
                     offset: 5,
                     affinity: Affinity::Upstream,
                 },
@@ -55,9 +56,9 @@ mod tests {
     #[test]
     fn select_word_at_expands_range_within_same_word() {
         let resource = Resource::new_test();
-        let (initial, t1, t2) = state! {
-            doc { root { paragraph { t1: text("hel") t2: text("lo world") } } }
-            selection: (t1, 1) -> (t2, 2)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 1) -> (p1, 5)
         };
 
         let (actual, ..) = transact!(initial, |tr| {
@@ -68,10 +69,10 @@ mod tests {
         assert_eq!(
             actual.selection,
             Some(Selection::new(
-                Position::new(t1, 0),
+                Position::new(p1, 0),
                 Position {
-                    node_id: t2,
-                    offset: 2,
+                    node: p1,
+                    offset: 5,
                     affinity: Affinity::Upstream,
                 },
             ))
@@ -81,9 +82,9 @@ mod tests {
     #[test]
     fn select_word_at_rejects_range_across_words() {
         let resource = Resource::new_test();
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 1) -> (t, 8)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 1) -> (p1, 8)
         };
         let before = initial.selection;
 

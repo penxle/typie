@@ -1,4 +1,5 @@
-use editor_model::{Doc, Node, NodeId};
+use editor_crdt::Dot;
+use editor_model::{DocView, Node};
 use editor_state::{Position, Selection};
 use editor_transaction::HistoryMeta;
 
@@ -13,7 +14,7 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
             if was_expanded
                 && let Some(sel) = editor.state.selection
                 && let Some(remapped) =
-                    remap_selection_out_of_fold_content(&editor.state.doc, id, sel)
+                    remap_selection_out_of_fold_content(&editor.state.view(), id, sel)
             {
                 // fold toggle is non-undoable view state; the coupled remap must
                 // skip history too, else undo strands the caret in still-collapsed
@@ -34,8 +35,8 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
 // moved to the fold-title end or it would be stranded in invisible content.
 // Mode-agnostic.
 fn remap_selection_out_of_fold_content(
-    doc: &Doc,
-    fold_id: NodeId,
+    doc: &DocView,
+    fold_id: Dot,
     sel: Selection,
 ) -> Option<Selection> {
     let fold = doc.node(fold_id)?;
@@ -44,7 +45,7 @@ fn remap_selection_out_of_fold_content(
     }
     let mut fold_title_id = None;
     let mut fold_content_id = None;
-    for child in fold.children() {
+    for child in fold.child_blocks() {
         match child.node() {
             Node::FoldTitle(_) => fold_title_id = Some(child.id()),
             Node::FoldContent(_) => fold_content_id = Some(child.id()),
@@ -54,14 +55,14 @@ fn remap_selection_out_of_fold_content(
     let fold_title_id = fold_title_id?;
     let fold_content_id = fold_content_id?;
 
-    let in_content = |nid: NodeId| {
+    let in_content = |nid: Dot| {
         nid == fold_content_id
             || doc
                 .node(nid)
                 .is_some_and(|n| n.ancestors().any(|a| a.id() == fold_content_id))
     };
-    let anchor_in = in_content(sel.anchor.node_id);
-    let head_in = in_content(sel.head.node_id);
+    let anchor_in = in_content(sel.anchor.node);
+    let head_in = in_content(sel.head.node);
     if !anchor_in && !head_in {
         return None;
     }
@@ -87,11 +88,11 @@ mod tests {
         let (state, f1, ..) = state! {
             doc { root {
                 f1: fold {
-                    fold_title { t1: text("Title") }
+                    ft1: fold_title { text("Title") }
                     fold_content { paragraph { text("Body") } }
                 }
             } }
-            selection: (t1, 0)
+            selection: (ft1, 0)
         };
         assert_probe_predicts_apply(
             state,
@@ -106,11 +107,11 @@ mod tests {
         let (initial, f1, ..) = state! {
             doc { root {
                 f1: fold {
-                    fold_title { t1: text("Title") }
+                    ft1: fold_title { text("Title") }
                     fold_content { paragraph { text("Body") } }
                 }
             } }
-            selection: (t1, 0)
+            selection: (ft1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -134,14 +135,14 @@ mod tests {
 
     #[test]
     fn collapse_remaps_selection_out_of_fold_content() {
-        let (initial, f1, t2) = state! {
+        let (initial, f1, p1) = state! {
             doc { root {
                 f1: fold {
                     fold_title { text("Title") }
-                    fold_content { paragraph { t2: text("Body") } }
+                    fold_content { p1: paragraph { text("Body") } }
                 }
             } }
-            selection: (t2, 2)
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -158,22 +159,22 @@ mod tests {
                 .selection
                 .expect("selection exists in test")
                 .head
-                .node_id,
-            t2,
+                .node,
+            p1,
             "selection inside fold-content must be remapped out on collapse"
         );
     }
 
     #[test]
     fn collapse_then_undo_keeps_selection_out_of_fold_content() {
-        let (initial, f1, t2) = state! {
+        let (initial, f1, p1) = state! {
             doc { root {
                 f1: fold {
                     fold_title { text("Title") }
-                    fold_content { paragraph { t2: text("Body") } }
+                    fold_content { p1: paragraph { text("Body") } }
                 }
             } }
-            selection: (t2, 2)
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -193,23 +194,23 @@ mod tests {
                 .selection
                 .expect("selection exists in test")
                 .head
-                .node_id,
-            t2,
+                .node,
+            p1,
             "undo must not restore a selection inside collapsed fold-content"
         );
     }
 
     #[test]
     fn collapse_keeps_selection_outside_fold() {
-        let (initial, f1, t1) = state! {
+        let (initial, f1, p1) = state! {
             doc { root {
                 f1: fold {
                     fold_title { text("Title") }
                     fold_content { paragraph { text("Body") } }
                 }
-                paragraph { t1: text("Out") }
+                p1: paragraph { text("Out") }
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -226,8 +227,8 @@ mod tests {
                 .selection
                 .expect("selection exists in test")
                 .head
-                .node_id,
-            t1,
+                .node,
+            p1,
             "selection outside the fold is untouched"
         );
     }

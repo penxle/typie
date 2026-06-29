@@ -1,16 +1,17 @@
-use editor_model::{Node, NodeId, PlainNode, PlainTableNode, TableBorderStyle};
+use editor_crdt::Dot;
+use editor_model::{Node, PlainNode, PlainTableNode, TableBorderStyle};
 use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
 pub fn set_table_border_style(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     border_style: TableBorderStyle,
 ) -> CommandResult {
     let proportion = {
-        let doc = tr.doc();
-        let table = doc
+        let view = tr.view();
+        let table = view
             .node(table_id)
             .ok_or(CommandError::NodeNotFound(table_id))?;
         match table.node() {
@@ -50,8 +51,8 @@ mod tests {
             tbl,
             TableBorderStyle::Dashed
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
         if let Node::Table(n) = table.node() {
             assert_eq!(*n.border_style.get(), TableBorderStyle::Dashed);
         } else {
@@ -78,8 +79,8 @@ mod tests {
             tbl,
             TableBorderStyle::Dotted
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
         if let Node::Table(n) = table.node() {
             assert_eq!(*n.proportion.get(), 75);
             assert_eq!(*n.border_style.get(), TableBorderStyle::Dotted);

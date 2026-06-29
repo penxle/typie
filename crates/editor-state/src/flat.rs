@@ -1,0 +1,657 @@
+use std::ops::Range;
+
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, NodeView};
+
+use crate::{Position, ResolvedPosition};
+
+/// Flat-text sentinel for a block boundary's leading edge (mirrors `collect_chars`).
+pub const FLAT_OPEN: char = '\u{2028}';
+/// Flat-text sentinel for a block boundary's trailing edge (mirrors `collect_chars`).
+pub const FLAT_CLOSE: char = '\u{2029}';
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FlatSegment {
+    Open { block: Dot },
+    Close { block: Dot },
+    Text { block: Dot, leaves: Vec<Dot> },
+    Break { leaf: Dot },
+    Atom { leaf: Dot },
+}
+
+enum ChildClass {
+    Char(Dot),
+    Break(Dot),
+    Atom(Dot),
+    Block,
+}
+
+fn classify(c: &ChildView) -> ChildClass {
+    match c {
+        ChildView::Block(_) => ChildClass::Block,
+        ChildView::Leaf(l) => {
+            if l.as_char().is_some() {
+                ChildClass::Char(l.dot())
+            } else if l.node_type().spec().inline {
+                ChildClass::Break(l.dot())
+            } else {
+                ChildClass::Atom(l.dot())
+            }
+        }
+    }
+}
+
+fn block_flat_size(b: &NodeView) -> usize {
+    2 + b.children().map(|c| child_flat_size(&c)).sum::<usize>()
+}
+
+fn child_flat_size(c: &ChildView) -> usize {
+    match c {
+        ChildView::Leaf(_) => 1,
+        ChildView::Block(b) => block_flat_size(b),
+    }
+}
+
+pub fn flat_size(view: &DocView) -> usize {
+    match view.root() {
+        Some(root) => root.children().map(|c| child_flat_size(&c)).sum(),
+        None => 0,
+    }
+}
+
+pub trait ResolvedPositionFlatExt<'a>: Sized {
+    fn to_flat(&self) -> usize;
+    fn from_flat(view: &'a DocView<'a>, flat: usize) -> Option<Self>;
+}
+
+impl<'a> ResolvedPositionFlatExt<'a> for ResolvedPosition<'a> {
+    fn to_flat(&self) -> usize {
+        let Some(root) = self.view().root() else {
+            return 0;
+        };
+        to_flat_walk(&root, self.node(), self.offset()).unwrap_or(0)
+    }
+
+    fn from_flat(view: &'a DocView<'a>, flat: usize) -> Option<Self> {
+        let root = view.root()?;
+        let pos = from_flat_walk(&root, 0, flat)?;
+        pos.resolve(view)
+    }
+}
+
+fn to_flat_walk(current: &NodeView, target: Dot, target_offset: usize) -> Option<usize> {
+    if current.id() == target {
+        let mut acc = 0usize;
+        for (i, c) in current.children().enumerate() {
+            if i == target_offset {
+                return Some(acc);
+            }
+            acc += child_flat_size(&c);
+        }
+        return Some(acc);
+    }
+    let mut acc = 0usize;
+    for c in current.children() {
+        match c {
+            ChildView::Block(b) => {
+                acc += 1;
+                if let Some(inner) = to_flat_walk(&b, target, target_offset) {
+                    return Some(acc + inner);
+                }
+                acc += block_flat_size(&b) - 2;
+                acc += 1;
+            }
+            ChildView::Leaf(_) => acc += 1,
+        }
+    }
+    None
+}
+
+fn from_flat_walk(container: &NodeView, start_flat: usize, target: usize) -> Option<Position> {
+    let mut acc = start_flat;
+    let children: Vec<ChildView> = container.children().collect();
+    for (i, c) in children.iter().enumerate() {
+        match c {
+            ChildView::Block(b) => {
+                let content = block_flat_size(b) - 2;
+                if target == acc {
+                    return Some(Position::new(container.id(), i));
+                }
+                acc += 1;
+                if target >= acc && target <= acc + content {
+                    return from_flat_walk(b, acc, target);
+                }
+                acc += content;
+                if target == acc {
+                    return Some(Position::new(b.id(), b.children().count()));
+                }
+                acc += 1;
+            }
+            ChildView::Leaf(_) => {
+                if target == acc {
+                    return Some(Position::new(container.id(), i));
+                }
+                acc += 1;
+            }
+        }
+    }
+    if target == acc {
+        return Some(Position::new(container.id(), children.len()));
+    }
+    None
+}
+
+pub fn flat_segments(view: &DocView) -> Vec<FlatSegment> {
+    let mut out = Vec::new();
+    if let Some(root) = view.root() {
+        emit_children(&root, &mut out);
+    }
+    out
+}
+
+fn emit_children(block: &NodeView, out: &mut Vec<FlatSegment>) {
+    let mut run: Vec<Dot> = Vec::new();
+    let block_id = block.id();
+    for c in block.children() {
+        match classify(&c) {
+            ChildClass::Char(d) => run.push(d),
+            other => {
+                flush_text(block_id, &mut run, out);
+                match other {
+                    ChildClass::Break(d) => out.push(FlatSegment::Break { leaf: d }),
+                    ChildClass::Atom(d) => out.push(FlatSegment::Atom { leaf: d }),
+                    ChildClass::Block => {
+                        if let ChildView::Block(b) = c {
+                            out.push(FlatSegment::Open { block: b.id() });
+                            emit_children(&b, out);
+                            out.push(FlatSegment::Close { block: b.id() });
+                        }
+                    }
+                    ChildClass::Char(..) => unreachable!(),
+                }
+            }
+        }
+    }
+    flush_text(block_id, &mut run, out);
+}
+
+fn flush_text(block: Dot, run: &mut Vec<Dot>, out: &mut Vec<FlatSegment>) {
+    if !run.is_empty() {
+        out.push(FlatSegment::Text {
+            block,
+            leaves: std::mem::take(run),
+        });
+    }
+}
+
+pub fn flat_chars(view: &DocView, range: Range<usize>) -> Vec<char> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    if let Some(root) = view.root() {
+        collect_chars(&root, &mut idx, &range, &mut out);
+    }
+    out
+}
+
+pub fn flat_text(view: &DocView, range: Range<usize>) -> String {
+    flat_chars(view, range).into_iter().collect()
+}
+
+fn collect_chars(block: &NodeView, idx: &mut usize, range: &Range<usize>, out: &mut Vec<char>) {
+    for c in block.children() {
+        match c {
+            ChildView::Block(b) => {
+                push_unit(FLAT_OPEN, idx, range, out);
+                collect_chars(&b, idx, range, out);
+                push_unit(FLAT_CLOSE, idx, range, out);
+            }
+            ChildView::Leaf(l) => {
+                let ch = match l.as_char() {
+                    Some(c) => c,
+                    None if l.node_type().spec().inline => '\n',
+                    None => '\u{fffc}',
+                };
+                push_unit(ch, idx, range, out);
+            }
+        }
+    }
+}
+
+fn push_unit(ch: char, idx: &mut usize, range: &Range<usize>, out: &mut Vec<char>) {
+    if range.contains(idx) {
+        out.push(ch);
+    }
+    *idx += 1;
+}
+
+pub fn flat_segments_in_range(view: &DocView, range: Range<usize>) -> Vec<FlatSegment> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    for seg in flat_segments(view) {
+        let size = match &seg {
+            FlatSegment::Text { leaves, .. } => leaves.len(),
+            _ => 1,
+        };
+        let seg_range = idx..idx + size;
+        if seg_range.start < range.end && range.start < seg_range.end {
+            match seg {
+                FlatSegment::Text { block, leaves } => {
+                    let lo = range.start.saturating_sub(idx);
+                    let hi = (range.end - idx).min(leaves.len());
+                    out.push(FlatSegment::Text {
+                        block,
+                        leaves: leaves[lo..hi].to_vec(),
+                    });
+                }
+                other => out.push(other),
+            }
+        }
+        idx += size;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        Anchor, AtomLeaf, Bias, DocLogs, HorizontalRuleVariant, Modifier, ModifierAttrLog,
+        ModifierType, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc, SeqItem,
+        SpanLog, SpanOp, StyleLog, project_document,
+    };
+
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        logs_with_spans(items, SpanLog::new())
+    }
+
+    fn logs_with_spans(items: &[(Dot, SeqItem)], spans: SpanLog) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans,
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn para_doc(children: &[SeqItem]) -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, c) in children.iter().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), c.clone()));
+        }
+        (project_document(&logs(&items)).unwrap(), para)
+    }
+
+    #[test]
+    fn flat_size_root_not_wrapped() {
+        let (pd, _p) = para_doc(&[SeqItem::Char('h'), SeqItem::Char('i')]);
+        let view = DocView::new(&pd);
+        assert_eq!(flat_size(&view), 4);
+    }
+
+    #[test]
+    fn to_from_flat_roundtrip() {
+        let (pd, p) = para_doc(&[SeqItem::Char('h'), SeqItem::Char('i')]);
+        let view = DocView::new(&pd);
+        for off in 0..=2usize {
+            let pos = Position::new(p, off).resolve(&view).unwrap();
+            let flat = pos.to_flat();
+            let back = ResolvedPosition::from_flat(&view, flat).unwrap();
+            assert_eq!(back.node(), p, "off {off}");
+            assert_eq!(back.offset(), off, "off {off}");
+        }
+    }
+
+    #[test]
+    fn from_flat_close_token_maps_to_content_end() {
+        let (pd, p) = para_doc(&[SeqItem::Char('h'), SeqItem::Char('i')]);
+        let view = DocView::new(&pd);
+        let r = ResolvedPosition::from_flat(&view, 3).unwrap();
+        assert_eq!(r.node(), p);
+        assert_eq!(r.offset(), 2);
+    }
+
+    #[test]
+    fn from_flat_zero_is_root_start() {
+        let (pd, _p) = para_doc(&[SeqItem::Char('h'), SeqItem::Char('i')]);
+        let view = DocView::new(&pd);
+        let root_id = view.root().unwrap().id();
+        let r = ResolvedPosition::from_flat(&view, 0).unwrap();
+        assert_eq!(r.node(), root_id);
+        assert_eq!(r.offset(), 0);
+    }
+
+    fn mixed_doc() -> (ProjectedDoc, Dot, Dot, Dot, Dot) {
+        let root = Dot::ROOT;
+        let hr = Dot::new(1, 1);
+        let para = Dot::new(1, 2);
+        let a = Dot::new(1, 3);
+        let hb = Dot::new(1, 4);
+        let b = Dot::new(1, 5);
+        let items = vec![
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::Line,
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (a, SeqItem::Char('a')),
+            (hb, SeqItem::Atom(AtomLeaf::HardBreak)),
+            (b, SeqItem::Char('b')),
+        ];
+        (project_document(&logs(&items)).unwrap(), hr, para, a, b)
+    }
+
+    #[test]
+    fn flat_segments_mixed_doc() {
+        let (pd, hr, para, a, b) = mixed_doc();
+        let view = DocView::new(&pd);
+        let hb = view
+            .node(para)
+            .unwrap()
+            .children()
+            .find_map(|c| match c {
+                ChildView::Leaf(l) if l.as_char().is_none() => Some(l.dot()),
+                _ => None,
+            })
+            .unwrap();
+        let segs = flat_segments(&view);
+        assert_eq!(
+            segs,
+            vec![
+                FlatSegment::Atom { leaf: hr },
+                FlatSegment::Open { block: para },
+                FlatSegment::Text {
+                    block: para,
+                    leaves: vec![a]
+                },
+                FlatSegment::Break { leaf: hb },
+                FlatSegment::Text {
+                    block: para,
+                    leaves: vec![b]
+                },
+                FlatSegment::Close { block: para },
+            ]
+        );
+    }
+
+    #[test]
+    fn flat_text_and_size_mixed_doc() {
+        let (pd, _hr, _para, _a, _b) = mixed_doc();
+        let view = DocView::new(&pd);
+        let size = flat_size(&view);
+        assert_eq!(size, 6);
+        assert_eq!(flat_text(&view, 0..size), "\u{fffc}\u{2028}a\nb\u{2029}");
+    }
+
+    #[test]
+    fn flat_segments_in_range_splits_text() {
+        let (pd, p) = para_doc(&[SeqItem::Char('a'), SeqItem::Char('b'), SeqItem::Char('c')]);
+        let view = DocView::new(&pd);
+        let leaves: Vec<Dot> = view
+            .node(p)
+            .unwrap()
+            .children()
+            .filter_map(|c| match c {
+                ChildView::Leaf(l) => l.as_char().map(|_| l.dot()),
+                _ => None,
+            })
+            .collect();
+        let segs = flat_segments_in_range(&view, 2..3);
+        assert_eq!(
+            segs,
+            vec![FlatSegment::Text {
+                block: p,
+                leaves: vec![leaves[1]]
+            }]
+        );
+    }
+
+    #[test]
+    fn deep_container_atom() {
+        use editor_model::ImageNode;
+        let root = Dot::ROOT;
+        let img = Dot::new(1, 1);
+        let bq = Dot::new(1, 2);
+        let para = Dot::new(1, 3);
+        let x = Dot::new(1, 4);
+        let items = vec![
+            (
+                img,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image {
+                        node: ImageNode::default(),
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bq],
+                },
+            ),
+            (x, SeqItem::Char('x')),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+        let segs = flat_segments(&view);
+        assert_eq!(segs.first(), Some(&FlatSegment::Atom { leaf: img }));
+        assert!(
+            segs.iter().any(|s| matches!(
+                s,
+                FlatSegment::Open { block } if *block == bq
+            )),
+            "blockquote opens as a container: {segs:?}"
+        );
+        let flat = flat_size(&view);
+        assert_eq!(
+            flat_text(&view, 0..flat),
+            "\u{fffc}\u{2028}\u{2028}x\u{2029}\u{2029}\u{2028}\u{2029}"
+        );
+    }
+
+    #[test]
+    fn mixed_modifier_text_is_one_segment() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let a = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let c = Dot::new(1, 4);
+        let items = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (a, SeqItem::Char('a')),
+            (b, SeqItem::Char('b')),
+            (c, SeqItem::Char('c')),
+        ];
+        let spans = SpanLog::new()
+            .apply(
+                Dot::new(3, 0),
+                SpanOp::AddSpan {
+                    start: Anchor {
+                        id: a,
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id: a,
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Bold,
+                },
+            )
+            .unwrap();
+        let pd = project_document(&logs_with_spans(&items, spans)).unwrap();
+        let view = DocView::new(&pd);
+
+        let segs = flat_segments(&view);
+        assert_eq!(
+            segs,
+            vec![
+                FlatSegment::Open { block: para },
+                FlatSegment::Text {
+                    block: para,
+                    leaves: vec![a, b, c]
+                },
+                FlatSegment::Close { block: para },
+            ]
+        );
+
+        assert_eq!(
+            view.leaf(a).unwrap().effective().get(&ModifierType::Bold),
+            Some(&Modifier::Bold)
+        );
+        assert_eq!(
+            view.leaf(b).unwrap().effective().get(&ModifierType::Bold),
+            None
+        );
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn roundtrip_arbitrary(seq in arb_doc()) {
+            let pd = project_document(&logs(&seq)).unwrap();
+            let view = DocView::new(&pd);
+            let size = flat_size(&view);
+
+            prop_assert_eq!(flat_chars(&view, 0..size).len(), size);
+            prop_assert_eq!(flat_segments(&view).iter().map(seg_size).sum::<usize>(), size);
+
+            for flat in 0..=size {
+                if let Some(r) = ResolvedPosition::from_flat(&view, flat) {
+                    let back = r.to_flat();
+                    let r2 = ResolvedPosition::from_flat(&view, back).unwrap();
+                    prop_assert_eq!(r.node(), r2.node());
+                    prop_assert_eq!(r.offset(), r2.offset());
+                }
+            }
+
+            for block in all_block_ids(&view) {
+                let count = view.node(block).unwrap().children().count();
+                for offset in 0..=count {
+                    let pos = Position::new(block, offset).resolve(&view).unwrap();
+                    let flat = pos.to_flat();
+                    let back = ResolvedPosition::from_flat(&view, flat).unwrap();
+                    prop_assert_eq!(back.node(), pos.node());
+                    prop_assert_eq!(back.offset(), pos.offset());
+                }
+            }
+        }
+    }
+
+    fn seg_size(s: &FlatSegment) -> usize {
+        match s {
+            FlatSegment::Text { leaves, .. } => leaves.len(),
+            _ => 1,
+        }
+    }
+
+    fn all_block_ids(view: &DocView) -> Vec<Dot> {
+        fn walk(node: &NodeView, out: &mut Vec<Dot>) {
+            out.push(node.id());
+            for c in node.children() {
+                if let ChildView::Block(b) = c {
+                    walk(&b, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(root) = view.root() {
+            walk(&root, &mut out);
+        }
+        out
+    }
+
+    fn arb_doc() -> impl Strategy<Value = Vec<(Dot, SeqItem)>> {
+        (any::<bool>(), prop::collection::vec(0u8..4, 0..6)).prop_map(|(nest, kinds)| {
+            let root = Dot::ROOT;
+            let mut items: Vec<(Dot, SeqItem)> = vec![];
+            let para = Dot::new(1, 1);
+            if nest {
+                let bq = Dot::new(1, 100);
+                items.push((
+                    bq,
+                    SeqItem::Block {
+                        node_type: NodeType::Blockquote,
+                        parents: vec![root],
+                    },
+                ));
+                items.push((
+                    para,
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![root, bq],
+                    },
+                ));
+            } else {
+                items.push((
+                    para,
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![root],
+                    },
+                ));
+            }
+            for (i, k) in kinds.into_iter().enumerate() {
+                let d = Dot::new(1, 2 + i as u64);
+                let item = match k {
+                    0 => SeqItem::Char('a'),
+                    1 => SeqItem::Char('b'),
+                    2 => SeqItem::Atom(AtomLeaf::HardBreak),
+                    _ => SeqItem::Char('c'),
+                };
+                items.push((d, item));
+            }
+            items
+        })
+    }
+}

@@ -1,9 +1,13 @@
+use std::collections::BTreeMap;
+
 use editor_common::StrExt;
+use editor_crdt::Dot;
 use editor_model::{
-    Modifier, Node, NodeId, PlainHardBreakNode, PlainNode, PlainTabNode, PlainTextNode, Subtree,
+    ChildView, Modifier, ModifierType, NodeView, PlainHardBreakNode, PlainNode, PlainTabNode,
+    PlainTextNode, Subtree,
 };
-use editor_state::{Affinity, PendingModifiers, Position, Selection};
-use editor_transaction::Transaction;
+use editor_state::{Affinity, PendingModifiers, Position, ProjectedState, Selection};
+use editor_transaction::{Step, Transaction};
 
 use crate::helpers::{
     carryable_modifiers_at, find_enclosing_paragraph_id, is_tab_metric_modifier,
@@ -11,13 +15,185 @@ use crate::helpers::{
 };
 use crate::{CommandError, CommandResult};
 
+/// Capture a projected child (block or leaf atom/char) as a `Subtree`, mirroring
+/// the substrate's internal capture so the removal is reversible.
+fn capture_child_subtree(ps: &ProjectedState, child: &ChildView) -> Subtree {
+    match child {
+        ChildView::Block(b) => capture_block_subtree(ps, b),
+        ChildView::Leaf(l) => {
+            let plain = if let Some(ch) = l.as_char() {
+                PlainNode::Text(PlainTextNode {
+                    text: ch.to_string(),
+                })
+            } else if let Some(atom) = l.as_atom() {
+                atom.clone().into_node().to_plain()
+            } else {
+                PlainNode::Text(PlainTextNode {
+                    text: String::new(),
+                })
+            };
+            Subtree::leaf(plain)
+        }
+    }
+}
+
+fn capture_block_subtree(ps: &ProjectedState, block: &NodeView) -> Subtree {
+    let node = block.node().to_plain();
+    let dot = block.dot();
+    let modifiers: Vec<Modifier> = dot
+        .map(|d| ps.block_modifiers().modifiers_of(d).into_values().collect())
+        .unwrap_or_default();
+    let style = dot.and_then(|d| ps.node_styles().value_of(d));
+    let marker = dot.and_then(|d| ps.node_markers().value_of(d));
+    let children = block
+        .children()
+        .map(|c| capture_child_subtree(ps, &c))
+        .collect();
+    Subtree {
+        node,
+        modifiers,
+        style,
+        marker,
+        children,
+    }
+}
+
+/// Remove the child at full child-slot `index` of `parent` (a block OR a
+/// block-level/inline atom leaf). Unlike `Transaction::remove_subtree`, this
+/// indexes by the full child list and can remove leaf atoms.
+pub(crate) fn remove_child_at(
+    tr: &mut Transaction,
+    parent: Dot,
+    index: usize,
+) -> Result<(), CommandError> {
+    let subtree = {
+        let view = tr.state().view();
+        let parent_node = view
+            .node(parent)
+            .ok_or(CommandError::NodeNotFound(parent))?;
+        let child = parent_node
+            .child_at(index)
+            .ok_or_else(|| CommandError::Corrupted("child index out of range".into()))?;
+        capture_child_subtree(&tr.state().projected, &child)
+    };
+    tr.apply_steps(vec![Step::RemoveSubtree {
+        parent,
+        index,
+        subtree,
+    }])?;
+    Ok(())
+}
+
+/// Remove `block` if it has no real children (the projection may synthesize a
+/// Derived placeholder, so emptiness is judged by real children), then cascade
+/// to its parent if that becomes empty in turn. A no-op for blocks that still
+/// hold real content, are structural, or for which empty is valid.
+pub(crate) fn prune_empty_real(tr: &mut Transaction, block: Dot) -> Result<(), CommandError> {
+    let mut current = block;
+    loop {
+        let parent_id = {
+            let view = tr.state().view();
+            let Some(node) = view.node(current) else {
+                break;
+            };
+            let has_real_child = node
+                .children()
+                .any(|c| crate::helpers::child_elem_id(&c).as_op_dot().is_some());
+            let spec = node.spec();
+            let removable = !has_real_child
+                && !spec.structural
+                && spec.content.min_required() > 0
+                && node.parent().is_some();
+            if !removable {
+                break;
+            }
+            node.parent().map(|p| p.id())
+        };
+        let Some(parent_id) = parent_id else {
+            break;
+        };
+        tr.remove_subtree(current)?;
+        current = parent_id;
+    }
+    Ok(())
+}
+
+/// Collect the leaf ids of the children in `[offset, offset + len)` of `block`.
+fn child_leaf_dots(tr: &Transaction, block: Dot, offset: usize, len: usize) -> Vec<Dot> {
+    let view = tr.state().view();
+    let Some(node) = view.node(block) else {
+        return Vec::new();
+    };
+    (offset..offset + len)
+        .filter_map(|i| match node.child_at(i) {
+            Some(ChildView::Leaf(l)) => Some(l.dot()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Reconcile inline (span) formatting on `dots` so the non-style own modifiers
+/// match `desired`: add desired spans that are missing or differ, and strip
+/// text-applicable spans that are not desired (so e.g. typing with bold unset
+/// inside a bold run yields plain text).
+fn apply_inline_modifiers(
+    tr: &mut Transaction,
+    dots: &[Dot],
+    desired: &[Modifier],
+) -> Result<(), CommandError> {
+    let (Some(first), Some(last)) = (dots.first(), dots.last()) else {
+        return Ok(());
+    };
+    let (first, last) = (*first, *last);
+
+    let desired_map: BTreeMap<ModifierType, Modifier> =
+        desired.iter().map(|m| (m.as_type(), m.clone())).collect();
+
+    let actual: BTreeMap<ModifierType, Modifier> = {
+        let view = tr.state().view();
+        match view.leaf(first) {
+            Some(l) => l
+                .own_modifiers()
+                .iter()
+                .filter(|(_, o)| !o.from_style)
+                .map(|(t, o)| (*t, o.value.clone()))
+                .collect(),
+            None => BTreeMap::new(),
+        }
+    };
+
+    for (ty, m) in &desired_map {
+        if actual.get(ty) != Some(m) {
+            tr.add_span_modifier(first, last, m.clone())?;
+        }
+    }
+    for (ty, m) in &actual {
+        if !desired_map.contains_key(ty) && is_text_applicable(*ty) {
+            tr.remove_span_modifier(first, last, m.clone())?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_node_style(
+    tr: &mut Transaction,
+    dots: &[Dot],
+    style_id: &Option<String>,
+) -> Result<(), CommandError> {
+    if let Some(style_id) = style_id {
+        for dot in dots {
+            tr.set_node_style(*dot, Some(style_id.clone()))?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandResult {
     if text.is_empty() {
         return Err(CommandError::InvalidArgument(
             "text must not be empty".into(),
         ));
     }
-
     if text.contains(['\n', '\r']) {
         return Err(CommandError::InvalidArgument(
             "text must not contain newlines".into(),
@@ -27,415 +203,216 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
-
     let pos = selection.head;
-    let doc = tr.doc();
-
-    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
-    let host_marker: Option<editor_model::Marker> = host_paragraph_id
-        .and_then(|id| doc.node(id))
-        .and_then(|p| p.marker().cloned());
-    let host_is_empty = host_paragraph_id
-        .and_then(|id| doc.node(id))
-        .map(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
-        .unwrap_or(false);
-    let marker_style: Option<String> = if host_is_empty {
-        host_marker.as_ref().and_then(|m| m.style.clone())
-    } else {
-        None
-    };
+    let block = pos.node;
 
     let pending_style_explicit = tr.pending_style().is_some();
-    let pending_style: Option<String> = match tr.pending_style() {
-        Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
-        Some(editor_state::PendingStyle::Unset) => None,
-        None => doc
-            .node(pos.node_id)
-            .and_then(|n| n.entry().style.get().clone())
-            .or_else(|| marker_style.clone()),
+    let pending_modifiers = tr.pending_modifiers().clone();
+
+    let (mut effective_mods, pending_style, host_paragraph_id, host_has_marker) = {
+        let view = tr.state().view();
+        let node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
+
+        let host_paragraph_id = find_enclosing_paragraph_id(&view, block);
+        let host_marker =
+            host_paragraph_id.and_then(|id| tr.state().projected.node_markers().value_of(id));
+        let host_is_empty = host_paragraph_id
+            .and_then(|id| view.node(id))
+            .map(|p| {
+                !p.children()
+                    .any(|c| matches!(c, ChildView::Leaf(l) if l.as_char().is_some()))
+            })
+            .unwrap_or(false);
+        let marker_style = if host_is_empty {
+            host_marker.as_ref().and_then(|m| m.style.clone())
+        } else {
+            None
+        };
+
+        let left_style = pos
+            .offset
+            .checked_sub(1)
+            .and_then(|i| match node.child_at(i) {
+                Some(ChildView::Leaf(l)) => Some(l.dot()),
+                _ => None,
+            })
+            .and_then(|d| tr.state().projected.node_styles().value_of(d));
+
+        let pending_style: Option<String> = match tr.pending_style() {
+            Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
+            Some(editor_state::PendingStyle::Unset) => None,
+            None => left_style.or(marker_style.clone()),
+        };
+
+        let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, &pending_modifiers);
+        effective_mods.retain(|m| is_text_applicable(m.as_type()));
+
+        if let Some(marker) = &host_marker {
+            for m in &marker.modifiers {
+                if !is_text_applicable(m.as_type()) {
+                    continue;
+                }
+                if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
+                    effective_mods.push(m.clone());
+                }
+            }
+        }
+
+        (
+            effective_mods,
+            pending_style,
+            host_paragraph_id,
+            host_marker.is_some(),
+        )
     };
-
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
     effective_mods.retain(|m| is_text_applicable(m.as_type()));
+
     let insert_len = text.char_count();
+    tr.insert_text(block, pos.offset, text)?;
 
-    if let Some(p_id) = host_paragraph_id
-        && p_id != pos.node_id
-        && let Some(p_node) = doc.node(p_id)
-    {
-        for m in p_node.modifiers() {
-            if !is_text_applicable(m.as_type()) {
-                continue;
-            }
-            if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
-                effective_mods.push(m.clone());
-            }
-        }
-    }
+    let new_dots = child_leaf_dots(tr, block, pos.offset, insert_len);
+    apply_inline_modifiers(tr, &new_dots, &effective_mods)?;
+    apply_node_style(tr, &new_dots, &pending_style)?;
 
-    if let Some(marker) = &host_marker {
-        for m in &marker.modifiers {
-            if !is_text_applicable(m.as_type()) {
-                continue;
-            }
-            if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
-                effective_mods.push(m.clone());
-            }
-        }
-    }
-
-    match node.node() {
-        Node::Text(text_node) => {
-            let mut node_mods: Vec<Modifier> = node.modifiers().cloned().collect();
-            node_mods.sort_by_key(|m| m.as_type());
-            let mut effective_sorted = effective_mods.clone();
-            effective_sorted.sort_by_key(|m| m.as_type());
-            if effective_sorted == node_mods
-                && doc
-                    .node(pos.node_id)
-                    .and_then(|n| n.entry().style.get().clone())
-                    == pending_style
-            {
-                tr.insert_text(pos.node_id, pos.offset, text)?;
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: pos.node_id,
-                    offset: pos.offset + insert_len,
-                    affinity: Affinity::Upstream,
-                })))?;
-            } else {
-                let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
-                let node_index = node
-                    .index()
-                    .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
-
-                let new_id = NodeId::new();
-                let subtree = Subtree::leaf(new_id, PlainNode::Text(PlainTextNode::default()))
-                    .with_modifiers(effective_mods);
-
-                if pos.offset == 0 {
-                    tr.insert_subtree(parent.id(), node_index, subtree)?;
-                } else if pos.offset == text_node.text.len() {
-                    tr.insert_subtree(parent.id(), node_index + 1, subtree)?;
-                } else {
-                    let split_id = NodeId::new();
-                    tr.split_node(pos.node_id, pos.offset, split_id)?;
-                    tr.insert_subtree(parent.id(), node_index + 1, subtree)?;
-                }
-                tr.insert_text(new_id, 0, text)?;
-
-                if let Some(style_id) = pending_style.clone() {
-                    tr.set_node_style(new_id, Some(style_id))?;
-                }
-
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: new_id,
-                    offset: insert_len,
-                    affinity: Affinity::Upstream,
-                })))?;
-            }
-        }
-        _ => {
-            // Case 3: non-text node (empty paragraph, etc.)
-            let new_id = NodeId::new();
-            let subtree = Subtree::leaf(new_id, PlainNode::Text(PlainTextNode::default()))
-                .with_modifiers(effective_mods);
-
-            tr.insert_subtree(pos.node_id, pos.offset, subtree)?;
-            tr.insert_text(new_id, 0, text)?;
-
-            if let Some(style_id) = pending_style.clone() {
-                tr.set_node_style(new_id, Some(style_id))?;
-            }
-
-            tr.set_selection(Some(Selection::collapsed(Position {
-                node_id: new_id,
-                offset: insert_len,
-                affinity: Affinity::Upstream,
-            })))?;
-        }
-    }
+    tr.set_selection(Some(Selection::collapsed(Position {
+        node: block,
+        offset: pos.offset + insert_len,
+        affinity: Affinity::Upstream,
+    })))?;
 
     if !tr.pending_modifiers().is_empty() {
         tr.set_pending_modifiers(PendingModifiers::new())?;
     }
-
     if pending_style_explicit {
         tr.set_pending_style(None)?;
     }
-
     if let Some(p_id) = host_paragraph_id
-        && host_marker.is_some()
+        && host_has_marker
     {
         tr.set_marker(p_id, None)?;
+    }
+
+    Ok(true)
+}
+
+fn insert_atom_at_caret(
+    tr: &mut Transaction,
+    plain: PlainNode,
+    metric_only: bool,
+) -> CommandResult {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+    if selection.anchor != selection.head {
+        return Ok(false);
+    }
+    let pos = selection.head;
+    let block = pos.node;
+    let pending_modifiers = tr.pending_modifiers().clone();
+
+    let (metric_mods, pending_style, carryable, host_paragraph_id, host_has_marker) = {
+        let view = tr.state().view();
+        let node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
+
+        let host_paragraph_id = find_enclosing_paragraph_id(&view, block);
+        let host_marker = host_paragraph_id
+            .filter(|&id| {
+                view.node(id)
+                    .map(|p| {
+                        !p.children()
+                            .any(|c| matches!(c, ChildView::Leaf(l) if l.as_char().is_some()))
+                    })
+                    .unwrap_or(false)
+            })
+            .and_then(|id| tr.state().projected.node_markers().value_of(id));
+        let marker_style = host_marker.as_ref().and_then(|m| m.style.clone());
+
+        let left_style = pos
+            .offset
+            .checked_sub(1)
+            .and_then(|i| match node.child_at(i) {
+                Some(ChildView::Leaf(l)) => Some(l.dot()),
+                _ => None,
+            })
+            .and_then(|d| tr.state().projected.node_styles().value_of(d));
+
+        let pending_style: Option<String> = match tr.pending_style() {
+            Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
+            Some(editor_state::PendingStyle::Unset) => None,
+            None => left_style.or(marker_style.clone()),
+        };
+
+        let mut metric_mods = resolve_effective_modifiers(&node, pos.offset, &pending_modifiers);
+        if metric_only {
+            metric_mods.retain(|m| is_tab_metric_modifier(m.as_type()));
+            if let Some(marker) = &host_marker {
+                for m in &marker.modifiers {
+                    if is_tab_metric_modifier(m.as_type())
+                        && !metric_mods.iter().any(|e| e.as_type() == m.as_type())
+                    {
+                        metric_mods.push(m.clone());
+                    }
+                }
+            }
+        } else {
+            metric_mods.clear();
+        }
+
+        let carryable = carryable_modifiers_at(&view, pos, &pending_modifiers);
+
+        (
+            metric_mods,
+            pending_style,
+            carryable,
+            host_paragraph_id,
+            host_marker.is_some(),
+        )
+    };
+
+    tr.insert_subtree(block, pos.offset, Subtree::leaf(plain))?;
+
+    let new_dots = child_leaf_dots(tr, block, pos.offset, 1);
+    apply_inline_modifiers(tr, &new_dots, &metric_mods)?;
+    apply_node_style(tr, &new_dots, &pending_style)?;
+
+    tr.set_selection(Some(Selection::collapsed(Position {
+        node: block,
+        offset: pos.offset + 1,
+        affinity: Affinity::Downstream,
+    })))?;
+
+    if tr.pending_style().is_some() {
+        tr.set_pending_style(None)?;
+    }
+
+    if let Some(p_id) = host_paragraph_id {
+        if host_has_marker {
+            tr.set_marker(p_id, None)?;
+        } else {
+            let marker = editor_model::Marker {
+                modifiers: carryable,
+                style: None,
+            };
+            if !marker.is_empty() {
+                tr.set_marker(p_id, Some(marker))?;
+            }
+        }
     }
 
     Ok(true)
 }
 
 pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult {
-    let Some(selection) = tr.selection() else {
-        return Ok(false);
-    };
-    if !selection.is_collapsed() {
-        return Ok(false);
-    }
-
-    let pos = selection.head;
-    let doc = tr.doc();
-
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
-    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
-
-    let break_id = NodeId::new();
-    let break_subtree = Subtree::leaf(
-        break_id,
+    insert_atom_at_caret(
+        tr,
         PlainNode::HardBreak(PlainHardBreakNode::default()),
-    );
-
-    match node.node() {
-        Node::Text(text_node) => {
-            let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
-            let node_index = node
-                .index()
-                .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
-            let text_len = text_node.text.len();
-
-            if pos.offset == 0 {
-                // Case B: cursor at start of text → insert hard break before
-                tr.insert_subtree(parent.id(), node_index, break_subtree)?;
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: pos.node_id,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                })))?;
-            } else if pos.offset == text_len {
-                // Case C: cursor at end of text → insert hard break after
-                tr.insert_subtree(parent.id(), node_index + 1, break_subtree)?;
-
-                let doc = tr.doc();
-                let break_node = doc
-                    .node(break_id)
-                    .ok_or(CommandError::NodeNotFound(break_id))?;
-
-                if let Some(next) = break_node.next_sibling() {
-                    if matches!(next.node(), Node::Text(_)) {
-                        tr.set_selection(Some(Selection::collapsed(Position {
-                            node_id: next.id(),
-                            offset: 0,
-                            affinity: Affinity::Downstream,
-                        })))?;
-                    } else {
-                        let idx = next
-                            .index()
-                            .ok_or(CommandError::orphan_child(next.id(), parent.id()))?;
-                        tr.set_selection(Some(Selection::collapsed(Position {
-                            node_id: parent.id(),
-                            offset: idx,
-                            affinity: Affinity::Downstream,
-                        })))?;
-                    }
-                } else {
-                    let break_idx = break_node
-                        .index()
-                        .ok_or(CommandError::orphan_child(break_id, parent.id()))?;
-                    tr.set_selection(Some(Selection::collapsed(Position {
-                        node_id: parent.id(),
-                        offset: break_idx + 1,
-                        affinity: Affinity::Downstream,
-                    })))?;
-                }
-            } else {
-                // Case A: cursor in middle of text → split, insert hard break between
-                let split_id = NodeId::new();
-                tr.split_node(pos.node_id, pos.offset, split_id)?;
-                tr.insert_subtree(parent.id(), node_index + 1, break_subtree)?;
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: split_id,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                })))?;
-            }
-        }
-        _ => {
-            // Case D: non-text node (empty paragraph, etc.)
-            tr.insert_subtree(pos.node_id, pos.offset, break_subtree)?;
-            tr.set_selection(Some(Selection::collapsed(Position {
-                node_id: pos.node_id,
-                offset: pos.offset + 1,
-                affinity: Affinity::Downstream,
-            })))?;
-        }
-    }
-
-    if let Some(p_id) = host_paragraph_id {
-        let marker = editor_model::Marker {
-            modifiers: carryable,
-            style: None,
-        };
-        if !marker.is_empty() {
-            tr.set_marker(p_id, Some(marker))?;
-        }
-    }
-
-    Ok(true)
+        false,
+    )
 }
 
 pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
-    let Some(selection) = tr.selection() else {
-        return Ok(false);
-    };
-    if !selection.is_collapsed() {
-        return Ok(false);
-    }
-
-    let pos = selection.head;
-    let doc = tr.doc();
-
-    let host_paragraph_id = find_enclosing_paragraph_id(&doc, pos.node_id);
-    let host_marker: Option<editor_model::Marker> = host_paragraph_id
-        .and_then(|id| doc.node(id))
-        .filter(|p| !p.children().any(|c| matches!(c.node(), Node::Text(_))))
-        .and_then(|p| p.marker().cloned());
-    let marker_style: Option<String> = host_marker.as_ref().and_then(|m| m.style.clone());
-
-    let pending_style_explicit = tr.pending_style().is_some();
-    let pending_style: Option<String> = match tr.pending_style() {
-        Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
-        Some(editor_state::PendingStyle::Unset) => None,
-        None => doc
-            .node(pos.node_id)
-            .and_then(|n| n.entry().style.get().clone())
-            .or_else(|| marker_style.clone()),
-    };
-
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let mut metric_mods = resolve_effective_modifiers(&node, pos.offset, tr.pending_modifiers());
-    metric_mods.retain(|m| is_tab_metric_modifier(m.as_type()));
-
-    // An empty host paragraph's marker holds the next-input formatting; fold its tab-metric
-    // modifiers into the tab (the resolver no longer surfaces the marker post de-overload).
-    if let Some(marker) = &host_marker {
-        for m in &marker.modifiers {
-            if is_tab_metric_modifier(m.as_type())
-                && !metric_mods.iter().any(|e| e.as_type() == m.as_type())
-            {
-                metric_mods.push(m.clone());
-            }
-        }
-    }
-
-    let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
-
-    let tab_id = NodeId::new();
-    let tab_subtree =
-        Subtree::leaf(tab_id, PlainNode::Tab(PlainTabNode::default())).with_modifiers(metric_mods);
-
-    match node.node() {
-        Node::Text(text_node) => {
-            let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
-            let node_index = node
-                .index()
-                .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
-            let text_len = text_node.text.len();
-
-            if pos.offset == 0 {
-                tr.insert_subtree(parent.id(), node_index, tab_subtree)?;
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: pos.node_id,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                })))?;
-            } else if pos.offset == text_len {
-                tr.insert_subtree(parent.id(), node_index + 1, tab_subtree)?;
-                let doc = tr.doc();
-                let tab_node = doc.node(tab_id).ok_or(CommandError::NodeNotFound(tab_id))?;
-                if let Some(next) = tab_node.next_sibling() {
-                    if matches!(next.node(), Node::Text(_)) {
-                        tr.set_selection(Some(Selection::collapsed(Position {
-                            node_id: next.id(),
-                            offset: 0,
-                            affinity: Affinity::Downstream,
-                        })))?;
-                    } else {
-                        let idx = next
-                            .index()
-                            .ok_or(CommandError::orphan_child(next.id(), parent.id()))?;
-                        tr.set_selection(Some(Selection::collapsed(Position {
-                            node_id: parent.id(),
-                            offset: idx,
-                            affinity: Affinity::Downstream,
-                        })))?;
-                    }
-                } else {
-                    let tab_idx = tab_node
-                        .index()
-                        .ok_or(CommandError::orphan_child(tab_id, parent.id()))?;
-                    tr.set_selection(Some(Selection::collapsed(Position {
-                        node_id: parent.id(),
-                        offset: tab_idx + 1,
-                        affinity: Affinity::Downstream,
-                    })))?;
-                }
-            } else {
-                let split_id = NodeId::new();
-                tr.split_node(pos.node_id, pos.offset, split_id)?;
-                tr.insert_subtree(parent.id(), node_index + 1, tab_subtree)?;
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: split_id,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                })))?;
-            }
-        }
-        _ => {
-            tr.insert_subtree(pos.node_id, pos.offset, tab_subtree)?;
-            tr.set_selection(Some(Selection::collapsed(Position {
-                node_id: pos.node_id,
-                offset: pos.offset + 1,
-                affinity: Affinity::Downstream,
-            })))?;
-        }
-    }
-
-    if let Some(style_id) = pending_style {
-        tr.set_node_style(tab_id, Some(style_id))?;
-    }
-
-    if pending_style_explicit {
-        tr.set_pending_style(None)?;
-    }
-
-    if let Some(p_id) = host_paragraph_id
-        && host_marker.is_some()
-    {
-        tr.set_marker(p_id, None)?;
-    }
-
-    if let Some(p_id) = host_paragraph_id
-        && host_marker.is_none()
-    {
-        let marker = editor_model::Marker {
-            modifiers: carryable,
-            style: None,
-        };
-        if !marker.is_empty() {
-            tr.set_marker(p_id, Some(marker))?;
-        }
-    }
-
-    Ok(true)
+    insert_atom_at_caret(tr, PlainNode::Tab(PlainTabNode::default()), true)
 }

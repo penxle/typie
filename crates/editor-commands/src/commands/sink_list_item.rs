@@ -1,8 +1,9 @@
-use editor_state::Position;
+use editor_crdt::Dot;
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    collect_top_level_list_items_in_selection, find_enclosing_list_item_id, sink_list_item_inner,
+    capture_selection_anchors, collect_top_level_list_items_in_selection,
+    restore_selection_anchors, sink_list_item_inner,
 };
 use crate::{CommandError, CommandResult};
 
@@ -10,46 +11,69 @@ pub fn sink_list_item(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let doc = tr.doc();
 
-    if selection.is_collapsed() {
-        let pos = selection.head;
-        let Some(list_item_id) = find_enclosing_list_item_id(&doc, pos.node_id) else {
-            return Ok(false);
-        };
-        return sink_list_item_inner(tr, list_item_id);
-    }
-
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
-
-    let items = collect_top_level_list_items_in_selection(&doc, from, to);
+    let items = {
+        let view = tr.view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let from = resolved.from().position();
+        let to = resolved.to().position();
+        collect_top_level_list_items_in_selection(&view, from, to)
+    };
     if items.is_empty() {
         return Ok(false);
     }
 
     // Google Docs behavior: if the first item has no prev sibling, the entire
     // range is a no-op rather than partially sinking later items.
-    let first = doc
-        .node(items[0])
-        .ok_or(CommandError::NodeNotFound(items[0]))?;
-    if first.prev_sibling().is_none() {
+    let first_has_prev = {
+        let view = tr.view();
+        let first = view
+            .node(items[0])
+            .ok_or_else(|| CommandError::NodeNotFound(items[0]))?;
+        first.index().map(|i| i > 0).unwrap_or(false)
+    };
+    if !first_has_prev {
         return Ok(false);
     }
 
+    let captured = {
+        let view = tr.view();
+        capture_selection_anchors(&view, &items, &selection)
+    };
+
+    let mut new_ids: Vec<Option<Dot>> = Vec::with_capacity(items.len());
     let mut any_sunk = false;
     for item_id in items.iter() {
-        let doc = tr.doc();
-        if doc.node(*item_id).is_none() {
+        let exists = {
+            let view = tr.view();
+            view.node(*item_id).is_some()
+        };
+        if !exists {
+            new_ids.push(None);
             continue;
         }
-        if sink_list_item_inner(tr, *item_id)? {
+        let new_id = sink_list_item_inner(tr, *item_id)?;
+        if new_id.is_some() {
             any_sunk = true;
         }
+        new_ids.push(new_id);
     }
+    if !any_sunk {
+        return Ok(false);
+    }
+
+    if let Some((anchor, head)) = captured {
+        let sel = {
+            let view = tr.view();
+            restore_selection_anchors(&view, &new_ids, &anchor, &head)
+        };
+        if let Some(sel) = sel {
+            tr.set_selection(Some(sel))?;
+        }
+    }
+
     Ok(any_sunk)
 }
 
@@ -62,64 +86,64 @@ mod tests {
 
     #[test]
     fn sink_simple_top_level() {
-        let (initial, ..) = state! {
+        let (initial, _) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item {
                             paragraph { text("A") }
                             bullet_list {
-                                list_item { paragraph { t1: text("B") } }
+                                list_item { p1: paragraph { text("B") } }
                             }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn no_prev_returns_false() {
-        let (initial, ..) = state! {
+        let (initial, _) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| sink_list_item(&mut tr));
     }
 
     #[test]
     fn outside_list_returns_false() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("A") } } }
-            selection: (t1, 0)
+        let (initial, _) = state! {
+            doc { root { p1: paragraph { text("A") } } }
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| sink_list_item(&mut tr));
     }
 
     #[test]
     fn sink_appends_to_existing_sublist() {
-        let (initial, ..) = state! {
+        let (initial, _) = state! {
             doc {
                 root {
                     bullet_list {
@@ -127,15 +151,15 @@ mod tests {
                             paragraph { text("A") }
                             bullet_list { list_item { paragraph { text("a1") } } }
                         }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _) = state! {
             doc {
                 root {
                     bullet_list {
@@ -143,71 +167,71 @@ mod tests {
                             paragraph { text("A") }
                             bullet_list {
                                 list_item { paragraph { text("a1") } }
-                                list_item { paragraph { t1: text("B") } }
+                                list_item { p1: paragraph { text("B") } }
                             }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn sink_preserves_ordered_type() {
-        let (initial, ..) = state! {
+        let (initial, _) = state! {
             doc {
                 root {
                     ordered_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _) = state! {
             doc {
                 root {
                     ordered_list {
                         list_item {
                             paragraph { text("A") }
                             ordered_list {
-                                list_item { paragraph { t1: text("B") } }
+                                list_item { p1: paragraph { text("B") } }
                             }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn sink_carries_existing_sublist() {
-        let (initial, ..) = state! {
+        let (initial, _) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
                         list_item {
-                            paragraph { t1: text("B") }
+                            p1: paragraph { text("B") }
                             bullet_list { list_item { paragraph { text("b1") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _) = state! {
             doc {
                 root {
                     bullet_list {
@@ -215,7 +239,7 @@ mod tests {
                             paragraph { text("A") }
                             bullet_list {
                                 list_item {
-                                    paragraph { t1: text("B") }
+                                    p1: paragraph { text("B") }
                                     bullet_list { list_item { paragraph { text("b1") } } }
                                 }
                             }
@@ -224,81 +248,81 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn sink_range_two_items() {
-        let (initial, ..) = state! {
+        let (initial, _, _) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
-                        list_item { paragraph { t2: text("C") } }
+                        list_item { p1: paragraph { text("B") } }
+                        list_item { p2: paragraph { text("C") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _, _) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item {
                             paragraph { text("A") }
                             bullet_list {
-                                list_item { paragraph { t1: text("B") } }
-                                list_item { paragraph { t2: text("C") } }
+                                list_item { p1: paragraph { text("B") } }
+                                list_item { p2: paragraph { text("C") } }
                             }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn sink_range_across_separate_lists_returns_false() {
-        let (initial, ..) = state! {
+        let (initial, _, _) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     bullet_list {
                         list_item { paragraph { text("C") } }
-                        list_item { paragraph { t2: text("D") } }
+                        list_item { p2: paragraph { text("D") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         transact_fail!(initial, |tr| sink_list_item(&mut tr));
     }
 
     #[test]
     fn sink_range_first_has_no_prev_returns_false() {
-        let (initial, ..) = state! {
+        let (initial, _, _) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
-                        list_item { paragraph { t2: text("B") } }
+                        list_item { p1: paragraph { text("A") } }
+                        list_item { p2: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         transact_fail!(initial, |tr| sink_list_item(&mut tr));
     }
@@ -308,7 +332,7 @@ mod tests {
         // prev_list_item already owns an ordered sublist (a state reachable only
         // via paste/import). Reusing it regardless of type preserves the single-
         // sublist invariant; the sunk item becomes a child of the ordered list.
-        let (initial, ..) = state! {
+        let (initial, _) = state! {
             doc {
                 root {
                     bullet_list {
@@ -316,15 +340,15 @@ mod tests {
                             paragraph { text("A") }
                             ordered_list { list_item { paragraph { text("a1") } } }
                         }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _) = state! {
             doc {
                 root {
                     bullet_list {
@@ -332,14 +356,14 @@ mod tests {
                             paragraph { text("A") }
                             ordered_list {
                                 list_item { paragraph { text("a1") } }
-                                list_item { paragraph { t1: text("B") } }
+                                list_item { p1: paragraph { text("B") } }
                             }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

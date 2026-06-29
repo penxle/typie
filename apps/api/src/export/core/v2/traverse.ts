@@ -7,7 +7,7 @@ import type { Inline, NodeVisitorV2, ParagraphV2, Run, TableV2 } from './types.t
 export function traverseV2<TCtx, TOut>(
   parsed: {
     plain: PlainDoc;
-    rootId: string;
+    root: PlainNodeEntry;
     defaults: { fontFamily: string; fontSizePt100: number };
     images: Map<string, ImageAsset>;
     embeds: Map<string, EmbedInfo>;
@@ -15,29 +15,21 @@ export function traverseV2<TCtx, TOut>(
   visitor: NodeVisitorV2<TCtx, TOut>,
   ctx: TCtx,
 ): TOut[] {
-  const plain = parsed.plain;
   const defaults = parsed.defaults;
   let listDepth = 0;
-  return convertChildren(parsed.rootId);
+  return convertChildren(parsed.root);
 
-  function entryOf(id: string): PlainNodeEntry | undefined {
-    return plain.nodes[id];
-  }
-  function convertChildren(id: string): TOut[] {
-    const e = entryOf(id);
-    if (!e) return [];
+  function convertChildren(e: PlainNodeEntry): TOut[] {
     const out: TOut[] = [];
-    for (const childId of e.children) {
-      const r = convertNode(childId);
+    for (const child of e.children) {
+      const r = convertNode(child);
       if (r !== undefined) out.push(r);
     }
     return out;
   }
   function parseParagraph(e: PlainNodeEntry): ParagraphV2 {
     const inlines: Inline[] = [];
-    for (const childId of e.children) {
-      const c = entryOf(childId);
-      if (!c) continue;
+    for (const c of e.children) {
       switch (c.node.type) {
         case 'text': {
           inlines.push({ type: 'run', run: { text: c.node.text, style: resolveRunStyle(c.modifiers, defaults) } });
@@ -66,15 +58,13 @@ export function traverseV2<TCtx, TOut>(
     };
   }
   function buildTable(e: PlainNodeEntry): TableV2<TOut> {
-    const rows = e.children.map((rowId) => {
-      const row = entryOf(rowId);
-      const cells = (row?.children ?? []).map((cellId) => {
-        const cell = entryOf(cellId);
-        const node = cell?.node;
-        const cellBg = cell?.modifiers['background_color'];
+    const rows = e.children.map((row) => {
+      const cells = row.children.map((cell) => {
+        const node = cell.node;
+        const cellBg = cell.modifiers['background_color'];
         return {
-          children: cell ? convertChildren(cellId) : [],
-          colWidth: node?.type === 'table_cell' ? (node.col_width ?? undefined) : undefined,
+          children: convertChildren(cell),
+          colWidth: node.type === 'table_cell' ? (node.col_width ?? undefined) : undefined,
           backgroundColorHex:
             cellBg?.type === 'background_color' && cellBg.value !== 'none' ? resolveColorToHex(`bg.${cellBg.value}`) : undefined,
         };
@@ -88,9 +78,7 @@ export function traverseV2<TCtx, TOut>(
       proportion: tnode.type === 'table' ? (tnode.proportion ?? 100) / 100 : 1,
     };
   }
-  function convertNode(id: string): TOut | undefined {
-    const e = entryOf(id);
-    if (!e) return undefined;
+  function convertNode(e: PlainNodeEntry): TOut | undefined {
     const v = visitor;
     switch (e.node.type) {
       case 'paragraph': {
@@ -124,33 +112,27 @@ export function traverseV2<TCtx, TOut>(
         const kind = e.node.type === 'bullet_list' ? 'bullet' : 'ordered';
         v.onEnterList?.(kind, listDepth, ctx);
         listDepth++;
-        const items = e.children.map((itemId) => {
-          const item = entryOf(itemId);
-          return item && item.node.type === 'list_item' ? convertChildren(itemId) : [];
-        });
+        const items = e.children.map((item) => (item.node.type === 'list_item' ? convertChildren(item) : []));
         listDepth--;
         v.onExitList?.(ctx);
         return kind === 'bullet' ? v.bulletList(items, ctx) : v.orderedList(items, ctx);
       }
       case 'blockquote': {
-        return v.blockquote(e.node.variant ?? 'left_line', convertChildren(id), ctx);
+        return v.blockquote(e.node.variant ?? 'left_line', convertChildren(e), ctx);
       }
       case 'callout': {
-        return v.callout(e.node.variant ?? 'info', convertChildren(id), ctx);
+        return v.callout(e.node.variant ?? 'info', convertChildren(e), ctx);
       }
       case 'fold': {
         const title: Run[] = [];
         let content: TOut[] = [];
-        for (const childId of e.children) {
-          const c = entryOf(childId);
-          if (!c) continue;
+        for (const c of e.children) {
           if (c.node.type === 'fold_title') {
-            for (const tId of c.children) {
-              const t = entryOf(tId);
-              if (t?.node.type === 'text') title.push({ text: t.node.text, style: resolveRunStyle(t.modifiers, defaults) });
+            for (const t of c.children) {
+              if (t.node.type === 'text') title.push({ text: t.node.text, style: resolveRunStyle(t.modifiers, defaults) });
             }
           } else if (c.node.type === 'fold_content') {
-            content = convertChildren(childId);
+            content = convertChildren(c);
           }
         }
         return v.fold(title, content, ctx);

@@ -1,13 +1,14 @@
-use editor_model::{Doc, Node, NodeId, NodeType};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, NodeType};
 use editor_state::Selection;
 use std::collections::{HashMap, HashSet};
 
 pub(crate) struct Labeler {
-    labels: HashMap<NodeId, String>,
+    labels: HashMap<Dot, String>,
 }
 
 impl Labeler {
-    pub fn new(doc: &Doc, selection: Option<&Selection>) -> Self {
+    pub fn new(view: &DocView, selection: Option<&Selection>) -> Self {
         let sel = match selection {
             None => {
                 return Self {
@@ -18,61 +19,65 @@ impl Labeler {
         };
 
         let mut needed = HashSet::new();
-        needed.insert(sel.anchor.node_id);
-        needed.insert(sel.head.node_id);
+        needed.insert(sel.anchor.node);
+        needed.insert(sel.head.node);
 
         let mut labels = HashMap::new();
         let mut counters: HashMap<NodeType, usize> = HashMap::new();
 
-        let root = doc.root().unwrap();
+        let root = view.root().unwrap();
         if needed.contains(&root.id()) {
-            let abbrev = node_type_abbreviation(root.node());
-            let counter = counters.entry(root.as_type()).or_insert(0);
+            let abbrev = node_type_abbreviation(root.node_type());
+            let counter = counters.entry(root.node_type()).or_insert(0);
             *counter += 1;
             labels.insert(root.id(), format!("{}{}", abbrev, counter));
         }
 
-        for node_ref in root.descendants() {
-            if needed.contains(&node_ref.id()) {
-                let abbrev = node_type_abbreviation(node_ref.node());
-                let counter = counters.entry(node_ref.as_type()).or_insert(0);
+        for child in root.descendants() {
+            let (id, node_type) = match child {
+                ChildView::Block(b) => (b.id(), b.node_type()),
+                ChildView::Leaf(l) => (l.dot(), l.node_type()),
+            };
+            if needed.contains(&id) {
+                let abbrev = node_type_abbreviation(node_type);
+                let counter = counters.entry(node_type).or_insert(0);
                 *counter += 1;
-                labels.insert(node_ref.id(), format!("{}{}", abbrev, counter));
+                labels.insert(id, format!("{}{}", abbrev, counter));
             }
         }
 
         Self { labels }
     }
 
-    pub fn label(&self, node_id: NodeId) -> Option<&str> {
-        self.labels.get(&node_id).map(|s| s.as_str())
+    pub fn label(&self, node: Dot) -> Option<&str> {
+        self.labels.get(&node).map(|s| s.as_str())
     }
 }
 
-fn node_type_abbreviation(node: &Node) -> &'static str {
-    match node {
-        Node::Root(_) => "r",
-        Node::Paragraph(_) => "p",
-        Node::Blockquote(_) => "bq",
-        Node::Callout(_) => "co",
-        Node::Text(_) => "t",
-        Node::BulletList(_) => "bl",
-        Node::OrderedList(_) => "ol",
-        Node::ListItem(_) => "li",
-        Node::Fold(_) => "fo",
-        Node::FoldTitle(_) => "ft",
-        Node::FoldContent(_) => "fc",
-        Node::Table(_) => "tb",
-        Node::TableRow(_) => "tr",
-        Node::TableCell(_) => "tc",
-        Node::Image(_) => "img",
-        Node::File(_) => "f",
-        Node::Embed(_) => "em",
-        Node::Archived(_) => "ar",
-        Node::HardBreak(_) => "hb",
-        Node::HorizontalRule(_) => "hr",
-        Node::PageBreak(_) => "pb",
-        Node::Tab(_) => "tab",
+fn node_type_abbreviation(node_type: NodeType) -> &'static str {
+    match node_type {
+        NodeType::Root => "r",
+        NodeType::Paragraph => "p",
+        NodeType::Blockquote => "bq",
+        NodeType::Callout => "co",
+        NodeType::Text => "t",
+        NodeType::BulletList => "bl",
+        NodeType::OrderedList => "ol",
+        NodeType::ListItem => "li",
+        NodeType::Fold => "fo",
+        NodeType::FoldTitle => "ft",
+        NodeType::FoldContent => "fc",
+        NodeType::Table => "tb",
+        NodeType::TableRow => "tr",
+        NodeType::TableCell => "tc",
+        NodeType::Image => "img",
+        NodeType::File => "f",
+        NodeType::Embed => "em",
+        NodeType::Archived => "ar",
+        NodeType::HardBreak => "hb",
+        NodeType::HorizontalRule => "hr",
+        NodeType::PageBreak => "pb",
+        NodeType::Tab => "tab",
     }
 }
 
@@ -84,38 +89,38 @@ mod tests {
 
     #[test]
     fn collapsed_selection_labels_one_node() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
-        assert_eq!(labeler.label(t1), Some("t1"));
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
+        assert_eq!(labeler.label(p1), Some("p1"));
     }
 
     #[test]
     fn range_selection_labels_two_nodes() {
-        let (state, t1, t2) = state! {
+        let (state, p1, p2) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t1, 0) -> (t2, 3)
+            selection: (p1, 0) -> (p2, 3)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
-        assert_eq!(labeler.label(t1), Some("t1"));
-        assert_eq!(labeler.label(t2), Some("t2"));
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
+        assert_eq!(labeler.label(p1), Some("p1"));
+        assert_eq!(labeler.label(p2), Some("p2"));
     }
 
     #[test]
     fn same_node_selection_labels_once() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
-        assert_eq!(labeler.label(t1), Some("t1"));
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
+        assert_eq!(labeler.label(p1), Some("p1"));
     }
 
     #[test]
@@ -124,49 +129,49 @@ mod tests {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
         assert_eq!(labeler.label(p1), Some("p1"));
     }
 
     #[test]
     fn depth_first_ordering() {
-        let (state, t1, t2) = state! {
+        let (state, p1, p2) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                     paragraph { text("B") }
-                    paragraph { t2: text("C") }
+                    p2: paragraph { text("C") }
                 }
             }
-            selection: (t2, 0) -> (t1, 0)
+            selection: (p2, 0) -> (p1, 0)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
-        assert_eq!(labeler.label(t1), Some("t1"));
-        assert_eq!(labeler.label(t2), Some("t2"));
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
+        assert_eq!(labeler.label(p1), Some("p1"));
+        assert_eq!(labeler.label(p2), Some("p2"));
     }
 
     #[test]
     fn unlabeled_node_returns_none() {
-        let (state, _, t2) = state! {
+        let (state, _, p2) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
-                    paragraph { t2: text("B") }
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
-        assert_eq!(labeler.label(t2), None);
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
+        assert_eq!(labeler.label(p2), None);
     }
 
     #[test]
     fn root_selection_labeled() {
         let (state, ..) = state! {
-            doc { r: root { paragraph { t1: text("A") } } }
+            doc { r: root { p1: paragraph { text("A") } } }
             selection: (r, 0)
         };
-        let labeler = Labeler::new(&state.doc, state.selection.as_ref());
-        assert_eq!(labeler.label(NodeId::ROOT), Some("r1"));
+        let labeler = Labeler::new(&state.view(), state.selection.as_ref());
+        assert_eq!(labeler.label(Dot::ROOT), Some("r1"));
     }
 }

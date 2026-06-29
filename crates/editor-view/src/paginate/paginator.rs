@@ -1,10 +1,10 @@
 use editor_common::{EdgeInsets, Rect, Size};
 
-use crate::style::Alignment;
-use editor_model::NodeId;
+use editor_crdt::Dot;
 use editor_state::Position;
 
-use crate::measure::*;
+use crate::measure::PageBreakPolicy;
+use crate::measure::types::{MeasuredBox, MeasuredContent, MeasuredNode, MeasuredTree};
 use crate::page::LayoutPage;
 use crate::style::*;
 
@@ -61,7 +61,11 @@ impl Paginator {
     }
 
     pub fn paginate(mut self, tree: MeasuredTree) -> PaginatedLayout {
-        let root = self.place_node(&tree.root, NodeId::ROOT, 0, 0.0);
+        let root_id = match &tree.root.content {
+            MeasuredContent::Box(b) => b.node,
+            _ => unreachable!("measured document root is always a Box"),
+        };
+        let root = self.place_node(&tree.root, root_id, 0, 0.0);
         let pages = self.finish();
         let tree = LayoutTree { root };
         PaginatedLayout { tree, pages }
@@ -70,7 +74,7 @@ impl Paginator {
     fn place_node(
         &mut self,
         node: &MeasuredNode,
-        parent_id: NodeId,
+        parent: Dot,
         child_index: usize,
         terminal_chrome_after: f32,
     ) -> LayoutNode {
@@ -83,8 +87,8 @@ impl Paginator {
                     Direction::Horizontal => self.place_horizontal(b, node),
                 };
                 if let LayoutContent::Box(lb) = &mut placed.content {
-                    lb.attachment = (lb.node_id != parent_id).then_some(ChildAttachment {
-                        parent_id,
+                    lb.attachment = (lb.node != parent).then_some(ChildAttachment {
+                        parent,
                         index: child_index,
                     });
                 }
@@ -97,7 +101,7 @@ impl Paginator {
                 LayoutNode {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Line(LayoutLine {
-                        node_id: l.node_id,
+                        node: l.node,
                         baseline: l.baseline,
                         ascent: l.ascent,
                         descent: l.descent,
@@ -106,7 +110,7 @@ impl Paginator {
                         glyph_runs: l.glyph_runs.clone(),
                         ruby_annotations: l.ruby_annotations.clone(),
                         empty_caret_x: l.empty_caret_x,
-                        child_range: l.child_range.clone(),
+                        offset_range: l.offset_range.clone(),
                         tab_gaps: l.tab_gaps.clone(),
                         is_phantom: l.is_phantom,
                         content_edge_x: l.content_edge_x,
@@ -120,9 +124,9 @@ impl Paginator {
                 LayoutNode {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Atom(LayoutAtom {
-                        node_id: a.node_id,
+                        node: a.node,
                         attachment: ChildAttachment {
-                            parent_id,
+                            parent,
                             index: child_index,
                         },
                     }),
@@ -135,14 +139,14 @@ impl Paginator {
                 LayoutNode {
                     rect: Rect::from_xywh(x, y, node.width, *h),
                     content: LayoutContent::Spacing(SpacingKind::Gap {
-                        position: Position::new(parent_id, child_index),
+                        position: Position::new(parent, child_index),
                     }),
                 }
             }
             MeasuredContent::PageBreak => LayoutNode {
                 rect: Rect::from_xywh(0.0, self.accumulated_y, 0.0, 0.0),
                 content: LayoutContent::Spacing(SpacingKind::Gap {
-                    position: Position::new(parent_id, child_index),
+                    position: Position::new(parent, child_index),
                 }),
             },
         }
@@ -228,7 +232,7 @@ impl Paginator {
             // 5. Place child
             let layout_child = self.place_node(
                 child,
-                measured.node_id,
+                measured.node,
                 child_index,
                 child_terminal_chrome_after,
             );
@@ -266,7 +270,7 @@ impl Paginator {
         LayoutNode {
             rect: Rect::from_xywh(box_x, box_y, width, box_height),
             content: LayoutContent::Box(LayoutBox {
-                node_id: measured.node_id,
+                node: measured.node,
                 style: measured.style.clone(),
                 children,
                 attachment: None,
@@ -300,7 +304,7 @@ impl Paginator {
             .map(|child| {
                 let is_doc_child = !matches!(child.content, MeasuredContent::Spacing(_));
                 let layout_child =
-                    place_node_at(child, child_x, child_y, measured.node_id, child_index);
+                    place_node_at(child, child_x, child_y, measured.node, child_index);
                 if is_doc_child {
                     child_index += 1;
                 }
@@ -319,7 +323,7 @@ impl Paginator {
         LayoutNode {
             rect: Rect::from_xywh(box_x, box_y, node.width, node.height),
             content: LayoutContent::Box(LayoutBox {
-                node_id: measured.node_id,
+                node: measured.node,
                 style: measured.style.clone(),
                 children,
                 attachment: None,
@@ -376,10 +380,6 @@ impl Paginator {
 
     fn page_content_bottom(&self) -> f32 {
         self.page_content_bottom
-    }
-
-    pub fn content_width(&self) -> f32 {
-        self.content_width
     }
 
     fn page_width(&self) -> f32 {
@@ -504,8 +504,6 @@ fn trailing_chrome_height(b: &MeasuredBox) -> f32 {
 }
 
 fn terminal_child_index(b: &MeasuredBox) -> Option<usize> {
-    // Last non-spacing/non-break child, via a forward pass (the children sum tree
-    // exposes a forward iterator).
     let mut last = None;
     for (i, child) in b.children.iter().enumerate() {
         if !matches!(
@@ -553,7 +551,7 @@ fn place_node_at(
     node: &MeasuredNode,
     x: f32,
     y: f32,
-    parent_id: NodeId,
+    parent: Dot,
     child_index: usize,
 ) -> LayoutNode {
     match &node.content {
@@ -568,8 +566,7 @@ fn place_node_at(
                         .map(|child| {
                             let is_doc_child =
                                 !matches!(child.content, MeasuredContent::Spacing(_));
-                            let c =
-                                place_node_at(child, x + offset_x, y + offset_y, b.node_id, idx);
+                            let c = place_node_at(child, x + offset_x, y + offset_y, b.node, idx);
                             if is_doc_child {
                                 idx += 1;
                             }
@@ -585,8 +582,7 @@ fn place_node_at(
                         .map(|child| {
                             let is_doc_child =
                                 !matches!(child.content, MeasuredContent::Spacing(_));
-                            let c =
-                                place_node_at(child, x + offset_x, y + offset_y, b.node_id, idx);
+                            let c = place_node_at(child, x + offset_x, y + offset_y, b.node, idx);
                             if is_doc_child {
                                 idx += 1;
                             }
@@ -597,13 +593,13 @@ fn place_node_at(
                 }
             };
             let attachment = Some(ChildAttachment {
-                parent_id,
+                parent,
                 index: child_index,
             });
             LayoutNode {
                 rect: Rect::from_xywh(x, y, node.width, node.height),
                 content: LayoutContent::Box(LayoutBox {
-                    node_id: b.node_id,
+                    node: b.node,
                     style: b.style.clone(),
                     children,
                     attachment,
@@ -613,7 +609,7 @@ fn place_node_at(
         MeasuredContent::Line(l) => LayoutNode {
             rect: Rect::from_xywh(x, y, node.width, node.height),
             content: LayoutContent::Line(LayoutLine {
-                node_id: l.node_id,
+                node: l.node,
                 baseline: l.baseline,
                 ascent: l.ascent,
                 descent: l.descent,
@@ -622,7 +618,7 @@ fn place_node_at(
                 glyph_runs: l.glyph_runs.clone(),
                 ruby_annotations: l.ruby_annotations.clone(),
                 empty_caret_x: l.empty_caret_x,
-                child_range: l.child_range.clone(),
+                offset_range: l.offset_range.clone(),
                 tab_gaps: l.tab_gaps.clone(),
                 is_phantom: l.is_phantom,
                 content_edge_x: l.content_edge_x,
@@ -631,9 +627,9 @@ fn place_node_at(
         MeasuredContent::Atom(a) => LayoutNode {
             rect: Rect::from_xywh(x, y, node.width, node.height),
             content: LayoutContent::Atom(LayoutAtom {
-                node_id: a.node_id,
+                node: a.node,
                 attachment: ChildAttachment {
-                    parent_id,
+                    parent,
                     index: child_index,
                 },
             }),
@@ -641,13 +637,13 @@ fn place_node_at(
         MeasuredContent::Spacing(h) => LayoutNode {
             rect: Rect::from_xywh(x, y, node.width, *h),
             content: LayoutContent::Spacing(SpacingKind::Gap {
-                position: Position::new(parent_id, child_index),
+                position: Position::new(parent, child_index),
             }),
         },
         MeasuredContent::PageBreak => LayoutNode {
             rect: Rect::from_xywh(x, y, 0.0, 0.0),
             content: LayoutContent::Spacing(SpacingKind::Gap {
-                position: Position::new(parent_id, child_index),
+                position: Position::new(parent, child_index),
             }),
         },
     }
@@ -655,713 +651,62 @@ fn place_node_at(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use editor_common::EdgeInsets;
-    use editor_macros::{doc, state};
-    use editor_model::NodeId;
-    use std::sync::Arc;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, Modifier, ModifierAttrLog,
+        ModifierAttrOp::SetModifier, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem,
+        SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
 
-    use crate::measure::Measurer;
-    use crate::query::layout_index::LayoutIndex;
-    use crate::view::View;
-    use crate::view_state::ViewState;
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
 
-    fn make_line_with_id(node_id: NodeId, height: f32) -> Arc<MeasuredNode> {
-        Arc::new(MeasuredNode {
-            width: 400.0,
-            height,
-            content: MeasuredContent::Line(MeasuredLine {
-                node_id,
-                baseline: height * 0.8,
-                ascent: height * 0.7,
-                descent: height * 0.1,
-                cursor_ascent: height * 0.7,
-                cursor_descent: height * 0.1,
-                glyph_runs: vec![],
-                ruby_annotations: vec![],
-                empty_caret_x: 0.0,
-                child_range: None,
-                tab_gaps: vec![],
-                is_phantom: false,
-                content_edge_x: None,
-            }),
-        })
-    }
+    use super::*;
 
-    fn make_line(height: f32) -> Arc<MeasuredNode> {
-        make_line_with_id(NodeId::new(), height)
-    }
-
-    fn make_box(children: Vec<Arc<MeasuredNode>>) -> MeasuredNode {
-        let height: f32 = children.iter().map(|c| c.height).sum();
-        MeasuredNode {
-            width: 400.0,
-            height,
-            content: MeasuredContent::Box(MeasuredBox {
-                node_id: NodeId::ROOT,
-                style: BoxStyle {
-                    direction: Direction::Vertical,
-                    padding: EdgeInsets::ZERO,
-                    border: EdgeInsets::ZERO,
-                    border_mode: BorderMode::Separate,
-                    alignment: Alignment::Start,
-                    decorations: vec![],
-                    monolithic: false,
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
                 },
-                children: MeasuredChildren::from_blocks(children),
-                page_break_policy: PageBreakPolicy::Auto,
-            }),
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
         }
     }
 
-    fn make_spacing(height: f32) -> Arc<MeasuredNode> {
-        Arc::new(MeasuredNode {
-            width: 0.0,
-            height,
-            content: MeasuredContent::Spacing(height),
-        })
+    fn measure_doc(doc: &DocLogs, width: f32) -> (editor_crdt::Dot, MeasuredTree) {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let root_id = root_node.id();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        (root_id, MeasuredTree { root: measured })
     }
 
-    fn make_atom(height: f32) -> Arc<MeasuredNode> {
-        Arc::new(MeasuredNode {
-            width: 400.0,
-            height,
-            content: MeasuredContent::Atom(MeasuredAtom {
-                node_id: NodeId::new(),
-            }),
-        })
+    fn paginate_continuous(doc: &DocLogs, width: f32) -> (editor_crdt::Dot, PaginatedLayout) {
+        let (root_id, tree) = measure_doc(doc, width);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0)).paginate(tree);
+        (root_id, layout)
     }
 
-    fn make_box_with_style(
-        node_id: NodeId,
-        children: Vec<Arc<MeasuredNode>>,
-        padding: EdgeInsets,
-        border: EdgeInsets,
-        page_break_policy: PageBreakPolicy,
-    ) -> Arc<MeasuredNode> {
-        let children_height: f32 = children.iter().map(|c| c.height).sum();
-        Arc::new(MeasuredNode {
-            width: 400.0,
-            height: children_height + padding.top + padding.bottom + border.top + border.bottom,
-            content: MeasuredContent::Box(MeasuredBox {
-                node_id,
-                style: BoxStyle {
-                    direction: Direction::Vertical,
-                    padding,
-                    border,
-                    border_mode: BorderMode::Separate,
-                    alignment: Alignment::Start,
-                    decorations: vec![],
-                    monolithic: false,
-                },
-                children: MeasuredChildren::from_blocks(children),
-                page_break_policy,
-            }),
-        })
-    }
-
-    fn into_tree(root: MeasuredNode) -> MeasuredTree {
-        MeasuredTree { root }
-    }
-
-    fn paginate_c(
-        root: MeasuredNode,
-        vw: f32,
-        max_h: f32,
-        margin: f32,
-    ) -> (LayoutTree, Vec<LayoutPage>) {
-        let paginated =
-            Paginator::continuous(vw, max_h, EdgeInsets::all(margin)).paginate(into_tree(root));
-        (paginated.tree, paginated.pages)
-    }
-
-    fn paginate_p(
-        root: MeasuredNode,
-        pw: f32,
-        ph: f32,
-        margins: EdgeInsets,
-    ) -> (LayoutTree, Vec<LayoutPage>) {
-        let paginated = Paginator::paginated(pw, ph, margins).paginate(into_tree(root));
-        (paginated.tree, paginated.pages)
-    }
-
-    #[test]
-    fn continuous_simple_single_page() {
-        let root = make_box(vec![make_line(20.0), make_line(20.0)]);
-        let (_, pages) = paginate_c(root, 440.0, 1024.0, 20.0);
-        assert_eq!(pages.len(), 1);
-        // y_start = 0 (first page includes margin_top)
-        assert_eq!(pages[0].y_start, 0.0);
-        // y_end = margin_top(20) + content(40) + margin_bottom(20) = 80
-        assert_eq!(pages[0].y_end, 80.0);
-    }
-
-    #[test]
-    fn continuous_final_overflow_page_keeps_bottom_margin() {
-        let root = make_box(vec![make_line(1020.0), make_line(25.0)]);
-        let (_, pages) = paginate_c(root, 440.0, 1024.0, 20.0);
-
-        assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].y_start, 0.0);
-        assert_eq!(pages[0].y_end, 1085.0);
-        assert_eq!(pages[0].size.height, 1085.0);
-    }
-
-    #[test]
-    fn root_box_positioned_at_margin() {
-        let root = make_box(vec![make_line(20.0)]);
-        let paginated = Paginator::continuous(
-            1024.0,
-            1024.0,
-            EdgeInsets {
-                top: 10.0,
-                left: 15.0,
-                bottom: 10.0,
-                right: 15.0,
-            },
-        )
-        .paginate(into_tree(root));
-        let tree = paginated.tree;
-        // Root box y should be at margin_top
-        assert_eq!(tree.root.rect.y, 10.0);
-        // Root box x should be at margin_left
-        assert_eq!(tree.root.rect.x, 15.0);
-    }
-
-    #[test]
-    fn line_inherits_current_x() {
-        let root = make_box(vec![make_line(20.0)]);
-        let paginated = Paginator::continuous(
-            1024.0,
-            1024.0,
-            EdgeInsets {
-                top: 10.0,
-                left: 25.0,
-                bottom: 10.0,
-                right: 25.0,
-            },
-        )
-        .paginate(into_tree(root));
-        let tree = paginated.tree;
-        // The line inside the box should have x = margin_left (box has no border/padding)
-        if let LayoutContent::Box(b) = &tree.root.content {
-            assert_eq!(b.children[0].rect.x, 25.0);
-            assert_eq!(b.children[0].rect.y, 10.0);
-        } else {
-            panic!("expected box");
-        }
-    }
-
-    #[test]
-    fn paginated_single_page() {
-        let root = make_box(vec![make_line(20.0)]);
-        let (_, pages) = paginate_p(root, 440.0, 200.0, EdgeInsets::all(20.0));
-        assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].y_start, 0.0);
-        assert_eq!(pages[0].y_end, 200.0);
-        assert_eq!(pages[0].size.height, 200.0);
-        assert_eq!(pages[0].size.width, 440.0);
-    }
-
-    #[test]
-    fn spacing_advances_y() {
-        let root = make_box(vec![make_spacing(10.0), make_line(20.0)]);
-        let paginated = Paginator::continuous(
-            1024.0,
-            1024.0,
-            EdgeInsets {
-                top: 10.0,
-                left: 15.0,
-                bottom: 10.0,
-                right: 15.0,
-            },
-        )
-        .paginate(into_tree(root));
-        let tree = paginated.tree;
-        if let LayoutContent::Box(b) = &tree.root.content {
-            // spacing at y=10 (margin_top), height=10
-            assert_eq!(b.children[0].rect.y, 10.0);
-            assert_eq!(b.children[0].rect.height, 10.0);
-            assert!(matches!(
-                b.children[0].content,
-                LayoutContent::Spacing(SpacingKind::Gap {
-                    position
-                }) if position == editor_state::Position::new(NodeId::ROOT, 0)
-            ));
-            // line at y=20 (after spacing)
-            assert_eq!(b.children[1].rect.y, 20.0);
-        } else {
-            panic!("expected box");
-        }
-    }
-
-    #[test]
-    fn empty_document_produces_one_page() {
-        let root = make_box(vec![]);
-        let (_, pages) = paginate_c(root, 440.0, 1024.0, 20.0);
-        assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].y_start, 0.0);
-        assert_eq!(pages[0].y_end, 40.0); // margin_top + margin_bottom
-    }
-
-    #[test]
-    fn nested_box_with_padding() {
-        let inner = Arc::new(MeasuredNode {
-            width: 380.0,
-            height: 30.0, // 5 (padding.top) + 20 (line) + 5 (padding.bottom)
-            content: MeasuredContent::Box(MeasuredBox {
-                node_id: NodeId::new(),
-                style: BoxStyle {
-                    direction: Direction::Vertical,
-                    padding: EdgeInsets {
-                        top: 5.0,
-                        left: 10.0,
-                        bottom: 5.0,
-                        right: 10.0,
-                    },
-                    border: EdgeInsets::ZERO,
-                    border_mode: BorderMode::Separate,
-                    alignment: Alignment::Start,
-                    decorations: vec![],
-                    monolithic: false,
-                },
-                children: MeasuredChildren::from_blocks(vec![make_line(20.0)]),
-                page_break_policy: PageBreakPolicy::Auto,
-            }),
-        });
-
-        let root = MeasuredNode {
-            width: 400.0,
-            height: 30.0,
-            content: MeasuredContent::Box(MeasuredBox {
-                node_id: NodeId::ROOT,
-                style: BoxStyle {
-                    direction: Direction::Vertical,
-                    padding: EdgeInsets::ZERO,
-                    border: EdgeInsets::ZERO,
-                    border_mode: BorderMode::Separate,
-                    alignment: Alignment::Start,
-                    decorations: vec![],
-                    monolithic: false,
-                },
-                children: MeasuredChildren::from_blocks(vec![inner]),
-                page_break_policy: PageBreakPolicy::Auto,
-            }),
-        };
-
-        let paginated = Paginator::continuous(
-            1024.0,
-            1024.0,
-            EdgeInsets {
-                top: 10.0,
-                left: 15.0,
-                bottom: 10.0,
-                right: 15.0,
-            },
-        )
-        .paginate(into_tree(root));
-        let tree = paginated.tree;
-
-        if let LayoutContent::Box(outer) = &tree.root.content {
-            let inner_node = &outer.children[0];
-            // inner box starts at y=10 (margin_top), x=15 (margin_left)
-            assert_eq!(inner_node.rect.y, 10.0);
-            assert_eq!(inner_node.rect.x, 15.0);
-
-            if let LayoutContent::Box(inner_box) = &inner_node.content {
-                let line = &inner_box.children[0];
-                // line inside inner box: x = 15 (margin_left) + 10 (padding.left) = 25
-                // y = 10 (margin_top) + 5 (padding.top) = 15
-                assert_eq!(line.rect.x, 25.0);
-                assert_eq!(line.rect.y, 15.0);
-            } else {
-                panic!("expected inner box");
-            }
-        } else {
-            panic!("expected outer box");
-        }
-    }
-
-    #[test]
-    fn paginated_inserts_fill_on_break() {
-        // Box containing atom(40) + atom(60), page content height = 90
-        let root = make_box(vec![make_atom(40.0), make_atom(60.0)]);
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert_eq!(pages.len(), 2);
-        // Box should contain: atom(40), Fill, atom(60)
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!()
-        };
-        let has_fill = root_box
-            .children
-            .iter()
-            .any(|c| matches!(c.content, LayoutContent::Spacing(SpacingKind::Fill)));
-        assert!(has_fill);
-        // Box height should be inflated
-        assert!(tree.root.rect.height > 100.0);
-    }
-
-    #[test]
-    fn paginated_splits_box_children_before_moving_splittable_box() {
-        // Page content height is 100. After the first line, 40px remain.
-        // A paragraph-like box with 3 lines should use that remaining space
-        // before splitting internally; it must not move wholesale to page 2.
-        let paragraph = Arc::new(make_box(vec![
-            make_line(20.0),
-            make_line(20.0),
-            make_line(20.0),
-        ]));
-        let root = make_box(vec![make_line(60.0), paragraph]);
-
-        let (tree, pages) = paginate_p(root, 400.0, 120.0, EdgeInsets::all(10.0));
-        assert_eq!(pages.len(), 2);
-
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!("expected root box")
-        };
-        let paragraph_node = root_box
-            .children
-            .iter()
-            .find(|child| matches!(child.content, LayoutContent::Box(_)))
-            .expect("paragraph-like box");
-        let LayoutContent::Box(paragraph_box) = &paragraph_node.content else {
-            panic!("expected paragraph box")
-        };
-        let first_line = paragraph_box
-            .children
-            .iter()
-            .find(|child| matches!(child.content, LayoutContent::Line(_)))
-            .expect("first paragraph line");
-
-        assert!(
-            first_line.rect.y < pages[0].y_end,
-            "first paragraph line should stay on page 1 when space remains; got y={} page_end={}",
-            first_line.rect.y,
-            pages[0].y_end
-        );
-    }
-
-    #[test]
-    fn paginated_keeps_leading_chrome_with_first_avoid_child() {
-        // Page content height is 90. The first line leaves exactly 1px, enough
-        // for the fold-like box's top border but not for its title. The box
-        // should move as a group instead of leaving top chrome on page 1.
-        let fold_id = NodeId::new();
-        let title_id = NodeId::new();
-        let title = make_box_with_style(
-            title_id,
-            vec![make_line(20.0)],
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            PageBreakPolicy::Avoid,
-        );
-        let fold = make_box_with_style(
-            fold_id,
-            vec![title],
-            EdgeInsets::ZERO,
-            EdgeInsets::all(1.0),
-            PageBreakPolicy::Auto,
-        );
-        let root = make_box(vec![make_line(89.0), fold]);
-
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert_eq!(pages.len(), 2);
-
-        let fold_node = find_node(&tree.root, fold_id).expect("fold-like box");
-        let title_node = find_node(&tree.root, title_id).expect("title box");
-        assert!(
-            fold_node.rect.y >= pages[1].content_y_start,
-            "fold leading chrome must move with title; fold y={} page2_content_start={}",
-            fold_node.rect.y,
-            pages[1].content_y_start
-        );
-        assert!(
-            title_node.rect.y >= pages[1].content_y_start,
-            "title must start on the same page as its leading chrome; title y={} page2_content_start={}",
-            title_node.rect.y,
-            pages[1].content_y_start
-        );
-    }
-
-    #[test]
-    fn paginated_fold_keeps_top_border_with_title() {
-        let (doc, f1) = doc! {
-            root {
-                f1: fold {
-                    fold_title { text("Title") }
-                    fold_content { paragraph { text("Content") } }
-                }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let fold = measurer.measure(&doc, f1, 400.0, &ViewState::new());
-        let root = make_box(vec![make_line(89.0), fold]);
-
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert!(pages.len() >= 2);
-
-        let fold_node = find_node(&tree.root, f1).expect("fold box");
-        assert!(
-            fold_node.rect.y >= pages[1].content_y_start,
-            "measured fold must not leave top border on the previous page; fold y={} page2_content_start={}",
-            fold_node.rect.y,
-            pages[1].content_y_start
-        );
-    }
-
-    #[test]
-    fn paginated_expanded_fold_does_not_reserve_own_bottom_for_title() {
-        // The first line leaves exactly enough space for top border + title.
-        // The fold bottom does not need to fit with the title because content
-        // follows; reserving it for the title strands the top border.
-        let fold_id = NodeId::new();
-        let title_id = NodeId::new();
-        let title = make_box_with_style(
-            title_id,
-            vec![make_line(20.0)],
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            PageBreakPolicy::Avoid,
-        );
-        let content = make_box_with_style(
-            NodeId::new(),
-            vec![make_line(20.0)],
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            PageBreakPolicy::Auto,
-        );
-        let fold = make_box_with_style(
-            fold_id,
-            vec![title, content],
-            EdgeInsets::ZERO,
-            EdgeInsets::all(1.0),
-            PageBreakPolicy::Auto,
-        );
-        let root = make_box(vec![make_line(69.0), fold]);
-
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert!(pages.len() >= 2);
-
-        let fold_node = find_node(&tree.root, fold_id).expect("fold-like box");
-        let title_node = find_node(&tree.root, title_id).expect("title box");
-        assert!(
-            title_node.rect.y < pages[0].content_y_end,
-            "title should stay with the top border when content follows; title y={} page1_content_end={}",
-            title_node.rect.y,
-            pages[0].content_y_end
-        );
-        assert!(
-            fold_node.rect.y < pages[0].content_y_end,
-            "fold top border should stay on the same page as the title; fold y={} page1_content_end={}",
-            fold_node.rect.y,
-            pages[0].content_y_end
-        );
-    }
-
-    #[test]
-    fn paginated_does_not_reserve_outer_trailing_chrome_for_expanded_first_child() {
-        // The wrapper has only one child, but that child is an expanded
-        // fold-like box. The wrapper's trailing chrome belongs with the fold's
-        // terminal content, not with the fold title.
-        let fold_id = NodeId::new();
-        let title_id = NodeId::new();
-        let title = make_box_with_style(
-            title_id,
-            vec![make_line(20.0)],
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            PageBreakPolicy::Avoid,
-        );
-        let content = make_box_with_style(
-            NodeId::new(),
-            vec![make_line(20.0)],
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            PageBreakPolicy::Auto,
-        );
-        let fold = make_box_with_style(
-            fold_id,
-            vec![title, content],
-            EdgeInsets::ZERO,
-            EdgeInsets::all(1.0),
-            PageBreakPolicy::Auto,
-        );
-        let wrapper = make_box_with_style(
-            NodeId::new(),
-            vec![fold],
-            EdgeInsets {
-                bottom: 10.0,
-                ..EdgeInsets::ZERO
-            },
-            EdgeInsets::ZERO,
-            PageBreakPolicy::Auto,
-        );
-        let root = make_box(vec![make_line(69.0), wrapper]);
-
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert!(pages.len() >= 2);
-
-        let fold_node = find_node(&tree.root, fold_id).expect("fold-like box");
-        let title_node = find_node(&tree.root, title_id).expect("title box");
-        assert!(
-            title_node.rect.y < pages[0].content_y_end,
-            "title should not move just to reserve outer trailing chrome; title y={} page1_content_end={}",
-            title_node.rect.y,
-            pages[0].content_y_end
-        );
-        assert!(
-            fold_node.rect.y < pages[0].content_y_end,
-            "fold top border should stay with the title even when outer trailing chrome does not fit; fold y={} page1_content_end={}",
-            fold_node.rect.y,
-            pages[0].content_y_end
-        );
-    }
-
-    #[test]
-    fn paginated_keeps_trailing_chrome_with_last_avoid_child() {
-        // Page content height is 90. Inside a splittable wrapper, the first
-        // child leaves exactly 15px. The last line fits by itself, but not with
-        // the wrapper's trailing padding+border, so the line should move.
-        let wrapper_id = NodeId::new();
-        let last_line_id = NodeId::new();
-        let wrapper = make_box_with_style(
-            wrapper_id,
-            vec![make_line(30.0), make_line_with_id(last_line_id, 15.0)],
-            EdgeInsets {
-                bottom: 10.0,
-                ..EdgeInsets::ZERO
-            },
-            EdgeInsets {
-                bottom: 1.0,
-                ..EdgeInsets::ZERO
-            },
-            PageBreakPolicy::Auto,
-        );
-        let root = make_box(vec![make_line(45.0), wrapper]);
-
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert_eq!(pages.len(), 2);
-
-        let last_line = find_line(&tree.root, last_line_id).expect("last avoid line");
-        assert!(
-            last_line.rect.y >= pages[1].content_y_start,
-            "last avoid child must move with trailing chrome; line y={} page2_content_start={}",
-            last_line.rect.y,
-            pages[1].content_y_start
-        );
-    }
-
-    #[test]
-    fn paginated_splits_table_by_rows_instead_of_moving_table() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph { text("before") }
-                t1: table {
-                    table_row { table_cell { paragraph { text("A") } } }
-                    table_row { table_cell { paragraph { text("B") } } }
-                }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &ViewState::new());
-
-        let paginated =
-            Paginator::paginated(400.0, 130.0, EdgeInsets::all(10.0)).paginate(measured_tree(root));
-        let tree = paginated.tree;
-        let pages = paginated.pages;
-
-        assert_eq!(pages.len(), 2);
-        let table = find_node(&tree.root, t1).expect("table box in layout");
-        let rows = box_children(table);
-        assert_eq!(rows.len(), 2);
-        assert!(
-            rows[0].rect.y < pages[0].y_end,
-            "first table row should stay on page 1 when space remains; got y={} page_end={}",
-            rows[0].rect.y,
-            pages[0].y_end
-        );
-        assert!(
-            rows[1].rect.y >= pages[1].y_start,
-            "last table row should move to page 2 after row-level split; got y={} page2_start={}",
-            rows[1].rect.y,
-            pages[1].y_start
-        );
-    }
-
-    #[test]
-    fn paginated_absorbs_gap_at_page_start() {
-        // atom(80) + spacing(16) + atom(20), page content = 90
-        let root = make_box(vec![make_atom(80.0), make_spacing(16.0), make_atom(20.0)]);
-        let (tree, pages) = paginate_p(root, 400.0, 110.0, EdgeInsets::all(10.0));
-        assert_eq!(pages.len(), 2);
-        // After break, spacing should be absorbed -- page 2 starts with atom, not gap
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!()
-        };
-        // Children should be: atom, Fill, atom (spacing absorbed)
-        let non_fill: Vec<_> = root_box
-            .children
-            .iter()
-            .filter(|c| !matches!(c.content, LayoutContent::Spacing(SpacingKind::Fill)))
-            .collect();
-        assert_eq!(non_fill.len(), 2); // just 2 atoms, spacing absorbed
-    }
-
-    #[test]
-    fn oversized_atom_spans_multiple_pages() {
-        let root = make_box(vec![make_atom(500.0)]);
-        let (_, pages) = paginate_p(root, 400.0, 120.0, EdgeInsets::all(10.0));
-        assert!(pages.len() >= 5); // 500 / 100 content = 5 pages
-    }
-
-    #[test]
-    fn continuous_no_fill_inserted() {
-        let root = make_box(vec![make_atom(800.0), make_spacing(16.0), make_atom(400.0)]);
-        let (tree, _pages) = paginate_c(root, 400.0, 1024.0, 0.0);
-        assert!(!has_fill(&tree.root));
-        // All 3 children present (no absorption in continuous mode)
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!()
-        };
-        assert_eq!(root_box.children.len(), 3);
-    }
-
-    #[test]
-    fn pagebreak_forces_break() {
-        let root = make_box(vec![
-            make_atom(20.0),
-            Arc::new(MeasuredNode {
-                width: 0.0,
-                height: 0.0,
-                content: MeasuredContent::PageBreak,
-            }),
-            make_atom(20.0),
-        ]);
-        let (tree, pages) = paginate_p(root, 400.0, 200.0, EdgeInsets::all(10.0));
-        assert_eq!(pages.len(), 2);
-        // PageBreak should NOT appear in output, Fill should
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!()
-        };
-        assert!(
-            root_box
-                .children
-                .iter()
-                .any(|c| matches!(c.content, LayoutContent::Spacing(SpacingKind::Fill)))
-        );
-    }
-
-    // Match production: `view.rs::compute` unwraps the `Arc` before handing
-    // the tree to the paginator.
-    fn measured_tree(root: Arc<MeasuredNode>) -> MeasuredTree {
-        MeasuredTree {
-            root: Arc::unwrap_or_clone(root),
-        }
-    }
-
-    // Fill lands in whichever container's local children fired `break_page`,
-    // which is not necessarily the root box — recurse to decouple the test
-    // from that nesting.
     fn has_fill(node: &LayoutNode) -> bool {
         match &node.content {
             LayoutContent::Spacing(SpacingKind::Fill) => true,
@@ -1370,324 +715,380 @@ mod tests {
         }
     }
 
-    #[test]
-    fn trailing_page_break_forces_paginated_break_via_measure_pipeline() {
-        let (doc, _p1, _p2) = doc! {
-            root {
-                p1: paragraph { text("a") page_break }
-                p2: paragraph { text("b") }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
-
-        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
-            .paginate(measured_tree(root));
-        let tree = paginated.tree;
-        let pages = paginated.pages;
-
-        assert_eq!(
-            pages.len(),
-            2,
-            "trailing page_break must force a page break in paginated mode",
-        );
-        assert!(
-            has_fill(&tree.root),
-            "paginated forced break should emit a Fill spacing somewhere in the layout tree",
-        );
+    fn build_root_two_paragraphs_gap(block_gap: Option<Modifier>) -> DocLogs {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 2);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let mut doc = logs(&items);
+        if let Some(modifier) = block_gap {
+            doc.block_modifiers = ModifierAttrLog::new()
+                .apply(
+                    Dot::ROOT,
+                    SetModifier {
+                        target: root,
+                        modifier,
+                    },
+                )
+                .unwrap();
+        }
+        doc
     }
 
     #[test]
-    fn trailing_page_break_does_not_break_in_continuous_mode() {
-        let (doc, _p1, _p2) = doc! {
-            root {
-                p1: paragraph { text("a") page_break }
-                p2: paragraph { text("b") }
-            }
+    fn root_paragraph_line() {
+        let root = Dot::ROOT;
+        let p = Dot::new(1, 1);
+        let items = vec![
+            (
+                p,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('H')),
+            (Dot::new(1, 3), SeqItem::Char('e')),
+            (Dot::new(1, 4), SeqItem::Char('l')),
+            (Dot::new(1, 5), SeqItem::Char('l')),
+            (Dot::new(1, 6), SeqItem::Char('o')),
+        ];
+        let doc = logs(&items);
+        let (root_id, layout) = paginate_continuous(&doc, 400.0);
+
+        let LayoutContent::Box(ref root_box) = layout.tree.root.content else {
+            panic!("expected root Box");
         };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
+        assert_eq!(root_box.node, root_id);
 
-        let paginated = Paginator::continuous(400.0, 1024.0, EdgeInsets::all(10.0))
-            .paginate(measured_tree(root));
-        let tree = paginated.tree;
-        let pages = paginated.pages;
-
-        assert_eq!(
-            pages.len(),
-            1,
-            "continuous mode must ignore the page_break marker",
-        );
-        assert!(
-            !has_fill(&tree.root),
-            "continuous mode must not emit Fill spacing for a page_break marker",
-        );
-    }
-
-    #[test]
-    fn trailing_page_break_in_middle_paragraph_routes_following_paragraphs_to_next_page() {
-        // The page is large enough to hold all three paragraphs vertically;
-        // the only thing that splits the document into two pages is p2's
-        // trailing `page_break`. This verifies multi-paragraph routing: the
-        // marker pushes the *following* paragraph(s) to the next page, not
-        // just one paragraph at a time.
-        let (doc, _p1, _p2, _p3) = doc! {
-            root {
-                p1: paragraph { text("a") }
-                p2: paragraph { text("b") page_break }
-                p3: paragraph { text("c") }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
-
-        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
-            .paginate(measured_tree(root));
-        let tree = paginated.tree;
-        let pages = paginated.pages;
-
-        assert_eq!(
-            pages.len(),
-            2,
-            "p1 and p2 share page 1; p2's trailing page_break sends p3 to page 2",
-        );
-
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!("expected root box")
-        };
-        // The default root modifiers inject `BlockGap` between paragraphs,
-        // which materialises as `Spacing` children of the root box, so the
-        // raw children count is not 3. Filter to paragraph LayoutBoxes.
-        let paragraph_boxes: Vec<&LayoutNode> = root_box
+        let para_node = root_box
             .children
             .iter()
-            .filter(|c| matches!(c.content, LayoutContent::Box(_)))
-            .collect();
-        assert_eq!(
-            paragraph_boxes.len(),
-            3,
-            "all three paragraph LayoutBoxes must be present in the root box",
-        );
-        let LayoutContent::Box(p2_box) = &paragraph_boxes[1].content else {
-            panic!("expected p2 to be a Box")
+            .find(|n| matches!(n.content, LayoutContent::Box(_)))
+            .unwrap();
+        let LayoutContent::Box(ref para_box) = para_node.content else {
+            panic!()
         };
-        let p2_has_fill = p2_box
-            .children
-            .iter()
-            .any(|c| matches!(c.content, LayoutContent::Spacing(SpacingKind::Fill)));
-        assert!(
-            p2_has_fill,
-            "p2's trailing page_break must emit a Fill inside p2's LayoutBox",
-        );
-    }
 
-    #[test]
-    fn page_break_only_paragraph_breaks_after_strut_line() {
-        let (doc, _p1, _p2) = doc! {
-            root {
-                p1: paragraph { page_break }
-                p2: paragraph { text("a") }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let root = measurer.measure(&doc, NodeId::ROOT, 400.0, &vs);
-
-        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0))
-            .paginate(measured_tree(root));
-        let tree = paginated.tree;
-        let pages = paginated.pages;
-
-        assert_eq!(
-            pages.len(),
-            2,
-            "page_break-only paragraph must emit a strut-only line and then break",
-        );
-
-        // The first paragraph LayoutBox contains exactly one Line (strut-only)
-        // before the page break — the PageBreak marker itself is consumed, not
-        // emitted into the layout tree.
-        let LayoutContent::Box(root_box) = &tree.root.content else {
-            panic!("expected root box")
-        };
-        let LayoutContent::Box(p1_box) = &root_box.children[0].content else {
-            panic!("expected p1 to be a Box")
-        };
-        let p1_line_count = p1_box
-            .children
-            .iter()
-            .filter(|c| matches!(c.content, LayoutContent::Line(_)))
-            .count();
-        assert_eq!(
-            p1_line_count, 1,
-            "p1 must contribute exactly one strut-only line",
-        );
-    }
-
-    fn find_node(node: &LayoutNode, id: NodeId) -> Option<&LayoutNode> {
-        if let LayoutContent::Box(b) = &node.content {
-            if b.node_id == id {
-                return Some(node);
-            }
-            for c in &b.children {
-                if let Some(f) = find_node(c, id) {
-                    return Some(f);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_view = view.root().unwrap();
+        let para_id = root_view
+            .children()
+            .find_map(|c| {
+                if let editor_model::ChildView::Block(nv) = c {
+                    Some(nv.id())
+                } else {
+                    None
                 }
-            }
-        }
-        None
-    }
-
-    fn find_line(node: &LayoutNode, id: NodeId) -> Option<&LayoutNode> {
-        match &node.content {
-            LayoutContent::Line(l) if l.node_id == id => Some(node),
-            LayoutContent::Box(b) => b.children.iter().find_map(|c| find_line(c, id)),
-            _ => None,
-        }
-    }
-
-    fn box_children(node: &LayoutNode) -> Vec<&LayoutNode> {
-        let LayoutContent::Box(b) = &node.content else {
-            panic!("expected box");
-        };
-        b.children
-            .iter()
-            .filter(|c| matches!(c.content, LayoutContent::Box(_)))
-            .collect()
-    }
-
-    #[test]
-    fn collapsed_table_borders_do_not_stack() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row {
-                        table_cell { paragraph { text("A") } }
-                        table_cell { paragraph { text("B") } }
-                    }
-                    table_row {
-                        table_cell { paragraph { text("C") } }
-                        table_cell { paragraph { text("D") } }
-                    }
-                }
-            }
-        };
-
-        let mut measurer = Measurer::new_test();
-        let root = measurer.measure(&doc, NodeId::ROOT, 500.0, &ViewState::new());
-        let tree = into_tree(Arc::unwrap_or_clone(root));
-        let paginated = Paginator::continuous(540.0, 1024.0, EdgeInsets::all(20.0)).paginate(tree);
-        let layout = paginated.tree;
-
-        let table = find_node(&layout.root, t1).expect("table box in layout");
-        let rows = box_children(table);
-        assert_eq!(rows.len(), 2, "two rows");
-        let row0 = rows[0];
-        let last_row = rows[rows.len() - 1];
-        let cells0 = box_children(row0);
-        let cell0 = cells0[0];
-        let last_cell0 = cells0[cells0.len() - 1];
-
-        let eps = 1e-3;
-        assert!(
-            (row0.rect.y - table.rect.y).abs() < eps,
-            "row top must coincide with table top (got row.y={}, table.y={})",
-            row0.rect.y,
-            table.rect.y
-        );
-        assert!(
-            (row0.rect.x - table.rect.x).abs() < eps,
-            "row left must coincide with table left (got row.x={}, table.x={})",
-            row0.rect.x,
-            table.rect.x
-        );
-        assert!(
-            (cell0.rect.y - table.rect.y).abs() < eps,
-            "cell top must coincide with table top (got cell.y={}, table.y={})",
-            cell0.rect.y,
-            table.rect.y
-        );
-        assert!(
-            (cell0.rect.x - table.rect.x).abs() < eps,
-            "cell left must coincide with table left (got cell.x={}, table.x={})",
-            cell0.rect.x,
-            table.rect.x
-        );
-        assert!(
-            ((table.rect.y + table.rect.height) - (last_row.rect.y + last_row.rect.height)).abs()
-                < eps,
-            "table bottom must coincide with last row bottom (got table_bottom={}, row_bottom={})",
-            table.rect.y + table.rect.height,
-            last_row.rect.y + last_row.rect.height
-        );
-        assert!(
-            ((last_cell0.rect.x + last_cell0.rect.width) - (table.rect.x + table.rect.width)).abs()
-                < eps,
-            "last cell right must coincide with table right (got cell_right={}, table_right={})",
-            last_cell0.rect.x + last_cell0.rect.width,
-            table.rect.x + table.rect.width
-        );
-    }
-
-    fn attachment_of(
-        tree: &LayoutTree,
-        pages: &[LayoutPage],
-        id: NodeId,
-    ) -> Option<ChildAttachment> {
-        let layout_index = LayoutIndex::new(tree.clone(), pages);
-        match &layout_index.box_entry(id)?.content(&layout_index)? {
-            LayoutContent::Box(b) => b.attachment,
-            _ => None,
-        }
-    }
-
-    #[test]
-    fn monolithic_box_carries_attachment_linkage() {
-        let (st, r, f, ..) = state! {
-            doc { r: root {
-                f: fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
-                paragraph { t: text("after") }
-            } }
-            selection: (t, 0)
-        };
-        let mut view = View::new_test();
-        view.layout(&st.doc);
-        let tree = view.layout_tree_for_test().expect("laid out");
-        let pages = view.pages();
-        assert_eq!(
-            attachment_of(tree, pages, f),
-            Some(ChildAttachment {
-                parent_id: r,
-                index: 0
             })
+            .unwrap();
+
+        let line_node = para_box
+            .children
+            .iter()
+            .find(|n| matches!(n.content, LayoutContent::Line(_)))
+            .unwrap();
+        let LayoutContent::Line(ref line) = line_node.content else {
+            panic!()
+        };
+        assert_eq!(line.node, para_id);
+        assert!(line_node.rect.height > 0.0);
+        assert!(line.offset_range.is_some());
+    }
+
+    #[test]
+    fn vertical_stacking() {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 2);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('H')),
+            (Dot::new(1, 4), SeqItem::Char('i')),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 5), SeqItem::Char('B')),
+            (Dot::new(1, 6), SeqItem::Char('y')),
+            (Dot::new(1, 7), SeqItem::Char('e')),
+        ];
+        let doc = logs(&items);
+        let (root_id, layout) = paginate_continuous(&doc, 400.0);
+
+        let LayoutContent::Box(ref root_box) = layout.tree.root.content else {
+            panic!("expected root Box");
+        };
+        assert_eq!(root_box.node, root_id);
+
+        let para_boxes: Vec<_> = root_box
+            .children
+            .iter()
+            .filter(|n| matches!(n.content, LayoutContent::Box(_)))
+            .collect();
+        assert!(para_boxes.len() >= 2);
+        assert!(para_boxes[1].rect.y > para_boxes[0].rect.y);
+        assert!(
+            layout.tree.root.rect.height >= para_boxes[0].rect.height + para_boxes[1].rect.height
         );
     }
 
     #[test]
-    fn monolithic_box_in_table_cell_carries_attachment_linkage() {
-        let (st, tc, f, ..) = state! {
-            doc { root {
-                table { table_row { tc: table_cell {
-                    f: fold { fold_title { text("t") } fold_content { paragraph { text("c") } } }
-                } } }
-                paragraph { t: text("after") }
-            } }
-            selection: (t, 0)
+    fn atom_attachment() {
+        let root = Dot::ROOT;
+        let hr = Dot::new(1, 1);
+        let p = Dot::new(1, 2);
+        let items = vec![
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::default(),
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                p,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+        ];
+        let doc = logs(&items);
+        let (root_id, layout) = paginate_continuous(&doc, 400.0);
+
+        let hr_id = hr;
+
+        let LayoutContent::Box(ref root_box) = layout.tree.root.content else {
+            panic!("expected root Box");
         };
-        let mut view = View::new_test();
-        view.layout(&st.doc);
-        let tree = view.layout_tree_for_test().expect("laid out");
-        let pages = view.pages();
+
+        let atom_node = root_box
+            .children
+            .iter()
+            .find(|n| matches!(n.content, LayoutContent::Atom(_)))
+            .unwrap();
+        let LayoutContent::Atom(ref atom) = atom_node.content else {
+            panic!()
+        };
+        assert_eq!(atom.node, hr_id);
         assert_eq!(
-            attachment_of(tree, pages, f),
-            Some(ChildAttachment {
-                parent_id: tc,
+            atom.attachment,
+            ChildAttachment {
+                parent: root_id,
                 index: 0
-            }),
-            "fold nested in a table_cell must link to its cell parent at index 0 (place_node_at path)"
+            }
         );
+        assert_eq!(atom_node.rect.height, 24.0);
+    }
+
+    #[test]
+    fn spacing_gap() {
+        let doc = build_root_two_paragraphs_gap(Some(Modifier::BlockGap { value: 100 }));
+        let (root_id, layout) = paginate_continuous(&doc, 300.0);
+
+        let LayoutContent::Box(ref root_box) = layout.tree.root.content else {
+            panic!("expected root Box");
+        };
+
+        let spacing = root_box
+            .children
+            .iter()
+            .find(|n| matches!(n.content, LayoutContent::Spacing(_)))
+            .unwrap();
+        let LayoutContent::Spacing(ref kind) = spacing.content else {
+            panic!()
+        };
+        let SpacingKind::Gap { position } = kind else {
+            panic!("expected Gap spacing");
+        };
+        assert_eq!(position.node, root_id);
+    }
+
+    #[test]
+    fn horizontal_row() {
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let row = Dot::new(1, 2);
+        let cell_a = Dot::new(1, 3);
+        let para_a = Dot::new(1, 4);
+        let cell_b = Dot::new(1, 10);
+        let para_b = Dot::new(1, 11);
+        let p_root = Dot::new(1, 20);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell_a,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                },
+            ),
+            (
+                para_a,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell_a],
+                },
+            ),
+            (Dot::new(1, 5), SeqItem::Char('A')),
+            (
+                cell_b,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                },
+            ),
+            (
+                para_b,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell_b],
+                },
+            ),
+            (Dot::new(1, 12), SeqItem::Char('B')),
+            (
+                p_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let (_root_id, layout) = paginate_continuous(&doc, 400.0);
+
+        let LayoutContent::Box(ref root_box) = layout.tree.root.content else {
+            panic!("expected root Box");
+        };
+
+        let table_node = root_box
+            .children
+            .iter()
+            .find(|n| matches!(n.content, LayoutContent::Box(_)))
+            .unwrap();
+        let LayoutContent::Box(ref table_box) = table_node.content else {
+            panic!()
+        };
+
+        let row_node = table_box
+            .children
+            .iter()
+            .find(|n| matches!(n.content, LayoutContent::Box(_)))
+            .unwrap();
+        let LayoutContent::Box(ref row_box) = row_node.content else {
+            panic!()
+        };
+        assert_eq!(row_box.style.direction, Direction::Horizontal);
+
+        let cell_nodes: Vec<_> = row_box
+            .children
+            .iter()
+            .filter(|n| matches!(n.content, LayoutContent::Box(_)))
+            .collect();
+        assert!(cell_nodes.len() >= 2);
+        assert!(cell_nodes[1].rect.x > cell_nodes[0].rect.x);
+    }
+
+    #[test]
+    fn root_attachment_none() {
+        let root = Dot::ROOT;
+        let p = Dot::new(1, 1);
+        let items = vec![
+            (
+                p,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('x')),
+        ];
+        let doc = logs(&items);
+        let (_root_id, layout) = paginate_continuous(&doc, 400.0);
+
+        let LayoutContent::Box(ref root_box) = layout.tree.root.content else {
+            panic!("expected root Box");
+        };
+        assert_eq!(root_box.attachment, None);
+    }
+
+    #[test]
+    fn forced_page_break() {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 2);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('A')),
+            (Dot::new(1, 4), SeqItem::Atom(AtomLeaf::PageBreak)),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 5), SeqItem::Char('B')),
+        ];
+        let doc = logs(&items);
+
+        let (_, tree_p) = measure_doc(&doc, 400.0);
+        let paginated = Paginator::paginated(400.0, 1000.0, EdgeInsets::all(10.0)).paginate(tree_p);
+        assert_eq!(paginated.pages.len(), 2);
+        assert!(has_fill(&paginated.tree.root));
+
+        let (_, tree_c) = measure_doc(&doc, 400.0);
+        let continuous =
+            Paginator::continuous(400.0, 100_000.0, EdgeInsets::all(10.0)).paginate(tree_c);
+        assert_eq!(continuous.pages.len(), 1);
+        assert!(!has_fill(&continuous.tree.root));
     }
 }

@@ -34,8 +34,65 @@ pub struct Dot {
 }
 
 impl Dot {
+    /// Top `clock` bit, reserved to mark a *synthetic* dot — one that names a
+    /// projection-synthesized node (scaffolded to satisfy the schema) rather than
+    /// a real authored op. Real ops never set it: `clock` is a per-actor Lamport
+    /// counter that cannot reach `2^63`.
+    const SYNTHETIC_BIT: u64 = 1 << 63;
+
+    /// The canonical, document-wide root id (the document-wide root identity).
+    /// The root is implicit — never a stored op — so it is a fixed synthetic dot:
+    /// always present, the same on every replica, and not a deletable seq op
+    /// (`as_op_dot` is `None`). Block-modifier ops may still target it because it
+    /// is a permanent anchor, unlike transient scaffolded synthetic dots.
+    pub const ROOT: Dot = Dot {
+        actor: 0,
+        clock: Self::SYNTHETIC_BIT,
+    };
+
     pub fn new(actor: u64, clock: u64) -> Self {
         Self { actor, clock }
+    }
+
+    /// `true` if this dot names a projection-synthesized node (no authored op).
+    pub fn is_synthetic(&self) -> bool {
+        self.clock & Self::SYNTHETIC_BIT != 0
+    }
+
+    /// Narrows to an [`OpDot`] iff this is a real authored op dot (not synthetic).
+    /// The edit layer requires an `OpDot` to target a CRDT op, so a synthesized
+    /// node must be materialized first.
+    pub fn as_op_dot(self) -> Option<OpDot> {
+        (!self.is_synthetic()).then_some(OpDot(self))
+    }
+
+    /// Builds a synthetic dot from a 128-bit content hash of the node's
+    /// (parent, slot, role). Deterministic across replicas (same inputs → same
+    /// dot), distinct from every real op dot (synthetic bit set), and distinct
+    /// from other synthesized nodes (127-bit hash space).
+    pub fn synthetic(hash: u128) -> Self {
+        Self {
+            actor: (hash >> 64) as u64,
+            clock: (hash as u64) | Self::SYNTHETIC_BIT,
+        }
+    }
+}
+
+/// A [`Dot`] proven to name a real authored op (not synthetic). Obtain via
+/// [`Dot::as_op_dot`]; required wherever a CRDT op targets an element, so the
+/// type system prevents applying ops to projection-synthesized nodes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct OpDot(Dot);
+
+impl OpDot {
+    pub fn dot(self) -> Dot {
+        self.0
+    }
+}
+
+impl From<OpDot> for Dot {
+    fn from(op: OpDot) -> Self {
+        op.0
     }
 }
 
@@ -113,6 +170,51 @@ impl PartialOrd for Dot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn real_dots_are_op_dots_not_synthetic() {
+        let d = Dot::new(12345, 678);
+        assert!(!d.is_synthetic());
+        assert_eq!(d.as_op_dot().map(|o| o.dot()), Some(d));
+    }
+
+    #[test]
+    fn synthetic_dot_is_synthetic_and_not_an_op_dot() {
+        let s = Dot::synthetic(0x0123_4567_89ab_cdef_fedc_ba98_7654_3210);
+        assert!(s.is_synthetic());
+        assert!(s.as_op_dot().is_none());
+    }
+
+    #[test]
+    fn root_is_a_stable_synthetic_anchor() {
+        assert!(
+            Dot::ROOT.is_synthetic(),
+            "root is implicit, not an authored op"
+        );
+        assert!(
+            Dot::ROOT.as_op_dot().is_none(),
+            "root is not a deletable seq op"
+        );
+        assert_eq!(Dot::ROOT, Dot::ROOT, "canonical: same on every replica");
+    }
+
+    #[test]
+    fn synthetic_is_deterministic_and_distinct() {
+        let a = Dot::synthetic(1);
+        let b = Dot::synthetic(1);
+        let c = Dot::synthetic(2);
+        assert_eq!(a, b, "same hash → same synthetic dot");
+        assert_ne!(a, c, "different hash → different synthetic dot");
+    }
+
+    #[test]
+    fn synthetic_never_collides_with_a_max_clock_real_dot() {
+        // Real clocks are Lamport counters that never reach 2^63, so even a huge
+        // real clock has the synthetic bit clear and stays an op dot.
+        let big_real = Dot::new(u64::MAX, (1u64 << 63) - 1);
+        assert!(!big_real.is_synthetic());
+        assert!(big_real.as_op_dot().is_some());
+    }
 
     #[test]
     fn ord_clock_primary() {

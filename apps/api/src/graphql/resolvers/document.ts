@@ -92,6 +92,7 @@ import {
   isTypeOf,
   User,
 } from '../objects.ts';
+import type { PlainDoc } from '@typie/editor-ffi/server';
 import type { Context } from '#/context.ts';
 import type { TemplatePreset } from '#/utils/entity.ts';
 
@@ -160,12 +161,7 @@ IDocument.implement({
         let archivedIds: string[];
 
         if (state) {
-          const plain = state.json as { nodes: Record<string, { node: { type: string; id?: string | null } }> };
-          const nodes = Object.values(plain.nodes);
-          imageIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'image' && e.node.id ? [e.node.id] : [])))];
-          fileIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'file' && e.node.id ? [e.node.id] : [])))];
-          embedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'embed' && e.node.id ? [e.node.id] : [])))];
-          archivedIds = [...new Set(nodes.flatMap((e) => (e.node.type === 'archived' && e.node.id ? [e.node.id] : [])))];
+          ({ imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromPlainDoc(state.json as PlainDoc));
         } else {
           const content = await db
             .select({ snapshot: DocumentContents.snapshot })

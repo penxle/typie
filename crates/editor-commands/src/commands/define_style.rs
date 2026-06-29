@@ -33,8 +33,8 @@ mod tests {
     #[test]
     fn registers_presence_name_and_modifiers() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -43,10 +43,10 @@ mod tests {
             vec![Modifier::Bold, Modifier::FontSize { value: 2400 }],
         ));
 
-        assert!(actual.doc.style_present("heading-1"));
+        assert!(actual.projected.styles().registered("heading-1"));
 
-        let style = actual.doc.style_entry("heading-1").unwrap();
-        assert_eq!(style.name.get(), "제목 1");
+        let style = actual.projected.styles().style_entry("heading-1").unwrap();
+        assert_eq!(style.name.get().as_str(), "제목 1");
         assert!(style.modifiers.contains(&Modifier::Bold));
         assert!(
             style
@@ -58,8 +58,8 @@ mod tests {
     #[test]
     fn empty_style_id_errors() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let err = transact_err!(initial, |tr| define_style(
             &mut tr,

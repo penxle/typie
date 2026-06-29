@@ -1,21 +1,48 @@
+use editor_crdt::Dot;
 use editor_macros::state;
 use editor_model::{
-    Modifier, ModifierType, NodeId, PlainNode, PlainParagraphNode, PlainStyleEntry,
+    AtomLeaf, CalloutVariant, ChildView, Modifier, ModifierType, Node, NodeType, NodeView,
+    PlainCalloutNode, PlainNode, PlainParagraphNode, PlainStyleEntry, Subtree,
 };
+use editor_state::State;
 use editor_transaction::{Step, Transaction};
 use proptest::prelude::*;
 
-fn extract_text(state: &editor_state::State, node_id: NodeId) -> String {
-    let Some(node_ref) = state.doc.node(node_id) else {
-        return String::new();
-    };
-    let mut result = String::new();
-    for desc in std::iter::once(node_ref).chain(node_ref.descendants()) {
-        if let editor_model::Node::Text(t) = desc.node() {
-            result.push_str(&t.text.to_string());
+fn block_text(state: &State, elem: &Dot) -> String {
+    state
+        .view()
+        .node(*elem)
+        .map(|n| n.inline_text())
+        .unwrap_or_default()
+}
+
+fn root_id(state: &State) -> Dot {
+    state.view().root().unwrap().id()
+}
+
+fn root_blocks(state: &State) -> Vec<(NodeType, String)> {
+    state
+        .view()
+        .root()
+        .unwrap()
+        .child_blocks()
+        .map(|b| (b.node_type(), b.inline_text()))
+        .collect()
+}
+
+fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
+    fn walk(nv: &NodeView, depth: usize, out: &mut Vec<(usize, NodeType, String)>) {
+        out.push((depth, nv.node_type(), nv.inline_text()));
+        for b in nv.child_blocks() {
+            walk(&b, depth + 1, out);
         }
     }
-    result
+    let view = state.view();
+    let mut out = Vec::new();
+    if let Some(root) = view.root() {
+        walk(&root, 0, &mut out);
+    }
+    out
 }
 
 mod proptests {
@@ -27,82 +54,53 @@ mod proptests {
             text_a in "[a-z]{1,5}",
             text_b in "[a-z]{1,5}",
         ) {
-            let (state, t1) = state! {
-                doc {
-                    root {
-                        paragraph {
-                            t1: text("")
-                        }
-                    }
-                }
-                selection: (t1, 0)
+            let (state, p1) = state! {
+                doc { root { p1: paragraph { text("") } } }
+                selection: (p1, 0)
             };
 
             let mut tr = Transaction::new(&state);
-            tr.insert_text(t1, 0, &text_a).unwrap();
-            let after_step_1 = tr.doc();
-            tr.insert_text(t1, 0, &text_b).unwrap();
-            let after_step_2 = tr.doc();
+            tr.insert_text(p1, 0, &text_a).unwrap();
+            tr.insert_text(p1, 0, &text_b).unwrap();
+            let after = block_text(tr.state(), &p1);
 
-            let invalid_offset = tr.doc().node(t1).map(|n| {
-                match n.node() {
-                    editor_model::Node::Text(t) => t.text.len() + 100,
-                    _ => 100,
-                }
-            }).unwrap_or(100);
-            let result = tr.insert_text(t1, invalid_offset, "x");
+            let invalid_offset = after.chars().count() + 100;
+            let result = tr.insert_text(p1, invalid_offset, "x");
             prop_assert!(result.is_err());
 
-            prop_assert_eq!(tr.doc().to_plain(), after_step_2.to_plain());
-            prop_assert_ne!(tr.doc().to_plain(), after_step_1.to_plain());
+            prop_assert_eq!(block_text(tr.state(), &p1), after);
         }
     }
 
     proptest! {
         #[test]
-        fn split_text_preserves_chars(
+        fn split_paragraph_preserves_chars(
             text in "[a-z]{1,15}",
             split_at in 0usize..15,
         ) {
             let chars: Vec<char> = text.chars().collect();
             let split_at = split_at.min(chars.len());
 
-            let (state, t1) = state! {
-                doc {
-                    root {
-                        paragraph {
-                            t1: text("placeholder")
-                        }
-                    }
-                }
-                selection: (t1, 0)
+            let (state, p1) = state! {
+                doc { root { p1: paragraph { text("placeholder") } } }
+                selection: (p1, 0)
             };
 
             let mut tr = Transaction::new(&state);
-            tr.remove_text(t1, 0, "placeholder".chars().count()).unwrap();
-            tr.insert_text(t1, 0, &text).unwrap();
+            tr.remove_text(p1, 0, "placeholder".chars().count()).unwrap();
+            tr.insert_text(p1, 0, &text).unwrap();
             let (state, _, _, _, _) = tr.commit();
 
-            let new_t = NodeId::new();
             let mut tr = Transaction::new(&state);
-            let result = tr.split_node(t1, split_at, new_t);
-            if result.is_err() { return Ok(()); }
+            tr.split_node(p1, split_at).unwrap();
             let (split_state, _, _, _, _) = tr.commit();
 
-            let t1_text = match split_state.doc.get_entry(t1).map(|e| &e.node) {
-                Some(editor_model::Node::Text(t)) => t.text.to_string(),
-                _ => return Ok(()),
-            };
-            let new_t_text = match split_state.doc.get_entry(new_t).map(|e| &e.node) {
-                Some(editor_model::Node::Text(t)) => t.text.to_string(),
-                _ => return Ok(()),
-            };
-
+            let blocks = root_blocks(&split_state);
+            prop_assert_eq!(blocks.len(), 2);
             let expected_first: String = text.chars().take(split_at).collect();
             let expected_rest: String = text.chars().skip(split_at).collect();
-
-            prop_assert_eq!(t1_text, expected_first);
-            prop_assert_eq!(new_t_text, expected_rest);
+            prop_assert_eq!(&blocks[0].1, &expected_first);
+            prop_assert_eq!(&blocks[1].1, &expected_rest);
         }
 
         #[test]
@@ -110,124 +108,112 @@ mod proptests {
             text_a in "[a-z]{0,10}",
             text_b in "[a-z]{0,10}",
         ) {
-            let (state, p1, t1, p2, t2) = state! {
+            let (state, p1, p2) = state! {
                 doc {
                     root {
-                        p1: paragraph { t1: text("placeholder_a") }
-                        p2: paragraph { t2: text("placeholder_b") }
+                        p1: paragraph { text("placeholder_a") }
+                        p2: paragraph { text("placeholder_b") }
                     }
                 }
-                selection: (t1, 0)
-            };
-
-            let mut tr = Transaction::new(&state);
-            tr.remove_text(t1, 0, "placeholder_a".chars().count()).unwrap();
-            tr.insert_text(t1, 0, &text_a).unwrap();
-            tr.remove_text(t2, 0, "placeholder_b".chars().count()).unwrap();
-            tr.insert_text(t2, 0, &text_b).unwrap();
-            let (state, _, _, _, _) = tr.commit();
-
-            let mut tr = Transaction::new(&state);
-            tr.merge_node(p2, p1).unwrap();
-            let (merged, _, _, _, _) = tr.commit();
-
-            let p1_text = extract_text(&merged, p1);
-            prop_assert_eq!(p1_text, format!("{}{}", text_a, text_b));
-            prop_assert!(merged.doc.get_entry(p2).is_none() || !merged.doc.nodes_iter().any(|(id, _)| *id == p2));
-        }
-
-        #[test]
-        fn move_node_changes_parent(target_index in 0usize..2) {
-            let (state, t1, p2) = state! {
-                doc {
-                    root {
-                        paragraph { t1: text("hello") }
-                        p2: paragraph
-                    }
-                }
-                selection: (t1, 0)
-            };
-
-            let mut tr = Transaction::new(&state);
-            let result = tr.move_node(t1, p2, target_index);
-            if result.is_err() { return Ok(()); }
-            let (moved, _, _, _, _) = tr.commit();
-
-            let t1_entry = moved.doc.get_entry(t1).unwrap();
-            prop_assert_eq!(*t1_entry.parent.get(), Some(p2));
-        }
-
-        #[test]
-        fn insert_subtree_appears_in_parent_children(index in 0usize..3) {
-            let (state, _) = state! {
-                doc { root { p1: paragraph } }
                 selection: (p1, 0)
             };
 
-            let new_id = NodeId::new();
-            let subtree = editor_model::Subtree::leaf(
-                new_id,
-                PlainNode::Paragraph(PlainParagraphNode::default()),
-            );
-            let root_id = state.doc.root().unwrap().id();
+            let mut tr = Transaction::new(&state);
+            tr.remove_text(p1, 0, "placeholder_a".chars().count()).unwrap();
+            tr.insert_text(p1, 0, &text_a).unwrap();
+            tr.remove_text(p2, 0, "placeholder_b".chars().count()).unwrap();
+            tr.insert_text(p2, 0, &text_b).unwrap();
+            let (state, ..) = tr.commit();
 
             let mut tr = Transaction::new(&state);
-            let result = tr.insert_subtree(root_id, index, subtree);
-            if result.is_err() { return Ok(()); }
-            let (inserted, _, _, _, _) = tr.commit();
+            tr.merge_node(p1).unwrap();
+            let (merged, ..) = tr.commit();
 
-            let new_entry = inserted.doc.get_entry(new_id).unwrap();
-            prop_assert_eq!(*new_entry.parent.get(), Some(root_id));
+            prop_assert_eq!(block_text(&merged, &p1), format!("{}{}", text_a, text_b));
+            prop_assert_eq!(root_blocks(&merged).len(), 1);
         }
 
+        #[test]
+        fn move_paragraph_reorders(_seed in 0usize..2) {
+            let (state, ..) = state! {
+                doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+                selection: (p1, 0)
+            };
+            let root = root_id(&state);
+            let p2_first = state.view().root().unwrap().child_blocks().nth(1).unwrap().id();
+
+            let step = Step::MoveNode {
+                block: p2_first,
+                old_parent: root,
+                old_index: 1,
+                new_parent: root,
+                new_index: 0,
+            };
+            let moved = step.apply(&state).unwrap().state;
+            let texts: Vec<String> = root_blocks(&moved).into_iter().map(|(_, t)| t).collect();
+            prop_assert_eq!(texts, vec!["b".to_string(), "a".to_string()]);
+        }
+
+        #[test]
+        fn insert_subtree_appears_in_parent(index in 0usize..2) {
+            let (state, ..) = state! {
+                doc { root { p1: paragraph } }
+                selection: (p1, 0)
+            };
+            let root = root_id(&state);
+            let subtree = Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default()));
+
+            let mut tr = Transaction::new(&state);
+            tr.insert_subtree(root, index, subtree).unwrap();
+            let (inserted, _, _, _, _) = tr.commit();
+
+            prop_assert_eq!(root_blocks(&inserted).len(), 2);
+        }
     }
 
     proptest! {
         #[test]
         fn insert_text_inverse_round_trip(text in "[a-z]{1,10}") {
-            let (state, t1) = state! {
-                doc { root { paragraph { t1: text("") } } }
-                selection: (t1, 0)
+            let (state, p1) = state! {
+                doc { root { p1: paragraph { text("") } } }
+                selection: (p1, 0)
             };
-            let plain_before = state.doc.to_plain();
-            let step = Step::InsertText { node_id: t1, offset: 0, text: text.clone() };
-            let after_state = step.apply(&state).unwrap().state;
-            let inverse = step.inverse();
-            let restored = inverse.apply(&after_state).unwrap().state;
-            prop_assert_eq!(restored.doc.to_plain(), plain_before);
+            let before = snapshot(&state);
+            let step = Step::InsertText { block: p1, offset: 0, text: text.clone() };
+            let after = step.apply(&state).unwrap().state;
+            let restored = step.inverse().apply(&after).unwrap().state;
+            prop_assert_eq!(snapshot(&restored), before);
         }
 
         #[test]
         fn remove_text_inverse_round_trip(text in "[a-z]{1,10}") {
-            let (state, t1) = state! {
-                doc { root { paragraph { t1: text("placeholder") } } }
-                selection: (t1, 0)
+            let (state, p1) = state! {
+                doc { root { p1: paragraph { text("placeholder") } } }
+                selection: (p1, 0)
             };
             let mut tr = Transaction::new(&state);
-            tr.remove_text(t1, 0, "placeholder".chars().count()).unwrap();
-            tr.insert_text(t1, 0, &text).unwrap();
+            tr.remove_text(p1, 0, "placeholder".chars().count()).unwrap();
+            tr.insert_text(p1, 0, &text).unwrap();
             let (state, _, _, _, _) = tr.commit();
 
-            let plain_before = state.doc.to_plain();
-            let step = Step::RemoveText { node_id: t1, offset: 0, text: text.clone() };
-            let after_state = step.apply(&state).unwrap().state;
-            let inverse = step.inverse();
-            let restored = inverse.apply(&after_state).unwrap().state;
-            prop_assert_eq!(restored.doc.to_plain(), plain_before);
+            let before = snapshot(&state);
+            let step = Step::RemoveText { block: p1, offset: 0, text: text.clone() };
+            let after = step.apply(&state).unwrap().state;
+            let restored = step.inverse().apply(&after).unwrap().state;
+            prop_assert_eq!(snapshot(&restored), before);
         }
-
     }
 }
 
 mod tests {
     use super::*;
+    use editor_state::PendingStyle;
 
     #[test]
     fn set_pending_style_roundtrip_and_inverse() {
-        use editor_state::PendingStyle;
-        let (initial, _t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&initial);
         tr.set_pending_style(Some(PendingStyle::Set {
@@ -245,301 +231,375 @@ mod tests {
 
     #[test]
     fn add_modifier_twice_dispatches_once() {
-        let (state, t1) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("hi")
-                    }
-                }
-            }
-            selection: (t1, 0)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
 
         let mut tr = Transaction::new(&state);
-        tr.add_modifier(t1, Modifier::Bold).unwrap();
-        tr.add_modifier(t1, Modifier::Bold).unwrap();
-        let (_, _, _, _, _) = tr.commit();
+        tr.add_modifier(p1, Modifier::Bold).unwrap();
+        tr.add_modifier(p1, Modifier::Bold).unwrap();
+        let (next, ..) = tr.commit();
+        assert_eq!(
+            next.view()
+                .node(p1)
+                .unwrap()
+                .block_modifier(ModifierType::Bold),
+            Some(&Modifier::Bold)
+        );
     }
 
     #[test]
-    fn subtree_subsumes_node_in_dispatch() {
-        let (state, t1) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("hello")
-                    }
-                }
-            }
-            selection: (t1, 0)
+    fn split_then_merge_via_transaction() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
 
         let mut tr = Transaction::new(&state);
-        let new_t = NodeId::new();
-        tr.split_node(t1, 3, new_t).unwrap();
-        let (_, _, _, _, _) = tr.commit();
+        tr.split_node(p1, 3).unwrap();
+        let (split_state, ..) = tr.commit();
+        assert_eq!(root_blocks(&split_state).len(), 2);
     }
 
     #[test]
     fn remove_subtree_removes_from_doc() {
         let (state, p1) = state! {
-            doc { root { p1: paragraph paragraph } }
+            doc { root { p1: paragraph { text("x") } paragraph } }
             selection: (p1, 0)
         };
 
         let mut tr = Transaction::new(&state);
         tr.remove_subtree(p1).unwrap();
-        let (removed, _, _, _, _) = tr.commit();
+        let (removed, ..) = tr.commit();
 
-        assert!(removed.doc.get_entry(p1).is_none());
+        assert_eq!(root_blocks(&removed).len(), 1);
     }
 
     #[test]
     fn add_modifier_inverse_round_trip() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
-        let plain_before = state.doc.to_plain();
+        let before = snapshot(&state);
         let step = Step::AddModifier {
-            node_id: t1,
+            block: p1,
             modifier: Modifier::Bold,
         };
-        let after_state = step.apply(&state).unwrap().state;
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
+        let after = step.apply(&state).unwrap().state;
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
     }
 
     #[test]
     fn split_node_inverse_round_trip() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 5)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
         };
-        let plain_before = state.doc.to_plain();
-        let new_t = NodeId::new();
+        let before = snapshot(&state);
         let step = Step::SplitNode {
-            node_id: t1,
+            block: p1,
             offset: 3,
-            new_node_id: new_t,
         };
-        let after_state = match step.apply(&state) {
-            Ok(out) => out.state,
-            Err(_) => return,
-        };
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
-    }
-
-    #[test]
-    fn remove_modifier_inverse_round_trip() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
-        };
-        let mut tr = Transaction::new(&state);
-        tr.add_modifier(t1, Modifier::Bold).unwrap();
-        let (state, _, _, _, _) = tr.commit();
-
-        let plain_before = state.doc.to_plain();
-        let step = Step::RemoveModifier {
-            node_id: t1,
-            modifier: Modifier::Bold,
-        };
-        let after_state = step.apply(&state).unwrap().state;
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
-    }
-
-    #[test]
-    fn set_node_inverse_round_trip() {
-        let (state, im1) = state! {
-            doc { root { paragraph im1: image paragraph } }
-            selection: (im1, 0)
-        };
-        let plain_before = state.doc.to_plain();
-        let new_node = editor_model::PlainNode::Image(editor_model::PlainImageNode {
-            id: Some("new-image-id".to_string()),
-            proportion: 50,
-        });
-        let old_node = state.doc.get_entry(im1).unwrap().node.to_plain();
-        let step = Step::SetNode {
-            node_id: im1,
-            old_node: old_node.clone(),
-            new_node,
-        };
-        let after_state = match step.apply(&state) {
-            Ok(out) => out.state,
-            Err(_) => return,
-        };
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
+        let after = step.apply(&state).unwrap().state;
+        assert_eq!(root_blocks(&after).len(), 2);
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
     }
 
     #[test]
     fn merge_node_inverse_round_trip() {
-        let (state, t1, t2) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] t2: text("world") [bold] } } }
-            selection: (t1, 0)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } paragraph { text("world") } } }
+            selection: (p1, 0)
         };
-        let plain_before = state.doc.to_plain();
+        let before = snapshot(&state);
+        // offset 5 = child count of survivor (p1) before merge.
         let step = Step::MergeNode {
-            node_id: t2,
-            target_id: t1,
+            block: p1,
             offset: 5,
         };
-        let after_state = match step.apply(&state) {
-            Ok(out) => out.state,
-            Err(_) => return,
-        };
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
+        let after = step.apply(&state).unwrap().state;
+        assert_eq!(root_blocks(&after).len(), 1);
+        assert_eq!(block_text(&after, &p1), "helloworld");
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
     }
 
     #[test]
-    fn move_node_inverse_round_trip() {
-        let (state, p2) = state! {
-            doc { root { paragraph { text("a") } p2: paragraph } }
+    fn remove_modifier_inverse_round_trip() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.add_modifier(p1, Modifier::Bold).unwrap();
+        let (state, ..) = tr.commit();
+
+        let before = snapshot(&state);
+        let bold_before = state
+            .view()
+            .node(p1)
+            .unwrap()
+            .block_modifier(ModifierType::Bold)
+            .cloned();
+        let step = Step::RemoveModifier {
+            block: p1,
+            modifier: Modifier::Bold,
+        };
+        let after = step.apply(&state).unwrap().state;
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
+        assert_eq!(
+            restored
+                .view()
+                .node(p1)
+                .unwrap()
+                .block_modifier(ModifierType::Bold)
+                .cloned(),
+            bold_before
+        );
+    }
+
+    #[test]
+    fn set_node_inverse_round_trip() {
+        let (state, c1) = state! {
+            doc { root { c1: callout { paragraph { text("x") } } } }
+            selection: (c1, 0)
+        };
+        let new_node = PlainNode::Callout(PlainCalloutNode {
+            variant: CalloutVariant::Warning,
+        });
+        let old_node = state.view().node(c1).unwrap().node().to_plain();
+        let step = Step::SetNode {
+            block: c1,
+            old_node,
+            new_node,
+        };
+        let after = step.apply(&state).unwrap().state;
+        if let Node::Callout(n) = after.view().node(c1).unwrap().node() {
+            assert_eq!(*n.variant.get(), CalloutVariant::Warning);
+        } else {
+            panic!("expected callout");
+        }
+        let restored = step.inverse().apply(&after).unwrap().state;
+        if let Node::Callout(n) = restored.view().node(c1).unwrap().node() {
+            assert_eq!(*n.variant.get(), CalloutVariant::Info);
+        } else {
+            panic!("expected callout");
+        }
+    }
+
+    #[test]
+    fn move_node_reorder_and_back() {
+        let (state, ..) = state! {
+            doc { root { paragraph { text("a") } p2: paragraph { text("b") } } }
             selection: (p2, 0)
         };
-        let plain_before = state.doc.to_plain();
-        let root_id = state.doc.root().unwrap().id();
+        let before = snapshot(&state);
+        let root = root_id(&state);
+        let p2_elem = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .nth(1)
+            .unwrap()
+            .id();
+
         let step = Step::MoveNode {
-            node_id: p2,
-            old_parent: root_id,
+            block: p2_elem,
+            old_parent: root,
             old_index: 1,
-            new_parent: root_id,
+            new_parent: root,
             new_index: 0,
         };
-        let after_state = match step.apply(&state) {
-            Ok(out) => out.state,
-            Err(_) => return,
+        let moved = step.apply(&state).unwrap().state;
+        let texts: Vec<String> = root_blocks(&moved).into_iter().map(|(_, t)| t).collect();
+        assert_eq!(texts, vec!["b".to_string(), "a".to_string()]);
+
+        // Reverse manually: the "b" block now sits at index 0 with a fresh dot.
+        let b_elem = moved
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        let back = Step::MoveNode {
+            block: b_elem,
+            old_parent: root,
+            old_index: 0,
+            new_parent: root,
+            new_index: 1,
         };
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
+        let restored = back.apply(&moved).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
     }
 
     #[test]
     fn insert_subtree_inverse_round_trip() {
-        let (state, _) = state! {
+        let (state, ..) = state! {
             doc { root { p1: paragraph } }
             selection: (p1, 0)
         };
-        let plain_before = state.doc.to_plain();
-        let root_id = state.doc.root().unwrap().id();
-        let new_id = NodeId::new();
-        let subtree = editor_model::Subtree::leaf(
-            new_id,
-            PlainNode::Paragraph(PlainParagraphNode::default()),
-        );
+        let before = snapshot(&state);
+        let root = root_id(&state);
+        let subtree = Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default()));
         let step = Step::InsertSubtree {
-            parent_id: root_id,
+            parent: root,
             index: 1,
             subtree,
         };
-        let after_state = match step.apply(&state) {
-            Ok(out) => out.state,
-            Err(_) => return,
-        };
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
+        let after = step.apply(&state).unwrap().state;
+        assert_eq!(root_blocks(&after).len(), 2);
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
     }
 
     #[test]
     fn remove_subtree_inverse_round_trip() {
         let (state, p1) = state! {
-            doc { root { p1: paragraph paragraph } }
+            doc { root { p1: paragraph { text("keep") } paragraph } }
             selection: (p1, 0)
         };
-        let plain_before = state.doc.to_plain();
-        let root_id = state.doc.root().unwrap().id();
-        let subtree = editor_model::Subtree::capture(&state.doc, p1).unwrap();
+        let before = snapshot(&state);
+        let root = root_id(&state);
+        let captured = capture(&state, &p1);
         let step = Step::RemoveSubtree {
-            parent_id: root_id,
+            parent: root,
             index: 0,
-            subtree,
+            subtree: captured,
         };
-        let after_state = step.apply(&state).unwrap().state;
-        let inverse = step.inverse();
-        let restored = inverse.apply(&after_state).unwrap().state;
-        assert_eq!(restored.doc.to_plain(), plain_before);
+        let after = step.apply(&state).unwrap().state;
+        assert_eq!(root_blocks(&after).len(), 1);
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
+    }
+
+    fn capture(state: &State, block: &Dot) -> Subtree {
+        // Build a Subtree mirroring the block: a paragraph with its text.
+        let view = state.view();
+        let nv = view.node(*block).unwrap();
+        Subtree::leaf(nv.node().to_plain()).with_children(vec![Subtree::leaf(PlainNode::Text(
+            editor_model::PlainTextNode {
+                text: nv.inline_text(),
+            },
+        ))])
     }
 
     #[test]
-    fn text_run_style_resolves_inline_only() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hi") } } }
-            selection: (t1, 0)
+    fn node_style_draws_modifier_on_text_leaves() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hi") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&initial);
         tr.set_style(
             "s1".into(),
             Some(PlainStyleEntry {
                 name: "s".into(),
-                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
-                    .into_iter()
-                    .collect(),
-            }),
-        )
-        .unwrap();
-        tr.set_node_style(t1, Some("s1".into())).unwrap();
-        let (next, ..) = tr.commit();
-
-        let node = next.doc.node(t1).unwrap();
-        let mods: Vec<Modifier> = node.own_modifiers().cloned().collect();
-        assert!(mods.contains(&Modifier::Bold));
-        assert!(
-            !mods
-                .iter()
-                .any(|m| matches!(m, Modifier::LineHeight { .. }))
-        );
-    }
-
-    #[test]
-    fn paragraph_with_style_ref_expands_no_style_modifiers() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hi") } } }
-            selection: (t1, 0)
-        };
-        let p1 = initial.doc.node(t1).unwrap().parent().unwrap().id();
-        let mut tr = Transaction::new(&initial);
-        tr.set_style(
-            "s1".into(),
-            Some(PlainStyleEntry {
-                name: "s".into(),
-                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
-                    .into_iter()
-                    .collect(),
+                modifiers: [Modifier::Bold].into_iter().collect(),
             }),
         )
         .unwrap();
         tr.set_node_style(p1, Some("s1".into())).unwrap();
         let (next, ..) = tr.commit();
 
-        let para = next.doc.node(p1).unwrap();
-        assert!(
-            para.effective_modifier(ModifierType::Bold).is_none(),
-            "inline Bold does not apply to the paragraph itself (paragraph is not its target)"
+        let view = next.view();
+        let para = view.node(p1).unwrap();
+        let inline = para.inline();
+        assert!(!inline.is_empty());
+        assert_eq!(
+            inline[0].effective.get(&ModifierType::Bold),
+            Some(&Modifier::Bold)
         );
-        let text = next.doc.node(t1).unwrap();
-        assert!(
-            text.effective_modifier(ModifierType::Bold).is_some(),
-            "the paragraph's child text inherits the style's Bold"
+    }
+
+    fn tab_count(state: &State, block: &Dot) -> usize {
+        state
+            .view()
+            .node(*block)
+            .unwrap()
+            .children()
+            .filter(|c| matches!(c, ChildView::Leaf(l) if l.as_atom() == Some(&AtomLeaf::Tab)))
+            .count()
+    }
+
+    #[test]
+    fn atom_tab_survives_build_and_move() {
+        // build_state_from_plain must emit inline atoms (state! with bare `tab`).
+        let (state, p1, _p2) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") tab text("b") }
+                    p2: paragraph { text("c") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_eq!(block_text(&state, &p1), "ab");
+        assert_eq!(
+            tab_count(&state, &p1),
+            1,
+            "build_state_from_plain emits the inline tab atom"
         );
-        assert!(
-            matches!(
-                para.effective_modifier(ModifierType::LineHeight),
-                Some(Modifier::LineHeight { value: 200 })
-            ),
-            "LineHeight (target Paragraph) applies to the paragraph itself"
+
+        // Moving the paragraph routes through capture_subtree + emit_subtree; the
+        // inline atom must survive onto the moved block's fresh dot.
+        let root = root_id(&state);
+        let moved = Step::MoveNode {
+            block: p1,
+            old_parent: root,
+            old_index: 0,
+            new_parent: root,
+            new_index: 1,
+        }
+        .apply(&state)
+        .unwrap()
+        .state;
+
+        let moved_p1 = moved
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .nth(1)
+            .unwrap()
+            .id();
+        assert_eq!(
+            block_text(&moved, &moved_p1),
+            "ab",
+            "text survives the move"
         );
+        assert_eq!(
+            tab_count(&moved, &moved_p1),
+            1,
+            "inline tab survives the move (capture_subtree + emit_subtree atom support)"
+        );
+    }
+
+    #[test]
+    fn atom_block_image_builds_at_root() {
+        // Block-level atom (image) as a direct child of root → SeqItem::BlockAtom.
+        let (state, _p1) = state! {
+            doc { root { image p1: paragraph { text("x") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        let root = view.root().unwrap();
+        let first = root.child_at(0).unwrap();
+        match first {
+            ChildView::Leaf(l) => {
+                assert!(
+                    matches!(l.as_atom(), Some(AtomLeaf::Image { .. })),
+                    "root's first child is the block image atom"
+                );
+            }
+            ChildView::Block(_) => panic!("expected the image atom as a leaf child of root"),
+        }
     }
 }

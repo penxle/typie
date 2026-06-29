@@ -1,6 +1,7 @@
 use editor_clipboard::Slice;
 use editor_model::{Fragment, PlainNode};
-use editor_state::{Position, Selection, enclosing_table_cell};
+use editor_state::enclosing_table_cell;
+use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
@@ -27,41 +28,45 @@ pub fn paste_cells_into_cell_rect(tr: &mut Transaction, slice: Slice) -> Command
         let Some(sel) = tr.selection() else {
             return Ok(false);
         };
-        let doc = tr.doc();
-        let Some(rs) = sel.resolve(&doc) else {
+        let view = tr.view();
+        let Some(rs) = sel.resolve(&view) else {
             return Ok(false);
         };
-        let (table, anchor_row, anchor_col) = if let Some(rect) = rs.as_cell_rect() {
-            (rect.table, *rect.rows.start(), *rect.cols.start())
+        let (table_id, anchor_row, anchor_col) = if let Some(rect) = rs.as_cell_rect() {
+            (rect.table.id(), *rect.rows.start(), *rect.cols.start())
         } else {
-            let head_id = rs.head().node_id();
-            let cell_id = enclosing_table_cell(&doc, head_id);
-            let Some(cell_id) = cell_id else {
+            let head_id = rs.head().node();
+            let Some(cell_id) = enclosing_table_cell(&view, head_id) else {
                 return Ok(false);
             };
-            let cell = doc
+            let cell = view
                 .node(cell_id)
                 .ok_or(CommandError::NodeNotFound(cell_id))?;
             let row = cell.parent().ok_or(CommandError::NoParent(cell_id))?;
-            let table = row.parent().ok_or(CommandError::NoParent(row.id()))?;
+            let table = row
+                .parent()
+                .ok_or_else(|| CommandError::NoParent(row.id()))?;
             let row_idx = row
                 .index()
                 .ok_or_else(|| CommandError::orphan_child(row.id(), table.id()))?;
             let col_idx = cell
                 .index()
                 .ok_or_else(|| CommandError::orphan_child(cell_id, row.id()))?;
-            (table, row_idx, col_idx)
+            (table.id(), row_idx, col_idx)
         };
-        let total_r = table.children().count();
+        let table = view
+            .node(table_id)
+            .ok_or(CommandError::NodeNotFound(table_id))?;
+        let total_r = table.child_blocks().count();
         let total_c = table
-            .children()
+            .child_blocks()
             .next()
-            .map(|row| row.children().count())
+            .map(|row| row.child_blocks().count())
             .unwrap_or(0);
         if total_r == 0 || total_c == 0 {
             return Ok(false);
         }
-        (table.id(), anchor_row, anchor_col, total_r, total_c)
+        (table_id, anchor_row, anchor_col, total_r, total_c)
     };
 
     let extra_r = (anchor_row + sr).saturating_sub(total_r);
@@ -92,7 +97,7 @@ pub fn paste_cells_into_cell_rect(tr: &mut Transaction, slice: Slice) -> Command
     })?;
 
     let anchor_cell_id = nth_table_cell(tr, table_id, anchor_row, anchor_col)?;
-    let cursor = find_first_text_position(&tr.doc(), anchor_cell_id)
+    let cursor = find_first_text_position(&tr.view(), anchor_cell_id)
         .unwrap_or_else(|| Position::new(anchor_cell_id, 0));
     tr.set_selection(Some(Selection::collapsed(cursor)))?;
     Ok(true)
@@ -133,57 +138,53 @@ fn find_table_fragment(frag: &Fragment) -> Option<&Fragment> {
 #[cfg(test)]
 mod tests {
     use editor_clipboard::Slice;
+    use editor_crdt::Dot;
     use editor_macros::state;
-    use editor_model::{Node, NodeId};
     use editor_state::cell_rect_selection;
 
     use super::*;
     use crate::test_utils::*;
 
-    fn with_cell_rect(
-        initial: editor_state::State,
-        anchor: NodeId,
-        head: NodeId,
-    ) -> editor_state::State {
-        let sel = cell_rect_selection(&initial.doc, anchor, head).unwrap();
+    fn with_cell_rect(initial: editor_state::State, anchor: Dot, head: Dot) -> editor_state::State {
+        let sel = {
+            let v = initial.view();
+            cell_rect_selection(anchor, head, &v).unwrap()
+        };
         editor_state::State {
             selection: Some(sel),
             ..initial
         }
     }
 
-    fn cell_text(doc: &editor_model::Doc, id: NodeId) -> String {
-        fn walk(node: editor_model::NodeRef<'_>, out: &mut String) {
-            match node.node() {
-                Node::Text(t) => out.push_str(&t.text.to_string()),
-                _ => {
-                    for c in node.children() {
-                        walk(c, out);
-                    }
+    fn cell_text(view: &editor_model::DocView, id: Dot) -> String {
+        let mut s = String::new();
+        if let Some(n) = view.node(id) {
+            for d in n.descendants() {
+                if let editor_model::ChildView::Leaf(l) = d
+                    && let Some(c) = l.as_char()
+                {
+                    s.push(c);
                 }
             }
         }
-        let mut out = String::new();
-        if let Some(n) = doc.node(id) {
-            walk(n, &mut out);
-        }
-        out
+        s
     }
 
-    fn cell_text_at(doc: &editor_model::Doc, table_id: NodeId, row: usize, col: usize) -> String {
-        let table = doc.node(table_id).expect("table");
-        let row_ref = table.children().nth(row).expect("row");
-        let cell = row_ref.children().nth(col).expect("cell");
-        cell_text(doc, cell.id())
+    fn cell_text_at(view: &editor_model::DocView, table_id: Dot, row: usize, col: usize) -> String {
+        let table = view.node(table_id).expect("table");
+        let row_ref = table.child_blocks().nth(row).expect("row");
+        let cell = row_ref.child_blocks().nth(col).expect("cell");
+        let id = cell.id();
+        cell_text(view, id)
     }
 
-    fn table_dims(doc: &editor_model::Doc, table_id: NodeId) -> (usize, usize) {
-        let table = doc.node(table_id).expect("table");
-        let rows = table.children().count();
+    fn table_dims(view: &editor_model::DocView, table_id: Dot) -> (usize, usize) {
+        let table = view.node(table_id).expect("table");
+        let rows = table.child_blocks().count();
         let cols = table
-            .children()
+            .child_blocks()
             .next()
-            .map(|r| r.children().count())
+            .map(|r| r.child_blocks().count())
             .unwrap_or(0);
         (rows, cols)
     }
@@ -203,9 +204,9 @@ mod tests {
 
     #[test]
     fn returns_false_when_selection_is_not_cell_rect() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0) -> (t, 5)
+        let (initial, _) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let source = source_slice_2x2();
         transact_fail!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
@@ -225,7 +226,10 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let sel = {
+            let v = s.view();
+            cell_rect_selection(c00, c11, &v).unwrap()
+        };
         let s = editor_state::State {
             selection: Some(sel),
             ..s
@@ -244,7 +248,10 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = cell_rect_selection(&s.doc, c00, c40).unwrap();
+        let sel = {
+            let v = s.view();
+            cell_rect_selection(c00, c40, &v).unwrap()
+        };
         let s = editor_state::State {
             selection: Some(sel),
             ..s
@@ -272,11 +279,12 @@ mod tests {
         let initial = with_cell_rect(state, c00, c11);
         let source = source_slice_2x2();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (2, 3));
-        assert_eq!(cell_text(&after.doc, c00), "X");
-        assert_eq!(cell_text(&after.doc, c01), "Y");
-        assert_eq!(cell_text(&after.doc, c10), "Z");
-        assert_eq!(cell_text(&after.doc, c11), "W");
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (2, 3));
+        assert_eq!(cell_text(&v, c00), "X");
+        assert_eq!(cell_text(&v, c01), "Y");
+        assert_eq!(cell_text(&v, c10), "Z");
+        assert_eq!(cell_text(&v, c11), "W");
     }
 
     #[test]
@@ -304,20 +312,21 @@ mod tests {
         let initial = with_cell_rect(state, c00, c21);
         let source = source_slice_5x1();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (5, 3));
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (5, 3));
         for (row, ch) in ["A", "B", "C", "D", "E"].iter().enumerate() {
-            assert_eq!(cell_text_at(&after.doc, tbl, row, 0), *ch);
+            assert_eq!(cell_text_at(&v, tbl, row, 0), *ch);
         }
-        assert_eq!(cell_text(&after.doc, c01), "b");
-        assert_eq!(cell_text(&after.doc, c11), "d");
-        assert_eq!(cell_text(&after.doc, c21), "f");
-        assert_eq!(cell_text_at(&after.doc, tbl, 3, 1), "");
-        assert_eq!(cell_text_at(&after.doc, tbl, 4, 1), "");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 2), "x");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 2), "y");
-        assert_eq!(cell_text_at(&after.doc, tbl, 2, 2), "z");
-        assert_eq!(cell_text_at(&after.doc, tbl, 3, 2), "");
-        assert_eq!(cell_text_at(&after.doc, tbl, 4, 2), "");
+        assert_eq!(cell_text(&v, c01), "b");
+        assert_eq!(cell_text(&v, c11), "d");
+        assert_eq!(cell_text(&v, c21), "f");
+        assert_eq!(cell_text_at(&v, tbl, 3, 1), "");
+        assert_eq!(cell_text_at(&v, tbl, 4, 1), "");
+        assert_eq!(cell_text_at(&v, tbl, 0, 2), "x");
+        assert_eq!(cell_text_at(&v, tbl, 1, 2), "y");
+        assert_eq!(cell_text_at(&v, tbl, 2, 2), "z");
+        assert_eq!(cell_text_at(&v, tbl, 3, 2), "");
+        assert_eq!(cell_text_at(&v, tbl, 4, 2), "");
     }
 
     #[test]
@@ -342,20 +351,24 @@ mod tests {
             } } } }
             selection: (sc00, 0)
         };
-        let sel = cell_rect_selection(&src.doc, sc00, sc02).unwrap();
+        let sel = {
+            let v = src.view();
+            cell_rect_selection(sc00, sc02, &v).unwrap()
+        };
         let src = editor_state::State {
             selection: Some(sel),
             ..src
         };
         let source = Slice::extract(&src).unwrap();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (2, 3));
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 0), "P");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 1), "Q");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 2), "R");
-        assert_eq!(cell_text(&after.doc, c10), "b");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 1), "");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 2), "");
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (2, 3));
+        assert_eq!(cell_text_at(&v, tbl, 0, 0), "P");
+        assert_eq!(cell_text_at(&v, tbl, 0, 1), "Q");
+        assert_eq!(cell_text_at(&v, tbl, 0, 2), "R");
+        assert_eq!(cell_text(&v, c10), "b");
+        assert_eq!(cell_text_at(&v, tbl, 1, 1), "");
+        assert_eq!(cell_text_at(&v, tbl, 1, 2), "");
     }
 
     #[test]
@@ -393,7 +406,10 @@ mod tests {
             } } }
             selection: (sc00, 0)
         };
-        let sel = cell_rect_selection(&src.doc, sc00, sc22).unwrap();
+        let sel = {
+            let v = src.view();
+            cell_rect_selection(sc00, sc22, &v).unwrap()
+        };
         let src = editor_state::State {
             selection: Some(sel),
             ..src
@@ -401,12 +417,13 @@ mod tests {
         let source = Slice::extract(&src).unwrap();
 
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (3, 3));
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (3, 3));
         for (i, ch) in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
             .iter()
             .enumerate()
         {
-            assert_eq!(cell_text_at(&after.doc, tbl, i / 3, i % 3), *ch);
+            assert_eq!(cell_text_at(&v, tbl, i / 3, i % 3), *ch);
         }
     }
 
@@ -454,7 +471,10 @@ mod tests {
             } } }
             selection: (sc00, 0)
         };
-        let sel = cell_rect_selection(&src.doc, sc00, sc22).unwrap();
+        let sel = {
+            let v = src.view();
+            cell_rect_selection(sc00, sc22, &v).unwrap()
+        };
         let src = editor_state::State {
             selection: Some(sel),
             ..src
@@ -462,14 +482,15 @@ mod tests {
         let source = Slice::extract(&src).unwrap();
 
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (4, 4));
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 1), "A");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 2), "B");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 3), "C");
-        assert_eq!(cell_text_at(&after.doc, tbl, 3, 3), "I");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 0), "x");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 3), "");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 0), "x");
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (4, 4));
+        assert_eq!(cell_text_at(&v, tbl, 1, 1), "A");
+        assert_eq!(cell_text_at(&v, tbl, 1, 2), "B");
+        assert_eq!(cell_text_at(&v, tbl, 1, 3), "C");
+        assert_eq!(cell_text_at(&v, tbl, 3, 3), "I");
+        assert_eq!(cell_text_at(&v, tbl, 0, 0), "x");
+        assert_eq!(cell_text_at(&v, tbl, 0, 3), "");
+        assert_eq!(cell_text_at(&v, tbl, 1, 0), "x");
     }
 
     #[test]
@@ -481,21 +502,22 @@ mod tests {
                     c01: table_cell { paragraph { text("b") } }
                 }
                 tr1: table_row {
-                    c10: table_cell { paragraph { ct: text("c") } }
+                    c10: table_cell { p1: paragraph { text("c") } }
                     c11: table_cell { paragraph { text("d") } }
                 }
             } } }
-            selection: (ct, 1)
+            selection: (p1, 1)
         };
-        assert!(
+        let is_cell_rect = {
+            let v = state.view();
             state
                 .selection
                 .as_ref()
-                .and_then(|s| s.resolve(&state.doc))
+                .and_then(|s| s.resolve(&v))
                 .and_then(|rs| rs.as_cell_rect())
-                .is_none(),
-            "test setup must be a non-cell-rect caret"
-        );
+                .is_some()
+        };
+        assert!(!is_cell_rect, "test setup must be a non-cell-rect caret");
 
         let (src, _, sc00, _, _, _, sc20) = state! {
             doc { root { table {
@@ -505,7 +527,10 @@ mod tests {
             } } }
             selection: (sc00, 0)
         };
-        let sel = cell_rect_selection(&src.doc, sc00, sc20).unwrap();
+        let sel = {
+            let v = src.view();
+            cell_rect_selection(sc00, sc20, &v).unwrap()
+        };
         let src = editor_state::State {
             selection: Some(sel),
             ..src
@@ -513,14 +538,15 @@ mod tests {
         let source = Slice::extract(&src).unwrap();
 
         let (after, ..) = transact!(state, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (4, 2));
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 0), "A");
-        assert_eq!(cell_text_at(&after.doc, tbl, 2, 0), "B");
-        assert_eq!(cell_text_at(&after.doc, tbl, 3, 0), "C");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 0), "a");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 1), "b");
-        assert_eq!(cell_text(&after.doc, c11), "d");
-        assert!(after.doc.node(c10).is_some());
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (4, 2));
+        assert_eq!(cell_text_at(&v, tbl, 1, 0), "A");
+        assert_eq!(cell_text_at(&v, tbl, 2, 0), "B");
+        assert_eq!(cell_text_at(&v, tbl, 3, 0), "C");
+        assert_eq!(cell_text_at(&v, tbl, 0, 0), "a");
+        assert_eq!(cell_text_at(&v, tbl, 0, 1), "b");
+        assert_eq!(cell_text(&v, c11), "d");
+        assert!(v.node(c10).is_some());
     }
 
     #[test]
@@ -551,18 +577,19 @@ mod tests {
         let initial = with_cell_rect(state, c00, c22);
         let source = source_slice_2x2();
         let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
-        assert_eq!(table_dims(&after.doc, tbl), (3, 4));
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 0), "X");
-        assert_eq!(cell_text_at(&after.doc, tbl, 0, 1), "Y");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 0), "Z");
-        assert_eq!(cell_text_at(&after.doc, tbl, 1, 1), "W");
-        assert_eq!(cell_text(&after.doc, c02), "2");
-        assert_eq!(cell_text(&after.doc, c12), "5");
-        assert_eq!(cell_text(&after.doc, c20), "6");
-        assert_eq!(cell_text(&after.doc, c21), "7");
-        assert_eq!(cell_text(&after.doc, c22), "8");
-        assert_eq!(cell_text(&after.doc, c03), "9");
-        assert_eq!(cell_text(&after.doc, c13), "10");
-        assert_eq!(cell_text(&after.doc, c23), "11");
+        let v = after.view();
+        assert_eq!(table_dims(&v, tbl), (3, 4));
+        assert_eq!(cell_text_at(&v, tbl, 0, 0), "X");
+        assert_eq!(cell_text_at(&v, tbl, 0, 1), "Y");
+        assert_eq!(cell_text_at(&v, tbl, 1, 0), "Z");
+        assert_eq!(cell_text_at(&v, tbl, 1, 1), "W");
+        assert_eq!(cell_text(&v, c02), "2");
+        assert_eq!(cell_text(&v, c12), "5");
+        assert_eq!(cell_text(&v, c20), "6");
+        assert_eq!(cell_text(&v, c21), "7");
+        assert_eq!(cell_text(&v, c22), "8");
+        assert_eq!(cell_text(&v, c03), "9");
+        assert_eq!(cell_text(&v, c13), "10");
+        assert_eq!(cell_text(&v, c23), "11");
     }
 }

@@ -31,8 +31,8 @@ mod tests {
     #[test]
     fn collapsed_selection_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| delete_selection(&mut tr));
     }
@@ -40,13 +40,13 @@ mod tests {
     #[test]
     fn delete_within_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello World") } } }
-            selection: (t1, 2) -> (t1, 7)
+            doc { root { p1: paragraph { text("Hello World") } } }
+            selection: (p1, 2) -> (p1, 7)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Heorld") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Heorld") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -54,17 +54,13 @@ mod tests {
     #[test]
     fn delete_entire_text_node() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("A")
-                t2: text("B")
-                t3: text("C")
-            } } }
-            selection: (t2, 0) -> (t2, 1)
+            doc { root { p1: paragraph { text("ABC") } } }
+            selection: (p1, 1) -> (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("A") t3: text("C") } } }
-            selection: (t3, 0)
+            doc { root { p1: paragraph { text("AC") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -73,17 +69,17 @@ mod tests {
     fn delete_across_two_paragraphs() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("Hello") }
-                paragraph { t2: text("World") }
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") }
             } }
-            selection: (t1, 2) -> (t2, 3)
+            selection: (p1, 2) -> (p2, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("Held") }
+                p1: paragraph { text("Held") }
             } }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -92,18 +88,18 @@ mod tests {
     fn delete_with_middle_paragraph() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("Hello") }
-                paragraph { t2: text("Middle") }
-                paragraph { t3: text("World") }
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("Middle") }
+                p3: paragraph { text("World") }
             } }
-            selection: (t1, 2) -> (t3, 3)
+            selection: (p1, 2) -> (p3, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("Held") }
+                p1: paragraph { text("Held") }
             } }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -113,27 +109,27 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 blockquote {
-                    paragraph { t1: text("A") }
-                    paragraph { t2: text("Hello") }
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("Hello") }
                 }
                 blockquote {
-                    paragraph { t3: text("World") }
-                    paragraph { t4: text("B") }
+                    p3: paragraph { text("World") }
+                    p4: paragraph { text("B") }
                 }
             } }
-            selection: (t2, 2) -> (t3, 3)
+            selection: (p2, 2) -> (p3, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
                 blockquote {
-                    paragraph { t1: text("A") }
-                    paragraph { t2: text("Held") }
-                    paragraph { t4: text("B") }
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("Held") }
+                    p3: paragraph { text("B") }
                 }
                 paragraph {}
             } }
-            selection: (t2, 2)
+            selection: (p2, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -141,8 +137,8 @@ mod tests {
     #[test]
     fn delete_sole_content_leaves_empty_paragraph() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -155,13 +151,13 @@ mod tests {
     #[test]
     fn delete_block_from_inline_to() {
         let (initial, ..) = state! {
-            doc { r: root { image paragraph { t1: text("Hello") } } }
-            selection: (r, 0) -> (t1, 3)
+            doc { r: root { image p1: paragraph { text("Hello") } } }
+            selection: (r, 0) -> (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("lo") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("lo") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -169,13 +165,13 @@ mod tests {
     #[test]
     fn delete_inline_from_block_to() {
         let (initial, ..) = state! {
-            doc { r: root { paragraph { t1: text("Hello") } image } }
-            selection: (t1, 2) -> (r, 2)
+            doc { r: root { p1: paragraph { text("Hello") } image } }
+            selection: (p1, 2) -> (r, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("He") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("He") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -184,20 +180,20 @@ mod tests {
     fn delete_block_from_block_to_same_parent() {
         let (initial, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("Before") }
+                p1: paragraph { text("Before") }
                 image
                 horizontal_rule
-                paragraph { t2: text("After") }
+                p2: paragraph { text("After") }
             } }
             selection: (r, 1) -> (r, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("Before") }
-                paragraph { t2: text("After") }
+                p1: paragraph { text("Before") }
+                p2: paragraph { text("After") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -207,15 +203,15 @@ mod tests {
         let (initial, ..) = state! {
             doc { r: root {
                 image
-                paragraph { t1: text("Middle") }
-                paragraph { t2: text("Hello") }
+                p1: paragraph { text("Middle") }
+                p2: paragraph { text("Hello") }
             } }
-            selection: (r, 0) -> (t2, 3)
+            selection: (r, 0) -> (p2, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t2: text("lo") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("lo") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -242,7 +238,7 @@ mod tests {
     fn delete_block_nodes_cursor_selects_remaining_hr() {
         let (initial, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("A") }
+                p1: paragraph { text("A") }
                 image
                 horizontal_rule
                 paragraph {}
@@ -252,7 +248,7 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("A") }
+                p1: paragraph { text("A") }
                 horizontal_rule
                 paragraph {}
             } }
@@ -264,13 +260,13 @@ mod tests {
     #[test]
     fn delete_single_block_cursor_to_textblock() {
         let (initial, ..) = state! {
-            doc { r: root { image paragraph { t1: text("Hello") } } }
+            doc { r: root { image p1: paragraph { text("Hello") } } }
             selection: (r, 0) -> (r, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -279,19 +275,19 @@ mod tests {
     fn block_from_does_not_merge_adjacent_paragraphs() {
         let (initial, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("Before") }
+                p1: paragraph { text("Before") }
                 image
-                paragraph { t2: text("Hello") }
+                p2: paragraph { text("Hello") }
             } }
-            selection: (r, 1) -> (t2, 3)
+            selection: (r, 1) -> (p2, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("Before") }
-                paragraph { t2: text("lo") }
+                p1: paragraph { text("Before") }
+                p2: paragraph { text("lo") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -301,26 +297,26 @@ mod tests {
         let (initial, ..) = state! {
             doc { r: root {
                 fold {
-                    fold_title { t1: text("Title") }
+                    ft1: fold_title { text("Title") }
                     fc: fold_content {
                         image
-                        paragraph { t2: text("Content") }
+                        p1: paragraph { text("Content") }
                     }
                 }
-                paragraph { t3: text("Hello") }
+                p2: paragraph { text("Hello") }
             } }
-            selection: (fc, 0) -> (t3, 3)
+            selection: (fc, 0) -> (p2, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("Title") }
+                    ft1: fold_title { text("Title") }
                     fold_content {
                         fp: paragraph {}
                     }
                 }
-                paragraph { t3: text("lo") }
+                p1: paragraph { text("lo") }
             } }
             selection: (fp, 0)
         };
@@ -332,16 +328,16 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 p1: paragraph {}
-                paragraph { t2: text("asdf") }
+                p2: paragraph { text("asdf") }
             } }
-            selection: (p1, 0) -> (t2, 0)
+            selection: (p1, 0) -> (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t2: text("asdf") }
+                p1: paragraph { text("asdf") }
             } }
-            selection: (t2, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -350,10 +346,10 @@ mod tests {
     fn delete_both_texts_fully() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("asdf") }
-                paragraph { t2: text("asdf") }
+                p1: paragraph { text("asdf") }
+                p2: paragraph { text("asdf") }
             } }
-            selection: (t1, 0) -> (t2, 4)
+            selection: (p1, 0) -> (p2, 4)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -369,19 +365,19 @@ mod tests {
     fn delete_to_empty_paragraph_merges() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("asdf") }
+                p1: paragraph { text("asdf") }
                 p2: paragraph {}
-                paragraph { t3: text("asdf") }
+                p3: paragraph { text("asdf") }
             } }
-            selection: (t1, 4) -> (p2, 0)
+            selection: (p1, 4) -> (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("asdf") }
-                paragraph { t3: text("asdf") }
+                p1: paragraph { text("asdf") }
+                p2: paragraph { text("asdf") }
             } }
-            selection: (t1, 4)
+            selection: (p1, 4)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -391,18 +387,18 @@ mod tests {
         let (initial, ..) = state! {
             doc { r: root {
                 p1: paragraph {}
-                callout { paragraph { t2: text("callout") } }
-                paragraph { t3: text("tail") }
+                callout { p2: paragraph { text("callout") } }
+                p3: paragraph { text("tail") }
             } }
             selection: (p1, 0) -> (r, 1, <)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                callout { paragraph { t2: text("callout") } }
-                paragraph { t3: text("tail") }
+                callout { p1: paragraph { text("callout") } }
+                p2: paragraph { text("tail") }
             } }
-            selection: (t2, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -412,16 +408,16 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 p1: paragraph {}
-                p2: paragraph { t2: text("next") }
+                p2: paragraph { text("next") }
             } }
-            selection: (p1, 0) -> (t2, 0)
+            selection: (p1, 0) -> (p2, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                p2: paragraph { t2: text("next") }
+                p2: paragraph { text("next") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -431,16 +427,16 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 p1: paragraph {}
-                p2: paragraph { t2: text("next") }
+                p2: paragraph { text("next") }
             } }
-            selection: (p1, 0) -> (t2, 2)
+            selection: (p1, 0) -> (p2, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                p2: paragraph { t2: text("xt") }
+                p2: paragraph { text("xt") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -491,7 +487,7 @@ mod tests {
             doc { r1: root {
                 paragraph { text("ㅁㄴㅇㄴㅁㅇ") }
                 paragraph {}
-                paragraph { t3: text("ㅁㄴㅇ") }
+                p1: paragraph { text("ㅁㄴㅇ") }
             } }
             selection: (r1, 1, >) -> (r1, 2, <)
         };
@@ -499,9 +495,9 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("ㅁㄴㅇㄴㅁㅇ") }
-                paragraph { t3: text("ㅁㄴㅇ") }
+                p1: paragraph { text("ㅁㄴㅇ") }
             } }
-            selection: (t3, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -511,7 +507,7 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 p1: paragraph {}
-                paragraph { t1: text("asdf") }
+                p3: paragraph { text("asdf") }
                 p2: paragraph {}
             } }
             selection: (p1, 0) -> (p2, 0)
@@ -529,20 +525,17 @@ mod tests {
     #[test]
     fn delete_across_hard_break() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("qwer")
+            doc { root { p: paragraph {
+                text("qwer")
                 hard_break {}
-                t2: text("zxcv")
+                text("zxcv")
             } } }
-            selection: (t1, 2) -> (t2, 2)
+            selection: (p, 2) -> (p, 7)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("qw")
-                t2: text("cv")
-            } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("qwcv") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -550,8 +543,8 @@ mod tests {
     #[test]
     fn delete_image_and_full_text() {
         let (initial, ..) = state! {
-            doc { r: root { image paragraph { t1: text("hello") } } }
-            selection: (r, 0) -> (t1, 5)
+            doc { r: root { image p1: paragraph { text("hello") } } }
+            selection: (r, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -565,11 +558,11 @@ mod tests {
     fn delete_text_start_and_image() {
         let (initial, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("hello") }
+                p1: paragraph { text("hello") }
                 image
                 p2: paragraph {}
             } }
-            selection: (t1, 0) -> (r, 2)
+            selection: (p1, 0) -> (r, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -585,13 +578,13 @@ mod tests {
     #[test]
     fn delete_image_to_paragraph_start() {
         let (initial, ..) = state! {
-            doc { r: root { image paragraph { t1: text("hello") } } }
-            selection: (r, 0) -> (t1, 0)
+            doc { r: root { image p1: paragraph { text("hello") } } }
+            selection: (r, 0) -> (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -600,19 +593,19 @@ mod tests {
     fn delete_middle_image_cursor_to_prev_end() {
         let (initial, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("hello") }
+                p1: paragraph { text("hello") }
                 image
-                paragraph { t2: text("world") }
+                p2: paragraph { text("world") }
             } }
             selection: (r, 1) -> (r, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("hello") }
-                paragraph { t2: text("world") }
+                p1: paragraph { text("hello") }
+                p2: paragraph { text("world") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -621,13 +614,13 @@ mod tests {
     fn delete_text_to_first_hr_preserves_others() {
         let (initial, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("text1") }
+                p1: paragraph { text("text1") }
                 horizontal_rule
                 horizontal_rule
                 horizontal_rule
-                paragraph { t2: text("text2") }
+                p2: paragraph { text("text2") }
             } }
-            selection: (t1, 0) -> (r, 2)
+            selection: (p1, 0) -> (r, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -635,7 +628,7 @@ mod tests {
                 p1: paragraph {}
                 horizontal_rule
                 horizontal_rule
-                paragraph { t2: text("text2") }
+                p2: paragraph { text("text2") }
             } }
             selection: (p1, 0)
         };
@@ -647,12 +640,12 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 bullet_list {
-                    list_item { paragraph { t1: text("A") } }
-                    list_item { paragraph { t2: text("B") } }
+                    list_item { p1: paragraph { text("A") } }
+                    list_item { p2: paragraph { text("B") } }
                 }
                 p3: paragraph {}
             } }
-            selection: (t1, 0) -> (p3, 0)
+            selection: (p1, 0) -> (p3, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -672,22 +665,22 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 bullet_list {
-                    list_item { paragraph { t1: text("asdf") } }
-                    list_item { paragraph { t2: text("asdf") } }
+                    list_item { p1: paragraph { text("asdf") } }
+                    list_item { p2: paragraph { text("asdf") } }
                 }
                 paragraph {}
             } }
-            selection: (t1, 2) -> (t2, 2)
+            selection: (p1, 2) -> (p2, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
                 bullet_list {
-                    list_item { paragraph { t1: text("asdf") } }
+                    list_item { p1: paragraph { text("asdf") } }
                 }
                 paragraph {}
             } }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -697,27 +690,27 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 ordered_list {
-                    list_item { paragraph { t1: text("1") } }
-                    list_item { paragraph { t2: text("2") } }
+                    list_item { p1: paragraph { text("1") } }
+                    list_item { p2: paragraph { text("2") } }
                 }
                 ordered_list {
-                    list_item { paragraph { t3: text("3") } }
-                    list_item { paragraph { t4: text("4") } }
+                    list_item { p3: paragraph { text("3") } }
+                    list_item { p4: paragraph { text("4") } }
                 }
             } }
-            selection: (t2, 0) -> (t3, 0)
+            selection: (p2, 0) -> (p3, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
                 ordered_list {
-                    list_item { paragraph { t1: text("1") } }
-                    list_item { paragraph { t3: text("3") } }
-                    list_item { paragraph { t4: text("4") } }
+                    list_item { p1: paragraph { text("1") } }
+                    list_item { p2: paragraph { text("3") } }
+                    list_item { p3: paragraph { text("4") } }
                 }
                 paragraph {}
             } }
-            selection: (t3, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -726,27 +719,27 @@ mod tests {
     fn delete_across_fold_boundary() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("11") }
+                p1: paragraph { text("11") }
                 fold {
-                    fold_title { t2: text("22") }
+                    ft1: fold_title { text("22") }
                     fold_content {
-                        paragraph { t3: text("33") }
+                        p2: paragraph { text("33") }
                     }
                 }
-                paragraph { t4: text("44") }
+                p3: paragraph { text("44") }
             } }
-            selection: (t1, 1) -> (t3, 1)
+            selection: (p1, 1) -> (p2, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         // fold_title allows empty because its content is Text* (no required child).
-        // The fold boundary blocks content merge, so t1 and t3 remain in separate blocks.
+        // The fold boundary blocks content merge, so p1 and p2 remain in separate blocks.
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("1") }
-                fold { fold_title {} fold_content { paragraph { t3: text("3") } } }
-                paragraph { t4: text("44") }
+                p1: paragraph { text("1") }
+                fold { ft1: fold_title {} fold_content { p2: paragraph { text("3") } } }
+                p3: paragraph { text("44") }
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -755,29 +748,29 @@ mod tests {
     fn delete_fold_title_to_outside() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("11") }
+                p1: paragraph { text("11") }
                 fold {
-                    fold_title { t2: text("22") }
+                    ft1: fold_title { text("22") }
                     fold_content {
-                        paragraph { t3: text("33") }
+                        p2: paragraph { text("33") }
                     }
                 }
-                paragraph { t4: text("44") }
+                p3: paragraph { text("44") }
             } }
-            selection: (t2, 1) -> (t4, 1)
+            selection: (ft1, 1) -> (p3, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         // The fold boundary blocks content merge across it; fold structure is preserved.
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("11") }
+                p1: paragraph { text("11") }
                 fold {
-                    fold_title { t2: text("2") }
-                    fold_content { paragraph {} }
+                    ft1: fold_title { text("2") }
+                    fold_content { p2: paragraph {} }
                 }
-                paragraph { t4: text("4") }
+                p3: paragraph { text("4") }
             } }
-            selection: (t2, 1)
+            selection: (ft1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -786,23 +779,23 @@ mod tests {
     fn delete_containing_whole_fold() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("11") }
+                p1: paragraph { text("11") }
                 fold {
-                    fold_title { t2: text("22") }
+                    ft1: fold_title { text("22") }
                     fold_content {
-                        paragraph { t3: text("33") }
+                        p2: paragraph { text("33") }
                     }
                 }
-                paragraph { t4: text("44") }
+                p3: paragraph { text("44") }
             } }
-            selection: (t1, 1) -> (t4, 1)
+            selection: (p1, 1) -> (p3, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("14") }
+                p1: paragraph { text("14") }
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -812,18 +805,18 @@ mod tests {
         let (initial, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("11") }
+                    ft1: fold_title { text("11") }
                     fold_content {
-                        paragraph { t2: text("22") }
+                        p1: paragraph { text("22") }
                         bullet_list {
                             list_item {
-                                paragraph { t3: text("33") }
+                                p2: paragraph { text("33") }
                             }
                         }
                     }
                 }
             } }
-            selection: (t1, 1) -> (t3, 1)
+            selection: (ft1, 1) -> (p2, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         // The fold boundary blocks content merge; partially-selected non-textblock ancestors
@@ -831,13 +824,13 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("1") }
+                    ft1: fold_title { text("1") }
                     fold_content {
-                        bullet_list { list_item { paragraph { t3: text("3") } } }
+                        bullet_list { list_item { p1: paragraph { text("3") } } }
                     }
                 }
             } }
-            selection: (t1, 1)
+            selection: (ft1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -848,7 +841,7 @@ mod tests {
             doc { root {
                 blockquote {
                     p1: paragraph {}
-                    paragraph { t1: text("ㅁㄴㅇㅁㄴㅇ") }
+                    p3: paragraph { text("ㅁㄴㅇㅁㄴㅇ") }
                 }
                 p2: paragraph {}
             } }
@@ -892,13 +885,13 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AAA") }
+                            p1: paragraph { text("AAA") }
                             bullet_list {
-                                list_item { paragraph { t_sub_a: text("a1") } }
+                                list_item { p2: paragraph { text("a1") } }
                             }
                         }
                         list_item {
-                            paragraph { t_b: text("BBB") }
+                            p3: paragraph { text("BBB") }
                             bullet_list {
                                 list_item { paragraph { text("b1") } }
                             }
@@ -907,7 +900,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t_sub_a, 1) -> (t_b, 0)
+            selection: (p2, 1) -> (p3, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -915,9 +908,9 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AAA") }
+                            p1: paragraph { text("AAA") }
                             bullet_list {
-                                list_item { paragraph { t_sub_a: text("aBBB") } }
+                                list_item { p2: paragraph { text("aBBB") } }
                                 list_item { paragraph { text("b1") } }
                             }
                         }
@@ -925,7 +918,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t_sub_a, 1)
+            selection: (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -941,13 +934,13 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AAA") }
+                            p1: paragraph { text("AAA") }
                             bullet_list {
-                                list_item { paragraph { t_sub_a: text("a1") } }
+                                list_item { p2: paragraph { text("a1") } }
                             }
                         }
                         list_item {
-                            paragraph { t_b: text("BBB") }
+                            p3: paragraph { text("BBB") }
                             ordered_list {
                                 list_item { paragraph { text("b1") } }
                             }
@@ -956,7 +949,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t_sub_a, 1) -> (t_b, 0)
+            selection: (p2, 1) -> (p3, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
@@ -964,9 +957,9 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t_a: text("AAA") }
+                            p1: paragraph { text("AAA") }
                             bullet_list {
-                                list_item { paragraph { t_sub_a: text("aBBB") } }
+                                list_item { p2: paragraph { text("aBBB") } }
                                 list_item { paragraph { text("b1") } }
                             }
                         }
@@ -974,7 +967,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t_sub_a, 1)
+            selection: (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -990,19 +983,19 @@ mod tests {
             doc {
                 root {
                     p1: paragraph { text("a") page_break }
-                    paragraph { t2: text("bc") }
+                    p2: paragraph { text("bc") }
                 }
             }
-            selection: (p1, 2) -> (t2, 1)
+            selection: (p1, 2) -> (p2, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("ac") }
+                    p1: paragraph { text("ac") }
                 }
             }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -1016,17 +1009,18 @@ mod tests {
             } } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&state.doc, c00, c00).unwrap();
+        let sel = editor_state::cell_rect_selection(c00, c00, &state.view()).unwrap();
         let initial = editor_state::State {
             selection: Some(sel),
             ..state
         };
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
-        let c00n = after.doc.node(c00).expect("c00 survives");
+        let view = after.view();
+        let c00n = view.node(c00).expect("c00 survives");
         assert_eq!(c00n.children().count(), 1);
-        assert_eq!(c00n.first_child().unwrap().children().count(), 0);
-        let c01n = after.doc.node(c01).expect("c01 survives");
-        assert_eq!(c01n.first_child().unwrap().children().count(), 1); // "b" intact
+        assert_eq!(c00n.child_blocks().next().unwrap().children().count(), 0);
+        let c01n = view.node(c01).expect("c01 survives");
+        assert_eq!(c01n.child_blocks().next().unwrap().children().count(), 1); // "b" intact
     }
 
     #[test]
@@ -1044,16 +1038,17 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&state.doc, c00, c01).unwrap();
+        let sel = editor_state::cell_rect_selection(c00, c01, &state.view()).unwrap();
         let initial = editor_state::State {
             selection: Some(sel),
             ..state
         };
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
-        for cid in [c00, c01] {
-            let n = after.doc.node(cid).expect("cell survives");
+        let view = after.view();
+        for cid in [&c00, &c01] {
+            let n = view.node(*cid).expect("cell survives");
             assert_eq!(n.children().count(), 1);
-            assert_eq!(n.first_child().unwrap().children().count(), 0);
+            assert_eq!(n.child_blocks().next().unwrap().children().count(), 0);
         }
     }
 
@@ -1061,7 +1056,7 @@ mod tests {
     fn delete_selection_through_rows_clears_cells_keeps_structure() {
         let (state, _, c00, c01, c10, c11, ..) = state! {
             doc { root {
-                paragraph { pt: text("hello") }
+                p1: paragraph { text("hello") }
                 table {
                     table_row {
                         c00: table_cell { paragraph { text("a") } }
@@ -1069,23 +1064,27 @@ mod tests {
                     }
                     table_row {
                         c10: table_cell { paragraph { text("c") } }
-                        c11: table_cell { paragraph { ct: text("d") } }
+                        c11: table_cell { p2: paragraph { text("d") } }
                     }
                 }
                 paragraph {}
             } }
-            selection: (pt, 3) -> (ct, 0)
+            selection: (p1, 3) -> (p2, 0)
         };
         let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
-        for cid in [c00, c01, c10, c11] {
-            assert!(after.doc.node(cid).is_some(), "cell {cid:?} must survive");
+        let view = after.view();
+        for cid in [&c00, &c01, &c10, &c11] {
+            assert!(view.node(*cid).is_some(), "cell {cid:?} must survive");
         }
-        for cid in [c00, c01, c10] {
-            let cell = after.doc.node(cid).unwrap();
+        for cid in [&c00, &c01, &c10] {
+            let cell = view.node(*cid).unwrap();
             let kids: Vec<_> = cell.children().collect();
             assert_eq!(kids.len(), 1, "cell {cid:?} one child");
-            assert!(matches!(kids[0].node(), editor_model::Node::Paragraph(_)));
-            assert_eq!(kids[0].children().count(), 0, "empty paragraph");
+            let editor_model::ChildView::Block(p) = &kids[0] else {
+                panic!("expected paragraph block");
+            };
+            assert_eq!(p.node_type(), editor_model::NodeType::Paragraph);
+            assert_eq!(p.children().count(), 0, "empty paragraph");
         }
     }
 
@@ -1093,16 +1092,16 @@ mod tests {
     fn delete_selection_whole_table_contained_removes_table_and_merges() {
         let (state, ..) = state! {
             doc { root {
-                paragraph { bt: text("AB") }
+                p1: paragraph { text("AB") }
                 table { table_row { table_cell { paragraph { text("x") } } } }
-                paragraph { at: text("CD") }
+                p2: paragraph { text("CD") }
             } }
-            selection: (bt, 1) -> (at, 1)
+            selection: (p1, 1) -> (p2, 1)
         };
         let (got, ..) = transact!(state, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("AD") } } }
-            selection: (t, 1)
+            doc { root { p1: paragraph { text("AD") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(&got, &expected);
     }
@@ -1111,35 +1110,40 @@ mod tests {
     fn delete_selection_to_structural_container_offset_fulfills_cell() {
         let (state, _, c00, c01) = state! {
             doc { root {
-                paragraph { pt: text("X") }
+                p1: paragraph { text("X") }
                 table { table_row {
                     c00: table_cell { paragraph { text("a") } }
                     c01: table_cell { paragraph { text("b") } }
                 } }
                 paragraph {}
             } }
-            selection: (pt, 0) -> (c00, 1)
+            selection: (p1, 0) -> (c00, 1)
         };
         let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
-        let cell = after.doc.node(c00).expect("structural cell must survive");
+        let view = after.view();
+        let cell = view.node(c00).expect("structural cell must survive");
         assert_eq!(cell.children().count(), 1, "emptied cell must be fulfilled");
-        assert!(matches!(
-            cell.first_child().unwrap().node(),
-            editor_model::Node::Paragraph(_)
-        ));
-        assert_eq!(cell.first_child().unwrap().children().count(), 0);
-        assert!(after.doc.node(c01).is_some());
+        let editor_model::ChildView::Block(p) = cell.first_child().unwrap() else {
+            panic!("expected paragraph block");
+        };
+        assert_eq!(p.node_type(), editor_model::NodeType::Paragraph);
+        assert_eq!(p.children().count(), 0);
+        assert!(view.node(c01).is_some());
     }
 
     #[test]
     fn delete_selection_emptying_paragraph_lifts_marker() {
         let (initial, p1, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") [bold, font_weight(700)] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [bold, font_weight(700)] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
-        let p = actual.doc.node(p1).unwrap();
-        let marker = p.marker().expect("paragraph should have a marker");
+        let dot = p1;
+        let marker = actual
+            .projected
+            .node_markers()
+            .value_of(dot)
+            .expect("paragraph should have a marker");
         assert!(
             marker
                 .modifiers
@@ -1157,12 +1161,12 @@ mod tests {
     #[test]
     fn delete_selection_partial_text_no_lift() {
         let (initial, p1, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 1) -> (t1, 3)
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 1) -> (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
-        let p = actual.doc.node(p1).unwrap();
-        assert_eq!(p.modifiers().count(), 0);
+        let dot = p1;
+        assert!(actual.projected.node_markers().value_of(dot).is_none());
     }
 
     #[test]
@@ -1195,29 +1199,31 @@ mod tests {
             selection: (p1, 0, >) -> (p2, 0, <)
         };
         let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
+        let view = after.view();
         assert!(
-            after.doc.node(c00).is_some(),
+            view.node(c00).is_some(),
             "first table_cell must not be deleted by backspace"
         );
-        assert!(after.doc.node(c01).is_some());
-        assert!(after.doc.node(c02).is_some());
-        assert!(after.doc.node(c03).is_some());
+        assert!(view.node(c01).is_some());
+        assert!(view.node(c02).is_some());
+        assert!(view.node(c03).is_some());
     }
 
     #[test]
     fn delete_selection_cell_to_cell_no_cross_merge() {
         let (state, ca, _, cb, ..) = state! {
             doc { root { table { table_row {
-                ca: table_cell { paragraph { ta: text("hello") } }
-                cb: table_cell { paragraph { tb: text("world") } }
+                ca: table_cell { p1: paragraph { text("hello") } }
+                cb: table_cell { p2: paragraph { text("world") } }
             } } } }
-            selection: (ta, 2) -> (tb, 3)
+            selection: (p1, 2) -> (p2, 3)
         };
         let (after, ..) = transact!(state, |tr| delete_selection(&mut tr));
-        assert!(after.doc.node(ca).is_some());
-        assert!(after.doc.node(cb).is_some());
-        assert!(after.doc.node(ca).unwrap().children().count() >= 1);
-        assert!(after.doc.node(cb).unwrap().children().count() >= 1);
+        let view = after.view();
+        assert!(view.node(ca).is_some());
+        assert!(view.node(cb).is_some());
+        assert!(view.node(ca).unwrap().children().count() >= 1);
+        assert!(view.node(cb).unwrap().children().count() >= 1);
     }
 
     #[test]
@@ -1237,16 +1243,17 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
+        let sel = editor_state::cell_rect_selection(c00, c11, &state.view()).unwrap();
         let initial = editor_state::State {
             selection: Some(sel),
             ..state
         };
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
-        for cid in [c00, c01, c10, c11] {
-            let n = after.doc.node(cid).expect("cell survives");
+        let view = after.view();
+        for cid in [&c00, &c01, &c10, &c11] {
+            let n = view.node(*cid).expect("cell survives");
             assert_eq!(n.children().count(), 1);
-            assert_eq!(n.first_child().unwrap().children().count(), 0);
+            assert_eq!(n.child_blocks().next().unwrap().children().count(), 0);
         }
     }
 
@@ -1264,11 +1271,11 @@ mod tests {
                         c11: table_cell { paragraph { text("d") } }
                     }
                 }
-                paragraph { after: text("after") }
+                p1: paragraph { text("after") }
             } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&state.doc, c00, c11).unwrap();
+        let sel = editor_state::cell_rect_selection(c00, c11, &state.view()).unwrap();
         let initial = editor_state::State {
             selection: Some(sel),
             ..state
@@ -1277,7 +1284,7 @@ mod tests {
         let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
 
         assert!(
-            after.doc.node(tbl).is_none(),
+            after.view().node(tbl).is_none(),
             "full-table selection should delete the table"
         );
     }

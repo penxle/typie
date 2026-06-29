@@ -1,11 +1,9 @@
-use editor_model::{Modifier, ModifierType};
-use editor_state::{Position, resolve_modifier_span_at};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, Modifier, ModifierType};
+use editor_state::{Position, ResolvedSelection};
 use editor_transaction::Transaction;
 
-use crate::helpers::{
-    apply_modifier_to_node, collect_text_nodes_in_range, compact_textblock_at_position,
-    compact_textblocks_for_nodes, filter_applicable_node_ids, is_text_applicable,
-};
+use crate::helpers::is_text_applicable;
 use crate::{CommandError, CommandResult};
 
 pub fn edit_modifier(
@@ -32,12 +30,81 @@ pub fn edit_modifier(
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let collapsed = selection.is_collapsed();
-    if collapsed {
+    if selection.anchor == selection.head {
         edit_modifier_collapsed(tr, modifier_type, modifier)
     } else {
         edit_modifier_range(tr, modifier_type, modifier)
     }
+}
+
+fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
+    let from = rs.from();
+    let to = rs.to();
+
+    let from_child = view.node(from.node())?.child_at(from.offset())?;
+    let first = match from_child {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(b) => b.dot()?,
+    };
+
+    let to_off = to.offset().checked_sub(1)?;
+    let to_child = view.node(to.node())?.child_at(to_off)?;
+    let last = match to_child {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(b) => b.dot()?,
+    };
+
+    Some((first, last))
+}
+
+/// The contiguous char run around a collapsed caret that shares the same
+/// effective value of `ty`. Returns the run's first/last char `Dot`s and the
+/// shared value, or `None` when the caret is not inside such a span.
+fn resolve_modifier_span(
+    view: &DocView,
+    pos: &Position,
+    ty: ModifierType,
+) -> Option<(Dot, Dot, Modifier)> {
+    let node = view.node(pos.node)?;
+    if !node.spec().is_textblock() {
+        return None;
+    }
+    let children: Vec<ChildView> = node.children().collect();
+
+    let has_value = |i: usize| matches!(children.get(i), Some(ChildView::Leaf(l)) if l.effective().get(&ty).is_some());
+
+    let seed = if has_value(pos.offset) {
+        pos.offset
+    } else {
+        let left = pos.offset.checked_sub(1)?;
+        if has_value(left) { left } else { return None }
+    };
+
+    let reference = match &children[seed] {
+        ChildView::Leaf(l) => l.effective().get(&ty)?.clone(),
+        _ => return None,
+    };
+
+    let same = |i: usize| matches!(children.get(i), Some(ChildView::Leaf(l)) if l.effective().get(&ty) == Some(&reference));
+
+    let mut start = seed;
+    while start > 0 && same(start - 1) {
+        start -= 1;
+    }
+    let mut end = seed;
+    while end + 1 < children.len() && same(end + 1) {
+        end += 1;
+    }
+
+    let first = match &children[start] {
+        ChildView::Leaf(l) => l.dot(),
+        _ => return None,
+    };
+    let last = match &children[end] {
+        ChildView::Leaf(l) => l.dot(),
+        _ => return None,
+    };
+    Some((first, last, reference))
 }
 
 fn edit_modifier_collapsed(
@@ -49,32 +116,19 @@ fn edit_modifier_collapsed(
         .selection()
         .expect("entry caller guaranteed selection")
         .head;
-    let Some(span_ids) = resolve_modifier_span_at(tr.state(), &pos, modifier_type) else {
+
+    let span = {
+        let view = tr.view();
+        resolve_modifier_span(&view, &pos, modifier_type)
+    };
+    let Some((first, last, reference)) = span else {
         return Ok(false);
     };
 
-    for &node_id in &span_ids {
-        let doc = tr.doc();
-        let node = doc
-            .node(node_id)
-            .ok_or(CommandError::NodeNotFound(node_id))?;
-        match &modifier {
-            Some(m) => {
-                apply_modifier_to_node(tr, &node, m)?;
-            }
-            None => {
-                let existing = node
-                    .explicit_modifiers()
-                    .find(|m| m.as_type() == modifier_type)
-                    .cloned();
-                if let Some(existing) = existing {
-                    tr.remove_modifier(node_id, existing)?;
-                }
-            }
-        }
+    match modifier {
+        Some(m) => tr.add_span_modifier(first, last, m)?,
+        None => tr.remove_span_modifier(first, last, reference)?,
     }
-
-    compact_textblock_at_position(tr, pos)?;
     Ok(true)
 }
 
@@ -84,40 +138,31 @@ fn edit_modifier_range(
     modifier: Option<Modifier>,
 ) -> CommandResult {
     let selection = tr.selection().expect("entry caller guaranteed selection");
-    let doc = tr.doc();
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
 
-    let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
-    let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, modifier_type);
+    let (first, last, present) = {
+        let view = tr.view();
+        let rs = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let Some((first, last)) = span_dots(&view, &rs) else {
+            return Ok(false);
+        };
+        let present = view
+            .leaf(first)
+            .and_then(|l| l.effective().get(&modifier_type).cloned());
+        (first, last, present)
+    };
 
-    if applicable_node_ids.is_empty() {
-        return Ok(false);
-    }
-
-    for &node_id in &applicable_node_ids {
-        let doc = tr.doc();
-        let node = doc
-            .node(node_id)
-            .ok_or(CommandError::NodeNotFound(node_id))?;
-        match &modifier {
-            Some(m) => apply_modifier_to_node(tr, &node, m)?,
-            None => {
-                let existing = node
-                    .explicit_modifiers()
-                    .find(|m| m.as_type() == modifier_type)
-                    .cloned();
-                if let Some(existing) = existing {
-                    tr.remove_modifier(node_id, existing)?;
-                }
+    match modifier {
+        Some(m) => {
+            tr.add_span_modifier(first, last, m)?;
+        }
+        None => {
+            if let Some(present) = present {
+                tr.remove_span_modifier(first, last, present)?;
             }
         }
     }
-
-    compact_textblocks_for_nodes(tr, &node_ids)?;
     Ok(true)
 }
 
@@ -132,8 +177,8 @@ mod tests {
     #[test]
     fn collapsed_inside_link_set_updates_span_value() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Click") [link(href: "https://a.com".to_string())] } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Click") [link(href: "https://a.com".to_string())] } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -143,8 +188,8 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Click") [link(href: "https://b.com".to_string())] } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Click") [link(href: "https://b.com".to_string())] } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -152,8 +197,8 @@ mod tests {
     #[test]
     fn collapsed_inside_link_remove_clears_span() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Click") [link(href: "https://a.com".to_string())] } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Click") [link(href: "https://a.com".to_string())] } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -161,8 +206,8 @@ mod tests {
             None,
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Click") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Click") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -170,8 +215,8 @@ mod tests {
     #[test]
     fn range_set_link_inserts_on_plain_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -181,10 +226,10 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
+            doc { root { p1: paragraph {
+                text("Hello") [link(href: "https://a.com".to_string())]
             } } }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -192,10 +237,10 @@ mod tests {
     #[test]
     fn range_set_link_replaces_existing_value() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
+            doc { root { p1: paragraph {
+                text("Hello") [link(href: "https://a.com".to_string())]
             } } }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -205,10 +250,10 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [link(href: "https://b.com".to_string())]
+            doc { root { p1: paragraph {
+                text("Hello") [link(href: "https://b.com".to_string())]
             } } }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -216,10 +261,10 @@ mod tests {
     #[test]
     fn range_remove_link_clears() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
+            doc { root { p1: paragraph {
+                text("Hello") [link(href: "https://a.com".to_string())]
             } } }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -227,8 +272,8 @@ mod tests {
             None,
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -236,8 +281,8 @@ mod tests {
     #[test]
     fn collapsed_outside_link_set_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("plain") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("plain") } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact_fail!(initial, |tr| edit_modifier(
             &mut tr,
@@ -247,8 +292,8 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("plain") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("plain") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -256,8 +301,8 @@ mod tests {
     #[test]
     fn non_text_modifier_rejected() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let err = transact_err!(initial, |tr| edit_modifier(
             &mut tr,
@@ -270,8 +315,8 @@ mod tests {
     #[test]
     fn value_modifier_type_mismatch_rejected() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let err = transact_err!(initial, |tr| edit_modifier(
             &mut tr,
@@ -286,11 +331,11 @@ mod tests {
     #[test]
     fn collapsed_adjacent_different_href_isolates() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
-                t2: text("World") [link(href: "https://b.com".to_string())]
+            doc { root { p: paragraph {
+                text("Hello") [link(href: "https://a.com".to_string())]
+                text("World") [link(href: "https://b.com".to_string())]
             } } }
-            selection: (t2, 2)
+            selection: (p, 7)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -300,11 +345,11 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph {
+            doc { root { p: paragraph {
                 text("Hello") [link(href: "https://a.com".to_string())]
-                t2: text("World") [link(href: "https://c.com".to_string())]
+                text("World") [link(href: "https://c.com".to_string())]
             } } }
-            selection: (t2, 2)
+            selection: (p, 7)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -313,10 +358,10 @@ mod tests {
     fn collapsed_paragraph_boundary_not_crossed() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("a") [link(href: "https://a.com".to_string())] }
-                paragraph { t2: text("b") [link(href: "https://a.com".to_string())] }
+                p1: paragraph { text("a") [link(href: "https://a.com".to_string())] }
+                p2: paragraph { text("b") [link(href: "https://a.com".to_string())] }
             } }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -327,10 +372,10 @@ mod tests {
         ));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("a") [link(href: "https://c.com".to_string())] }
-                paragraph { text("b") [link(href: "https://a.com".to_string())] }
+                p1: paragraph { text("a") [link(href: "https://c.com".to_string())] }
+                p2: paragraph { text("b") [link(href: "https://a.com".to_string())] }
             } }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -338,8 +383,8 @@ mod tests {
     #[test]
     fn collapsed_inside_ruby_set_updates_span_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Han") [ruby(text: "한".to_string())] } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("Han") [ruby(text: "한".to_string())] } } }
+            selection: (p1, 1)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -349,8 +394,8 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Han") [ruby(text: "韓".to_string())] } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("Han") [ruby(text: "韓".to_string())] } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -358,11 +403,11 @@ mod tests {
     #[test]
     fn mixed_range_set_overwrites_all() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
-                t2: text("World") [link(href: "https://b.com".to_string())]
+            doc { root { p: paragraph {
+                text("Hello") [link(href: "https://a.com".to_string())]
+                text("World") [link(href: "https://b.com".to_string())]
             } } }
-            selection: (t1, 0) -> (t2, 5)
+            selection: (p, 0) -> (p, 10)
         };
         let (actual, ..) = transact!(initial, |tr| edit_modifier(
             &mut tr,
@@ -372,10 +417,10 @@ mod tests {
             })
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph {
-                t1: text("HelloWorld") [link(href: "https://c.com".to_string())]
+            doc { root { p: paragraph {
+                text("HelloWorld") [link(href: "https://c.com".to_string())]
             } } }
-            selection: (t1, 0) -> (t1, 10)
+            selection: (p, 0) -> (p, 10)
         };
         assert_state_eq!(&actual, &expected);
     }

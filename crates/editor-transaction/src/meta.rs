@@ -1,13 +1,7 @@
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-#[ffi]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum HistoryTag {
-    AutoReplacement,
-    PasteHtml { plain_text: String },
-}
+use editor_common::HistoryTag;
 
 #[ffi]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -37,6 +31,7 @@ mod tests {
             history: HistoryMeta::Tagged {
                 tag: HistoryTag::PasteHtml {
                     plain_text: "hi".into(),
+                    start: None,
                 },
             },
         };

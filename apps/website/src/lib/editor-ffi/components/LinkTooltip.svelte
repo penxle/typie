@@ -8,8 +8,7 @@
   import { getEditorContext } from '../editor.svelte';
   import { pageRectsToVirtualElement } from '../geometry';
   import { openLinkEditorFromTooltip } from '../handlers/link';
-  import { pickLinkTooltipAnchorRect, resolveSelectionTarget } from './link-tooltip';
-  import type { NodeId } from '@typie/editor-ffi/browser';
+  import { linkRectKey, pickLinkTooltipAnchorRect, resolveSelectionTarget } from './link-tooltip';
 
   const ctx = getEditorContext();
   const { editor } = ctx;
@@ -77,7 +76,8 @@
     await navigator.clipboard.writeText(href);
   };
 
-  const openToolbarLinkEditor = async (nodeId: NodeId) => {
+  const openToolbarLinkEditor = async (target: TooltipTarget) => {
+    const rect = target.anchorRect;
     await openLinkEditorFromTooltip({
       closeTooltip: () => {
         activeHover = undefined;
@@ -85,7 +85,7 @@
       },
       ctx,
       editor,
-      nodeId,
+      point: { page: target.page, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
     });
   };
 
@@ -93,7 +93,7 @@
     clearHideTimer();
 
     if (hover) {
-      const nodeChanged = activeHover?.link.node_id !== hover.link.node_id;
+      const nodeChanged = !activeHover || linkRectKey(activeHover.link) !== linkRectKey(hover.link);
       activeHover = hover;
       if (nodeChanged) {
         ctx.linkEditorOpen = false;
@@ -225,7 +225,7 @@
               color: 'text.subtle',
               transition: 'common',
             })}
-            onclick={() => openToolbarLinkEditor(tooltipTarget.link.node_id)}
+            onclick={() => openToolbarLinkEditor(tooltipTarget)}
             type="button"
           >
             편집

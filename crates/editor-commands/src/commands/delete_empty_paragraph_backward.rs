@@ -1,5 +1,6 @@
 use editor_model::Node;
-use editor_state::{NodeRefCursorExt, Selection};
+use editor_state::Selection;
+use editor_state::last_cursor_position;
 use editor_transaction::{Transaction, fulfill};
 
 use crate::{CommandError, CommandResult};
@@ -8,7 +9,7 @@ pub fn delete_empty_paragraph_backward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
@@ -17,45 +18,57 @@ pub fn delete_empty_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let (prev_id, parent_id) = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
 
-    if !matches!(node.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
-    if node.first_child().is_some() {
-        return Ok(false);
-    }
+        if !matches!(node.node(), Node::Paragraph(_)) {
+            return Ok(false);
+        }
+        if node.first_child().is_some() {
+            return Ok(false);
+        }
 
-    let prev_id = match node.prev_sibling() {
-        Some(prev) => prev.id(),
-        None => return Ok(false),
+        let parent = node.parent().ok_or(CommandError::NoParent(pos.node))?;
+        let idx = parent
+            .child_blocks()
+            .position(|b| b.id() == node.id())
+            .ok_or_else(|| CommandError::orphan_child(pos.node, parent.id()))?;
+        if idx == 0 {
+            return Ok(false);
+        }
+        let prev = match parent.child_blocks().nth(idx - 1) {
+            Some(prev) => prev,
+            None => return Ok(false),
+        };
+        (prev.id(), parent.id())
     };
 
-    let paragraph_id = pos.node_id;
-    let parent_id = node
-        .parent()
-        .ok_or(CommandError::NoParent(paragraph_id))?
-        .id();
+    let paragraph_id = pos.node;
 
     tr.batch::<_, CommandError>(|tr| {
         tr.remove_subtree(paragraph_id)?;
-        let doc = tr.doc();
-        if let Some(parent) = doc.node(parent_id) {
-            tr.apply_steps(fulfill(&parent))?;
+        let steps = {
+            let view = tr.state().view();
+            view.node(parent_id).map(|parent| fulfill(&parent))
+        };
+        if let Some(steps) = steps {
+            tr.apply_steps(steps)?;
         }
         Ok(())
     })?;
 
-    let doc = tr.doc();
-    let prev = doc
-        .node(prev_id)
-        .ok_or(CommandError::NodeNotFound(prev_id))?;
-    let cursor = prev.last_cursor_position().ok_or(CommandError::Corrupted(
-        "no cursor position in prev sibling".into(),
-    ))?;
+    let cursor = {
+        let view = tr.state().view();
+        let prev = view
+            .node(prev_id)
+            .ok_or(CommandError::NodeNotFound(prev_id))?;
+        last_cursor_position(&prev).ok_or(CommandError::Corrupted(
+            "no cursor position in prev sibling".into(),
+        ))?
+    };
 
     tr.set_selection(Some(Selection::collapsed(cursor)))?;
 
@@ -73,10 +86,10 @@ mod tests {
     fn non_collapsed_selection_returns_false() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("hello") }
+                p1: paragraph { text("hello") }
                 p2: paragraph {}
             } }
-            selection: (t1, 0) -> (p2, 0)
+            selection: (p1, 0) -> (p2, 0)
         };
         transact_fail!(initial, |tr| delete_empty_paragraph_backward(&mut tr));
     }
@@ -84,8 +97,8 @@ mod tests {
     #[test]
     fn non_paragraph_node_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { bq: blockquote { paragraph { text("hello") } } } }
+            selection: (bq, 0)
         };
         transact_fail!(initial, |tr| delete_empty_paragraph_backward(&mut tr));
     }

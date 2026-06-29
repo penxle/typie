@@ -9,18 +9,16 @@ test-utils = [
   "icu_segmenter/auto",
   "icu_segmenter/compiled_data",
 ]
-uniffi = ["dep:uniffi", "editor-common/uniffi", "editor-model/uniffi"]
+uniffi = ["dep:uniffi", "editor-common/uniffi"]
 wasm = [
   "dep:tsify",
   "dep:wasm-bindgen",
   "editor-common/wasm",
-  "editor-model/wasm",
 ]
 
 [dependencies]
 editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
-editor-model = { path = "../editor-model" }
 fancy-regex.workspace = true
 fontique.workspace = true
 hashbrown.workspace = true

@@ -1,16 +1,17 @@
 use editor_clipboard::Slice;
-use editor_common::{Movement, time::Duration};
+use editor_common::{HistoryTag, Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
-use editor_model::{DocOp, ModifierState, ModifierType, Node, NodeId, NodeType, Schema};
+use editor_model::{EditOp, ModifierState, ModifierType, NodeType, Schema};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
-    DocFlatExt, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
     StableSelection, State, closest_empty_paragraph_break_end_between, farther_endpoint,
+    is_unit_node_selection,
 };
-use editor_transaction::{Effect, HistoryMeta, HistoryTag, StepError, Transaction};
+use editor_transaction::{Effect, HistoryMeta, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -21,11 +22,12 @@ use crate::dnd::DndState;
 use crate::error::EditorError;
 use crate::event::{EditorEvent, FontData};
 use crate::handle;
-use crate::history::{History, HistoryPlaybackStep};
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
 use crate::tracked_range::TrackedRangeRegistry;
+use editor_common::time::Instant;
+use editor_state::undo::{TransientState, UndoEntry, UndoHistory};
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
@@ -44,7 +46,7 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
     let mut modifiers = state.pending_modifiers.clone();
 
     if let Some(editor_state::PendingStyle::Set { style_id }) = &state.pending_style
-        && let Some(entry) = state.doc.style_entry(style_id)
+        && let Some(entry) = state.projected.styles().style_entry(style_id)
     {
         for modifier in entry.modifiers.iter() {
             let ty = modifier.as_type();
@@ -64,14 +66,12 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
         return None;
     }
     let selection = state.selection.as_ref()?;
-    let textblock = state
-        .doc
-        .node(selection.head.node_id)?
+    let view = state.view();
+    let textblock = view
+        .node(selection.head.node)?
         .ancestors()
         .find(|n| n.spec().is_textblock())?;
-    let is_empty = textblock
-        .children()
-        .all(|c| matches!(c.node(), Node::Text(t) if t.text.is_empty()));
+    let is_empty = textblock.children().next().is_none();
     if !is_empty {
         return None;
     }
@@ -82,11 +82,12 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
 }
 
 fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
-    use editor_state::GapCursor;
-    let rs = state.selection.as_ref()?.resolve(&state.doc)?;
-    match rs.as_gap_cursor()? {
+    use editor_state::{GapCursor, as_gap_cursor};
+    let view = state.view();
+    let rs = state.selection.as_ref()?.resolve(&view)?;
+    match as_gap_cursor(&rs)? {
         GapCursor::LeadingUnit { .. } => Some(GapPhantom {
-            parent: NodeId::ROOT,
+            parent: Dot::ROOT,
             index: 0,
         }),
         GapCursor::BetweenMonolithic { parent, index, .. } => Some(GapPhantom {
@@ -96,10 +97,21 @@ fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
     }
 }
 
+/// Snapshot of the transient (non-document) editor state recorded with each undo
+/// entry so undo/redo restore the caret/IME/pending overlays.
+fn transient_of(state: &State) -> TransientState {
+    TransientState {
+        selection: state.selection,
+        composition: state.composition,
+        pending_modifiers: state.pending_modifiers.clone(),
+        pending_style: state.pending_style.clone(),
+    }
+}
+
 pub struct Editor {
     pub(crate) state: State,
     pub(crate) view: View,
-    pub(crate) history: History,
+    pub(crate) undo_history: UndoHistory,
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) tracked_ranges: TrackedRangeRegistry,
@@ -110,9 +122,9 @@ pub struct Editor {
     focused: bool,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
-    pub(crate) pending_ops: Vec<Op<DocOp>>,
+    pub(crate) pending_ops: Vec<Op<EditOp>>,
     pending_effects: HashSet<Effect>,
-    pub(crate) pending_fonts: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>,
+    pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     mode: Mode,
 }
 
@@ -161,7 +173,7 @@ impl Editor {
         Self {
             state,
             view: View::new(viewport, Arc::clone(&resource)),
-            history: History::new(Duration::from_millis(300)),
+            undo_history: UndoHistory::new(Duration::from_millis(300)),
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
@@ -189,7 +201,7 @@ impl Editor {
     }
 
     pub fn find_matches(&self, query: &str, options: &SearchOptions) -> Vec<Selection> {
-        crate::search::find_matches(&self.state.doc, query, options)
+        crate::search::find_matches(&self.state.view(), query, options)
     }
 
     pub(crate) fn is_probing(&self) -> bool {
@@ -202,19 +214,19 @@ impl Editor {
         }
     }
 
-    pub fn receive_remote_changeset(&mut self, changeset: Changeset<DocOp>) {
+    pub fn receive_remote_changeset(&mut self, changeset: Changeset<EditOp>) {
         self.enqueue(Message::Remote { changeset });
     }
 
     pub fn local_changesets_since(
         &self,
         remote_heads: &HashSet<Dot>,
-    ) -> Result<Vec<Changeset<DocOp>>, CrdtError> {
+    ) -> Result<Vec<Changeset<EditOp>>, CrdtError> {
         self.state.local_changesets_since(remote_heads)
     }
 
     pub fn current_heads(&self) -> Vec<Dot> {
-        self.state.graph.current_heads().copied().collect()
+        self.state.graph().current_heads().copied().collect()
     }
 
     pub fn view(&self) -> &View {
@@ -222,7 +234,12 @@ impl Editor {
     }
 
     pub fn modifier_state(&self) -> Option<ModifierState> {
-        editor_state::resolve_modifier_state(&self.state)
+        let sel = self.state.selection.as_ref()?;
+        editor_state::resolve_modifier_state(
+            &self.state.projected,
+            sel,
+            &self.state.pending_modifiers,
+        )
     }
 
     /// Selection covering the whole link/ruby span containing `pos`.
@@ -243,7 +260,7 @@ impl Editor {
     }
 
     pub fn style_entries(&self) -> Vec<crate::style_state::StyleInfo> {
-        crate::style_state::resolve_style_entries(&self.state.doc)
+        crate::style_state::resolve_style_entries(&self.state)
     }
 
     pub fn applied_style(&self) -> editor_common::Tri<crate::style_state::StyleRefValue> {
@@ -255,7 +272,8 @@ impl Editor {
     }
 
     pub fn character_counts(&self) -> (CharacterCount, CharacterCount) {
-        let doc_text = self.state.doc.extract_text();
+        let doc = self.state.view();
+        let doc_text = editor_state::flat_text(&doc, 0..editor_state::flat_size(&doc));
         let selection_text = Slice::extract(&self.state)
             .map(|s| s.to_text())
             .unwrap_or_default();
@@ -272,34 +290,30 @@ impl Editor {
         x: f32,
         y: f32,
     ) -> Option<editor_view::InteractiveHit> {
-        self.view
-            .interactive_hit_test(&self.state.doc, page_idx, x, y)
+        self.view.interactive_hit_test(&self.state, page_idx, x, y)
     }
 
     pub fn page_link_rects(&self, page_idx: usize) -> Vec<editor_view::LinkRect> {
-        self.view.page_link_rects(&self.state.doc, page_idx)
+        self.view.page_link_rects(page_idx)
     }
 
     pub fn link_rects(&self) -> Vec<editor_view::LinkRect> {
-        self.view.link_rects(&self.state.doc)
+        self.view.link_rects()
     }
 
     pub fn link_hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<editor_view::LinkRect> {
-        self.view.link_hit_test(&self.state.doc, page_idx, x, y)
+        self.view.link_hit_test(page_idx, x, y)
     }
 
     pub fn selection_endpoints(&self) -> Option<editor_view::SelectionEndpoints> {
-        let resolved = self.state.selection.as_ref()?.resolve(&self.state.doc)?;
+        let doc = self.state.view();
+        let resolved = self.state.selection.as_ref()?.resolve(&doc)?;
         self.view.selection_endpoints(&resolved)
     }
 
     pub fn selection_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
-        let Some(resolved) = self
-            .state
-            .selection
-            .as_ref()
-            .and_then(|s| s.resolve(&self.state.doc))
-        else {
+        let doc = self.state.view();
+        let Some(resolved) = self.state.selection.as_ref().and_then(|s| s.resolve(&doc)) else {
             return false;
         };
         self.view.selection_hit_test(&resolved, page_idx, x, y)
@@ -320,12 +334,13 @@ impl Editor {
             None => Box::new(self.tracked_ranges.iter()),
         };
 
+        let doc = self.state.view();
         let mut scored: Vec<(usize, String, TrackedRangeHit)> = Vec::new();
         for range in iter {
-            let Some(sel) = range.locate(&self.state.doc) else {
+            let Some(sel) = range.locate(&self.state) else {
                 continue;
             };
-            let Some(resolved) = sel.resolve(&self.state.doc) else {
+            let Some(resolved) = sel.resolve(&doc) else {
                 continue;
             };
             let rects: Vec<editor_view::SelectionRect> = self
@@ -375,7 +390,8 @@ impl Editor {
         use crate::tracked_range::TrackedRange;
         use editor_state::ResolvedPositionFlatExt;
 
-        let Some(pos) = position.resolve(&self.state.doc) else {
+        let doc = self.state.view();
+        let Some(pos) = position.resolve(&doc) else {
             return Vec::new();
         };
         let pos = pos.to_flat();
@@ -387,10 +403,10 @@ impl Editor {
 
         let mut scored: Vec<(usize, String, TrackedRange)> = Vec::new();
         for range in iter {
-            let Some(sel) = range.locate(&self.state.doc) else {
+            let Some(sel) = range.locate(&self.state) else {
                 continue;
             };
-            let Some(resolved) = sel.resolve(&self.state.doc) else {
+            let Some(resolved) = sel.resolve(&doc) else {
                 continue;
             };
 
@@ -422,10 +438,11 @@ impl Editor {
             return false;
         }
 
-        let Some(current_head) = selection.head.resolve(&self.state.doc) else {
+        let doc = self.state.view();
+        let Some(current_head) = selection.head.resolve(&doc) else {
             return false;
         };
-        let Some(hit_head) = hit_selection.head.resolve(&self.state.doc) else {
+        let Some(hit_head) = hit_selection.head.resolve(&doc) else {
             return false;
         };
         current_head == hit_head
@@ -439,20 +456,20 @@ impl Editor {
         read_only: bool,
     ) -> Option<editor_view::PointerStyle> {
         self.view
-            .pointer_style_at(&self.state.doc, page_idx, x, y, read_only)
+            .pointer_style_at(&self.state, page_idx, x, y, read_only)
     }
 
     pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Ime, EditorError> {
         let state = self.state();
-        let doc = &state.doc;
-        let doc_size = doc.flat_size();
+        let doc = state.view();
+        let doc_size = editor_state::flat_size(&doc);
 
         let sel = state.selection.ok_or_else(|| EditorError::General {
             msg: "IME requires an active selection".into(),
         })?;
         let anchor_flat = sel
             .anchor
-            .resolve(doc)
+            .resolve(&doc)
             .ok_or_else(|| EditorError::General {
                 msg: "invariant violated: state.selection.anchor must resolve against state.doc"
                     .into(),
@@ -460,7 +477,7 @@ impl Editor {
             .to_flat();
         let head_flat = sel
             .head
-            .resolve(doc)
+            .resolve(&doc)
             .ok_or_else(|| EditorError::General {
                 msg: "invariant violated: state.selection.head must resolve against state.doc"
                     .into(),
@@ -471,7 +488,7 @@ impl Editor {
         let window_start = sel_start.saturating_sub(before_limit);
         let window_end = sel_end.saturating_add(after_limit).min(doc_size);
 
-        let text = doc.flat_text(window_start..window_end);
+        let text = editor_state::flat_text(&doc, window_start..window_end);
         let composing = state.composition.map(|c| ImeRange {
             start: c.start,
             end: c.end,
@@ -493,12 +510,11 @@ impl Editor {
     }
 
     pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
-        let old_doc = self.state.doc.clone();
         let old_selection = self.state.selection;
         let old_pending_modifiers = self.state.pending_modifiers.clone();
         let old_pending_style = self.state.pending_style.clone();
         let old_composition = self.state.composition;
-        let old_last_history_tag_revision = self.history.last_tag_revision();
+        let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
@@ -517,13 +533,9 @@ impl Editor {
         let ops = std::mem::take(&mut self.pending_ops);
         let pending_style = normalize_pending_style(&self.state);
         let gap_phantom = normalize_gap_phantom(&self.state);
-        let dirty = self.view.reconcile_with_ops(
-            &old_doc,
-            &self.state.doc,
-            &ops,
-            pending_style,
-            gap_phantom,
-        );
+        // `reconcile` reports view-level change sources (pending style, gap phantom,
+        // layout fingerprint); applied doc ops also dirty the rendered layout.
+        let dirty = self.view.reconcile(&self.state, pending_style, gap_phantom) || !ops.is_empty();
 
         let mut fields: HashSet<StateField> = HashSet::new();
 
@@ -553,15 +565,16 @@ impl Editor {
         if ops.iter().any(|op| {
             matches!(
                 &op.payload,
-                DocOp::Style { .. } | DocOp::NodeStyle { .. } | DocOp::NodeMarker { .. }
+                EditOp::Style(..) | EditOp::NodeStyle(..) | EditOp::NodeMarker(..)
             )
         }) {
             fields.insert(StateField::Styles);
         }
 
-        if ops.iter().any(
-            |op| matches!(&op.payload, DocOp::Attr { node_id, .. } if *node_id == NodeId::ROOT),
-        ) {
+        if ops
+            .iter()
+            .any(|op| matches!(&op.payload, EditOp::NodeAttr(attr) if attr.target == Dot::ROOT))
+        {
             fields.insert(StateField::Doc);
             fields.insert(StateField::RootAttrs);
         }
@@ -591,7 +604,7 @@ impl Editor {
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
-        if old_last_history_tag_revision != self.history.last_tag_revision() {
+        if old_last_history_tag_revision != self.undo_history.last_tag_revision() {
             fields.insert(StateField::LastHistoryTag);
         }
 
@@ -617,6 +630,7 @@ impl Editor {
             return;
         }
         let mut entries: Vec<(i32, &editor_view::GroupDecoration, Vec<PageRect>)> = Vec::new();
+        let doc = self.state.view();
         for range in self.tracked_ranges.iter() {
             let Some(group) = view_state.group_decoration(&range.group) else {
                 continue;
@@ -624,10 +638,10 @@ impl Editor {
             if !group.enabled {
                 continue;
             }
-            let Some(sel) = range.locate(&self.state.doc) else {
+            let Some(sel) = range.locate(&self.state) else {
                 continue;
             };
-            let Some(resolved) = sel.resolve(&self.state.doc) else {
+            let Some(resolved) = sel.resolve(&doc) else {
                 continue;
             };
             let selection_rects: Vec<PageRect> = self
@@ -663,7 +677,8 @@ impl Editor {
     }
 
     fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
-        let resolved = self.state.selection.as_ref()?.resolve(&self.state.doc)?;
+        let doc = self.state.view();
+        let resolved = self.state.selection.as_ref()?.resolve(&doc)?;
         if resolved.is_collapsed() {
             return None;
         }
@@ -691,10 +706,11 @@ impl Editor {
             });
         }
 
+        let doc = self.state.view();
         if let Some(composition) = self.state.composition
             && let (Some(from), Some(to)) = (
-                ResolvedPosition::from_flat(&self.state.doc, composition.start),
-                ResolvedPosition::from_flat(&self.state.doc, composition.end),
+                ResolvedPosition::from_flat(&doc, composition.start),
+                ResolvedPosition::from_flat(&doc, composition.end),
             )
         {
             let rects = self
@@ -718,7 +734,7 @@ impl Editor {
 
         self.renderer.render_page(
             sink,
-            &self.state.doc,
+            &doc,
             &self.view,
             page_idx as usize,
             scale_factor,
@@ -727,12 +743,9 @@ impl Editor {
     }
 
     pub fn export_page_vector(&mut self, page_idx: u32, scale_factor: f32) -> Vec<u8> {
-        self.renderer.export_page_vector(
-            &self.state.doc,
-            &self.view,
-            page_idx as usize,
-            scale_factor,
-        )
+        let doc = self.state.view();
+        self.renderer
+            .export_page_vector(&doc, &self.view, page_idx as usize, scale_factor)
     }
 
     fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
@@ -761,6 +774,7 @@ impl Editor {
         &mut self,
         f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
     ) -> Result<(), EditorError> {
+        let pre_transient = transient_of(&self.state);
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
@@ -769,14 +783,32 @@ impl Editor {
             return Ok(());
         }
 
-        let (state, step_records, ops, effects, meta) = tr.commit();
+        let (state, _step_records, recorded, effects, meta) = tr.commit();
+        let ops: Vec<Op<EditOp>> = recorded.iter().map(|r| r.op.clone()).collect();
+        // A Record/Tagged transaction is undoable when it changes the document
+        // OR the transient state (caret/IME/pending), matching the old
+        // step-history's SetSelection/SetComposition entries.
+        let undoable = !recorded.is_empty() || pre_transient != transient_of(&state);
 
-        if !step_records.is_empty() {
-            match meta.history {
-                HistoryMeta::Record => self.history.push(&step_records),
-                HistoryMeta::Tagged { tag } => self.history.push_tagged(&step_records, tag),
-                HistoryMeta::Skip => self.history.clear_last_tag(),
-            }
+        match meta.history {
+            HistoryMeta::Skip => self.undo_history.clear_last_tag(),
+            HistoryMeta::Record if undoable => self.undo_history.record(
+                UndoEntry {
+                    ops: recorded,
+                    tag: None,
+                    transient: pre_transient,
+                },
+                Instant::now(),
+            ),
+            HistoryMeta::Tagged { tag } if undoable => self.undo_history.record(
+                UndoEntry {
+                    ops: recorded,
+                    tag: Some(tag),
+                    transient: pre_transient,
+                },
+                Instant::now(),
+            ),
+            _ => self.undo_history.clear_last_tag(),
         }
 
         self.state = state;
@@ -819,8 +851,9 @@ impl Editor {
     fn augment_font_state_from_ops(&mut self) {
         let updates = {
             let resource = self.resource.lock().unwrap();
+            let view = self.state.view();
             crate::font::derive_font_updates_from_ops(
-                &self.state.doc,
+                &view,
                 &resource.font_registry,
                 &self.pending_ops,
             )
@@ -871,12 +904,12 @@ impl Editor {
     }
 
     pub(crate) fn resize_view(&mut self, viewport: Viewport) -> bool {
-        let would_change = self.view.would_resize(viewport, &self.state.doc);
+        let would_change = self.view.would_resize(viewport, &self.state);
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= would_change;
             return would_change;
         }
-        let did_change = self.view.resize(viewport, &self.state.doc);
+        let did_change = self.view.resize(viewport, &self.state);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
                 fields: vec![
@@ -893,17 +926,15 @@ impl Editor {
         did_change
     }
 
-    pub(crate) fn set_external_height(&mut self, node_id: NodeId, height: f32) -> bool {
+    pub(crate) fn set_external_height(&mut self, node_id: Dot, height: f32) -> bool {
         let would_change = self
             .view
-            .would_set_external_height(&self.state.doc, node_id, height);
+            .would_set_external_height(&self.state, node_id, height);
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= would_change;
             return would_change;
         }
-        let did_change = self
-            .view
-            .set_external_height(&self.state.doc, node_id, height);
+        let did_change = self.view.set_external_height(&self.state, node_id, height);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
                 fields: vec![
@@ -917,13 +948,13 @@ impl Editor {
         did_change
     }
 
-    pub(crate) fn toggle_fold(&mut self, id: NodeId) -> bool {
-        let would_change = self.view.would_toggle_fold(&self.state.doc, id);
+    pub(crate) fn toggle_fold(&mut self, id: Dot) -> bool {
+        let would_change = self.view.would_toggle_fold(&self.state, id);
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= would_change;
             return would_change;
         }
-        let did_change = self.view.toggle_fold(&self.state.doc, id);
+        let did_change = self.view.toggle_fold(&self.state, id);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
                 fields: vec![
@@ -937,7 +968,7 @@ impl Editor {
         did_change
     }
 
-    pub(crate) fn fold_expanded(&self, id: NodeId) -> bool {
+    pub(crate) fn fold_expanded(&self, id: Dot) -> bool {
         self.view.fold_expanded(id)
     }
 
@@ -995,74 +1026,78 @@ impl Editor {
         movement: &Movement,
     ) -> Option<Selection> {
         let target = self.resolve_movement(&selection.head, movement)?;
-        let doc = &self.state.doc;
-        let current_is_unit = selection.is_unit_node_selection(doc);
+        let doc = self.state.view();
+        let current_is_unit = is_unit_node_selection(&selection, &doc);
         let fixed = if current_is_unit {
-            farther_endpoint(doc, target.head, selection.anchor, selection.head)
+            farther_endpoint(&doc, &target.head, &selection.anchor, &selection.head)
         } else {
             selection.anchor
         };
-        let mut head = farther_endpoint(doc, fixed, target.anchor, target.head);
+        let mut head = farther_endpoint(&doc, &fixed, &target.anchor, &target.head);
         if !current_is_unit
             && matches!(
                 movement,
                 Movement::Grapheme { .. } | Movement::Word { .. } | Movement::Sentence { .. }
             )
-            && let Some(stop) = closest_empty_paragraph_break_end_between(doc, selection.head, head)
+            && let Some(stop) =
+                closest_empty_paragraph_break_end_between(&selection.head, &head, &doc)
         {
             head = stop;
         }
         Some(Selection::new(fixed, head))
     }
 
-    pub fn last_history_tag(&self) -> Option<&HistoryTag> {
-        self.history.last_tag()
+    pub fn last_history_tag(&self) -> Option<HistoryTag> {
+        self.undo_history.last_tag().cloned()
     }
 
-    pub(crate) fn history_last_inverse_playback_steps(
-        &self,
-    ) -> Option<Vec<crate::history::HistoryPlaybackStep>> {
-        self.history.last_inverse_playback_steps()
-    }
-
-    pub(crate) fn try_undo(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= self.history.can_undo();
-            return None;
+    fn apply_undo_result(&mut self, result: Option<(Vec<Op<EditOp>>, TransientState)>) -> bool {
+        match result {
+            Some((ops, transient)) => {
+                self.state.selection = transient.selection;
+                self.state.composition = transient.composition;
+                self.state.pending_modifiers = transient.pending_modifiers;
+                self.state.pending_style = transient.pending_style;
+                self.pending_ops.extend(ops);
+                true
+            }
+            None => false,
         }
-        self.history.undo()
     }
 
-    pub(crate) fn try_redo(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
+    pub(crate) fn try_undo(&mut self) -> bool {
         if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= self.history.can_redo();
-            return None;
+            *changed |= self.undo_history.can_undo();
+            return false;
         }
-        self.history.redo()
+        let current = transient_of(&self.state);
+        let result = self.undo_history.undo(&mut self.state.projected, current);
+        self.apply_undo_result(result)
     }
 
-    pub(crate) fn try_undo_auto_replacement(&mut self) -> Option<Vec<HistoryPlaybackStep>> {
-        let is_auto = matches!(self.history.last_tag(), Some(HistoryTag::AutoReplacement));
+    pub(crate) fn try_redo(&mut self) -> bool {
+        if let Mode::Probe { ref mut changed } = self.mode {
+            *changed |= self.undo_history.can_redo();
+            return false;
+        }
+        let current = transient_of(&self.state);
+        let result = self.undo_history.redo(&mut self.state.projected, current);
+        self.apply_undo_result(result)
+    }
+
+    pub(crate) fn try_undo_auto_replacement(&mut self) -> bool {
+        let is_auto = self
+            .last_history_tag()
+            .is_some_and(|t| matches!(t, HistoryTag::AutoReplacement));
         if !is_auto {
-            return None;
+            return false;
         }
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= self.history.can_undo();
-            return None;
-        }
-        self.history.undo()
-    }
-
-    pub(crate) fn sync_history_last_tag_from_top(&mut self) {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return;
-        }
-        self.history.sync_last_tag_from_top();
+        self.try_undo()
     }
 
     pub(crate) fn apply_remote_changeset(
         &mut self,
-        changeset: Changeset<DocOp>,
+        changeset: Changeset<EditOp>,
     ) -> Result<(), EditorError> {
         if let Mode::Probe { ref mut changed } = self.mode {
             let would_change = self
@@ -1073,32 +1108,32 @@ impl Editor {
             return Ok(());
         }
 
-        let frozen = self
-            .state
-            .selection
-            .as_ref()
-            .map(|s| StableSelection::capture(s, &self.state.doc));
+        let frozen = self.state.selection.as_ref().map(|s| {
+            let view = self.state.view();
+            StableSelection::capture(s, &view)
+        });
         let (mut next, applied_ops) = self
             .state
             .receive_remote_changeset(changeset)
             .map_err(|e| EditorError::Step(StepError::State(e)))?;
-        next.selection = frozen.map(|f| {
-            let restored = f.restore(&next.doc);
-            restored.normalize(&next.doc).unwrap_or(restored)
+        next.selection = frozen.and_then(|f| {
+            let view = next.view();
+            let ctx = editor_state::StableResolveCtx::new(&view, next.projected.seq());
+            let restored = f.resolve(&ctx)?;
+            Some(restored.normalize(&view).unwrap_or(restored))
         });
         self.state = next;
         if !applied_ops.is_empty() {
-            self.history.clear_last_tag();
+            self.undo_history.clear_last_tag();
         }
         self.pending_ops.extend(applied_ops);
         Ok(())
     }
 
     pub fn set_doc(&mut self, plain: editor_model::PlainDoc) {
-        let (doc, graph) = editor_model::Doc::from_plain(plain);
-        self.state = State::new(doc, graph, None);
+        self.state = State::from_plain(&plain).expect("set_doc template must build");
         crate::font::reresolve_fonts(self).ok();
-        self.view.layout(&self.state.doc);
+        self.view.layout(&self.state);
         self.push_event(EditorEvent::StateChanged {
             fields: StateField::iter().collect(),
         });
@@ -1109,34 +1144,31 @@ impl Editor {
         &mut self,
         template: editor_model::PlainDoc,
     ) -> Result<(), EditorError> {
-        use editor_state::NodeRefCursorExt;
-
-        let root_entry = template
-            .nodes
-            .get(&editor_model::NodeId::ROOT)
-            .ok_or_else(|| EditorError::General {
-                msg: "template has no ROOT".into(),
-            })?;
-        let root_plain_node = root_entry.node.clone();
+        let root_entry = &template.root;
         let root_modifiers: Vec<editor_model::Modifier> =
             root_entry.modifiers.values().cloned().collect();
         let root_style: Option<String> = root_entry.style.clone();
-        let child_ids: Vec<editor_model::NodeId> = root_entry.children.clone();
-
         let styles = template.styles.clone();
-        let node_styles: Vec<(editor_model::NodeId, String)> = template
-            .nodes
-            .iter()
-            .filter(|(id, _)| **id != editor_model::NodeId::ROOT)
-            .filter_map(|(id, e)| e.style.clone().map(|s| (*id, s)))
-            .collect();
 
-        let (template_doc, _graph) = editor_model::Doc::from_plain(template);
-
-        let subtrees: Vec<editor_model::Subtree> = child_ids
-            .iter()
-            .filter_map(|&id| editor_model::Subtree::capture(&template_doc, id))
-            .collect();
+        // Build the template as a projected state and capture each root child as a
+        // subtree (subtrees carry their own modifiers/style/marker recursively, so
+        // inserting them re-establishes per-node styling in the eg-walker model).
+        let template_state =
+            editor_state::State::from_plain(&template).map_err(|e| EditorError::General {
+                msg: format!("{e:?}"),
+            })?;
+        let subtrees: Vec<editor_model::Subtree> = {
+            let view = template_state.view();
+            match view.root() {
+                Some(root) => root
+                    .child_blocks()
+                    .filter_map(|b| {
+                        editor_transaction::capture_subtree(&template_state.projected, b.id())
+                    })
+                    .collect(),
+                None => Vec::new(),
+            }
+        };
 
         if subtrees.is_empty() {
             return Ok(());
@@ -1144,50 +1176,47 @@ impl Editor {
 
         self.transact(|tr| {
             tr.batch::<_, EditorError>(|tr| {
-                let existing: Vec<editor_model::NodeId> = tr
-                    .doc()
-                    .node(editor_model::NodeId::ROOT)
+                let existing: Vec<Dot> = tr
+                    .view()
+                    .node(Dot::ROOT)
                     .ok_or_else(|| EditorError::General {
                         msg: "ROOT not found".into(),
                     })?
-                    .children()
-                    .map(|c| c.id())
+                    .child_blocks()
+                    .map(|b| b.id())
                     .collect();
                 for id in existing {
                     tr.remove_subtree(id)?;
                 }
                 for (i, st) in subtrees.into_iter().enumerate() {
-                    tr.insert_subtree(editor_model::NodeId::ROOT, i, st)?;
+                    tr.insert_subtree(Dot::ROOT, i, st)?;
                 }
-                tr.set_node(editor_model::NodeId::ROOT, root_plain_node)?;
 
                 let existing_root_mods: Vec<editor_model::Modifier> = tr
-                    .doc()
-                    .node(editor_model::NodeId::ROOT)
-                    .map(|r| r.explicit_modifiers().cloned().collect())
-                    .unwrap_or_default();
+                    .state()
+                    .projected
+                    .block_modifiers()
+                    .modifiers_of(Dot::ROOT)
+                    .into_values()
+                    .collect();
                 for m in existing_root_mods {
-                    tr.remove_modifier(editor_model::NodeId::ROOT, m)?;
+                    tr.remove_modifier(Dot::ROOT, m)?;
                 }
                 for modifier in root_modifiers {
-                    editor_commands::set_node_modifier(tr, editor_model::NodeId::ROOT, modifier)?;
+                    editor_commands::set_node_modifier(tr, Dot::ROOT, modifier)?;
                 }
 
                 for (name, entry) in styles {
                     tr.set_style(name, Some(entry))?;
                 }
-                tr.set_node_style(editor_model::NodeId::ROOT, root_style)?;
-                for (id, name) in node_styles {
-                    tr.set_node_style(id, Some(name))?;
-                }
+                tr.set_node_style(Dot::ROOT, root_style)?;
                 Ok(())
             })?;
 
-            let doc = tr.doc();
-            if let Some(pos) = doc
-                .node(editor_model::NodeId::ROOT)
-                .and_then(|r| r.first_child())
-                .and_then(|first| first.first_cursor_position())
+            let view = tr.view();
+            if let Some(root) = view.node(Dot::ROOT)
+                && let Some(editor_model::ChildView::Block(first)) = root.first_child()
+                && let Some(pos) = editor_state::first_cursor_position(&first)
             {
                 tr.set_selection(Some(editor_state::Selection::collapsed(pos)))?;
             }
@@ -1200,7 +1229,7 @@ impl Editor {
             return Ok(());
         }
         crate::font::reresolve_fonts(self)?;
-        self.view.layout(&self.state.doc);
+        self.view.layout(&self.state);
         self.push_event(EditorEvent::StateChanged {
             fields: StateField::iter().collect(),
         });
@@ -1313,10 +1342,10 @@ impl Editor {
     }
 
     pub fn new_test_with_resource(state: State, resource: Arc<Mutex<Resource>>) -> Self {
-        Self {
+        let mut editor = Self {
             state,
             view: View::new_test(),
-            history: History::new(Duration::from_millis(300)),
+            undo_history: UndoHistory::new(Duration::from_millis(300)),
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
@@ -1328,7 +1357,12 @@ impl Editor {
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             mode: Mode::Apply,
-        }
+        };
+        // Lay out the view once so the first `tick()` reconciles clean (matches the
+        // production `run_initialize` path); otherwise every test's first tick would
+        // spuriously report the whole view dirty.
+        editor.view.layout(&editor.state);
+        editor
     }
 
     pub fn apply(&mut self, msg: Message) -> Vec<EditorEvent> {
@@ -1341,11 +1375,11 @@ impl Editor {
     }
 
     pub fn history_undos_len(&self) -> usize {
-        self.history.undos_len()
+        self.undo_history.undos_len()
     }
 
     pub fn history_redos_len(&self) -> usize {
-        self.history.redos_len()
+        self.undo_history.redos_len()
     }
 
     #[cfg(test)]
@@ -1363,210 +1397,95 @@ impl Editor {
 mod tests {
     use crate::dnd::DndState;
     use crate::editor::Editor;
-    use editor_crdt::{OpGraph, RgaOp};
-    use editor_macros::{doc, state};
+    use editor_crdt::{Changeset, Dot, ListOp};
+    use editor_macros::state;
     use editor_model::{
-        Doc, DocOp, Modifier, ModifierType, Node, NodeId, PlainDoc, PlainNode, PlainNodeEntry,
-        PlainParagraphNode, PlainRootNode, PlainTextNode,
+        ChildView, EditOp, Modifier, ModifierType, Node, NodeType, PlainDoc, PlainNode,
+        PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
     };
-    use editor_state::{Affinity, PendingModifier, PendingModifiers, Position, Selection, State};
+    use editor_state::{
+        Affinity, PendingModifier, PendingModifiers, Position, Selection, StableResolveCtx, State,
+    };
     use hashbrown::HashSet;
     use std::collections::BTreeMap;
 
     use super::*;
 
-    /// Builds a two-replica pair from a shared PlainDoc so both replicas have
-    /// identical NodeIds and a common base OpGraph — required for remote ops
-    /// from replica A to resolve on replica B.
-    fn bootstrap_two_replicas(plain: PlainDoc) -> (State, State) {
-        let (doc, graph) = Doc::from_plain(plain);
-        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
-        let seed = State::new(doc, graph, Some(sel));
-
-        let seed_css = seed.graph.changesets_as_vec();
-        let replica_b =
-            State::from_changesets(seed_css, Some(sel)).expect("from_changesets on bootstrap");
-        (seed, replica_b)
+    /// Produce a remote changeset by replaying `ops` (in a single commit) onto a
+    /// clone of `base`'s projected graph and extracting the resulting local
+    /// changeset. The `state!` fixtures build their graph with actor 1 and
+    /// deterministic clocks, so replica_a and replica_b share the same base op
+    /// identities — the new op continues replica_a's clock and is unknown to
+    /// replica_b. Mirrors `handle/remote.rs`'s helper.
+    fn remote_change(base: &State, ops: Vec<EditOp>) -> Changeset<EditOp> {
+        let mut pa = base.projected.clone();
+        let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
+        pa.apply_batch(ops).unwrap();
+        pa.commit();
+        pa.graph()
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0)
     }
 
-    fn root_default_font_modifiers() -> BTreeMap<ModifierType, Modifier> {
-        // The editor's font resolver assumes every node can find a FontFamily and FontWeight
-        // by walking ancestors up to the root. PlainDoc-built fixtures need to honor that
-        // invariant explicitly because they bypass the doc!/state! macros that supply defaults.
-        BTreeMap::from([
-            (
-                ModifierType::FontFamily,
-                Modifier::FontFamily {
-                    value: "Pretendard".into(),
-                },
-            ),
-            (
-                ModifierType::FontWeight,
-                Modifier::FontWeight { value: 400 },
-            ),
-        ])
+    /// Like `remote_change` but commits each op separately, yielding one
+    /// sequential changeset per op (each builds on the previous so their op Dots
+    /// are distinct and all are unknown to replica_b).
+    fn remote_changes(base: &State, ops: Vec<EditOp>) -> Vec<Changeset<EditOp>> {
+        let mut pa = base.projected.clone();
+        let mut out = Vec::new();
+        for op in ops {
+            let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
+            pa.apply_batch(vec![op]).unwrap();
+            pa.commit();
+            out.push(
+                pa.graph()
+                    .local_changesets_since(&baseline)
+                    .unwrap()
+                    .remove(0),
+            );
+        }
+        out
     }
 
-    fn plain_doc_with_one_text() -> (PlainDoc, NodeId) {
-        let para_id = NodeId::new();
-        let text_id = NodeId::new();
-
-        let mut nodes = BTreeMap::new();
-        nodes.insert(
-            NodeId::ROOT,
-            PlainNodeEntry {
-                parent: None,
-                children: vec![para_id],
-                modifiers: root_default_font_modifiers(),
-                style: None,
-                marker: None,
-                node: PlainNode::Root(PlainRootNode::default()),
-            },
-        );
-        nodes.insert(
-            para_id,
-            PlainNodeEntry {
-                parent: Some(NodeId::ROOT),
-                children: vec![text_id],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Paragraph(PlainParagraphNode {}),
-            },
-        );
-        nodes.insert(
-            text_id,
-            PlainNodeEntry {
-                parent: Some(para_id),
-                children: vec![],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Text(PlainTextNode {
-                    text: "hi".to_string(),
-                }),
-            },
-        );
-        (
-            PlainDoc {
-                nodes,
-                styles: BTreeMap::new(),
-            },
-            text_id,
-        )
-    }
-
-    fn plain_doc_with_two_paragraphs() -> (PlainDoc, NodeId, NodeId, NodeId) {
-        let para1_id = NodeId::new();
-        let text1_id = NodeId::new();
-        let para2_id = NodeId::new();
-        let text2_id = NodeId::new();
-
-        let mut nodes = BTreeMap::new();
-        nodes.insert(
-            NodeId::ROOT,
-            PlainNodeEntry {
-                parent: None,
-                children: vec![para1_id, para2_id],
-                modifiers: root_default_font_modifiers(),
-                style: None,
-                marker: None,
-                node: PlainNode::Root(PlainRootNode::default()),
-            },
-        );
-        nodes.insert(
-            para1_id,
-            PlainNodeEntry {
-                parent: Some(NodeId::ROOT),
-                children: vec![text1_id],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Paragraph(PlainParagraphNode {}),
-            },
-        );
-        nodes.insert(
-            text1_id,
-            PlainNodeEntry {
-                parent: Some(para1_id),
-                children: vec![],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Text(PlainTextNode {
-                    text: String::new(),
-                }),
-            },
-        );
-        nodes.insert(
-            para2_id,
-            PlainNodeEntry {
-                parent: Some(NodeId::ROOT),
-                children: vec![text2_id],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Paragraph(PlainParagraphNode {}),
-            },
-        );
-        nodes.insert(
-            text2_id,
-            PlainNodeEntry {
-                parent: Some(para2_id),
-                children: vec![],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Text(PlainTextNode {
-                    text: String::new(),
-                }),
-            },
-        );
-        (
-            PlainDoc {
-                nodes,
-                styles: BTreeMap::new(),
-            },
-            para1_id,
-            para2_id,
-            text2_id,
-        )
-    }
-
-    fn build_state(doc: editor_model::Doc, head: Position, pending: PendingModifiers) -> State {
-        let mut s = State::new(
-            doc,
-            OpGraph::<DocOp>::new(),
-            Some(Selection::collapsed(head)),
-        );
-        s.pending_modifiers = pending;
-        s
+    fn with_pending(mut state: State, pending: PendingModifiers) -> State {
+        state.pending_modifiers = pending;
+        state
     }
 
     #[test]
     fn normalize_empty_pending_returns_none() {
-        let (doc, p1) = doc! { root { p1: paragraph } };
-        let s = build_state(doc, Position::new(p1, 0), PendingModifiers::new());
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph } }
+            selection: (p1, 0)
+        };
+        let s = with_pending(state, PendingModifiers::new());
         assert!(normalize_pending_style(&s).is_none());
     }
 
     #[test]
     fn normalize_non_empty_paragraph_returns_none() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("hi") } } };
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
         let pending: PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::Bold,
         }];
-        let s = build_state(doc, Position::new(p1, 0), pending);
+        let s = with_pending(state, pending);
         assert!(normalize_pending_style(&s).is_none());
     }
 
     #[test]
     fn normalize_empty_paragraph_returns_some_with_container_id() {
-        let (doc, p1) = doc! { root { p1: paragraph } };
+        let (state, p1) = state! {
+            doc { root { p1: paragraph } }
+            selection: (p1, 0)
+        };
         let pending: PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::FontSize { value: 9600 },
         }];
-        let s = build_state(doc, Position::new(p1, 0), pending.clone());
+        let s = with_pending(state, pending.clone());
         let ps = normalize_pending_style(&s).expect("Some");
         assert_eq!(ps.node_id, p1);
         assert_eq!(ps.modifiers, pending);
@@ -1574,11 +1493,14 @@ mod tests {
 
     #[test]
     fn normalize_head_on_text_child_ascends_to_textblock() {
-        let (doc, _p1, t1) = doc! { root { _p1: paragraph { t1: text("hi") } } };
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
         let pending: PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::Bold,
         }];
-        let s = build_state(doc, Position::new(t1, 0), pending);
+        let s = with_pending(state, pending);
         assert!(normalize_pending_style(&s).is_none());
     }
 
@@ -1652,12 +1574,12 @@ mod tests {
         );
     }
 
-    fn test_editor() -> (Editor, NodeId) {
-        let (state, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+    fn test_editor() -> (Editor, editor_crdt::Dot) {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
-        (Editor::new_test(state), t)
+        (Editor::new_test(state), p1)
     }
 
     #[test]
@@ -1686,15 +1608,15 @@ mod tests {
     fn undo_after_typing_over_multi_paragraph_selection_restores_initial_selection() {
         use editor_state::assert_state_eq;
 
-        let (initial, ..) = state! {
+        let (initial, _p1, _p2) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    p1: paragraph { text("a") }
                     paragraph { text("b") }
-                    paragraph { t2: text("c") }
+                    p2: paragraph { text("c") }
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         let mut editor = Editor::new_test(initial.clone());
 
@@ -1723,12 +1645,12 @@ mod tests {
         let _ = log::set_logger(Box::leak(Box::new(StderrLogger)));
         log::set_max_level(log::LevelFilter::Info);
 
-        let (state, _) = state! {
-            doc { root { paragraph { t: text("") } } }
-            selection: (t, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         for ch in "abcdefghijklmnopqrst".chars() {
             editor.apply(Message::Insertion {
@@ -1766,64 +1688,41 @@ mod tests {
         log::set_max_level(log::LevelFilter::Debug);
 
         fn build_editor(n: usize) -> Editor {
-            let root_id = NodeId::ROOT;
-            let mut nodes = BTreeMap::new();
-            let mut para_ids = Vec::with_capacity(n);
-            let mut text_ids = Vec::with_capacity(n);
+            let mut paragraphs = Vec::with_capacity(n);
             for _ in 0..n {
-                para_ids.push(NodeId::new());
-                text_ids.push(NodeId::new());
-            }
-            nodes.insert(
-                root_id,
-                PlainNodeEntry {
-                    parent: None,
-                    children: para_ids.clone(),
+                let text = PlainNodeEntry {
+                    node: PlainNode::Text(PlainTextNode {
+                        text: "The quick brown fox jumps".to_string(),
+                    }),
                     modifiers: BTreeMap::new(),
                     style: None,
                     marker: None,
-                    node: PlainNode::Root(PlainRootNode::default()),
-                },
-            );
-            for i in 0..n {
-                nodes.insert(
-                    para_ids[i],
-                    PlainNodeEntry {
-                        parent: Some(root_id),
-                        children: vec![text_ids[i]],
-                        modifiers: BTreeMap::new(),
-                        style: None,
-                        marker: None,
-                        node: PlainNode::Paragraph(PlainParagraphNode {}),
-                    },
-                );
-                nodes.insert(
-                    text_ids[i],
-                    PlainNodeEntry {
-                        parent: Some(para_ids[i]),
-                        children: vec![],
-                        modifiers: BTreeMap::new(),
-                        style: None,
-                        marker: None,
-                        node: PlainNode::Text(PlainTextNode {
-                            text: "The quick brown fox jumps".to_string(),
-                        }),
-                    },
-                );
+                    children: vec![],
+                };
+                paragraphs.push(PlainNodeEntry {
+                    node: PlainNode::Paragraph(PlainParagraphNode {}),
+                    modifiers: BTreeMap::new(),
+                    style: None,
+                    marker: None,
+                    children: vec![text],
+                });
             }
             let plain = PlainDoc {
-                nodes,
+                root: PlainNodeEntry {
+                    node: PlainNode::Root(PlainRootNode::default()),
+                    modifiers: BTreeMap::new(),
+                    style: None,
+                    marker: None,
+                    children: paragraphs,
+                },
                 styles: BTreeMap::new(),
             };
-            let (doc, graph) = Doc::from_plain(plain);
-            let last_text = *text_ids.last().unwrap();
-            let state = State::new(
-                doc,
-                graph,
-                Some(Selection::collapsed(Position::new(last_text, 5))),
-            );
+            let last_text_path = vec![n - 1, 0];
+            let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
+            let last_dot = handles[&last_text_path];
+            state.selection = Some(Selection::collapsed(Position::new(last_dot, 5)));
             let mut editor = Editor::new_test(state);
-            editor.view.layout(&editor.state.doc);
+            editor.view.layout(&editor.state);
             editor.apply(Message::TextInput {
                 ops: vec![FlatImeOp::ReplaceSelection { text: "a".into() }],
             });
@@ -1845,36 +1744,34 @@ mod tests {
             // Derived-query (host-side, post-tick) cost: whole-doc table_overlays
             // builds every page's fragment; the per-visible-page call builds one.
             // Re-layout before each to reset the lazy per-page fragment caches.
-            editor.view.layout(&editor.state.doc);
+            editor.view.layout(&editor.state);
             let page_count = editor.view.pages().len();
             let t = editor_common::time::Instant::now();
-            let _ = editor.view.table_overlays(&editor.state.doc, None);
+            let _ = editor.view.table_overlays(&editor.state, None);
             eprintln!(
                 "  table_overlays WHOLE ({page_count} pages): {:?}",
                 t.elapsed()
             );
-            editor.view.layout(&editor.state.doc);
+            editor.view.layout(&editor.state);
             let t = editor_common::time::Instant::now();
-            let _ = editor.view.page_table_overlays(&editor.state.doc, 0, None);
+            let _ = editor.view.page_table_overlays(&editor.state, 0, None);
             eprintln!("  page_table_overlays(visible page 0): {:?}", t.elapsed());
 
             let t = editor_common::time::Instant::now();
-            let _ = editor.view.external_elements(&editor.state.doc, None);
+            let _ = editor.view.external_elements(&editor.state, None);
             eprintln!("  external_elements WHOLE: {:?}", t.elapsed());
             let t = editor_common::time::Instant::now();
-            let _ = editor
-                .view
-                .page_external_elements(&editor.state.doc, 0, None);
+            let _ = editor.view.page_external_elements(&editor.state, 0, None);
             eprintln!(
                 "  page_external_elements(visible page 0): {:?}",
                 t.elapsed()
             );
 
             let t = editor_common::time::Instant::now();
-            let _ = editor.view.link_rects(&editor.state.doc);
+            let _ = editor.view.link_rects();
             eprintln!("  link_rects WHOLE: {:?}", t.elapsed());
             let t = editor_common::time::Instant::now();
-            let _ = editor.view.page_link_rects(&editor.state.doc, 0);
+            let _ = editor.view.page_link_rects(0);
             eprintln!("  page_link_rects(visible page 0): {:?}", t.elapsed());
         }
     }
@@ -2051,14 +1948,14 @@ mod tests {
 
     #[test]
     fn input_context_full_window_returns_whole_doc() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let editor = Editor::new_test(state);
         let ctx = editor.ime(usize::MAX, usize::MAX).unwrap();
         // flat: O(p)=0, "hello"=1..6, C(p)=6 → flat_size=7
-        // (t1,2) → flat 3; window covers full doc [0,7)
+        // (p1,2) → flat 3; window covers full doc [0,7)
         assert_eq!(ctx.text, "\u{2028}hello\u{2029}");
         assert_eq!(ctx.window_start, 0);
         assert_eq!(ctx.selection.start, 3);
@@ -2068,14 +1965,14 @@ mod tests {
 
     #[test]
     fn input_context_limited_window_clamps() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 6)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
         };
         let editor = Editor::new_test(state);
         let ctx = editor.ime(3, 3).unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
-        // (t1,6) → flat 7; window [7-3, 7+3) = [4, 10) → "lo wor"
+        // (p1,6) → flat 7; window [7-3, 7+3) = [4, 10) → "lo wor"
         assert_eq!(ctx.window_start, 4);
         assert_eq!(ctx.text, "lo wor");
         assert_eq!(ctx.selection.start, 7);
@@ -2084,14 +1981,14 @@ mod tests {
 
     #[test]
     fn input_context_with_non_collapsed_selection() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 2) -> (t1, 8)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 2) -> (p1, 8)
         };
         let editor = Editor::new_test(state);
         let ctx = editor.ime(usize::MAX, usize::MAX).unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
-        // (t1,2)→flat 3, (t1,8)→flat 9; window covers full doc [0,13)
+        // (p1,2)→flat 3, (p1,8)→flat 9; window covers full doc [0,13)
         assert_eq!(ctx.text, "\u{2028}hello world\u{2029}");
         assert_eq!(ctx.selection.start, 3);
         assert_eq!(ctx.selection.end, 9);
@@ -2099,9 +1996,9 @@ mod tests {
 
     #[test]
     fn input_context_empty_blockquote_has_tokens() {
-        let (state, ..) = state! {
-            doc { root { blockquote { paragraph { t1: text("") } } paragraph {} } }
-            selection: (t1, 0)
+        let (state, _p1) = state! {
+            doc { root { blockquote { p1: paragraph { text("") } } paragraph {} } }
+            selection: (p1, 0)
         };
         let editor = Editor::new_test(state);
         let ctx = editor.ime(100, 100).unwrap();
@@ -2202,23 +2099,44 @@ mod tests {
 
     #[test]
     fn editor_exposes_modifier_state() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hi") [bold] } } }
-            selection: (t1, 1)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("Hi") [bold] } } }
+            selection: (p1, 1)
         };
         let editor = Editor::new_test(state);
         let s = editor.modifier_state().unwrap();
         assert_eq!(s.bold, editor_common::Tri::Uniform { value: () });
     }
 
+    // Selecting exactly a bold run that is followed by more text must light up the
+    // bold toolbar button — the trailing run's first char must not be over-collected.
+    #[test]
+    fn editor_bold_active_for_exact_bold_run_with_trailing_text() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph {
+                text("hello")
+                text("world") [font_weight(700)]
+                text("hi")
+            } } }
+            selection: (p1, 5) -> (p1, 10)
+        };
+        let editor = Editor::new_test(state);
+        let s = editor.modifier_state().unwrap();
+        assert_eq!(
+            s.effective_bold,
+            editor_common::Tri::Uniform { value: () },
+            "selecting exactly the bold run [5,10) must report bold active"
+        );
+    }
+
     #[test]
     fn editor_exposes_uniform_link_for_paragraph_child_range_selection() {
-        let (state, _p1, ..) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
-                t2: text("World") [link(href: "https://a.com".to_string())]
+                text("Hello") [link(href: "https://a.com".to_string())]
+                text("World") [link(href: "https://a.com".to_string())]
             } } }
-            selection: (p1, 0) -> (p1, 2)
+            selection: (p1, 0) -> (p1, 10)
         };
         let editor = Editor::new_test(state);
         let s = editor.modifier_state().unwrap();
@@ -2234,12 +2152,12 @@ mod tests {
 
     #[test]
     fn editor_exposes_mixed_link_for_paragraph_child_range_selection() {
-        let (state, _p1, ..) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph {
-                t1: text("Hello") [link(href: "https://a.com".to_string())]
-                t2: text("World") [link(href: "https://b.com".to_string())]
+                text("Hello") [link(href: "https://a.com".to_string())]
+                text("World") [link(href: "https://b.com".to_string())]
             } } }
-            selection: (p1, 0) -> (p1, 2)
+            selection: (p1, 0) -> (p1, 10)
         };
         let editor = Editor::new_test(state);
         let s = editor.modifier_state().unwrap();
@@ -2248,9 +2166,9 @@ mod tests {
 
     #[test]
     fn editor_exposes_block_state() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hi") } } }
-            selection: (t1, 1)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("Hi") } } }
+            selection: (p1, 1)
         };
         let editor = Editor::new_test(state);
         let bs = editor.block_state().unwrap();
@@ -2260,9 +2178,9 @@ mod tests {
 
     #[test]
     fn character_counts_empty_doc_is_all_zero() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let editor = Editor::new_test(state);
         let (doc, sel) = editor.character_counts();
@@ -2276,9 +2194,9 @@ mod tests {
 
     #[test]
     fn character_counts_single_block_no_selection() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let editor = Editor::new_test(state);
         let (doc, sel) = editor.character_counts();
@@ -2311,35 +2229,27 @@ mod tests {
 
     #[test]
     fn remote_message_triggers_view_invalidation_and_events() {
-        use editor_crdt::TextOp;
-
-        let (plain, text_id) = plain_doc_with_one_text();
-        let (state_a, state_b) = bootstrap_two_replicas(plain);
-
-        // Snapshot heads before A's edit so local_changesets_since returns only the new op.
-        let baseline: HashSet<_> = state_a.graph.current_heads().copied().collect();
-
-        let (state_a, _) = state_a
-            .apply(DocOp::Text {
-                node_id: text_id,
-                op: TextOp::InsertChar {
-                    after: None,
-                    ch: 'x',
-                },
-            })
-            .unwrap();
-        let state_a = State {
-            graph: state_a.graph.commit(),
-            ..state_a
+        let (state_a, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
+        let css_a = state_a.graph().changesets_as_vec();
+        let state_b = State::from_changesets(css_a, state_a.selection).unwrap();
 
-        let mut css = state_a.local_changesets_since(&baseline).unwrap();
-        let cs = css.remove(0);
+        // Insert 'x' at the start of the text ("hi" -> "xhi"); seq pos 1
+        // ([para0, 'h', 'i']).
+        let cs = remote_change(
+            &state_a,
+            vec![EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('x'),
+            })],
+        );
 
         // Pre-layout populates the measurer cache; without this, invalidation has nothing
         // to evict and dirty stays false.
         let mut editor = Editor::new_test(state_b);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         editor.receive_remote_changeset(cs);
         let events = editor.tick().unwrap();
@@ -2365,101 +2275,53 @@ mod tests {
             );
         }
 
-        let entry = editor
-            .state
-            .doc
-            .get_entry(text_id)
-            .expect("text node exists");
-        let Node::Text(t) = &entry.node else {
-            panic!("t1 must be Text")
-        };
-        assert!(
-            t.text.iter_visible_entries().any(|(_, c)| c == 'x'),
-            "remote insert applied"
-        );
+        let view = editor.state().view();
+        let full_text = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
+        assert!(full_text.contains('x'), "remote insert applied");
     }
 
     #[test]
     fn multiple_remote_messages_processed_in_single_tick() {
-        use editor_crdt::TextOp;
-
-        let (plain, text_id) = plain_doc_with_one_text();
-        let (state_a, state_b) = bootstrap_two_replicas(plain);
-
-        let baseline1: HashSet<_> = state_a.graph.current_heads().copied().collect();
-        let (state_a, _) = state_a
-            .apply(DocOp::Text {
-                node_id: text_id,
-                op: TextOp::InsertChar {
-                    after: None,
-                    ch: 'x',
-                },
-            })
-            .unwrap();
-        let state_a = State {
-            graph: state_a.graph.commit(),
-            ..state_a
+        let (state_a, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
-        let cs1 = state_a
-            .local_changesets_since(&baseline1)
-            .unwrap()
-            .remove(0);
+        let css_a = state_a.graph().changesets_as_vec();
+        let state_b = State::from_changesets(css_a, state_a.selection).unwrap();
 
-        let baseline2: HashSet<_> = state_a.graph.current_heads().copied().collect();
-        let (state_a, _) = state_a
-            .apply(DocOp::Text {
-                node_id: text_id,
-                op: TextOp::InsertChar {
-                    after: None,
-                    ch: 'y',
-                },
-            })
-            .unwrap();
-        let state_a = State {
-            graph: state_a.graph.commit(),
-            ..state_a
-        };
-        let cs2 = state_a
-            .local_changesets_since(&baseline2)
-            .unwrap()
-            .remove(0);
-
-        let baseline3: HashSet<_> = state_a.graph.current_heads().copied().collect();
-        let (state_a, _) = state_a
-            .apply(DocOp::Text {
-                node_id: text_id,
-                op: TextOp::InsertChar {
-                    after: None,
-                    ch: 'z',
-                },
-            })
-            .unwrap();
-        let state_a = State {
-            graph: state_a.graph.commit(),
-            ..state_a
-        };
-        let cs3 = state_a
-            .local_changesets_since(&baseline3)
-            .unwrap()
-            .remove(0);
+        // Three sequential inserts at the start of the text (seq pos 1), each
+        // committed separately so they arrive as three distinct changesets.
+        let mut css = remote_changes(
+            &state_a,
+            vec![
+                EditOp::Seq(ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Char('x'),
+                }),
+                EditOp::Seq(ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Char('y'),
+                }),
+                EditOp::Seq(ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Char('z'),
+                }),
+            ],
+        );
+        let cs3 = css.remove(2);
+        let cs2 = css.remove(1);
+        let cs1 = css.remove(0);
 
         let mut editor = Editor::new_test(state_b);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         editor.receive_remote_changeset(cs1);
         editor.receive_remote_changeset(cs2);
         editor.receive_remote_changeset(cs3);
         let events = editor.tick().unwrap();
 
-        let entry = editor
-            .state
-            .doc
-            .get_entry(text_id)
-            .expect("text node exists");
-        let Node::Text(t) = &entry.node else {
-            panic!("t1 must be Text")
-        };
-        let text_str = t.text.to_string();
+        let view = editor.state().view();
+        let text_str = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
         assert!(text_str.contains('x'), "op1 ('x') applied");
         assert!(text_str.contains('y'), "op2 ('y') applied");
         assert!(text_str.contains('z'), "op3 ('z') applied");
@@ -2486,64 +2348,26 @@ mod tests {
 
     #[test]
     fn remote_children_remove_invalidates_and_fires_events() {
-        use editor_crdt::OrMapOp;
-
-        let (plain, _para1_id, para2_id, text2_id) = plain_doc_with_two_paragraphs();
-        let (state_a, state_b) = bootstrap_two_replicas(plain);
-
-        let baseline: HashSet<_> = state_a.graph.current_heads().copied().collect();
-
-        // Read all dot lookups up front so the batch closure below doesn't need to reborrow state_a.
-        let para2_dot = {
-            let root_entry = state_a.doc.get_entry(NodeId::ROOT).expect("root exists");
-            root_entry
-                .children
-                .iter_with_dot()
-                .find(|(_, v)| **v == para2_id)
-                .map(|(d, _)| d)
-                .expect("para2 must be in root's children")
+        let (state_a, _p1) = state! {
+            doc { root { p1: paragraph { text("a") } paragraph {} } }
+            selection: (p1, 0)
         };
-        let text2_presence_dots: Vec<_> = state_a.doc.nodes_tags_for(&text2_id).copied().collect();
-        let para2_presence_dots: Vec<_> = state_a.doc.nodes_tags_for(&para2_id).copied().collect();
+        let css_a = state_a.graph().changesets_as_vec();
+        let state_b = State::from_changesets(css_a, state_a.selection).unwrap();
 
-        let (state_a, _ops) = state_a
-            .batch_with_ops::<_, editor_state::StateError>(|b| {
-                b.apply(DocOp::Presence {
-                    node_id: text2_id,
-                    op: OrMapOp::Unset {
-                        observed: text2_presence_dots.clone(),
-                    },
-                })?;
-                b.apply(DocOp::Presence {
-                    node_id: para2_id,
-                    op: OrMapOp::Unset {
-                        observed: para2_presence_dots.clone(),
-                    },
-                })?;
-                b.apply(DocOp::Children {
-                    node_id: NodeId::ROOT,
-                    op: RgaOp::Remove {
-                        observed: para2_dot,
-                    },
-                })?;
-                Ok(())
-            })
-            .unwrap();
-        let state_a = State {
-            graph: state_a.graph.commit(),
-            ..state_a
-        };
-        let cs = state_a.local_changesets_since(&baseline).unwrap().remove(0);
+        // Delete the second (empty) paragraph block; seq pos 2
+        // ([para0, 'a', para1]).
+        let cs = remote_change(&state_a, vec![EditOp::Seq(ListOp::Del { pos: 2, len: 1 })]);
 
         // Pre-layout so both paragraphs are cached; otherwise sibling-shift invalidation
         // has nothing to evict and dirty stays false.
         let mut editor = Editor::new_test(state_b);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         editor.receive_remote_changeset(cs);
         let events = editor.tick().unwrap();
 
-        // Multi-op changesets must still emit a single pair of events — covers dedup
+        // The remote changeset must still emit a single pair of events — covers dedup
         // along the actual remote-receive path, not just the push_event helper.
         let render_count = events
             .iter()
@@ -2581,29 +2405,25 @@ mod tests {
             );
         }
 
-        let root_after = editor
-            .state
-            .doc
-            .get_entry(NodeId::ROOT)
-            .expect("root exists");
-        let still_present = root_after.children.iter().any(|&c| c == para2_id);
-        assert!(
-            !still_present,
-            "para2 must no longer be a live child of root after removal"
+        let view = editor.state().view();
+        let block_count = view.root().expect("root exists").child_blocks().count();
+        assert_eq!(
+            block_count, 1,
+            "second paragraph must no longer be a live child of root after removal"
         );
     }
 
     #[test]
     fn editor_interactive_hit_test_delegates_to_view() {
         use editor_macros::state;
-        let (initial, f1, ft1, ..) = state! {
+        let (initial, f1, ft1) = state! {
             doc { root {
                 f1: fold {
-                    ft1: fold_title { t1: text("Title") }
+                    ft1: fold_title { text("Title") }
                     fold_content { paragraph { text("Body") } }
                 }
             } }
-            selection: (t1, 0)
+            selection: (ft1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2625,9 +2445,9 @@ mod tests {
 
     #[test]
     fn editor_selection_endpoints_delegates_to_view() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 1) -> (t, 8)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 1) -> (p1, 8)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2644,9 +2464,9 @@ mod tests {
 
     #[test]
     fn editor_selection_endpoints_collapsed_is_none() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2657,20 +2477,21 @@ mod tests {
 
     #[test]
     fn editor_selection_hit_test_inside_rect() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 0) -> (t, 5)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
             event: crate::message::SystemEvent::Initialize,
         });
 
+        let view = editor.state.view();
         let resolved = editor
             .state
             .selection
             .expect("selection exists in test")
-            .resolve(&editor.state.doc)
+            .resolve(&view)
             .unwrap();
         let rect = editor.view().selection_rects(&resolved)[0].rect;
         let probe_x = rect.x + rect.width * 0.5;
@@ -2680,9 +2501,9 @@ mod tests {
 
     #[test]
     fn editor_selection_hit_test_collapsed_is_false() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2707,9 +2528,12 @@ mod tests {
             selection: (c00, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        editor.state.selection =
-            Some(editor_state::cell_rect_selection(&editor.state.doc, c00, c10).unwrap());
+        editor.view.layout(&editor.state);
+        let cell_sel = {
+            let view = editor.state.view();
+            editor_state::cell_rect_selection(c00, c10, &view).unwrap()
+        };
+        editor.state.selection = Some(cell_sel);
 
         let center = |editor: &Editor, cell| {
             let rect = editor.view.node_box_rects(&[cell])[0].rect;
@@ -2728,9 +2552,9 @@ mod tests {
 
     #[test]
     fn editor_cursor_hit_test_matches_current_collapsed_position() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 2)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2750,9 +2574,9 @@ mod tests {
 
     #[test]
     fn editor_cursor_hit_test_rejects_different_position() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2772,9 +2596,9 @@ mod tests {
 
     #[test]
     fn editor_cursor_hit_test_rejects_range_selection() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0) -> (t, 2)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2786,9 +2610,9 @@ mod tests {
 
     #[test]
     fn cursor_metrics_at_span_boundary_uses_input_font_size() {
-        let (initial, _t0, t1) = state! {
-            doc { root { paragraph { t0: text("a") t1: text("a") [font_size(2400)] } } }
-            selection: (t1, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("a") text("a") [font_size(2400)] } } }
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2797,16 +2621,16 @@ mod tests {
 
         let at_start = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t1, 0))
-            .expect("cursor metrics at t1 start");
+            .cursor_metrics(&editor.state, &Position::new(p1, 1))
+            .expect("cursor metrics at p1 offset 1");
         let at_end = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t1, 1))
-            .expect("cursor metrics at t1 end");
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
+            .expect("cursor metrics at p1 offset 2");
 
         assert!(
             at_start.caret.height < at_end.caret.height,
-            "offset 0 (입력은 이전 span 폰트) caret이 offset 1 (24pt) caret보다 작아야 함: \
+            "offset 1 (입력은 이전 span 폰트) caret이 offset 2 (24pt) caret보다 작아야 함: \
              start={}, end={}",
             at_start.caret.height,
             at_end.caret.height,
@@ -2815,9 +2639,9 @@ mod tests {
 
     #[test]
     fn dnd_over_text_sets_drop_indicator_and_invalidates_render() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2825,7 +2649,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2853,9 +2677,9 @@ mod tests {
 
     #[test]
     fn dnd_over_without_active_session_does_not_set_drop_indicator() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2863,7 +2687,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2886,9 +2710,9 @@ mod tests {
 
     #[test]
     fn dnd_leave_clears_drop_indicator_and_invalidates_render() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2896,7 +2720,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
             .expect("cursor metrics")
             .caret;
         editor.apply(Message::Dnd {
@@ -2925,9 +2749,9 @@ mod tests {
 
     #[test]
     fn dnd_leave_preserves_internal_drag_session_while_clearing_drop_indicator() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0) -> (t, 2)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 2)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2935,7 +2759,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
         editor.apply(Message::Dnd {
@@ -2964,9 +2788,9 @@ mod tests {
 
     #[test]
     fn internal_dnd_over_inside_source_selection_rejects_drop_indicator() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 1) -> (t, 4)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -2974,7 +2798,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 2))
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -2995,10 +2819,10 @@ mod tests {
 
     #[test]
     fn internal_dnd_page_break_source_rejects_nested_inline_drop_indicator() {
-        let (initial, _p1, t2) = state! {
+        let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
-                blockquote { paragraph { t2: text("inside") } }
+                blockquote { p2: paragraph { text("inside") } }
                 paragraph {}
             } }
             selection: (p1, 1) -> (p1, 2)
@@ -3009,7 +2833,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t2, 2))
+            .cursor_metrics(&editor.state, &Position::new(p2, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -3030,10 +2854,10 @@ mod tests {
 
     #[test]
     fn internal_dnd_page_break_source_allows_root_inline_drop_indicator() {
-        let (initial, _p1, t2) = state! {
+        let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
-                paragraph { t2: text("root") }
+                p2: paragraph { text("root") }
                 paragraph {}
             } }
             selection: (p1, 1) -> (p1, 2)
@@ -3044,7 +2868,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t2, 2))
+            .cursor_metrics(&editor.state, &Position::new(p2, 2))
             .expect("cursor metrics")
             .caret;
 
@@ -3065,9 +2889,9 @@ mod tests {
 
     #[test]
     fn drop_text_inserts_at_drop_target_not_current_selection() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -3075,7 +2899,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -3105,18 +2929,18 @@ mod tests {
             },
         });
 
-        let (expected, ..) = state! {
-            doc { root { paragraph { t: text("hello!") } } }
-            selection: (t, 5) -> (t, 6)
+        let (expected, _p1_e) = state! {
+            doc { root { p1: paragraph { text("hello!") } } }
+            selection: (p1, 5) -> (p1, 6)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
     fn drop_text_without_external_enter_is_noop() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial.clone());
         editor.apply(Message::System {
@@ -3124,7 +2948,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -3146,9 +2970,9 @@ mod tests {
 
     #[test]
     fn drop_text_without_drop_target_is_noop() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial.clone());
         editor.apply(Message::System {
@@ -3156,7 +2980,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -3183,9 +3007,9 @@ mod tests {
 
     #[test]
     fn drop_text_falls_back_to_plain_text_when_html_is_empty() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -3193,7 +3017,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -3223,18 +3047,18 @@ mod tests {
             },
         });
 
-        let (expected, ..) = state! {
-            doc { root { paragraph { t: text("helloplain") } } }
-            selection: (t, 5) -> (t, 10)
+        let (expected, _p1_e) = state! {
+            doc { root { p1: paragraph { text("helloplain") } } }
+            selection: (p1, 5) -> (p1, 10)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
     fn drop_files_inserts_placeholders_at_drop_target_not_current_selection() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -3242,7 +3066,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -3272,37 +3096,31 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.node(editor_model::NodeId::ROOT).unwrap();
-        let children: Vec<_> = root.children().map(|c| c.node().clone()).collect();
-        assert!(matches!(
-            children.first(),
-            Some(editor_model::Node::Paragraph(_))
-        ));
-        assert!(matches!(
-            children.get(1),
-            Some(editor_model::Node::Image(_))
-        ));
-        assert!(matches!(children.get(2), Some(editor_model::Node::File(_))));
+        let view = editor.state().view();
+        let root = view.node(Dot::ROOT).unwrap();
+        let kinds: Vec<NodeType> = root
+            .children()
+            .map(|c| match c {
+                ChildView::Block(b) => b.node_type(),
+                ChildView::Leaf(l) => l.node_type(),
+            })
+            .collect();
+        assert!(matches!(kinds.first(), Some(NodeType::Paragraph)));
+        assert!(matches!(kinds.get(1), Some(NodeType::Image)));
+        assert!(matches!(kinds.get(2), Some(NodeType::File)));
         assert!(
-            matches!(children.last(), Some(editor_model::Node::Paragraph(_))),
+            matches!(kinds.last(), Some(NodeType::Paragraph)),
             "root schema should keep a trailing paragraph after inserted file blocks",
         );
-        let first_text = root
-            .children()
-            .next()
-            .and_then(|p| p.first_child())
-            .and_then(|n| match n.node() {
-                editor_model::Node::Text(t) => Some(t.text.to_string()),
-                _ => None,
-            });
+        let first_text = root.child_blocks().next().map(|p| p.inline_text());
         assert_eq!(first_text.as_deref(), Some("hello"));
     }
 
     #[test]
     fn drop_internal_selection_without_start_is_noop() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 0) -> (t, 5)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let mut editor = Editor::new_test(initial.clone());
         editor.apply(Message::System {
@@ -3310,7 +3128,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 11))
+            .cursor_metrics(&editor.state, &Position::new(p1, 11))
             .expect("cursor metrics")
             .caret;
 
@@ -3337,10 +3155,10 @@ mod tests {
 
     #[test]
     fn drop_internal_image_into_text_middle_selects_inserted_range() {
-        let (initial, root, t) = state! {
+        let (initial, root, p1) = state! {
             doc { root: root {
                 image
-                paragraph { t: text("hello") }
+                p1: paragraph { text("hello") }
             } }
             selection: (root, 0, >) -> (root, 1, <)
         };
@@ -3353,7 +3171,7 @@ mod tests {
             panic!("internal dnd should start from selected image");
         };
         *drop_target = Some(editor_view::DropTarget {
-            position: Position::new(t, 3),
+            position: Position::new(p1, 3),
             indicator: editor_view::DropIndicator::Inline {
                 page_idx: 0,
                 x: 0.0,
@@ -3372,40 +3190,34 @@ mod tests {
             },
         });
 
-        let root_node = editor.state().doc.node(root).expect("root exists");
-        let children: Vec<_> = root_node.children().map(|c| c.node()).collect();
+        let view = editor.state().view();
+        let root_node = view.node(root).expect("root exists");
+        let kinds: Vec<NodeType> = root_node
+            .children()
+            .map(|c| match c {
+                ChildView::Block(b) => b.node_type(),
+                ChildView::Leaf(l) => l.node_type(),
+            })
+            .collect();
         assert!(matches!(
-            children.as_slice(),
-            [Node::Paragraph(_), Node::Image(_), Node::Paragraph(_)]
+            kinds.as_slice(),
+            [NodeType::Paragraph, NodeType::Image, NodeType::Paragraph]
         ));
-        let first_text = root_node
-            .children()
-            .next()
-            .and_then(|p| p.first_child())
-            .and_then(|n| match n.node() {
-                Node::Text(t) => Some(t.text.to_string()),
-                _ => None,
-            });
-        let last_text = root_node
-            .children()
-            .nth(2)
-            .and_then(|p| p.first_child())
-            .and_then(|n| match n.node() {
-                Node::Text(t) => Some(t.text.to_string()),
-                _ => None,
-            });
+        let mut blocks = root_node.child_blocks();
+        let first_text = blocks.next().map(|p| p.inline_text());
+        let last_text = blocks.next().map(|p| p.inline_text());
         assert_eq!(first_text.as_deref(), Some("hel"));
         assert_eq!(last_text.as_deref(), Some("lo"));
         assert_eq!(
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: root,
+                    node: root,
                     offset: 1,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: root,
+                    node: root,
                     offset: 2,
                     affinity: Affinity::Upstream,
                 },
@@ -3427,7 +3239,7 @@ mod tests {
         editor.dnd = DndState::ExternalDnd {
             payload: ExternalDndPayloadKind::Text,
             drop_target: Some(editor_view::DropTarget {
-                position: Position::new(NodeId::ROOT, 1),
+                position: Position::new(Dot::ROOT, 1),
                 indicator: editor_view::DropIndicator::Block {
                     page_idx: 0,
                     x: 0.0,
@@ -3450,22 +3262,25 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.node(NodeId::ROOT).unwrap();
-        let children: Vec<_> = root.children().map(|c| c.node()).collect();
+        let view = editor.state().view();
+        let root = view.node(Dot::ROOT).unwrap();
+        let kinds: Vec<NodeType> = root
+            .children()
+            .map(|c| match c {
+                ChildView::Block(b) => b.node_type(),
+                ChildView::Leaf(l) => l.node_type(),
+            })
+            .collect();
         assert!(matches!(
-            children.as_slice(),
+            kinds.as_slice(),
             [
-                Node::Paragraph(_),
-                Node::Paragraph(_),
-                Node::Image(_),
-                Node::Paragraph(_),
+                NodeType::Paragraph,
+                NodeType::Paragraph,
+                NodeType::Image,
+                NodeType::Paragraph,
             ]
         ));
-        let inserted = root.children().nth(1).unwrap();
-        let inserted_text = inserted.first_child().and_then(|n| match n.node() {
-            Node::Text(t) => Some(t.text.to_string()),
-            _ => None,
-        });
+        let inserted_text = root.child_blocks().nth(1).map(|p| p.inline_text());
         assert_eq!(inserted_text.as_deref(), Some("dropped"));
     }
 
@@ -3483,7 +3298,7 @@ mod tests {
         editor.dnd = DndState::ExternalDnd {
             payload: ExternalDndPayloadKind::Text,
             drop_target: Some(editor_view::DropTarget {
-                position: Position::new(NodeId::ROOT, 1),
+                position: Position::new(Dot::ROOT, 1),
                 indicator: editor_view::DropIndicator::Block {
                     page_idx: 0,
                     x: 0.0,
@@ -3506,30 +3321,33 @@ mod tests {
             },
         });
 
-        let root = editor.state().doc.node(NodeId::ROOT).unwrap();
-        let children: Vec<_> = root.children().map(|c| c.node()).collect();
+        let view = editor.state().view();
+        let root = view.node(Dot::ROOT).unwrap();
+        let kinds: Vec<NodeType> = root
+            .children()
+            .map(|c| match c {
+                ChildView::Block(b) => b.node_type(),
+                ChildView::Leaf(l) => l.node_type(),
+            })
+            .collect();
         assert!(matches!(
-            children.as_slice(),
+            kinds.as_slice(),
             [
-                Node::Paragraph(_),
-                Node::Paragraph(_),
-                Node::File(_),
-                Node::Paragraph(_),
+                NodeType::Paragraph,
+                NodeType::Paragraph,
+                NodeType::File,
+                NodeType::Paragraph,
             ]
         ));
-        let inserted = root.children().nth(1).unwrap();
-        let inserted_text = inserted.first_child().and_then(|n| match n.node() {
-            Node::Text(t) => Some(t.text.to_string()),
-            _ => None,
-        });
+        let inserted_text = root.child_blocks().nth(1).map(|p| p.inline_text());
         assert_eq!(inserted_text.as_deref(), Some("dropped"));
     }
 
     #[test]
     fn internal_drop_move_remaps_target_after_deleting_source() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 0) -> (t, 5)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -3537,7 +3355,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 11))
+            .cursor_metrics(&editor.state, &Position::new(p1, 11))
             .expect("cursor metrics")
             .caret;
 
@@ -3562,18 +3380,18 @@ mod tests {
             },
         });
 
-        let (expected, ..) = state! {
-            doc { root { paragraph { t: text(" worldhello") } } }
-            selection: (t, 6) -> (t, 11)
+        let (expected, _p1_e) = state! {
+            doc { root { p1: paragraph { text(" worldhello") } } }
+            selection: (p1, 6) -> (p1, 11)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
     fn internal_drop_copy_preserves_source_selection_content() {
-        let (initial, t) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 0) -> (t, 5)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let mut editor = Editor::new_test(initial);
         editor.apply(Message::System {
@@ -3581,7 +3399,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(t, 11))
+            .cursor_metrics(&editor.state, &Position::new(p1, 11))
             .expect("cursor metrics")
             .caret;
 
@@ -3612,9 +3430,9 @@ mod tests {
             },
         });
 
-        let (expected, ..) = state! {
-            doc { root { paragraph { t: text("hello worldhello") } } }
-            selection: (t, 11) -> (t, 16)
+        let (expected, _p1_e) = state! {
+            doc { root { p1: paragraph { text("hello worldhello") } } }
+            selection: (p1, 11) -> (p1, 16)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
@@ -3626,15 +3444,15 @@ mod tests {
             selection: (root, 0, <)
         };
         let gp = super::normalize_gap_phantom(&state).expect("leading image is a gap");
-        assert_eq!(gp.parent, editor_model::NodeId::ROOT);
+        assert_eq!(gp.parent, Dot::ROOT);
         assert_eq!(gp.index, 0);
     }
 
     #[test]
     fn normalize_gap_phantom_none_for_normal_caret() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t: text("hi") } } }
-            selection: (t, 1)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 1)
         };
         assert!(super::normalize_gap_phantom(&state).is_none());
     }
@@ -3652,21 +3470,21 @@ mod tests {
             selection: (root, 1)
         };
         let gp = super::normalize_gap_phantom(&state).expect("between two folds");
-        assert_eq!(gp.parent, editor_model::NodeId::ROOT);
+        assert_eq!(gp.parent, Dot::ROOT);
         assert_eq!(gp.index, 1);
     }
 
     #[test]
     fn gap_cursor_yields_caret_then_recovers() {
-        let (state, _, t) = state! {
-            doc { root: root { image paragraph { t: text("b") } } }
+        let (state, _root, p1) = state! {
+            doc { root: root { image p1: paragraph { text("b") } } }
             selection: (root, 0, <)
         };
         let mut editor = Editor::new_test(state);
         // Prime the measurer cache before the gap appears; reconcile needs a
         // populated layout to invalidate when gap_phantom flips on. layout()
         // itself clears gap_phantom, so it must run before the gap tick.
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         let _ = editor.tick().unwrap();
         let st = editor.state();
         assert!(
@@ -3679,7 +3497,7 @@ mod tests {
 
         editor.enqueue(Message::Selection {
             op: SelectionOp::Set {
-                selection: Selection::collapsed(Position::new(t, 1)),
+                selection: Selection::collapsed(Position::new(p1, 1)),
             },
         });
         let _ = editor.tick().unwrap();
@@ -3695,15 +3513,15 @@ mod tests {
 
     #[test]
     fn no_op_messages_when_selection_is_none() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t: text("Hello") } } }
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
             selection: none
         };
         let mut editor = Editor::new_test(initial);
 
-        let pre_doc = editor.state().doc.clone();
+        let pre_state = editor.state().clone();
         let pre_selection = editor.state().selection;
-        let pre_can_undo = editor.history.can_undo();
+        let pre_can_undo = editor.undo_history.can_undo();
 
         editor.enqueue(Message::Key {
             event: KeyEvent {
@@ -3724,18 +3542,14 @@ mod tests {
         });
         editor.tick().unwrap();
 
-        assert_eq!(
-            editor.state().doc,
-            pre_doc,
-            "doc must not change when selection is None"
-        );
+        editor_state::assert_doc_eq!(editor.state(), &pre_state);
         assert_eq!(
             editor.state().selection,
             pre_selection,
             "selection must stay None"
         );
         assert_eq!(
-            editor.history.can_undo(),
+            editor.undo_history.can_undo(),
             pre_can_undo,
             "no history entries pushed"
         );
@@ -3743,9 +3557,9 @@ mod tests {
 
     #[test]
     fn can_returns_true_for_insertion_with_selection() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         let probed = editor.can(Message::Insertion {
@@ -3756,9 +3570,9 @@ mod tests {
 
     #[test]
     fn can_returns_false_for_undo_with_empty_history() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
         let probed = editor.can(Message::History {
@@ -3769,12 +3583,12 @@ mod tests {
 
     #[test]
     fn can_returns_false_for_set_same_selection() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
-        let same = editor_state::Selection::collapsed(editor_state::Position::new(t1, 2));
+        let same = editor_state::Selection::collapsed(editor_state::Position::new(p1, 2));
         let probed = editor.can(Message::Selection {
             op: SelectionOp::Set { selection: same },
         });
@@ -3783,17 +3597,17 @@ mod tests {
 
     #[test]
     fn can_does_not_mutate_state_for_insertion() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        let before_doc = editor.state().doc.clone();
+        let before_state = editor.state().clone();
         let before_sel = editor.state().selection;
         let _ = editor.can(Message::Insertion {
             op: InsertionOp::Text { text: "x".into() },
         });
-        assert_eq!(editor.state().doc, before_doc);
+        editor_state::assert_doc_eq!(editor.state(), &before_state);
         assert_eq!(editor.state().selection, before_sel);
     }
 
@@ -3815,16 +3629,20 @@ mod tests {
             selection: (c00, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
-        let sel = editor_state::cell_rect_selection(&editor.state.doc, c00, c11).unwrap();
+        let sel = {
+            let view = editor.state.view();
+            editor_state::cell_rect_selection(c00, c11, &view).unwrap()
+        };
         editor.state.selection = Some(sel);
 
+        let view = editor.state.view();
         let resolved = editor
             .state
             .selection
             .expect("selection set above")
-            .resolve(&editor.state.doc)
+            .resolve(&view)
             .unwrap();
         assert!(
             resolved.as_cell_rect().is_some(),
@@ -3835,6 +3653,7 @@ mod tests {
             .as_cell_rect()
             .unwrap()
             .cells()
+            .into_iter()
             .map(|c| c.id())
             .collect();
         let expected = editor.view.node_box_rects(&ids);
@@ -3850,15 +3669,15 @@ mod tests {
         );
     }
 
-    fn fold_editor_with_unit_selection() -> (Editor, NodeId, NodeId) {
-        let (initial, root, fold_node, _para_text) = state! {
+    fn fold_editor_with_unit_selection() -> (Editor, editor_crdt::Dot, editor_crdt::Dot) {
+        let (initial, root, fold_node, _p1) = state! {
             doc {
                 root: root {
                     fold_node: fold {
                         fold_title { text("title") }
                         fold_content { paragraph { text("content") } }
                     }
-                    paragraph { _para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (root, 0) -> (root, 1)
@@ -3873,14 +3692,14 @@ mod tests {
     // drop_target_at이 fold 문서에서 유효한 위치를 반환하는지 확인
     #[test]
     fn fold_dnd_drop_target_at_returns_position_below_paragraph() {
-        let (initial, r, _fnode, para_text) = state! {
+        let (initial, r, _fnode, p1) = state! {
             doc {
                 r: root {
                     _fnode: fold {
                         fold_title { text("title") }
                         fold_content { paragraph { text("content") } }
                     }
-                    paragraph { para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (r, 0) -> (r, 1)
@@ -3893,13 +3712,13 @@ mod tests {
         let page_bottom = editor.view().pages()[0].size.height;
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(para_text, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
         let target = editor
             .view
-            .drop_target_at(&editor.state.doc, 0, caret.x, page_bottom - 1.0);
+            .drop_target_at(&editor.state, 0, caret.x, page_bottom - 1.0);
 
         assert!(
             target.is_some(),
@@ -3910,7 +3729,7 @@ mod tests {
         if let Some(t) = target {
             assert_eq!(
                 t.position,
-                Position::new(NodeId::ROOT, 2),
+                Position::new(Dot::ROOT, 2),
                 "drop target position must be (root, 2) - after paragraph"
             );
         }
@@ -3935,14 +3754,14 @@ mod tests {
     fn fold_dnd_debug_drop_internal_selection_steps() {
         use editor_clipboard::Slice;
         use editor_commands::{self as commands};
-        let (initial, _root, _fold_node, _para_text) = state! {
+        let (initial, _root, _fold_node, _p1) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
                         fold_title { text("t") }
                         fold_content { paragraph { text("c") } }
                     }
-                    paragraph { _para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (root, 0) -> (root, 1)
@@ -3955,10 +3774,14 @@ mod tests {
             op: DndOp::StartInternalSelection,
         });
 
-        let DndState::InternalDnd { ref source, .. } = editor.dnd else {
-            panic!("expected InternalDnd");
+        let sel = {
+            let DndState::InternalDnd { ref source, .. } = editor.dnd else {
+                panic!("expected InternalDnd");
+            };
+            let view = editor.state.view();
+            let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+            source.resolve(&ctx).expect("source restores")
         };
-        let sel = source.restore(&editor.state.doc);
 
         // Extract slice
         let mut state = editor.state().clone();
@@ -3994,10 +3817,10 @@ mod tests {
         }
 
         // Step 1: set_selection + delete_selection in separate transact
-        let stable_target = StableSelection::capture(
-            &Selection::collapsed(Position::new(NodeId::ROOT, 2)),
-            &editor.state.doc,
-        );
+        let stable_target = {
+            let view = editor.state.view();
+            StableSelection::capture(&Selection::collapsed(Position::new(Dot::ROOT, 2)), &view)
+        };
         let r1 = editor.transact(|tr| {
             commands::set_selection(tr, sel).map_err(crate::error::EditorError::from)?;
             commands::delete_selection(tr).map_err(crate::error::EditorError::from)?;
@@ -4009,10 +3832,14 @@ mod tests {
         }
 
         // Step 2: insert_slice_at in separate transact
-        let target = stable_target.restore(&editor.state.doc).head;
+        let target = {
+            let view = editor.state.view();
+            let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+            stable_target.resolve(&ctx).expect("target restores").head
+        };
         eprintln!(
             "target position after deletion: node={:?} offset={}",
-            target.node_id, target.offset
+            target.node, target.offset
         );
         let r2 = editor.transact(|tr| {
             commands::insert_slice_at(tr, target, slice.clone())
@@ -4028,14 +3855,14 @@ mod tests {
     // can_apply_drop이 fold → after-paragraph 이동에 대해 TRUE 반환하는지 검증
     #[test]
     fn fold_dnd_can_apply_drop_at_root_2_returns_true() {
-        let (initial, _root, _fold_node, _para_text) = state! {
+        let (initial, _root, _fold_node, _p1) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
                         fold_title { text("t") }
                         fold_content { paragraph { text("c") } }
                     }
-                    paragraph { _para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (root, 0) -> (root, 1)
@@ -4049,12 +3876,17 @@ mod tests {
         });
 
         // probe can_apply_drop at (root, 2)
-        let target_pos = Position::new(NodeId::ROOT, 2);
+        let target_pos = Position::new(Dot::ROOT, 2);
         let result = editor.probe(|editor| {
-            let DndState::InternalDnd { ref source, .. } = editor.dnd.clone() else {
+            let dnd = editor.dnd.clone();
+            let DndState::InternalDnd { source, .. } = dnd else {
                 panic!("expected InternalDnd state");
             };
-            let sel = source.restore(&editor.state.doc);
+            let sel = {
+                let view = editor.state.view();
+                let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+                source.resolve(&ctx).expect("source restores")
+            };
             assert!(
                 !sel.is_collapsed(),
                 "source selection must not be collapsed"
@@ -4079,14 +3911,14 @@ mod tests {
     // fold 선택 드래그 중 fold 아래 paragraph 하단에 hover → indicator가 나타나야 한다
     #[test]
     fn fold_dnd_over_below_paragraph_shows_drop_indicator() {
-        let (initial, _root, _fold_node, para_text) = state! {
+        let (initial, _root, _fold_node, p1) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
                         fold_title { text("title") }
                         fold_content { paragraph { text("content") } }
                     }
-                    paragraph { para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (root, 0) -> (root, 1)
@@ -4097,7 +3929,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(para_text, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics for paragraph after fold")
             .caret;
 
@@ -4123,14 +3955,14 @@ mod tests {
     // fold 드롭 → fold가 paragraph 다음으로 이동해야 한다
     #[test]
     fn fold_dnd_drop_moves_fold_after_paragraph() {
-        let (initial, _root, _fold_node, para_text) = state! {
+        let (initial, _root, _fold_node, p1) = state! {
             doc {
                 root: root {
                     fold_node: fold {
                         fold_title { text("title") }
                         fold_content { paragraph { text("content") } }
                     }
-                    paragraph { para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (root, 0) -> (root, 1)
@@ -4141,7 +3973,7 @@ mod tests {
         });
         let caret = editor
             .view()
-            .cursor_metrics(&editor.state, &Position::new(para_text, 5))
+            .cursor_metrics(&editor.state, &Position::new(p1, 5))
             .expect("cursor metrics")
             .caret;
 
@@ -4167,8 +3999,8 @@ mod tests {
             },
         });
 
-        let doc = &editor.state().doc;
-        let root_children: Vec<_> = doc.node(NodeId::ROOT).unwrap().children().collect();
+        let view = editor.state().view();
+        let root_children: Vec<_> = view.node(Dot::ROOT).unwrap().child_blocks().collect();
         // ROOT schema requires a trailing Paragraph, so fulfill adds one after the inserted fold.
         // [paragraph("after"), fold, paragraph("")] = 3 children.
         assert!(
@@ -4188,14 +4020,14 @@ mod tests {
     // fold 위에 hover → fold 내부이므로 indicator가 나타나면 안 된다
     #[test]
     fn fold_dnd_over_inside_fold_shows_no_indicator() {
-        let (initial, _root, _fold_node, _para_text) = state! {
+        let (initial, _root, _fold_node, _p1) = state! {
             doc {
                 root: root {
                     _fold_node: fold {
                         fold_title { text("title") }
                         fold_content { paragraph { text("content") } }
                     }
-                    paragraph { _para_text: text("after") }
+                    p1: paragraph { text("after") }
                 }
             }
             selection: (root, 0) -> (root, 1)
@@ -4226,63 +4058,52 @@ mod tests {
 
     #[test]
     fn insert_template_fragment_replaces_empty_doc() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
-        let (template, ..) = state! {
-            doc { root { paragraph { a: text("Title") } paragraph { b: text("Body") } } }
-            selection: (a, 0)
+        let (template, _p2, _p3) = state! {
+            doc { root { p2: paragraph { text("Title") } p3: paragraph { text("Body") } } }
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor
-            .insert_template_fragment(template.doc.to_plain())
+            .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
 
-        let root = editor.state().doc.root().unwrap();
-        let texts: Vec<String> = root
-            .children()
-            .map(|p| {
-                let mut s = String::new();
-                for c in p.children() {
-                    if let Node::Text(t) = c.node() {
-                        s.push_str(&t.text.to_string());
-                    }
-                }
-                s
-            })
+        let view = editor.state().view();
+        let texts: Vec<String> = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|p| p.inline_text())
             .collect();
         assert_eq!(texts, vec!["Title".to_string(), "Body".to_string()]);
     }
 
     #[test]
     fn insert_template_fragment_hides_placeholder() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
-        let (template, ..) = state! {
-            doc { root { paragraph { a: text("X") } } }
-            selection: (a, 0)
+        let (template, _p2) = state! {
+            doc { root { p2: paragraph { text("X") } } }
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor
-            .insert_template_fragment(template.doc.to_plain())
+            .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
-        assert!(
-            editor
-                .view()
-                .placeholder_metrics(&editor.state().doc)
-                .is_none()
-        );
+        assert!(editor.view().placeholder_metrics(editor.state()).is_none());
     }
 
     #[test]
     fn insert_template_fragment_preserves_named_styles() {
         use editor_transaction::Transaction;
-        let (tpl_initial, p1, _t) = state! {
-            doc { root { p1: paragraph { t1: text("Styled") } } }
-            selection: (t1, 0)
+        let (tpl_initial, p1) = state! {
+            doc { root { p1: paragraph { text("Styled") } } }
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&tpl_initial);
         tr.set_style(
@@ -4298,24 +4119,30 @@ mod tests {
         tr.set_node_style(p1, Some("h1".into())).unwrap();
         let (tpl_state, ..) = tr.commit();
 
-        let (initial, ..) = state! {
-            doc { root { paragraph { e: text("") } } }
-            selection: (e, 0)
+        let (initial, _p2) = state! {
+            doc { root { p2: paragraph { text("") } } }
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(initial);
         editor
-            .insert_template_fragment(tpl_state.doc.to_plain())
+            .insert_template_fragment(tpl_state.to_plain())
             .expect("ok");
 
-        let plain = editor.state().doc.to_plain();
         assert!(
-            plain.styles.contains_key("h1"),
+            editor.state().projected.styles().registered("h1"),
             "named style entry must transfer"
         );
-        let para = editor.state().doc.root().unwrap().first_child().unwrap();
-        let entry = plain.nodes.get(&para.id()).unwrap();
+        let para_dot = {
+            let view = editor.state().view();
+            view.root().unwrap().child_blocks().next().unwrap().id()
+        };
         assert_eq!(
-            entry.style.as_deref(),
+            editor
+                .state()
+                .projected
+                .node_styles()
+                .value_of(para_dot)
+                .as_deref(),
             Some("h1"),
             "node style ref must be reapplied"
         );
@@ -4323,31 +4150,42 @@ mod tests {
 
     #[test]
     fn insert_template_fragment_carries_root_base_style() {
-        use editor_macros::doc;
-        use editor_model::NodeId;
-
         // destination root has macro-default root.modifiers populated.
-        let (state, _t0) = state! {
-            doc { root { paragraph { t0: text("orig") } } }
-            selection: (t0, 0)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("orig") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
 
-        let (tdoc, ..) = doc! {
-            styles { base: "기본" [font_size(1600)] }
-            root @base [] { paragraph { text("tpl") } }
+        let (tstate, ..) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { tp: paragraph { text("tpl") } }
+            }
+            selection: (tp, 0)
         };
-        let template = tdoc.to_plain();
+        let template = tstate.to_plain();
 
         editor.insert_template_fragment(template).unwrap();
 
-        let doc = &editor.state().doc;
-        let root = doc.node(NodeId::ROOT).unwrap();
-        assert_eq!(root.entry().style.get().as_deref(), Some("base"));
-        assert!(doc.style_entry("base").is_some());
+        assert_eq!(
+            editor
+                .state()
+                .projected
+                .node_styles()
+                .value_of(Dot::ROOT)
+                .as_deref(),
+            Some("base")
+        );
+        assert!(editor.state().projected.styles().registered("base"));
         // ★ destination's stale root.modifiers must be cleared (no coexistence with base).
         assert_eq!(
-            root.explicit_modifiers().count(),
+            editor
+                .state()
+                .projected
+                .block_modifiers()
+                .modifiers_of(Dot::ROOT)
+                .len(),
             0,
             "stale root modifiers must be cleared"
         );

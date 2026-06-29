@@ -4,23 +4,24 @@ use editor_transaction::Transaction;
 use crate::CommandResult;
 
 pub fn select_all(tr: &mut Transaction) -> CommandResult {
-    let doc = tr.doc();
-    let root = doc.root().expect("root must exist");
-
-    let children_count = root.children().count();
+    let (root_id, children_count) = {
+        let view = tr.view();
+        let root = view.root().expect("root must exist");
+        (root.id(), root.children().count())
+    };
 
     if children_count == 0 {
-        tr.set_selection(Some(Selection::collapsed(Position::new(root.id(), 0))))?;
+        tr.set_selection(Some(Selection::collapsed(Position::new(root_id, 0))))?;
     } else {
         tr.set_selection(Some(Selection::new(
             Position {
-                node_id: root.id(),
+                node: root_id,
                 offset: 0,
                 affinity: Affinity::Downstream,
             },
             Position {
-                node_id: root.id(),
-                offset: root.children().count(),
+                node: root_id,
+                offset: children_count,
                 affinity: Affinity::Upstream,
             },
         )))?;
@@ -46,7 +47,7 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| select_all(&mut tr));
         assert!(actual.selection.is_some());
         let sel = actual.selection.unwrap();
-        assert!(!sel.is_collapsed(), "select_all must produce a range");
+        assert!(sel.anchor != sel.head, "select_all must produce a range");
     }
 
     #[test]
@@ -63,7 +64,7 @@ mod tests {
             Some(Selection::new(
                 Position::new(r, 0),
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },
@@ -91,7 +92,7 @@ mod tests {
         assert_eq!(
             sel.head,
             Position {
-                node_id: r,
+                node: r,
                 offset: 3,
                 affinity: Affinity::Upstream,
             },
@@ -100,6 +101,8 @@ mod tests {
 
     #[test]
     fn select_all_images_only() {
+        // Root content requires a trailing Paragraph, so projection appends a
+        // derived paragraph after the three images → 4 children total.
         let (state, r) = state! {
             doc { r: root { image image image } }
             selection: (r, 0)
@@ -112,8 +115,8 @@ mod tests {
         assert_eq!(
             sel.head,
             Position {
-                node_id: r,
-                offset: 3,
+                node: r,
+                offset: 4,
                 affinity: Affinity::Upstream,
             },
         );
@@ -133,7 +136,7 @@ mod tests {
             Some(Selection::new(
                 Position::new(r, 0),
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },

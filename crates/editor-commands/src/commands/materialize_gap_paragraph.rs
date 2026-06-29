@@ -1,5 +1,7 @@
-use editor_model::{NodeId, NodeType, PlainNode, PlainParagraphNode, Subtree};
-use editor_state::{Affinity, GapCursor, Position, Selection};
+use editor_crdt::Dot;
+use editor_model::{ChildView, NodeType, PlainNode, PlainParagraphNode, Subtree};
+use editor_state::{Affinity, Position, Selection};
+use editor_state::{GapCursor, as_gap_cursor};
 use editor_transaction::Transaction;
 
 use crate::helpers::is_block_container;
@@ -18,35 +20,44 @@ pub fn materialize_gap_paragraph(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let doc = tr.doc();
 
-    let (parent_id, index): (NodeId, usize) =
-        match selection.resolve(&doc).and_then(|rs| rs.as_gap_cursor()) {
+    let (parent_id, index): (Dot, usize) = {
+        let view = tr.state().view();
+        let Some(rs) = selection.resolve(&view) else {
+            return Ok(false);
+        };
+        let (parent, index) = match as_gap_cursor(&rs) {
             None => return Ok(false),
             // Leading-unit gap: caret before the document's first child
             // unit. The slot is index 0 under the document root.
-            Some(GapCursor::LeadingUnit { .. }) => (NodeId::ROOT, 0),
+            Some(GapCursor::LeadingUnit { .. }) => (view.root().unwrap(), 0),
             // Between-monolithic gap: the slot is at `index` under
             // `parent`, between the two adjacent monolithic siblings.
-            Some(GapCursor::BetweenMonolithic { parent, index, .. }) => (parent.id(), index),
+            Some(GapCursor::BetweenMonolithic { parent, index, .. }) => (parent, index),
         };
+        if !is_block_container(&parent) || !parent.spec().content.matches(NodeType::Paragraph) {
+            return Ok(false);
+        }
+        (parent.id(), index)
+    };
 
-    let parent = doc
-        .node(parent_id)
-        .ok_or(CommandError::NodeNotFound(parent_id))?;
-    if !is_block_container(parent.node()) || !parent.spec().content.matches(NodeType::Paragraph) {
-        return Ok(false);
-    }
-
-    let new_para_id = NodeId::new();
-    let subtree = Subtree::leaf(
-        new_para_id,
-        PlainNode::Paragraph(PlainParagraphNode::default()),
-    );
+    let subtree = Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default()));
     tr.insert_subtree(parent_id, index, subtree)?;
 
+    let new_para = {
+        let view = tr.state().view();
+        match view.node(parent_id).and_then(|p| p.child_at(index)) {
+            Some(ChildView::Block(b)) => b.id(),
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "materialized paragraph not found at gap".into(),
+                ));
+            }
+        }
+    };
+
     tr.set_selection(Some(Selection::collapsed(Position {
-        node_id: new_para_id,
+        node: new_para,
         offset: 0,
         affinity: Affinity::Downstream,
     })))?;
@@ -64,13 +75,13 @@ mod tests {
     #[test]
     fn non_gap_selection_is_a_noop_ok_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hi") } } }
-            selection: (t, 1)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 1)
         };
         let (actual, ..) = transact_fail!(initial, |tr| materialize_gap_paragraph(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("hi") } } }
-            selection: (t, 1)
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }

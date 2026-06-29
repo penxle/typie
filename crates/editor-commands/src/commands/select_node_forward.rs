@@ -1,83 +1,95 @@
-use editor_model::{Node, NodeId};
+use editor_crdt::Dot;
+use editor_model::{AtomLeaf, ChildView, DocView};
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, fulfill, prune};
+use editor_transaction::{Transaction, fulfill};
 
+use crate::helpers::{child_elem_id, prune_empty_full, remove_subtree_full};
 use crate::{CommandError, CommandResult};
+
+fn child_is_unit(child: &ChildView) -> bool {
+    match child {
+        ChildView::Block(b) => b.spec().is_unit(),
+        ChildView::Leaf(l) => l.as_atom().is_some_and(AtomLeaf::is_block_level),
+    }
+}
+
+fn child_index(view: &DocView, parent: Dot, child: Dot) -> Option<usize> {
+    view.node(parent)?
+        .children()
+        .position(|c| child_elem_id(&c) == child)
+}
 
 pub fn select_node_forward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let start = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let view = tr.state().view();
+    let start = view
+        .node(pos.node)
+        .ok_or(CommandError::NodeNotFound(pos.node))?;
 
-    let at_end = match start.node() {
-        Node::Text(t) => pos.offset == t.text.len(),
-        _ => pos.offset == start.entry().children.len(),
-    };
-    if !at_end {
+    if pos.offset != start.children().count() {
         return Ok(false);
     }
 
     let mut current = start;
-    let next = loop {
-        if let Some(next) = current.next_sibling() {
-            break next;
-        }
-        match current.parent() {
-            Some(parent) => current = parent,
-            None => return Ok(false),
+    let (parent_id, next_elem) = loop {
+        let Some(parent) = current.parent() else {
+            return Ok(false);
+        };
+        let idx = current
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(current.id(), parent.id()))?;
+        match parent.child_at(idx + 1) {
+            Some(next) => {
+                if !child_is_unit(&next) {
+                    return Ok(false);
+                }
+                break (parent.id(), child_elem_id(&next));
+            }
+            None => current = parent,
         }
     };
 
-    if matches!(next.node(), Node::Text(_)) || !next.spec().is_unit() {
-        return Ok(false);
-    }
-
-    let next_id = next.id();
-    let remove_start = !start.spec().is_leaf() && start.entry().children.is_empty();
+    let remove_start = !start.spec().is_leaf() && start.children().next().is_none();
     let start_id = start.id();
     let start_parent_id = start.parent().map(|p| p.id());
 
     if remove_start && let Some(pid) = start_parent_id {
         // Capture the ancestor chain before removal: prune severs parent links,
         // so we cannot walk upward afterward to repair surviving ancestors.
-        let ancestor_chain: Vec<NodeId> = {
-            let doc = tr.doc();
+        let ancestor_chain: Vec<Dot> = {
+            let view = tr.state().view();
             let mut chain = Vec::new();
-            let mut current = Some(pid);
-            while let Some(id) = current {
+            let mut cur = Some(pid);
+            while let Some(id) = cur {
+                let parent = view.node(id).and_then(|n| n.parent()).map(|p| p.id());
                 chain.push(id);
-                current = doc.node(id).and_then(|n| n.parent()).map(|p| p.id());
+                cur = parent;
             }
             chain
         };
 
         tr.batch::<_, CommandError>(|tr| {
-            tr.remove_subtree(start_id)?;
+            remove_subtree_full(tr, start_id)?;
 
-            let doc = tr.doc();
-            if let Some(parent) = doc.node(pid)
-                && parent.entry().children.is_empty()
-                && !parent.spec().structural
-            {
-                tr.apply_steps(prune(&parent))?;
-            }
+            prune_empty_full(tr, pid)?;
 
             // prune may have cascaded removals; re-fulfill the surviving
             // ancestors so structural containers and the root's trailing
             // paragraph requirement stay schema-valid.
-            for &id in &ancestor_chain {
-                let doc = tr.doc();
-                if let Some(node) = doc.node(id) {
-                    tr.apply_steps(fulfill(&node))?;
+            for id in &ancestor_chain {
+                let steps = {
+                    let view = tr.state().view();
+                    view.node(*id).map(|node| fulfill(&node))
+                };
+                if let Some(steps) = steps {
+                    tr.apply_steps(steps)?;
                 }
             }
 
@@ -85,23 +97,20 @@ pub fn select_node_forward(tr: &mut Transaction) -> CommandResult {
         })?;
     }
 
-    let doc = tr.doc();
-    let next = doc
-        .node(next_id)
-        .ok_or(CommandError::NodeNotFound(next_id))?;
-    let parent_id = next.parent().ok_or(CommandError::NoParent(next_id))?.id();
-    let next_idx = next
-        .index()
-        .ok_or_else(|| CommandError::orphan_child(next_id, parent_id))?;
+    let next_idx = {
+        let view = tr.state().view();
+        child_index(&view, parent_id, next_elem)
+            .ok_or_else(|| CommandError::orphan_child(next_elem, parent_id))?
+    };
 
     tr.set_selection(Some(Selection::new(
         Position {
-            node_id: parent_id,
+            node: parent_id,
             offset: next_idx + 1,
             affinity: Affinity::Upstream,
         },
         Position {
-            node_id: parent_id,
+            node: parent_id,
             offset: next_idx,
             affinity: Affinity::Downstream,
         },
@@ -120,8 +129,8 @@ mod tests {
     #[test]
     fn rejects_range_selection() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("Hello") } horizontal_rule paragraph } }
-            selection: (t, 0) -> (t, 1)
+            doc { root { p1: paragraph { text("Hello") } horizontal_rule paragraph } }
+            selection: (p1, 0) -> (p1, 1)
         };
         transact_fail!(initial, |tr| select_node_forward(&mut tr));
     }
@@ -129,8 +138,8 @@ mod tests {
     #[test]
     fn rejects_if_not_on_last_position() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } horizontal_rule paragraph } }
-            selection: (t, 3)
+            doc { root { p1: paragraph { text("hello") } horizontal_rule paragraph } }
+            selection: (p1, 3)
         };
         transact_fail!(initial, |tr| select_node_forward(&mut tr));
     }
@@ -138,8 +147,8 @@ mod tests {
     #[test]
     fn rejects_if_next_sibling_is_not_leaf_or_monolithic() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } paragraph } }
-            selection: (t, 5)
+            doc { root { p1: paragraph { text("hello") } paragraph } }
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| select_node_forward(&mut tr));
     }
@@ -147,8 +156,8 @@ mod tests {
     #[test]
     fn select_node_forward_on_last_position() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } horizontal_rule paragraph } }
-            selection: (t, 5)
+            doc { root { p1: paragraph { text("hello") } horizontal_rule paragraph } }
+            selection: (p1, 5)
         };
 
         let (actual, ..) = transact!(initial, |tr| select_node_forward(&mut tr));

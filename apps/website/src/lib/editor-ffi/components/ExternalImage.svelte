@@ -46,7 +46,7 @@
   const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
   const imageId = $derived(imageData?.id || undefined);
   const asset = $derived(imageId ? ctx.editor?.imageAssets.get(imageId) : undefined);
-  const inflight = $derived(ctx.editor?.inflightImages.get(element.node_id));
+  const inflight = $derived(ctx.editor?.inflightImages.get(element.node));
   const stage = $derived(deriveImageStage({ imageId, inflight, asset }));
 
   const imageSrc = $derived(resolveImageSrc(asset, inflight));
@@ -64,7 +64,7 @@
   const canEdit = $derived(!ctx.editor?.readOnly);
   const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
   const isOnlySelectedElement = $derived(
-    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node_id,
+    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
   );
 
   const { anchor, floating } = createFloatingActions({
@@ -98,13 +98,13 @@
   $effect(() => {
     if (asset && inflight) {
       const url = inflight.url;
-      ctx.editor?.inflightImages.delete(element.node_id);
+      ctx.editor?.inflightImages.delete(element.node);
       URL.revokeObjectURL(url);
     }
   });
 
   const deleteNode = () => {
-    ctx.editor?.enqueue(deleteNodeMessage(element.node_id));
+    ctx.editor?.enqueue(deleteNodeMessage(element.node));
     ctx.editor?.focus();
   };
 
@@ -114,7 +114,7 @@
 
     const result = await processImageUpload({
       file,
-      nodeId: element.node_id,
+      nodeId: element.node,
       getProportion: () => proportion,
       setInflightImage: (nodeId, image) => editor.inflightImages.set(nodeId, image),
       deleteInflightImage: (nodeId) => editor.inflightImages.delete(nodeId),
@@ -212,7 +212,7 @@
 
     isResizing = false;
     initialResizeData = null;
-    ctx.editor?.enqueue(setImageAttrsMessage(element.node_id, imageId, proportion));
+    ctx.editor?.enqueue(setImageAttrsMessage(element.node, imageId, proportion));
     ctx.editor?.focus();
   };
 

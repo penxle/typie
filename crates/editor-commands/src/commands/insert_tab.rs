@@ -17,7 +17,7 @@ mod tests {
     #[test]
     fn non_collapsed_selection_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
+            doc { root { t1: paragraph { text("Hello") } } }
             selection: (t1, 0) -> (t1, 3)
         };
         transact_fail!(initial, |tr| insert_tab(&mut tr));
@@ -26,13 +26,13 @@ mod tests {
     #[test]
     fn insert_in_middle_of_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
+            doc { root { t1: paragraph { text("Hello") } } }
             selection: (t1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("He") tab t2: text("llo") } } }
-            selection: (t2, 0)
+            doc { root { t: paragraph { text("He") tab text("llo") } } }
+            selection: (t, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -40,13 +40,13 @@ mod tests {
     #[test]
     fn insert_at_end_of_text() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") tab } } }
-            selection: (p1, 2)
+            doc { root { p1: paragraph { text("Hello") tab } } }
+            selection: (p1, 6)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -68,13 +68,13 @@ mod tests {
     #[test]
     fn insert_at_end_attaches_carryable_marker() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph marker([bold]) { t1: text("Hello") [bold] tab } } }
-            selection: (p1, 2)
+            doc { root { p1: paragraph marker([bold]) { text("Hello") [bold] tab } } }
+            selection: (p1, 6)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -82,88 +82,45 @@ mod tests {
     #[test]
     fn tab_node_carries_font_size_metric() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hi") [font_size(2400)] } } }
+            doc { root { t1: paragraph { text("Hi") [font_size(2400)] } } }
             selection: (t1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph marker([font_size(2400)]) { t1: text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
-            selection: (p1, 2)
+            doc { root { p1: paragraph marker([font_size(2400)]) { text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
+            selection: (p1, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn tab_into_empty_paragraph_consumes_and_clears_marker_style() {
-        use editor_model::PlainStyleEntry;
-        use editor_resource::Resource;
-
-        use crate::commands::delete_text_backward;
-        let (state, p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hi") } } }
-            selection: (t1, 2)
+        // An empty paragraph whose marker carries style "s1": inserting a tab
+        // consumes the marker style onto the new tab and clears the marker.
+        let (state, ..) = state! {
+            doc { styles { s1: "s" } root { p1: paragraph marker(@s1) {} } }
+            selection: (p1, 0)
         };
-        let mut setup = editor_transaction::Transaction::new(&state);
-        setup
-            .set_style(
-                "s1".into(),
-                Some(PlainStyleEntry {
-                    name: "s".into(),
-                    modifiers: Default::default(),
-                }),
-            )
-            .unwrap();
-        setup.set_node_style(t1, Some("s1".into())).unwrap();
-        let (state, ..) = setup.commit();
-
-        // delete all text → marker lift puts "s1" on the empty paragraph
-        let (e1, ..) = transact!(state, |tr| delete_text_backward(
-            &mut tr,
-            &Resource::new_test()
-        ));
-        let (emptied, ..) = transact!(e1, |tr| delete_text_backward(
-            &mut tr,
-            &Resource::new_test()
-        ));
-        assert_eq!(
-            emptied
-                .doc
-                .node(p1)
-                .unwrap()
-                .marker()
-                .and_then(|m| m.style.as_deref()),
-            Some("s1"),
-            "marker present while empty"
-        );
-
-        let (actual, ..) = transact!(emptied, |tr| insert_tab(&mut tr));
-        let para = actual.doc.node(p1).unwrap();
-        assert!(
-            para.children()
-                .any(|c| matches!(c.node(), editor_model::Node::Tab(_))
-                    && c.entry().style.get().as_deref() == Some("s1")),
-            "inserted tab gets marker style"
-        );
-        assert_eq!(para.marker(), None, "marker cleared from paragraph");
+        let (actual, ..) = transact!(state, |tr| insert_tab(&mut tr));
+        let (expected, ..) = state! {
+            doc { styles { s1: "s" } root { p1: paragraph { tab @s1 } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn tab_into_empty_paragraph_with_marker_carries_metric() {
-        let (state, p1) = state! {
+        let (state, ..) = state! {
             doc { root { p1: paragraph marker([font_size(2400)]) {} } }
             selection: (p1, 0)
         };
         let (actual, ..) = transact!(state, |tr| insert_tab(&mut tr));
-        let para = actual.doc.node(p1).unwrap();
-        let tab = para
-            .children()
-            .find(|c| matches!(c.node(), editor_model::Node::Tab(_)))
-            .expect("tab inserted");
-        assert!(
-            tab.modifiers()
-                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 2400 })),
-            "tab carries the marker's font_size metric"
-        );
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(2400)] } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -171,7 +128,7 @@ mod tests {
         use editor_model::PlainStyleEntry;
         use editor_state::PendingStyle;
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
+            doc { root { t1: paragraph { text("Hello") } } }
             selection: (t1, 5)
         };
         let mut setup = editor_transaction::Transaction::new(&initial);
@@ -191,12 +148,10 @@ mod tests {
             .unwrap();
         let (with_pending, ..) = setup.commit();
         let (actual, ..) = transact!(with_pending, |tr| insert_tab(&mut tr));
-        let para = actual.doc.root().unwrap().children().next().unwrap();
-        let tab_styled = para.children().any(|c| {
-            matches!(c.node(), editor_model::Node::Tab(_))
-                && c.entry().style.get().as_deref() == Some("s1")
-        });
-        assert!(tab_styled, "inserted tab must carry pending style");
-        assert!(actual.pending_style.is_none());
+        let (expected, ..) = state! {
+            doc { styles { s1: "s" } root { t1: paragraph { text("Hello") tab @s1 } } }
+            selection: (t1, 6)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 }

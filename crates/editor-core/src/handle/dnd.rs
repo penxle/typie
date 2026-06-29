@@ -6,9 +6,10 @@ use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifie
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
 use editor_model::{
-    Doc, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode, PlainRootNode, Schema,
+    ChildView, ContextExpr, DocView, Fragment, Node, NodeType, PlainFileNode, PlainImageNode,
+    PlainNode, PlainRootNode, Schema,
 };
-use editor_state::{Position, Selection, StableSelection};
+use editor_state::{Position, Selection, StableResolveCtx, StableSelection};
 
 #[derive(Debug, Clone, Copy)]
 enum SelectionAfterDrop {
@@ -20,15 +21,16 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
     let previous_drop_target = editor.dnd.drop_target();
     let result = match op {
         DndOp::StartInternalSelection => {
+            let view = editor.state.view();
             editor.dnd = editor
                 .state
                 .selection
                 .as_ref()
                 .filter(|selection| !selection.is_collapsed())
-                .map(|selection| snap_to_block_unit(&editor.state.doc, selection))
+                .map(|selection| snap_to_block_unit(&view, selection))
                 .filter(|selection| !selection.is_collapsed())
                 .map_or(DndState::Idle, |source| DndState::InternalDnd {
-                    source: StableSelection::capture(&source, &editor.state.doc),
+                    source: StableSelection::capture(&source, &view),
                     drop_target: None,
                 });
             Ok(())
@@ -50,8 +52,11 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             modifiers,
         } => {
             let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
-                let selection = source.restore(&editor.state.doc);
-                (!selection.is_collapsed()).then_some(selection)
+                let view = editor.state.view();
+                let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+                source
+                    .resolve(&ctx)
+                    .filter(|selection| !selection.is_collapsed())
             } else {
                 None
             };
@@ -62,10 +67,14 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             let target = match editor.dnd.clone() {
                 DndState::InternalDnd { .. } => editor
                     .view
-                    .drop_target_at(&editor.state.doc, page, x, y)
+                    .drop_target_at(&editor.state, page, x, y)
                     .filter(|target| {
                         internal_source.as_ref().is_some_and(|source| {
-                            !position_inside_selection(&editor.state.doc, target.position, source)
+                            let inside = {
+                                let view = editor.state.view();
+                                position_inside_selection(&view, target.position, source)
+                            };
+                            !inside
                                 && can_apply_drop(
                                     editor,
                                     target.position,
@@ -77,7 +86,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                     }),
                 DndState::ExternalDnd { payload, .. } => editor
                     .view
-                    .drop_target_at(&editor.state.doc, page, x, y)
+                    .drop_target_at(&editor.state, page, x, y)
                     .filter(|target| {
                         can_apply_drop(
                             editor,
@@ -96,8 +105,11 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             payload, modifiers, ..
         } => {
             let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
-                let selection = source.restore(&editor.state.doc);
-                (!selection.is_collapsed()).then_some(selection)
+                let view = editor.state.view();
+                let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+                source
+                    .resolve(&ctx)
+                    .filter(|selection| !selection.is_collapsed())
             } else {
                 None
             };
@@ -115,7 +127,11 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                 match (&payload, internal_source.as_ref()) {
                     (DndDropPayload::InternalSelection, Some(source)) => {
                         editor.dnd.drop_target().filter(|target| {
-                            !position_inside_selection(&editor.state.doc, target.position, source)
+                            let inside = {
+                                let view = editor.state.view();
+                                position_inside_selection(&view, target.position, source)
+                            };
+                            !inside
                                 && can_apply_drop(
                                     editor,
                                     target.position,
@@ -163,19 +179,19 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
     result
 }
 
-fn position_inside_selection(doc: &Doc, position: Position, selection: &Selection) -> bool {
-    let Some(resolved_selection) = selection.resolve(doc) else {
+fn position_inside_selection(view: &DocView, position: Position, selection: &Selection) -> bool {
+    let Some(resolved_selection) = selection.resolve(view) else {
         return false;
     };
     if let Some(cell_rect) = resolved_selection.as_cell_rect() {
-        return doc.node(position.node_id).is_some_and(|node| {
+        return view.node(position.node).is_some_and(|node| {
             node.ancestors()
                 .find(|ancestor| matches!(ancestor.node(), Node::TableCell(_)))
                 .is_some_and(|cell| cell_rect.contains(&cell))
         });
     }
 
-    let Some(resolved_position) = position.resolve(doc) else {
+    let Some(resolved_position) = position.resolve(view) else {
         return false;
     };
     *resolved_selection.from() < resolved_position && resolved_position < *resolved_selection.to()
@@ -184,17 +200,17 @@ fn position_inside_selection(doc: &Doc, position: Position, selection: &Selectio
 /// anchor가 isolating+monolithic 블록(fold/table)의 parent 경계에 있으면
 /// 해당 블록의 단위 선택으로 스냅한다. promote_cross_isolating이 만드는
 /// (parent, fold_idx)→(external_pos) 선택을 DnD 소스로 정제하기 위해 사용.
-fn snap_to_block_unit(doc: &Doc, selection: &Selection) -> Selection {
+fn snap_to_block_unit(view: &DocView, selection: &Selection) -> Selection {
     let anchor = selection.anchor;
-    if let Some(node) = doc.node(anchor.node_id) {
-        let spec = Schema::node_spec(node.as_type());
+    if let Some(node) = view.node(anchor.node) {
+        let spec = node.spec();
         if !spec.is_textblock()
             && !spec.inline
-            && let Some(child) = node.children().nth(anchor.offset)
+            && let Some(ChildView::Block(child)) = node.children().nth(anchor.offset)
         {
-            let child_spec = Schema::node_spec(child.as_type());
+            let child_spec = child.spec();
             if child_spec.isolating && child_spec.monolithic {
-                let unit_end = Position::new(anchor.node_id, anchor.offset + 1);
+                let unit_end = Position::new(anchor.node, anchor.offset + 1);
                 return Selection::new(anchor, unit_end);
             }
         }
@@ -288,12 +304,49 @@ pub(crate) fn apply_drop_for_test(
     apply_drop(editor, position, payload, modifiers, source)
 }
 
+/// A drop is rejected when the slice carries a leaf whose schema context cannot
+/// be satisfied at the drop target (e.g. a `page_break`, valid only directly
+/// under `Root > Paragraph`, dropped into a paragraph nested in a blockquote).
+/// Without this the inline-insert path silently relocates or drops such a leaf,
+/// so the probe would wrongly accept the drop.
+fn slice_content_fits_target_context(view: &DocView, position: Position, slice: &Slice) -> bool {
+    let mut textblock = view.node(position.node);
+    while let Some(node) = &textblock {
+        if node.spec().is_textblock() {
+            break;
+        }
+        textblock = node.parent();
+    }
+    let Some(textblock) = textblock else {
+        return true;
+    };
+    let mut base: Vec<NodeType> = textblock.ancestors().map(|a| a.node_type()).collect();
+    base.reverse();
+
+    fn check(fragment: &Fragment, base: &[NodeType]) -> bool {
+        let ty = fragment.node.as_type();
+        let spec = Schema::node_spec(ty);
+        if spec.is_leaf() && spec.context != ContextExpr::Any {
+            let mut path = base.to_vec();
+            path.push(ty);
+            if !spec.context.matches(&path) {
+                return false;
+            }
+        }
+        fragment.children.iter().all(|c| check(c, base))
+    }
+    check(&slice.fragment, &base)
+}
+
 fn drop_slice_at(
     editor: &mut Editor,
     position: Position,
     slice: Slice,
     selection: SelectionAfterDrop,
 ) -> Result<(), EditorError> {
+    if !slice_content_fits_target_context(&editor.state.view(), position, &slice) {
+        return Ok(());
+    }
     editor.transact(|tr| {
         let inserted_selection = commands::insert_slice_at(tr, position, slice.clone())?;
         if let Some(inserted_selection) = inserted_selection
@@ -332,13 +385,16 @@ fn drop_internal_selection_at(
     };
 
     // Dropping at the source selection's own from/to boundary is a structural no-op:
-    // the block would be deleted and re-inserted at the same position (with new NodeIds).
+    // the block would be deleted and re-inserted at the same position (with new Dots).
     // Detect and skip early so probe mode doesn't report a false "state changed".
-    if !copy && let Some(resolved) = source.resolve(&editor.state.doc) {
-        let from = Position::from(resolved.from());
-        let to = Position::from(resolved.to());
-        if position == from || position == to {
-            return Ok(());
+    if !copy {
+        let view = editor.state.view();
+        if let Some(resolved) = source.resolve(&view) {
+            let from = Position::from(resolved.from());
+            let to = Position::from(resolved.to());
+            if position == from || position == to {
+                return Ok(());
+            }
         }
     }
 
@@ -347,6 +403,10 @@ fn drop_internal_selection_at(
     let Some(slice) = Slice::extract(&state) else {
         return Ok(());
     };
+
+    if !slice_content_fits_target_context(&editor.state.view(), position, &slice) {
+        return Ok(());
+    }
 
     if copy {
         return drop_slice_at(
@@ -358,12 +418,19 @@ fn drop_internal_selection_at(
     }
 
     let stable_target =
-        StableSelection::capture(&Selection::collapsed(position), &editor.state.doc);
+        StableSelection::capture(&Selection::collapsed(position), &editor.state.view());
     editor.transact(|tr| {
         commands::set_selection(tr, source)?;
         commands::delete_selection(tr)?;
 
-        let target = stable_target.restore(&tr.doc()).head;
+        let resolved_target = {
+            let view = tr.view();
+            let ctx = StableResolveCtx::new(&view, tr.state().projected.seq());
+            stable_target.resolve(&ctx)
+        };
+        let Some(target) = resolved_target.map(|sel| sel.head) else {
+            return Ok(());
+        };
         if let Some(inserted_selection) = commands::insert_slice_at(tr, target, slice.clone())?
             && !inserted_selection.is_collapsed()
         {

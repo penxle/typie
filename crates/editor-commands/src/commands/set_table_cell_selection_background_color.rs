@@ -1,20 +1,21 @@
-use editor_model::{Modifier, NodeId};
+use editor_crdt::Dot;
+use editor_model::Modifier;
 use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
 pub fn set_table_cell_selection_background_color(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     color: Option<String>,
 ) -> CommandResult {
-    let cell_ids: Vec<NodeId> = {
-        let doc = tr.doc();
+    let cell_ids: Vec<Dot> = {
+        let view = tr.view();
         let sel = tr
             .selection()
             .ok_or_else(|| CommandError::Corrupted("no selection".into()))?;
         let resolved = sel
-            .resolve(&doc)
+            .resolve(&view)
             .ok_or_else(|| CommandError::Corrupted("selection could not be resolved".into()))?;
         let rect = resolved
             .as_cell_rect()
@@ -24,7 +25,7 @@ pub fn set_table_cell_selection_background_color(
                 "selection is not in this table".into(),
             ));
         }
-        rect.cells().map(|cell| cell.id()).collect()
+        rect.cells().into_iter().map(|cell| cell.id()).collect()
     };
 
     for cell_id in cell_ids {
@@ -49,31 +50,31 @@ pub fn set_table_cell_selection_background_color(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
     use editor_state::cell_rect_selection;
 
     use super::*;
     use crate::test_utils::*;
 
-    fn with_cell_rect(
-        initial: editor_state::State,
-        anchor: NodeId,
-        head: NodeId,
-    ) -> editor_state::State {
-        let sel = cell_rect_selection(&initial.doc, anchor, head).unwrap();
+    fn with_cell_rect(initial: editor_state::State, anchor: Dot, head: Dot) -> editor_state::State {
+        let sel = {
+            let view = initial.view();
+            cell_rect_selection(anchor, head, &view)
+        }
+        .unwrap();
         editor_state::State {
             selection: Some(sel),
             ..initial
         }
     }
 
-    fn cell_bg(doc: &editor_model::Doc, cell_id: NodeId) -> Option<String> {
-        doc.node(cell_id)?
-            .explicit_modifiers()
-            .find_map(|m| match m {
-                Modifier::BackgroundColor { value } => Some(value.clone()),
-                _ => None,
-            })
+    fn cell_bg(view: &editor_model::DocView, id: Dot) -> Option<String> {
+        match view
+            .node(id)?
+            .block_modifier(editor_model::ModifierType::BackgroundColor)?
+        {
+            Modifier::BackgroundColor { value } => Some(value.clone()),
+            _ => None,
+        }
     }
 
     #[test]
@@ -101,11 +102,11 @@ mod tests {
             tbl,
             Some("red".to_string())
         ));
-        let doc = &actual.doc;
-        assert_eq!(cell_bg(doc, r0c0), Some("red".to_string()));
-        assert_eq!(cell_bg(doc, r0c1), Some("red".to_string()));
-        assert_eq!(cell_bg(doc, r1c0), Some("red".to_string()));
-        assert_eq!(cell_bg(doc, r1c1), Some("red".to_string()));
+        let view = actual.view();
+        assert_eq!(cell_bg(&view, r0c0), Some("red".to_string()));
+        assert_eq!(cell_bg(&view, r0c1), Some("red".to_string()));
+        assert_eq!(cell_bg(&view, r1c0), Some("red".to_string()));
+        assert_eq!(cell_bg(&view, r1c1), Some("red".to_string()));
     }
 
     #[test]
@@ -129,8 +130,8 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| set_table_cell_selection_background_color(
             &mut tr, tbl, None
         ));
-        let doc = &actual.doc;
-        assert_eq!(cell_bg(doc, r0c0), None);
-        assert_eq!(cell_bg(doc, r1c0), None);
+        let view = actual.view();
+        assert_eq!(cell_bg(&view, r0c0), None);
+        assert_eq!(cell_bg(&view, r1c0), None);
     }
 }

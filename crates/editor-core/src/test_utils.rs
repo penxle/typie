@@ -1,5 +1,5 @@
 use editor_common::Size;
-use editor_model::NodeId;
+use editor_crdt::Dot;
 use editor_resource::ThemeVariant;
 use editor_state::{Composition, PendingModifiers, Selection};
 use editor_view::{GroupDecoration, Viewport};
@@ -10,15 +10,15 @@ use crate::tracked_range::TrackedRangeRegistry;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorSnapshot {
-    doc: editor_model::Doc,
+    doc: editor_model::ProjectedDoc,
     selection: Option<Selection>,
     pending_modifiers: PendingModifiers,
     composition: Option<Composition>,
     undos_len: usize,
     redos_len: usize,
     viewport: Viewport,
-    external_heights: HashMap<NodeId, f32>,
-    fold_states: HashMap<NodeId, bool>,
+    external_heights: HashMap<Dot, f32>,
+    fold_states: HashMap<Dot, bool>,
     preferred_x: Option<f32>,
     focused: bool,
     theme_variant: ThemeVariant,
@@ -32,7 +32,7 @@ impl EditorSnapshot {
         let view_state = editor.view().view_state();
         let page_sizes: Vec<Size> = editor.view().pages().iter().map(|p| p.size).collect();
         Self {
-            doc: editor.state().doc.clone(),
+            doc: editor.state().projected.projected().clone(),
             selection: editor.state().selection,
             pending_modifiers: editor.state().pending_modifiers.clone(),
             composition: editor.state().composition,

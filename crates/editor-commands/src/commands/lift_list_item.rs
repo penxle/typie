@@ -1,4 +1,3 @@
-use editor_state::Position;
 use editor_transaction::Transaction;
 
 use crate::helpers::{
@@ -10,33 +9,38 @@ pub fn lift_list_item(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let doc = tr.doc();
 
-    if selection.is_collapsed() {
-        let pos = selection.head;
-        let Some(list_item_id) = find_enclosing_list_item_id(&doc, pos.node_id) else {
+    if selection.anchor == selection.head {
+        let list_item_id = {
+            let view = tr.view();
+            find_enclosing_list_item_id(&view, selection.head.node)
+        };
+        let Some(list_item_id) = list_item_id else {
             return Ok(false);
         };
         return lift_list_item_inner(tr, list_item_id);
     }
 
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
-
-    let items = collect_top_level_list_items_in_selection(&doc, from, to);
+    let items = {
+        let view = tr.view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let from = resolved.from().position();
+        let to = resolved.to().position();
+        collect_top_level_list_items_in_selection(&view, from, to)
+    };
     if items.is_empty() {
         return Ok(false);
     }
 
-    // Lift later siblings first so the earlier items' parent-list indices are
-    // not disturbed before they are processed.
     let mut any_lifted = false;
     for item_id in items.iter().rev() {
-        let doc = tr.doc();
-        if doc.node(*item_id).is_none() {
+        let exists = {
+            let view = tr.view();
+            view.node(*item_id).is_some()
+        };
+        if !exists {
             continue;
         }
         if lift_list_item_inner(tr, *item_id)? {
@@ -60,22 +64,22 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
+                        list_item { p1: paragraph { text("A") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -83,8 +87,8 @@ mod tests {
     #[test]
     fn outside_list_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("A") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("A") } } }
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| lift_list_item(&mut tr));
     }
@@ -96,25 +100,25 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                         list_item { paragraph { text("C") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     bullet_list { list_item { paragraph { text("A") } } }
-                    paragraph { t1: text("B") }
+                    p1: paragraph { text("B") }
                     bullet_list { list_item { paragraph { text("C") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -125,24 +129,24 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("A") } }
+                        list_item { p1: paragraph { text("A") } }
                         list_item { paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                     bullet_list { list_item { paragraph { text("B") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -154,23 +158,23 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     bullet_list { list_item { paragraph { text("A") } } }
-                    paragraph { t1: text("B") }
+                    p1: paragraph { text("B") }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -185,7 +189,7 @@ mod tests {
                             paragraph { text("outer") }
                             bullet_list {
                                 list_item { paragraph { text("A") } }
-                                list_item { paragraph { t1: text("B") } }
+                                list_item { p1: paragraph { text("B") } }
                                 list_item { paragraph { text("C") } }
                             }
                         }
@@ -193,7 +197,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
@@ -207,7 +211,7 @@ mod tests {
                             }
                         }
                         list_item {
-                            paragraph { t1: text("B") }
+                            p1: paragraph { text("B") }
                             bullet_list {
                                 list_item { paragraph { text("C") } }
                             }
@@ -216,7 +220,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -228,25 +232,25 @@ mod tests {
                 root {
                     ordered_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                         list_item { paragraph { text("C") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     ordered_list { list_item { paragraph { text("A") } } }
-                    paragraph { t1: text("B") }
+                    p1: paragraph { text("B") }
                     ordered_list { list_item { paragraph { text("C") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -257,22 +261,22 @@ mod tests {
             doc {
                 root {
                     blockquote {
-                        bullet_list { list_item { paragraph { t1: text("A") } } }
+                        bullet_list { list_item { p1: paragraph { text("A") } } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    blockquote { paragraph { t1: text("A") } }
+                    blockquote { p1: paragraph { text("A") } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -285,7 +289,7 @@ mod tests {
                     blockquote {
                         bullet_list {
                             list_item {
-                                paragraph { t1: text("A") }
+                                p1: paragraph { text("A") }
                                 bullet_list { list_item { paragraph { text("a1") } } }
                             }
                         }
@@ -293,20 +297,20 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     blockquote {
-                        paragraph { t1: text("A") }
+                        p1: paragraph { text("A") }
                         bullet_list { list_item { paragraph { text("a1") } } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -318,25 +322,25 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t1: text("A") }
+                            p1: paragraph { text("A") }
                             bullet_list { list_item { paragraph { text("a1") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
+                    p1: paragraph { text("A") }
                     bullet_list { list_item { paragraph { text("a1") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -349,12 +353,12 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
-                    bullet_list { list_item { paragraph { t2: text("B") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
+                    bullet_list { list_item { p2: paragraph { text("B") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         transact_fail!(initial, |tr| lift_list_item(&mut tr));
     }
@@ -366,29 +370,29 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
-                        list_item { paragraph { t2: text("C") } }
+                        list_item { p1: paragraph { text("B") } }
+                        list_item { p2: paragraph { text("C") } }
                         list_item { paragraph { text("D") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     bullet_list { list_item { paragraph { text("A") } } }
-                    paragraph { t1: text("B") }
-                    paragraph { t2: text("C") }
+                    p1: paragraph { text("B") }
+                    p2: paragraph { text("C") }
                     bullet_list { list_item { paragraph { text("D") } } }
                     paragraph {}
                 }
             }
             // Range lift processes items in reverse, so the final cursor lands on
             // the last-lifted (earliest) item's paragraph rather than spanning the range.
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -407,7 +411,7 @@ mod tests {
                             paragraph { text("outer") }
                             bullet_list {
                                 list_item {
-                                    paragraph { t_b: text("B") }
+                                    p_b: paragraph { text("B") }
                                     bullet_list { list_item { paragraph { text("b_sub") } } }
                                 }
                                 list_item { paragraph { text("C") } }
@@ -418,7 +422,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t_b, 0)
+            selection: (p_b, 0)
         };
         let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
         // Original nested sublist becomes empty after B's lift and is pruned, so the
@@ -432,7 +436,7 @@ mod tests {
                             paragraph { text("outer") }
                         }
                         list_item {
-                            paragraph { t_b: text("B") }
+                            p_b: paragraph { text("B") }
                             bullet_list {
                                 list_item { paragraph { text("b_sub") } }
                                 list_item { paragraph { text("C") } }
@@ -443,7 +447,7 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t_b, 0)
+            selection: (p_b, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

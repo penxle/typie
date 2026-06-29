@@ -1,5 +1,5 @@
 use editor_common::{Rect, Underline, UnderlineStyle};
-use editor_model::{Doc, Modifier, Node, TableBorderStyle};
+use editor_model::{DocView, Modifier, ModifierType, Node, TableBorderStyle};
 use editor_resource::{Resource, Theme};
 use editor_view::style::DecorationData;
 use editor_view::{
@@ -581,7 +581,7 @@ impl Renderer {
     pub fn render_page(
         &mut self,
         sink: &mut dyn RenderSink,
-        doc: &Doc,
+        doc: &DocView,
         view: &editor_view::View,
         page_idx: usize,
         scale_factor: f32,
@@ -630,7 +630,7 @@ impl Renderer {
 
     pub fn export_page_vector(
         &mut self,
-        doc: &Doc,
+        doc: &DocView,
         view: &editor_view::View,
         page_idx: usize,
         scale_factor: f32,
@@ -668,7 +668,7 @@ impl Renderer {
     fn page_visitor<'a>(
         &'a mut self,
         sink: &'a mut dyn RenderSink,
-        doc: &'a Doc,
+        doc: &'a DocView<'a>,
         scale_factor: f32,
         active: LayerSet,
     ) -> RenderVisitor<'a> {
@@ -678,7 +678,7 @@ impl Renderer {
     fn vector_page_visitor<'a>(
         &'a mut self,
         sink: &'a mut dyn RenderSink,
-        doc: &'a Doc,
+        doc: &'a DocView<'a>,
         scale_factor: f32,
         active: LayerSet,
     ) -> RenderVisitor<'a> {
@@ -694,7 +694,7 @@ impl Renderer {
     fn make_page_visitor<'a>(
         &'a mut self,
         sink: &'a mut dyn RenderSink,
-        doc: &'a Doc,
+        doc: &'a DocView<'a>,
         scale_factor: f32,
         active: LayerSet,
         text_mode: TextRenderMode,
@@ -724,7 +724,7 @@ struct BoxFrame {
 pub struct RenderVisitor<'a> {
     renderer: &'a mut Renderer,
     sink: &'a mut dyn RenderSink,
-    doc: &'a Doc,
+    doc: &'a DocView<'a>,
     scale_factor: f32,
     root_transform: Transform,
     box_stack: Vec<BoxFrame>,
@@ -835,12 +835,14 @@ impl<'a> RenderVisitor<'a> {
                 background_color: None,
                 glyphs: ann.glyphs.clone(),
                 decoration: editor_view::glyph_run::TextDecoration::default(),
-                node_id: editor_model::NodeId::ROOT,
-                offset: 0,
+                offset_range: 0..0,
+                link: None,
                 text: String::new(),
                 x: ann.x,
                 width: ann.width,
                 graphemes: Vec::<GraphemeSpan>::new(),
+                cursor_ascent: 0.0,
+                cursor_descent: 0.0,
             };
 
             if self.text_mode == TextRenderMode::VectorExport {
@@ -997,11 +999,11 @@ fn draw_table_grid(
 
 impl<'a> PageVisitor for RenderVisitor<'a> {
     fn box_enter(&mut self, node: &PageFragmentNode, fragment: &PageFragmentBox) {
-        let node_id = fragment.node_id;
+        let node_id = fragment.node;
         let local_rect = node.rect;
         let style = &fragment.style;
         let edges = fragment.edges;
-        let node = self.doc.node(node_id).map(|n| n.node().clone());
+        let node = self.doc.node(node_id).map(|n| n.node());
 
         if self.on(RenderLayer::Background) {
             let t = self.root_transform.translate(local_rect.x, local_rect.y);
@@ -1074,10 +1076,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 }
                 Some(Node::TableCell(_)) => {
                     let color_value = self.doc.node(node_id).and_then(|n| {
-                        n.explicit_modifiers().find_map(|m| match m {
-                            Modifier::BackgroundColor { value } => Some(value.clone()),
+                        match n.block_modifier(ModifierType::BackgroundColor) {
+                            Some(Modifier::BackgroundColor { value }) => Some(value.clone()),
                             _ => None,
-                        })
+                        }
                     });
                     if let Some(ref color_value) = color_value
                         && color_value != "none"
@@ -1285,14 +1287,18 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             return;
         }
 
-        let node_id = fragment.node_id;
+        let node_id = fragment.node;
         let local_rect = node.rect;
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
         let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
-        let node = self.doc.node(node_id);
+        let node = self
+            .doc
+            .leaf(node_id)
+            .and_then(|l| l.as_atom().cloned())
+            .map(|a| a.into_node());
 
-        match node.map(|n| n.node()) {
+        match node {
             Some(Node::HorizontalRule(hr)) => {
                 let color = self.theme.color("ui.text.default");
                 let w = inner_rect.width;
@@ -1513,8 +1519,9 @@ mod tests {
     use crate::vector::export::VectorSink;
     use crate::vector::types::{VectorOp, VectorPage};
     use editor_common::EdgeInsets;
-    use editor_model::NodeId;
+    use editor_crdt::Dot;
     use editor_resource::ThemeVariant;
+    use editor_state::State;
     use editor_view::PageFragmentContent;
     use editor_view::glyph_run::RubyAnnotation;
     use editor_view::style::{Alignment, BorderMode, BoxStyle, Direction};
@@ -1611,7 +1618,7 @@ mod tests {
 
     fn table_fragment(row_fragments: &[(Rect, Edges<bool>, Vec<Rect>)]) -> PageFragmentBox {
         PageFragmentBox {
-            node_id: NodeId::new(),
+            node: Dot::new(90, 1),
             style: table_box_style(Direction::Vertical),
             edges: all_edges(),
             decorations: vec![],
@@ -1620,7 +1627,7 @@ mod tests {
                 .map(|(row_rect, row_edges, cells)| PageFragmentNode {
                     rect: *row_rect,
                     content: PageFragmentContent::Box(PageFragmentBox {
-                        node_id: NodeId::new(),
+                        node: Dot::new(91, 1),
                         style: table_box_style(Direction::Horizontal),
                         edges: *row_edges,
                         decorations: vec![],
@@ -1629,7 +1636,7 @@ mod tests {
                             .map(|cell_rect| PageFragmentNode {
                                 rect: *cell_rect,
                                 content: PageFragmentContent::Box(PageFragmentBox {
-                                    node_id: NodeId::new(),
+                                    node: Dot::new(92, 1),
                                     style: table_box_style(Direction::Vertical),
                                     edges: all_edges(),
                                     decorations: vec![],
@@ -1693,7 +1700,7 @@ mod tests {
     }
 
     fn fragment_box(
-        node_id: NodeId,
+        node: Dot,
         rect: Rect,
         style: BoxStyle,
         edges: Edges<bool>,
@@ -1701,7 +1708,7 @@ mod tests {
         PageFragmentNode {
             rect,
             content: PageFragmentContent::Box(PageFragmentBox {
-                node_id,
+                node,
                 style,
                 edges,
                 decorations: vec![],
@@ -1720,7 +1727,7 @@ mod tests {
         PageFragmentNode {
             rect,
             content: PageFragmentContent::Line(PageFragmentLine {
-                node_id: NodeId::ROOT,
+                node: Dot::ROOT,
                 baseline: metrics.baseline,
                 ascent: metrics.ascent,
                 descent: metrics.descent,
@@ -1729,7 +1736,7 @@ mod tests {
                 glyph_runs,
                 ruby_annotations,
                 empty_caret_x: 0.0,
-                child_range: None,
+                offset_range: None,
                 tab_gaps: vec![],
             }),
         }
@@ -2030,7 +2037,7 @@ mod tests {
 
     /// Render the Background layer for a one-line doc and return the single
     /// background-fill rect (page-local).
-    fn background_fill_rect(doc: &Doc) -> Rect {
+    fn background_fill_rect(state: &State) -> Rect {
         #[derive(Default)]
         struct RecordingSink {
             rects: Vec<Rect>,
@@ -2057,14 +2064,15 @@ mod tests {
 
         let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut view = editor_view::View::new_test();
-        view.layout(doc);
+        view.layout(state);
+        let doc = state.view();
         let mut renderer = Renderer::new(resource);
         let mut sink = RecordingSink::default();
         view.visit_page(
             0,
             &mut renderer.page_visitor(
                 &mut sink,
-                doc,
+                &doc,
                 1.0,
                 LayerSet::of(&[RenderLayer::Background]),
             ),
@@ -2075,19 +2083,22 @@ mod tests {
 
     #[test]
     fn text_background_height_matches_v1_and_excludes_ruby() {
-        use editor_macros::doc;
+        use editor_macros::state;
 
         // V1 fills the background with `metric.height` (= ascent + descent),
         // excluding ruby which it parks in paint-overflow above the line box.
         // The new engine must match: the same text with and without ruby yields
         // the same background height. (TR-222)
-        let (plain, _) = doc! { root { paragraph { t: text("ABCD") [background_color("yellow".to_string())] } } };
-        let (ruby, _) = doc! {
-            root {
-                paragraph {
-                    t: text("ABCD") [background_color("yellow".to_string()), ruby(text: "かな".to_string())]
+        let (plain, _) = state! { doc { root { p1: paragraph { text("ABCD") [background_color("yellow".to_string())] } } } selection: none };
+        let (ruby, _) = state! {
+            doc {
+                root {
+                    p2: paragraph {
+                        text("ABCD") [background_color("yellow".to_string()), ruby(text: "かな".to_string())]
+                    }
                 }
             }
+            selection: none
         };
 
         let plain_rect = background_fill_rect(&plain);
@@ -2131,7 +2142,8 @@ mod tests {
         }
 
         let resource = Arc::new(Mutex::new(Resource::new_test()));
-        let doc = Doc::empty();
+        let state = State::empty();
+        let doc = state.view();
         let mut renderer = Renderer::new(resource);
         let mut sink = RecordingSink::default();
         let mut visitor = renderer.page_visitor(
@@ -2150,12 +2162,14 @@ mod tests {
             background_color: Some("bg.yellow".to_string()),
             glyphs: vec![],
             decoration: TextDecoration::default(),
-            node_id: NodeId::ROOT,
-            offset: 0,
+            offset_range: 0..0,
+            link: None,
             text: "abc".to_string(),
             x: 8.0,
             width: 24.0,
             graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
 
         let line_node = fragment_line(
@@ -2178,10 +2192,11 @@ mod tests {
         assert!((rect.height - 60.0).abs() < 0.01);
     }
 
-    fn export_page_to_vector_page(doc: &Doc) -> VectorPage {
+    fn export_page_to_vector_page(state: &State) -> VectorPage {
         let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut view = editor_view::View::new_test();
-        view.layout(doc);
+        view.layout(state);
+        let doc = state.view();
 
         let (width, height) = view
             .pages()
@@ -2196,7 +2211,7 @@ mod tests {
             0,
             &mut renderer.vector_page_visitor(
                 &mut sink,
-                doc,
+                &doc,
                 1.0,
                 LayerSet::of(&[RenderLayer::Background]),
             ),
@@ -2205,7 +2220,7 @@ mod tests {
             0,
             &mut renderer.vector_page_visitor(
                 &mut sink,
-                doc,
+                &doc,
                 1.0,
                 LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
             ),
@@ -2217,20 +2232,23 @@ mod tests {
     #[test]
     fn table_border_page_is_vectorized() {
         // 테이블 보더가 페이지 export 결과에서 벡터 path op로 나타나는지 확인한다.
-        use editor_macros::doc;
+        use editor_macros::state;
 
-        let (doc,) = doc! {
-            root {
-                table {
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
+        let (state,) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph }
+                            table_cell { paragraph }
+                        }
                     }
                 }
             }
+            selection: none
         };
 
-        let page = export_page_to_vector_page(&doc);
+        let page = export_page_to_vector_page(&state);
 
         assert!(page.width > 0.0);
         assert!(page.height > 0.0);
@@ -2245,16 +2263,19 @@ mod tests {
     #[test]
     fn horizontal_rule_pattern_page_is_vectorized() {
         // horizontal rule 패턴이 페이지 export 결과에서 벡터 path op로 나타나는지 확인한다.
-        use editor_macros::doc;
+        use editor_macros::state;
 
-        let (doc,) = doc! {
-            root {
-                paragraph { text("a") }
-                horizontal_rule
+        let (state,) = state! {
+            doc {
+                root {
+                    paragraph { text("a") }
+                    horizontal_rule
+                }
             }
+            selection: none
         };
 
-        let page = export_page_to_vector_page(&doc);
+        let page = export_page_to_vector_page(&state);
 
         assert!(page.width > 0.0);
         assert!(page.height > 0.0);
@@ -2308,7 +2329,8 @@ mod tests {
             .intern_id("test")
             .expect("test font must be registered");
 
-        let doc = editor_model::Doc::empty();
+        let state = State::empty();
+        let doc = state.view();
         let mut renderer = Renderer::new(Arc::new(Mutex::new(resource)));
 
         let mut sink = CountingSink::default();
@@ -2420,7 +2442,7 @@ mod tests {
     #[test]
     fn fold_title_background_drawn_on_every_visible_page_piece() {
         use editor_common::EdgeInsets;
-        use editor_macros::doc;
+        use editor_macros::state;
         use editor_view::style::{Alignment, BorderMode, Decoration, Direction};
 
         #[derive(Default)]
@@ -2449,14 +2471,18 @@ mod tests {
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
-        let (doc, ft) = doc! {
-            root {
-                fold {
-                    ft: fold_title { text("Title") }
-                    fold_content { paragraph { text("c") } }
+        let (state, ft) = state! {
+            doc {
+                root {
+                    fold {
+                        ft: fold_title { text("Title") }
+                        fold_content { paragraph { text("c") } }
+                    }
                 }
             }
+            selection: none
         };
+        let doc = state.view();
 
         let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
         let muted = renderer
@@ -2573,7 +2599,7 @@ mod tests {
 
     #[test]
     fn table_row_and_cell_draw_no_border() {
-        use editor_macros::doc;
+        use editor_macros::state;
 
         #[derive(Default)]
         struct FillCounter {
@@ -2599,24 +2625,28 @@ mod tests {
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row {
-                        table_cell { paragraph }
+        let (state, t1) = state! {
+            doc {
+                root {
+                    t1: table {
+                        table_row {
+                            table_cell { paragraph }
+                        }
                     }
                 }
             }
+            selection: none
         };
+        let doc = state.view();
 
-        let row_id = {
-            let node = doc.node(t1).unwrap();
-            node.children().next().unwrap().id()
-        };
-        let cell_id = {
-            let row = doc.node(row_id).unwrap();
-            row.children().next().unwrap().id()
-        };
+        let row_id = doc.node(t1).unwrap().child_blocks().next().unwrap().id();
+        let cell_id = doc
+            .node(row_id)
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
 
         let mut renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
         let mut sink = FillCounter::default();

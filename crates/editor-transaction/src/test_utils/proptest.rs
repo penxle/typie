@@ -1,7 +1,8 @@
 use proptest::prelude::*;
 
+use editor_crdt::Dot;
 use editor_macros::state;
-use editor_model::{Modifier, NodeId};
+use editor_model::Modifier;
 use editor_state::State;
 
 use crate::Step;
@@ -16,18 +17,23 @@ pub struct TransformScenario {
     pub b: Step,
 }
 
-fn fixed_state() -> (State, NodeId, NodeId) {
-    let (state, p1, t1) = state! {
-        doc { root { p1: paragraph { t1: text("abcdefghij") } } }
-        selection: (t1, 0)
+fn fixed_state() -> (State, Dot) {
+    let (state, p1) = state! {
+        doc { root { p1: paragraph { text("abcdefghij") } } }
+        selection: (p1, 0)
     };
-    (state, p1, t1)
+    (state, p1)
 }
 
-pub fn arb_syncable_step(text_id: NodeId, paragraph_id: NodeId) -> impl Strategy<Value = Step> {
+pub fn arb_syncable_step(block: Dot) -> impl Strategy<Value = Step> {
+    let b1 = block;
+    let b2 = block;
+    let b3 = block;
+    let b4 = block;
+    let b5 = block;
     prop_oneof![
         (0usize..=TEXT_LEN, "[a-z]{0,4}").prop_map(move |(offset, text)| Step::InsertText {
-            node_id: text_id,
+            block: b1,
             offset,
             text
         }),
@@ -39,34 +45,34 @@ pub fn arb_syncable_step(text_id: NodeId, paragraph_id: NodeId) -> impl Strategy
                 }
                 let removed: String = FIXED_TEXT.chars().skip(offset).take(len).collect();
                 Some(Step::RemoveText {
-                    node_id: text_id,
+                    block: b2,
                     offset,
                     text: removed,
                 })
             }
         ),
         Just(Step::AddModifier {
-            node_id: paragraph_id,
+            block: b3,
             modifier: Modifier::Bold
         }),
         Just(Step::AddModifier {
-            node_id: paragraph_id,
+            block: b4,
             modifier: Modifier::Italic
         }),
         Just(Step::RemoveModifier {
-            node_id: paragraph_id,
+            block: b5,
             modifier: Modifier::Underline
         }),
     ]
 }
 
 pub fn transform_scenario() -> impl Strategy<Value = TransformScenario> {
-    let (state, paragraph_id, text_id) = fixed_state();
+    let (state, block) = fixed_state();
     let state_for_steps = state.clone();
     (
         Just(state),
-        arb_syncable_step(text_id, paragraph_id),
-        arb_syncable_step(text_id, paragraph_id),
+        arb_syncable_step(block),
+        arb_syncable_step(block),
     )
         .prop_filter("a and b must apply to state", move |(_, a, b)| {
             a.apply(&state_for_steps).is_ok() && b.apply(&state_for_steps).is_ok()

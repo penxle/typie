@@ -3,13 +3,13 @@ import { handlePointerDown, handlePointerMove, handlePointerUp, markNativeSelect
 import type { Editor } from '../editor.svelte';
 
 const collapsedSelection = {
-  anchor: { node_id: 't1', offset: 2 },
-  head: { node_id: 't1', offset: 2 },
+  anchor: { node: 't1', offset: 2, affinity: 'downstream' },
+  head: { node: 't1', offset: 2, affinity: 'downstream' },
 } as const;
 
 const rangeSelection = {
-  anchor: { node_id: 't1', offset: 1 },
-  head: { node_id: 't1', offset: 4 },
+  anchor: { node: 't1', offset: 1, affinity: 'downstream' },
+  head: { node: 't1', offset: 4, affinity: 'downstream' },
 } as const;
 
 const createPointerTarget = ({ captured = false } = {}) => {

@@ -47,6 +47,8 @@ serde_json.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+editor-crdt = { path = "../editor-crdt" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
 editor-view = { path = "../editor-view", features = ["test-utils"] }

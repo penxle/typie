@@ -1,50 +1,40 @@
-use editor_model::Node;
+use editor_model::{AtomLeaf, ChildView};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::remove_atom_leaf;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_preceding_tab(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let prev = match node.node() {
-        Node::Text(_) => {
-            if pos.offset > 0 {
-                return Ok(false);
-            }
-            node.prev_sibling()
-        }
-        _ => {
-            if pos.offset == 0 {
-                return Ok(false);
-            }
-            node.children().nth(pos.offset - 1)
-        }
-    };
-
-    let Some(prev) = prev else {
-        return Ok(false);
-    };
-    if !matches!(prev.node(), Node::Tab(_)) {
+    if pos.offset == 0 {
         return Ok(false);
     }
 
-    let target_id = prev.id();
-    let is_text = matches!(node.node(), Node::Text(_));
-    let new_offset = if is_text { 0 } else { pos.offset - 1 };
-    tr.remove_subtree(target_id)?;
+    let tab_index = pos.offset - 1;
+    {
+        let view = tr.view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        let Some(ChildView::Leaf(prev)) = node.child_at(tab_index) else {
+            return Ok(false);
+        };
+        if prev.as_atom() != Some(&AtomLeaf::Tab) {
+            return Ok(false);
+        }
+    }
+
+    let new_offset = pos.offset - 1;
+    remove_atom_leaf(tr, pos.node, tab_index)?;
     tr.set_selection(Some(Selection::collapsed(Position {
-        node_id: pos.node_id,
+        node: pos.node,
         offset: new_offset,
         affinity: Affinity::Downstream,
     })))?;
@@ -61,13 +51,13 @@ mod tests {
     #[test]
     fn deletes_tab_before_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("a") tab t2: text("b") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_preceding_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("a") t2: text("b") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -75,8 +65,8 @@ mod tests {
     #[test]
     fn no_op_when_prev_is_not_tab() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("a") hard_break t2: text("b") } } }
-            selection: (t2, 0)
+            doc { root { p1: paragraph { text("a") hard_break text("b") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| delete_preceding_tab(&mut tr));
     }
@@ -84,8 +74,8 @@ mod tests {
     #[test]
     fn no_op_in_middle_of_text() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("abc") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("abc") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| delete_preceding_tab(&mut tr));
     }

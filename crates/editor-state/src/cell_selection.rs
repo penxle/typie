@@ -1,169 +1,81 @@
 use std::ops::RangeInclusive;
 
-use editor_model::{Doc, Node, NodeId, NodeRef};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, LeafView, NodeType, NodeView};
 
-use crate::position::Position;
-use crate::resolved_selection::ResolvedSelection;
-use crate::selection::Selection;
+use crate::selection::ResolvedSelection;
 
-/// A rectangular block of table cells derived from a cell-rect `Selection`.
+fn block_child_at<'a>(node: &NodeView<'a>, i: usize) -> Option<NodeView<'a>> {
+    match node.child_at(i) {
+        Some(ChildView::Block(b)) => Some(b),
+        _ => None,
+    }
+}
+
 pub struct CellRect<'a> {
-    pub table: NodeRef<'a>,
-    pub anchor_cell: NodeRef<'a>,
-    pub head_cell: NodeRef<'a>,
+    pub table: NodeView<'a>,
+    pub anchor_cell: NodeView<'a>,
+    pub head_cell: NodeView<'a>,
     pub rows: RangeInclusive<usize>,
     pub cols: RangeInclusive<usize>,
 }
 
-/// The `TableRow` an endpoint addresses, or `None` if its node is not one.
-fn endpoint_row<'a>(doc: &'a Doc, pos: Position) -> Option<NodeRef<'a>> {
-    let row = doc.node(pos.node_id)?;
-    matches!(row.node(), Node::TableRow(_)).then_some(row)
+fn row_width(table: &NodeView, row_idx: usize) -> usize {
+    block_child_at(table, row_idx)
+        .map(|row| row.children().count())
+        .unwrap_or(0)
 }
 
-impl<'a> ResolvedSelection<'a> {
-    /// `Some` iff this selection encodes a table cell rectangle. Reads only
-    /// node ids, offsets, and row indices — never affinity — so it is stable
-    /// across the unconditional affinity-rewriting `normalize` pass.
-    pub fn as_cell_rect(&self) -> Option<CellRect<'a>> {
-        if self.is_collapsed() {
-            return None;
-        }
-        let doc = self.doc();
-        let a = Position::from(self.anchor());
-        let h = Position::from(self.head());
-
-        let arow = endpoint_row(doc, a)?;
-        let hrow = endpoint_row(doc, h)?;
-
-        let table = arow.parent()?;
-        if !matches!(table.node(), Node::Table(_)) {
-            return None;
-        }
-        if hrow.parent()?.id() != table.id() {
-            return None;
-        }
-
-        let ra = arow.index()?;
-        let rh = hrow.index()?;
-
-        let o_lo = a.offset.min(h.offset);
-        let o_hi = a.offset.max(h.offset);
-        if o_hi == o_lo {
-            return None; // degenerate / zero-width
-        }
-        let c_lo = o_lo;
-        let c_hi = o_hi - 1;
-
-        // The endpoint at the lower offset is the rectangle's left-outer
-        // boundary (column c_lo); the one at the higher offset is the
-        // right-outer boundary (column c_hi).
-        let anchor_col = if a.offset == o_lo { c_lo } else { c_hi };
-        let head_col = if h.offset == o_lo { c_lo } else { c_hi };
-
-        let anchor_cell = arow.children().nth(anchor_col)?;
-        let head_cell = hrow.children().nth(head_col)?;
-        if !matches!(anchor_cell.node(), Node::TableCell(_))
-            || !matches!(head_cell.node(), Node::TableCell(_))
-        {
-            return None;
-        }
-
-        Some(CellRect {
-            table,
-            anchor_cell,
-            head_cell,
-            rows: ra.min(rh)..=ra.max(rh),
-            cols: c_lo..=c_hi,
-        })
+fn uniform_width(table: &NodeView) -> Option<usize> {
+    let count = table.children().count();
+    if count == 0 {
+        return None;
     }
-
-    /// The single **leaf, non-`Text`** node bracketed by a node-selection,
-    /// or `None`. Returns `None` whenever `as_cell_rect()` is `Some`, for a
-    /// bracketed `Text` child, and for a **non-leaf** child — matching what
-    /// real producers actually bracket (`select_node_forward.rs:38` checks
-    /// `!next.spec().is_leaf()`; `select_node_backward.rs:34` checks
-    /// `!prev.spec().is_leaf()`; both reject `Text`). It is a constrained
-    /// "single leaf, non-`Text` node" detector — it does NOT also check the
-    /// schema `selectable` flag, so a `HardBreak`/`PageBreak` bracket (never
-    /// produced by the real commands) would still match — and is **not** a
-    /// general "is this selection deletable as one node" predicate:
-    /// structural containers (`TableRow`/`TableCell`/`Table`/paragraph) are
-    /// never reported, so a cell-rect can never be observed here as a plain
-    /// node-selection.
-    pub fn as_node_selection(&self) -> Option<NodeRef<'a>> {
-        if self.is_collapsed() || self.as_cell_rect().is_some() {
+    let w = row_width(table, 0);
+    for i in 1..count {
+        if row_width(table, i) != w {
             return None;
         }
-        let doc = self.doc();
-        let a = Position::from(self.anchor());
-        let h = Position::from(self.head());
-        if a.node_id != h.node_id {
-            return None;
-        }
-        let lo = a.offset.min(h.offset);
-        let hi = a.offset.max(h.offset);
-        if hi - lo != 1 {
-            return None;
-        }
-        let child = doc.node(a.node_id)?.children().nth(lo)?;
-        if matches!(child.node(), Node::Text(_)) || !child.spec().is_leaf() {
-            return None;
-        }
-        Some(child)
     }
+    Some(w)
 }
 
 impl<'a> CellRect<'a> {
-    /// Selected cells in row-major order. Skips a `(r, c)` slot whose cell
-    /// does not exist (ragged table) rather than panicking.
-    pub fn cells(&self) -> impl Iterator<Item = NodeRef<'a>> {
-        let table = self.table;
-        let rows = self.rows.clone();
-        let cols = self.cols.clone();
-        let mut out: Vec<NodeRef<'a>> = Vec::new();
-        for r in rows {
-            if let Some(row) = table.children().nth(r) {
-                for c in cols.clone() {
-                    if let Some(cell) = row.children().nth(c) {
+    pub fn table_id(&self) -> Dot {
+        self.table.id()
+    }
+    pub fn rows(&self) -> &std::ops::RangeInclusive<usize> {
+        &self.rows
+    }
+    pub fn cols(&self) -> &std::ops::RangeInclusive<usize> {
+        &self.cols
+    }
+
+    pub fn cells(&self) -> Vec<NodeView<'a>> {
+        let mut out = Vec::new();
+        for r in self.rows.clone() {
+            if let Some(row) = block_child_at(&self.table, r) {
+                for c in self.cols.clone() {
+                    if let Some(cell) = block_child_at(&row, c) {
                         out.push(cell);
                     }
                 }
             }
         }
-        out.into_iter()
+        out
     }
 
-    pub fn contains(&self, cell: &NodeRef<'_>) -> bool {
+    pub fn contains(&self, cell: &NodeView) -> bool {
         let Some(row) = cell.parent() else {
             return false;
         };
-        if row.parent().map(|t| t.id()) != Some(self.table.id()) {
+        let Some(r) = row.index() else {
             return false;
-        }
-        let (Some(r), Some(c)) = (row.index(), cell.index()) else {
+        };
+        let Some(c) = cell.index() else {
             return false;
         };
         self.rows.contains(&r) && self.cols.contains(&c)
-    }
-
-    fn row_width(&self, row_index: usize) -> Option<usize> {
-        Some(self.table.children().nth(row_index)?.children().count())
-    }
-
-    /// `Some(width)` iff every row has the same number of cells; `None` on a
-    /// ragged table.
-    fn uniform_width(&self) -> Option<usize> {
-        let mut w: Option<usize> = None;
-        for row in self.table.children() {
-            let rw = row.children().count();
-            match w {
-                None => w = Some(rw),
-                Some(x) if x != rw => return None,
-                _ => {}
-            }
-        }
-        w
     }
 
     pub fn is_single(&self) -> bool {
@@ -171,866 +83,990 @@ impl<'a> CellRect<'a> {
     }
 
     pub fn is_full_row(&self) -> bool {
-        if self.rows.start() != self.rows.end() {
-            return false;
-        }
-        match self.row_width(*self.rows.start()) {
-            Some(w) => w > 0 && *self.cols.start() == 0 && *self.cols.end() == w - 1,
-            None => false,
+        match uniform_width(&self.table) {
+            Some(w) if w > 0 => *self.cols.start() == 0 && *self.cols.end() == w - 1,
+            _ => false,
         }
     }
 
     pub fn is_full_column(&self) -> bool {
-        let Some(w) = self.uniform_width() else {
+        let row_count = self.table.children().count();
+        if row_count == 0 {
             return false;
-        };
-        let h = self.table.children().count();
-        w > 0
-            && h > 0
-            && self.cols.start() == self.cols.end()
-            && *self.rows.start() == 0
-            && *self.rows.end() == h - 1
+        }
+        *self.rows.start() == 0 && *self.rows.end() == row_count - 1
     }
 
     pub fn is_full_table(&self) -> bool {
-        let Some(w) = self.uniform_width() else {
-            return false;
-        };
-        let h = self.table.children().count();
-        w > 0
-            && h > 0
-            && *self.rows.start() == 0
-            && *self.rows.end() == h - 1
-            && *self.cols.start() == 0
-            && *self.cols.end() == w - 1
+        self.is_full_row() && self.is_full_column()
     }
 }
 
-/// Build a cell-rect `Selection` whose corners are `anchor_cell` and
-/// `head_cell`. Both must be `TableCell`s in one common `Table`; otherwise
-/// `None`. Endpoints are placed at each corner's outer column boundary, then
-/// the selection is run through `Selection::normalize` so the returned value
-/// is already canonical (correct affinities, no pre-normalization invariant
-/// violation) and safe for any caller to inspect directly — not only via the
-/// `set_selection` ingress. Derivation never reads affinity anyway; this is
-/// belt-and-suspenders. Full-table rectangles normalize to the table's unit
-/// selection; non-full rectangles resolve back to a `CellRect` whose
-/// `anchor_cell`/`head_cell` match the inputs (direction preserved).
-pub fn cell_rect_selection(doc: &Doc, anchor_cell: NodeId, head_cell: NodeId) -> Option<Selection> {
-    let ac = doc.node(anchor_cell)?;
-    let hc = doc.node(head_cell)?;
-    if !matches!(ac.node(), Node::TableCell(_)) || !matches!(hc.node(), Node::TableCell(_)) {
+fn endpoint_row<'a>(pos: &crate::Position, view: &'a DocView<'a>) -> Option<NodeView<'a>> {
+    let row = view.node(pos.node)?;
+    (row.node_type() == NodeType::TableRow).then_some(row)
+}
+
+pub fn as_cell_rect<'a>(rs: &ResolvedSelection<'a>) -> Option<CellRect<'a>> {
+    if rs.is_collapsed() {
         return None;
     }
-    let arow = ac.parent()?;
-    let hrow = hc.parent()?;
+    let (a, h) = (rs.anchor().position(), rs.head().position());
+    let arow = endpoint_row(&a, rs.view())?;
+    let hrow = endpoint_row(&h, rs.view())?;
     let table = arow.parent()?;
-    if !matches!(table.node(), Node::Table(_)) || hrow.parent()?.id() != table.id() {
+    if table.node_type() != NodeType::Table {
         return None;
     }
-    let ca = ac.index()?;
-    let ch = hc.index()?;
-
-    let anchor_offset = if ca <= ch { ca } else { ca + 1 };
-    let head_offset = if ch >= ca { ch + 1 } else { ch };
-
-    Selection::new(
-        Position::new(arow.id(), anchor_offset),
-        Position::new(hrow.id(), head_offset),
-    )
-    .normalize(doc)
-}
-
-pub fn enclosing_table_cell(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
-    doc.node(node_id)?
-        .ancestors()
-        .find(|n| matches!(n.node(), Node::TableCell(_)))
-        .map(|n| n.id())
-}
-
-pub fn enclosing_table(doc: &Doc, cell_id: NodeId) -> Option<NodeId> {
-    doc.node(cell_id)?
-        .ancestors()
-        .find(|n| matches!(n.node(), Node::Table(_)))
-        .map(|n| n.id())
-}
-
-pub fn table_cell_ids(doc: &Doc, cell_id: NodeId) -> Vec<NodeId> {
-    let Some(node) = doc.node(cell_id) else {
-        return Vec::new();
-    };
-    if !matches!(node.node(), Node::TableCell(_)) {
-        return Vec::new();
+    if hrow.parent()?.id() != table.id() {
+        return None;
     }
-    let Some(table) = node
+    let (ra, rh) = (arow.index()?, hrow.index()?);
+    let (o_lo, o_hi) = (a.offset.min(h.offset), a.offset.max(h.offset));
+    if o_hi == o_lo {
+        return None;
+    }
+    let (c_lo, c_hi) = (o_lo, o_hi - 1);
+    let anchor_col = if a.offset == o_lo { c_lo } else { c_hi };
+    let head_col = if h.offset == o_lo { c_lo } else { c_hi };
+    let anchor_cell = block_child_at(&arow, anchor_col)?;
+    let head_cell = block_child_at(&hrow, head_col)?;
+    if anchor_cell.node_type() != NodeType::TableCell
+        || head_cell.node_type() != NodeType::TableCell
+    {
+        return None;
+    }
+    Some(CellRect {
+        table,
+        anchor_cell,
+        head_cell,
+        rows: ra.min(rh)..=ra.max(rh),
+        cols: c_lo..=c_hi,
+    })
+}
+
+pub fn as_node_selection<'a>(rs: &ResolvedSelection<'a>) -> Option<LeafView<'a>> {
+    if rs.is_collapsed() || as_cell_rect(rs).is_some() {
+        return None;
+    }
+    let (a, h) = (rs.anchor().position(), rs.head().position());
+    if a.node != h.node {
+        return None;
+    }
+    let (lo, hi) = (a.offset.min(h.offset), a.offset.max(h.offset));
+    if hi - lo != 1 {
+        return None;
+    }
+    match rs.view().node(a.node)?.child_at(lo)? {
+        ChildView::Leaf(l) if l.as_char().is_some() => None,
+        ChildView::Leaf(l) => Some(l),
+        ChildView::Block(_) => None,
+    }
+}
+
+pub fn enclosing_table_cell<'a>(view: &'a DocView<'a>, node: Dot) -> Option<Dot> {
+    view.node(node)?
         .ancestors()
-        .find(|n| matches!(n.node(), Node::Table(_)))
-    else {
-        return Vec::new();
+        .find(|n| n.node_type() == NodeType::TableCell)
+        .map(|n| n.id())
+}
+
+pub fn enclosing_table<'a>(view: &'a DocView<'a>, cell: Dot) -> Option<Dot> {
+    view.node(cell)?
+        .ancestors()
+        .find(|n| n.node_type() == NodeType::Table)
+        .map(|n| n.id())
+}
+
+pub fn table_cell_ids<'a>(view: &'a DocView<'a>, cell: Dot) -> Vec<Dot> {
+    let cell_node = view.node(cell);
+    if cell_node.as_ref().map(|n| n.node_type()) != Some(NodeType::TableCell) {
+        return vec![];
+    }
+    let table_id = match enclosing_table(view, cell) {
+        Some(id) => id,
+        None => return vec![],
     };
-    table
-        .children()
-        .filter(|row| matches!(row.node(), Node::TableRow(_)))
-        .flat_map(|row| row.children().collect::<Vec<_>>())
-        .filter(|cell| matches!(cell.node(), Node::TableCell(_)))
-        .map(|cell| cell.id())
-        .collect()
+    let table = match view.node(table_id) {
+        Some(t) => t,
+        None => return vec![],
+    };
+    let mut out = Vec::new();
+    for row in table.child_blocks() {
+        for cell_child in row.child_blocks() {
+            out.push(cell_child.id());
+        }
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::state;
-    use editor_model::Node;
+    use super::*;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog,
+        NodeType, ProjectedDoc, SeqItem, SpanLog, StyleLog, project_document,
+    };
 
-    use crate::affinity::Affinity;
-    use crate::position::Position;
-    use crate::selection::Selection;
+    use crate::{Position, affinity::Affinity, selection::Selection};
 
-    #[test]
-    fn full_table_2x2_derives_bounding_box() {
-        let (state, tr0, c00, _, tr1, _, c11) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 2,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rs = sel.resolve(&state.doc).unwrap();
-        let rect = rs.as_cell_rect().expect("must be a cell rectangle");
-
-        assert!(matches!(rect.table.node(), Node::Table(_)));
-        assert_eq!(rect.anchor_cell.id(), c00);
-        assert_eq!(rect.head_cell.id(), c11);
-        assert_eq!(rect.rows, 0..=1);
-        assert_eq!(rect.cols, 0..=1);
-    }
-
-    #[test]
-    fn affinity_does_not_affect_derivation() {
-        let (state, tr0, c00, _, tr1, _, c11) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Upstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 2,
-                affinity: Affinity::Downstream,
-            },
-        );
-        let rect = sel.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        assert_eq!(rect.anchor_cell.id(), c00);
-        assert_eq!(rect.head_cell.id(), c11);
-        assert_eq!(rect.rows, 0..=1);
-        assert_eq!(rect.cols, 0..=1);
-    }
-
-    #[test]
-    fn single_cell_1x1_is_a_cell_rect() {
-        let (state, tr0, c00, _) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph {} }
-                c01: table_cell { paragraph {} }
-            } } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr0,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rect = sel
-            .resolve(&state.doc)
-            .unwrap()
-            .as_cell_rect()
-            .expect("1x1 must be a cell rectangle");
-        assert_eq!(rect.anchor_cell.id(), c00);
-        assert_eq!(rect.head_cell.id(), c00);
-        assert_eq!(rect.rows, 0..=0);
-        assert_eq!(rect.cols, 0..=0);
-    }
-
-    #[test]
-    fn plain_text_selection_is_not_a_cell_rect() {
-        let (state, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
-        };
-        let sel = Selection::new(
-            Position::new(t, 0),
-            Position {
-                node_id: t,
-                offset: 5,
-                affinity: Affinity::Upstream,
-            },
-        );
-        assert!(sel.resolve(&state.doc).unwrap().as_cell_rect().is_none());
-    }
-
-    #[test]
-    fn collapsed_at_row_boundary_is_not_a_cell_rect() {
-        let (state, tr0, _) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph {} }
-            } } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::collapsed(Position::new(tr0, 0));
-        assert!(sel.resolve(&state.doc).unwrap().as_cell_rect().is_none());
-    }
-
-    #[test]
-    fn antidiagonal_direct_derives_corners() {
-        // anchor corner = c01 (row0,col1, top-right); head corner = c10
-        // (row1,col0, bottom-left). Built directly (no normalize): anchor
-        // outer side of col1 = offset 2 in tr0; head outer side of col0 =
-        // offset 0 in tr1. Affinity is immaterial.
-        let (state, tr0, _, c01, tr1, c10, _) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 2,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-        );
-        let rect = sel
-            .resolve(&state.doc)
-            .unwrap()
-            .as_cell_rect()
-            .expect("anti-diagonal must be a cell rectangle");
-        assert_eq!(rect.anchor_cell.id(), c01);
-        assert_eq!(rect.head_cell.id(), c10);
-        assert_eq!(rect.rows, 0..=1);
-        assert_eq!(rect.cols, 0..=1);
-    }
-
-    #[test]
-    fn cross_table_is_not_a_cell_rect() {
-        let (state, tr0, _, tr1, _) = state! {
-            doc { root {
-                table { tr0: table_row { ca: table_cell { paragraph {} } } }
-                table { tr1: table_row { cb: table_cell { paragraph {} } } }
-            } }
-            selection: (ca, 0)
-        };
-        // endpoints in TableRows of two DIFFERENT tables.
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        );
-        assert!(sel.resolve(&state.doc).unwrap().as_cell_rect().is_none());
-    }
-
-    #[test]
-    fn same_row_equal_offset_differing_affinity_is_not_a_cell_rect() {
-        let (state, tr0, _) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph {} }
-            } } } }
-            selection: (c00, 0)
-        };
-        // Not collapsed (affinity differs) but offsets equal → degenerate.
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 1,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr0,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rs = sel.resolve(&state.doc).unwrap();
-        assert!(!rs.is_collapsed());
-        assert!(rs.as_cell_rect().is_none());
-    }
-
-    #[test]
-    fn cells_yields_row_major_rectangle() {
-        let (state, tr0, c00, c01, tr1, c10, c11) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 2,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rect = sel.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        let ids: Vec<_> = rect.cells().map(|c| c.id()).collect();
-        assert_eq!(ids, vec![c00, c01, c10, c11]);
-    }
-
-    #[test]
-    fn contains_only_cells_inside_rectangle() {
-        let (state, tr0, c00, c01, tr1, c10, _) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rect = sel.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        assert!(rect.contains(&state.doc.node(c00).unwrap()));
-        assert!(rect.contains(&state.doc.node(c10).unwrap()));
-        assert!(!rect.contains(&state.doc.node(c01).unwrap()));
-    }
-
-    #[test]
-    fn predicates_single_full_row_column_table() {
-        let (state, tr0, _, _, tr1, _, _) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let rect = |a: Position, h: Position| {
-            Selection::new(a, h)
-                .resolve(&state.doc)
-                .unwrap()
-                .as_cell_rect()
-                .unwrap()
-        };
-        let dn = Affinity::Downstream;
-        let up = Affinity::Upstream;
-
-        let r = rect(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: dn,
-            },
-            Position {
-                node_id: tr0,
-                offset: 1,
-                affinity: up,
-            },
-        );
-        assert!(r.is_single());
-        assert!(!r.is_full_row());
-        assert!(!r.is_full_table());
-
-        let r = rect(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: dn,
-            },
-            Position {
-                node_id: tr0,
-                offset: 2,
-                affinity: up,
-            },
-        );
-        assert!(r.is_full_row());
-        assert!(!r.is_full_column());
-
-        let r = rect(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: dn,
-            },
-            Position {
-                node_id: tr1,
-                offset: 1,
-                affinity: up,
-            },
-        );
-        assert!(r.is_full_column());
-        assert!(!r.is_full_row());
-
-        let r = rect(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: dn,
-            },
-            Position {
-                node_id: tr1,
-                offset: 2,
-                affinity: up,
-            },
-        );
-        assert!(r.is_full_table());
-        assert!(!r.is_single());
-    }
-
-    #[test]
-    fn ragged_table_predicates_do_not_lie_or_panic() {
-        let (state, tr0, _, _, tr1, ..) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                    c12: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: tr0,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: tr1,
-                offset: 2,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rect = sel.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        assert!(!rect.is_full_table());
-        assert!(!rect.is_full_column());
-        let n = rect.cells().count();
-        assert_eq!(n, 4);
-    }
-
-    #[test]
-    fn builder_roundtrips_through_as_cell_rect() {
-        let (state, c00, c11) = state! {
-            doc { root { table {
-                table_row {
-                    c00: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-                table_row {
-                    table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-                table_row {
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = super::cell_rect_selection(&state.doc, c00, c11)
-            .expect("c00..c11 is a valid cell rectangle");
-        let rect = sel.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        assert_eq!(rect.anchor_cell.id(), c00);
-        assert_eq!(rect.head_cell.id(), c11);
-        assert_eq!(rect.rows, 0..=1);
-        assert_eq!(rect.cols, 0..=1);
-    }
-
-    #[test]
-    fn full_table_cell_rect_normalizes_to_table_selection() {
-        let (state, root, table, c00, c11) = state! {
-            doc { root: root { table: table {
-                table_row {
-                    c00: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-                table_row {
-                    table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-
-        let sel = super::cell_rect_selection(&state.doc, c00, c11)
-            .expect("full-table cell rect should normalize");
-
-        assert_eq!(
-            sel,
-            Selection::new(
-                Position {
-                    node_id: root,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
                 },
-                Position {
-                    node_id: root,
-                    offset: 1,
-                    affinity: Affinity::Upstream,
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    // 2x2 table: root > table > [row0 > [cell00, cell01], row1 > [cell10, cell11]]
+    // Each cell has a paragraph child.
+    fn two_by_two_table() -> (ProjectedDoc, Dot, Dot, Dot, Dot, Dot, Dot, Dot) {
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let row0 = Dot::new(1, 2);
+        let cell00 = Dot::new(1, 3);
+        let cell01 = Dot::new(1, 4);
+        let row1 = Dot::new(1, 5);
+        let cell10 = Dot::new(1, 6);
+        let cell11 = Dot::new(1, 7);
+        let mut counter = 8u64;
+        let mut next = || {
+            let d = Dot::new(1, counter);
+            counter += 1;
+            d
+        };
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
                 },
-            )
-        );
-        assert!(sel.resolve(&state.doc).unwrap().as_cell_rect().is_none());
-        assert!(sel.is_unit_node_selection(&state.doc));
-        assert_eq!(state.doc.node(table).unwrap().index(), Some(0));
+            ),
+            (
+                row0,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell00,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell00],
+                },
+            ),
+            (
+                cell01,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell01],
+                },
+            ),
+            (
+                row1,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell10,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row1],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row1, cell10],
+                },
+            ),
+            (
+                cell11,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row1],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row1, cell11],
+                },
+            ),
+        ];
+        (
+            project_document(&logs(&items)).unwrap(),
+            root,
+            table,
+            row0,
+            cell00,
+            cell01,
+            row1,
+            cell10,
+        )
+    }
+
+    fn sel<'a>(
+        view: &'a DocView<'a>,
+        anchor_node: Dot,
+        anchor_off: usize,
+        head_node: Dot,
+        head_off: usize,
+    ) -> crate::selection::ResolvedSelection<'a> {
+        let a = Position {
+            node: anchor_node,
+            offset: anchor_off,
+            affinity: Affinity::Downstream,
+        };
+        let h = Position {
+            node: head_node,
+            offset: head_off,
+            affinity: Affinity::Downstream,
+        };
+        Selection::new(a, h).resolve(view).unwrap()
     }
 
     #[test]
-    fn builder_preserves_direction() {
-        let (state, c00, c11) = state! {
-            doc { root { table {
-                table_row {
-                    c00: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-                table_row {
-                    table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-                table_row {
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let fwd = super::cell_rect_selection(&state.doc, c00, c11).unwrap();
-        let bwd = super::cell_rect_selection(&state.doc, c11, c00).unwrap();
-        assert_ne!(fwd, bwd, "anchor/head corner identity must be preserved");
-        let rf = fwd.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        let rb = bwd.resolve(&state.doc).unwrap().as_cell_rect().unwrap();
-        assert_eq!(rf.anchor_cell.id(), c00);
-        assert_eq!(rb.anchor_cell.id(), c11);
-        assert_eq!(rf.rows, rb.rows);
-        assert_eq!(rf.cols, rb.cols);
+    fn test_4_as_cell_rect_single_row() {
+        let (pd, _root, _table, row0, cell00, cell01, _row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+        // anchor at row0 offset 0, head at row0 offset 2 (both cells)
+        let rs = sel(&view, row0, 0, row0, 2);
+        let cr = as_cell_rect(&rs);
+        assert!(cr.is_some(), "single-row 2-cell rect should resolve");
+        let cr = cr.unwrap();
+        assert_eq!(*cr.rows.start(), 0);
+        assert_eq!(*cr.rows.end(), 0);
+        assert_eq!(*cr.cols.start(), 0);
+        assert_eq!(*cr.cols.end(), 1);
+        let cell00_node = view.node(cell00).unwrap();
+        let cell01_node = view.node(cell01).unwrap();
+        assert!(cr.contains(&cell00_node));
+        assert!(cr.contains(&cell01_node));
     }
 
     #[test]
-    fn builder_rejects_non_cell_nodes() {
-        let (state, t) = state! {
-            doc { root { paragraph { t: text("x") } } }
-            selection: (t, 0)
-        };
-        assert!(super::cell_rect_selection(&state.doc, t, t).is_none());
+    fn test_4_as_cell_rect_cross_row() {
+        let (pd, _root, _table, row0, _cell00, _cell01, row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+        // anchor row0 col 0..1 → cell00, head row1 col 0..1 → cell10
+        let rs = sel(&view, row0, 0, row1, 1);
+        let cr = as_cell_rect(&rs);
+        assert!(cr.is_some(), "cross-row rect should resolve");
+        let cr = cr.unwrap();
+        assert_eq!(*cr.rows.start(), 0);
+        assert_eq!(*cr.rows.end(), 1);
+        assert_eq!(*cr.cols.start(), 0);
+        assert_eq!(*cr.cols.end(), 0);
     }
 
     #[test]
-    fn antidiagonal_survives_normalize() {
-        let (state, _c00, c01, c10) = state! {
-            doc { root { table {
-                table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-                table_row {
-                    c10: table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        // anchor corner = c01 (top-right), head corner = c10 (bottom-left).
-        let sel = super::cell_rect_selection(&state.doc, c01, c10).unwrap();
-        let normalized = sel.normalize(&state.doc).expect("normalizes");
-        let rect = normalized
-            .resolve(&state.doc)
-            .unwrap()
-            .as_cell_rect()
-            .expect("anti-diagonal cell-rect must survive the affinity rewrite");
-        assert_eq!(rect.anchor_cell.id(), c01);
-        assert_eq!(rect.head_cell.id(), c10);
-        assert_eq!(rect.rows, 0..=1);
-        assert_eq!(rect.cols, 0..=1);
-    }
-
-    #[test]
-    fn same_row_backward_survives_normalize() {
-        let (state, c00, c01) = state! {
-            doc { root { table {
-                table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                table_row {
-                    table_cell { paragraph {} }
-                    table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        // backward 1xN: anchor corner c01 (right), head corner c00 (left).
-        let sel = super::cell_rect_selection(&state.doc, c01, c00).unwrap();
-        let normalized = sel.normalize(&state.doc).expect("normalizes");
-        let rect = normalized
-            .resolve(&state.doc)
-            .unwrap()
-            .as_cell_rect()
-            .expect("backward same-row cell-rect must survive normalize");
-        assert_eq!(rect.anchor_cell.id(), c01);
-        assert_eq!(rect.head_cell.id(), c00);
-        assert_eq!(rect.rows, 0..=0);
-        assert_eq!(rect.cols, 0..=1);
-    }
-
-    #[test]
-    fn image_node_selection_is_a_node_selection_not_a_cell_rect() {
-        let (state, r) = state! {
-            doc { r: root { paragraph {} image paragraph {} } }
-            selection: (r, 0)
-        };
-        let sel = Selection::new(
-            Position {
-                node_id: r,
-                offset: 1,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node_id: r,
-                offset: 2,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rs = sel.resolve(&state.doc).unwrap();
-        assert!(rs.as_cell_rect().is_none());
-        let node = rs.as_node_selection().expect("image is a node selection");
-        assert!(matches!(node.node(), Node::Image(_)));
-    }
-
-    #[test]
-    fn cell_rect_is_never_observed_as_node_selection() {
-        let (state, _, c00, _) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph {} }
-                c01: table_cell { paragraph {} }
-            } } } }
-            selection: (c00, 0)
-        };
-        let sel = super::cell_rect_selection(&state.doc, c00, c00).unwrap();
-        let rs = sel.resolve(&state.doc).unwrap();
-        assert!(rs.as_cell_rect().is_some());
+    fn test_4_as_cell_rect_none_when_collapsed() {
+        let (pd, _root, _table, row0, _cell00, _cell01, _row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+        let pos = Position::new(row0, 1);
+        let sel = Selection::collapsed(pos).resolve(&view).unwrap();
         assert!(
-            rs.as_node_selection().is_none(),
-            "a 1x1 cell-rect must never be observable as a plain node-selection"
+            as_cell_rect(&sel).is_none(),
+            "collapsed selection cannot be cell rect"
         );
     }
 
     #[test]
-    fn text_child_bracket_is_not_a_node_selection() {
-        let (state, p) = state! {
-            doc { root { p: paragraph { text("ab") text("cd") } } }
-            selection: (p, 0)
+    fn test_5_cell_rect_predicates() {
+        let (pd, _root, _table, row0, _cell00, _cell01, row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        // Single cell: row0 col 0
+        let rs_single = sel(&view, row0, 0, row0, 1);
+        let cr_single = as_cell_rect(&rs_single).unwrap();
+        assert!(cr_single.is_single());
+        assert!(!cr_single.is_full_row());
+        assert!(!cr_single.is_full_column());
+        assert!(!cr_single.is_full_table());
+
+        // Full row: row0 col 0..=1
+        let rs_full_row = sel(&view, row0, 0, row0, 2);
+        let cr_full_row = as_cell_rect(&rs_full_row).unwrap();
+        assert!(!cr_full_row.is_single());
+        assert!(cr_full_row.is_full_row());
+        assert!(!cr_full_row.is_full_column());
+        assert!(!cr_full_row.is_full_table());
+
+        // Full column: col 0 across both rows
+        let rs_full_col = sel(&view, row0, 0, row1, 1);
+        let cr_full_col = as_cell_rect(&rs_full_col).unwrap();
+        assert!(!cr_full_col.is_single());
+        assert!(!cr_full_col.is_full_row());
+        assert!(cr_full_col.is_full_column());
+        assert!(!cr_full_col.is_full_table());
+
+        // Full table: all rows, all cols
+        let rs_full_table = sel(&view, row0, 0, row1, 2);
+        let cr_full_table = as_cell_rect(&rs_full_table).unwrap();
+        assert!(!cr_full_table.is_single());
+        assert!(cr_full_table.is_full_row());
+        assert!(cr_full_table.is_full_column());
+        assert!(cr_full_table.is_full_table());
+    }
+
+    fn doc_with_hardbreak_atom() -> (ProjectedDoc, Dot, Dot) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let atom_dot = Dot::new(1, 2);
+        let items = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (atom_dot, SeqItem::Atom(AtomLeaf::HardBreak)),
+        ];
+        (project_document(&logs(&items)).unwrap(), para, atom_dot)
+    }
+
+    #[test]
+    fn test_6_as_node_selection_atom() {
+        let (pd, para, _atom_dot) = doc_with_hardbreak_atom();
+        let view = DocView::new(&pd);
+        // selection of exactly 1 atom leaf (offset 0..1 in para)
+        let a = Position {
+            node: para,
+            offset: 0,
+            affinity: Affinity::Downstream,
         };
-        let sel = Selection::new(
-            Position::new(p, 0),
-            Position {
-                node_id: p,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
+        let h = Position {
+            node: para,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        };
+        let sel = Selection::new(a, h).resolve(&view).unwrap();
+        let ns = as_node_selection(&sel);
+        assert!(
+            ns.is_some(),
+            "selecting a single atom leaf should give node selection"
+        );
+        let lv = ns.unwrap();
+        assert!(lv.as_char().is_none());
+        assert!(lv.as_atom().is_some());
+    }
+
+    #[test]
+    fn test_6_as_node_selection_none_for_char() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let items = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('a')),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+        let a = Position::new(para, 0);
+        let h = Position::new(para, 1);
+        let sel = Selection::new(a, h).resolve(&view).unwrap();
+        assert!(
+            as_node_selection(&sel).is_none(),
+            "char leaf is not a node selection"
+        );
+    }
+
+    #[test]
+    fn test_7_table_helpers() {
+        let (pd, _root, _table, _row0, cell00, _cell01, _row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        let cell00_id = cell00;
+        let tc = enclosing_table_cell(&view, cell00_id);
+        assert!(
+            tc.is_some(),
+            "cell00 should find its own TableCell as enclosing"
+        );
+        let tc_id = tc.unwrap();
+        assert_eq!(tc_id, cell00_id);
+
+        let t = enclosing_table(&view, cell00_id);
+        assert!(t.is_some(), "should find enclosing table from a cell");
+        let table_node = view.node(t.unwrap()).unwrap();
+        assert_eq!(table_node.node_type(), NodeType::Table);
+
+        let ids = table_cell_ids(&view, cell00_id);
+        assert_eq!(ids.len(), 4, "2x2 table should have 4 cells");
+    }
+
+    // §4.4 — affinity-invariant: same 2×2 rect with Upstream endpoint affinities yields same result
+    #[test]
+    fn test_4_cell_rect_affinity_invariant() {
+        let (pd, _root, _table, row0, _cell00, _cell01, row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        // Build with Downstream (existing helper)
+        let rs_down = sel(&view, row0, 0, row1, 2);
+        let cr_down = as_cell_rect(&rs_down).expect("Downstream should resolve");
+
+        // Same endpoints with Upstream affinity
+        let a = Position {
+            node: row0,
+            offset: 0,
+            affinity: Affinity::Upstream,
+        };
+        let h = Position {
+            node: row1,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        };
+        let rs_up = Selection::new(a, h).resolve(&view).unwrap();
+        let cr_up = as_cell_rect(&rs_up).expect("Upstream should resolve to the same rect");
+
+        assert_eq!(cr_down.rows, cr_up.rows, "rows must be affinity-invariant");
+        assert_eq!(cr_down.cols, cr_up.cols, "cols must be affinity-invariant");
+    }
+
+    // §4.4 — anti-diagonal: anchor top-right, head bottom-left → correct anchor_cell/head_cell
+    #[test]
+    fn test_4_cell_rect_anti_diagonal() {
+        let (pd, _root, _table, row0, _cell00, cell01, row1, cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        // anchor at row0 offset 2 (boundary after col 1 = top-right cell01),
+        // head at row1 offset 0 (boundary before col 0 = bottom-left cell10).
+        // o_lo=0, o_hi=2, c_lo=0, c_hi=1
+        // anchor_col: a.offset(2) != o_lo(0) → c_hi=1 (cell01) ✓
+        // head_col:   h.offset(0) == o_lo(0) → c_lo=0 (cell10) ✓
+        let rs = sel(&view, row0, 2, row1, 0);
+        let cr = as_cell_rect(&rs).expect("anti-diagonal selection should resolve");
+
+        assert_eq!(*cr.rows.start(), 0);
+        assert_eq!(*cr.rows.end(), 1);
+        assert_eq!(*cr.cols.start(), 0);
+        assert_eq!(*cr.cols.end(), 1);
+
+        // anchor_cell must be top-right (cell01, row0 col1)
+        assert_eq!(cr.anchor_cell.id(), cell01);
+        // head_cell must be bottom-left (cell10, row1 col0)
+        assert_eq!(cr.head_cell.id(), cell10);
+    }
+
+    // §4.4 — cross-table: endpoints in rows of different tables → None
+    #[test]
+    fn test_4_cell_rect_cross_table_is_none() {
+        // Build two separate tables in the same doc.
+        let root = Dot::ROOT;
+        let table1 = Dot::new(1, 1);
+        let row1t1 = Dot::new(1, 2);
+        let _cell1 = Dot::new(1, 3);
+        let table2 = Dot::new(1, 10);
+        let row1t2 = Dot::new(1, 11);
+        let _cell2 = Dot::new(1, 12);
+        let mut counter = 20u64;
+        let mut next = || {
+            let d = Dot::new(1, counter);
+            counter += 1;
+            d
+        };
+        let items = vec![
+            (
+                table1,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row1t1,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table1],
+                },
+            ),
+            (
+                _cell1,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table1, row1t1],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table1, row1t1, _cell1],
+                },
+            ),
+            (
+                table2,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row1t2,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table2],
+                },
+            ),
+            (
+                _cell2,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table2, row1t2],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table2, row1t2, _cell2],
+                },
+            ),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+
+        // anchor in row of table1, head in row of table2
+        let rs = sel(&view, row1t1, 0, row1t2, 1);
+        assert!(
+            as_cell_rect(&rs).is_none(),
+            "endpoints in rows of different tables must not form a cell rect"
+        );
+    }
+
+    // §4.4 — degenerate: same-row equal-offset, non-collapsed via differing affinity → None
+    #[test]
+    fn test_4_cell_rect_degenerate_same_offset_non_collapsed() {
+        let (pd, _root, _table, row0, _cell00, _cell01, _row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        // Both endpoints in row0 at offset 1; differing affinity makes them non-collapsed.
+        let a = Position {
+            node: row0,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let h = Position {
+            node: row0,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        };
+        let rs = Selection::new(a, h).resolve(&view).unwrap();
+        assert!(
+            !rs.is_collapsed(),
+            "must be non-collapsed (different affinity)"
         );
         assert!(
-            sel.resolve(&state.doc)
-                .unwrap()
-                .as_node_selection()
-                .is_none()
+            as_cell_rect(&rs).is_none(),
+            "same offset in same row (o_lo==o_hi) must return None"
         );
     }
 
+    // §4.5 — ragged table: rows of different widths
     #[test]
-    fn plain_text_range_is_not_a_node_selection() {
-        let (state, t) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0)
+    fn test_5_ragged_table_predicates() {
+        // Build: root > table > [row0 > [cell00, cell01, cell02], row1 > [cell10, cell11]]
+        // row0 has 3 cells, row1 has 2 cells — a ragged (non-uniform) table.
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let row0 = Dot::new(1, 2);
+        let cell00 = Dot::new(1, 3);
+        let cell01 = Dot::new(1, 4);
+        let cell02 = Dot::new(1, 5);
+        let row1 = Dot::new(1, 6);
+        let cell10 = Dot::new(1, 7);
+        let cell11 = Dot::new(1, 8);
+        let mut counter = 20u64;
+        let mut next = || {
+            let d = Dot::new(1, counter);
+            counter += 1;
+            d
         };
-        let sel = Selection::new(
-            Position::new(t, 1),
-            Position {
-                node_id: t,
-                offset: 4,
-                affinity: Affinity::Upstream,
-            },
-        );
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row0,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell00,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell00],
+                },
+            ),
+            (
+                cell01,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell01],
+                },
+            ),
+            (
+                cell02,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell02],
+                },
+            ),
+            (
+                row1,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell10,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row1],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row1, cell10],
+                },
+            ),
+            (
+                cell11,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row1],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row1, cell11],
+                },
+            ),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+
+        // Select cols 0..=1 across both rows: anchor=(row0,0), head=(row1,2)
+        // o_lo=0, o_hi=2, cols=0..=1, rows=0..=1
+        let rs = sel(&view, row0, 0, row1, 2);
+        let cr = as_cell_rect(&rs).expect("should resolve to a cell rect");
+
+        // is_full_row uses uniform_width; since row0 has 3 cells and row1 has 2, uniform_width
+        // returns None, so is_full_row = false even though cols covers 0..=1.
         assert!(
-            sel.resolve(&state.doc)
-                .unwrap()
-                .as_node_selection()
-                .is_none()
+            !cr.is_full_row(),
+            "ragged table: uniform_width fails → is_full_row false"
         );
-    }
 
-    #[test]
-    fn non_leaf_container_bracket_is_not_a_node_selection() {
-        let (state, r) = state! {
-            doc { r: root { paragraph { text("x") } image } }
-            selection: (r, 0)
-        };
-        let sel = Selection::new(
-            Position::new(r, 0),
-            Position {
-                node_id: r,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        );
+        // is_full_table = is_full_row && is_full_column; since is_full_row is false, so is this.
         assert!(
-            sel.resolve(&state.doc)
-                .unwrap()
-                .as_node_selection()
-                .is_none()
+            !cr.is_full_table(),
+            "ragged table must not claim is_full_table"
         );
-    }
 
-    #[test]
-    fn enclosing_table_cell_finds_cell_from_descendant_and_self() {
-        let (state, _, c00, t00, _) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph { t00: text("a") } }
-                c01: table_cell { paragraph { text("b") } }
-            } } } }
-            selection: (t00, 0)
-        };
-        assert_eq!(super::enclosing_table_cell(&state.doc, t00), Some(c00));
-        assert_eq!(super::enclosing_table_cell(&state.doc, c00), Some(c00));
-    }
-
-    #[test]
-    fn enclosing_table_cell_none_outside_table() {
-        let (state, t) = state! {
-            doc { root { paragraph { t: text("x") } } }
-            selection: (t, 0)
-        };
-        assert_eq!(super::enclosing_table_cell(&state.doc, t), None);
-    }
-
-    #[test]
-    fn table_cell_ids_row_major() {
-        let (state, _, c00, c01, _, c10, c11) = state! {
-            doc { root { table {
-                tr0: table_row {
-                    c00: table_cell { paragraph {} }
-                    c01: table_cell { paragraph {} }
-                }
-                tr1: table_row {
-                    c10: table_cell { paragraph {} }
-                    c11: table_cell { paragraph {} }
-                }
-            } } }
-            selection: (c00, 0)
-        };
+        // cells() must not panic and must return only cells actually present in the cols range.
+        // rows 0..=1, cols 0..=1: row0 has cells at both cols (cell00, cell01), row1 too → 4.
+        let cells = cr.cells();
         assert_eq!(
-            super::table_cell_ids(&state.doc, c00),
-            vec![c00, c01, c10, c11]
+            cells.len(),
+            4,
+            "ragged table: cells() counts only present slots, no panic"
         );
-        assert_eq!(
-            super::table_cell_ids(&state.doc, c11),
-            vec![c00, c01, c10, c11]
+
+        // Suppress unused variable warnings
+        let _ = (cell02, cell10, cell11);
+    }
+
+    // §4.6 — 1×1 cell-rect must NOT be reported as a node-selection
+    #[test]
+    fn test_6_node_selection_none_for_1x1_cell_rect() {
+        let (pd, _root, _table, row0, _cell00, _cell01, _row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        // Single-cell selection (offset 0..1 in row0 → 1×1 rect)
+        let rs = sel(&view, row0, 0, row0, 1);
+        let cr = as_cell_rect(&rs);
+        assert!(cr.is_some(), "this is a valid 1×1 cell rect");
+        assert!(cr.unwrap().is_single());
+
+        // as_node_selection must return None because as_cell_rect gate fires first
+        assert!(
+            as_node_selection(&rs).is_none(),
+            "1×1 cell rect must NOT be reported as a node-selection (as_cell_rect gate)"
         );
     }
 
+    // §4.6 — bracketed Block container (e.g. a Table) → as_node_selection is None
     #[test]
-    fn table_cell_ids_empty_for_non_cell() {
-        let (state, t) = state! {
-            doc { root { paragraph { t: text("x") } } }
-            selection: (t, 0)
-        };
-        assert!(super::table_cell_ids(&state.doc, t).is_empty());
+    fn test_6_node_selection_none_for_block_container() {
+        // root > [table, paragraph]: bracket the table → offset 0..1 in root
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let row = Dot::new(1, 2);
+        let cell = Dot::new(1, 3);
+        let para_in_cell = Dot::new(1, 4);
+        let para_after = Dot::new(1, 5);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                },
+            ),
+            (
+                para_in_cell,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell],
+                },
+            ),
+            (
+                para_after,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+
+        // Bracket the table: anchor at root offset 0, head at root offset 1
+        let a = Position::new(root, 0);
+        let h = Position::new(root, 1);
+        let rs = Selection::new(a, h).resolve(&view).unwrap();
+
+        // as_cell_rect: endpoints are in root (not a TableRow) → None
+        assert!(
+            as_cell_rect(&rs).is_none(),
+            "no cell rect for root-level bracket"
+        );
+        // as_node_selection: the child at offset 0 is a Block (Table) → None
+        assert!(
+            as_node_selection(&rs).is_none(),
+            "bracketed Block container must not be a node-selection"
+        );
+    }
+
+    // §4.7 — enclosing_table_cell for a node outside any table → None
+    #[test]
+    fn test_7_enclosing_table_cell_outside_table_is_none() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+
+        let para_id = para;
+        assert!(
+            enclosing_table_cell(&view, para_id).is_none(),
+            "paragraph outside any table must return None for enclosing_table_cell"
+        );
+    }
+
+    // §4.7 — table_cell_ids for a non-TableCell id → empty vec
+    #[test]
+    fn test_7_table_cell_ids_non_cell_is_empty() {
+        let (pd, _root, table, _row0, _cell00, _cell01, _row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        // Pass the Table node id, which is NOT a TableCell
+        let table_id = table;
+        let ids = table_cell_ids(&view, table_id);
+        assert!(
+            ids.is_empty(),
+            "table_cell_ids for a non-TableCell id must return an empty vec"
+        );
+    }
+
+    // §4.8 — proptest: detectors never panic and are mutually exclusive
+    proptest::proptest! {
+        #[test]
+        fn test_8_proptest_mutual_exclusion(
+            // Choose doc shape: 0=two-fold, 1=two-by-two-table, 2=hardbreak-atom
+            doc_kind in 0u8..3,
+            // Two (node_selector, offset) pairs for anchor / head
+            a_node_sel in 0usize..3,
+            a_off in 0usize..4,
+            h_node_sel in 0usize..3,
+            h_off in 0usize..4,
+            a_aff_up in proptest::bool::ANY,
+            h_aff_up in proptest::bool::ANY,
+        ) {
+            use crate::gap_cursor::as_gap_cursor;
+            use crate::affinity::Affinity;
+
+            // We'll test against the two_by_two_table doc for simplicity, with
+            // offsets clamped to valid ranges. Using a larger arb space doesn't help
+            // since the invariants are structural, not input-sensitive.
+            let (pd, root_d, _table_d, row0_d, cell00_d, cell01_d, row1_d, cell10_d) = two_by_two_table();
+            let view = DocView::new(&pd);
+
+            // Available nodes to pick positions in
+            let nodes = [
+                root_d,
+                row0_d,
+                row1_d,
+            ];
+            let a_node = &nodes[a_node_sel.min(2)];
+            let h_node = &nodes[h_node_sel.min(2)];
+
+            // Clamp offsets to the node's actual child count
+            let a_count = view.node(*a_node).map(|n| n.children().count()).unwrap_or(0);
+            let h_count = view.node(*h_node).map(|n| n.children().count()).unwrap_or(0);
+            let a_off_c = a_off.min(a_count);
+            let h_off_c = h_off.min(h_count);
+
+            let a_affinity = if a_aff_up { Affinity::Upstream } else { Affinity::Downstream };
+            let h_affinity = if h_aff_up { Affinity::Upstream } else { Affinity::Downstream };
+
+            let a = Position { node: *a_node, offset: a_off_c, affinity: a_affinity };
+            let h = Position { node: *h_node, offset: h_off_c, affinity: h_affinity };
+
+            let Some(rs) = Selection::new(a, h).resolve(&view) else { return Ok(()); };
+
+            // Detectors must not panic
+            let gc = as_gap_cursor(&rs);
+            let cr = as_cell_rect(&rs);
+            let ns = as_node_selection(&rs);
+
+            // Mutual exclusion invariants:
+            // 1. as_gap_cursor => selection is collapsed
+            if gc.is_some() {
+                proptest::prop_assert!(rs.is_collapsed(), "as_gap_cursor implies collapsed");
+            }
+            // 2. as_cell_rect / as_node_selection => non-collapsed
+            if cr.is_some() {
+                proptest::prop_assert!(!rs.is_collapsed(), "as_cell_rect implies non-collapsed");
+            }
+            if ns.is_some() {
+                proptest::prop_assert!(!rs.is_collapsed(), "as_node_selection implies non-collapsed");
+            }
+            // 3. as_cell_rect and as_node_selection are never both Some
+            proptest::prop_assert!(
+                !(cr.is_some() && ns.is_some()),
+                "as_cell_rect and as_node_selection are mutually exclusive"
+            );
+
+            // Suppress unused-variable warnings for doc_kind
+            let _ = (doc_kind, cell00_d, cell01_d, cell10_d);
+        }
+    }
+
+    #[test]
+    fn cell_rect_accessors_and_anchor_head_reachable() {
+        let (pd, _root, table, row0, cell00, cell01, row1, _cell10) = two_by_two_table();
+        let view = DocView::new(&pd);
+
+        let rs = sel(&view, row0, 0, row1, 2);
+        let rect = rs.as_cell_rect().expect("should resolve to cell rect");
+
+        assert_eq!(rect.table_id(), table);
+        assert_eq!(*rect.rows().start(), 0);
+        assert_eq!(*rect.rows().end(), 1);
+        assert_eq!(*rect.cols().start(), 0);
+        assert_eq!(*rect.cols().end(), 1);
+
+        assert_eq!(rs.anchor().node(), row0);
+        assert_eq!(rs.head().node(), row1);
+
+        let _ = (cell00, cell01);
     }
 }

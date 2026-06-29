@@ -31,12 +31,6 @@ pub fn context_expr(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn doc(input: TokenStream) -> TokenStream {
-    let tree = syn::parse_macro_input!(input as doc_macro::parse::DocTree);
-    doc_macro::codegen::generate(&tree).into()
-}
-
-#[proc_macro]
 pub fn state(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as state_macro::parse::StateInput);
     state_macro::codegen::generate(&input).into()

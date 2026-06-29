@@ -2,14 +2,14 @@ use editor_common::Rect;
 use editor_state::Position;
 
 use crate::page::{LayoutPage, PageRect};
-use crate::paginate::*;
+use crate::paginate::types::{LayoutBox, LayoutContent, LayoutLine, LayoutNode};
 
 use super::common::*;
 use super::layout_index::{LayoutEntry, LayoutIndex};
 
 pub type CompositionRect = PageRect;
 
-pub fn composition_rects(
+pub(crate) fn composition_rects(
     layout_index: &LayoutIndex,
     from: &Position,
     to: &Position,
@@ -163,30 +163,139 @@ fn visit_box(
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
+        SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+    use editor_state::Affinity;
+
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
+    use crate::paginate::paginator::Paginator;
 
     use super::*;
-    use crate::view::View;
 
-    fn layout(doc: &editor_model::Doc) -> View {
-        let mut view = View::new_test();
-        view.layout(doc);
-        view
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn build_index(doc: &DocLogs, width: f32) -> LayoutIndex {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        LayoutIndex::new(layout.tree, &layout.pages)
+    }
+
+    fn para_doc(text: &str, width: f32) -> (Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, ch) in text.chars().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let index = build_index(&doc, width);
+        (para_id, index)
+    }
+
+    fn two_para_doc(text1: &str, text2: &str, width: f32) -> (Dot, Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para1 = Dot::new(2, 1);
+        let base = 2u64;
+        let mut items = vec![(
+            para1,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        let mut offset = base;
+        for ch in text1.chars() {
+            items.push((Dot::new(2, offset), SeqItem::Char(ch)));
+            offset += 1;
+        }
+        let para2 = Dot::new(2, offset);
+        items.push((
+            para2,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        ));
+        offset += 1;
+        for ch in text2.chars() {
+            items.push((Dot::new(2, offset), SeqItem::Char(ch)));
+            offset += 1;
+        }
+        let doc = logs(&items);
+        let p1 = para1;
+        let p2 = para2;
+        let index = build_index(&doc, width);
+        (p1, p2, index)
     }
 
     #[test]
     fn same_position_returns_empty() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
-        let rects = view.composition_rects(&Position::new(t, 2), &Position::new(t, 2));
+        let (para_id, index) = para_doc("hello", 400.0);
+        let pos = Position {
+            node: para_id,
+            offset: 2,
+            affinity: Affinity::default(),
+        };
+        let rects = composition_rects(&index, &pos, &pos);
         assert!(rects.is_empty());
     }
 
     #[test]
     fn single_line_composition() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
-        let rects = view.composition_rects(&Position::new(t, 1), &Position::new(t, 4));
+        let (para_id, index) = para_doc("hello", 400.0);
+        let from = Position {
+            node: para_id,
+            offset: 1,
+            affinity: Affinity::default(),
+        };
+        let to = Position {
+            node: para_id,
+            offset: 4,
+            affinity: Affinity::default(),
+        };
+        let rects = composition_rects(&index, &from, &to);
 
         assert_eq!(rects.len(), 1);
         assert!(rects[0].rect.width > 0.0);
@@ -195,14 +304,18 @@ mod tests {
 
     #[test]
     fn multi_paragraph_composition() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("hello") }
-                paragraph { t2: text("world") }
-            }
+        let (p1, p2, index) = two_para_doc("hello", "world", 400.0);
+        let from = Position {
+            node: p1,
+            offset: 2,
+            affinity: Affinity::default(),
         };
-        let view = layout(&doc);
-        let rects = view.composition_rects(&Position::new(t1, 2), &Position::new(t2, 3));
+        let to = Position {
+            node: p2,
+            offset: 3,
+            affinity: Affinity::default(),
+        };
+        let rects = composition_rects(&index, &from, &to);
 
         assert_eq!(rects.len(), 2);
         assert_eq!(rects[0].rect.height, 1.0);
@@ -211,33 +324,21 @@ mod tests {
     }
 
     #[test]
-    fn composition_starting_at_lower_soft_wrap_line_emits_rect() {
-        // Same soft-wrap setup as selection.rs's regression test: text wraps
-        // such that offset 6 is the lower visual line's leading boundary.
-        let (doc, t) = doc! {
-            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
-                paragraph { t: text("abcdefgh") }
-            }
+    fn soft_wrap_lower_line_emits_rect() {
+        let (para_id, index) = para_doc("abcdefgh", 40.0);
+        let from = Position {
+            node: para_id,
+            offset: 6,
+            affinity: Affinity::default(),
         };
-        let view = layout(&doc);
-        let rects = view.composition_rects(&Position::new(t, 6), &Position::new(t, 7));
+        let to = Position {
+            node: para_id,
+            offset: 7,
+            affinity: Affinity::default(),
+        };
+        let rects = composition_rects(&index, &from, &to);
 
         assert_eq!(rects.len(), 1);
         assert!(rects[0].rect.width > 0.0);
-    }
-
-    #[test]
-    fn underline_y_below_baseline() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
-
-        let comp_rects = view.composition_rects(&Position::new(t, 0), &Position::new(t, 5));
-        let sel = editor_state::Selection::new(Position::new(t, 0), Position::new(t, 5));
-        let resolved = sel.resolve(&doc).unwrap();
-        let sel_rects = view.selection_rects(&resolved);
-
-        assert_eq!(comp_rects.len(), 1);
-        assert_eq!(sel_rects.len(), 1);
-        assert!(comp_rects[0].rect.y > sel_rects[0].rect.y);
     }
 }

@@ -1,15 +1,3 @@
-use editor_common::Rect;
-use editor_macros::ffi;
-use editor_model::Doc;
-use editor_state::{Affinity, Position};
-use serde::{Deserialize, Serialize};
-
-use crate::page::{LayoutPage, PageRect};
-use crate::paginate::*;
-
-use super::common::*;
-use super::layout_index::{LayoutEntry, LayoutIndex};
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SelectionRectKind {
     Text,
@@ -19,6 +7,20 @@ pub enum SelectionRectKind {
 }
 
 pub type SelectionRect = PageRect<SelectionRectKind>;
+
+use editor_common::Rect;
+use editor_macros::ffi;
+use editor_model::DocView;
+use editor_state::Affinity;
+use editor_state::{Position, ResolvedSelection};
+use serde::{Deserialize, Serialize};
+
+use crate::page::{LayoutPage, PageRect};
+use crate::paginate::types::{LayoutAtom, LayoutBox, LayoutContent, LayoutLine, LayoutNode};
+
+use super::common::{Phase, line_end_x, line_start_x, page_for_y};
+use super::grapheme;
+use super::layout_index::{LayoutEntry, LayoutIndex};
 
 #[derive(Debug, Clone, PartialEq)]
 struct SelectionRectSets {
@@ -71,38 +73,42 @@ pub struct SelectionEndpoints {
     pub to_position: Position,
 }
 
-pub fn selection_rects(
+pub(crate) fn selection_rects(
     layout_index: &LayoutIndex,
-    selection: &editor_state::ResolvedSelection<'_>,
+    selection: &ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
     selection_rect_sets(layout_index, selection).line_box_rects
 }
 
-pub fn selection_text_rects(
+pub(crate) fn selection_text_rects(
     layout_index: &LayoutIndex,
-    selection: &editor_state::ResolvedSelection<'_>,
+    selection: &ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
     selection_rect_sets(layout_index, selection).text_rects
 }
 
 fn selection_rect_sets(
     layout_index: &LayoutIndex,
-    selection: &editor_state::ResolvedSelection<'_>,
+    selection: &ResolvedSelection<'_>,
 ) -> SelectionRectSets {
     if selection.is_collapsed() {
         return SelectionRectSets::empty();
     }
 
     if let Some(cell_rect) = selection.as_cell_rect() {
-        let ids: Vec<_> = cell_rect.cells().map(|cell| cell.id()).collect();
+        let ids: Vec<_> = cell_rect
+            .cells()
+            .into_iter()
+            .map(|cell| cell.id())
+            .collect();
         let rects = block_selection_rects(layout_index, &ids);
         return SelectionRectSets::mirrored(rects);
     }
 
     let pages = layout_index.pages();
 
-    let from = Position::from(selection.from());
-    let to = Position::from(selection.to());
+    let from = selection.from().position();
+    let to = selection.to().position();
 
     let from_entry = layout_index.entry_for_position(&from);
     let to_entry = layout_index.entry_for_position(&to);
@@ -133,7 +139,7 @@ fn selection_rect_sets(
         &mut phase,
         &mut rects,
         pages,
-        selection.doc(),
+        selection.view(),
     );
 
     for hard_break in hard_breaks {
@@ -161,7 +167,7 @@ fn paragraph_break_rect(geometry: super::paragraph_break::ParagraphBreakGeometry
 
 pub(crate) fn block_selection_rects(
     layout_index: &LayoutIndex,
-    ids: &[editor_model::NodeId],
+    ids: &[editor_crdt::Dot],
 ) -> Vec<SelectionRect> {
     layout_index
         .box_page_rects(ids)
@@ -170,9 +176,9 @@ pub(crate) fn block_selection_rects(
         .collect()
 }
 
-pub fn selection_endpoints(
+pub(crate) fn selection_endpoints(
     layout_index: &LayoutIndex,
-    selection: &editor_state::ResolvedSelection<'_>,
+    selection: &ResolvedSelection<'_>,
 ) -> Option<SelectionEndpoints> {
     if selection.is_collapsed() {
         return None;
@@ -194,14 +200,14 @@ pub fn selection_endpoints(
                 last.rect.height,
             ),
         ),
-        from_position: Position::from(selection.from()),
-        to_position: Position::from(selection.to()),
+        from_position: selection.from().position(),
+        to_position: selection.to().position(),
     })
 }
 
-pub fn selection_hit_test(
+pub(crate) fn selection_hit_test(
     layout_index: &LayoutIndex,
-    selection: &editor_state::ResolvedSelection<'_>,
+    selection: &ResolvedSelection<'_>,
     page_idx: usize,
     x: f32,
     y: f32,
@@ -258,7 +264,7 @@ pub fn selection_hit_test(
 
 fn selected_external_atom_hit_test(
     layout_index: &LayoutIndex,
-    selection: &editor_state::ResolvedSelection<'_>,
+    selection: &ResolvedSelection<'_>,
     page_idx: usize,
     x: f32,
     y: f32,
@@ -273,8 +279,8 @@ fn selected_external_atom_hit_test(
             let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
                 return false;
             };
-            let doc = selection.doc();
-            let Some(node_ref) = doc.node(atom.node_id) else {
+            let view = selection.view();
+            let Some(node_ref) = view.node(atom.node) else {
                 return false;
             };
             if !node_ref.spec().external || !selection.contains_subtree(&node_ref) {
@@ -293,17 +299,6 @@ fn selected_external_atom_hit_test(
         })
 }
 
-// Whether `entry` (as returned by `LayoutIndex::entry_for_position`) should be treated as the
-// owner of `pos` for selection-rect attribution. The two carve-outs encode the
-// same idea — the endpoint sits on a structural container boundary, not in
-// the interior of a Line/Atom — but at different node kinds:
-//
-// - A monolithic-bracket Box position is a container boundary that the
-//   `fully && monolithic` branch (and any ancestor box machine) must claim.
-// - An atom edge owns the position only when affinity attaches the position to
-//   the atom: leading edge with Downstream, or trailing edge with Upstream.
-//   The other two cases are container boundaries — the box machine claims them
-//   via its own phase transitions.
 fn attached(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> bool {
     match entry.content(layout_index) {
         Some(LayoutContent::Box(_)) => false,
@@ -322,7 +317,7 @@ fn strut_line_has_selectable_child_range(line: &LayoutLine) -> bool {
     line.glyph_runs.is_empty()
         && line.tab_gaps.is_empty()
         && line
-            .child_range
+            .offset_range
             .as_ref()
             .is_some_and(|range| range.start < range.end)
 }
@@ -352,7 +347,7 @@ fn visit_node(
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
-    doc: &Doc,
+    doc: &DocView,
 ) {
     match &node.content {
         LayoutContent::Box(b) => visit_box(
@@ -404,13 +399,13 @@ fn visit_line(
 
     let (x_start, x_end) = match (*phase, contains_from, contains_to) {
         (Phase::Before, true, true) => {
-            let x0 = super::grapheme::x_at_offset(line, from);
-            let x1 = super::grapheme::x_at_offset(line, to);
+            let x0 = grapheme::x_at_offset(line, from);
+            let x1 = grapheme::x_at_offset(line, to);
             *phase = Phase::After;
             (x0, x1)
         }
         (Phase::Before, true, false) => {
-            let x0 = super::grapheme::x_at_offset(line, from);
+            let x0 = grapheme::x_at_offset(line, from);
             let x1 = line_end_x(line);
             *phase = Phase::Inside;
             (x0, x1)
@@ -422,7 +417,7 @@ fn visit_line(
         }
         (Phase::Inside, false, true) => {
             let x0 = line_start_x(line);
-            let x1 = super::grapheme::x_at_offset(line, to);
+            let x1 = grapheme::x_at_offset(line, to);
             *phase = Phase::After;
             (x0, x1)
         }
@@ -466,10 +461,10 @@ fn visit_atom(
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
-    doc: &Doc,
+    doc: &DocView,
 ) {
-    let is_from = from.node_id == atom.attachment.parent_id && from.offset == atom.attachment.index;
-    let is_to = to.node_id == atom.attachment.parent_id && to.offset == atom.attachment.index + 1;
+    let is_from = from.node == atom.attachment.parent && from.offset == atom.attachment.index;
+    let is_to = to.node == atom.attachment.parent && to.offset == atom.attachment.index + 1;
 
     if *phase == Phase::Before && is_from {
         *phase = Phase::Inside;
@@ -479,9 +474,7 @@ fn visit_atom(
         return;
     }
 
-    // External nodes render their own selection affordance; the selection
-    // layer must not paint a rect over them.
-    let is_external = doc.node(atom.node_id).is_some_and(|n| n.spec().external);
+    let is_external = doc.node(atom.node).is_some_and(|n| n.spec().external);
     if !is_external && let Some(page_idx) = page_for_y(pages, node.rect.y) {
         let rect = PageRect::with_meta(
             page_idx,
@@ -513,30 +506,17 @@ fn visit_box(
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
-    doc: &Doc,
+    doc: &DocView,
 ) {
-    // Box-level phase transitions fire only for endpoints anchored at a
-    // structural container boundary — positions like `(bullet_list, 0)` that
-    // no line owns. When a descendant line owns the endpoint, visit_line is
-    // responsible for the transition; firing here too would double-count and
-    // break collapsed selections that sit on the same physical boundary
-    // expressed at different container levels (e.g. end of text `t` vs.
-    // offset 0 of the following sibling container).
-    let from_at_box_level = from.node_id == bx.node_id && from_owner.is_none();
-    let to_at_box_level = to.node_id == bx.node_id && to_owner.is_none();
+    let from_at_box_level = from.node == bx.node && from_owner.is_none();
+    let to_at_box_level = to.node == bx.node && to_owner.is_none();
 
-    // `entry_phase` is captured before any of this box's own boundary
-    // transitions fire. A container is "fully selected" only when phase was
-    // Inside on entry and remains Inside on exit — that is, the selection
-    // envelopes the box from an ancestor's perspective rather than anchoring
-    // inside it.
     let entry_phase = *phase;
     let line_box_rects_before = rects.line_box_rects.len();
     let text_rects_before = rects.text_rects.len();
     let mut has_content_child = false;
     let mut content_idx = 0usize;
 
-    // Position 0 (box entry). Handles `from.offset == 0` and `to.offset == 0`.
     if from_at_box_level && *phase == Phase::Before && from.offset == 0 {
         *phase = Phase::Inside;
     }
@@ -563,7 +543,6 @@ fn visit_box(
         if !is_spacing {
             has_content_child = true;
             content_idx += 1;
-            // Position `content_idx` — the gap between this child and the next.
             if from_at_box_level && *phase == Phase::Before && content_idx == from.offset {
                 *phase = Phase::Inside;
             }
@@ -603,1372 +582,467 @@ fn visit_box(
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::{doc, state};
-    use editor_model::NodeId;
-    use editor_state::{Affinity, Position, Selection};
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog,
+        NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc, SeqItem, SpanLog, StyleLog,
+        project_document,
+    };
+    use editor_state::Affinity;
+    use editor_state::{Position, Selection};
+
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
+    use crate::paginate::paginator::Paginator;
+    use crate::query::layout_index::LayoutIndex;
+    use editor_resource::Resource;
 
     use super::*;
-    use crate::view::View;
 
-    fn layout(doc: &editor_model::Doc) -> View {
-        let mut view = View::new_test();
-        view.layout(doc);
-        view
-    }
-
-    fn first_line(node: &LayoutNode) -> Option<(&LayoutNode, &LayoutLine)> {
-        match &node.content {
-            LayoutContent::Line(line) => Some((node, line)),
-            LayoutContent::Box(bx) => bx.children.iter().find_map(first_line),
-            LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
         }
     }
 
-    fn line_y_for_child_range(
-        view: &View,
-        node_id: NodeId,
-        child_range: std::ops::Range<usize>,
-    ) -> Option<f32> {
-        fn find(
-            node: &LayoutNode,
-            node_id: NodeId,
-            child_range: &std::ops::Range<usize>,
-        ) -> Option<f32> {
-            match &node.content {
-                LayoutContent::Line(line)
-                    if line.node_id == node_id
-                        && line.child_range.as_ref() == Some(child_range) =>
-                {
-                    Some(node.rect.y)
-                }
-                LayoutContent::Box(bx) => bx
-                    .children
-                    .iter()
-                    .find_map(|child| find(child, node_id, child_range)),
-                LayoutContent::Line(_) | LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
+    fn build_index(doc: &DocLogs, width: f32) -> (ProjectedDoc, LayoutIndex) {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        let index = LayoutIndex::new(layout.tree, &layout.pages);
+        (pd, index)
+    }
+
+    fn simple_para_doc(text: &str) -> (DocLogs, Dot, Dot) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, ch) in text.chars().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
+        }
+        (logs(&items), root, para)
+    }
+
+    fn first_line_for_para<'a>(
+        index: &'a LayoutIndex,
+        para_id: &Dot,
+    ) -> Option<(&'a crate::query::layout_index::LayoutEntry, &'a LayoutLine)> {
+        for entry in index.entries() {
+            if let Some(node) = entry.node(index)
+                && let LayoutContent::Line(line) = &node.content
+                && &line.node == para_id
+            {
+                return Some((entry, line));
             }
         }
-
-        find(&view.layout_tree_for_test()?.root, node_id, &child_range)
+        None
     }
 
     #[test]
-    fn collapsed_selection_returns_empty() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
+    fn collapsed_empty() {
+        let (doc, _root, para) = simple_para_doc("Hello");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let para_id = para;
 
-        let sel = Selection::collapsed(Position::new(t, 2));
-        let resolved = sel.resolve(&doc).unwrap();
-        assert!(view.selection_rects(&resolved).is_empty());
+        let sel = Selection::collapsed(Position {
+            node: para_id,
+            offset: 2,
+            affinity: Affinity::Downstream,
+        });
+        let rsel = sel.resolve(&view).expect("must resolve");
+
+        assert!(selection_rects(&index, &rsel).is_empty());
+        assert!(selection_endpoints(&index, &rsel).is_none());
+        assert!(!selection_hit_test(&index, &rsel, 0, 0.0, 0.0));
     }
 
     #[test]
-    fn single_line_partial_selection() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
+    fn single_line_span() {
+        let (doc, _root, para) = simple_para_doc("Hello");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let para_id = para;
 
-        let sel = Selection::new(Position::new(t, 1), Position::new(t, 4));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
+        let from_pos = Position {
+            node: para_id,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        };
+        let to_pos = Position {
+            node: para_id,
+            offset: 4,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::new(from_pos, to_pos);
+        let rsel = sel.resolve(&view).expect("must resolve");
 
-        assert_eq!(rects.len(), 1);
+        let rects = selection_rects(&index, &rsel);
+        assert_eq!(
+            rects.len(),
+            1,
+            "single-line span must yield one rect, got {:?}",
+            rects
+        );
         assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
+
+        let (entry, line) = first_line_for_para(&index, &para_id).expect("must find line");
+        let expected_x = entry.rect.x + super::grapheme::x_at_offset(line, &from_pos);
+        let expected_right = entry.rect.x + super::grapheme::x_at_offset(line, &to_pos);
+        assert!(
+            (rects[0].rect.x - expected_x).abs() < 0.1,
+            "rect.x must equal entry.rect.x + x_at_offset(from): got {}, expected {}",
+            rects[0].rect.x,
+            expected_x
+        );
+        assert!(
+            (rects[0].rect.x + rects[0].rect.width - expected_right).abs() < 0.1,
+            "rect right edge must equal entry.rect.x + x_at_offset(to)"
+        );
     }
 
     #[test]
-    fn paragraph_break_selection_has_paragraph_break_rect() {
-        let (doc, _p1, t1, _p2, _t2) = doc! {
-            root {
-                p1: paragraph { t1: text("a") }
-                p2: paragraph { t2: text("b") }
-            }
+    fn multi_line_span() {
+        let text = "abcdefghijklmnopqrstuvwxyzabcdef";
+        let (doc, _root, para) = simple_para_doc(text);
+        let (pd, index) = build_index(&doc, 40.0);
+        let view = DocView::new(&pd);
+        let para_id = para;
+
+        let from_pos = Position {
+            node: para_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
         };
-        let view = layout(&doc);
+        let to_pos = Position {
+            node: para_id,
+            offset: text.len(),
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::new(from_pos, to_pos);
+        let rsel = sel.resolve(&view).expect("must resolve");
 
-        let sel =
-            editor_state::paragraph_break_selection_at_paragraph_end(&doc, Position::new(t1, 1))
-                .expect("P -> P has paragraph break");
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::ParagraphBreak);
-        assert!(rects[0].rect.width > 0.0);
-        assert!(rects[0].rect.height > 0.0);
+        let rects = selection_rects(&index, &rsel);
+        let text_rects: Vec<_> = rects
+            .iter()
+            .filter(|r| r.meta == SelectionRectKind::Text)
+            .collect();
+        assert!(
+            text_rects.len() >= 2,
+            "wrapped paragraph must yield ≥2 text rects (phase machine), got {:?}",
+            rects
+        );
     }
 
     #[test]
-    fn removable_empty_paragraph_break_selection_has_paragraph_break_rect() {
-        let (doc, root, p1) = doc! {
-            root: root {
-                p1: paragraph {}
-                callout { paragraph { text("callout") } }
-                paragraph { text("tail") }
-            }
-        };
-        let view = layout(&doc);
+    fn atom_in_selection() {
+        let root = Dot::ROOT;
+        let hr = Dot::new(2, 1);
+        let para = Dot::new(2, 2);
+        let items = vec![
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::default(),
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(2, 3), SeqItem::Char('x')),
+        ];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let root_id = root;
+        let para_id = para;
 
-        let sel = Selection::new(
-            Position::new(p1, 0),
+        let covering = Selection::new(
             Position {
-                node_id: root,
+                node: root_id,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root_id,
                 offset: 1,
                 affinity: Affinity::Upstream,
             },
         );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
+        let rsel = covering.resolve(&view).expect("must resolve covering");
+        let rects = selection_rects(&index, &rsel);
+        assert!(
+            rects.iter().any(|r| r.meta == SelectionRectKind::Atom),
+            "selection covering HR atom must yield Atom rect, got {:?}",
+            rects
+        );
 
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::ParagraphBreak);
-        assert!(rects[0].rect.width > 0.0);
-        assert!(rects[0].rect.height > 0.0);
-    }
-
-    #[test]
-    fn selection_containing_paragraph_break_shows_paragraph_break_rect() {
-        let (doc, _p1, t1, _p2, t2) = doc! {
-            root {
-                p1: paragraph { t1: text("a") }
-                p2: paragraph { t2: text("bc") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(
+        let not_covering = Selection::new(
             Position {
-                node_id: t1,
-                offset: 1,
-                affinity: Affinity::Downstream,
-            },
-            Position::new(t2, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert!(
-            rects.iter().any(|r| r.meta == SelectionRectKind::Text),
-            "range must still show selected text, got {rects:?}"
-        );
-        assert!(
-            rects
-                .iter()
-                .any(|r| r.meta == SelectionRectKind::ParagraphBreak),
-            "range containing PB must show PB affordance, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn selection_to_next_paragraph_start_with_upstream_affinity_shows_paragraph_break_rect() {
-        let (state, ..) = state! {
-            doc {
-                root [block_gap(200)] {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t1, 1, >) -> (t2, 0, <)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert!(
-            rects
-                .iter()
-                .any(|r| r.meta == SelectionRectKind::ParagraphBreak),
-            "range ending at next paragraph start must show PB affordance, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn reversed_selection_from_next_paragraph_text_shows_paragraph_break_rect() {
-        let (state, ..) = state! {
-            doc {
-                root [block_gap(200)] {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t2, 1) -> (t1, 2)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert!(
-            rects
-                .iter()
-                .any(|r| r.meta == SelectionRectKind::ParagraphBreak),
-            "reversed range containing PB must show PB affordance, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn selection_from_text_middle_to_empty_paragraph_shows_text_and_paragraph_break_only() {
-        let (doc, _p1, t1, p2) = doc! {
-            root {
-                p1: paragraph { t1: text("abc") }
-                p2: paragraph {}
-                paragraph { text("tail") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(
-            Position::new(t1, 1),
-            Position {
-                node_id: p2,
+                node: para_id,
                 offset: 0,
                 affinity: Affinity::Downstream,
             },
+            Position {
+                node: para_id,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
         );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
-
-        assert_eq!(
-            kinds,
-            vec![SelectionRectKind::Text, SelectionRectKind::ParagraphBreak],
-            "empty paragraph placeholder rect must not be emitted, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn selection_from_empty_paragraph_to_text_shows_paragraph_break_and_text_only() {
-        let (doc, p1, _p2, t2) = doc! {
-            root {
-                p1: paragraph {}
-                p2: paragraph { t2: text("abc") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(p1, 0), Position::new(t2, 1));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
-
-        assert_eq!(
-            kinds,
-            vec![SelectionRectKind::ParagraphBreak, SelectionRectKind::Text],
-            "empty paragraph placeholder rect must not be emitted, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn selection_through_empty_paragraph_shows_paragraph_breaks_without_placeholder() {
-        let (doc, _p1, t1, _p2, _p3, t3) = doc! {
-            root {
-                p1: paragraph { t1: text("abc") }
-                p2: paragraph {}
-                p3: paragraph { t3: text("tail") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 1), Position::new(t3, 1));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
-
-        assert_eq!(
-            kinds,
-            vec![
-                SelectionRectKind::Text,
-                SelectionRectKind::ParagraphBreak,
-                SelectionRectKind::ParagraphBreak,
-                SelectionRectKind::Text,
-            ],
-            "empty paragraph placeholder rect must not be emitted, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn paragraph_boundary_selection_over_two_hard_breaks_shows_each_break_and_pb() {
-        let (state, ..) = state! {
-            doc {
-                root {
-                    p1: paragraph {
-                        hard_break
-                        hard_break
-                    }
-                    p2: paragraph {}
-                }
-            }
-            selection: (p1, 0, >) -> (p2, 0, <)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        let kinds: Vec<_> = rects.iter().map(|r| r.meta).collect();
-
-        assert_eq!(
-            kinds,
-            vec![
-                SelectionRectKind::Text,
-                SelectionRectKind::Text,
-                SelectionRectKind::ParagraphBreak,
-            ],
-            "two hard_break rects and the paragraph break must be visible, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn trailing_hard_break_after_soft_wrap_line_is_visible() {
-        let (state, p1, _t1, ..) = state! {
-            doc {
-                root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
-                    p1: paragraph {
-                        t1: text("abcdefgh")
-                        hard_break
-                        text("z")
-                    }
-                }
-            }
-            selection: (t1, 8, >) -> (p1, 2, <)
-        };
-        let view = layout(&state.doc);
-        let trailing_line_y = line_y_for_child_range(&view, p1, 1..1)
-            .expect("soft-wrapped trailing hard_break line exists");
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1, "hard_break must be visible, got {rects:?}");
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.width > 0.0, "got {rects:?}");
+        let rsel2 = not_covering
+            .resolve(&view)
+            .expect("must resolve non-covering");
+        let rects2 = selection_rects(&index, &rsel2);
         assert!(
-            (rects[0].rect.y - trailing_line_y).abs() < 0.01,
-            "hard_break rect must be on trailing wrapped line y={trailing_line_y}, got {rects:?}",
+            !rects2.iter().any(|r| r.meta == SelectionRectKind::Atom),
+            "selection not covering HR must not yield Atom rect, got {:?}",
+            rects2
         );
     }
 
     #[test]
-    fn paragraph_break_after_trailing_hard_break_uses_trailing_empty_line() {
-        let (state, p1, _p2) = state! {
-            doc {
-                root [block_gap(200)] {
-                    p1: paragraph {
-                        hard_break
-                        hard_break
-                    }
-                    p2: paragraph {}
-                }
-            }
-            selection: (p1, 2, >) -> (p2, 0, <)
+    fn cell_rect_block() {
+        let root = Dot::ROOT;
+        let table = Dot::new(3, 1);
+        let row0 = Dot::new(3, 2);
+        let cell00 = Dot::new(3, 3);
+        let cell01 = Dot::new(3, 4);
+        let mut counter = 10u64;
+        let mut next = || {
+            let d = Dot::new(3, counter);
+            counter += 1;
+            d
         };
-        let view = layout(&state.doc);
-        let trailing_line_y = line_y_for_child_range(&view, p1, 2..2)
-            .expect("trailing empty line after hard_breaks exists");
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1, "got {rects:?}");
-        assert_eq!(rects[0].meta, SelectionRectKind::ParagraphBreak);
-        assert!(
-            (rects[0].rect.y - trailing_line_y).abs() < 0.01,
-            "PB must be drawn on trailing empty line y={trailing_line_y}, got {rects:?}",
-        );
-    }
-
-    #[test]
-    fn root_selection_over_atom_and_hard_break_paragraph_shows_hard_break_rects() {
-        let (state, ..) = state! {
-            doc {
-                r1: root {
-                    image
-                    paragraph {
-                        hard_break
-                        hard_break
-                    }
-                }
-            }
-            selection: (r1, 0, >) -> (r1, 2, <)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        let text_rect_count = rects
-            .iter()
-            .filter(|rect| rect.meta == SelectionRectKind::Text)
-            .count();
-
-        assert_eq!(
-            text_rect_count, 2,
-            "both hard_breaks in the selected paragraph must be visible, got {rects:?}"
-        );
-    }
-
-    #[test]
-    fn selection_text_rect_uses_centered_text_area_height() {
-        let (doc, t) = doc! {
-            root {
-                paragraph [line_height(300)] { t: text("hello") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t, 1), Position::new(t, 4));
-        let resolved = sel.resolve(&doc).unwrap();
-        let line_box_rect = view.selection_rects(&resolved)[0].rect;
-        let text_rect = view.selection_text_rects(&resolved)[0].rect;
-
-        let tree = view.layout_tree_for_test().unwrap();
-        let page_start = view.pages()[0].y_start;
-        let (line_node, line) = first_line(&tree.root).expect("line must exist");
-        let expected_height = text_area_height(line);
-        let expected_y =
-            line_node.rect.y + (line_node.rect.height - expected_height) * 0.5 - page_start;
-
-        assert!(line_box_rect.height > text_rect.height);
-        assert!((text_rect.y - expected_y).abs() < 0.01);
-        assert!((text_rect.height - expected_height).abs() < 0.01);
-        assert!((line_box_rect.x - text_rect.x).abs() < 0.01);
-        assert!((line_box_rect.width - text_rect.width).abs() < 0.01);
-    }
-
-    #[test]
-    fn selection_highlight_excludes_ruby_band() {
-        // The rendered selection highlight uses `selection_rects` (line box).
-        // Ruby inflates the line box upward; that band must be excluded so the
-        // highlight never covers the ruby drawn above the text. (TR-222)
-        let (plain_doc, p) = doc! { root { paragraph { p: text("ABCD") } } };
-        let (ruby_doc, r) = doc! {
-            root { paragraph { r: text("ABCD") [ruby(text: "xy".to_string())] } }
-        };
-        let plain = layout(&plain_doc);
-        let ruby = layout(&ruby_doc);
-
-        let plain_box = {
-            let sel = Selection::new(Position::new(p, 0), Position::new(p, 4));
-            plain.selection_rects(&sel.resolve(&plain_doc).unwrap())[0].rect
-        };
-        let resolved = Selection::new(Position::new(r, 0), Position::new(r, 4))
-            .resolve(&ruby_doc)
-            .unwrap();
-        let ruby_box = ruby.selection_rects(&resolved)[0].rect;
-
-        let ruby_tree = ruby.layout_tree_for_test().unwrap();
-        let (ruby_node, ruby_line) = first_line(&ruby_tree.root).expect("line must exist");
-        let band = ruby_band(ruby_line);
-
-        // Ruby actually inflated this line (else the test is vacuous).
-        assert!(band > 0.0, "ruby must reserve space above the text");
-        // The rendered highlight excludes the ruby band: same height as the
-        // plain (ruby-free, v1-equivalent) line, not the inflated line box.
-        assert!(
-            (ruby_box.height - plain_box.height).abs() < 0.5,
-            "ruby must not enlarge the selection highlight: plain={}, ruby={}",
-            plain_box.height,
-            ruby_box.height,
-        );
-        assert!(
-            (ruby_box.height - (ruby_node.rect.height - band)).abs() < 0.01,
-            "highlight height must be line box minus the ruby band",
-        );
-        // ...and the highlight starts below the reserved ruby band, not at the
-        // inflated line-box top.
-        let page_start = ruby.pages()[0].y_start;
-        assert!(ruby_box.y >= ruby_node.rect.y + band - page_start - 0.01);
-    }
-
-    #[test]
-    fn selection_text_rect_matches_v1_metric_height_without_ruby() {
-        // Without ruby the text rect height equals the v1 formula `ascent +
-        // descent` (v1 `metric.height`).
-        let (doc, t) = doc! { root { paragraph { t: text("ABCD") } } };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 4))
-            .resolve(&doc)
-            .unwrap();
-        let text_rect = view.selection_text_rects(&resolved)[0].rect;
-
-        let tree = view.layout_tree_for_test().unwrap();
-        let (_, line) = first_line(&tree.root).expect("line must exist");
-        let v1_height = line.ascent + line.descent;
-        assert!(
-            (text_rect.height - v1_height).abs() < 0.01,
-            "text rect height must equal v1 metric.height: rect={}, ascent+descent={}",
-            text_rect.height,
-            v1_height,
-        );
-    }
-
-    #[test]
-    fn selection_rects_match_v1_height_formulas_on_mixed_font_line() {
-        let (doc, small, big) = doc! {
-            root {
-                paragraph [line_height(200)] {
-                    small: text("a")
-                    big: text("A") [font_size(4800)]
-                }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(small, 0), Position::new(big, 1));
-        let resolved = sel.resolve(&doc).unwrap();
-        let line_box_rect = view.selection_rects(&resolved)[0].rect;
-        let text_rect = view.selection_text_rects(&resolved)[0].rect;
-
-        let tree = view.layout_tree_for_test().unwrap();
-        let page_start = view.pages()[0].y_start;
-        let (line_node, line) = first_line(&tree.root).expect("line must exist");
-
-        let expected_text_height = text_area_height(line);
-        let expected_text_y =
-            line_node.rect.y + (line_node.rect.height - expected_text_height) * 0.5 - page_start;
-        let expected_line_box_height = line_node.rect.height;
-        let cursor_height = line.cursor_ascent + line.cursor_descent;
-
-        assert!(
-            text_rect.height > cursor_height,
-            "mixed-font line must follow v1-like line ascent/descent, not base cursor strut: text={}, cursor={}",
-            text_rect.height,
-            cursor_height,
-        );
-        assert!((text_rect.y - expected_text_y).abs() < 0.01);
-        assert!((text_rect.height - expected_text_height).abs() < 0.01);
-        assert!((line_box_rect.height - expected_line_box_height).abs() < 0.01);
-        assert!(line_box_rect.height > text_rect.height);
-    }
-
-    #[test]
-    fn selection_text_rects_preserve_line_box_rect_order_and_horizontal_span() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph [line_height(300)] { t1: text("hello") }
-                paragraph [line_height(300)] { t2: text("world") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 1), Position::new(t2, 4));
-        let resolved = sel.resolve(&doc).unwrap();
-        let line_box_rects = view.selection_rects(&resolved);
-        let text_rects = view.selection_text_rects(&resolved);
-
-        assert_eq!(line_box_rects.len(), text_rects.len());
-        for (line_box, text) in line_box_rects.iter().zip(text_rects.iter()) {
-            assert_eq!(line_box.page_idx, text.page_idx);
-            assert_eq!(line_box.meta, text.meta);
-            assert!((line_box.rect.x - text.rect.x).abs() < 0.01);
-            assert!((line_box.rect.width - text.rect.width).abs() < 0.01);
-            if line_box.meta == SelectionRectKind::Text {
-                assert!(line_box.rect.height > text.rect.height);
-            } else {
-                assert!((line_box.rect.height - text.rect.height).abs() < 0.01);
-            }
-        }
-    }
-
-    #[test]
-    fn multi_line_selection() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("hello") }
-                paragraph { t2: text("world") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 2), Position::new(t2, 3));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 3);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert_eq!(rects[1].meta, SelectionRectKind::ParagraphBreak);
-        assert_eq!(rects[2].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.y < rects[2].rect.y);
-    }
-
-    #[test]
-    fn atom_selection() {
-        let (doc,) = doc! {
-            root {
-                paragraph { text("a") }
-                horizontal_rule {}
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 1),
-            Position::new(NodeId::ROOT, 2),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Atom);
-    }
-
-    #[test]
-    fn external_atom_selection_emits_no_rect() {
-        let (doc,) = doc! {
-            root {
-                image
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 0),
-            Position::new(NodeId::ROOT, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert!(
-            rects.is_empty(),
-            "external atom must not emit a selection rect, got {:?}",
-            rects
-        );
-    }
-
-    #[test]
-    fn selection_hit_test_includes_selected_external_atom_bounds() {
-        let (doc, img) = doc! {
-            root {
-                img: image
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 0),
-            Position::new(NodeId::ROOT, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rect = view
-            .external_elements(&doc, Some(&sel))
-            .into_iter()
-            .find(|element| element.node_id == img)
-            .expect("image external element")
-            .bounds;
-
-        assert!(
-            view.selection_hit_test(
-                &resolved,
-                0,
-                rect.x + rect.width * 0.5,
-                rect.y + rect.height * 0.5,
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
             ),
-            "selected external atoms must be a hit target for native DnD admission"
+            (
+                row0,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell00,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell00],
+                },
+            ),
+            (
+                cell01,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row0],
+                },
+            ),
+            (
+                next(),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row0, cell01],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let row0_id = row0;
+        let cell00_id = cell00;
+        let cell01_id = cell01;
+
+        let cell_rect_sel = Selection::new(
+            Position {
+                node: row0_id,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: row0_id,
+                offset: 2,
+                affinity: Affinity::Downstream,
+            },
         );
-    }
+        let rsel = cell_rect_sel
+            .resolve(&view)
+            .expect("must resolve cell rect selection");
 
-    #[test]
-    fn selection_skips_external_atom_between_text() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("hi") }
-                image
-                paragraph { t2: text("bye") }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 0), Position::new(t2, 3));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 2, "expected text rects only, got {:?}", rects);
-        assert!(rects.iter().all(|r| r.meta == SelectionRectKind::Text));
-    }
-
-    #[test]
-    fn block_fully_selected_emits_block_rect() {
-        let (doc,) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::LeftLine) {
-                    paragraph { text("quoted") }
-                }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 0),
-            Position::new(NodeId::ROOT, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Block);
-    }
-
-    #[test]
-    fn block_partially_selected_emits_text_rects() {
-        let (doc, t) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::LeftLine) {
-                    paragraph { t: text("quoted") }
-                }
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t, 1), Position::new(t, 4));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-    }
-
-    #[test]
-    fn fold_title_selection() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {}
-                fold {
-                    fold_title {
-                        t1: text("hello")
-                    }
-                    fold_content {
-                        paragraph {
-                            text("body")
-                        }
-                    }
-                }
-                paragraph {}
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 0), Position::new(t1, 5));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.width > 0.0);
-        assert!(rects[0].rect.height > 0.0);
-    }
-
-    #[test]
-    fn fold_content_selection() {
-        let (doc, t1) = doc! {
-            root {
-                paragraph {}
-                fold {
-                    fold_title {
-                        text("title")
-                    }
-                    fold_content {
-                        paragraph {
-                            t1: text("body!")
-                        }
-                    }
-                }
-                paragraph {}
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 5), Position::new(t1, 0));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.width > 0.0);
-        assert!(rects[0].rect.height > 0.0);
-    }
-
-    #[test]
-    fn selection_starting_at_lower_soft_wrap_line_emits_rect() {
-        // Force soft-wrap: max_width=40 (content width) — exactly 4 ASCII test
-        // chars per line. "abcdefgh" wraps as
-        //   line A (offset 0..4): "abcd"
-        //   line B (offset 4..8): "efgh"
-        // Selecting the lower line's leading character (offset 4 → 5) must
-        // produce one rect over the lower line.
-        let (doc, t) = doc! {
-            root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
-                paragraph { t: text("abcdefgh") }
-            }
-        };
-        let view = layout(&doc);
-
-        // Layout dumped via PageVisitor confirms the wrap boundary is at
-        // codepoint offset 6: the last visual line owns offsets 6..8 ("gh").
-        // Selecting from (t, 6) — the first character of that lower line —
-        // exercises the bug: both upper and lower lines claim offset 6 and
-        // visit_line consumes it on the upper line with zero width.
-        let sel = Selection::new(Position::new(t, 6), Position::new(t, 7));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(
-            rects.len(),
-            1,
-            "expected one rect on the lower wrapped line"
-        );
-        assert!(rects[0].rect.width > 0.0);
-        // The lower visual line is well below the upper ones (y ~ 71).
         assert!(
-            rects[0].rect.y > 50.0,
-            "rect must be on the lower line, got y={}",
-            rects[0].rect.y
-        );
-    }
-
-    #[test]
-    fn fully_selected_box_spanning_pages_emits_rect_per_page() {
-        // Fully select a fold whose FoldContent spans two pages. FoldContent
-        // has padding > 0, so visit_box's "fully selected" branch fires for it.
-        // The selection rect must appear on every page the box overlaps; if it
-        // is anchored to a single page only, the renderer's per-page mark
-        // filtering hides the selection on the other pages.
-        let (doc,) = doc! {
-            root (
-                layout_mode: editor_model::LayoutMode::Paginated {
-                    page_width: 400,
-                    page_height: 120,
-                    page_margin_top: 10,
-                    page_margin_bottom: 10,
-                    page_margin_left: 10,
-                    page_margin_right: 10,
-                }
-            ) {
-                fold {
-                    fold_title { text("title") }
-                    fold_content {
-                        paragraph { text("a") }
-                        paragraph { text("b") }
-                        paragraph { text("c") }
-                        paragraph { text("d") }
-                        paragraph { text("e") }
-                        paragraph { text("f") }
-                        paragraph { text("g") }
-                        paragraph { text("h") }
-                    }
-                }
-            }
-        };
-        let view = layout(&doc);
-        assert!(
-            view.pages().len() >= 2,
-            "expected >= 2 pages, got {}",
-            view.pages().len()
+            rsel.as_cell_rect().is_some(),
+            "selection must be recognised as a cell rect"
         );
 
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 0),
-            Position::new(NodeId::ROOT, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        let pages: std::collections::HashSet<_> = rects.iter().map(|r| r.page_idx).collect();
-        assert!(
-            pages.len() >= 2,
-            "fully-selected box spanning pages must emit rects on every overlapped page; pages={:?}, rects={:?}",
-            pages,
-            rects,
-        );
-    }
-
-    #[test]
-    fn nested_bullet_lists_with_external_endpoint_emit_text_rects() {
-        // Selection runs from inside the outer list_item's paragraph down through
-        // nested list_items and ends at the start of a sibling paragraph outside
-        // the bullet_list. The middle and innermost list_items are enveloped by
-        // the selection (entry_phase=Inside on entry, phase=Inside on exit). Their
-        // padding.left is structural — it reserves the bullet marker slot, not a
-        // visual envelope. Selection rendering must NOT collapse them into block
-        // rects covering the marker slot. Each line emits its own text rect.
-        let (doc, t1, p1) = doc! {
-            root {
-                bullet_list {
-                    list_item {
-                        paragraph {
-                            t1: text("a")
-                        }
-                        bullet_list {
-                            list_item {
-                                paragraph {
-                                    text("b")
-                                }
-                                bullet_list {
-                                    list_item {
-                                        paragraph {
-                                            text("c")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                p1: paragraph {}
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 0), Position::new(p1, 0));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(
-            rects.len(),
-            3,
-            "expected text rects for a/b/c without an empty paragraph placeholder for p1, got {:?}",
-            rects,
-        );
-        assert!(
-            rects.iter().all(|r| r.meta == SelectionRectKind::Text),
-            "list_item's structural padding must not promote rects to Block kind: {:?}",
-            rects,
-        );
-    }
-
-    #[test]
-    fn selection_ending_at_offset_zero_of_container_does_not_leak_to_following_siblings() {
-        // `to` lands at offset 0 of a container box (`bl1`) — i.e. immediately
-        // before its first child. The selection's `from` sits at the end of `t1`,
-        // which is the same physical boundary at a different level. Nothing
-        // should be drawn: neither inside `bl1` nor in the bottom paragraph
-        // that follows the outer bullet_list.
-        let (state, ..) = state! {
-            doc {
-                root {
-                    bullet_list {
-                        list_item {
-                            paragraph {
-                                t1: text("a")
-                            }
-                            bl1: bullet_list {
-                                list_item {
-                                    paragraph {
-                                        text("b")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (t1, 1, <) -> (bl1, 0, >)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(
-            rects.len(),
-            0,
-            "selection collapsed at the boundary just outside t1 / just inside bl1 must emit no rects, got {:?}",
-            rects,
-        );
-    }
-
-    #[test]
-    fn fully_enveloped_fold_content_emits_text_not_block() {
-        // (fold,1)->(fold,2) envelopes the fold_content subtree from the
-        // fold's perspective (fold_title excluded, so Fold itself is not
-        // fully selected). FoldContent is not monolithic (only Fold is), so a
-        // fully-enveloped fold_content must emit text rects, not one Block rect.
-        let (doc,) = doc! {
-            root {
-                fold {
-                    fold_title { text("t") }
-                    fold_content { paragraph { text("body") } }
-                }
-            }
-        };
-        let f = doc
-            .node(NodeId::ROOT)
-            .unwrap()
-            .children()
-            .next()
-            .unwrap()
-            .id();
-        let view = layout(&doc);
-        let sel = Selection::new(Position::new(f, 1), Position::new(f, 2));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        assert!(!rects.is_empty());
-        assert!(
-            rects.iter().all(|r| r.meta == SelectionRectKind::Text),
-            "fold_content is not monolithic; must emit text rects, got {:?}",
-            rects
-        );
-    }
-
-    #[test]
-    fn fully_enveloped_callout_emits_block_rect() {
-        let (doc,) = doc! {
-            root {
-                callout(variant: CalloutVariant::Danger) {
-                    paragraph { text("hi") }
-                }
-            }
-        };
-        let view = layout(&doc);
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 0),
-            Position::new(NodeId::ROOT, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Block);
-    }
-
-    #[test]
-    fn fully_enveloped_table_emits_block_rect() {
-        let (doc,) = doc! {
-            root {
-                table {
-                    table_row {
-                        table_cell { paragraph { text("a") } }
-                    }
-                }
-            }
-        };
-        let view = layout(&doc);
-        let sel = Selection::new(
-            Position::new(NodeId::ROOT, 0),
-            Position::new(NodeId::ROOT, 1),
-        );
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
+        let rects = selection_rects(&index, &rsel);
         assert!(
             rects.iter().any(|r| r.meta == SelectionRectKind::Block),
-            "fully-enveloped monolithic Table must emit a Block rect, got {:?}",
+            "cell rect selection must yield Block rects, got {:?}",
             rects
         );
-    }
 
-    #[test]
-    fn empty_paragraph_after_atom_node_selected_emits_no_rect() {
-        // Node-selecting the empty paragraph that follows an image atom.
-        // (r1, 1, >) means Downstream-attached-to-child[1] (the paragraph),
-        // (r1, 2, <) means Upstream-attached-to-child[1] (the paragraph);
-        // both endpoints bracket the empty paragraph from the root level.
-        let (state, ..) = state! {
-            doc {
-                r1: root {
-                    image
-                    paragraph {}
-                }
-            }
-            selection: (r1, 1, >) -> (r1, 2, <)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert!(rects.is_empty(), "got {:?}", rects);
-    }
-
-    #[test]
-    fn paragraph_after_atom_node_selected_emits_text_rect() {
-        // Non-empty counterpart of the previous test. The same affinity-bracket
-        // pattern around child[1] must also paint the line for a populated
-        // paragraph.
-        let (state, ..) = state! {
-            doc {
-                r1: root {
-                    image
-                    paragraph { text("hello") }
-                }
-            }
-            selection: (r1, 1, >) -> (r1, 2, <)
-        };
-        let view = layout(&state.doc);
-        let resolved = state.selection.unwrap().resolve(&state.doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1, "got {:?}", rects);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.width > 0.0);
-    }
-
-    #[test]
-    fn cross_block_selection() {
-        let (doc, t1, p1) = doc! {
-            root {
-                callout(variant: CalloutVariant::Danger) {
-                    paragraph { text("A") }
-                    paragraph { text("Hello, World!") }
-                    paragraph { t1: text("end") }
-                }
-                p1: paragraph {}
-            }
-        };
-        let view = layout(&doc);
-
-        let sel = Selection::new(Position::new(t1, 0), Position::new(p1, 0));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].meta, SelectionRectKind::Text);
-        assert!(rects[0].rect.width > 0.0);
-    }
-
-    #[test]
-    fn selection_endpoints_collapsed_returns_none() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
-
-        let sel = Selection::collapsed(Position::new(t, 2));
-        let resolved = sel.resolve(&doc).unwrap();
-        assert!(view.selection_endpoints(&resolved).is_none());
-    }
-
-    #[test]
-    fn selection_hit_test_collapsed_is_false() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello") } } };
-        let view = layout(&doc);
-        let resolved = Selection::collapsed(Position::new(t, 2))
-            .resolve(&doc)
-            .unwrap();
-        assert!(!view.selection_hit_test(&resolved, 0, 5.0, 5.0));
-    }
-
-    #[test]
-    fn selection_hit_test_single_line_inside_rect_is_true() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello world") } } };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
-            .resolve(&doc)
-            .unwrap();
-        let rect = view.selection_rects(&resolved)[0].rect;
-
-        assert!(view.selection_hit_test(
-            &resolved,
-            0,
-            rect.x + rect.width * 0.5,
-            rect.y + rect.height * 0.5,
-        ));
-    }
-
-    #[test]
-    fn selection_hit_test_single_line_outside_rect_is_false() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello world") } } };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
-            .resolve(&doc)
-            .unwrap();
-        let rect = view.selection_rects(&resolved)[0].rect;
-
-        assert!(!view.selection_hit_test(
-            &resolved,
-            0,
-            rect.x + rect.width + 5.0,
-            rect.y + rect.height * 0.5,
-        ));
-    }
-
-    #[test]
-    fn selection_hit_test_multi_line_extends_first_rect_to_max_x() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("hi") }
-                paragraph { t2: text("a much longer line") }
-            }
-        };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
-            .resolve(&doc)
-            .unwrap();
-        let rects = view.selection_rects(&resolved);
-        let first = rects[0].rect;
-        let last = rects[1].rect;
-        let max_x = last.x + last.width;
-
-        assert!(max_x > first.x + first.width, "second line must be wider");
-
-        let probe_x = first.x + first.width + (max_x - (first.x + first.width)) * 0.5;
-        let probe_y = first.y + first.height * 0.5;
-        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
-    }
-
-    #[test]
-    fn selection_hit_test_multi_line_extends_last_rect_to_min_x() {
-        // callout's measured padding.left = CALLOUT_PADDING_X + CALLOUT_ICON_WIDTH
-        // + CALLOUT_ICON_CONTENT_GAP = 40, so the inner paragraph's line starts
-        // further right than the outer paragraph. The partial range (t1..t2) keeps
-        // the callout from collapsing into a Block rect, so a Text rect is emitted
-        // for the inner line — that's the last rect whose left edge envelope
-        // extension we want to exercise.
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("hi") }
-                callout(variant: CalloutVariant::Danger) {
-                    paragraph { t2: text("inside callout") }
-                }
-            }
-        };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 5))
-            .resolve(&doc)
-            .unwrap();
-        let rects = view.selection_rects(&resolved);
-        let first = rects[0].rect;
-        let last = rects.last().unwrap().rect;
-        let min_x = first.x.min(last.x);
-
-        assert!(
-            last.x > min_x,
-            "last line must start further right than envelope min_x",
-        );
-
-        let probe_x = min_x + (last.x - min_x) * 0.5;
-        let probe_y = last.y + last.height * 0.5;
-        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
-    }
-
-    #[test]
-    fn selection_hit_test_vertical_gap_inside_envelope_is_true() {
-        let (doc, t1, t2) = doc! {
-            root {
-                blockquote(variant: BlockquoteVariant::LeftLine) {
-                    paragraph { t1: text("first") }
-                }
-                blockquote(variant: BlockquoteVariant::LeftLine) {
-                    paragraph { t2: text("second") }
-                }
-            }
-        };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 6))
-            .resolve(&doc)
-            .unwrap();
-        let rects: Vec<_> = view
-            .selection_rects(&resolved)
-            .into_iter()
-            .filter(|r| r.page_idx == 0)
-            .collect();
-        assert!(rects.len() >= 2, "expected rects spanning two blocks");
-        let a = rects[0].rect;
-        let b = rects[1].rect;
-        let gap_top = a.y + a.height;
-        let gap_bottom = b.y;
-        assert!(gap_bottom > gap_top, "expected vertical gap between blocks");
-
-        let probe_y = (gap_top + gap_bottom) * 0.5;
-        let probe_x = a.x.min(b.x) + 1.0;
-        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
-    }
-
-    #[test]
-    fn selection_hit_test_outside_envelope_band_is_false() {
-        let (doc, t1, t2) = doc! {
-            root {
-                paragraph { t1: text("hi") }
-                paragraph { t2: text("a much longer line") }
-            }
-        };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t1, 0), Position::new(t2, 18))
-            .resolve(&doc)
-            .unwrap();
-        let rects = view.selection_rects(&resolved);
-        let last = rects
-            .iter()
-            .rev()
-            .find(|rect| rect.meta == SelectionRectKind::Text)
+        let cell_ids: Vec<_> = rsel
+            .as_cell_rect()
             .unwrap()
-            .rect;
-
-        let probe_x = last.x + last.width + 50.0;
-        let probe_y = last.y + last.height * 0.5;
-        assert!(!view.selection_hit_test(&resolved, 0, probe_x, probe_y));
+            .cells()
+            .into_iter()
+            .map(|c| c.id())
+            .collect();
+        assert!(cell_ids.contains(&cell00_id), "cell00 must be in cell ids");
+        assert!(cell_ids.contains(&cell01_id), "cell01 must be in cell ids");
     }
 
     #[test]
-    fn selection_hit_test_wrong_page_is_false() {
-        let (doc, t) = doc! { root { paragraph { t: text("hello world") } } };
-        let view = layout(&doc);
-        let resolved = Selection::new(Position::new(t, 0), Position::new(t, 5))
-            .resolve(&doc)
-            .unwrap();
-        let rect = view.selection_rects(&resolved)[0].rect;
-        let probe_x = rect.x + rect.width * 0.5;
-        let probe_y = rect.y + rect.height * 0.5;
+    fn endpoints() {
+        let (doc, _root, para) = simple_para_doc("Hello");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let para_id = para;
 
-        assert!(view.selection_hit_test(&resolved, 0, probe_x, probe_y));
-        assert!(!view.selection_hit_test(&resolved, 1, probe_x, probe_y));
-    }
+        let from_pos = Position {
+            node: para_id,
+            offset: 1,
+            affinity: Affinity::Downstream,
+        };
+        let to_pos = Position {
+            node: para_id,
+            offset: 4,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::new(from_pos, to_pos);
+        let rsel = sel.resolve(&view).expect("must resolve");
 
-    #[test]
-    fn selection_covering_leading_tab_emits_rect_over_gap() {
-        // Paragraph: tab(child 0) text("xx")(child 1). Select the whole
-        // paragraph content; the emitted rect must span the tab gap.
-        let (doc, p1) = doc! { root { p1: paragraph { tab {} text("xx") } } };
-        let view = layout(&doc);
+        let eps = selection_endpoints(&index, &rsel)
+            .expect("non-collapsed selection must have endpoints");
 
-        let tree = view.layout_tree_for_test().unwrap();
-        let (line_node, line) = first_line(&tree.root).expect("line must exist");
-        let gap = line.tab_gaps.first().cloned().expect("tab gap exists");
-        let line_x = line_node.rect.x;
+        assert_eq!(
+            eps.from_position.node, para_id,
+            "from_position.node must equal the from Dot"
+        );
+        assert_eq!(
+            eps.to_position.node, para_id,
+            "to_position.node must equal the to Dot"
+        );
+        assert_eq!(eps.from.rect.width, 0.0, "from endpoint must be zero-width");
+        assert_eq!(eps.to.rect.width, 0.0, "to endpoint must be zero-width");
 
-        let sel = Selection::new(Position::new(p1, 0), Position::new(p1, 2));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
-
-        assert!(!rects.is_empty(), "expected a selection rect");
-        let r = rects[0].rect;
-        let gap_lo = line_x + gap.x;
-        let gap_hi = line_x + gap.x + gap.width;
-        // The selection rect must overlap the gap's [x, x+width] span.
+        let rects = selection_rects(&index, &rsel);
+        let first = rects.first().unwrap();
+        let last = rects.last().unwrap();
         assert!(
-            r.x <= gap_lo + 0.5 && r.x + r.width >= gap_hi - 0.5,
-            "rect [{}, {}] must cover gap [{}, {}]",
-            r.x,
-            r.x + r.width,
-            gap_lo,
-            gap_hi,
+            (eps.from.rect.x - first.rect.x).abs() < 0.1,
+            "from.rect.x must be at the left edge of the first rect"
+        );
+        assert!(
+            (eps.to.rect.x - (last.rect.x + last.rect.width)).abs() < 0.1,
+            "to.rect.x must be at the right edge of the last rect"
         );
     }
 
     #[test]
-    fn selection_covering_only_tab_emits_rect_over_gap() {
-        // Tab-only paragraph: selecting the tab must still produce a visible
-        // rect spanning the gap (no glyph runs to fall back on).
-        let (doc, p1) = doc! { root { p1: paragraph { tab {} } } };
-        let view = layout(&doc);
+    fn hit_test() {
+        let (doc, _root, para) = simple_para_doc("Hello world");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let para_id = para;
 
-        let tree = view.layout_tree_for_test().unwrap();
-        let (line_node, line) = first_line(&tree.root).expect("line must exist");
-        let gap = line.tab_gaps.first().cloned().expect("tab gap exists");
-        let line_x = line_node.rect.x;
+        let from_pos = Position {
+            node: para_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        let to_pos = Position {
+            node: para_id,
+            offset: 5,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::new(from_pos, to_pos);
+        let rsel = sel.resolve(&view).expect("must resolve");
 
-        let sel = Selection::new(Position::new(p1, 0), Position::new(p1, 1));
-        let resolved = sel.resolve(&doc).unwrap();
-        let rects = view.selection_rects(&resolved);
+        let rect = selection_rects(&index, &rsel)[0].rect;
 
-        assert!(!rects.is_empty(), "expected a selection rect for the tab");
-        let r = rects[0].rect;
-        let gap_lo = line_x + gap.x;
-        let gap_hi = line_x + gap.x + gap.width;
-        assert!(r.width > 0.0, "tab selection rect must have width");
         assert!(
-            r.x <= gap_lo + 0.5 && r.x + r.width >= gap_hi - 0.5,
-            "rect [{}, {}] must cover gap [{}, {}]",
-            r.x,
-            r.x + r.width,
-            gap_lo,
-            gap_hi,
+            selection_hit_test(
+                &index,
+                &rsel,
+                0,
+                rect.x + rect.width * 0.5,
+                rect.y + rect.height * 0.5
+            ),
+            "point inside selection rect must hit"
+        );
+
+        assert!(
+            !selection_hit_test(
+                &index,
+                &rsel,
+                0,
+                rect.x + rect.width + 50.0,
+                rect.y + rect.height * 0.5
+            ),
+            "point clearly outside selection rect must not hit"
+        );
+
+        assert!(
+            !selection_hit_test(
+                &index,
+                &rsel,
+                1,
+                rect.x + rect.width * 0.5,
+                rect.y + rect.height * 0.5
+            ),
+            "point inside rect on wrong page must not hit"
         );
     }
 }

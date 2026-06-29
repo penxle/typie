@@ -204,10 +204,13 @@ fn html_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::slice::Slice;
+    use crate::test_doc::DocBuilder;
+    use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        Fragment, Modifier, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
+    use editor_state::{Position, Selection};
 
     #[test]
     fn serialize_empty_slice_with_meta() {
@@ -368,20 +371,30 @@ mod tests {
 
     #[test]
     fn serialize_image() {
-        let (s, ..) = state! {
-            doc { r: root { image } }
-            selection: (r, 0, >) -> (r, 1, <)
-        };
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        b.image(&[root]);
+        let s = b.finish(Some(Selection::new(
+            Position::new(root, 0),
+            Position::new(root, 1),
+        )));
         let html = Slice::extract(&s).unwrap().to_html();
         assert!(html.contains("<img data-id"));
     }
 
     #[test]
     fn serialize_horizontal_rule() {
-        let (s, ..) = state! {
-            doc { r: root { paragraph { text("a") } horizontal_rule paragraph { text("b") } } }
-            selection: (r, 1, >) -> (r, 2, <)
-        };
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let _p1 = b.block(NodeType::Paragraph, &[root]);
+        b.text("a");
+        b.horizontal_rule(&[root]);
+        let _p2 = b.block(NodeType::Paragraph, &[root]);
+        b.text("b");
+        let s = b.finish(Some(Selection::new(
+            Position::new(root, 1),
+            Position::new(root, 2),
+        )));
         let html = Slice::extract(&s).unwrap().to_html();
         assert!(html.contains("<hr>"));
     }

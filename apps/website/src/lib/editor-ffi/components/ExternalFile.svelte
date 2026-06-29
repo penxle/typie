@@ -28,7 +28,7 @@
   const fileData = $derived(element.data.type === 'file' ? element.data : undefined);
   const fileId = $derived(fileData?.id || undefined);
   const asset = $derived(fileId ? ctx.fileAssets.get(fileId) : undefined);
-  const inflight = $derived(ctx.editor?.inflightFiles.get(element.node_id));
+  const inflight = $derived(ctx.editor?.inflightFiles.get(element.node));
   const stage = $derived(deriveFileStage({ fileId, inflight, asset }));
 
   const canEdit = $derived(!ctx.editor?.readOnly);
@@ -37,7 +37,7 @@
   const displaySize = $derived(asset ? formatFileSize(Number(asset.size)) : undefined);
   const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
   const isOnlySelectedElement = $derived(
-    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node_id,
+    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
   );
 
   let pickerOpened = $state(false);
@@ -53,7 +53,7 @@
   });
 
   const deleteNode = () => {
-    ctx.editor?.enqueue(createDeleteNodeMessage(element.node_id));
+    ctx.editor?.enqueue(createDeleteNodeMessage(element.node));
     ctx.editor?.focus();
   };
 
@@ -88,7 +88,7 @@
 
     const result = await processFileUpload({
       file,
-      nodeId: element.node_id,
+      nodeId: element.node,
       setInflightFile: (nodeId, data) => editor.inflightFiles.set(nodeId, data),
       deleteInflightFile: (nodeId) => editor.inflightFiles.delete(nodeId),
       setFileAsset: (a) => ctx.fileAssets.set(a.id, a),

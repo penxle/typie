@@ -1,6 +1,7 @@
 use editor_common::Axis;
-use editor_model::NodeId;
-use editor_state::{NodeRefCursorExt, Selection};
+use editor_crdt::Dot;
+use editor_state::Selection;
+use editor_state::first_cursor_position;
 use editor_transaction::Transaction;
 
 use crate::helpers::{col_count_from_table, cursor_pos_in_table};
@@ -8,18 +9,18 @@ use crate::{CommandError, CommandResult};
 
 pub fn delete_table_axis(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     axis: Axis,
     index: usize,
 ) -> CommandResult {
     match axis {
         Axis::Horizontal => {
             let (row_count, n_cols) = {
-                let doc = tr.doc();
-                let table = doc
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
-                (table.children().count(), col_count_from_table(&table)?)
+                (table.child_blocks().count(), col_count_from_table(&table)?)
             };
             // Invariant: table must keep at least one row.
             if row_count <= 1 {
@@ -29,12 +30,12 @@ pub fn delete_table_axis(
                 .map(|(_, c)| c)
                 .unwrap_or(0);
             let row_id = {
-                let doc = tr.doc();
-                let table = doc
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
                 table
-                    .children()
+                    .child_blocks()
                     .nth(index)
                     .ok_or_else(|| CommandError::Corrupted("row index out of range".into()))?
                     .id()
@@ -45,11 +46,11 @@ pub fn delete_table_axis(
         }
         Axis::Vertical => {
             let (row_ids, n_cols, row_count) = {
-                let doc = tr.doc();
-                let table = doc
+                let view = tr.view();
+                let table = view
                     .node(table_id)
                     .ok_or(CommandError::NodeNotFound(table_id))?;
-                let row_ids: Vec<NodeId> = table.children().map(|r| r.id()).collect();
+                let row_ids: Vec<Dot> = table.child_blocks().map(|r| r.id()).collect();
                 let row_count = row_ids.len();
                 let n_cols = col_count_from_table(&table)?;
                 (row_ids, n_cols, row_count)
@@ -63,11 +64,11 @@ pub fn delete_table_axis(
                 .unwrap_or(0);
             for row_id in &row_ids {
                 let cell_id = {
-                    let doc = tr.doc();
-                    let row = doc
+                    let view = tr.view();
+                    let row = view
                         .node(*row_id)
                         .ok_or(CommandError::NodeNotFound(*row_id))?;
-                    row.children()
+                    row.child_blocks()
                         .nth(index)
                         .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
                         .id()
@@ -83,24 +84,24 @@ pub fn delete_table_axis(
 
 fn restore_selection_to_cell(
     tr: &mut Transaction,
-    table_id: NodeId,
+    table_id: Dot,
     row_index: usize,
     col_index: usize,
 ) -> Result<(), CommandError> {
     let pos = {
-        let doc = tr.doc();
-        let table = doc
+        let view = tr.view();
+        let table = view
             .node(table_id)
             .ok_or(CommandError::NodeNotFound(table_id))?;
         let row = table
-            .children()
+            .child_blocks()
             .nth(row_index)
             .ok_or_else(|| CommandError::Corrupted("row index out of range".into()))?;
         let cell = row
-            .children()
+            .child_blocks()
             .nth(col_index)
             .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?;
-        cell.first_cursor_position()
+        first_cursor_position(&cell)
             .ok_or_else(|| CommandError::Corrupted("cell has no cursor position".into()))?
     };
     tr.set_selection(Some(Selection::collapsed(pos)))?;
@@ -137,9 +138,9 @@ mod tests {
             Axis::Horizontal,
             0
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        assert_eq!(table.children().count(), 1);
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        assert_eq!(table.child_blocks().count(), 1);
     }
 
     #[test]
@@ -183,10 +184,10 @@ mod tests {
             Axis::Vertical,
             0
         ));
-        let doc = actual.doc;
-        let table = doc.node(tbl).unwrap();
-        for row in table.children() {
-            assert_eq!(row.children().count(), 1);
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        for row in table.child_blocks() {
+            assert_eq!(row.child_blocks().count(), 1);
         }
     }
 
@@ -225,11 +226,11 @@ mod tests {
             Axis::Horizontal,
             1
         ));
-        let sel = actual.selection.unwrap();
-        let doc = actual.doc;
-        let r0c0_node = doc.node(r0c0).unwrap();
-        let expected_pos = r0c0_node.first_cursor_position().unwrap();
+        let v = actual.view();
+        let r0c0_node = v.node(r0c0).unwrap();
+        let expected_pos = first_cursor_position(&r0c0_node).unwrap();
         let expected = Selection::collapsed(expected_pos);
+        let sel = actual.selection.unwrap();
         assert_eq!(sel, expected);
     }
 }

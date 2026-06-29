@@ -1,8 +1,7 @@
 use editor_macros::state;
 use editor_resource::RawTextReplacementRule;
 use editor_state::{
-    Composition, DocFlatExt, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    assert_state_eq,
+    Composition, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, assert_state_eq,
 };
 use editor_transaction::HistoryMeta;
 
@@ -42,10 +41,8 @@ fn key(editor: &mut Editor, k: Key) {
 }
 
 fn flat_text(editor: &Editor) -> String {
-    editor
-        .state()
-        .doc
-        .flat_text(0..editor.state().doc.flat_size())
+    let view = editor.state().view();
+    editor_state::flat_text(&view, 0..editor_state::flat_size(&view))
 }
 
 const PLAIN_PATTERN: &str = "abc";
@@ -60,8 +57,8 @@ const MULTILINE_PAT_SUBSTITUTE: &str = "Q";
 #[test]
 fn plain_rule_applies_on_insertion() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -71,8 +68,8 @@ fn plain_rule_applies_on_insertion() {
     }
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("X") } } }
-        selection: (t1, 1)
+        doc { root { p1: paragraph { text("X") } } }
+        selection: (p1, 1)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -80,16 +77,16 @@ fn plain_rule_applies_on_insertion() {
 #[test]
 fn no_rule_means_no_replacement() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
 
     type_text(&mut editor, PLAIN_PATTERN);
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("abc") } } }
-        selection: (t1, 3)
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -97,8 +94,8 @@ fn no_rule_means_no_replacement() {
 #[test]
 fn non_matching_input_is_untouched() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -106,8 +103,8 @@ fn non_matching_input_is_untouched() {
     type_text(&mut editor, "zzz");
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("zzz") } } }
-        selection: (t1, 3)
+        doc { root { p1: paragraph { text("zzz") } } }
+        selection: (p1, 3)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -115,8 +112,8 @@ fn non_matching_input_is_untouched() {
 #[test]
 fn regex_rule_applies_on_insertion() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(REGEX_PATTERN, REGEX_SUBSTITUTE, true)]);
@@ -124,8 +121,8 @@ fn regex_rule_applies_on_insertion() {
     type_text(&mut editor, "42#");
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("N") } } }
-        selection: (t1, 1)
+        doc { root { p1: paragraph { text("N") } } }
+        selection: (p1, 1)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -133,8 +130,8 @@ fn regex_rule_applies_on_insertion() {
 #[test]
 fn multiline_substitute_creates_hard_break() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(
@@ -165,11 +162,11 @@ fn multiline_pattern_matches_across_hard_break() {
                 _p1: paragraph {
                     text("P1")
                     hard_break {}
-                    t1: text("P")
+                    text("P")
                 }
             }
         }
-        selection: (t1, 1)
+        selection: (_p1, 4)
     };
     let mut editor = Editor::new_test(s);
     set_rules(
@@ -188,8 +185,8 @@ fn multiline_pattern_matches_across_hard_break() {
 #[test]
 fn backspace_immediately_after_replacement_restores_original() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -198,8 +195,8 @@ fn backspace_immediately_after_replacement_restores_original() {
     key(&mut editor, Key::Backspace);
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("abc") } } }
-        selection: (t1, 3)
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -207,8 +204,8 @@ fn backspace_immediately_after_replacement_restores_original() {
 #[test]
 fn second_backspace_after_restore_is_normal_delete() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -218,8 +215,8 @@ fn second_backspace_after_restore_is_normal_delete() {
     key(&mut editor, Key::Backspace);
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("ab") } } }
-        selection: (t1, 2)
+        doc { root { p1: paragraph { text("ab") } } }
+        selection: (p1, 2)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -227,8 +224,8 @@ fn second_backspace_after_restore_is_normal_delete() {
 #[test]
 fn typing_after_replacement_invalidates_restore() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -238,8 +235,8 @@ fn typing_after_replacement_invalidates_restore() {
     key(&mut editor, Key::Backspace);
 
     let (expected, ..) = state! {
-        doc { root { paragraph { t1: text("X") } } }
-        selection: (t1, 1)
+        doc { root { p1: paragraph { text("X") } } }
+        selection: (p1, 1)
     };
     assert_state_eq!(editor.state(), &expected);
 }
@@ -247,8 +244,8 @@ fn typing_after_replacement_invalidates_restore() {
 #[test]
 fn cursor_movement_invalidates_restore() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("k") } } }
-        selection: (t1, 1)
+        doc { root { p1: paragraph { text("k") } } }
+        selection: (p1, 1)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -267,16 +264,16 @@ fn cursor_movement_invalidates_restore() {
         .selection
         .expect("selection must exist after typing");
     let current_flat = {
-        let doc = editor.state().doc.clone();
+        let view = editor.state().view();
         current_sel
             .head
-            .resolve(&doc)
+            .resolve(&view)
             .map(|rp| rp.to_flat())
             .expect("cursor must resolve")
     };
     let left_sel = {
-        let doc = editor.state().doc.clone();
-        let pos = ResolvedPosition::from_flat(&doc, current_flat - 1)
+        let view = editor.state().view();
+        let pos = ResolvedPosition::from_flat(&view, current_flat - 1)
             .expect("flat pos left of cursor resolves");
         Selection::collapsed(Position::from(&pos))
     };
@@ -320,11 +317,11 @@ fn multiline_replacement_restored_by_backspace() {
                 _p1: paragraph {
                     text("P1")
                     hard_break {}
-                    t1: text("P")
+                    text("P")
                 }
             }
         }
-        selection: (t1, 1)
+        selection: (_p1, 4)
     };
     let mut editor = Editor::new_test(s);
     set_rules(
@@ -347,8 +344,8 @@ fn multiline_replacement_restored_by_backspace() {
 #[test]
 fn undo_after_replacement_does_not_leave_substitute_in_doc() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -368,8 +365,8 @@ fn undo_after_replacement_does_not_leave_substitute_in_doc() {
 #[test]
 fn redo_after_undo_restores_substitute() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -395,8 +392,8 @@ fn undo_then_backspace_is_safe_when_replacement_undo_state_was_live() {
     // the shortcut again and restores the original text. The mechanism must not
     // corrupt the history stack.
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -421,14 +418,14 @@ fn undo_then_backspace_is_safe_when_replacement_undo_state_was_live() {
         flat.contains(PLAIN_PATTERN),
         "original text must be restored by shortcut: {flat:?}"
     );
-    assert!(editor.history.can_redo(), "redo stack must be intact");
+    assert!(editor.undo_history.can_redo(), "redo stack must be intact");
 }
 
 #[test]
 fn replacement_skipped_during_active_composition() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -457,8 +454,8 @@ fn replacement_skipped_during_active_composition() {
 #[test]
 fn replacement_fires_on_commit_as_is() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -488,8 +485,8 @@ fn replacement_fires_on_commit_as_is() {
 #[test]
 fn flat_text_input_message_commits_preedit() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -513,8 +510,8 @@ fn flat_text_input_message_commits_preedit() {
 #[test]
 fn replacement_fires_on_explicit_commit() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
@@ -536,8 +533,8 @@ fn replacement_fires_on_explicit_commit() {
 #[test]
 fn update_then_update_keeps_composition_intact() {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
     set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);

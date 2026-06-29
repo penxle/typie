@@ -1,5 +1,4 @@
 use editor_macros::state;
-use editor_model::StableEntryResolution;
 use editor_state::Selection;
 
 use crate::editor::Editor;
@@ -18,7 +17,10 @@ fn add_message(id: &str, group: &str, selection: Selection) -> Message {
 
 fn restored_offsets(editor: &Editor, id: &str) -> (usize, usize) {
     let range = editor.tracked_ranges().get(id).expect("range present");
-    let sel = range.selection.restore(&editor.state().doc);
+    let state = editor.state();
+    let view = state.view();
+    let ctx = editor_state::StableResolveCtx::new(&view, state.projected.seq());
+    let sel = range.selection.resolve(&ctx).expect("range restores");
     (sel.anchor.offset, sel.head.offset)
 }
 
@@ -27,36 +29,22 @@ fn restored_offsets(editor: &Editor, id: &str) -> (usize, usize) {
 /// unlocated for current range semantics.
 fn is_unlocated(editor: &Editor, id: &str) -> bool {
     let range = editor.tracked_ranges().get(id).expect("range present");
-    range.locate(&editor.state().doc).is_none()
+    range.locate(editor.state()).is_none()
 }
 
 fn located_text(editor: &Editor, id: &str) -> Option<String> {
     let range = editor.tracked_ranges().get(id).expect("range present");
-    range
-        .locate(&editor.state().doc)
-        .and_then(|sel| sel.resolve(&editor.state().doc))
-        .map(|resolved| resolved.collect_text())
-}
-
-fn visible_entry_dots(
-    editor: &Editor,
-    node_id: editor_model::NodeId,
-) -> Vec<editor_crdt::EntryDot> {
-    editor
-        .state()
-        .doc
-        .text_view(node_id)
-        .expect("text node")
-        .visible_entries()
-        .map(|(entry, _)| entry)
-        .collect()
+    let sel = range.locate(editor.state())?;
+    let view = editor.state().view();
+    let resolved = sel.resolve(&view)?;
+    Some(resolved.collect_text())
 }
 
 #[test]
 fn range_position_shifts_when_text_inserted_before_it() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -66,7 +54,7 @@ fn range_position_shifts_when_text_inserted_before_it() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 0)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
         },
     });
     editor.apply(Message::Insertion {
@@ -79,9 +67,9 @@ fn range_position_shifts_when_text_inserted_before_it() {
 
 #[test]
 fn range_does_not_expand_when_text_inserted_at_right_boundary() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -91,7 +79,7 @@ fn range_does_not_expand_when_text_inserted_at_right_boundary() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 4)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 4)),
         },
     });
     editor.apply(Message::Insertion {
@@ -107,12 +95,12 @@ fn range_does_not_expand_when_text_inserted_at_right_boundary() {
 
 #[test]
 fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
-    let frozen = editor_state::StableSelection::capture(&sel, &initial.doc);
+    let frozen = editor_state::StableSelection::capture(&sel, &initial.view());
     let mut editor = Editor::new_test(initial);
     editor.apply(Message::TrackedRange {
         op: TrackedRangeOp::AddFrozen {
@@ -125,7 +113,7 @@ fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 4)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 4)),
         },
     });
     editor.apply(Message::Insertion {
@@ -141,11 +129,12 @@ fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
 
 #[test]
 fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
-        selection: (t1, 4) -> (t1, 6)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
+        selection: (p1, 4) -> (p1, 6)
     };
-    let frozen = editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.doc);
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
     let mut editor = Editor::new_test(initial);
     editor.apply(Message::TrackedRange {
         op: TrackedRangeOp::AddFrozen {
@@ -160,8 +149,8 @@ fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t1, 7),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p1, 7),
             ),
         },
     });
@@ -180,7 +169,7 @@ fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 6)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 6)),
         },
     });
     editor.apply(Message::Deletion {
@@ -200,9 +189,9 @@ fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
 
 #[test]
 fn range_with_deleted_trailing_edge_expands_for_insert_inside_remaining_content() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("aabbccdd") } } }
-        selection: (t1, 2) -> (t1, 6)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("aabbccdd") } } }
+        selection: (p1, 2) -> (p1, 6)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -212,8 +201,8 @@ fn range_with_deleted_trailing_edge_expands_for_insert_inside_remaining_content(
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 5),
-                editor_state::Position::new(t1, 7),
+                editor_state::Position::new(p1, 5),
+                editor_state::Position::new(p1, 7),
             ),
         },
     });
@@ -224,7 +213,7 @@ fn range_with_deleted_trailing_edge_expands_for_insert_inside_remaining_content(
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 3)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 3)),
         },
     });
     editor.apply(Message::Insertion {
@@ -240,9 +229,9 @@ fn range_with_deleted_trailing_edge_expands_for_insert_inside_remaining_content(
 
 #[test]
 fn range_with_deleted_trailing_edge_keeps_content_after_insert_before_range() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("aabbccdd") } } }
-        selection: (t1, 2) -> (t1, 6)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("aabbccdd") } } }
+        selection: (p1, 2) -> (p1, 6)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -251,8 +240,8 @@ fn range_with_deleted_trailing_edge_keeps_content_after_insert_before_range() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 5),
-                editor_state::Position::new(t1, 7),
+                editor_state::Position::new(p1, 5),
+                editor_state::Position::new(p1, 7),
             ),
         },
     });
@@ -263,7 +252,7 @@ fn range_with_deleted_trailing_edge_keeps_content_after_insert_before_range() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 1)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 1)),
         },
     });
     editor.apply(Message::Insertion {
@@ -279,35 +268,39 @@ fn range_with_deleted_trailing_edge_keeps_content_after_insert_before_range() {
 
 #[test]
 fn range_restores_after_full_delete_undo_following_partial_boundary_delete() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("aabbcc") } } }
-        selection: (t1, 2) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("aabbcc") } } }
+        selection: (p1, 2) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
-    editor.history = crate::History::new(editor_common::time::Duration::from_millis(0));
+    editor.undo_history =
+        editor_state::undo::UndoHistory::new(editor_common::time::Duration::from_millis(0));
     editor.apply(add_message("r", "comment", sel));
     assert_eq!(located_text(&editor, "r").as_deref(), Some("bb"));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 3),
-                editor_state::Position::new(t1, 5),
+                editor_state::Position::new(p1, 3),
+                editor_state::Position::new(p1, 5),
             ),
         },
     });
     editor.apply(Message::Deletion {
         op: DeletionOp::Selection,
     });
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "aabc");
+    assert_eq!(
+        editor.state().view().node(p1).unwrap().inline_text(),
+        "aabc"
+    );
     assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t1, 4),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p1, 4),
             ),
         },
     });
@@ -323,7 +316,10 @@ fn range_restores_after_full_delete_undo_following_partial_boundary_delete() {
         op: HistoryOp::Undo,
     });
 
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "aabc");
+    assert_eq!(
+        editor.state().view().node(p1).unwrap().inline_text(),
+        "aabc"
+    );
     assert_eq!(
         located_text(&editor, "r").as_deref(),
         Some("b"),
@@ -333,9 +329,9 @@ fn range_restores_after_full_delete_undo_following_partial_boundary_delete() {
 
 #[test]
 fn range_marked_invalid_when_all_covered_text_deleted() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -345,8 +341,8 @@ fn range_marked_invalid_when_all_covered_text_deleted() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 1),
-                editor_state::Position::new(t1, 4),
+                editor_state::Position::new(p1, 1),
+                editor_state::Position::new(p1, 4),
             ),
         },
     });
@@ -364,9 +360,9 @@ fn range_marked_invalid_when_all_covered_text_deleted() {
 fn range_collapses_when_text_deleted_beyond_its_bounds() {
     // Comment covers 'ell' (1..4) of "hello", but the user deletes the whole
     // word (0..5). The range must still collapse — TR-225 repro.
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -376,8 +372,8 @@ fn range_collapses_when_text_deleted_beyond_its_bounds() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t1, 5),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p1, 5),
             ),
         },
     });
@@ -397,12 +393,12 @@ fn range_across_two_paragraphs_collapses_when_wider_selection_deleted() {
     // Comment spans from p1's 'llo' into p2's 'wor'. User deletes a WIDER
     // selection covering all of both paragraphs' text, merging them.
     // TR-225 repro: does the cross-node range collapse, or leave a ghost?
-    let (initial, _p1, t1, _p2, t2) = state! {
+    let (initial, p1, p2) = state! {
         doc { root {
-            p1: paragraph { t1: text("hello") }
-            p2: paragraph { t2: text("world") }
+            p1: paragraph { text("hello") }
+            p2: paragraph { text("world") }
         } }
-        selection: (t1, 2) -> (t2, 3)
+        selection: (p1, 2) -> (p2, 3)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -412,8 +408,8 @@ fn range_across_two_paragraphs_collapses_when_wider_selection_deleted() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t2, 5),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p2, 5),
             ),
         },
     });
@@ -433,12 +429,12 @@ fn range_across_two_paragraphs_collapses_when_tail_survives() {
     // Real-app repro: comment spans p1 'llo' -> p2 'wor', but the deletion keeps
     // the TAIL of p2 alive ('ld'). Paragraphs merge; t2 survives (not fully
     // tombstoned). Does the comment still collapse, or leave a ghost on 'ld'?
-    let (initial, _p1, t1, _p2, t2) = state! {
+    let (initial, p1, p2) = state! {
         doc { root {
-            p1: paragraph { t1: text("hello") }
-            p2: paragraph { t2: text("world") }
+            p1: paragraph { text("hello") }
+            p2: paragraph { text("world") }
         } }
-        selection: (t1, 2) -> (t2, 3)
+        selection: (p1, 2) -> (p2, 3)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -449,8 +445,8 @@ fn range_across_two_paragraphs_collapses_when_tail_survives() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 2),
-                editor_state::Position::new(t2, 3),
+                editor_state::Position::new(p1, 2),
+                editor_state::Position::new(p2, 3),
             ),
         },
     });
@@ -469,12 +465,12 @@ fn range_across_two_paragraphs_collapses_when_tail_survives() {
 fn undo_restores_text_after_deleting_commented_cross_paragraph_range() {
     // Repro attempt: comment spans two paragraphs, delete a wide range, then
     // undo. Does the TEXT come back? (User reports it does NOT in the app.)
-    let (initial, _p1, t1, _p2, t2) = state! {
+    let (initial, p1, p2) = state! {
         doc { root {
-            p1: paragraph { t1: text("hello") }
-            p2: paragraph { t2: text("world") }
+            p1: paragraph { text("hello") }
+            p2: paragraph { text("world") }
         } }
-        selection: (t1, 2) -> (t2, 3)
+        selection: (p1, 2) -> (p2, 3)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -483,8 +479,8 @@ fn undo_restores_text_after_deleting_commented_cross_paragraph_range() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t2, 5),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p2, 5),
             ),
         },
     });
@@ -492,40 +488,24 @@ fn undo_restores_text_after_deleting_commented_cross_paragraph_range() {
         op: DeletionOp::Selection,
     });
 
-    // After delete: t1/t2 text gone (merged). Confirm.
+    // After delete: p1/p2 text gone (merged). Confirm.
     let text_after_delete: String = editor
         .state()
-        .doc
-        .get_entry(t1)
-        .and_then(|e| match &e.node {
-            editor_model::Node::Text(t) => Some(t.text.to_string()),
-            _ => None,
-        })
+        .view()
+        .node(p1)
+        .map(|n| n.inline_text())
         .unwrap_or_default();
 
     editor.apply(Message::History {
         op: HistoryOp::Undo,
     });
 
-    // After undo: t1 should read "hello" and t2 "world" again.
-    let t1_text = editor
-        .state()
-        .doc
-        .get_entry(t1)
-        .and_then(|e| match &e.node {
-            editor_model::Node::Text(t) => Some(t.text.to_string()),
-            _ => None,
-        });
-    let t2_text = editor
-        .state()
-        .doc
-        .get_entry(t2)
-        .and_then(|e| match &e.node {
-            editor_model::Node::Text(t) => Some(t.text.to_string()),
-            _ => None,
-        });
+    // After undo: p1 should read "hello" and p2 "world" again.
+    let view = editor.state().view();
+    let p1_text = view.node(p1).map(|n| n.inline_text());
+    let p2_text = view.node(p2).map(|n| n.inline_text());
     assert_eq!(
-        (t1_text.as_deref(), t2_text.as_deref()),
+        (p1_text.as_deref(), p2_text.as_deref()),
         (Some("hello"), Some("world")),
         "undo must restore both paragraphs' text (text_after_delete={text_after_delete:?})"
     );
@@ -537,12 +517,12 @@ fn comment_in_second_paragraph_collapses_when_its_text_deleted_via_merge() {
     // delete spanning p1..into-p2 removes the commented text AND merges the
     // paragraphs, leaving p2's tail ('ld') alive. The comment's endpoints both
     // fall back onto the surviving tail -> must be unlocatable, not a ghost.
-    let (initial, _p1, _t1, _p2, t2) = state! {
+    let (initial, p1, p2) = state! {
         doc { root {
-            p1: paragraph { t1: text("hello") }
-            p2: paragraph { t2: text("world") }
+            p1: paragraph { text("hello") }
+            p2: paragraph { text("world") }
         } }
-        selection: (t2, 0) -> (t2, 3)
+        selection: (p2, 0) -> (p2, 3)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -550,12 +530,11 @@ fn comment_in_second_paragraph_collapses_when_its_text_deleted_via_merge() {
     assert!(!is_unlocated(&editor, "r"));
 
     // Delete all of p1 + 'wor' of p2, merging paragraphs, leaving p2 'ld'.
-    let t1 = _t1;
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t2, 3),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p2, 3),
             ),
         },
     });
@@ -575,9 +554,9 @@ fn range_stays_locatable_when_one_covered_char_survives() {
     // Policy: a comment must survive as long as ANY of its original characters
     // is still alive. Comment covers 'ell' (1..4) of "hello"; delete only 'el'
     // (1..3), leaving 'l'. The range must remain locatable.
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -586,8 +565,8 @@ fn range_stays_locatable_when_one_covered_char_survives() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 1),
-                editor_state::Position::new(t1, 3),
+                editor_state::Position::new(p1, 1),
+                editor_state::Position::new(p1, 3),
             ),
         },
     });
@@ -604,9 +583,9 @@ fn range_stays_locatable_when_one_covered_char_survives() {
 #[test]
 fn range_unaffected_by_deletion_elsewhere_stays_locatable() {
     // Guard: deleting text OUTSIDE the comment must not invalidate it.
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 6) -> (t1, 11)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 6) -> (p1, 11)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -616,8 +595,8 @@ fn range_unaffected_by_deletion_elsewhere_stays_locatable() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t1, 6),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p1, 6),
             ),
         },
     });
@@ -635,9 +614,9 @@ fn range_unaffected_by_deletion_elsewhere_stays_locatable() {
 fn collapsed_range_on_live_text_is_handled_consistently() {
     // Guard: a collapsed range (caret-position comment) on still-live text is
     // still unlocatable by the is_collapsed() rule.
-    let (initial, _t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 2)
+    let (initial, _p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 2)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -645,8 +624,15 @@ fn collapsed_range_on_live_text_is_handled_consistently() {
 
     // No deletion: locate must reject collapsed tracked ranges.
     let range = editor.tracked_ranges().get("r").unwrap();
-    let located = range.locate(&editor.state().doc);
-    let restored_collapsed = range.selection.restore(&editor.state().doc).is_collapsed();
+    let located = range.locate(editor.state());
+    let state = editor.state();
+    let view = state.view();
+    let ctx = editor_state::StableResolveCtx::new(&view, state.projected.seq());
+    let restored_collapsed = range
+        .selection
+        .resolve(&ctx)
+        .expect("collapsed range still restores")
+        .is_collapsed();
     assert_eq!(
         located.is_none(),
         restored_collapsed,
@@ -661,9 +647,9 @@ fn range_collapses_when_covered_text_deleted_but_following_char_survives() {
     // head was captured Bind::Right onto the char AT offset 3 ('l'), which is
     // OUTSIDE the comment and survives -> head's anchor dot is alive even though
     // every covered char ('w','o','r') is gone. Must still be unlocatable.
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("world") } } }
-        selection: (t1, 0) -> (t1, 3)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("world") } } }
+        selection: (p1, 0) -> (p1, 3)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -673,8 +659,8 @@ fn range_collapses_when_covered_text_deleted_but_following_char_survives() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 0),
-                editor_state::Position::new(t1, 3),
+                editor_state::Position::new(p1, 0),
+                editor_state::Position::new(p1, 3),
             ),
         },
     });
@@ -691,9 +677,9 @@ fn range_collapses_when_covered_text_deleted_but_following_char_survives() {
 
 #[test]
 fn range_stays_locatable_when_endpoint_chars_die_but_middle_survives() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("abcdef") } } }
-        selection: (t1, 1) -> (t1, 5)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("abcdef") } } }
+        selection: (p1, 1) -> (p1, 5)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -702,8 +688,8 @@ fn range_stays_locatable_when_endpoint_chars_die_but_middle_survives() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 1),
-                editor_state::Position::new(t1, 2),
+                editor_state::Position::new(p1, 1),
+                editor_state::Position::new(p1, 2),
             ),
         },
     });
@@ -714,8 +700,8 @@ fn range_stays_locatable_when_endpoint_chars_die_but_middle_survives() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 3),
-                editor_state::Position::new(t1, 4),
+                editor_state::Position::new(p1, 3),
+                editor_state::Position::new(p1, 4),
             ),
         },
     });
@@ -731,9 +717,9 @@ fn range_stays_locatable_when_endpoint_chars_die_but_middle_survives() {
 
 #[test]
 fn range_positions_revert_after_undo() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -741,7 +727,7 @@ fn range_positions_revert_after_undo() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 0)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
         },
     });
     editor.apply(Message::Insertion {
@@ -762,9 +748,9 @@ fn range_positions_revert_after_undo() {
 
 #[test]
 fn registry_membership_survives_undo() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -772,7 +758,7 @@ fn registry_membership_survives_undo() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 0)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
         },
     });
     editor.apply(Message::Insertion {
@@ -791,8 +777,8 @@ fn registry_membership_survives_undo() {
 #[test]
 fn groups_are_independent() {
     let (initial, ..) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -813,9 +799,9 @@ fn groups_are_independent() {
 
 #[test]
 fn freeze_then_add_frozen_roundtrip_yields_same_registry_entry() {
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = state.selection.unwrap();
 
@@ -823,7 +809,7 @@ fn freeze_then_add_frozen_roundtrip_yields_same_registry_entry() {
     a.apply(add_message("r", "g", sel));
     let from_add = a.tracked_ranges().get("r").unwrap().clone();
 
-    let stable = editor_state::StableSelection::capture(&sel, &state.doc);
+    let stable = editor_state::StableSelection::capture(&sel, &state.view());
     let json = serde_json::to_string(&stable).unwrap();
     let restored: editor_state::StableSelection = serde_json::from_str(&json).unwrap();
 
@@ -843,17 +829,21 @@ fn freeze_then_add_frozen_roundtrip_yields_same_registry_entry() {
 
 #[test]
 fn add_frozen_with_unresolvable_dots_remains_unlocated() {
-    let (state_a, _t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (state_a, _p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = state_a.selection.unwrap();
-    let stable = editor_state::StableSelection::capture(&sel, &state_a.doc);
+    let stable = editor_state::StableSelection::capture(&sel, &state_a.view());
 
-    let (state_b, _) = state! {
-        doc { root { paragraph { t2: text("world") } } }
-        selection: (t2, 0)
+    let (state_b_actor1, _) = state! {
+        doc { root { p2: paragraph { text("world") } } }
+        selection: (p2, 0)
     };
+    // Rebuild state_b under a distinct actor so none of state_a's actor-1 Dots
+    // collide; otherwise the captured selection would spuriously resolve here.
+    let plain_b = editor_state::to_plain(state_b_actor1.projected.projected());
+    let (state_b, _) = editor_state::test_utils::build_state_from_plain_with_actor(plain_b, 2);
 
     let mut b = Editor::new_test(state_b);
     b.apply(Message::TrackedRange {
@@ -870,21 +860,20 @@ fn add_frozen_with_unresolvable_dots_remains_unlocated() {
 
 #[test]
 fn range_recovers_from_invalid_after_undo() {
-    let (state, t1) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (state, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = state.selection.unwrap();
     let mut editor = Editor::new_test(state);
     editor.apply(add_message("r", "g", sel));
     assert!(!is_unlocated(&editor, "r"));
-    let old_entries = visible_entry_dots(&editor, t1)[1..4].to_vec();
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 1),
-                editor_state::Position::new(t1, 4),
+                editor_state::Position::new(p1, 1),
+                editor_state::Position::new(p1, 4),
             ),
         },
     });
@@ -903,71 +892,42 @@ fn range_recovers_from_invalid_after_undo() {
         !is_unlocated(&editor, "r"),
         "undo must restore range to valid"
     );
-    let current_entries = visible_entry_dots(&editor, t1);
     assert_eq!(
-        old_entries
-            .iter()
-            .map(|entry| editor
-                .state()
-                .doc
-                .text_identity()
-                .resolve_stable_entry(*entry))
-            .collect::<Vec<_>>(),
-        current_entries[1..4]
-            .iter()
-            .map(|entry| StableEntryResolution::Live(*entry))
-            .collect::<Vec<_>>(),
-        "undo remove must remap deleted covered entries to the fresh inserted entries"
+        located_text(&editor, "r").as_deref(),
+        Some("ell"),
+        "restored range must cover its original content"
     );
 }
 
 #[test]
-fn inserted_entry_remaps_to_fresh_entry_after_redo() {
-    let (state, t1) = state! {
-        doc { root { paragraph { t1: text("a") } } }
-        selection: (t1, 1)
+fn redo_restores_inserted_text() {
+    let (state, p1) = state! {
+        doc { root { p1: paragraph { text("a") } } }
+        selection: (p1, 1)
     };
     let mut editor = Editor::new_test(state);
 
     editor.apply(Message::Insertion {
         op: InsertionOp::Text { text: "x".into() },
     });
-    let original_x = visible_entry_dots(&editor, t1)[1];
+    assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "ax");
 
     editor.apply(Message::History {
         op: HistoryOp::Undo,
     });
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "a");
+    assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "a");
 
     editor.apply(Message::History {
         op: HistoryOp::Redo,
     });
-    assert_eq!(editor.state().doc.text_view(t1).unwrap().text(), "ax");
-    let fresh_x = visible_entry_dots(&editor, t1)[1];
-    assert_ne!(original_x, fresh_x);
-    assert_eq!(
-        editor
-            .state()
-            .doc
-            .text_identity()
-            .replacement_for_stable_position(original_x),
-        Some(fresh_x)
-    );
-    assert_eq!(
-        editor
-            .state()
-            .doc
-            .text_identity()
-            .resolve_stable_entry(original_x),
-        StableEntryResolution::Live(fresh_x)
-    );
+    assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "ax");
 }
 
 #[test]
 fn set_group_preserves_deleted_trailing_boundary_before_later_insert() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("abcdef") } } }
-        selection: (t1, 1) -> (t1, 4)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("abcdef") } } }
+        selection: (p1, 1) -> (p1, 4)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -976,8 +936,8 @@ fn set_group_preserves_deleted_trailing_boundary_before_later_insert() {
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::new(
-                editor_state::Position::new(t1, 3),
-                editor_state::Position::new(t1, 5),
+                editor_state::Position::new(p1, 3),
+                editor_state::Position::new(p1, 5),
             ),
         },
     });
@@ -1001,7 +961,7 @@ fn set_group_preserves_deleted_trailing_boundary_before_later_insert() {
 
     editor.apply(Message::Selection {
         op: SelectionOp::Set {
-            selection: Selection::collapsed(editor_state::Position::new(t1, 3)),
+            selection: Selection::collapsed(editor_state::Position::new(p1, 3)),
         },
     });
     editor.apply(Message::Insertion {

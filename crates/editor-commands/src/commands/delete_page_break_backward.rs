@@ -1,64 +1,60 @@
-use editor_model::Node;
+use editor_model::{ChildView, Node, NodeType};
 use editor_transaction::Transaction;
 
+use crate::helpers::remove_atom_leaf;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_page_break_backward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
-
-    let paragraph_id = match node.node() {
-        Node::Text(_) => {
-            if pos.offset > 0 || node.prev_sibling().is_some() {
-                return Ok(false);
-            }
-            node.parent()
-                .ok_or(CommandError::NoParent(pos.node_id))?
-                .id()
-        }
-        Node::Paragraph(_) => {
-            if pos.offset > 0 {
-                return Ok(false);
-            }
-            pos.node_id
-        }
-        _ => return Ok(false),
-    };
-
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
-
-    let prev = match paragraph.prev_sibling() {
-        Some(prev) => prev,
-        None => return Ok(false),
-    };
-
-    if !matches!(prev.node(), Node::Paragraph(_)) {
+    if pos.offset > 0 {
         return Ok(false);
     }
 
-    let last = match prev.last_child() {
-        Some(last) => last,
-        None => return Ok(false),
+    let (prev_id, page_break_index) = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+
+        let parent = match node.parent() {
+            Some(parent) => parent,
+            None => return Ok(false),
+        };
+        let idx = match parent.child_blocks().position(|b| b.id() == node.id()) {
+            Some(idx) => idx,
+            None => return Ok(false),
+        };
+        if idx == 0 {
+            return Ok(false);
+        }
+        let prev = match parent.child_blocks().nth(idx - 1) {
+            Some(prev) => prev,
+            None => return Ok(false),
+        };
+
+        if !matches!(prev.node(), Node::Paragraph(_)) {
+            return Ok(false);
+        }
+
+        let last_is_page_break = matches!(
+            prev.last_child(),
+            Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak
+        );
+        if !last_is_page_break {
+            return Ok(false);
+        }
+
+        (prev.id(), prev.children().count() - 1)
     };
 
-    if !matches!(last.node(), Node::PageBreak(_)) {
-        return Ok(false);
-    }
-
-    tr.remove_subtree(last.id())?;
+    remove_atom_leaf(tr, prev_id, page_break_index)?;
 
     Ok(true)
 }
@@ -76,20 +72,20 @@ mod tests {
             doc {
                 root {
                     paragraph { page_break }
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| delete_page_break_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     paragraph {}
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -100,10 +96,10 @@ mod tests {
             doc {
                 root {
                     paragraph { text("Hello") }
-                    paragraph { t1: text("World") }
+                    p1: paragraph { text("World") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
     }
@@ -114,26 +110,10 @@ mod tests {
             doc {
                 root {
                     paragraph { text("Hello") hard_break }
-                    paragraph { t1: text("World") }
+                    p1: paragraph { text("World") }
                 }
             }
-            selection: (t1, 0)
-        };
-        transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
-    }
-
-    #[test]
-    fn at_text_with_prev_sibling_returns_false() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    paragraph {
-                        text("Hello")
-                        t1: text("World")
-                    }
-                }
-            }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
     }
@@ -144,10 +124,10 @@ mod tests {
             doc {
                 root {
                     paragraph { page_break }
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
     }
@@ -158,10 +138,10 @@ mod tests {
             doc {
                 root {
                     paragraph { page_break }
-                    paragraph { t1: text("1234") }
+                    p1: paragraph { text("1234") }
                 }
             }
-            selection: (t1, 0) -> (t1, 2)
+            selection: (p1, 0) -> (p1, 2)
         };
         transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
     }
@@ -171,10 +151,10 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
     }
@@ -185,10 +165,10 @@ mod tests {
             doc {
                 root {
                     horizontal_rule
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
     }

@@ -1,52 +1,31 @@
-use editor_model::{ModifierType, NodeId};
+use editor_crdt::Dot;
+use editor_model::ModifierType;
 use editor_state::StateError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StepError {
-    #[error("node not found: {0}")]
-    NodeNotFound(NodeId),
+    #[error("node not found: {0:?}")]
+    NodeNotFound(Dot),
 
-    #[error("offset {offset} out of bounds for node {node_id} (len: {len})")]
+    #[error("offset {offset} out of bounds for node {block:?} (len: {len})")]
     OffsetOutOfBounds {
-        node_id: NodeId,
+        block: Dot,
         offset: usize,
         len: usize,
     },
 
-    #[error("index {index} out of bounds for children of {parent_id} (len: {len})")]
+    #[error("index {index} out of bounds for children of {parent:?} (len: {len})")]
     IndexOutOfBounds {
-        parent_id: NodeId,
+        parent: Dot,
         index: usize,
         len: usize,
-    },
-
-    #[error("expected text node: {0}")]
-    ExpectedTextNode(NodeId),
-
-    #[error("content violation at {node_id}: {detail}")]
-    ContentViolation { node_id: NodeId, detail: String },
-
-    #[error("context violation at {node_id}: {detail}")]
-    ContextViolation { node_id: NodeId, detail: String },
-
-    #[error("modifier context violation at {node_id}: {modifier_type:?} — {detail}")]
-    ModifierContextViolation {
-        node_id: NodeId,
-        modifier_type: ModifierType,
-        detail: String,
     },
 
     #[error("pending modifier {modifier_type:?} is not applicable to Text and cannot be staged")]
     InvalidPendingModifier { modifier_type: ModifierType },
 
-    #[error(
-        "MergeNode requires {source_id} to be the immediately-following sibling of {target_id}; \
-         use a compose-and-remove path (e.g. helpers::merge_element_cross_parent) instead"
-    )]
-    MergeNotAdjacentSiblings {
-        source_id: NodeId,
-        target_id: NodeId,
-    },
+    #[error("merge target {block:?} has no following sibling block to merge")]
+    MergeNoSibling { block: Dot },
 
     #[error(transparent)]
     State(#[from] StateError),

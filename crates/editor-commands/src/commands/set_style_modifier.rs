@@ -9,7 +9,7 @@ pub fn set_style_modifier(
     style_id: String,
     modifier: Modifier,
 ) -> CommandResult {
-    let Some(mut entry) = capture_style_entry(&tr.state().doc, &style_id) else {
+    let Some(mut entry) = capture_style_entry(tr.state(), &style_id) else {
         return Err(CommandError::InvalidArgument(format!(
             "style {style_id:?} not defined"
         )));
@@ -38,8 +38,8 @@ mod tests {
     #[test]
     fn replaces_existing_modifier_of_same_type() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (defined, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -52,7 +52,7 @@ mod tests {
             "heading-1".into(),
             Modifier::FontSize { value: 2400 }
         ));
-        let style = after.doc.style_entry("heading-1").unwrap();
+        let style = after.projected.styles().style_entry("heading-1").unwrap();
         assert!(
             style
                 .modifiers
@@ -68,8 +68,8 @@ mod tests {
     #[test]
     fn adds_when_no_existing_of_type() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (defined, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -82,7 +82,7 @@ mod tests {
             "heading-1".into(),
             Modifier::Bold
         ));
-        let style = after.doc.style_entry("heading-1").unwrap();
+        let style = after.projected.styles().style_entry("heading-1").unwrap();
         assert!(style.modifiers.contains(&Modifier::Bold));
     }
 }

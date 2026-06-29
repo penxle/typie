@@ -4,15 +4,15 @@ use editor_state::{Position, Selection};
 use icu_segmenter::{SentenceSegmenter, WordSegmenter};
 
 use crate::glyph_run::GlyphRun;
-use crate::measure::TabGap;
-use crate::paginate::*;
+use crate::measure::text::measure::TabGap;
+use crate::paginate::types::{LayoutContent, LayoutLine};
 
 use super::layout_index::LayoutIndex;
 use super::navigation::{
     landed_entry, move_box_boundary, next_navigable_entry, prev_navigable_entry,
 };
 
-pub fn move_word_forward(
+pub(crate) fn move_word_forward(
     layout_index: &LayoutIndex,
     pos: &Position,
     segmenters: &TextSegmenters,
@@ -40,7 +40,7 @@ pub fn move_word_forward(
     Some(landed_entry(layout_index, next, false, true))
 }
 
-pub fn move_word_backward(
+pub(crate) fn move_word_backward(
     layout_index: &LayoutIndex,
     pos: &Position,
     segmenters: &TextSegmenters,
@@ -68,7 +68,7 @@ pub fn move_word_backward(
     Some(landed_entry(layout_index, prev, true, false))
 }
 
-pub fn move_sentence_forward(
+pub(crate) fn move_sentence_forward(
     layout_index: &LayoutIndex,
     pos: &Position,
     segmenters: &TextSegmenters,
@@ -96,7 +96,7 @@ pub fn move_sentence_forward(
     Some(landed_entry(layout_index, next, false, true))
 }
 
-pub fn move_sentence_backward(
+pub(crate) fn move_sentence_backward(
     layout_index: &LayoutIndex,
     pos: &Position,
     segmenters: &TextSegmenters,
@@ -142,11 +142,11 @@ fn line_items(line: &LayoutLine) -> Vec<LineItem<'_>> {
     items.into_iter().map(|(_, it)| it).collect()
 }
 
-pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
+pub(crate) fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
     if line_items(line).is_empty()
-        && pos.node_id == line.node_id
+        && pos.node == line.node
         && line
-            .child_range
+            .offset_range
             .as_ref()
             .is_none_or(|range| pos.offset >= range.start && pos.offset <= range.end)
     {
@@ -158,8 +158,8 @@ pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
         match item {
             LineItem::Run(run) => {
                 let run_chars = run.text.char_count();
-                if run.node_id == pos.node_id
-                    && let Some(local) = pos.offset.checked_sub(run.offset)
+                if pos.node == line.node
+                    && let Some(local) = pos.offset.checked_sub(run.offset_range.start)
                     && local <= run_chars
                 {
                     return Some(char_count + local);
@@ -167,7 +167,7 @@ pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
                 char_count += run_chars;
             }
             LineItem::Tab(gap) => {
-                if pos.node_id == line.node_id && pos.offset == gap.child_index {
+                if pos.node == line.node && pos.offset == gap.offset_index {
                     return Some(char_count);
                 }
                 char_count += 1;
@@ -177,20 +177,20 @@ pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
     None
 }
 
-pub fn position_at_char_index(line: &LayoutLine, char_index: usize) -> Option<Position> {
+pub(crate) fn position_at_char_index(line: &LayoutLine, char_index: usize) -> Option<Position> {
     let mut remaining = char_index;
     for item in line_items(line) {
         match item {
             LineItem::Run(run) => {
                 let run_chars = run.text.char_count();
                 if remaining <= run_chars {
-                    return Some(Position::new(run.node_id, run.offset + remaining));
+                    return Some(Position::new(line.node, run.offset_range.start + remaining));
                 }
                 remaining -= run_chars;
             }
             LineItem::Tab(gap) => {
                 if remaining == 0 {
-                    return Some(Position::new(line.node_id, gap.child_index));
+                    return Some(Position::new(line.node, gap.offset_index));
                 }
                 remaining -= 1;
             }
@@ -307,300 +307,252 @@ fn prev_sentence_boundary(
 
 #[cfg(test)]
 mod tests {
+    use editor_common::EdgeInsets;
+    use editor_common::Size;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
+        SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+    use editor_state::Position;
+
+    use crate::glyph_run::GlyphRun;
+    use crate::glyph_run::{GraphemeSpan, Synthesis, TextDecoration};
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
     use crate::page::LayoutPage;
-    use crate::query::layout_index::LayoutIndex;
-    use crate::style::Alignment;
-    use editor_common::{EdgeInsets, Rect, Size};
-    use editor_model::NodeId;
-    use editor_state::Affinity;
+    use crate::paginate::paginator::Paginator;
+    use crate::paginate::types::{LayoutBox, LayoutContent, LayoutLine, LayoutNode, LayoutTree};
+    use crate::style::BoxStyle;
 
+    use super::super::layout_index::LayoutIndex;
     use super::*;
-    use crate::glyph_run::{GlyphRun, GraphemeSpan};
-    use crate::style::{BorderMode, BoxStyle, Direction as LayoutDirection};
 
-    fn gs(n: usize) -> Vec<GraphemeSpan> {
-        vec![
-            GraphemeSpan {
-                advance: 10.0,
-                codepoints: 1
-            };
-            n
-        ]
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
     }
 
-    fn make_line(id: NodeId, text: &str) -> LayoutLine {
-        let n = text.chars().count();
+    fn build_index(doc: &DocLogs, width: f32) -> (Dot, LayoutIndex) {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let root_id = root_node.id();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        let index = LayoutIndex::new(layout.tree, &layout.pages);
+        (root_id, index)
+    }
+
+    fn para_doc(text: &str, width: f32) -> (Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, ch) in text.chars().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let (_, index) = build_index(&doc, width);
+        (para_id, index)
+    }
+
+    fn gs(advance: f32, codepoints: u8) -> GraphemeSpan {
+        GraphemeSpan {
+            advance,
+            codepoints,
+        }
+    }
+
+    fn vrun(
+        offset_range: std::ops::Range<usize>,
+        x: f32,
+        text: &str,
+        graphemes: Vec<GraphemeSpan>,
+    ) -> GlyphRun {
+        let width = graphemes.iter().map(|g| g.advance).sum();
+        GlyphRun {
+            family_id: 0,
+            weight: 400,
+            font_size: 16.0,
+            synthesis: Synthesis::default(),
+            color: String::new(),
+            background_color: None,
+            glyphs: vec![],
+            decoration: TextDecoration::default(),
+            offset_range,
+            link: None,
+            text: text.to_string(),
+            x,
+            width,
+            graphemes,
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
+        }
+    }
+
+    fn vline(
+        node: Dot,
+        offset_range: Option<std::ops::Range<usize>>,
+        runs: Vec<GlyphRun>,
+    ) -> LayoutLine {
         LayoutLine {
-            node_id: id,
+            node,
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
             cursor_ascent: 14.0,
             cursor_descent: 4.0,
-            glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
+            glyph_runs: runs,
             ruby_annotations: vec![],
             empty_caret_x: 0.0,
-            child_range: None,
+            offset_range,
             tab_gaps: vec![],
             is_phantom: false,
             content_edge_x: None,
         }
     }
 
-    fn make_multi_segment_line() -> (LayoutLine, NodeId, NodeId) {
-        let id1 = NodeId::new();
-        let id2 = NodeId::new();
-        let line = LayoutLine {
-            node_id: id1,
-            baseline: 16.0,
-            ascent: 14.0,
-            descent: 4.0,
-            cursor_ascent: 14.0,
-            cursor_descent: 4.0,
-            glyph_runs: vec![
-                GlyphRun::make_test_run(id1, 0, "hello ", 0.0, gs(6)),
-                GlyphRun::make_test_run(id2, 0, "world", 60.0, gs(5)),
-            ],
-            ruby_annotations: vec![],
-            empty_caret_x: 0.0,
-            child_range: None,
-            tab_gaps: vec![],
-            is_phantom: false,
-            content_edge_x: None,
-        };
-        (line, id1, id2)
-    }
+    fn make_single_line_index(para_id: Dot, line: LayoutLine, line_height: f32) -> LayoutIndex {
+        let root_id = Dot::ROOT;
+        let line_rect = editor_common::Rect::from_xywh(0.0, 0.0, 110.0, line_height);
+        let para_rect = editor_common::Rect::from_xywh(0.0, 0.0, 110.0, line_height);
+        let root_rect = editor_common::Rect::from_xywh(0.0, 0.0, 110.0, line_height);
 
-    #[test]
-    fn char_index_at_start() {
-        let id = NodeId::new();
-        let line = make_line(id, "hello");
-        assert_eq!(line_char_index(&line, &Position::new(id, 0)), Some(0));
-    }
-
-    #[test]
-    fn char_index_in_second_segment() {
-        let (line, _, id2) = make_multi_segment_line();
-        assert_eq!(line_char_index(&line, &Position::new(id2, 2)), Some(8));
-    }
-
-    #[test]
-    fn position_at_start() {
-        let id = NodeId::new();
-        let line = make_line(id, "hello");
-        let pos = position_at_char_index(&line, 0).unwrap();
-        assert_eq!(pos.node_id, id);
-        assert_eq!(pos.offset, 0);
-    }
-
-    #[test]
-    fn position_in_second_segment() {
-        let (line, _, id2) = make_multi_segment_line();
-        let pos = position_at_char_index(&line, 8).unwrap();
-        assert_eq!(pos.node_id, id2);
-        assert_eq!(pos.offset, 2);
-    }
-
-    #[test]
-    fn word_forward() {
-        let id = NodeId::new();
-        let line = make_line(id, "hello world");
-        let segmenters = TextSegmenters::new_test();
-        let boundary = next_word_boundary(&line, 0, &segmenters.word).unwrap();
-        assert!(boundary > 0 && boundary <= 6);
-    }
-
-    #[test]
-    fn word_forward_skips_whitespace_between_words() {
-        let id = NodeId::new();
-        let tree = make_single_line_tree(make_line(id, "hello  world"));
-        let layout_index = layout_index(&tree);
-        let segmenters = TextSegmenters::new_test();
-        let selection =
-            move_word_forward(&layout_index, &Position::new(id, 5), &segmenters).unwrap();
-        assert_eq!(selection.head.node_id, id);
-        assert_eq!(selection.head.offset, 12);
-    }
-
-    #[test]
-    fn word_backward() {
-        let id = NodeId::new();
-        let line = make_line(id, "hello world");
-        let segmenters = TextSegmenters::new_test();
-        let boundary = prev_word_boundary(&line, 11, &segmenters.word).unwrap();
-        assert!((5..=6).contains(&boundary));
-    }
-
-    #[test]
-    fn word_backward_skips_whitespace_between_words() {
-        let id = NodeId::new();
-        let tree = make_single_line_tree(make_line(id, "hello  world"));
-        let layout_index = layout_index(&tree);
-        let segmenters = TextSegmenters::new_test();
-        let selection =
-            move_word_backward(&layout_index, &Position::new(id, 7), &segmenters).unwrap();
-        assert_eq!(selection.head.node_id, id);
-        assert_eq!(selection.head.offset, 0);
-    }
-
-    #[test]
-    fn sentence_forward() {
-        let id = NodeId::new();
-        let line = make_line(id, "Hello world. Goodbye world.");
-        let segmenters = TextSegmenters::new_test();
-        let boundary = next_sentence_boundary(&line, 0, &segmenters.sentence).unwrap();
-        assert!(boundary > 0 && boundary <= 13);
-    }
-
-    #[test]
-    fn sentence_backward() {
-        let id = NodeId::new();
-        let line = make_line(id, "Hello world. Goodbye world.");
-        let segmenters = TextSegmenters::new_test();
-        let boundary = prev_sentence_boundary(&line, 27, &segmenters.sentence).unwrap();
-        assert!((12..=13).contains(&boundary));
-    }
-
-    fn make_box_style() -> BoxStyle {
-        BoxStyle {
-            direction: LayoutDirection::Vertical,
-            padding: EdgeInsets::ZERO,
-            border: EdgeInsets::ZERO,
-            border_mode: BorderMode::Separate,
-            alignment: Alignment::Start,
-            decorations: vec![],
-            monolithic: false,
-        }
-    }
-
-    fn make_single_line_tree(line: LayoutLine) -> LayoutTree {
-        let width = line.glyph_runs.iter().map(|run| run.width).sum::<f32>();
-        LayoutTree {
+        let tree = LayoutTree {
             root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
+                rect: root_rect,
                 content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: make_box_style(),
+                    node: root_id,
+                    style: BoxStyle::default(),
                     children: vec![LayoutNode {
-                        rect: Rect::from_xywh(0.0, 0.0, width, 20.0),
-                        content: LayoutContent::Line(line),
+                        rect: para_rect,
+                        content: LayoutContent::Box(LayoutBox {
+                            node: para_id,
+                            style: BoxStyle::default(),
+                            children: vec![LayoutNode {
+                                rect: line_rect,
+                                content: LayoutContent::Line(line),
+                            }],
+                            attachment: None,
+                        }),
                     }],
                     attachment: None,
                 }),
             },
-        }
-    }
+        };
 
-    fn layout_index(tree: &LayoutTree) -> LayoutIndex {
-        let pages = [LayoutPage::new(0.0, 10_000.0, Size::new(1_000.0, 10_000.0))];
-        LayoutIndex::new(tree.clone(), &pages)
+        let page = LayoutPage::new(
+            0.0,
+            line_height + 1.0,
+            Size {
+                width: 110.0,
+                height: line_height + 1.0,
+            },
+        );
+        LayoutIndex::new(tree, &[page])
     }
 
     #[test]
-    fn word_forward_onto_atom_selects_atom() {
-        use crate::paginate::{LayoutAtom, LayoutContent, LayoutNode, LayoutTree};
-        let para = NodeId::new();
-        let atom_parent = NodeId::new();
-        let atom_id = NodeId::new();
-        let line = LayoutNode {
-            rect: Rect::from_xywh(0.0, 0.0, 50.0, 20.0),
-            content: LayoutContent::Line(make_line(para, "hi")),
-        };
-        let atom = LayoutNode {
-            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
-            content: LayoutContent::Atom(LayoutAtom {
-                node_id: atom_id,
-                attachment: ChildAttachment {
-                    parent_id: atom_parent,
-                    index: 0,
-                },
-            }),
-        };
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: make_box_style(),
-                    children: vec![line, atom],
-                    attachment: None,
-                }),
-            },
-        };
-        let segmenters = TextSegmenters::new_test();
-        // Moving word-forward from the end of "hi" has no in-line boundary; the next navigable is the atom.
-        let layout_index = layout_index(&tree);
-        let sel = move_word_forward(&layout_index, &Position::new(para, 2), &segmenters).unwrap();
+    fn word_forward_backward() {
+        let (para_id, index) = para_doc("hello world", 400.0);
+        let res = Resource::new_test();
+
+        let pos0 = Position::new(para_id, 0);
+        let sel_fwd = move_word_forward(&index, &pos0, &res.segmenters)
+            .expect("word_forward from 0 must resolve");
+        assert_eq!(sel_fwd.head.node, para_id);
         assert!(
-            !sel.is_collapsed(),
-            "word-forward onto atom must node-select, got {:?}",
-            sel
+            sel_fwd.head.offset > 0 && sel_fwd.head.offset <= 11,
+            "word_forward offset must be in (0, 11], got {}",
+            sel_fwd.head.offset
         );
+
+        let sel_bwd = move_word_backward(&index, &sel_fwd.head, &res.segmenters)
+            .expect("word_backward must resolve");
+        assert_eq!(sel_bwd.head.node, para_id);
         assert_eq!(
-            sel.anchor,
-            Position {
-                node_id: atom_parent,
-                offset: 0,
-                affinity: Affinity::Downstream
-            }
-        );
-        assert_eq!(
-            sel.head,
-            Position {
-                node_id: atom_parent,
-                offset: 1,
-                affinity: Affinity::Upstream
-            }
+            sel_bwd.head.offset, 0,
+            "word_backward from word boundary must return to 0"
         );
     }
 
     #[test]
-    fn word_forward_from_selected_atom_passes_to_next_text() {
-        use crate::paginate::{LayoutAtom, LayoutContent, LayoutNode, LayoutTree};
-        let para = NodeId::new();
-        let atom_parent = NodeId::new();
-        let atom_id = NodeId::new();
-        let atom = LayoutNode {
-            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-            content: LayoutContent::Atom(LayoutAtom {
-                node_id: atom_id,
-                attachment: ChildAttachment {
-                    parent_id: atom_parent,
-                    index: 0,
-                },
-            }),
-        };
-        let line = LayoutNode {
-            rect: Rect::from_xywh(0.0, 20.0, 50.0, 20.0),
-            content: LayoutContent::Line(make_line(para, "hi")),
-        };
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: make_box_style(),
-                    children: vec![atom, line],
-                    attachment: None,
-                }),
-            },
-        };
-        let segmenters = TextSegmenters::new_test();
-        // Forward head of the atom node-selection is (atom_parent, 1, Upstream).
-        // Position ownership returns Atom, so word-forward passes through to the next navigable Line.
-        let pos = Position {
-            node_id: atom_parent,
-            offset: 1,
-            affinity: Affinity::Upstream,
-        };
-        let layout_index = layout_index(&tree);
-        let sel = move_word_forward(&layout_index, &pos, &segmenters).unwrap();
+    fn sentence_forward_backward() {
+        let text = "Hello world. Goodbye world.";
+        let (para_id, index) = para_doc(text, 800.0);
+        let res = Resource::new_test();
+
+        let pos0 = Position::new(para_id, 0);
+        let sel_fwd = move_sentence_forward(&index, &pos0, &res.segmenters)
+            .expect("sentence_forward from 0 must resolve");
+        assert_eq!(sel_fwd.head.node, para_id);
         assert!(
-            sel.is_collapsed(),
-            "passing atom must yield text caret, got {:?}",
-            sel
+            sel_fwd.head.offset > 0 && sel_fwd.head.offset <= text.len(),
+            "sentence_forward offset must be positive, got {}",
+            sel_fwd.head.offset
         );
-        assert_eq!(sel.head.node_id, para);
-        assert_eq!(sel.head.offset, 0);
+
+        let sel_bwd = move_sentence_backward(&index, &sel_fwd.head, &res.segmenters)
+            .expect("sentence_backward must resolve");
+        assert_eq!(sel_bwd.head.node, para_id);
+        assert_eq!(
+            sel_bwd.head.offset, 0,
+            "sentence_backward from boundary must return to 0"
+        );
+    }
+
+    #[test]
+    fn word_forward_multi_run() {
+        let para_id = Dot::new(1, 1);
+
+        let run0 = vrun(0..6, 0.0, "hello ", vec![gs(10.0, 1); 6]);
+        let run1 = vrun(6..11, 60.0, "world", vec![gs(10.0, 1); 5]);
+        let line = vline(para_id, Some(0..11), vec![run0, run1]);
+
+        let index = make_single_line_index(para_id, line, 20.0);
+        let res = Resource::new_test();
+
+        // From offset 5 (end of "hello" in run0), word-forward skips the space
+        // and must land at offset 11 (end of "world" in run1), crossing the
+        // run boundary identified solely by offset_range (not per-run node identity).
+        let pos = Position::new(para_id, 5);
+        let sel = move_word_forward(&index, &pos, &res.segmenters)
+            .expect("word_forward from offset 5 must resolve");
+        assert_eq!(sel.head.node, para_id);
+        assert_eq!(
+            sel.head.offset, 11,
+            "word_forward from offset 5 must cross run boundary to offset 11 (end of 'world' in run1)"
+        );
     }
 }

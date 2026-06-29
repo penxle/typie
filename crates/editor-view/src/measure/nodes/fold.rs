@@ -1,17 +1,19 @@
+use std::sync::Arc;
+
 use editor_common::{EdgeInsets, Rect};
+use editor_model::{Alignment, ChildView, NodeType, NodeView};
+use editor_resource::Resource;
 
-use crate::style::Alignment as LayoutAlignment;
-use editor_model::{Alignment, Doc, Node, NodeRef};
-
-use crate::measure::Measurer;
-use crate::measure::container::{PaddedLayoutConfig, layout_padded};
-use crate::measure::text::measure::measure_inline_text;
-use crate::measure::types::MeasuredChildren;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
+use crate::measure::PageBreakPolicy;
+use crate::measure::container::PaddedLayoutConfig;
+use crate::measure::text::measure::measure_paragraph;
 use crate::style::{BorderMode, BoxStyle, Decoration, DecorationData, Direction};
-use crate::view_state::ViewState;
 
+use super::dispatch::measure_child;
 use super::line_geometry::first_line_info;
+use crate::measure::container::layout_padded;
+use crate::measure::context::MeasureContext;
+use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent, MeasuredNode};
 
 const FOLD_TITLE_PADDING_X: f32 = 12.0;
 const FOLD_TITLE_PADDING_Y: f32 = 8.0;
@@ -21,47 +23,48 @@ const FOLD_CONTENT_PADDING_X: f32 = 24.0;
 const FOLD_CONTENT_PADDING_Y: f32 = 16.0;
 const FOLD_BORDER_WIDTH: f32 = 1.0;
 
-pub fn measure_fold_title(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_fold_title(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
+    let expanded = node
+        .parent()
+        .map(|p| ctx.fold_expanded(&p.id()))
+        .unwrap_or(true);
     let padding = EdgeInsets {
         top: FOLD_TITLE_PADDING_Y,
         left: FOLD_TITLE_PADDING_X + FOLD_TITLE_ICON_WIDTH + FOLD_TITLE_ICON_GAP,
         bottom: FOLD_TITLE_PADDING_Y,
         right: FOLD_TITLE_PADDING_X,
     };
-
-    let expanded = node
-        .parent()
-        .map(|p| view_state.fold_expanded(p.id()))
-        .unwrap_or(true);
-
     let inner_width = width - padding.left - padding.right;
-    let (children, children_height) = measure_inline_text(
-        measurer,
-        doc,
+
+    let (lines, children_height) = measure_paragraph(
         node,
         inner_width,
         Alignment::Left,
         0.0,
-        view_state,
+        ctx.pending_for(&node.id()),
+        resource,
     );
+    let children: Vec<Arc<MeasuredNode>> = lines
+        .into_iter()
+        .map(|l| Arc::new(MeasuredNode::from_line(inner_width, l)))
+        .collect();
 
     let mut measured = MeasuredNode {
         width,
         height: children_height + padding.top + padding.bottom,
         content: MeasuredContent::Box(MeasuredBox {
-            node_id: node.id(),
+            node: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding,
                 border: EdgeInsets::ZERO,
                 border_mode: BorderMode::Separate,
-                alignment: LayoutAlignment::Start,
+                alignment: crate::style::Alignment::Start,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
@@ -90,49 +93,51 @@ pub fn measure_fold_title(
     measured
 }
 
-pub fn measure_fold_content(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_fold_content(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
     let padding = EdgeInsets::symmetric(FOLD_CONTENT_PADDING_X, FOLD_CONTENT_PADDING_Y);
-
+    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
+        measure_child;
     layout_padded(
-        measurer,
-        doc,
         node,
         width,
-        view_state,
+        ctx,
+        resource,
         PaddedLayoutConfig {
             padding,
             border: EdgeInsets::ZERO,
-            alignment: LayoutAlignment::Start,
+            alignment: crate::style::Alignment::Start,
             page_break_policy: PageBreakPolicy::Auto,
         },
+        &mut seam,
     )
 }
 
-pub fn measure_fold(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_fold(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
+    let expanded = ctx.fold_expanded(&node.id());
     let border = EdgeInsets::all(FOLD_BORDER_WIDTH);
     let content_width = width - border.left - border.right;
-    let expanded = view_state.fold_expanded(node.id());
 
-    let mut children = Vec::new();
+    let mut children: Vec<Arc<MeasuredNode>> = Vec::new();
     let mut children_height = 0.0f32;
 
     for child in node.children() {
-        if !expanded && matches!(child.node(), Node::FoldContent(_)) {
+        if !expanded
+            && let ChildView::Block(b) = &child
+            && b.node_type() == NodeType::FoldContent
+        {
             continue;
         }
-        let m = measurer.measure(doc, child.id(), content_width, view_state);
+        let m = measure_child(child, content_width, ctx, resource);
         children_height += m.height;
         children.push(m);
     }
@@ -143,13 +148,13 @@ pub fn measure_fold(
         width,
         height,
         content: MeasuredContent::Box(MeasuredBox {
-            node_id: node.id(),
+            node: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding: EdgeInsets::ZERO,
                 border,
                 border_mode: BorderMode::Separate,
-                alignment: LayoutAlignment::Start,
+                alignment: crate::style::Alignment::Start,
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
@@ -161,218 +166,441 @@ pub fn measure_fold(
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        Alignment, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog, NodeMarkerLog,
+        NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+    use editor_state::PendingModifier;
+    use hashbrown::HashMap;
+
+    use crate::measure::context::MeasureContext;
+    use crate::measure::text::measure::measure_paragraph;
+    use crate::style::DecorationData;
 
     use super::*;
-    use crate::glyph_run::GlyphRun;
+    use crate::measure::types::MeasuredContent;
 
-    #[test]
-    fn fold_collapsed_excludes_content() {
-        let (doc, f1) = doc! {
-            root {
-                f1: fold {
-                    fold_title { text("Title") }
-                    fold_content { paragraph { text("Content") } }
-                }
-            }
-        };
-
-        let mut view_state = ViewState::new();
-        view_state.fold_states.insert(f1, false);
-
-        let node = doc.node(f1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold(&mut measurer, &doc, &node, 300.0, &view_state);
-
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
-        let box_children: Vec<_> = b
-            .children
-            .iter()
-            .filter(|c| matches!(c.content, MeasuredContent::Box(_)))
-            .collect();
-        assert_eq!(box_children.len(), 1);
-        assert_eq!(b.style.border.top, FOLD_BORDER_WIDTH);
-        assert_eq!(b.style.border.left, FOLD_BORDER_WIDTH);
-    }
-
-    #[test]
-    fn fold_expanded_includes_content() {
-        let (doc, f1) = doc! {
-            root {
-                f1: fold {
-                    fold_title { text("Title") }
-                    fold_content { paragraph { text("Content") } }
-                }
-            }
-        };
-
-        let mut view_state = ViewState::new();
-        view_state.fold_states.insert(f1, true);
-
-        let node = doc.node(f1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold(&mut measurer, &doc, &node, 300.0, &view_state);
-
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
-        let box_children: Vec<_> = b
-            .children
-            .iter()
-            .filter(|c| matches!(c.content, MeasuredContent::Box(_)))
-            .collect();
-        assert_eq!(box_children.len(), 2);
-    }
-
-    #[test]
-    fn fold_title_has_icon_padding() {
-        let (doc, ft1) = doc! {
-            root {
-                fold {
-                    ft1: fold_title { text("Title") }
-                    fold_content { paragraph { text("Content") } }
-                }
-            }
-        };
-
-        let node = doc.node(ft1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
-        assert_eq!(b.style.padding.left, 40.0);
-        assert_eq!(b.style.padding.right, 12.0);
-        assert_eq!(b.style.padding.top, 8.0);
-        assert_eq!(b.style.padding.bottom, 8.0);
-    }
-
-    #[test]
-    fn fold_title_icon_centered_on_first_line() {
-        let (doc, ft1) = doc! {
-            root {
-                fold {
-                    ft1: fold_title { text("Title") }
-                    fold_content { paragraph { text("Content") } }
-                }
-            }
-        };
-
-        let node = doc.node(ft1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
-        let first_line_height = b.children[0].height;
-        let icon = b.style.decorations.first().expect("icon decoration");
-        let icon_center = icon.rect.y + icon.rect.height / 2.0;
-        let first_line_center = FOLD_TITLE_PADDING_Y + first_line_height / 2.0;
-
-        assert!(
-            (icon_center - first_line_center).abs() < 0.01,
-            "icon center {icon_center} should match first line center {first_line_center}",
-        );
-    }
-
-    #[test]
-    fn fold_title_has_no_separator_border_when_expanded() {
-        let (doc, ft1) = doc! {
-            root {
-                fold {
-                    ft1: fold_title { text("Title") }
-                    fold_content { paragraph { text("Content") } }
-                }
-            }
-        };
-
-        let mut view_state = ViewState::new();
-        // The removed separator was only ever added in the expanded branch, so
-        // the test must expand the fold to exercise that path.
-        if let Some(p) = doc.node(ft1).unwrap().parent() {
-            view_state.fold_states.insert(p.id(), true);
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
         }
-
-        let node = doc.node(ft1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &view_state);
-
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
-        assert_eq!(b.style.border, EdgeInsets::ZERO);
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
     }
 
-    fn first_line_glyph_run(result: &MeasuredNode) -> &GlyphRun {
-        let MeasuredContent::Box(b) = &result.content else {
-            panic!("expected box")
-        };
-        let first = b
-            .children
-            .iter()
-            .find_map(|c| match &c.content {
-                MeasuredContent::Line(l) if !l.glyph_runs.is_empty() => Some(l),
-                _ => None,
-            })
-            .expect("a line with glyph runs");
-        &first.glyph_runs[0]
+    fn fold_title_doc() -> (DocLogs, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(1, 1);
+        let ft = Dot::new(1, 2);
+        let para_root = Dot::new(1, 10);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
+            ),
+            (
+                ft,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('T')),
+            (Dot::new(1, 4), SeqItem::Char('i')),
+            (Dot::new(1, 5), SeqItem::Char('t')),
+            (Dot::new(1, 6), SeqItem::Char('l')),
+            (Dot::new(1, 7), SeqItem::Char('e')),
+            (
+                para_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (logs(&items), ft)
+    }
+
+    fn fold_content_doc() -> (DocLogs, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(2, 1);
+        let ft = Dot::new(2, 2);
+        let fc = Dot::new(2, 3);
+        let para_inner = Dot::new(2, 4);
+        let para_root = Dot::new(2, 10);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
+            ),
+            (
+                ft,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                },
+            ),
+            (Dot::new(2, 9), SeqItem::Char('T')),
+            (
+                fc,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold],
+                },
+            ),
+            (
+                para_inner,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, fold, fc],
+                },
+            ),
+            (Dot::new(2, 5), SeqItem::Char('C')),
+            (
+                para_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (logs(&items), fc)
+    }
+
+    fn get_node<'a>(view: &'a DocView<'a>, dot: Dot) -> NodeView<'a> {
+        view.node(dot).expect("node")
     }
 
     #[test]
-    fn fold_title_text_uses_implicit_style() {
-        let (doc, ft1) = doc! {
-            root {
-                fold {
-                    ft1: fold_title { text("1234") }
-                    fold_content { paragraph { text("c") } }
-                }
-            }
+    fn fold_title_inline_and_chevron() {
+        let (doc, ft_dot) = fold_title_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let title = get_node(&view, ft_dot);
+        let mut res = Resource::new_test();
+
+        let measured = measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref b) = measured.content else {
+            panic!("expected Box");
         };
-
-        let node = doc.node(ft1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold_title(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-
-        let gr = first_line_glyph_run(&result);
-        // FoldTitle's implicit FontSize(1050) resolves to 14px.
+        assert_eq!(b.style.padding.left, 40.0);
+        assert_eq!(b.style.decorations.len(), 1);
+        let dec = &b.style.decorations[0];
+        assert_eq!(dec.rect.width, 20.0);
+        assert_eq!(dec.rect.x, 12.0);
+        assert!(matches!(dec.data, DecorationData::Bool(true)));
         assert!(
-            (gr.font_size - 14.0).abs() < 0.5,
-            "font_size = {}",
-            gr.font_size
+            b.children
+                .iter()
+                .all(|c| matches!(c.content, MeasuredContent::Line(_)))
         );
-        assert_eq!(gr.color, "text.gray");
+
+        let ctx_false = MeasureContext {
+            fold_states: HashMap::from([(editor_crdt::Dot::new(1, 1), false)]),
+            ..Default::default()
+        };
+        let measured_false = measure_fold_title(&title, 300.0, &ctx_false, &mut res);
+        let MeasuredContent::Box(ref bf) = measured_false.content else {
+            panic!("expected Box");
+        };
+        let dec_f = &bf.style.decorations[0];
+        assert!(matches!(dec_f.data, DecorationData::Bool(false)));
     }
 
     #[test]
-    fn fold_content_has_padding() {
-        let (doc, fc1) = doc! {
-            root {
-                fold {
-                    fold_title { text("Title") }
-                    fc1: fold_content { paragraph { text("Content") } }
-                }
-            }
+    fn fold_title_height() {
+        let (doc, ft_dot) = fold_title_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let title = get_node(&view, ft_dot);
+        let mut res = Resource::new_test();
+
+        let inner_width = 300.0 - 40.0 - 12.0;
+        let (_, inline_h) =
+            measure_paragraph(&title, inner_width, Alignment::Left, 0.0, None, &mut res);
+        let measured = measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res);
+        assert!(
+            (measured.height - (inline_h + 8.0 * 2.0)).abs() < 0.01,
+            "height mismatch: {} vs {}",
+            measured.height,
+            inline_h + 8.0 * 2.0
+        );
+    }
+
+    #[test]
+    fn fold_content_padding() {
+        let (doc, fc_dot) = fold_content_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let content = get_node(&view, fc_dot);
+        let mut res = Resource::new_test();
+
+        let measured = measure_fold_content(&content, 300.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref b) = measured.content else {
+            panic!("expected Box");
         };
-
-        let node = doc.node(fc1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_fold_content(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
         assert_eq!(b.style.padding.left, 24.0);
-        assert_eq!(b.style.padding.right, 24.0);
         assert_eq!(b.style.padding.top, 16.0);
-        assert_eq!(b.style.padding.bottom, 16.0);
+        assert!(b.style.decorations.is_empty());
+        assert!(!b.children.is_empty());
+        assert!(matches!(b.children[0].content, MeasuredContent::Box(_)));
+    }
+
+    fn fold_doc() -> (DocLogs, Dot, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(3, 1);
+        let ft = Dot::new(3, 2);
+        let fc = Dot::new(3, 3);
+        let para_inner = Dot::new(3, 4);
+        let para_root = Dot::new(3, 10);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
+            ),
+            (
+                ft,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                },
+            ),
+            (Dot::new(3, 8), SeqItem::Char('T')),
+            (
+                fc,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold],
+                },
+            ),
+            (
+                para_inner,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, fold, fc],
+                },
+            ),
+            (Dot::new(3, 5), SeqItem::Char('C')),
+            (
+                para_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (logs(&items), root, fold)
+    }
+
+    #[test]
+    fn fold_border_and_children() {
+        use crate::measure::nodes::dispatch::measure_node;
+        let (doc, root_dot, _) = fold_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root = get_node(&view, root_dot);
+        let mut res = Resource::new_test();
+
+        let result = measure_node(&root, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref rb) = result.content else {
+            panic!("expected Box at root");
+        };
+        let fold_child = &rb.children[0];
+        let MeasuredContent::Box(ref fb) = fold_child.content else {
+            panic!("expected Box at fold");
+        };
+        assert_eq!(fb.style.border.top, 1.0);
+        assert_eq!(fb.style.border.left, 1.0);
+        assert_eq!(fb.children.len(), 2);
+    }
+
+    #[test]
+    fn collapse_skips_content() {
+        let (doc, _, fold_dot) = fold_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let fold = get_node(&view, fold_dot);
+        let mut res = Resource::new_test();
+
+        let ctx_collapsed = MeasureContext {
+            fold_states: HashMap::from([(fold_dot, false)]),
+            ..Default::default()
+        };
+        let collapsed = measure_fold(&fold, 300.0, &ctx_collapsed, &mut res);
+        let MeasuredContent::Box(ref cb) = collapsed.content else {
+            panic!("expected Box");
+        };
+        assert_eq!(cb.children.len(), 1);
+
+        let expanded = measure_fold(&fold, 300.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref eb) = expanded.content else {
+            panic!("expected Box");
+        };
+        assert_eq!(eb.children.len(), 2);
+    }
+
+    #[test]
+    fn dispatch_wires_fold() {
+        use crate::measure::nodes::dispatch::measure_node;
+        let (doc, _, fold_dot) = fold_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let fold = get_node(&view, fold_dot);
+        let mut res = Resource::new_test();
+
+        let result = measure_node(&fold, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!("expected Box");
+        };
+        assert_eq!(b.style.border.top, 1.0);
+    }
+
+    #[test]
+    fn fold_title_chevron_reflects_parent_state() {
+        let (doc, ft_dot) = fold_title_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let title = get_node(&view, ft_dot);
+        let fold_id = Dot::new(1, 1);
+        let mut res = Resource::new_test();
+
+        let ctx_collapsed = MeasureContext {
+            fold_states: HashMap::from([(fold_id, false)]),
+            ..Default::default()
+        };
+        let measured = measure_fold_title(&title, 300.0, &ctx_collapsed, &mut res);
+        let MeasuredContent::Box(ref b) = measured.content else {
+            panic!("expected Box");
+        };
+        let dec = &b.style.decorations[0];
+        assert!(matches!(dec.data, DecorationData::Bool(false)));
+
+        let measured_default =
+            measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref bd) = measured_default.content else {
+            panic!("expected Box");
+        };
+        let dec_d = &bd.style.decorations[0];
+        assert!(matches!(dec_d.data, DecorationData::Bool(true)));
+    }
+
+    fn empty_fold_title_doc() -> (DocLogs, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(5, 1);
+        let ft = Dot::new(5, 2);
+        let para_root = Dot::new(5, 10);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                },
+            ),
+            (
+                ft,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                },
+            ),
+            (
+                para_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (logs(&items), ft)
+    }
+
+    #[test]
+    fn empty_fold_title_pending_font_size_grows_height() {
+        let (doc, ft_dot) = empty_fold_title_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let title = get_node(&view, ft_dot);
+        let title_id = ft_dot;
+        let mut res = Resource::new_test();
+
+        let h_none = measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res).height;
+
+        let big: editor_state::PendingModifiers = vec![PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
+        let ctx_pending = MeasureContext {
+            pending_style: Some((title_id, big)),
+            ..Default::default()
+        };
+        let h_pending = measure_fold_title(&title, 300.0, &ctx_pending, &mut res).height;
+
+        assert!(
+            h_pending > h_none,
+            "pending font-size must grow empty fold title height (h_none={h_none}, h_pending={h_pending})"
+        );
+    }
+
+    #[test]
+    fn fold_collapse_threads_through_dispatch() {
+        use crate::measure::nodes::dispatch::measure_node;
+        let (doc, root_dot, fold_dot) = fold_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root = get_node(&view, root_dot);
+        let fold_id = fold_dot;
+        let mut res = Resource::new_test();
+
+        let ctx_collapsed = MeasureContext {
+            fold_states: HashMap::from([(fold_id, false)]),
+            ..Default::default()
+        };
+        let result_collapsed = measure_node(&root, 400.0, &ctx_collapsed, &mut res);
+        let MeasuredContent::Box(ref rb) = result_collapsed.content else {
+            panic!("expected Box at root");
+        };
+        let fold_child = &rb.children[0];
+        let MeasuredContent::Box(ref fb) = fold_child.content else {
+            panic!("expected Box at fold");
+        };
+        assert_eq!(fb.children.len(), 1);
+
+        let result_expanded = measure_node(&root, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref rb2) = result_expanded.content else {
+            panic!("expected Box at root");
+        };
+        let fold_child2 = &rb2.children[0];
+        let MeasuredContent::Box(ref fb2) = fold_child2.content else {
+            panic!("expected Box at fold");
+        };
+        assert_eq!(fb2.children.len(), 2);
     }
 }

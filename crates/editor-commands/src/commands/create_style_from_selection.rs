@@ -17,8 +17,8 @@ pub fn create_style_from_selection(
         ));
     }
 
-    let run_ids = crate::helpers::collect_run_nodes_in_selection(tr)?;
-    if run_ids.is_empty() {
+    let run_dots = crate::helpers::collect_run_nodes_in_selection(tr)?;
+    if run_dots.is_empty() {
         return Ok(false);
     }
 
@@ -33,8 +33,8 @@ pub fn create_style_from_selection(
         }),
     )?;
 
-    for node_id in &run_ids {
-        tr.set_node_style(*node_id, Some(style_id.clone()))?;
+    for elem in &run_dots {
+        tr.set_node_style(*elem, Some(style_id.clone()))?;
     }
 
     clear_inline_modifier_types_in_selection(tr, &modifier_types)?;
@@ -48,13 +48,14 @@ mod tests {
     use editor_model::Modifier;
 
     use super::*;
+    use crate::helpers::capture_style_entry;
     use crate::test_utils::*;
 
     #[test]
     fn captures_uniform_inline_modifiers_into_new_style() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [font_size(800), text_color("#ff00ff".to_string())] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [font_size(800), text_color("#ff00ff".to_string())] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
@@ -62,11 +63,10 @@ mod tests {
             "핑크임".into(),
         ));
 
-        let style = actual.doc.style_entry("s1").unwrap();
-        assert_eq!(style.name.get(), "핑크임");
-        let mods: Vec<Modifier> = style.modifiers.iter().cloned().collect();
-        assert!(mods.contains(&Modifier::FontSize { value: 800 }));
-        assert!(mods.contains(&Modifier::TextColor {
+        let style = capture_style_entry(&actual, "s1").unwrap();
+        assert_eq!(style.name, "핑크임");
+        assert!(style.modifiers.contains(&Modifier::FontSize { value: 800 }));
+        assert!(style.modifiers.contains(&Modifier::TextColor {
             value: "#ff00ff".into()
         }));
     }
@@ -76,13 +76,13 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("a") [bold]
-                        t2: text("b") [italic]
+                    p: paragraph {
+                        text("a") [bold]
+                        text("b") [italic]
                     }
                 }
             }
-            selection: (t1, 0) -> (t2, 0)
+            selection: (p, 0) -> (p, 1)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
@@ -90,81 +90,75 @@ mod tests {
             "x".into()
         ));
 
-        let style = actual.doc.style_entry("s1").unwrap();
-        let mods: Vec<Modifier> = style.modifiers.iter().cloned().collect();
-        assert!(mods.contains(&Modifier::Bold));
-        assert!(!mods.contains(&Modifier::Italic));
+        let style = capture_style_entry(&actual, "s1").unwrap();
+        assert!(style.modifiers.contains(&Modifier::Bold));
+        assert!(!style.modifiers.contains(&Modifier::Italic));
     }
 
     #[test]
     fn sets_style_ref_on_selected_runs() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [font_size(800)] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [font_size(800)] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
             "s1".into(),
             "x".into()
         ));
-        let para = actual.doc.root().unwrap().children().next().unwrap();
-        assert!(
-            para.children()
-                .any(|c| c.entry().style.get().as_deref() == Some("s1"))
-        );
-        assert_eq!(
-            para.entry().style.get().as_deref(),
-            None,
-            "paragraph must not carry style"
-        );
+
+        let (expected, ..) = state! {
+            doc {
+                styles { s1: "x" [font_size(800)] }
+                root { p1: paragraph { text("Hello") @s1 } }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn clears_inline_modifiers_moved_into_style() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [font_size(800), text_color("#ff00ff".to_string())] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") [font_size(800), text_color("#ff00ff".to_string())] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
             "s1".into(),
             "x".into(),
         ));
-        let para = actual.doc.root().unwrap().children().next().unwrap();
-        let text = para.children().next().unwrap();
-        let explicit: Vec<Modifier> = text.explicit_modifiers().cloned().collect();
-        assert!(
-            !explicit
-                .iter()
-                .any(|m| matches!(m, Modifier::FontSize { .. })),
-            "font_size should be moved into style"
-        );
-        assert!(
-            !explicit
-                .iter()
-                .any(|m| matches!(m, Modifier::TextColor { .. })),
-            "text_color should be moved into style"
-        );
+
+        let (expected, ..) = state! {
+            doc {
+                styles { s1: "x" [font_size(800), text_color("#ff00ff".to_string())] }
+                root { p1: paragraph { text("Hello") @s1 } }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn drops_mixed_modifiers() {
         let (initial, ..) = state! {
-            doc { root { paragraph {
-                t1: text("Hello") [font_size(800)]
-                t2: text("World") [font_size(1600)]
+            doc { root { p: paragraph {
+                text("Hello") [font_size(800)]
+                text("World") [font_size(1600)]
             } } }
-            selection: (t1, 0) -> (t2, 5)
+            selection: (p, 0) -> (p, 10)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
             "s1".into(),
             "x".into(),
         ));
-        let style = actual.doc.style_entry("s1").unwrap();
-        let mods: Vec<Modifier> = style.modifiers.iter().cloned().collect();
+        let style = capture_style_entry(&actual, "s1").unwrap();
         assert!(
-            !mods.iter().any(|m| matches!(m, Modifier::FontSize { .. })),
+            !style
+                .modifiers
+                .iter()
+                .any(|m| matches!(m, Modifier::FontSize { .. })),
             "mixed font_size should be dropped from style"
         );
     }
@@ -172,22 +166,22 @@ mod tests {
     #[test]
     fn registers_style_presence_on_root() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| create_style_from_selection(
             &mut tr,
             "s1".into(),
             "x".into(),
         ));
-        assert!(actual.doc.style_present("s1"));
+        assert!(capture_style_entry(&actual, "s1").is_some());
     }
 
     #[test]
     fn empty_style_id_errors() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let err = transact_err!(initial, |tr| create_style_from_selection(
             &mut tr,

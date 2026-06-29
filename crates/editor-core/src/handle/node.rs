@@ -86,11 +86,11 @@ mod tests {
 
     #[test]
     fn delete_node_removes_selected_external_block_and_records_history() {
-        let (initial, _root, _t1, img, ..) = state! {
+        let (initial, _root, _p1, img, ..) = state! {
             doc { r: root {
-                paragraph { t1: text("Before") }
+                p1: paragraph { text("Before") }
                 img: image
-                paragraph { t2: text("After") }
+                p2: paragraph { text("After") }
             } }
             selection: (r, 1, >) -> (r, 2, <)
         };
@@ -102,13 +102,13 @@ mod tests {
 
         let (deleted, ..) = state! {
             doc { root {
-                paragraph { t1: text("Before") }
-                paragraph { t2: text("After") }
+                p1: paragraph { text("Before") }
+                p2: paragraph { text("After") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &deleted);
-        assert!(editor.history.can_undo());
+        assert!(editor.undo_history.can_undo());
 
         editor.apply(Message::History {
             op: HistoryOp::Undo,

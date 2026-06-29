@@ -1,0 +1,868 @@
+use std::collections::BTreeMap;
+
+use editor_common::Tri;
+use editor_model::{LeafView, Modifier, ModifierState, ModifierType, NodeType, NodeView, Schema};
+use strum::IntoEnumIterator;
+
+use crate::pending_modifier::PendingModifier;
+use crate::projected_state::ProjectedState;
+use crate::selection::ResolvedSelection;
+use crate::selection::Selection;
+use crate::stable_selection::caret_modifiers;
+use crate::traversal;
+
+pub enum RangeNode<'a> {
+    Block(NodeView<'a>),
+    Leaf(LeafView<'a>),
+}
+
+impl<'a> RangeNode<'a> {
+    fn node_type(&self) -> NodeType {
+        match self {
+            RangeNode::Block(b) => b.node_type(),
+            RangeNode::Leaf(l) => l.node_type(),
+        }
+    }
+
+    fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
+        match self {
+            RangeNode::Block(b) => b.effective(),
+            RangeNode::Leaf(l) => l.effective(),
+        }
+    }
+
+    fn type_path(&self) -> Vec<NodeType> {
+        match self {
+            RangeNode::Block(b) => {
+                let mut p: Vec<_> = b.ancestors().map(|n| n.node_type()).collect();
+                p.reverse();
+                p
+            }
+            RangeNode::Leaf(l) => {
+                let host = l.parent().expect("a collected leaf has a live host block");
+                let mut p: Vec<_> = host.ancestors().map(|n| n.node_type()).collect();
+                p.reverse();
+                p.push(l.node_type());
+                p
+            }
+        }
+    }
+}
+
+pub fn range_nodes<'a>(rs: &ResolvedSelection<'a>) -> Vec<RangeNode<'a>> {
+    let mut out: Vec<RangeNode> = traversal::blocks_in_range(rs)
+        .into_iter()
+        .map(RangeNode::Block)
+        .collect();
+    out.extend(
+        traversal::leaves_in_range(rs)
+            .into_iter()
+            .map(RangeNode::Leaf),
+    );
+    out
+}
+
+pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState {
+    let mut out = ModifierState::default();
+    let nodes = range_nodes(rs);
+    for ty in ModifierType::iter() {
+        let target = &Schema::modifier_spec(ty).target;
+        let targets = target.rightmost_node_types();
+        let mut canonical: Option<Modifier> = None;
+        let (mut absent_seen, mut mixed) = (false, false);
+        let sparse_absence_is_neutral = matches!(ty, ModifierType::Link);
+        for n in &nodes {
+            if !targets.contains(&n.node_type()) {
+                continue;
+            }
+            if !target.matches(&n.type_path()) {
+                continue;
+            }
+            let value = n.effective().get(&ty).cloned();
+            match (value, &canonical) {
+                (Some(m), Some(c)) if &m == c => {}
+                (Some(_), Some(_)) => {
+                    mixed = true;
+                    break;
+                }
+                (Some(m), None) => {
+                    if absent_seen && !sparse_absence_is_neutral {
+                        mixed = true;
+                        break;
+                    }
+                    canonical = Some(m);
+                }
+                (None, Some(_)) => {
+                    if !sparse_absence_is_neutral {
+                        mixed = true;
+                        break;
+                    }
+                }
+                (None, None) => {
+                    absent_seen = true;
+                }
+            }
+        }
+        if mixed {
+            out.set_mixed(ty);
+        } else if let Some(m) = canonical {
+            out.set_uniform(&m);
+        }
+    }
+    out.effective_bold = effective_bold(&nodes);
+    out
+}
+
+fn is_bold_set<'a>(mut mods: impl Iterator<Item = &'a Modifier>) -> bool {
+    mods.any(|m| {
+        matches!(m, Modifier::Bold) || matches!(m, Modifier::FontWeight { value } if *value >= 700)
+    })
+}
+
+fn leaf_is_bold(l: &LeafView) -> bool {
+    l.own_no_style(ModifierType::Bold).is_some()
+        || matches!(
+            l.effective().get(&ModifierType::FontWeight),
+            Some(Modifier::FontWeight { value }) if *value >= 700
+        )
+}
+
+pub fn effective_bold(nodes: &[RangeNode]) -> Tri<()> {
+    let target = &Schema::modifier_spec(ModifierType::Bold).target;
+    let targets = target.rightmost_node_types();
+    let (mut any_applicable, mut all_bold, mut any_bold) = (false, true, false);
+    for n in nodes {
+        if !targets.contains(&n.node_type()) || !target.matches(&n.type_path()) {
+            continue;
+        }
+        any_applicable = true;
+        let bold = match n {
+            RangeNode::Leaf(l) => leaf_is_bold(l),
+            RangeNode::Block(_) => false,
+        };
+        if bold {
+            any_bold = true;
+        } else {
+            all_bold = false;
+        }
+    }
+    if !any_applicable {
+        Tri::Absent
+    } else if all_bold {
+        Tri::Uniform { value: () }
+    } else if any_bold {
+        Tri::Mixed
+    } else {
+        Tri::Absent
+    }
+}
+
+pub fn resolve_modifier_state(
+    state: &ProjectedState,
+    sel: &Selection,
+    pending: &[PendingModifier],
+) -> Option<ModifierState> {
+    let view = state.view();
+    let rs = sel.resolve(&view)?;
+    if rs.is_collapsed() {
+        let caret = caret_modifiers(state, &sel.head, pending);
+        let mut out = ModifierState::default();
+        for m in caret.values() {
+            out.set_uniform(m);
+        }
+        if is_bold_set(caret.values()) {
+            out.effective_bold = Tri::Uniform { value: () };
+        }
+        Some(out)
+    } else {
+        Some(resolve_modifier_state_in_range(&rs))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_common::Tri;
+    use editor_crdt::{Dot, ListOp, OpGraph};
+    use editor_model::{Anchor, Bias, EditOp, Modifier, ModifierAttrOp, NodeType, SeqItem, SpanOp};
+
+    use crate::pending_modifier::PendingModifier;
+    use crate::projected_state::ProjectedState;
+    use crate::resolve_modifier_state;
+    use crate::{Position, selection::Selection};
+
+    fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Block { node_type, parents },
+        })
+    }
+
+    fn seq_char(pos: usize, c: char) -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Char(c),
+        })
+    }
+
+    fn simple_para_state(chars: &[char]) -> (ProjectedState, Dot, Dot) {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let para = graph
+            .add_mut(seq_block(0, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        for (i, c) in chars.iter().enumerate() {
+            graph.add_mut(seq_char(1 + i, *c)).unwrap();
+        }
+        let state = ProjectedState::from_graph(graph).unwrap();
+        (state, root, para)
+    }
+
+    fn sel(anchor: (Dot, usize), head: (Dot, usize)) -> Selection {
+        Selection::new(
+            Position::new(anchor.0, anchor.1),
+            Position::new(head.0, head.1),
+        )
+    }
+
+    fn collapsed(node: Dot, offset: usize) -> Selection {
+        Selection::collapsed(Position::new(node, offset))
+    }
+
+    // §4.1: collapsed uniform — caret inside a bold run → bold == Uniform; pending applies
+    #[test]
+    fn test_1_collapsed_uniform_bold() {
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        // get the dot of 'a' leaf
+        let leaf_a = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .next()
+                .and_then(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        };
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+
+        // caret at offset 1 (after 'a', which is bold)
+        let s = collapsed(para, 1);
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.bold,
+            Tri::Uniform { value: () },
+            "collapsed caret inside bold run → Uniform bold"
+        );
+        assert_eq!(
+            ms.effective_bold,
+            Tri::Uniform { value: () },
+            "effective_bold also Uniform"
+        );
+    }
+
+    // §4.1 with pending: pending italic applies to collapsed caret
+    #[test]
+    fn test_1b_collapsed_pending_applies() {
+        let (state, _root, para) = simple_para_state(&['a']);
+        let s = collapsed(para, 1);
+        let ms = resolve_modifier_state(
+            &state,
+            &s,
+            &[PendingModifier::Set {
+                modifier: Modifier::Italic,
+            }],
+        )
+        .unwrap();
+        assert_eq!(ms.italic, Tri::Uniform { value: () });
+    }
+
+    // §4.2: collapsed inherits — caret in para under root[font_size] → font_size Uniform
+    #[test]
+    fn test_2_collapsed_inherits_font_size() {
+        let (mut state, root, para) = simple_para_state(&['x']);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: root,
+                modifier: Modifier::FontSize { value: 1600 },
+            }))
+            .unwrap();
+        let s = collapsed(para, 1);
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_size,
+            Tri::Uniform {
+                value: editor_model::FontSizeValue { value: 1600 }
+            }
+        );
+    }
+
+    // §4.3: range uniform — selection fully inside one bold run
+    #[test]
+    fn test_3_range_uniform_bold() {
+        let (mut state, _root, para) = simple_para_state(&['a', 'b', 'c']);
+        let (leaf_a, leaf_b, leaf_c) = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            let mut it = p.children().filter_map(|c| {
+                if let editor_model::ChildView::Leaf(l) = c {
+                    Some(l.dot())
+                } else {
+                    None
+                }
+            });
+            (it.next().unwrap(), it.next().unwrap(), it.next().unwrap())
+        };
+        // span all three chars with Bold
+        for (&start_id, &end_id) in [(&leaf_a, &leaf_a), (&leaf_b, &leaf_b), (&leaf_c, &leaf_c)] {
+            state
+                .apply(EditOp::Span(SpanOp::AddSpan {
+                    start: Anchor {
+                        id: start_id,
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id: end_id,
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Bold,
+                }))
+                .unwrap();
+        }
+        let s = sel((para, 0), (para, 3));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.bold, Tri::Uniform { value: () });
+        assert_eq!(ms.effective_bold, Tri::Uniform { value: () });
+    }
+
+    // §4.3b: selecting EXACTLY a bold run [hello|world|hi], offsets [5,10) covering
+    // only "world", must report Uniform bold — the `to`-boundary leaf (first char
+    // of "hi") must not be over-collected.
+    #[test]
+    fn test_3b_range_uniform_bold_exact_span() {
+        let chars: Vec<char> = "helloworldhi".chars().collect();
+        let (mut state, _root, para) = simple_para_state(&chars);
+        let leaves: Vec<Dot> = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .filter_map(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+        // bold over "world" = leaf indices 5..=9
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaves[5],
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaves[9],
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+
+        let exact = sel((para, 5), (para, 10));
+        let ms = resolve_modifier_state(&state, &exact, &[]).unwrap();
+        assert_eq!(
+            ms.bold,
+            Tri::Uniform { value: () },
+            "selecting exactly the bold run [5,10) must be Uniform, not Mixed"
+        );
+        assert_eq!(ms.effective_bold, Tri::Uniform { value: () });
+
+        // reducing the end by one char was the user's workaround — also Uniform
+        let shorter = sel((para, 5), (para, 9));
+        assert_eq!(
+            resolve_modifier_state(&state, &shorter, &[]).unwrap().bold,
+            Tri::Uniform { value: () }
+        );
+    }
+
+    // §4.4: range mixed — selection spanning bold + non-bold chars
+    #[test]
+    fn test_4_range_mixed_bold() {
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        let leaf_a = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .next()
+                .and_then(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        };
+        // only 'a' is bold
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+
+        let s = sel((para, 0), (para, 2));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.bold, Tri::Mixed, "bold+plain in range → Mixed");
+        assert_eq!(ms.effective_bold, Tri::Mixed, "effective_bold Mixed");
+    }
+
+    // §4.5: range absent — no bold at all
+    #[test]
+    fn test_5_range_absent_bold() {
+        let (state, _root, para) = simple_para_state(&['a', 'b']);
+        let s = sel((para, 0), (para, 2));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.bold, Tri::Absent);
+        assert_eq!(ms.effective_bold, Tri::Absent);
+    }
+
+    // §4.6: Link sparse-neutral — [link "A"][plain][link "A"] → Uniform
+    #[test]
+    fn test_6_link_sparse_neutral_uniform() {
+        let (mut state, _root, para) = simple_para_state(&['a', 'b', 'c']);
+        let (leaf_a, _leaf_b, leaf_c) = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            let mut it = p.children().filter_map(|c| {
+                if let editor_model::ChildView::Leaf(l) = c {
+                    Some(l.dot())
+                } else {
+                    None
+                }
+            });
+            (it.next().unwrap(), it.next().unwrap(), it.next().unwrap())
+        };
+        let link_a = Modifier::Link {
+            href: "https://a.example".to_string(),
+        };
+        for id in [leaf_a, leaf_c] {
+            state
+                .apply(EditOp::Span(SpanOp::AddSpan {
+                    start: Anchor {
+                        id,
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id,
+                        bias: Bias::After,
+                    },
+                    modifier: link_a.clone(),
+                }))
+                .unwrap();
+        }
+        let s = sel((para, 0), (para, 3));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        // plain 'b' in the middle is sparse-absent, so Link stays Uniform
+        assert_eq!(
+            ms.link,
+            Tri::Uniform {
+                value: editor_model::LinkValue {
+                    href: "https://a.example".to_string()
+                }
+            }
+        );
+    }
+
+    // §4.6b: differing hrefs → Mixed
+    #[test]
+    fn test_6b_link_differing_hrefs_mixed() {
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        let (leaf_a, leaf_b) = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            let mut it = p.children().filter_map(|c| {
+                if let editor_model::ChildView::Leaf(l) = c {
+                    Some(l.dot())
+                } else {
+                    None
+                }
+            });
+            (it.next().unwrap(), it.next().unwrap())
+        };
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Link {
+                    href: "https://a.example".to_string(),
+                },
+            }))
+            .unwrap();
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_b,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_b,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Link {
+                    href: "https://b.example".to_string(),
+                },
+            }))
+            .unwrap();
+        let s = sel((para, 0), (para, 2));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.link, Tri::Mixed);
+    }
+
+    // §4.7: block-context modifier — selection inside one paragraph aggregates Root-context BlockGap
+    #[test]
+    fn test_7_block_context_modifier_root() {
+        let (mut state, root, para) = simple_para_state(&['x']);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: root,
+                modifier: Modifier::BlockGap { value: 8 },
+            }))
+            .unwrap();
+        let s = sel((para, 0), (para, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.block_gap,
+            Tri::Uniform {
+                value: editor_model::BlockGapValue { value: 8 }
+            }
+        );
+    }
+
+    // §4.8: effective_bold — all-bold → Uniform; FontWeight 700 counts
+    #[test]
+    fn test_8_effective_bold_font_weight_700() {
+        let (mut state, _root, para) = simple_para_state(&['a']);
+        let leaf_a = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .next()
+                .and_then(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        };
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::FontWeight { value: 700 },
+            }))
+            .unwrap();
+        let s = sel((para, 0), (para, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.effective_bold,
+            Tri::Uniform { value: () },
+            "FontWeight 700 counts as bold for effective_bold"
+        );
+    }
+
+    // §4.8b: some-bold → Mixed effective_bold
+    #[test]
+    fn test_8b_effective_bold_mixed() {
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        let leaf_a = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .next()
+                .and_then(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        };
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+        let s = sel((para, 0), (para, 2));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.effective_bold, Tri::Mixed);
+    }
+
+    // §4.9: own-vs-inherited bold asymmetry
+    // A paragraph with a marker Bold applied but own-plain text in range
+    // → range effective_bold == Absent (own-only check via own_no_style)
+    // → collapsed caret in EMPTY paragraph with marker → effective_bold == Uniform
+    //   (caret resolution via empty_or_structural picks up node_markers)
+    #[test]
+    fn test_9_own_vs_inherited_bold_asymmetry() {
+        use editor_crdt::LwwRegOp;
+        use editor_model::{EditOp, Marker, NodeLwwOp};
+
+        // Part A: empty paragraph with marker — collapsed caret picks it up
+        let (mut state_empty, _root_e, para_e) = simple_para_state(&[]);
+        state_empty
+            .apply(EditOp::NodeMarker(NodeLwwOp {
+                target: para_e,
+                op: LwwRegOp::Set {
+                    value: Some(Marker {
+                        modifiers: vec![Modifier::Bold],
+                        style: None,
+                    }),
+                },
+            }))
+            .unwrap();
+        let s_collapsed_empty = collapsed(para_e, 0);
+        let ms_empty = resolve_modifier_state(&state_empty, &s_collapsed_empty, &[]).unwrap();
+        assert_eq!(
+            ms_empty.effective_bold,
+            Tri::Uniform { value: () },
+            "collapsed caret in empty paragraph with marker Bold → effective_bold Uniform"
+        );
+
+        // Part B: paragraph with 'a' + marker — range effective_bold uses own_no_style → Absent
+        let (mut state, _root, para) = simple_para_state(&['a']);
+        state
+            .apply(EditOp::NodeMarker(NodeLwwOp {
+                target: para,
+                op: LwwRegOp::Set {
+                    value: Some(Marker {
+                        modifiers: vec![Modifier::Bold],
+                        style: None,
+                    }),
+                },
+            }))
+            .unwrap();
+        let s_range = sel((para, 0), (para, 1));
+        let ms_range = resolve_modifier_state(&state, &s_range, &[]).unwrap();
+        assert_eq!(
+            ms_range.effective_bold,
+            Tri::Absent,
+            "range with only inherited bold (no own span) → effective_bold Absent (own-only check)"
+        );
+    }
+
+    // §4.10: over-collection guard — selection inside p1, image is NOT collected
+    #[test]
+    fn test_10_over_collection_guard() {
+        use editor_model::AtomLeaf;
+
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let p1 = graph
+            .add_mut(seq_block(0, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(1, 'a')).unwrap();
+        graph.add_mut(seq_char(2, 'b')).unwrap();
+        graph.add_mut(seq_char(3, 'c')).unwrap();
+        let img_node = match NodeType::Image.into_node() {
+            editor_model::Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        let image_dot = graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 4,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img_node },
+                    parents: vec![root],
+                },
+            }))
+            .unwrap()
+            .id;
+        let p2 = graph
+            .add_mut(seq_block(5, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(6, 'x')).unwrap();
+        let mut state = ProjectedState::from_graph(graph).unwrap();
+
+        // Set alignment on image — if image is over-collected, alignment would appear
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: image_dot,
+                modifier: Modifier::Alignment {
+                    value: editor_model::Alignment::Center,
+                },
+            }))
+            .unwrap();
+
+        // Selection wholly inside p1 — image must NOT pollute alignment
+        let s = sel((p1, 0), (p1, 3));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        // alignment should be Absent (image not collected)
+        assert_eq!(
+            ms.alignment,
+            Tri::Absent,
+            "image alignment must not appear in a selection inside p1 only"
+        );
+        let _ = (p2, image_dot);
+    }
+
+    // §4.11: block-atom alignment — selection across p1, image[align], p2
+    #[test]
+    fn test_11_block_atom_alignment_ungated() {
+        use editor_model::AtomLeaf;
+
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let p1 = graph
+            .add_mut(seq_block(0, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(1, 'a')).unwrap();
+        let img_node = match NodeType::Image.into_node() {
+            editor_model::Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        let image_dot = graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img_node },
+                    parents: vec![root],
+                },
+            }))
+            .unwrap()
+            .id;
+        let p2 = graph
+            .add_mut(seq_block(3, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(4, 'b')).unwrap();
+        let mut state = ProjectedState::from_graph(graph).unwrap();
+
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: image_dot,
+                modifier: Modifier::Alignment {
+                    value: editor_model::Alignment::Center,
+                },
+            }))
+            .unwrap();
+
+        let s = sel((p1, 0), (p2, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.alignment,
+            Tri::Mixed,
+            "selection spanning p1(no alignment) + image(Center) + p2(no alignment) → Mixed"
+        );
+    }
+
+    // §4.12: collapsed vs range parity — same modifiers at same spot
+    #[test]
+    fn test_12_collapsed_vs_range_parity() {
+        let (mut state, _root, para) = simple_para_state(&['a']);
+        let leaf_a = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .next()
+                .and_then(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        };
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Italic,
+            }))
+            .unwrap();
+
+        let s_collapsed = collapsed(para, 1);
+        let s_range = sel((para, 0), (para, 1));
+        let ms_c = resolve_modifier_state(&state, &s_collapsed, &[]).unwrap();
+        let ms_r = resolve_modifier_state(&state, &s_range, &[]).unwrap();
+        assert_eq!(
+            ms_c.italic, ms_r.italic,
+            "collapsed and range agree on italic at same spot"
+        );
+    }
+
+    // §4.13: proptest — never panics; range is a function of covered leaves
+    proptest::proptest! {
+        #[test]
+        fn test_13_proptest_never_panics(
+            a_off in 0usize..=2,
+            h_off in 0usize..=2,
+        ) {
+            let (state, _root, para) = simple_para_state(&['a', 'b']);
+            let s = Selection::new(
+                Position::new(para, a_off.min(2)),
+                Position::new(para, h_off.min(2)),
+            );
+            // must not panic
+            let _ = resolve_modifier_state(&state, &s, &[]);
+        }
+    }
+}

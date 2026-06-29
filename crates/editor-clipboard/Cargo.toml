@@ -20,6 +20,7 @@ wasm = [
 [dependencies]
 editor-model = { path = "../editor-model" }
 editor-state = { path = "../editor-state" }
+editor-crdt = { path = "../editor-crdt" }
 editor-common = { path = "../editor-common" }
 editor-resource = { path = "../editor-resource" }
 editor-macros = { path = "../editor-macros" }
@@ -38,6 +39,6 @@ wasm-bindgen = { workspace = true, optional = true }
 [dev-dependencies]
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state", features = ["test-utils"] }
+editor-transaction = { path = "../editor-transaction" }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
-editor-crdt = { path = "../editor-crdt" }
 serde_json = { workspace = true }

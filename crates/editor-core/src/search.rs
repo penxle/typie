@@ -1,10 +1,10 @@
-use editor_model::{Doc, Node};
+use editor_model::{ChildView, DocView};
 use editor_state::{Position, Selection};
 
 use crate::message::SearchOptions;
 
-pub fn find_matches(doc: &Doc, query: &str, options: &SearchOptions) -> Vec<Selection> {
-    let Some(root) = doc.root() else {
+pub fn find_matches(view: &DocView, query: &str, options: &SearchOptions) -> Vec<Selection> {
+    let Some(root) = view.root() else {
         return Vec::new();
     };
     let query_chars: Vec<char> = query.chars().collect();
@@ -15,10 +15,10 @@ pub fn find_matches(doc: &Doc, query: &str, options: &SearchOptions) -> Vec<Sele
 
     let mut out = Vec::new();
     for desc in root.descendants() {
-        let Node::Text(text_node) = desc.node() else {
+        let ChildView::Block(block) = desc else {
             continue;
         };
-        let chars: Vec<char> = text_node.text.to_string().chars().collect();
+        let chars: Vec<char> = block.inline_text().chars().collect();
         let n = chars.len();
         if m > n {
             continue;
@@ -35,8 +35,8 @@ pub fn find_matches(doc: &Doc, query: &str, options: &SearchOptions) -> Vec<Sele
                 };
                 if passes_word {
                     out.push(Selection::new(
-                        Position::new(desc.id(), i),
-                        Position::new(desc.id(), i + m),
+                        Position::new(block.id(), i),
+                        Position::new(block.id(), i + m),
                     ));
                     i += m;
                     continue;
@@ -61,17 +61,18 @@ mod tests {
         let opts = SearchOptions {
             match_whole_word: whole_word,
         };
-        find_matches(&state.doc, query, &opts)
+        let view = state.view();
+        find_matches(&view, query, &opts)
             .into_iter()
-            .filter_map(|sel| sel.resolve(&state.doc).map(|r| r.collect_text()))
+            .filter_map(|sel| sel.resolve(&view).map(|r| r.collect_text()))
             .collect()
     }
 
     #[test]
     fn empty_query_returns_no_matches() {
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("hello world") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0)
         };
         assert!(matches_text(&state, "", false).is_empty());
     }
@@ -79,17 +80,24 @@ mod tests {
     #[test]
     fn finds_multiple_occurrences_in_single_text_node() {
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("ab ab ab") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("ab ab ab") } } }
+            selection: (p1, 0)
         };
         assert_eq!(matches_text(&state, "ab", false), vec!["ab", "ab", "ab"]);
     }
 
     #[test]
-    fn does_not_cross_text_node_boundary() {
+    fn does_not_cross_block_boundary() {
+        // In the eg-walker model there are no text-node boundaries: adjacent runs
+        // in one block flatten into a single continuous string, so a query may
+        // span them. The boundary search must still not cross is the *block*
+        // boundary — matching is per-block over `inline_text`.
         let (state, ..) = state! {
-            doc { root { paragraph { a: text("foo") b: text("bar") } } }
-            selection: (a, 0)
+            doc { root {
+                p1: paragraph { text("foo") }
+                p2: paragraph { text("bar") }
+            } }
+            selection: (p1, 0)
         };
         assert!(matches_text(&state, "oob", false).is_empty());
     }
@@ -97,8 +105,8 @@ mod tests {
     #[test]
     fn whole_word_excludes_partial_matches() {
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("cat catalog cat") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("cat catalog cat") } } }
+            selection: (p1, 0)
         };
         assert_eq!(matches_text(&state, "cat", true), vec!["cat", "cat"]);
     }
@@ -106,8 +114,8 @@ mod tests {
     #[test]
     fn whole_word_includes_punctuation_boundary() {
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("cat. cat,") } } }
-            selection: (t, 0)
+            doc { root { p1: paragraph { text("cat. cat,") } } }
+            selection: (p1, 0)
         };
         assert_eq!(matches_text(&state, "cat", true), vec!["cat", "cat"]);
     }

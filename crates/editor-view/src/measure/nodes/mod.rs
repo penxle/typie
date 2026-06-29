@@ -1,9 +1,9 @@
-mod atom;
-mod blockquote;
-mod callout;
+pub(crate) mod atom;
+pub(crate) mod blockquote;
+pub(crate) mod callout;
 pub(crate) mod dispatch;
-mod fold;
-mod line_geometry;
-mod list_item;
+pub(crate) mod fold;
+pub(crate) mod line_geometry;
+pub(crate) mod list_item;
 pub(crate) mod paragraph;
-mod table;
+pub(crate) mod table;

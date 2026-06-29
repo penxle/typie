@@ -1,65 +1,51 @@
-use editor_model::Node;
+use editor_model::{ChildView, NodeType};
 use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::remove_atom_leaf;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_page_break_forward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    match node.node() {
-        Node::Text(text_node) => {
-            if pos.offset < text_node.text.len() {
-                return Ok(false);
-            }
-            let next = match node.next_sibling() {
-                Some(next) => next,
-                None => return Ok(false),
-            };
-            if !matches!(next.node(), Node::PageBreak(_)) {
-                return Ok(false);
-            }
-            tr.remove_subtree(next.id())?;
-            Ok(true)
-        }
-        Node::Paragraph(_) => {
-            let last = match node.last_child() {
-                Some(last) => last,
-                None => return Ok(false),
-            };
-            if !matches!(last.node(), Node::PageBreak(_)) {
-                return Ok(false);
-            }
-            let children_count = node.entry().children.len();
-            let last_id = last.id();
-            if pos.offset + 1 == children_count {
-                tr.remove_subtree(last_id)?;
-                Ok(true)
-            } else if pos.offset == children_count {
-                let new_offset = pos.offset - 1;
-                tr.remove_subtree(last_id)?;
-                tr.set_selection(Some(Selection::collapsed(Position {
-                    node_id: pos.node_id,
-                    offset: new_offset,
-                    affinity: pos.affinity,
-                })))?;
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        }
-        _ => Ok(false),
+    let (children_count, last_is_page_break) = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        let last_is_page_break = matches!(
+            node.last_child(),
+            Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak
+        );
+        (node.children().count(), last_is_page_break)
+    };
+
+    if !last_is_page_break {
+        return Ok(false);
+    }
+    let page_break_index = children_count - 1;
+
+    if pos.offset + 1 == children_count {
+        remove_atom_leaf(tr, pos.node, page_break_index)?;
+        Ok(true)
+    } else if pos.offset == children_count {
+        let new_offset = pos.offset - 1;
+        remove_atom_leaf(tr, pos.node, page_break_index)?;
+        tr.set_selection(Some(Selection::collapsed(Position {
+            node: pos.node,
+            offset: new_offset,
+            affinity: pos.affinity,
+        })))?;
+        Ok(true)
+    } else {
+        Ok(false)
     }
 }
 
@@ -72,20 +58,20 @@ mod tests {
 
     #[test]
     fn at_text_end_before_page_break_removes_marker() {
-        let (initial, ..) = state! {
+        let (initial, _t1) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") page_break }
+                    t1: paragraph { text("a") page_break }
                     paragraph { text("b") }
                 }
             }
             selection: (t1, 1)
         };
         let (actual, ..) = transact!(initial, |tr| delete_page_break_forward(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _t1) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    t1: paragraph { text("a") }
                     paragraph { text("b") }
                 }
             }
@@ -144,10 +130,10 @@ mod tests {
 
     #[test]
     fn at_text_end_without_page_break_returns_false() {
-        let (initial, ..) = state! {
+        let (initial, _t1) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    t1: paragraph { text("a") }
                     paragraph { text("b") }
                 }
             }
@@ -158,10 +144,10 @@ mod tests {
 
     #[test]
     fn at_text_end_followed_by_hard_break_returns_false() {
-        let (initial, ..) = state! {
+        let (initial, _t1) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") hard_break }
+                    t1: paragraph { text("a") hard_break }
                 }
             }
             selection: (t1, 1)
@@ -171,9 +157,7 @@ mod tests {
 
     #[test]
     fn at_paragraph_offset_past_page_break_removes_marker_and_shifts_cursor() {
-        // Removing the child shrinks `children.len()`, so an offset equal to the
-        // old length becomes out of bounds and must be decremented in the same step.
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     p1: paragraph { text("a") page_break }
@@ -183,10 +167,10 @@ mod tests {
             selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| delete_page_break_forward(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _t1) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") }
+                    t1: paragraph { text("a") }
                     paragraph { text("b") }
                 }
             }
@@ -197,10 +181,10 @@ mod tests {
 
     #[test]
     fn non_collapsed_selection_returns_false() {
-        let (initial, ..) = state! {
+        let (initial, _t1) = state! {
             doc {
                 root {
-                    paragraph { t1: text("a") page_break }
+                    t1: paragraph { text("a") page_break }
                 }
             }
             selection: (t1, 0) -> (t1, 1)

@@ -17,9 +17,9 @@ fn drain_state_changed_fields(events: Vec<EditorEvent>) -> Vec<StateField> {
 
 #[test]
 fn state_changed_includes_tracked_ranges_when_doc_edit_with_registered_range() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = initial.selection.unwrap();
     let mut editor = Editor::new_test(initial);
@@ -47,14 +47,14 @@ fn state_changed_includes_tracked_ranges_when_doc_edit_with_registered_range() {
         "doc edit with registered range must emit TrackedRanges field; got {fields:?}"
     );
 
-    let _ = t1;
+    let _ = p1;
 }
 
 #[test]
 fn state_changed_omits_tracked_ranges_when_no_range_registered() {
-    let (initial, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 5)
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 5)
     };
     let mut editor = Editor::new_test(initial);
 
@@ -72,5 +72,5 @@ fn state_changed_omits_tracked_ranges_when_no_range_registered() {
         "no TrackedRanges emit when registry is empty; got {fields:?}"
     );
 
-    let _ = t1;
+    let _ = p1;
 }

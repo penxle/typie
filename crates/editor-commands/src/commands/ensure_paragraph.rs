@@ -1,73 +1,82 @@
-use editor_model::{NodeId, NodeType, PlainNode, PlainParagraphNode, Subtree};
+use editor_model::{ChildView, NodeType, PlainNode, PlainParagraphNode, Subtree};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::is_block_container;
+use crate::helpers::{is_block_container, remove_child_at};
 use crate::{CommandError, CommandResult};
 
 pub fn ensure_paragraph(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         return Ok(false);
     }
 
-    let doc = tr.doc();
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
+    let (parent_id, from_offset, remove_count) = {
+        let view = tr.state().view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let from = resolved.from();
+        let to = resolved.to();
 
-    if from.node_id != to.node_id {
-        return Ok(false);
-    }
+        let from_node = from.node();
+        if from_node != to.node() {
+            return Ok(false);
+        }
 
-    let parent = doc
-        .node(from.node_id)
-        .ok_or(CommandError::NodeNotFound(from.node_id))?;
+        let parent = view
+            .node(from_node)
+            .ok_or(CommandError::NodeNotFound(from_node))?;
 
-    if !is_block_container(parent.node()) {
-        return Ok(false);
-    }
+        if !is_block_container(&parent) {
+            return Ok(false);
+        }
 
-    if !parent.spec().content.matches(NodeType::Paragraph) {
-        return Ok(false);
-    }
+        if !parent.spec().content.matches(NodeType::Paragraph) {
+            return Ok(false);
+        }
 
-    let parent_id = parent.id();
-    let children_to_remove: Vec<NodeId> = parent
-        .entry()
-        .children
-        .iter()
-        .skip(from.offset)
-        .take(to.offset - from.offset)
-        .copied()
-        .collect();
+        let from_offset = from.offset();
+        let to_offset = to.offset();
+        let remove_count = to_offset - from_offset;
 
-    let new_para_id = NodeId::new();
+        (from_node, from_offset, remove_count)
+    };
 
     tr.batch::<_, CommandError>(|tr| {
-        for child_id in children_to_remove.into_iter().rev() {
-            tr.remove_subtree(child_id)?;
+        for index in (from_offset..from_offset + remove_count).rev() {
+            remove_child_at(tr, parent_id, index)?;
         }
 
-        let subtree = Subtree::leaf(
-            new_para_id,
-            PlainNode::Paragraph(PlainParagraphNode::default()),
-        );
-        tr.insert_subtree(parent_id, from.offset, subtree)?;
+        let subtree = Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default()));
+        tr.insert_subtree(parent_id, from_offset, subtree)?;
 
-        let doc = tr.doc();
-        if let Some(parent) = doc.node(parent_id) {
-            tr.apply_steps(fulfill(&parent))?;
-        }
+        let steps = {
+            let view = tr.state().view();
+            let parent = view
+                .node(parent_id)
+                .ok_or(CommandError::NodeNotFound(parent_id))?;
+            fulfill(&parent)
+        };
+        tr.apply_steps(steps)?;
         Ok(())
     })?;
 
+    let new_para_id = {
+        let view = tr.state().view();
+        let parent = view
+            .node(parent_id)
+            .ok_or(CommandError::NodeNotFound(parent_id))?;
+        match parent.child_at(from_offset) {
+            Some(ChildView::Block(b)) => b.id(),
+            _ => return Err(CommandError::Corrupted("inserted paragraph missing".into())),
+        }
+    };
+
     tr.set_selection(Some(Selection::collapsed(Position {
-        node_id: new_para_id,
+        node: new_para_id,
         offset: 0,
         affinity: Affinity::Downstream,
     })))?;
@@ -107,8 +116,8 @@ mod tests {
     #[test]
     fn collapsed_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| ensure_paragraph(&mut tr));
     }
@@ -116,8 +125,8 @@ mod tests {
     #[test]
     fn range_within_text_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         transact_fail!(initial, |tr| ensure_paragraph(&mut tr));
     }
@@ -126,10 +135,10 @@ mod tests {
     fn cross_textblock_range_returns_false() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("a") }
-                paragraph { t2: text("b") }
+                p1: paragraph { text("a") }
+                p2: paragraph { text("b") }
             } }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         transact_fail!(initial, |tr| ensure_paragraph(&mut tr));
     }
@@ -139,9 +148,9 @@ mod tests {
         let (initial, ..) = state! {
             doc { r: root {
                 horizontal_rule
-                paragraph { t1: text("hello") }
+                p1: paragraph { text("hello") }
             } }
-            selection: (r, 0, >) -> (t1, 3)
+            selection: (r, 0, >) -> (p1, 3)
         };
         transact_fail!(initial, |tr| ensure_paragraph(&mut tr));
     }

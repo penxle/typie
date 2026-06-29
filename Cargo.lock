@@ -650,6 +650,7 @@ dependencies = [
  "editor-model",
  "editor-resource",
  "editor-state",
+ "editor-transaction",
  "ego-tree",
  "scraper",
  "selectors",
@@ -666,6 +667,7 @@ version = "0.0.1"
 dependencies = [
  "editor-clipboard",
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-resource",
@@ -788,6 +790,7 @@ dependencies = [
 name = "editor-introspection"
 version = "0.0.1"
 dependencies = [
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-state",
@@ -846,9 +849,11 @@ name = "editor-renderer"
 version = "0.0.1"
 dependencies = [
  "editor-common",
+ "editor-crdt",
  "editor-macros",
  "editor-model",
  "editor-resource",
+ "editor-state",
  "editor-view",
  "hashbrown 0.17.1",
  "kurbo",
@@ -875,7 +880,6 @@ version = "0.0.1"
 dependencies = [
  "editor-common",
  "editor-macros",
- "editor-model",
  "fancy-regex",
  "fontique",
  "hashbrown 0.17.1",

@@ -1,12 +1,17 @@
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
+use editor_common::HistoryTag;
 use editor_model::{Fragment, PlainNode};
-use editor_state::enclosing_table_cell;
-use editor_transaction::{HistoryMeta, HistoryTag, StepError, StepRecord, Transaction};
+use editor_state::{
+    ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection, enclosing_table_cell,
+};
+use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::event::EditorEvent;
 use crate::message::*;
+use crate::state_field::StateField;
 
 pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), EditorError> {
     match op {
@@ -21,11 +26,24 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
             };
             let is_html_paste = html.as_deref().is_some_and(|h| !h.is_empty());
             let plain_text = is_html_paste.then(|| text.clone());
+            let (start_flat, pre_block) = if is_html_paste {
+                let view = editor.state().view();
+                let sel = editor.state().selection;
+                let start_flat = sel
+                    .and_then(|s| s.resolve(&view))
+                    .map(|rs| rs.from().to_flat());
+                (start_flat, sel.map(|s| s.head.node))
+            } else {
+                (None, None)
+            };
             editor.transact(|tr| {
-                if let Some(plain_text) = plain_text {
+                if let Some(plain_text) = plain_text.clone() {
                     tr.update_meta(|m| {
                         m.history = HistoryMeta::Tagged {
-                            tag: HistoryTag::PasteHtml { plain_text },
+                            tag: HistoryTag::PasteHtml {
+                                plain_text,
+                                start: None,
+                            },
                         };
                     });
                 }
@@ -46,29 +64,103 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     |tr| commands::insert_slice(tr, slice.clone()),
                 )?;
                 Ok(())
-            })
+            })?;
+            if !editor.is_probing()
+                && let (Some(start), Some(pre), Some(plain_text)) =
+                    (start_flat, pre_block, plain_text)
+                && matches!(
+                    editor.last_history_tag(),
+                    Some(HistoryTag::PasteHtml { .. })
+                )
+                && editor.state().selection.map(|s| s.head.node) == Some(pre)
+            {
+                editor
+                    .undo_history
+                    .set_last_tag(Some(HistoryTag::PasteHtml {
+                        plain_text,
+                        start: Some(start),
+                    }));
+            }
+            Ok(())
         }
         ClipboardOp::RepasteAsText => {
-            let Some(HistoryTag::PasteHtml { plain_text }) = editor.last_history_tag() else {
+            let Some(HistoryTag::PasteHtml { plain_text, start }) = editor.last_history_tag()
+            else {
                 return Ok(());
             };
-            let plain_text = plain_text.clone();
-            let Some(inverse_playback_steps) = editor.history_last_inverse_playback_steps() else {
-                return Ok(());
-            };
-            let source_records: Vec<StepRecord> = inverse_playback_steps
-                .iter()
-                .rev()
-                .map(|step| step.source.clone())
-                .collect();
-            let inverse_steps = inverse_playback_steps
-                .into_iter()
-                .map(|step| step.step_to_apply)
-                .collect();
             let plain_slice = Slice::from_text(&plain_text);
+
+            let inline = start.and_then(|start_flat| {
+                let view = editor.state().view();
+                let end_flat = editor
+                    .state()
+                    .selection
+                    .and_then(|s| s.resolve(&view))
+                    .map(|rs| rs.to().to_flat())?;
+                let anchor = ResolvedPosition::from_flat(&view, start_flat)?;
+                let head = ResolvedPosition::from_flat(&view, end_flat)?;
+                let a: editor_state::Position = (&anchor).into();
+                let h: editor_state::Position = (&head).into();
+                (a.node == h.node).then_some((Selection::new(a, h), start_flat, end_flat))
+            });
+
+            if let Some((range, span_start, span_end)) = inline {
+                let reanchors: Vec<(String, usize, usize)> = {
+                    let state = editor.state();
+                    let view = state.view();
+                    editor
+                        .tracked_ranges()
+                        .iter()
+                        .filter_map(|range| {
+                            let resolved = range.locate(state)?.resolve(&view)?;
+                            let a = resolved.from().to_flat();
+                            let b = resolved.to().to_flat();
+                            (a >= span_start && b <= span_end).then(|| (range.id.clone(), a, b))
+                        })
+                        .collect()
+                };
+                editor.transact(|tr| {
+                    tr.set_selection(Some(range))?;
+                    commands::chain!(
+                        tr,
+                        commands::optional!(commands::delete_selection()),
+                        |tr| commands::insert_slice(tr, plain_slice.clone()),
+                    )?;
+                    Ok(())
+                })?;
+                if !editor.is_probing() {
+                    let mut changed = false;
+                    for (id, a, b) in reanchors {
+                        let stable = {
+                            let view = editor.state().view();
+                            match (
+                                ResolvedPosition::from_flat(&view, a),
+                                ResolvedPosition::from_flat(&view, b),
+                            ) {
+                                (Some(anchor), Some(head)) => Some(StableSelection::capture(
+                                    &Selection::new((&anchor).into(), (&head).into()),
+                                    &view,
+                                )),
+                                _ => None,
+                            }
+                        };
+                        if let Some(stable) = stable {
+                            changed |= editor.tracked_ranges_mut().set_selection(&id, stable);
+                        }
+                    }
+                    if changed {
+                        editor.push_event(EditorEvent::StateChanged {
+                            fields: vec![StateField::TrackedRanges],
+                        });
+                    }
+                }
+                return Ok(());
+            }
+
+            if !editor.try_undo() {
+                return Ok(());
+            }
             editor.transact(|tr| {
-                tr.apply_steps(inverse_steps)?;
-                let replacement_start = tr.step_records_len();
                 commands::chain!(
                     tr,
                     commands::optional!(commands::materialize_gap_paragraph()),
@@ -76,40 +168,17 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     commands::optional!(commands::delete_selection()),
                     |tr| commands::insert_slice(tr, plain_slice.clone()),
                 )?;
-                let replacement_records = tr.step_records_since(replacement_start).to_vec();
-                apply_repaste_as_text_remaps(tr, &source_records, &replacement_records)?;
                 Ok(())
             })
         }
     }
 }
 
-fn apply_repaste_as_text_remaps(
-    tr: &mut Transaction,
-    source_records: &[StepRecord],
-    replacement_records: &[StepRecord],
-) -> Result<(), StepError> {
-    let source_inserts: Vec<_> = source_records
-        .iter()
-        .flat_map(|record| record.effect.text_inserts.iter())
-        .collect();
-    let replacement_inserts: Vec<_> = replacement_records
-        .iter()
-        .flat_map(|record| record.effect.text_inserts.iter())
-        .collect();
-
-    super::history::apply_insert_effect_remaps(
-        tr,
-        source_inserts.iter().copied(),
-        replacement_inserts.iter().copied(),
-    )
-}
-
 fn is_cell_rect_selection(tr: &editor_transaction::Transaction) -> bool {
     let Some(sel) = tr.selection() else {
         return false;
     };
-    let doc = tr.doc();
+    let doc = tr.view();
     sel.resolve(&doc).and_then(|rs| rs.as_cell_rect()).is_some()
 }
 
@@ -120,8 +189,8 @@ fn caret_in_table_cell(tr: &editor_transaction::Transaction) -> bool {
     if !sel.is_collapsed() {
         return false;
     }
-    let doc = tr.doc();
-    enclosing_table_cell(&doc, sel.head.node_id).is_some()
+    let doc = tr.view();
+    enclosing_table_cell(&doc, sel.head.node).is_some()
 }
 
 fn slice_has_table(slice: &Slice) -> bool {
@@ -138,10 +207,10 @@ fn slice_has_table(slice: &Slice) -> bool {
 mod tests {
     use crate::event::EditorEvent;
     use crate::state_field::StateField;
+    use editor_common::HistoryTag;
     use editor_macros::state;
     use editor_model::ModifierType;
-    use editor_state::{DocFlatExt, ResolvedPositionFlatExt, Selection, assert_state_eq};
-    use editor_transaction::HistoryTag;
+    use editor_state::{ResolvedPositionFlatExt, Selection, assert_doc_eq, assert_state_eq};
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
@@ -155,8 +224,8 @@ mod tests {
     #[test]
     fn probe_cut_with_collapsed_selection() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         assert_probe_predicts_apply(
             state,
@@ -169,8 +238,8 @@ mod tests {
     #[test]
     fn probe_paste_empty() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         assert_probe_predicts_apply(
             state,
@@ -203,10 +272,10 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
-                paragraph { t1: text("b") }
+                p1: paragraph { text("b") }
                 paragraph { text("c") }
             } }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -225,8 +294,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("pasted") } image paragraph { text("b") } } }
-            selection: (t1, 6)
+            doc { root { p1: paragraph { text("pasted") } image paragraph { text("b") } } }
+            selection: (p1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -234,16 +303,16 @@ mod tests {
     #[test]
     fn cut_deletes_selection() {
         let (s, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let mut editor = Editor::new_test(s);
         editor.apply(Message::Clipboard {
             op: ClipboardOp::Cut,
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("Ho") } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("Ho") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -279,28 +348,28 @@ mod tests {
             } }
             selection: (r, 0)
         };
-        editor_model::assert_doc_eq!(&editor.state().doc, &expected.doc);
+        assert_doc_eq!(editor.state().clone(), expected);
     }
 
     #[test]
     fn paste_backward_open_paragraph_copy_at_text_end() {
-        let (source, _t1, t2) = state! {
+        let (source, _p1, p2) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("a")
+                    p1: paragraph {
+                        text("a")
                     }
-                    paragraph {
-                        t2: text("b")
+                    p2: paragraph {
+                        text("b")
                     }
                 }
             }
-            selection: (t2, 0, <) -> (t1, 0, >)
+            selection: (p2, 0, <) -> (p1, 0, >)
         };
         let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
         let target = editor_state::State {
             selection: Some(editor_state::Selection::collapsed(
-                editor_state::Position::new(t2, 1),
+                editor_state::Position::new(p2, 1),
             )),
             ..source
         };
@@ -338,9 +407,9 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
-        let (target, _t1) = state! {
-            doc { root { paragraph { t1: text("asd") } } }
-            selection: (t1, 1)
+        let (target, _p1) = state! {
+            doc { root { p1: paragraph { text("asd") } } }
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(target);
 
@@ -372,20 +441,20 @@ mod tests {
             } }
             selection: none
         };
-        let selection = editor_state::paragraph_break_selection_at_paragraph_end(
-            &source.doc,
-            editor_state::Position::new(p1, 0),
-        )
-        .expect("empty paragraph before non-paragraph has break");
+        let selection = {
+            let view = source.view();
+            editor_state::paragraph_break_at_end(&editor_state::Position::new(p1, 0), &view)
+                .expect("empty paragraph before non-paragraph has break")
+        };
         let source = editor_state::State {
             selection: Some(selection),
             ..source
         };
         let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
 
-        let (target, _t1) = state! {
-            doc { root { paragraph { t1: text("asd") } } }
-            selection: (t1, 1)
+        let (target, _p1) = state! {
+            doc { root { p1: paragraph { text("asd") } } }
+            selection: (p1, 1)
         };
         let mut editor = Editor::new_test(target);
 
@@ -399,31 +468,31 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
-                paragraph { t2: text("sd") }
+                p2: paragraph { text("sd") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
     fn paste_open_empty_paragraph_range_into_text_middle_inserts_boundary() {
-        let (source, _p1, _t1) = state! {
+        let (source, _p1, _p2) = state! {
             doc { root {
                 p1: paragraph {}
-                paragraph { t1: text("asd") }
+                p2: paragraph { text("asd") }
                 paragraph {}
             } }
-            selection: (p1, 0, >) -> (t1, 0, <)
+            selection: (p1, 0, >) -> (p2, 0, <)
         };
         let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
-        let (target, _t2) = state! {
+        let (target, _p2) = state! {
             doc { root {
                 paragraph {}
-                paragraph { t2: text("asd") }
+                p2: paragraph { text("asd") }
                 paragraph {}
             } }
-            selection: (t2, 1)
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(target);
 
@@ -438,10 +507,10 @@ mod tests {
             doc { root {
                 paragraph {}
                 paragraph { text("a") }
-                paragraph { t3: text("sd") }
+                p3: paragraph { text("sd") }
                 paragraph {}
             } }
-            selection: (t3, 0)
+            selection: (p3, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -449,8 +518,8 @@ mod tests {
     #[test]
     fn paste_crlf_text_does_not_fail() {
         let (s, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(s);
         editor.apply(Message::Clipboard {
@@ -460,8 +529,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { text("a") hard_break t2: text("b") } } }
-            selection: (t2, 1)
+            doc { root { p1: paragraph { text("a") hard_break text("b") } } }
+            selection: (p1, 3)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -483,7 +552,10 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let sel = {
+            let view = s.view();
+            editor_state::cell_rect_selection(c00, c11, &view).unwrap()
+        };
         let s = editor_state::State {
             selection: Some(sel),
             ..s
@@ -492,10 +564,14 @@ mod tests {
         editor.apply(Message::Clipboard {
             op: ClipboardOp::Cut,
         });
+        let view = editor.state().view();
         for cid in [c00, c01, c10, c11] {
-            let cell = editor.state().doc.node(cid).expect("cell survives cut");
+            let cell = view.node(cid).expect("cell survives cut");
             assert_eq!(cell.children().count(), 1);
-            assert_eq!(cell.first_child().unwrap().children().count(), 0);
+            let editor_model::ChildView::Block(para) = cell.first_child().unwrap() else {
+                panic!("cell child must be a paragraph block");
+            };
+            assert_eq!(para.children().count(), 0);
         }
     }
 
@@ -514,7 +590,10 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let sel = {
+            let view = s.view();
+            editor_state::cell_rect_selection(c00, c11, &view).unwrap()
+        };
         let s = editor_state::State {
             selection: Some(sel),
             ..s
@@ -523,7 +602,7 @@ mod tests {
         editor.apply(Message::Clipboard {
             op: ClipboardOp::Cut,
         });
-        assert!(editor.state().doc.node(tbl).is_none());
+        assert!(editor.state().view().node(tbl).is_none());
     }
 
     #[test]
@@ -541,7 +620,10 @@ mod tests {
             } } }
             selection: (c00s, 0)
         };
-        let sel_src = editor_state::cell_rect_selection(&s_src.doc, c00s, c11s).unwrap();
+        let sel_src = {
+            let view = s_src.view();
+            editor_state::cell_rect_selection(c00s, c11s, &view).unwrap()
+        };
         let s_src = editor_state::State {
             selection: Some(sel_src),
             ..s_src
@@ -563,7 +645,10 @@ mod tests {
             } } }
             selection: (c00t, 0)
         };
-        let sel_tgt = editor_state::cell_rect_selection(&s_tgt.doc, c00t, c11t).unwrap();
+        let sel_tgt = {
+            let view = s_tgt.view();
+            editor_state::cell_rect_selection(c00t, c11t, &view).unwrap()
+        };
         let s_tgt = editor_state::State {
             selection: Some(sel_tgt),
             ..s_tgt
@@ -576,26 +661,15 @@ mod tests {
             },
         });
 
-        let tbl = editor.state().doc.node(tbl).expect("table survives paste");
-        assert_eq!(tbl.children().count(), 2);
-        let texts: Vec<String> = tbl
-            .children()
-            .flat_map(|row| {
-                row.children().map(|cell| {
-                    let mut out = String::new();
-                    fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
-                        if let editor_model::Node::Text(t) = n.node() {
-                            out.push_str(&t.text.to_string());
-                        }
-                        for c in n.children() {
-                            walk(c, out);
-                        }
-                    }
-                    walk(cell, &mut out);
-                    out
-                })
-            })
-            .collect();
+        let view = editor.state().view();
+        let tbl = view.node(tbl).expect("table survives paste");
+        assert_eq!(tbl.child_blocks().count(), 2);
+        let mut texts: Vec<String> = Vec::new();
+        for row in tbl.child_blocks() {
+            for cell in row.child_blocks() {
+                texts.push(cell.child_blocks().map(|p| p.inline_text()).collect());
+            }
+        }
         assert_eq!(texts, vec!["X", "Y", "x", "Z", "W", "y"]);
     }
 
@@ -611,7 +685,10 @@ mod tests {
             } } }
             selection: (sc00, 0)
         };
-        let sel_src = editor_state::cell_rect_selection(&s_src.doc, sc00, sc40).unwrap();
+        let sel_src = {
+            let view = s_src.view();
+            editor_state::cell_rect_selection(sc00, sc40, &view).unwrap()
+        };
         let s_src = editor_state::State {
             selection: Some(sel_src),
             ..s_src
@@ -638,7 +715,10 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel_tgt = editor_state::cell_rect_selection(&s_tgt.doc, c00, c21).unwrap();
+        let sel_tgt = {
+            let view = s_tgt.view();
+            editor_state::cell_rect_selection(c00, c21, &view).unwrap()
+        };
         let s_tgt = editor_state::State {
             selection: Some(sel_tgt),
             ..s_tgt
@@ -651,47 +731,37 @@ mod tests {
             },
         });
 
-        fn cell_text_at(
-            doc: &editor_model::Doc,
-            tbl: editor_model::NodeId,
+        fn cell_text_at<'a>(
+            view: &'a editor_model::DocView<'a>,
+            tbl: editor_crdt::Dot,
             row: usize,
             col: usize,
         ) -> String {
-            let table = doc.node(tbl).expect("table");
-            let row_ref = table.children().nth(row).expect("row");
-            let cell = row_ref.children().nth(col).expect("cell");
-            let mut out = String::new();
-            fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
-                if let editor_model::Node::Text(t) = n.node() {
-                    out.push_str(&t.text.to_string());
-                }
-                for c in n.children() {
-                    walk(c, out);
-                }
-            }
-            walk(cell, &mut out);
-            out
+            let table = view.node(tbl).expect("table");
+            let row_nv = table.child_blocks().nth(row).expect("row");
+            let cell = row_nv.child_blocks().nth(col).expect("cell");
+            cell.child_blocks().map(|p| p.inline_text()).collect()
         }
 
-        let doc = &editor.state().doc;
-        let table = doc.node(tbl).expect("table survives");
-        assert_eq!(table.children().count(), 5, "target now has 5 rows");
-        for row in table.children() {
-            assert_eq!(row.children().count(), 3, "every row keeps 3 cols");
+        let view = editor.state().view();
+        let table = view.node(tbl).expect("table survives");
+        assert_eq!(table.child_blocks().count(), 5, "target now has 5 rows");
+        for row in table.child_blocks() {
+            assert_eq!(row.child_blocks().count(), 3, "every row keeps 3 cols");
         }
         for (row, ch) in ["A", "B", "C", "D", "E"].iter().enumerate() {
-            assert_eq!(cell_text_at(doc, tbl, row, 0), *ch);
+            assert_eq!(cell_text_at(&view, tbl, row, 0), *ch);
         }
-        assert_eq!(cell_text_at(doc, tbl, 0, 1), "b");
-        assert_eq!(cell_text_at(doc, tbl, 1, 1), "d");
-        assert_eq!(cell_text_at(doc, tbl, 2, 1), "f");
-        assert_eq!(cell_text_at(doc, tbl, 3, 1), "");
-        assert_eq!(cell_text_at(doc, tbl, 4, 1), "");
-        assert_eq!(cell_text_at(doc, tbl, 0, 2), "x");
-        assert_eq!(cell_text_at(doc, tbl, 1, 2), "y");
-        assert_eq!(cell_text_at(doc, tbl, 2, 2), "z");
-        assert_eq!(cell_text_at(doc, tbl, 3, 2), "");
-        assert_eq!(cell_text_at(doc, tbl, 4, 2), "");
+        assert_eq!(cell_text_at(&view, tbl, 0, 1), "b");
+        assert_eq!(cell_text_at(&view, tbl, 1, 1), "d");
+        assert_eq!(cell_text_at(&view, tbl, 2, 1), "f");
+        assert_eq!(cell_text_at(&view, tbl, 3, 1), "");
+        assert_eq!(cell_text_at(&view, tbl, 4, 1), "");
+        assert_eq!(cell_text_at(&view, tbl, 0, 2), "x");
+        assert_eq!(cell_text_at(&view, tbl, 1, 2), "y");
+        assert_eq!(cell_text_at(&view, tbl, 2, 2), "z");
+        assert_eq!(cell_text_at(&view, tbl, 3, 2), "");
+        assert_eq!(cell_text_at(&view, tbl, 4, 2), "");
     }
 
     #[test]
@@ -704,7 +774,10 @@ mod tests {
             } } }
             selection: (sc00, 0)
         };
-        let sel_src = editor_state::cell_rect_selection(&s_src.doc, sc00, sc20).unwrap();
+        let sel_src = {
+            let view = s_src.view();
+            editor_state::cell_rect_selection(sc00, sc20, &view).unwrap()
+        };
         let s_src = editor_state::State {
             selection: Some(sel_src),
             ..s_src
@@ -714,7 +787,7 @@ mod tests {
         let (s_tgt, tbl, _, _, ct, _, _, _, _) = state! {
             doc { root { tbl: table {
                 tr0: table_row {
-                    c00: table_cell { paragraph { ct: text("hi") } }
+                    c00: table_cell { ct: paragraph { text("hi") } }
                     c01: table_cell { paragraph { text("x") } }
                 }
                 tr1: table_row {
@@ -734,41 +807,31 @@ mod tests {
 
         let _ = ct;
 
-        let doc = &editor.state().doc;
-        let table = doc.node(tbl).expect("table survives");
-        assert_eq!(table.children().count(), 3);
-        for row in table.children() {
-            assert_eq!(row.children().count(), 2);
+        let view = editor.state().view();
+        let table = view.node(tbl).expect("table survives");
+        assert_eq!(table.child_blocks().count(), 3);
+        for row in table.child_blocks() {
+            assert_eq!(row.child_blocks().count(), 2);
         }
 
-        fn cell_text_at(
-            doc: &editor_model::Doc,
-            tbl: editor_model::NodeId,
+        fn cell_text_at<'a>(
+            view: &'a editor_model::DocView<'a>,
+            tbl: editor_crdt::Dot,
             row: usize,
             col: usize,
         ) -> String {
-            let table = doc.node(tbl).expect("table");
-            let row_ref = table.children().nth(row).expect("row");
-            let cell = row_ref.children().nth(col).expect("cell");
-            let mut out = String::new();
-            fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
-                if let editor_model::Node::Text(t) = n.node() {
-                    out.push_str(&t.text.to_string());
-                }
-                for c in n.children() {
-                    walk(c, out);
-                }
-            }
-            walk(cell, &mut out);
-            out
+            let table = view.node(tbl).expect("table");
+            let row_nv = table.child_blocks().nth(row).expect("row");
+            let cell = row_nv.child_blocks().nth(col).expect("cell");
+            cell.child_blocks().map(|p| p.inline_text()).collect()
         }
 
-        assert_eq!(cell_text_at(doc, tbl, 0, 0), "A");
-        assert_eq!(cell_text_at(doc, tbl, 1, 0), "B");
-        assert_eq!(cell_text_at(doc, tbl, 2, 0), "C");
-        assert_eq!(cell_text_at(doc, tbl, 0, 1), "x");
-        assert_eq!(cell_text_at(doc, tbl, 1, 1), "z");
-        assert_eq!(cell_text_at(doc, tbl, 2, 1), "");
+        assert_eq!(cell_text_at(&view, tbl, 0, 0), "A");
+        assert_eq!(cell_text_at(&view, tbl, 1, 0), "B");
+        assert_eq!(cell_text_at(&view, tbl, 2, 0), "C");
+        assert_eq!(cell_text_at(&view, tbl, 0, 1), "x");
+        assert_eq!(cell_text_at(&view, tbl, 1, 1), "z");
+        assert_eq!(cell_text_at(&view, tbl, 2, 1), "");
     }
 
     #[test]
@@ -788,7 +851,10 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let sel = {
+            let view = s.view();
+            editor_state::cell_rect_selection(c00, c11, &view).unwrap()
+        };
         let s = editor_state::State {
             selection: Some(sel),
             ..s
@@ -800,24 +866,15 @@ mod tests {
                 text: "hello".into(),
             },
         });
-        fn cell_text(doc: &editor_model::Doc, id: editor_model::NodeId) -> String {
-            fn walk(n: editor_model::NodeRef<'_>, out: &mut String) {
-                if let editor_model::Node::Text(t) = n.node() {
-                    out.push_str(&t.text.to_string());
-                }
-                for c in n.children() {
-                    walk(c, out);
-                }
+        fn cell_text<'a>(view: &'a editor_model::DocView<'a>, id: editor_crdt::Dot) -> String {
+            match view.node(id) {
+                Some(cell) => cell.child_blocks().map(|p| p.inline_text()).collect(),
+                None => String::new(),
             }
-            let mut out = String::new();
-            if let Some(n) = doc.node(id) {
-                walk(n, &mut out);
-            }
-            out
         }
-        let doc = &editor.state().doc;
+        let view = editor.state().view();
         for cid in [c00, c01, c10, c11] {
-            assert_eq!(cell_text(doc, cid), "hello");
+            assert_eq!(cell_text(&view, cid), "hello");
         }
     }
 
@@ -836,7 +893,10 @@ mod tests {
             } } }
             selection: (c00s, 0)
         };
-        let sel_src = editor_state::cell_rect_selection(&s_src.doc, c00s, c11s).unwrap();
+        let sel_src = {
+            let view = s_src.view();
+            editor_state::cell_rect_selection(c00s, c11s, &view).unwrap()
+        };
         let s_src = editor_state::State {
             selection: Some(sel_src),
             ..s_src
@@ -858,12 +918,15 @@ mod tests {
             } } }
             selection: (c00t, 0)
         };
-        let sel_tgt = editor_state::cell_rect_selection(&s_tgt.doc, c00t, c11t).unwrap();
+        let sel_tgt = {
+            let view = s_tgt.view();
+            editor_state::cell_rect_selection(c00t, c11t, &view).unwrap()
+        };
         let s_tgt = editor_state::State {
             selection: Some(sel_tgt),
             ..s_tgt
         };
-        let before = s_tgt.doc.clone();
+        let before = s_tgt.clone();
         let mut editor = Editor::new_test(s_tgt);
         editor.apply(Message::Clipboard {
             op: ClipboardOp::Paste {
@@ -874,20 +937,20 @@ mod tests {
         editor.apply(Message::History {
             op: HistoryOp::Undo,
         });
-        editor_model::assert_doc_eq!(&editor.state().doc, &before);
+        assert_doc_eq!(editor.state().clone(), before);
     }
 
     #[test]
     fn paste_html_with_meta_lossless() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("source") } } }
-            selection: (t1, 0) -> (t1, 6)
+            doc { root { p1: paragraph { text("source") } } }
+            selection: (p1, 0) -> (p1, 6)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
         editor.apply(Message::Clipboard {
@@ -897,8 +960,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t3: text("Hsourcei") } } }
-            selection: (t3, 7)
+            doc { root { p3: paragraph { text("Hsourcei") } } }
+            selection: (p3, 7)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -906,14 +969,14 @@ mod tests {
     #[test]
     fn paste_html_sets_paste_html_tag() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("") } } }
-            selection: (t2, 0)
+            doc { root { p2: paragraph { text("") } } }
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(s_target);
         editor.apply(Message::Clipboard {
@@ -923,9 +986,9 @@ mod tests {
             },
         });
 
-        let tag = editor.last_history_tag().cloned();
+        let tag = editor.last_history_tag();
         assert!(
-            matches!(tag, Some(HistoryTag::PasteHtml { ref plain_text }) if plain_text == &payload.text),
+            matches!(tag, Some(HistoryTag::PasteHtml { ref plain_text, .. }) if plain_text == &payload.text),
             "expected PasteHtml tag with plain_text == payload.text, got {tag:?}"
         );
     }
@@ -933,8 +996,8 @@ mod tests {
     #[test]
     fn paste_with_text_only_does_not_set_tag() {
         let (s, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(s);
         editor.apply(Message::Clipboard {
@@ -949,8 +1012,8 @@ mod tests {
     #[test]
     fn paste_with_empty_html_does_not_set_tag() {
         let (s, ..) = state! {
-            doc { root { paragraph { t1: text("") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(s);
         editor.apply(Message::Clipboard {
@@ -965,14 +1028,14 @@ mod tests {
     #[test]
     fn repaste_as_text_replaces_paste_region_with_plain() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -987,8 +1050,8 @@ mod tests {
         });
 
         let (expected, ..) = state! {
-            doc { root { paragraph { t3: text("Hhelloi") } } }
-            selection: (t3, 6)
+            doc { root { p3: paragraph { text("Hhelloi") } } }
+            selection: (p3, 6)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
@@ -996,14 +1059,14 @@ mod tests {
     #[test]
     fn repaste_as_text_remaps_tracked_range_on_pasted_text() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1015,7 +1078,7 @@ mod tests {
         });
         let selection = editor.state().selection.unwrap();
         let pasted = Selection::new(
-            editor_state::Position::new(selection.head.node_id, selection.head.offset - 5),
+            editor_state::Position::new(selection.head.node, selection.head.offset - 5),
             selection.head,
         );
         editor.apply(Message::TrackedRange {
@@ -1032,9 +1095,10 @@ mod tests {
         });
 
         let range = editor.tracked_ranges().get("r").expect("range present");
+        let view = editor.state().view();
         let resolved = range
-            .locate(&editor.state().doc)
-            .and_then(|sel| sel.resolve(&editor.state().doc))
+            .locate(editor.state())
+            .and_then(|sel| sel.resolve(&view))
             .map(|resolved| resolved.collect_text());
         assert_eq!(resolved.as_deref(), Some("hello"));
     }
@@ -1042,14 +1106,14 @@ mod tests {
     #[test]
     fn last_history_tag_field_tracks_repaste_as_text_availability() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
         let expected_text = payload.text.clone();
@@ -1062,7 +1126,7 @@ mod tests {
         });
         assert!(matches!(
             editor.last_history_tag(),
-            Some(HistoryTag::PasteHtml { plain_text }) if plain_text == &expected_text
+            Some(HistoryTag::PasteHtml { ref plain_text, .. }) if plain_text == &expected_text
         ));
         assert!(has_state_field(&paste_events, StateField::LastHistoryTag));
 
@@ -1076,14 +1140,14 @@ mod tests {
     #[test]
     fn last_history_tag_field_emits_for_repeated_equal_html_paste() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
         let html = payload.html.clone();
@@ -1111,8 +1175,8 @@ mod tests {
     #[test]
     fn repaste_as_text_is_noop_when_last_tag_absent() {
         let (s, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let initial = s.clone();
         let mut editor = Editor::new_test(s);
@@ -1125,14 +1189,14 @@ mod tests {
     #[test]
     fn repaste_as_text_expires_after_other_edit() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("") } } }
-            selection: (t2, 0)
+            doc { root { p2: paragraph { text("") } } }
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1155,14 +1219,14 @@ mod tests {
     #[test]
     fn repaste_as_text_expires_after_deletion() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1189,14 +1253,14 @@ mod tests {
     #[test]
     fn repaste_as_text_expires_after_modifier_toggle() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 0) -> (t2, 2)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 0) -> (p2, 2)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1221,14 +1285,14 @@ mod tests {
     #[test]
     fn repaste_as_text_expires_after_ime_composition_start() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1240,11 +1304,12 @@ mod tests {
         });
 
         let state = editor.state();
+        let view = state.view();
         let head_flat = state
             .selection
             .unwrap()
             .head
-            .resolve(&state.doc)
+            .resolve(&view)
             .unwrap()
             .to_flat();
         editor.apply(Message::TextInput {
@@ -1264,14 +1329,14 @@ mod tests {
     #[test]
     fn repaste_as_text_expires_after_selection_change() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
-        let (s_target, t2) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+        let (s_target, p2) = state! {
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1283,7 +1348,7 @@ mod tests {
         });
         editor.apply(Message::Selection {
             op: SelectionOp::Set {
-                selection: editor_state::Selection::collapsed(editor_state::Position::new(t2, 0)),
+                selection: editor_state::Selection::collapsed(editor_state::Position::new(p2, 0)),
             },
         });
         let before = editor.state().clone();
@@ -1296,14 +1361,14 @@ mod tests {
     #[test]
     fn repaste_as_text_expires_after_undo() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1326,14 +1391,14 @@ mod tests {
     #[test]
     fn repaste_as_text_undo_returns_to_html_paste_state() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1356,14 +1421,14 @@ mod tests {
     #[test]
     fn repaste_as_text_undo_twice_returns_to_pre_paste_state() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let pre_paste = s_target.clone();
         let mut editor = Editor::new_test(s_target);
@@ -1389,14 +1454,14 @@ mod tests {
     #[test]
     fn repaste_as_text_is_one_shot() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1418,102 +1483,42 @@ mod tests {
 
     #[test]
     fn repaste_as_text_expires_after_remote_changeset() {
-        use std::collections::BTreeMap;
-
-        use editor_crdt::TextOp;
-        use editor_model::{
-            Doc, DocOp, Modifier, ModifierType, NodeId, PlainDoc, PlainNode, PlainNodeEntry,
-            PlainParagraphNode, PlainRootNode, PlainTextNode,
-        };
-        use editor_state::{Position, Selection, State};
+        use editor_crdt::{Dot, ListOp};
+        use editor_model::{EditOp, SeqItem};
+        use editor_state::State;
         use hashbrown::HashSet;
 
-        let para_id = NodeId::new();
-        let text_id = NodeId::new();
-
-        let root_modifiers = BTreeMap::from([
-            (
-                ModifierType::FontFamily,
-                Modifier::FontFamily {
-                    value: "Pretendard".into(),
-                },
-            ),
-            (
-                ModifierType::FontWeight,
-                Modifier::FontWeight { value: 400 },
-            ),
-        ]);
-
-        let mut nodes = BTreeMap::new();
-        nodes.insert(
-            NodeId::ROOT,
-            PlainNodeEntry {
-                parent: None,
-                children: vec![para_id],
-                modifiers: root_modifiers,
-                style: None,
-                marker: None,
-                node: PlainNode::Root(PlainRootNode::default()),
-            },
-        );
-        nodes.insert(
-            para_id,
-            PlainNodeEntry {
-                parent: Some(NodeId::ROOT),
-                children: vec![text_id],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Paragraph(PlainParagraphNode {}),
-            },
-        );
-        nodes.insert(
-            text_id,
-            PlainNodeEntry {
-                parent: Some(para_id),
-                children: vec![],
-                modifiers: BTreeMap::new(),
-                style: None,
-                marker: None,
-                node: PlainNode::Text(PlainTextNode {
-                    text: String::new(),
-                }),
-            },
-        );
-        let plain = PlainDoc {
-            nodes,
-            styles: BTreeMap::new(),
+        let (replica_a, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
         };
+        let css_a = replica_a.graph().changesets_as_vec();
+        let replica_b =
+            State::from_changesets(css_a, replica_a.selection).expect("from_changesets");
 
-        let (doc, graph) = Doc::from_plain(plain);
-        let sel = Selection::collapsed(Position::new(NodeId::ROOT, 0));
-        let seed = State::new(doc, graph, Some(sel));
-        let seed_css = seed.graph.changesets_as_vec();
-        let replica_b = State::from_changesets(seed_css, Some(sel)).expect("from_changesets");
-
-        let baseline: HashSet<_> = seed.graph.current_heads().copied().collect();
-        let (state_a, _) = seed
-            .apply(DocOp::Text {
-                node_id: text_id,
-                op: TextOp::InsertChar {
-                    after: None,
-                    ch: 'r',
-                },
-            })
+        // Produce a remote changeset by inserting a char on a fork of replica_a's
+        // projected graph (continuing actor 1's clock, unknown to replica_b).
+        let remote_cs = {
+            let mut pa = replica_a.projected.clone();
+            let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
+            pa.apply_batch(vec![EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('r'),
+            })])
             .unwrap();
-        let state_a = State {
-            graph: state_a.graph.commit(),
-            ..state_a
+            pa.commit();
+            pa.graph()
+                .local_changesets_since(&baseline)
+                .unwrap()
+                .remove(0)
         };
-        let mut css = state_a.local_changesets_since(&baseline).unwrap();
-        let remote_cs = css.remove(0);
 
         let mut editor = Editor::new_test(replica_b);
 
         let source_payload = {
             let (s_source, ..) = state! {
-                doc { root { paragraph { t1: text("hello") } } }
-                selection: (t1, 0) -> (t1, 5)
+                doc { root { p1: paragraph { text("hello") } } }
+                selection: (p1, 0) -> (p1, 5)
             };
             Slice::extract(&s_source).unwrap().to_payload()
         };
@@ -1537,17 +1542,17 @@ mod tests {
     #[test]
     fn repaste_as_text_survives_duplicate_remote_changeset() {
         let (s_source, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let payload = Slice::extract(&s_source).unwrap().to_payload();
 
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("Hi") } } }
-            selection: (t2, 1)
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
         };
         let duplicate_cs = s_target
-            .graph
+            .graph()
             .changesets_as_vec()
             .into_iter()
             .next()
@@ -1571,8 +1576,8 @@ mod tests {
         });
 
         let (expected, ..) = state! {
-            doc { root { paragraph { t3: text("Hhelloi") } } }
-            selection: (t3, 6)
+            doc { root { p3: paragraph { text("Hhelloi") } } }
+            selection: (p3, 6)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
@@ -1580,8 +1585,8 @@ mod tests {
     #[test]
     fn repaste_as_text_preserves_list_marker_from_text_payload() {
         let (s_target, ..) = state! {
-            doc { root { paragraph { t2: text("") } } }
-            selection: (t2, 0)
+            doc { root { p2: paragraph { text("") } } }
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(s_target);
 
@@ -1595,10 +1600,8 @@ mod tests {
             op: ClipboardOp::RepasteAsText,
         });
 
-        let plain_text_in_doc = editor
-            .state()
-            .doc
-            .flat_text(0..editor.state().doc.flat_size());
+        let view = editor.state().view();
+        let plain_text_in_doc = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
         assert!(
             plain_text_in_doc.contains("1. a") && plain_text_in_doc.contains("2. b"),
             "expected list marker preserved from text payload, got {plain_text_in_doc:?}"

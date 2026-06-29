@@ -64,8 +64,8 @@ mod tests {
     #[test]
     fn collapsed_apply_style_notifies_styles_field() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
 
@@ -94,8 +94,8 @@ mod tests {
     #[test]
     fn collapsed_unset_style_notifies_styles_field() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
 

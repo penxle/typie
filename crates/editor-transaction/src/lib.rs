@@ -1,6 +1,5 @@
 editor_macros::preamble!();
 
-mod compact;
 mod dissolve;
 mod effect;
 mod error;
@@ -11,12 +10,10 @@ mod revert;
 mod step;
 mod steps;
 mod transaction;
-mod validate;
 
-#[doc(hidden)]
-pub mod test_utils;
+#[cfg(test)]
+mod test_utils;
 
-pub use compact::compact;
 pub use dissolve::dissolve;
 pub use effect::*;
 pub use error::*;
@@ -25,4 +22,5 @@ pub use meta::*;
 pub use prune::prune;
 pub use revert::*;
 pub use step::*;
+pub use steps::support::capture_subtree;
 pub use transaction::*;

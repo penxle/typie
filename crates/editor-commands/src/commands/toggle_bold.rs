@@ -1,179 +1,123 @@
-use editor_model::{Modifier, ModifierType, NodeId, NodeRef};
+use editor_common::Tri;
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
-use editor_state::{
-    PendingModifier, PendingModifiers, Position, is_effective_bold, is_node_bold,
-    resolve_effective_modifiers_at,
-};
+use editor_state::ResolvedSelection;
+use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 use editor_transaction::Transaction;
 
-use crate::helpers::{
-    collect_text_nodes_in_range, compact_textblocks_for_nodes, filter_applicable_node_ids,
-    resolve_inherited_modifiers,
-};
 use crate::{CommandError, CommandResult};
+
+fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
+    let from = rs.from();
+    let to = rs.to();
+
+    let from_child = view.node(from.node())?.child_at(from.offset())?;
+    let first = match from_child {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(b) => b.dot()?,
+    };
+
+    let to_off = to.offset().checked_sub(1)?;
+    let to_child = view.node(to.node())?.child_at(to_off)?;
+    let last = match to_child {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(b) => b.dot()?,
+    };
+
+    Some((first, last))
+}
+
+fn block_weight(view: &DocView, elem: Dot) -> Option<u16> {
+    match view.node(elem)?.effective().get(&ModifierType::FontWeight) {
+        Some(Modifier::FontWeight { value }) => Some(*value),
+        _ => None,
+    }
+}
+
+fn block_family(view: &DocView, elem: Dot) -> Option<String> {
+    match view.node(elem)?.effective().get(&ModifierType::FontFamily) {
+        Some(Modifier::FontFamily { value }) => Some(value.clone()),
+        _ => None,
+    }
+}
 
 pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
 
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         return toggle_bold_collapsed(tr, resource);
     }
 
-    let doc = tr.doc();
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
+    let (first, last, current_weight, font_family, inherited_weight, is_bold) = {
+        let view = tr.view();
+        let rs = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let Some((first, last)) = span_dots(&view, &rs) else {
+            return Ok(false);
+        };
+        let ms = resolve_modifier_state_in_range(&rs);
+        let from_block = rs.from().node();
+        let inherited_weight = block_weight(&view, from_block).ok_or_else(|| {
+            CommandError::Corrupted("FontWeight missing in inherited modifiers".into())
+        })?;
+        let current_weight = match &ms.font_weight {
+            Tri::Uniform { value } => value.value,
+            _ => inherited_weight,
+        };
+        let font_family = match &ms.font_family {
+            Tri::Uniform { value } => value.value.clone(),
+            _ => block_family(&view, from_block).ok_or_else(|| {
+                CommandError::Corrupted("FontFamily missing in effective modifiers".into())
+            })?,
+        };
+        let is_bold = matches!(ms.effective_bold, Tri::Uniform { .. });
+        (
+            first,
+            last,
+            current_weight,
+            font_family,
+            inherited_weight,
+            is_bold,
+        )
+    };
 
-    let node_ids = collect_text_nodes_in_range(tr, &from, &to)?;
-    let applicable_node_ids = filter_applicable_node_ids(&tr.doc(), &node_ids, ModifierType::Bold);
-
-    if applicable_node_ids.is_empty() {
-        return Ok(false);
-    }
-
-    let doc = tr.doc();
-    let nodes = applicable_node_ids
-        .iter()
-        .filter_map(|id| doc.node(*id))
-        .collect::<Vec<_>>();
-    let is_bold = check_range_is_bold(&nodes);
+    let available = resource.font_registry.weights(&font_family).unwrap_or(&[]);
 
     if is_bold {
-        toggle_bold_off_range(tr, resource, &applicable_node_ids)?;
-    } else {
-        toggle_bold_on_range(tr, resource, &applicable_node_ids)?;
-    }
-
-    compact_textblocks_for_nodes(tr, &node_ids)?;
-
-    Ok(true)
-}
-
-fn check_range_is_bold(nodes: &[NodeRef]) -> bool {
-    nodes.iter().all(|node| is_node_bold(node))
-}
-
-fn toggle_bold_on_range(
-    tr: &mut Transaction,
-    resource: &Resource,
-    node_ids: &[NodeId],
-) -> CommandResult {
-    for &node_id in node_ids {
-        let doc = tr.doc();
-        let node = doc
-            .node(node_id)
-            .ok_or(CommandError::NodeNotFound(node_id))?;
-
-        if is_node_bold(&node) {
-            continue;
+        tr.remove_span_modifier(first, last, Modifier::Bold)?;
+        let unbold = find_unbold_target(current_weight, available);
+        tr.remove_span_modifier(
+            first,
+            last,
+            Modifier::FontWeight {
+                value: current_weight,
+            },
+        )?;
+        if unbold != inherited_weight {
+            tr.add_span_modifier(first, last, Modifier::FontWeight { value: unbold })?;
         }
-
-        let inherited = resolve_inherited_modifiers(&node);
-        let inherited_weight = inherited
-            .iter()
-            .find_map(|m| match m {
-                Modifier::FontWeight { value } => Some(*value),
-                _ => None,
-            })
-            .unwrap();
-        let inherited_family = inherited
-            .iter()
-            .find_map(|m| match m {
-                Modifier::FontFamily { value } => Some(value.as_str()),
-                _ => None,
-            })
-            .unwrap();
-
-        let has_explicit_weight = node.modifiers().find_map(|m| match m {
-            Modifier::FontWeight { value } => Some(*value),
-            _ => None,
-        });
-        let current_weight = has_explicit_weight.unwrap_or(inherited_weight);
-        let font_family = node
-            .modifiers()
-            .find_map(|m| match m {
-                Modifier::FontFamily { value } => Some(value.as_str()),
-                _ => None,
-            })
-            .unwrap_or(inherited_family);
-
-        let available = resource.font_registry.weights(font_family).unwrap_or(&[]);
-
+    } else {
         match find_bold_target(current_weight, available) {
             Some(target) => {
-                if let Some(w) = has_explicit_weight {
-                    tr.remove_modifier(node_id, Modifier::FontWeight { value: w })?;
-                }
+                tr.remove_span_modifier(
+                    first,
+                    last,
+                    Modifier::FontWeight {
+                        value: current_weight,
+                    },
+                )?;
                 if target != inherited_weight {
-                    tr.add_modifier(node_id, Modifier::FontWeight { value: target })?;
+                    tr.add_span_modifier(first, last, Modifier::FontWeight { value: target })?;
                 }
             }
             None => {
-                tr.add_modifier(node_id, Modifier::Bold)?;
+                tr.add_span_modifier(first, last, Modifier::Bold)?;
             }
-        }
-    }
-
-    Ok(true)
-}
-
-fn toggle_bold_off_range(
-    tr: &mut Transaction,
-    resource: &Resource,
-    node_ids: &[NodeId],
-) -> CommandResult {
-    for &node_id in node_ids {
-        let doc = tr.doc();
-        let node = doc
-            .node(node_id)
-            .ok_or(CommandError::NodeNotFound(node_id))?;
-
-        let has_bold = node.modifiers().any(|m| matches!(m, Modifier::Bold));
-        let inherited = resolve_inherited_modifiers(&node);
-        let inherited_weight = inherited
-            .iter()
-            .find_map(|m| match m {
-                Modifier::FontWeight { value } => Some(*value),
-                _ => None,
-            })
-            .unwrap();
-        let inherited_family = inherited
-            .iter()
-            .find_map(|m| match m {
-                Modifier::FontFamily { value } => Some(value.as_str()),
-                _ => None,
-            })
-            .unwrap();
-
-        let has_explicit_weight = node.modifiers().find_map(|m| match m {
-            Modifier::FontWeight { value } => Some(*value),
-            _ => None,
-        });
-        let current_weight = has_explicit_weight.unwrap_or(inherited_weight);
-        let font_family = node
-            .modifiers()
-            .find_map(|m| match m {
-                Modifier::FontFamily { value } => Some(value.as_str()),
-                _ => None,
-            })
-            .unwrap_or(inherited_family);
-
-        let available = resource.font_registry.weights(font_family).unwrap_or(&[]);
-        let unbold = find_unbold_target(current_weight, available);
-
-        if has_bold {
-            tr.remove_modifier(node_id, Modifier::Bold)?;
-        }
-
-        if let Some(w) = has_explicit_weight {
-            tr.remove_modifier(node_id, Modifier::FontWeight { value: w })?;
-        }
-        if unbold != inherited_weight {
-            tr.add_modifier(node_id, Modifier::FontWeight { value: unbold })?;
         }
     }
 
@@ -181,48 +125,51 @@ fn toggle_bold_off_range(
 }
 
 fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandResult {
-    let pos = tr
-        .selection()
-        .expect("entry caller guaranteed selection")
-        .head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let selection = tr.selection().expect("entry caller guaranteed selection");
+    let pos = selection.head;
 
-    let effective = resolve_effective_modifiers_at(tr.state(), &pos);
+    let (current_weight, font_family, is_bold) = {
+        let ms = resolve_modifier_state(&tr.state().projected, &selection, tr.pending_modifiers())
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let current_weight = match &ms.font_weight {
+            Tri::Uniform { value } => value.value,
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "FontWeight missing in effective modifiers".into(),
+                ));
+            }
+        };
+        let font_family = match &ms.font_family {
+            Tri::Uniform { value } => value.value.clone(),
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "FontFamily missing in effective modifiers".into(),
+                ));
+            }
+        };
+        (
+            current_weight,
+            font_family,
+            matches!(ms.effective_bold, Tri::Uniform { .. }),
+        )
+    };
 
-    let current_weight = effective
-        .iter()
-        .find_map(|m| match m {
-            Modifier::FontWeight { value } => Some(*value),
-            _ => None,
-        })
-        .ok_or_else(|| {
-            CommandError::Corrupted("FontWeight missing in effective modifiers".into())
-        })?;
-    let font_family = effective
-        .iter()
-        .find_map(|m| match m {
-            Modifier::FontFamily { value } => Some(value.as_str()),
-            _ => None,
-        })
-        .ok_or_else(|| {
-            CommandError::Corrupted("FontFamily missing in effective modifiers".into())
-        })?;
+    let inherited_weight = {
+        let view = tr.view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        match node.effective().get(&ModifierType::FontWeight) {
+            Some(Modifier::FontWeight { value }) => *value,
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "FontWeight missing in inherited modifiers".into(),
+                ));
+            }
+        }
+    };
 
-    let available = resource.font_registry.weights(font_family).unwrap_or(&[]);
-    let inherited = resolve_inherited_modifiers(&node);
-    let inherited_weight = inherited
-        .iter()
-        .find_map(|m| match m {
-            Modifier::FontWeight { value } => Some(*value),
-            _ => None,
-        })
-        .ok_or_else(|| {
-            CommandError::Corrupted("FontWeight missing in inherited modifiers".into())
-        })?;
-    let is_bold = is_effective_bold(&effective);
+    let available = resource.font_registry.weights(&font_family).unwrap_or(&[]);
 
     let mut pending: PendingModifiers = tr
         .pending_modifiers()
@@ -281,18 +228,6 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
 
-    #[test]
-    fn toggle_bold_returns_false_when_no_selection() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc { root { paragraph { text("Hello") [font_weight(400), font_family("Pretendard".to_string())] } } }
-            selection: none
-        };
-        let mut tr = editor_transaction::Transaction::new(&initial);
-        let result = toggle_bold(&mut tr, &resource);
-        assert!(matches!(result, Ok(false)));
-    }
-
     fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {
         let mut resource = Resource::new_test();
         let families: Vec<FontFamily> = families
@@ -315,17 +250,29 @@ mod tests {
     }
 
     #[test]
+    fn toggle_bold_returns_false_when_no_selection() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc { root { paragraph { text("Hello") [font_weight(400), font_family("Pretendard".to_string())] } } }
+            selection: none
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        let result = toggle_bold(&mut tr, &resource);
+        assert!(matches!(result, Ok(false)));
+    }
+
+    #[test]
     fn collapsed_toggle_on_sets_pending_font_weight() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
@@ -342,12 +289,12 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello")
+                    p1: paragraph {
+                        text("Hello")
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
@@ -360,17 +307,16 @@ mod tests {
 
     #[test]
     fn collapsed_toggle_on_faux_bold_when_no_heavier() {
-        // Weight 400, only available weight is [400] → no heavier → faux bold
         let resource = make_resource([("Pretendard", vec![400])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
@@ -383,17 +329,16 @@ mod tests {
 
     #[test]
     fn collapsed_toggle_off_from_bold_modifier() {
-        // Text has Bold modifier, weight 400 → toggle off removes Bold, weight stays inherited
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(actual.pending_modifiers.iter().any(|pm| matches!(
@@ -402,7 +347,6 @@ mod tests {
                 ty: ModifierType::Bold
             }
         )));
-        // unbold target 400 == inherited 400 → no FontWeight set
         assert!(!actual.pending_modifiers.iter().any(|pm| matches!(
             pm,
             PendingModifier::Set {
@@ -413,17 +357,16 @@ mod tests {
 
     #[test]
     fn collapsed_toggle_off_from_heavy_weight() {
-        // Weight 700 (no Bold marker) → toggle off to 400
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(actual.pending_modifiers.iter().any(|pm| matches!(
@@ -432,7 +375,6 @@ mod tests {
                 ty: ModifierType::Bold
             }
         )));
-        // unbold target 400 == inherited 400 → FontWeight unset (not set)
         assert!(actual.pending_modifiers.iter().any(|pm| matches!(
             pm,
             PendingModifier::Unset {
@@ -443,17 +385,16 @@ mod tests {
 
     #[test]
     fn collapsed_toggle_off_unbold_differs_from_inherited() {
-        // Inherited 300, current 700, unbold target picks 400 → 400 != 300 → set FontWeight(400)
         let resource = make_resource([("Pretendard", vec![300, 400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(300), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(actual.pending_modifiers.iter().any(|pm| matches!(
@@ -470,12 +411,12 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(700), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(300), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(300), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(!actual.pending_modifiers.iter().any(|pm| matches!(
@@ -487,182 +428,84 @@ mod tests {
     }
 
     #[test]
-    fn check_bold_all_bold_nodes() {
-        let (state, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("World") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        let doc = state.doc;
-        let sel = state.selection.as_ref().unwrap();
-        let nodes = vec![
-            doc.node(sel.anchor.node_id).unwrap(),
-            doc.node(sel.head.node_id).unwrap(),
-        ];
-        assert!(check_range_is_bold(&nodes));
-    }
-
-    #[test]
-    fn check_bold_mixed_returns_false() {
-        let (state, t1, t2) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("World") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        let doc = state.doc;
-        let nodes = vec![doc.node(t1).unwrap(), doc.node(t2).unwrap()];
-        assert!(!check_range_is_bold(&nodes));
-    }
-
-    #[test]
     fn range_toggle_on_single_node_full() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn range_toggle_on_partial_splits_node() {
+    fn range_toggle_on_partial_applies_weight_to_substring() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello World") [font_weight(400), font_family("Pretendard".to_string())]
+                    p: paragraph {
+                        text("Hello World") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 6) -> (t1, 11)
+            selection: (p, 6) -> (p, 11)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello ") [font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("World") [font_weight(700), font_family("Pretendard".to_string())]
+                    p: paragraph {
+                        text("Hello ") [font_weight(400), font_family("Pretendard".to_string())]
+                        text("World") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t2, 0) -> (t2, 5)
+            selection: (p, 6) -> (p, 11)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn range_toggle_on_skips_already_bold() {
+    fn range_toggle_on_makes_mixed_range_uniform_bold() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("Bold") [font_weight(700), font_family("Pretendard".to_string())]
+                    p: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                        text("Bold") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t2, 4)
+            selection: (p, 0) -> (p, 9)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("HelloBold") [font_weight(700), font_family("Pretendard".to_string())]
+                    p: paragraph {
+                        text("HelloBold") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 9)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_bold_on_fold_title_only_is_noop() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    fold {
-                        fold_title { t1: text("Title") }
-                        fold_content { paragraph { text("Body") } }
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 5)
-        };
-        let (actual, ..) = transact_fail!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    fold {
-                        fold_title { t1: text("Title") }
-                        fold_content { paragraph { text("Body") } }
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 5)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_bold_skips_fold_title_applies_to_paragraph() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    fold {
-                        fold_title { t1: text("Title") }
-                        fold_content { paragraph { t2: text("Body") } }
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 4)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    fold {
-                        fold_title { t1: text("Title") }
-                        fold_content { paragraph { t2: text("Body") [font_weight(700)] } }
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 4)
+            selection: (p, 0) -> (p, 9)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -673,52 +516,52 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(700), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
-        let entry = actual.doc.get_entry(t1_id).unwrap();
-        assert!(
-            !entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { .. }))
-        );
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(700), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn range_toggle_off_removes_bold_and_sets_weight() {
+    fn range_toggle_off_removes_bold_and_resets_weight() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
-        let entry = actual.doc.get_entry(t1_id).unwrap();
-        assert!(
-            !entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::Bold))
-        );
-        assert!(
-            !entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { .. }))
-        );
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -727,22 +570,25 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
-        let entry = actual.doc.get_entry(t1_id).unwrap();
-        assert!(
-            !entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { .. }))
-        );
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -751,48 +597,51 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(300), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.as_ref().unwrap().head.node_id;
-        let entry = actual.doc.get_entry(t1_id).unwrap();
-        assert!(
-            entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 400 }))
-        );
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(300), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn range_toggle_off_multi_node() {
+    fn range_toggle_off_multi_run() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
-                        t2: text("World") [font_weight(700), font_family("Pretendard".to_string())]
+                    p: paragraph {
+                        text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
+                        text("World") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t2, 5)
+            selection: (p, 0) -> (p, 10)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("HelloWorld") [font_family("Pretendard".to_string())]
+                    p: paragraph {
+                        text("HelloWorld") [font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 10)
+            selection: (p, 0) -> (p, 10)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -803,547 +652,113 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                    paragraph {
-                        t2: text("World") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                    paragraph {
-                        t2: text("World") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_on_backward_boundary_excludes_left_text() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t2, 2, <) -> (t1, 2, >)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb") [font_weight(700)]
-                    }
-                }
-            }
-            selection: (t2, 2, <) -> (t1, 2, >)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_on_forward_boundary_excludes_right_text_start() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t1, 1, >) -> (t2, 0, <)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("a")
-                        t2: text("a") [font_weight(700)]
-                    }
-                    paragraph {
-                        t3: text("bb")
-                    }
-                }
-            }
-            selection: (t2, 0, >) -> (t3, 0, <)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_double_toggle_forward_boundary_restores_original_selection() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t1, 1, >) -> (t2, 0, <)
-        };
-        let (actual, ..) = transact!(initial, |tr| {
-            toggle_bold(&mut tr, &resource).unwrap();
-            toggle_bold(&mut tr, &resource)
-        });
-        let (expected, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t1, 1, >) -> (t2, 0, <)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_off_preserves_start_of_text_merged_by_compact() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        text("a")
-                        t1: text("a") [font_weight(700)]
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t1, 0, >) -> (t2, 0, <)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
-                    paragraph {
-                        t1: text("aa")
-                    }
-                    paragraph {
-                        t2: text("bb")
-                    }
-                }
-            }
-            selection: (t1, 1, >) -> (t2, 0, <)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_on_preserves_paragraph_end_after_split_before_hard_break() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
                     p1: paragraph {
-                        t1: text("aa")
-                        hard_break
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                    p2: paragraph {
+                        text("World") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 1, >) -> (p1, 2, <)
+            selection: (p1, 0) -> (p2, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(50), paragraph_indent(50)]
-                }
-                root @base {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
                     p1: paragraph {
-                        t1: text("a")
-                        t2: text("a") [font_weight(700)]
-                        hard_break
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                    p2: paragraph {
+                        text("World") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t2, 0, >) -> (p1, 3, <)
+            selection: (p1, 0) -> (p2, 5)
         };
         assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn backward_selection_works() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 5) -> (t1, 0)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = actual.selection.as_ref().unwrap().anchor.node_id;
-        let entry = actual.doc.get_entry(t1_id).unwrap();
-        assert!(
-            entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 700 }))
-        );
-    }
-
-    #[test]
-    fn compact_merges_adjacent_after_toggle_on() {
-        // Two nodes: normal + already bold → toggle ON makes first bold too → compact merges
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("World") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("HelloWorld") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 10)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn compact_merges_adjacent_after_toggle_off() {
-        // Two bold nodes → toggle OFF → both become normal → compact merges
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
-                        t2: text("World") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("HelloWorld") [font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 10)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn compact_merges_split_node_back_after_full_bold() {
-        // Partial selection splits node, if result has same modifiers as neighbor → compact merges
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("AB") [font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("CD") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 1) -> (t2, 2)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        // "A" stays 400, "B" becomes 700, "CD" stays 700 → "B"+"CD" merge
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("A") [font_weight(400), font_family("Pretendard".to_string())]
-                        t2: text("BCD") [font_weight(700), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t2, 0) -> (t2, 3)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn no_compact_when_modifiers_differ() {
-        // Bold + non-bold stay separate after toggle
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello World") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 5)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        // "Hello" becomes 700, " World" stays 400 → no merge (different modifiers)
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
-                        t2: text(" World") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 0)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_double_toggle_preserves_valid_selection() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello World") [font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 6) -> (t1, 11)
-        };
-
-        let (actual, ..) = transact!(initial, |tr| {
-            toggle_bold(&mut tr, &resource).unwrap();
-            toggle_bold(&mut tr, &resource)
-        });
-
-        let sel = actual.selection.as_ref().unwrap();
-        let doc = &actual.doc;
-        assert!(
-            doc.get_entry(sel.anchor.node_id).is_some(),
-            "anchor node must exist"
-        );
-        assert!(
-            doc.get_entry(sel.head.node_id).is_some(),
-            "head node must exist"
-        );
-    }
-
-    #[test]
-    fn range_double_toggle_with_adjacent_hard_break() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_family("Pretendard".to_string())]
-                        hard_break
-                        t2: text("World") [font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 5)
-        };
-
-        let (actual, ..) = transact!(initial, |tr| {
-            toggle_bold(&mut tr, &resource).unwrap();
-            toggle_bold(&mut tr, &resource)
-        });
-
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_family("Pretendard".to_string())]
-                        hard_break
-                        t2: text("World") [font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t1, 5)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_double_toggle_across_hard_break() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_family("Pretendard".to_string())]
-                        hard_break
-                        t2: text("World") [font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-
-        let (actual, ..) = transact!(initial, |tr| {
-            toggle_bold(&mut tr, &resource).unwrap();
-            toggle_bold(&mut tr, &resource)
-        });
-
-        let (expected, ..) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_family("Pretendard".to_string())]
-                        hard_break
-                        t2: text("World") [font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 5)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_bold_does_not_reach_tab() {
-        let resource = make_resource([("Pretendard", vec![400, 700])]);
-        let (initial, t1, t2) = state! {
-            doc {
-                root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("a") [font_weight(400), font_family("Pretendard".to_string())]
-                        tab {}
-                        t2: text("b") [font_weight(400), font_family("Pretendard".to_string())]
-                    }
-                }
-            }
-            selection: (t1, 0) -> (t2, 1)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-
-        let tab_has_bold_or_weight = actual.doc.root().unwrap().descendants().any(|n| {
-            matches!(n.node(), editor_model::Node::Tab(_))
-                && n.explicit_modifiers()
-                    .any(|m| matches!(m, Modifier::Bold | Modifier::FontWeight { .. }))
-        });
-        assert!(
-            !tab_has_bold_or_weight,
-            "tab must not receive Bold or a bold font_weight"
-        );
-
-        assert!(
-            actual
-                .doc
-                .get_entry(t1)
-                .unwrap()
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 700 }))
-        );
-        assert!(
-            actual
-                .doc
-                .get_entry(t2)
-                .unwrap()
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, Modifier::FontWeight { value: 700 }))
-        );
     }
 
     #[test]
     fn range_toggle_on_faux_bold_when_no_heavier() {
-        // Weight 400, only [400] available → no heavier → faux bold
         let resource = make_resource([("Pretendard", vec![400])]);
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    paragraph {
-                        t1: text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
+                    p1: paragraph {
+                        text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
             }
-            selection: (t1, 0) -> (t1, 5)
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_double_toggle_restores_original() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 6) -> (p1, 11)
+        };
+        let (actual, ..) = transact!(initial, |tr| {
+            toggle_bold(&mut tr, &resource).unwrap();
+            toggle_bold(&mut tr, &resource)
+        });
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 6) -> (p1, 11)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn backward_selection_applies_weight() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 5) -> (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 5) -> (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

@@ -1,7 +1,8 @@
 use editor_common::Tri;
+use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{Doc, Modifier, Node, NodeRef};
-use editor_state::{PendingStyle, ResolvedSelection, State};
+use editor_model::{ChildView, DocView, Modifier, ModifierType};
+use editor_state::{PendingStyle, Position, State, inline_leaf_dots_in_range};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -18,10 +19,11 @@ pub struct StyleRefValue {
     pub value: String,
 }
 
-pub fn resolve_style_entries(doc: &Doc) -> Vec<StyleInfo> {
-    let mut entries: Vec<StyleInfo> = doc
-        .style_entries_iter()
-        .filter(|(id, _)| doc.style_present(id))
+pub fn resolve_style_entries(state: &State) -> Vec<StyleInfo> {
+    let styles = state.projected.styles();
+    let mut entries: Vec<StyleInfo> = styles
+        .registered_entries()
+        .iter()
         .map(|(id, entry)| StyleInfo {
             id: id.clone(),
             name: entry.name.get().clone(),
@@ -32,71 +34,94 @@ pub fn resolve_style_entries(doc: &Doc) -> Vec<StyleInfo> {
     entries
 }
 
+fn leaf_style(state: &State, dot: Dot) -> Option<String> {
+    state.projected.node_styles().value_of(dot)
+}
+
+fn block_marker_style(state: &State, block: Dot) -> Option<String> {
+    state
+        .projected
+        .node_markers()
+        .value_of(block)
+        .and_then(|m| m.style)
+}
+
+fn caret_leaf(view: &DocView, pos: Position) -> Option<Dot> {
+    let block = view.node(pos.node)?;
+    let idx = if pos.offset > 0 { pos.offset - 1 } else { 0 };
+    match block.child_at(idx) {
+        Some(ChildView::Leaf(l)) => Some(l.dot()),
+        _ => None,
+    }
+}
+
+fn collapsed_base_style(state: &State, view: &DocView, pos: Position) -> Option<String> {
+    if let Some(dot) = caret_leaf(view, pos) {
+        return leaf_style(state, dot);
+    }
+    let block = view.node(pos.node)?;
+    if block.spec().is_textblock() {
+        return block_marker_style(state, pos.node);
+    }
+    None
+}
+
+fn style_modifier_types(state: &State, style_id: &str) -> Vec<ModifierType> {
+    state
+        .projected
+        .styles()
+        .style_entry(style_id)
+        .map(|entry| entry.modifiers.iter().map(Modifier::as_type).collect())
+        .unwrap_or_default()
+}
+
+fn leaf_diverges(view: &DocView, dot: Dot, style_types: &[ModifierType]) -> bool {
+    let Some(leaf) = view.leaf(dot) else {
+        return false;
+    };
+    leaf.own_modifiers()
+        .iter()
+        .filter(|(_, own)| !own.from_style)
+        .any(|(ty, _)| style_types.contains(ty))
+}
+
 pub fn resolve_style_divergence(state: &State) -> bool {
-    let applied = resolve_applied_style(state);
-    let Tri::Uniform { value } = applied else {
+    let Tri::Uniform { value } = resolve_applied_style(state) else {
         return false;
     };
     let style_id = value.value;
+    let style_types = style_modifier_types(state, &style_id);
+    if style_types.is_empty() {
+        return false;
+    }
 
     let Some(sel) = state.selection.as_ref() else {
         return false;
     };
+    let view = state.view();
 
     if sel.is_collapsed() {
-        let Some(node) = state.doc.node(sel.head.node_id) else {
-            return false;
-        };
-        if is_run(&node) {
-            return run_diverges_from_style(&node, &style_id);
-        }
-        return false;
+        return caret_leaf(&view, sel.head)
+            .is_some_and(|dot| leaf_diverges(&view, dot, &style_types));
     }
 
-    let Some(rs) = sel.resolve(&state.doc) else {
+    let Some(rs) = sel.resolve(&view) else {
         return false;
     };
-    let Some(root) = state.doc.root() else {
-        return false;
-    };
-    walk_for_divergence(&root, &rs, &style_id)
-}
-
-fn walk_for_divergence<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection<'a>, style_id: &str) -> bool {
-    if !rs.intersects_subtree(node) {
-        return false;
-    }
-    if is_run(node) {
-        return run_diverges_from_style(node, style_id);
-    }
-    for child in node.children() {
-        if walk_for_divergence(&child, rs, style_id) {
-            return true;
-        }
-    }
-    false
-}
-
-fn run_diverges_from_style(run: &NodeRef<'_>, style_id: &str) -> bool {
-    let doc = run.doc();
-    let Some(style) = doc.style_entry(style_id) else {
-        return false;
-    };
-    let style_types: Vec<_> = style.modifiers.iter().map(Modifier::as_type).collect();
-    run.explicit_modifiers()
-        .any(|m| style_types.contains(&m.as_type()))
+    let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position());
+    leaves
+        .iter()
+        .any(|&dot| leaf_diverges(&view, dot, &style_types))
 }
 
 pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
     let Some(sel) = state.selection.as_ref() else {
         return Tri::Absent;
     };
+    let view = state.view();
 
     if sel.is_collapsed() {
-        let Some(node) = state.doc.node(sel.head.node_id) else {
-            return Tri::Absent;
-        };
-        let base = collapsed_base_style(&node);
+        let base = collapsed_base_style(state, &view, sel.head);
         let applied = match &state.pending_style {
             Some(PendingStyle::Set { style_id }) => Some(style_id.clone()),
             Some(PendingStyle::Unset) => None,
@@ -110,21 +135,16 @@ pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
         };
     }
 
-    let Some(rs) = sel.resolve(&state.doc) else {
+    let Some(rs) = sel.resolve(&view) else {
         return Tri::Absent;
     };
-    let Some(root) = state.doc.root() else {
-        return Tri::Absent;
-    };
+    let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position());
 
     let mut canonical: Option<String> = None;
     let mut absent_seen = false;
     let mut mixed = false;
-    fold_runs(&root, &rs, &mut |run| {
-        if mixed {
-            return;
-        }
-        let style = run.entry().style.get().clone();
+    for dot in leaves {
+        let style = leaf_style(state, dot);
         match (style, &canonical) {
             (Some(s), Some(c)) if &s == c => {}
             (Some(_), Some(_)) => mixed = true,
@@ -138,7 +158,10 @@ pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
             (None, Some(_)) => mixed = true,
             (None, None) => absent_seen = true,
         }
-    });
+        if mixed {
+            break;
+        }
+    }
 
     if mixed {
         Tri::Mixed
@@ -148,33 +171,6 @@ pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
         }
     } else {
         Tri::Absent
-    }
-}
-
-fn collapsed_base_style(node: &NodeRef<'_>) -> Option<String> {
-    if is_run(node) {
-        return node.entry().style.get().clone();
-    }
-    if node.spec().is_textblock() && !node.children().any(|c| is_run(&c)) {
-        return node.marker().and_then(|m| m.style.clone());
-    }
-    None
-}
-
-fn is_run(node: &NodeRef<'_>) -> bool {
-    matches!(node.node(), Node::Text(_) | Node::Tab(_))
-}
-
-fn fold_runs<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection<'a>, f: &mut dyn FnMut(NodeRef<'a>)) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-    if is_run(node) {
-        f(*node);
-        return;
-    }
-    for child in node.children() {
-        fold_runs(&child, rs, f);
     }
 }
 
@@ -192,7 +188,7 @@ mod tests {
             doc { root { paragraph { text("Hi") } } }
             selection: none
         };
-        assert!(resolve_style_entries(&state.doc).is_empty());
+        assert!(resolve_style_entries(&state).is_empty());
     }
 
     #[test]
@@ -206,19 +202,15 @@ mod tests {
 
     #[test]
     fn applied_style_uniform_on_collapsed_caret() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hi") } } }
-            selection: (t1, 1)
+        let (state, ..) = state! {
+            doc { styles { heading1: "x" } root { p1: paragraph { text("Hi") @heading1 } } }
+            selection: (p1, 1)
         };
-        let mut tr = Transaction::new(&state);
-        tr.set_node_style(t1, Some("heading-1".into())).unwrap();
-        let (next, _, _, _, _) = tr.commit();
-
         assert_eq!(
-            resolve_applied_style(&next),
+            resolve_applied_style(&state),
             Tri::Uniform {
                 value: StyleRefValue {
-                    value: "heading-1".into()
+                    value: "heading1".into()
                 }
             }
         );
@@ -226,22 +218,10 @@ mod tests {
 
     #[test]
     fn applied_style_uniform_over_styled_runs() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (with_style, ..) = state! {
+            doc { styles { h1: "x" } root { p1: paragraph { text("Hello") @h1 } } }
+            selection: (p1, 0) -> (p1, 5)
         };
-        let mut tr = Transaction::new(&initial);
-        tr.set_style(
-            "h1".into(),
-            Some(editor_model::PlainStyleEntry {
-                name: "x".into(),
-                modifiers: Default::default(),
-            }),
-        )
-        .unwrap();
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
-        let (with_style, _, _, _, _) = tr.commit();
-
         assert_eq!(
             resolve_applied_style(&with_style),
             Tri::Uniform {
@@ -252,45 +232,42 @@ mod tests {
 
     #[test]
     fn applied_style_mixed_over_runs_with_different_styles() {
-        let (initial, t1, t2) = state! {
-            doc { root { paragraph { t1: text("Hello") t2: text("World") } } }
-            selection: (t1, 0) -> (t2, 5)
+        let (with_style, ..) = state! {
+            doc {
+                styles { h1: "x" h2: "y" }
+                root { p1: paragraph { text("Hello") @h1 text("World") @h2 } }
+            }
+            selection: (p1, 0) -> (p1, 10)
         };
-        let mut tr = Transaction::new(&initial);
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
-        tr.set_node_style(t2, Some("h2".into())).unwrap();
-        let (with_style, _, _, _, _) = tr.commit();
-
         assert_eq!(resolve_applied_style(&with_style), Tri::Mixed);
     }
 
     #[test]
     fn applied_style_mixed_when_some_runs_unstyled() {
-        let (initial, t1, _t2) = state! {
-            doc { root { paragraph { t1: text("Hello") t2: text("World") } } }
-            selection: (t1, 0) -> (t2, 5)
+        let (with_style, ..) = state! {
+            doc {
+                styles { h1: "x" }
+                root { p1: paragraph { text("Hello") @h1 text("World") } }
+            }
+            selection: (p1, 0) -> (p1, 10)
         };
-        let mut tr = Transaction::new(&initial);
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
-        let (with_style, _, _, _, _) = tr.commit();
-
         assert_eq!(resolve_applied_style(&with_style), Tri::Mixed);
     }
 
     #[test]
     fn applied_style_absent_over_unstyled_runs() {
-        let (state, _t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         assert_eq!(resolve_applied_style(&state), Tri::Absent);
     }
 
     #[test]
     fn applied_style_reflects_pending_set_at_collapsed_caret() {
-        let (state, _t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let mut tr = Transaction::new(&state);
         tr.set_pending_style(Some(PendingStyle::Set {
@@ -309,12 +286,12 @@ mod tests {
 
     #[test]
     fn applied_style_reflects_pending_unset_over_styled_run_at_collapsed_caret() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let mut tr = Transaction::new(&state);
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
+        tr.set_node_style(p1, Some("h1".into())).unwrap();
         tr.set_pending_style(Some(PendingStyle::Unset)).unwrap();
         let (next, _, _, _, _) = tr.commit();
 
@@ -348,53 +325,30 @@ mod tests {
 
     #[test]
     fn divergence_false_when_styled_run_has_no_override() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (with_style, ..) = state! {
+            doc { styles { h1: "x" [bold] } root { p1: paragraph { text("Hello") @h1 } } }
+            selection: (p1, 0) -> (p1, 5)
         };
-        let mut tr = Transaction::new(&initial);
-        tr.set_style(
-            "h1".into(),
-            Some(editor_model::PlainStyleEntry {
-                name: "x".into(),
-                modifiers: [Modifier::Bold].into_iter().collect(),
-            }),
-        )
-        .unwrap();
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
-        let (with_style, _, _, _, _) = tr.commit();
-
         assert!(!resolve_style_divergence(&with_style));
     }
 
     #[test]
     fn divergence_true_when_styled_run_overrides_style_modifier() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (with_style, ..) = state! {
+            doc {
+                styles { h1: "x" [font_size(2800)] }
+                root { p1: paragraph { text("Hello") @h1 [font_size(1200)] } }
+            }
+            selection: (p1, 0) -> (p1, 5)
         };
-        let mut tr = Transaction::new(&initial);
-        tr.set_style(
-            "h1".into(),
-            Some(editor_model::PlainStyleEntry {
-                name: "x".into(),
-                modifiers: [Modifier::FontSize { value: 2800 }].into_iter().collect(),
-            }),
-        )
-        .unwrap();
-        tr.add_modifier(t1, Modifier::FontSize { value: 1200 })
-            .unwrap();
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
-        let (with_style, _, _, _, _) = tr.commit();
-
         assert!(resolve_style_divergence(&with_style));
     }
 
     #[test]
     fn divergence_false_when_run_modifier_not_in_style() {
-        let (initial, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let mut tr = Transaction::new(&initial);
         tr.set_style(
@@ -405,7 +359,7 @@ mod tests {
             }),
         )
         .unwrap();
-        tr.set_node_style(t1, Some("h1".into())).unwrap();
+        tr.set_node_style(p1, Some("h1".into())).unwrap();
         let (with_style, _, _, _, _) = tr.commit();
 
         assert!(!resolve_style_divergence(&with_style));
@@ -413,9 +367,9 @@ mod tests {
 
     #[test]
     fn divergence_false_when_no_uniform_style() {
-        let (state, _t1) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold] } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello") [bold] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         assert!(!resolve_style_divergence(&state));
     }

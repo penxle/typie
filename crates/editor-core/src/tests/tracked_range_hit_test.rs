@@ -25,19 +25,20 @@ fn make_test_editor(state: editor_state::State) -> Editor {
 
 #[test]
 fn hit_test_returns_single_range_when_only_one_covers_point() {
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
     editor.apply(add_msg("a", "comment", sel));
 
     let range = editor.tracked_ranges().get("a").unwrap();
+    let view = editor.state().view();
     let resolved = range
-        .locate(&editor.state().doc)
+        .locate(editor.state())
         .expect("range resolves")
-        .resolve(&editor.state().doc)
+        .resolve(&view)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;
@@ -51,9 +52,9 @@ fn hit_test_returns_single_range_when_only_one_covers_point() {
 
 #[test]
 fn hit_test_returns_empty_for_point_outside_any_range() {
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
@@ -64,19 +65,20 @@ fn hit_test_returns_empty_for_point_outside_any_range() {
 
 #[test]
 fn hit_test_excludes_invalid_range() {
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
     editor.apply(add_msg("a", "comment", sel));
 
     let range = editor.tracked_ranges().get("a").unwrap();
+    let view = editor.state().view();
     let resolved = range
-        .locate(&editor.state().doc)
+        .locate(editor.state())
         .expect("range resolves")
-        .resolve(&editor.state().doc)
+        .resolve(&view)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;
@@ -93,9 +95,9 @@ fn hit_test_excludes_invalid_range() {
 
 #[test]
 fn hit_test_filters_by_group() {
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
@@ -103,10 +105,11 @@ fn hit_test_filters_by_group() {
     editor.apply(add_msg("b", "spellcheck", sel));
 
     let range = editor.tracked_ranges().get("a").unwrap();
+    let view = editor.state().view();
     let resolved = range
-        .locate(&editor.state().doc)
+        .locate(editor.state())
         .expect("range resolves")
-        .resolve(&editor.state().doc)
+        .resolve(&view)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;
@@ -123,25 +126,26 @@ fn hit_test_filters_by_group() {
 
 #[test]
 fn hit_test_sorts_overlapping_ranges_narrowest_first() {
-    let (state, t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 11)
+    let (state, p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 11)
     };
     let outer = state.selection.unwrap();
     let mut editor = make_test_editor(state);
     editor.apply(add_msg("outer", "comment", outer));
 
     let inner = Selection::new(
-        editor_state::Position::new(t1, 0),
-        editor_state::Position::new(t1, 5),
+        editor_state::Position::new(p1, 0),
+        editor_state::Position::new(p1, 5),
     );
     editor.apply(add_msg("inner", "comment", inner));
 
     let range = editor.tracked_ranges().get("inner").unwrap();
+    let view = editor.state().view();
     let resolved = range
-        .locate(&editor.state().doc)
+        .locate(editor.state())
         .expect("range resolves")
-        .resolve(&editor.state().doc)
+        .resolve(&view)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;
@@ -156,9 +160,9 @@ fn hit_test_sorts_overlapping_ranges_narrowest_first() {
 
 #[test]
 fn hit_test_ignores_decoration_enabled_flag() {
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
@@ -177,10 +181,11 @@ fn hit_test_ignores_decoration_enabled_flag() {
     });
 
     let range = editor.tracked_ranges().get("a").unwrap();
+    let view = editor.state().view();
     let resolved = range
-        .locate(&editor.state().doc)
+        .locate(editor.state())
         .expect("range resolves")
-        .resolve(&editor.state().doc)
+        .resolve(&view)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;
@@ -198,9 +203,9 @@ fn hit_test_ignores_decoration_enabled_flag() {
 #[test]
 fn hit_test_breaks_char_count_ties_by_id_alphabetically() {
     // 같은 문자 길이의 두 range가 같은 좌표에 있을 때 id 사전순으로 정렬되는지 검증.
-    let (state, _t1) = state! {
-        doc { root { paragraph { t1: text("hello world") } } }
-        selection: (t1, 0) -> (t1, 5)
+    let (state, _p1) = state! {
+        doc { root { p1: paragraph { text("hello world") } } }
+        selection: (p1, 0) -> (p1, 5)
     };
     let sel = state.selection.unwrap();
     let mut editor = make_test_editor(state);
@@ -209,10 +214,11 @@ fn hit_test_breaks_char_count_ties_by_id_alphabetically() {
     editor.apply(add_msg("aaa", "comment", sel));
 
     let range = editor.tracked_ranges().get("aaa").unwrap();
+    let view = editor.state().view();
     let resolved = range
-        .locate(&editor.state().doc)
+        .locate(editor.state())
         .expect("range resolves")
-        .resolve(&editor.state().doc)
+        .resolve(&view)
         .unwrap();
     let rects = editor.view().selection_rects(&resolved);
     let r = rects[0].rect;

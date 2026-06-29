@@ -1,22 +1,23 @@
-pub(crate) fn attrs(doc: &editor_model::Doc) -> Option<editor_model::PlainRootNode> {
-    let entry = doc.get_entry(editor_model::NodeId::ROOT)?;
-    match &entry.node.to_plain() {
-        editor_model::PlainNode::Root(root) => Some(root.clone()),
-        _ => unreachable!("root entry must be Root"),
+pub(crate) fn attrs(view: &editor_model::DocView) -> Option<editor_model::PlainRootNode> {
+    match view.node(editor_crdt::Dot::ROOT)?.node().to_plain() {
+        editor_model::PlainNode::Root(root) => Some(root),
+        _ => None,
     }
 }
 
-pub(crate) fn base_style_modifiers(doc: &editor_model::Doc) -> Vec<editor_model::Modifier> {
-    let Some(root) = doc.root() else {
+pub(crate) fn base_style_modifiers(state: &editor_state::State) -> Vec<editor_model::Modifier> {
+    let Some(style_id) = state
+        .projected
+        .node_styles()
+        .value_of(editor_crdt::Dot::ROOT)
+    else {
         return Vec::new();
     };
-    let Some(style_id) = root.entry().style.get().as_deref() else {
-        return Vec::new();
-    };
-    if !doc.style_present(style_id) {
+    let styles = state.projected.styles();
+    if !styles.registered(&style_id) {
         return Vec::new();
     }
-    let Some(style) = doc.style_entry(style_id) else {
+    let Some(style) = styles.style_entry(&style_id) else {
         return Vec::new();
     };
     style.modifiers.iter().cloned().collect()

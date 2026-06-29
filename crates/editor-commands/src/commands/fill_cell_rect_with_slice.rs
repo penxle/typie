@@ -1,5 +1,6 @@
 use editor_clipboard::Slice;
-use editor_model::{Fragment, NodeId, PlainNode, PlainParagraphNode};
+use editor_crdt::Dot;
+use editor_model::{Fragment, PlainNode, PlainParagraphNode};
 use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
@@ -19,14 +20,14 @@ pub fn fill_cell_rect_with_slice(tr: &mut Transaction, slice: Slice) -> CommandR
         let Some(sel) = tr.selection() else {
             return Ok(false);
         };
-        let doc = tr.doc();
-        let Some(rs) = sel.resolve(&doc) else {
+        let view = tr.view();
+        let Some(rs) = sel.resolve(&view) else {
             return Ok(false);
         };
         let Some(rect) = rs.as_cell_rect() else {
             return Ok(false);
         };
-        let ids: Vec<NodeId> = rect.cells().map(|c| c.id()).collect();
+        let ids: Vec<Dot> = rect.cells().into_iter().map(|c| c.id()).collect();
         if ids.is_empty() {
             return Ok(false);
         }
@@ -40,7 +41,7 @@ pub fn fill_cell_rect_with_slice(tr: &mut Transaction, slice: Slice) -> CommandR
         Ok(())
     })?;
 
-    let cursor = find_first_text_position(&tr.doc(), anchor_cell_id)
+    let cursor = find_first_text_position(&tr.view(), anchor_cell_id)
         .unwrap_or_else(|| Position::new(anchor_cell_id, 0));
     tr.set_selection(Some(Selection::collapsed(cursor)))?;
     Ok(true)
@@ -83,47 +84,42 @@ fn slice_to_cell_blocks(slice: &Slice) -> Vec<Fragment> {
 mod tests {
     use editor_clipboard::Slice;
     use editor_macros::state;
-    use editor_model::Node;
+    use editor_model::NodeType;
     use editor_state::cell_rect_selection;
 
     use super::*;
     use crate::test_utils::*;
 
-    fn with_cell_rect(
-        initial: editor_state::State,
-        anchor: NodeId,
-        head: NodeId,
-    ) -> editor_state::State {
-        let sel = cell_rect_selection(&initial.doc, anchor, head).unwrap();
+    fn with_cell_rect(initial: editor_state::State, anchor: Dot, head: Dot) -> editor_state::State {
+        let sel = {
+            let v = initial.view();
+            cell_rect_selection(anchor, head, &v).unwrap()
+        };
         editor_state::State {
             selection: Some(sel),
             ..initial
         }
     }
 
-    fn cell_text(doc: &editor_model::Doc, id: NodeId) -> String {
-        fn walk(node: editor_model::NodeRef<'_>, out: &mut String) {
-            match node.node() {
-                Node::Text(t) => out.push_str(&t.text.to_string()),
-                _ => {
-                    for c in node.children() {
-                        walk(c, out);
-                    }
+    fn cell_text(view: &editor_model::DocView, id: Dot) -> String {
+        let mut s = String::new();
+        if let Some(n) = view.node(id) {
+            for d in n.descendants() {
+                if let editor_model::ChildView::Leaf(l) = d
+                    && let Some(c) = l.as_char()
+                {
+                    s.push(c);
                 }
             }
         }
-        let mut out = String::new();
-        if let Some(n) = doc.node(id) {
-            walk(n, &mut out);
-        }
-        out
+        s
     }
 
     #[test]
     fn returns_false_when_selection_is_not_cell_rect() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
-            selection: (t, 0) -> (t, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         transact_fail!(initial, |tr| fill_cell_rect_with_slice(
             &mut tr,
@@ -151,8 +147,9 @@ mod tests {
         let initial = with_cell_rect(state, c00, c11);
         let slice = Slice::from_text("hi");
         let (after, ..) = transact!(initial, |tr| fill_cell_rect_with_slice(&mut tr, slice));
+        let v = after.view();
         for cid in [c00, c01, c10, c11] {
-            assert_eq!(cell_text(&after.doc, cid), "hi");
+            assert_eq!(cell_text(&v, cid), "hi");
         }
     }
 
@@ -176,13 +173,14 @@ mod tests {
         let initial = with_cell_rect(state, c00, c11);
         let slice = Slice::from_text("X");
         let (after, ..) = transact!(initial, |tr| fill_cell_rect_with_slice(&mut tr, slice));
-        let table = after.doc.node(tbl).expect("table survives fill");
-        assert!(matches!(table.node(), Node::Table(_)));
-        assert_eq!(table.children().count(), 2);
+        let v = after.view();
+        let table = v.node(tbl).expect("table survives fill");
+        assert_eq!(table.node_type(), NodeType::Table);
+        assert_eq!(table.child_blocks().count(), 2);
         for cid in [c00, c01, c10, c11] {
-            let cell = after.doc.node(cid).expect("cell id stable");
-            assert!(matches!(cell.node(), Node::TableCell(_)));
-            assert_eq!(cell.children().count(), 1);
+            let cell = v.node(cid).expect("cell id stable");
+            assert_eq!(cell.node_type(), NodeType::TableCell);
+            assert_eq!(cell.child_blocks().count(), 1);
         }
     }
 
@@ -199,8 +197,9 @@ mod tests {
         let initial = with_cell_rect(state, c00, c01);
         let slice = Slice::from_text("Z");
         let (after, ..) = transact!(initial, |tr| fill_cell_rect_with_slice(&mut tr, slice));
-        assert_eq!(cell_text(&after.doc, c00), "Z");
-        assert_eq!(cell_text(&after.doc, c01), "Z");
-        assert_eq!(cell_text(&after.doc, c02), "c");
+        let v = after.view();
+        assert_eq!(cell_text(&v, c00), "Z");
+        assert_eq!(cell_text(&v, c01), "Z");
+        assert_eq!(cell_text(&v, c02), "c");
     }
 }

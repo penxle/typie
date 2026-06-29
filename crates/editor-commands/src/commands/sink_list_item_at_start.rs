@@ -1,3 +1,4 @@
+use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -13,14 +14,33 @@ pub fn sink_list_item_at_start(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let doc = tr.doc();
-    if !is_at_list_item_content_start(&doc, &selection) {
-        return Ok(false);
-    }
-    let Some(item_id) = find_enclosing_list_item_id(&doc, selection.head.node_id) else {
-        return Ok(false);
+    let item_id = {
+        let view = tr.view();
+        if !is_at_list_item_content_start(&view, &selection) {
+            return Ok(false);
+        }
+        let Some(item_id) = find_enclosing_list_item_id(&view, selection.head.node) else {
+            return Ok(false);
+        };
+        item_id
     };
-    sink_list_item_inner(tr, item_id)?;
+    let offset = selection.head.offset;
+    let affinity = selection.head.affinity;
+    if let Some(new_item) = sink_list_item_inner(tr, item_id)? {
+        let new_para = {
+            let view = tr.view();
+            view.node(new_item)
+                .and_then(|li| li.child_blocks().next())
+                .map(|p| p.id())
+        };
+        if let Some(new_para) = new_para {
+            tr.set_selection(Some(Selection::collapsed(Position {
+                node: new_para,
+                offset,
+                affinity,
+            })))?;
+        }
+    }
     Ok(true)
 }
 
@@ -34,8 +54,8 @@ mod tests {
     #[test]
     fn not_at_list_item_start_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| sink_list_item_at_start(&mut tr));
     }
@@ -45,11 +65,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("AB") } } }
+                    bullet_list { list_item { p1: paragraph { text("AB") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (p1, 1)
         };
         transact_fail!(initial, |tr| sink_list_item_at_start(&mut tr));
     }
@@ -59,11 +79,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         // First item cannot sink, but the key is consumed (transact! asserts Ok(true))
         // and the document is unchanged.
@@ -71,11 +91,11 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { paragraph { t1: text("A") } } }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -87,12 +107,12 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { paragraph { text("A") } }
-                        list_item { paragraph { t1: text("B") } }
+                        list_item { p1: paragraph { text("B") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| sink_list_item_at_start(&mut tr));
         let (expected, ..) = state! {
@@ -101,13 +121,13 @@ mod tests {
                     bullet_list {
                         list_item {
                             paragraph { text("A") }
-                            bullet_list { list_item { paragraph { t1: text("B") } } }
+                            bullet_list { list_item { p1: paragraph { text("B") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

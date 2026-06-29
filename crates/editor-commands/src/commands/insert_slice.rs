@@ -5,32 +5,53 @@ use crate::CommandResult;
 use crate::helpers::insert_slice_at_position;
 
 pub fn insert_slice(tr: &mut Transaction, slice: Slice) -> CommandResult {
-    // Mirror `insert_text` / `insert_hard_break`: callers compose
-    // `delete_selection` ahead of this command when they want a non-collapsed
-    // selection replaced.
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let Some(inserted) = insert_slice_at_position(tr, selection.head, slice)? else {
         return Ok(false);
     };
-    if inserted.is_unit_node_selection(&tr.doc()) {
+    let unit = is_unit_node_selection(&tr.view(), &inserted);
+    if unit {
         tr.set_selection(Some(inserted))?;
     }
     Ok(true)
 }
 
+fn is_unit_node_selection(view: &editor_model::DocView, sel: &editor_state::Selection) -> bool {
+    if sel.anchor.node != sel.head.node {
+        return false;
+    }
+    let (lo, hi) = (
+        sel.anchor.offset.min(sel.head.offset),
+        sel.anchor.offset.max(sel.head.offset),
+    );
+    if lo + 1 != hi {
+        return false;
+    }
+    match view.node(sel.anchor.node).and_then(|n| n.child_at(lo)) {
+        Some(editor_model::ChildView::Block(b)) => b.spec().is_unit(),
+        Some(editor_model::ChildView::Leaf(l)) => {
+            l.as_atom().map(|a| a.is_block_level()).unwrap_or(false)
+        }
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use editor_clipboard::Slice;
+    use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        Fragment, PlainFoldTitleNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        ChildView, Fragment, NodeType, PlainFoldTitleNode, PlainNode, PlainParagraphNode,
+        PlainRootNode, PlainTextNode,
     };
+    use editor_state::State;
 
     use super::*;
     use crate::test_utils::*;
@@ -81,11 +102,51 @@ mod tests {
         }
     }
 
+    fn block_style_of(state: &State, block: Dot) -> Option<String> {
+        state.projected.node_styles().value_of(block)
+    }
+
+    fn run_style_of(state: &State, block: Dot, idx: usize) -> Option<String> {
+        let view = state.view();
+        let node = view.node(block)?;
+        match node.child_at(idx)? {
+            ChildView::Leaf(l) => state.projected.node_styles().value_of(l.dot()),
+            ChildView::Block(_) => None,
+        }
+    }
+
+    fn style_chars(
+        state: State,
+        block: Dot,
+        range: std::ops::Range<usize>,
+        style_id: &str,
+    ) -> State {
+        let (out, ..) = transact!(state, |tr| {
+            let dots: Vec<Dot> = {
+                let view = tr.view();
+                let node = view.node(block).expect("block exists");
+                range
+                    .filter_map(|i| match node.child_at(i) {
+                        Some(ChildView::Leaf(l)) => Some(l.dot()),
+                        _ => None,
+                    })
+                    .collect()
+            };
+            let any = !dots.is_empty();
+            for d in dots {
+                tr.set_node_style(d, Some(style_id.into()))
+                    .expect("set_node_style");
+            }
+            Ok::<bool, crate::CommandError>(any)
+        });
+        out
+    }
+
     #[test]
     fn insert_empty_slice_no_op() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let empty = Slice {
             fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
@@ -99,14 +160,14 @@ mod tests {
     #[test]
     fn insert_open_single_paragraph_into_paragraph_middle_merges_both_edges() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let slice = root_with_paragraph("XY");
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("HeXYllo") } } }
-            selection: (t1, 4)
+            doc { root { p1: paragraph { text("HeXYllo") } } }
+            selection: (p1, 4)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -114,17 +175,17 @@ mod tests {
     #[test]
     fn insert_paragraph_break_slice_into_paragraph_middle_splits_once() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("asd") } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("asd") } } }
+            selection: (p1, 1)
         };
         let slice = Slice::from_text("\n\n");
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("a") }
-                paragraph { t2: text("sd") }
+                p1: paragraph { text("a") }
+                p2: paragraph { text("sd") }
             } }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -143,10 +204,10 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
-                paragraph { t2: text("X") }
+                p2: paragraph { text("X") }
                 paragraph { text("b") }
             } }
-            selection: (t2, 1)
+            selection: (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -154,8 +215,8 @@ mod tests {
     #[test]
     fn insert_open_paragraph_text_into_fold_title_uses_open_inline_content() {
         let (source, ..) = state! {
-            doc { root { paragraph { t1: text("body") } } }
-            selection: (t1, 0) -> (t1, 4)
+            doc { root { p1: paragraph { text("body") } } }
+            selection: (p1, 0) -> (p1, 4)
         };
         let slice = Slice::extract(&source).expect("non-collapsed");
 
@@ -169,10 +230,10 @@ mod tests {
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
             doc { root { fold {
-                fold_title { t: text("body") }
+                ft1: fold_title { text("body") }
                 fold_content { paragraph {} }
             } } }
-            selection: (t, 4)
+            selection: (ft1, 4)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -188,8 +249,8 @@ mod tests {
             open_fold_title_slice("title")
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t: text("title") } } }
-            selection: (t, 5)
+            doc { root { p1: paragraph { text("title") } } }
+            selection: (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -198,8 +259,8 @@ mod tests {
     fn insert_block_slice_into_paragraph_preserves_block_structure() {
         use editor_model::{PlainBulletListNode, PlainListItemNode};
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
         };
         let slice = Slice {
             fragment: Fragment {
@@ -235,36 +296,44 @@ mod tests {
 
     #[test]
     fn pasting_text_with_tab_yields_inline_tab_node() {
-        use editor_model::Node;
         let (initial, ..) = state! {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
         let slice = Slice::from_text("a\tb");
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
-        let root = actual.doc.root().expect("root exists");
-        let para = root.first_child().expect("paragraph exists");
-        let children: Vec<_> = para.children().collect();
+        let view = actual.view();
+        let para = view
+            .root()
+            .expect("root exists")
+            .child_blocks()
+            .next()
+            .expect("paragraph exists");
+        let children: Vec<ChildView> = para.children().collect();
         assert_eq!(children.len(), 3, "paragraph must have 3 inline children");
-        assert!(
-            matches!(children[0].node(), Node::Text(t) if t.text.to_string() == "a"),
-            "first child must be Text(\"a\")"
-        );
-        assert!(
-            matches!(children[1].node(), Node::Tab(_)),
-            "second child must be Tab"
-        );
-        assert!(
-            matches!(children[2].node(), Node::Text(t) if t.text.to_string() == "b"),
-            "third child must be Text(\"b\")"
-        );
+        match &children[0] {
+            ChildView::Leaf(l) => assert_eq!(l.as_char(), Some('a'), "first child must be 'a'"),
+            _ => panic!("first child must be a char leaf"),
+        }
+        match &children[1] {
+            ChildView::Leaf(l) => assert_eq!(
+                l.node_type(),
+                NodeType::Tab,
+                "second child must be a Tab atom"
+            ),
+            _ => panic!("second child must be a tab leaf"),
+        }
+        match &children[2] {
+            ChildView::Leaf(l) => assert_eq!(l.as_char(), Some('b'), "third child must be 'b'"),
+            _ => panic!("third child must be a char leaf"),
+        }
     }
 
     #[test]
     fn non_collapsed_selection_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         let slice = Slice::from_text("X");
         transact_fail!(initial, |tr| insert_slice(&mut tr, slice));
@@ -294,10 +363,10 @@ mod tests {
             doc { root {
                 paragraph { text("a") }
                 paragraph { text("X") }
-                paragraph { t3: text("Y") }
+                p3: paragraph { text("Y") }
                 paragraph { text("b") }
             } }
-            selection: (t3, 1)
+            selection: (p3, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -346,8 +415,8 @@ mod tests {
     #[test]
     fn insert_blocks_into_paragraph_middle_splits_and_merges() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello World") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello World") } } }
+            selection: (p1, 5)
         };
         let slice = Slice {
             fragment: Fragment {
@@ -363,9 +432,9 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("Hellofirst") }
-                paragraph { t2: text("second World") }
+                p2: paragraph { text("second World") }
             } }
-            selection: (t2, 6)
+            selection: (p2, 6)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -374,8 +443,8 @@ mod tests {
     fn insert_image_at_text_middle_splits_paragraph_and_inserts() {
         use editor_model::PlainImageNode;
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let slice = Slice {
             fragment: Fragment {
@@ -427,10 +496,6 @@ mod tests {
         assert_state_eq!(&actual, &expected);
     }
 
-    // A single-paragraph slice whose inline RUN carries a style ref. In the
-    // text-style model the named style lives on the run, not the paragraph
-    // wrapper, so paste must transport the run's style — not stamp the
-    // destination paragraph.
     fn run_styled_paragraph_slice(text: &str, style_id: &str) -> Slice {
         Slice {
             fragment: Fragment {
@@ -467,12 +532,6 @@ mod tests {
         }
     }
 
-    fn run_style_of(node: &editor_model::NodeRef<'_>, idx: usize) -> Option<String> {
-        node.children()
-            .nth(idx)
-            .and_then(|c| c.entry().style.get().clone())
-    }
-
     #[test]
     fn paste_block_boundary_preserves_run_style_without_paragraph_wrapper() {
         use editor_model::Modifier;
@@ -496,12 +555,12 @@ mod tests {
         let slice = run_styled_paragraph_slice("XY", "h1");
         let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
 
-        let root = actual.doc.root().unwrap();
-        let inserted = root.children().nth(1).unwrap();
-        // The new paragraph itself acquires no wrapper style...
-        assert_eq!(inserted.entry().style.get().as_deref(), None);
-        // ...but the pasted run keeps the source run's style.
-        assert_eq!(run_style_of(&inserted, 0).as_deref(), Some("h1"));
+        let inserted = {
+            let view = actual.view();
+            view.root().unwrap().child_blocks().nth(1).unwrap().id()
+        };
+        assert_eq!(block_style_of(&actual, inserted), None);
+        assert_eq!(run_style_of(&actual, inserted, 0).as_deref(), Some("h1"));
     }
 
     #[test]
@@ -527,11 +586,16 @@ mod tests {
         let slice = bare_styled_inline_slice("XY", "h1");
         let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
 
-        let root = actual.doc.root().unwrap();
-        let inserted = root.children().nth(1).unwrap();
-        assert!(matches!(inserted.node(), editor_model::Node::Paragraph(_)));
-        assert_eq!(inserted.entry().style.get().as_deref(), None);
-        assert_eq!(run_style_of(&inserted, 0).as_deref(), Some("h1"));
+        let inserted = {
+            let view = actual.view();
+            view.root().unwrap().child_blocks().nth(1).unwrap().id()
+        };
+        assert_eq!(
+            actual.view().node(inserted).unwrap().node_type(),
+            NodeType::Paragraph
+        );
+        assert_eq!(block_style_of(&actual, inserted), None);
+        assert_eq!(run_style_of(&actual, inserted, 0).as_deref(), Some("h1"));
     }
 
     #[test]
@@ -554,12 +618,8 @@ mod tests {
         let slice = run_styled_paragraph_slice("XY", "h1");
         let (actual, ..) = transact!(with_style, |tr| insert_slice(&mut tr, slice));
 
-        // The destination paragraph gains no wrapper style...
-        let entry = actual.doc.get_entry(p_empty).unwrap();
-        assert_eq!(entry.style.get().as_deref(), None);
-        // ...and the pasted run carries the source run's style.
-        let p_node = actual.doc.node(p_empty).unwrap();
-        assert_eq!(run_style_of(&p_node, 0).as_deref(), Some("h1"));
+        assert_eq!(block_style_of(&actual, p_empty), None);
+        assert_eq!(run_style_of(&actual, p_empty, 0).as_deref(), Some("h1"));
     }
 
     #[test]
@@ -568,9 +628,9 @@ mod tests {
 
         use crate::commands::define_style;
 
-        let (initial, _p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (s1, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -578,14 +638,13 @@ mod tests {
             "H1".into(),
             vec![Modifier::FontSize { value: 2400 }]
         ));
-        let (with_style, ..) = transact!(s1, |tr| tr
-            .set_node_style(t1, Some("h1".into()))
-            .map(|_| true)
-            .map_err(crate::CommandError::Step));
+        let with_style = style_chars(s1, p1, 0..5, "h1");
 
         let slice = Slice::extract(&with_style).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Text(_)));
-        assert_eq!(slice.fragment.style.as_deref(), Some("h1"));
+        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
+        let run = &slice.fragment.children[0];
+        assert!(matches!(run.node, PlainNode::Text(_)));
+        assert_eq!(run.style.as_deref(), Some("h1"));
     }
 
     #[test]
@@ -594,9 +653,9 @@ mod tests {
 
         use crate::commands::define_style;
 
-        let (initial, p1, _t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         let (s1, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -618,17 +677,12 @@ mod tests {
         let slice = run_styled_paragraph_slice("XY", "h1");
         let (actual, ..) = transact!(with_styles, |tr| insert_slice(&mut tr, slice));
 
-        // The destination paragraph keeps its own style (no wrapper transport)...
-        let entry = actual.doc.get_entry(p1).unwrap();
-        assert_eq!(entry.style.get().as_deref(), Some("body"));
-        // ...while the pasted run carries the source run's "h1" style. The run
-        // lands mid-paragraph: locate the run bearing the pasted "XY" text.
-        let p_node = actual.doc.node(p1).unwrap();
-        let styled_run = p_node
-            .children()
-            .find(|c| matches!(c.node(), editor_model::Node::Text(t) if t.text.to_string() == "XY"))
-            .expect("pasted run exists");
-        assert_eq!(styled_run.entry().style.get().as_deref(), Some("h1"));
+        assert_eq!(block_style_of(&actual, p1).as_deref(), Some("body"));
+        let text = actual.view().node(p1).unwrap().inline_text();
+        assert_eq!(text, "HeXYllo");
+        assert_eq!(run_style_of(&actual, p1, 2).as_deref(), Some("h1"));
+        assert_eq!(run_style_of(&actual, p1, 3).as_deref(), Some("h1"));
+        assert_eq!(run_style_of(&actual, p1, 0), None);
     }
 
     #[test]
@@ -637,10 +691,9 @@ mod tests {
 
         use crate::commands::define_style;
 
-        // Source doc: a styled run "Hello".
-        let (src, p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (src, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (src, ..) = transact!(src, |tr| define_style(
             &mut tr,
@@ -648,17 +701,10 @@ mod tests {
             "H1".into(),
             vec![Modifier::FontSize { value: 2400 }]
         ));
-        let (src, ..) = transact!(src, |tr| tr
-            .set_node_style(t1, Some("h1".into()))
-            .map(|_| true)
-            .map_err(crate::CommandError::Step));
-        let _ = p1;
+        let src = style_chars(src, p1, 0..5, "h1");
 
-        // Copy.
         let slice = Slice::extract(&src).expect("non-collapsed");
 
-        // Destination doc: empty (unstyled) paragraph. Define the same style so
-        // the ref resolves.
         let (dst, p_empty) = state! {
             doc { root { p_empty: paragraph {} } }
             selection: (p_empty, 0)
@@ -670,14 +716,9 @@ mod tests {
             vec![Modifier::FontSize { value: 2400 }]
         ));
 
-        // Paste.
         let (actual, ..) = transact!(dst, |tr| insert_slice(&mut tr, slice));
 
-        // Destination paragraph acquires no wrapper style.
-        let entry = actual.doc.get_entry(p_empty).unwrap();
-        assert_eq!(entry.style.get().as_deref(), None);
-        // The pasted run carries the copied run's style.
-        let p_node = actual.doc.node(p_empty).unwrap();
-        assert_eq!(run_style_of(&p_node, 0).as_deref(), Some("h1"));
+        assert_eq!(block_style_of(&actual, p_empty), None);
+        assert_eq!(run_style_of(&actual, p_empty, 0).as_deref(), Some("h1"));
     }
 }

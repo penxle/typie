@@ -1,108 +1,141 @@
-use editor_model::{ContextExpr, Modifier, Node, NodeId, NodeRef, NodeType};
+use editor_crdt::Dot;
+use editor_model::{ChildView, ContextExpr, LeafView, Modifier, ModifierType, NodeType, NodeView};
 use editor_transaction::Transaction;
 
 use crate::helpers::{capture_style_entry, is_text_applicable};
 use crate::{CommandError, CommandResult};
 
+enum Bake {
+    BlockModifier { block: Dot, modifier: Modifier },
+    LeafSpan { leaf: Dot, modifier: Modifier },
+    ClearStyle { target: Dot },
+}
+
 pub fn delete_style(tr: &mut Transaction, style_id: String) -> CommandResult {
-    let root_referenced = tr
-        .state()
-        .doc
-        .node(NodeId::ROOT)
-        .and_then(|r| r.entry().style.get().clone())
-        .as_deref()
-        == Some(style_id.as_str());
+    let root_referenced = {
+        let view = tr.view();
+        let root_style = view
+            .root()
+            .and_then(|r| r.dot())
+            .and_then(|d| tr.state().projected.node_styles().value_of(d));
+        root_style.as_deref() == Some(style_id.as_str())
+    };
     if root_referenced {
         return Err(CommandError::InvalidArgument(format!(
             "cannot delete style {style_id:?}: referenced by the root node (document default)"
         )));
     }
 
-    let style_modifiers: Vec<Modifier> = capture_style_entry(&tr.state().doc, &style_id)
+    let style_modifiers: Vec<Modifier> = capture_style_entry(tr.state(), &style_id)
         .map(|e| e.modifiers.into_iter().collect())
         .unwrap_or_default();
 
-    // (target_node_id, additions on target itself, additions per text descendant)
-    type Plan = (NodeId, Vec<Modifier>, Vec<(NodeId, Vec<Modifier>)>);
-    let plans: Vec<Plan> = {
-        let doc = &tr.state().doc;
-        doc.nodes_iter()
-            .filter_map(|(node_id, _)| {
-                let node = doc.node(*node_id)?;
-                let entry = node.entry();
-                if entry.style.get().as_deref() != Some(style_id.as_str()) {
-                    return None;
+    let plans: Vec<Bake> = {
+        let view = tr.view();
+        let referencing: Vec<Dot> = tr
+            .state()
+            .projected
+            .node_styles()
+            .project()
+            .iter()
+            .filter_map(|(dot, val)| {
+                if val.as_deref() == Some(style_id.as_str()) {
+                    Some(*dot)
+                } else {
+                    None
                 }
+            })
+            .collect();
 
-                let text_descendants: Vec<NodeRef> = node
+        let mut out: Vec<Bake> = Vec::new();
+        for elem in &referencing {
+            let Some(op) = elem.as_op_dot() else {
+                continue;
+            };
+            let dot = op.dot();
+            if let Some(block) = view.node(*elem) {
+                let leaves: Vec<LeafView> = block
                     .descendants()
-                    .filter(|n| matches!(n.node(), Node::Text(_)))
+                    .filter_map(|c| match c {
+                        ChildView::Leaf(l) => Some(l),
+                        _ => None,
+                    })
                     .collect();
-
-                let mut on_target: Vec<Modifier> = Vec::new();
-                let mut on_texts: Vec<(NodeId, Vec<Modifier>)> = text_descendants
-                    .iter()
-                    .map(|n| (n.id(), Vec::new()))
-                    .collect();
-
                 for modifier in &style_modifiers {
                     let ty = modifier.as_type();
-                    let inline = is_text_applicable(ty);
-
-                    if inline && !text_descendants.is_empty() {
-                        for (i, text_node) in text_descendants.iter().enumerate() {
-                            let already_explicit =
-                                text_node.explicit_modifiers().any(|m| m.as_type() == ty);
-                            if already_explicit {
+                    if is_text_applicable(ty) && !leaves.is_empty() {
+                        for l in &leaves {
+                            if l.own_no_style(ty).is_some() {
                                 continue;
                             }
-                            if !valid_on(text_node, ty) {
-                                continue;
-                            }
-                            on_texts[i].1.push(modifier.clone());
+                            out.push(Bake::LeafSpan {
+                                leaf: l.dot(),
+                                modifier: modifier.clone(),
+                            });
                         }
                     } else {
-                        let already_explicit =
-                            entry.modifiers.iter().any(|(_, m)| m.as_type() == ty);
-                        if already_explicit {
+                        if block.block_modifier(ty).is_some() {
                             continue;
                         }
-                        if !valid_on(&node, ty) {
+                        if !valid_on(&block, ty) {
                             continue;
                         }
-                        on_target.push(modifier.clone());
+                        out.push(Bake::BlockModifier {
+                            block: *elem,
+                            modifier: modifier.clone(),
+                        });
                     }
                 }
-
-                Some((*node_id, on_target, on_texts))
-            })
-            .collect()
-    };
-
-    for (target_id, on_target, on_texts) in plans {
-        for modifier in on_target {
-            tr.add_modifier(target_id, modifier)?;
-        }
-        for (text_id, modifiers) in on_texts {
-            for modifier in modifiers {
-                tr.add_modifier(text_id, modifier)?;
+                out.push(Bake::ClearStyle { target: *elem });
+            } else if let Some(leaf) = view.leaf(dot) {
+                for modifier in &style_modifiers {
+                    let ty = modifier.as_type();
+                    if !is_text_applicable(ty) {
+                        continue;
+                    }
+                    if leaf.own_no_style(ty).is_some() {
+                        continue;
+                    }
+                    out.push(Bake::LeafSpan {
+                        leaf: *elem,
+                        modifier: modifier.clone(),
+                    });
+                }
+                out.push(Bake::ClearStyle { target: *elem });
             }
         }
-        tr.set_node_style(target_id, None)?;
+        out
+    };
+
+    for bake in plans {
+        match bake {
+            Bake::BlockModifier { block, modifier } => {
+                tr.add_modifier(block, modifier)?;
+            }
+            Bake::LeafSpan { leaf, modifier } => {
+                if let Some(op) = leaf.as_op_dot() {
+                    let d = op.dot();
+                    tr.add_span_modifier(d, d, modifier)?;
+                }
+            }
+            Bake::ClearStyle { target } => {
+                tr.set_node_style(target, None)?;
+            }
+        }
     }
 
     tr.set_style(style_id, None)?;
     Ok(true)
 }
 
-fn valid_on(node: &NodeRef<'_>, ty: editor_model::ModifierType) -> bool {
+fn valid_on(node: &NodeView<'_>, ty: ModifierType) -> bool {
     let ctx = &ty.spec().context;
     if *ctx == ContextExpr::Any {
         return true;
     }
     let path: Vec<NodeType> = node
         .ancestors()
-        .map(|n| n.as_type())
+        .map(|n| n.node_type())
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
@@ -113,7 +146,6 @@ fn valid_on(node: &NodeRef<'_>, ty: editor_model::ModifierType) -> bool {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::NodeId;
 
     use super::*;
     use crate::commands::define_style;
@@ -121,9 +153,9 @@ mod tests {
 
     #[test]
     fn removes_presence() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (defined, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -133,28 +165,28 @@ mod tests {
         ));
         let (deleted, ..) = transact!(defined, |tr| delete_style(&mut tr, "heading-1".into()));
 
-        assert!(!deleted.doc.style_present("heading-1"));
+        assert!(!deleted.projected.styles().registered("heading-1"));
     }
 
     #[test]
     fn refuses_delete_of_root_referenced_style() {
-        let (state, ..) = state! {
+        let (state, _p1) = state! {
             doc {
                 styles { base: "기본" [font_size(1600)] }
-                root @base [] { paragraph { t1: text("hi") } }
+                root @base [] { p1: paragraph { text("hi") } }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
         assert!(delete_style(&mut tr, "base".into()).is_err());
+
+        let view = tr.view();
+        let root_style = view
+            .root()
+            .and_then(|r| r.dot())
+            .and_then(|d| tr.state().projected.node_styles().value_of(d));
         assert_eq!(
-            tr.doc()
-                .node(NodeId::ROOT)
-                .unwrap()
-                .entry()
-                .style
-                .get()
-                .as_deref(),
+            root_style.as_deref(),
             Some("base"),
             "root.style must be preserved"
         );
@@ -162,12 +194,12 @@ mod tests {
 
     #[test]
     fn allows_delete_of_unreferenced_style() {
-        let (state, ..) = state! {
+        let (state, _p1) = state! {
             doc {
                 styles { s: "s" [bold] }
-                root { paragraph { t1: text("hi") } }
+                root { p1: paragraph { text("hi") } }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut tr = Transaction::new(&state);
         assert!(delete_style(&mut tr, "s".into()).is_ok());

@@ -1,7 +1,9 @@
-use editor_model::{Doc, NodeId, Schema};
+use editor_crdt::Dot;
+use editor_model::{ChildView, DocView, Schema};
 use editor_state::{
-    Affinity, GapCursor, Position, Selection, cell_rect_selection, enclosing_table_cell,
-    gap_cursor_selection_between, gap_cursor_selection_leading,
+    Affinity, GapCursor, Position, Selection, as_gap_cursor, cell_rect_selection,
+    enclosing_table_cell, first_cursor_position, gap_cursor_selection_between,
+    gap_cursor_selection_leading, is_unit_node_selection, last_cursor_position,
 };
 use editor_transaction::HistoryMeta;
 
@@ -16,7 +18,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
             let Some(selection) = editor.state.selection else {
                 if !extend && let Movement::Document { .. } = movement {
                     let probe_pos = Position {
-                        node_id: NodeId::ROOT,
+                        node: Dot::ROOT,
                         offset: 0,
                         affinity: Affinity::Upstream,
                     };
@@ -65,15 +67,18 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 );
 
             if is_upward_exit && selection.is_collapsed() {
-                let at_document_start = match selection
-                    .resolve(&editor.state.doc)
-                    .and_then(|rs| rs.as_gap_cursor())
-                {
-                    Some(GapCursor::LeadingUnit { .. }) => true,
-                    Some(_) => false,
+                let leading_gap = {
+                    let view = editor.state.view();
+                    selection
+                        .resolve(&view)
+                        .and_then(|rs| as_gap_cursor(&rs))
+                        .map(|gap| matches!(gap, GapCursor::LeadingUnit { .. }))
+                };
+                let at_document_start = match leading_gap {
+                    Some(is_leading) => is_leading,
                     None => {
                         let resource = editor.resource.lock().unwrap();
-                        gap_cursor_selection_leading(&editor.state.doc).is_none()
+                        gap_cursor_selection_leading(&editor.state.view()).is_none()
                             && editor
                                 .view
                                 .would_resolve_movement(
@@ -104,54 +109,55 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
             // must still exit/enter the gap).
             if !extend {
                 // Exit: the current selection is itself a gap cursor.
-                if let Some(gap) = selection
-                    .resolve(&editor.state.doc)
-                    .and_then(|rs| rs.as_gap_cursor())
-                {
-                    let exit: Option<Selection> = match gap {
-                        GapCursor::LeadingUnit { unit } => {
+                let gap_exit = {
+                    let view = editor.state.view();
+                    match selection.resolve(&view).and_then(|rs| as_gap_cursor(&rs)) {
+                        None => None,
+                        Some(GapCursor::LeadingUnit { unit }) => {
                             if backward {
                                 // Document start — nothing before it.
-                                None
+                                Some(None)
                             } else {
-                                Some(exit_into_or_node_select(
+                                Some(Some(exit_into_or_node_select(
                                     editor,
-                                    unit.id(),
-                                    NodeId::ROOT,
+                                    child_view_dot(&unit),
+                                    Dot::ROOT,
                                     0,
                                     false,
                                     &movement,
-                                ))
+                                )))
                             }
                         }
-                        GapCursor::BetweenMonolithic {
+                        Some(GapCursor::BetweenMonolithic {
                             parent,
                             before,
                             after,
                             index,
-                        } => {
+                        }) => {
                             let p = parent.id();
                             if backward {
-                                Some(exit_into_or_node_select(
+                                Some(Some(exit_into_or_node_select(
                                     editor,
-                                    before.id(),
+                                    child_view_dot(&before),
                                     p,
                                     index - 1,
                                     true,
                                     &movement,
-                                ))
+                                )))
                             } else {
-                                Some(exit_into_or_node_select(
+                                Some(Some(exit_into_or_node_select(
                                     editor,
-                                    after.id(),
+                                    child_view_dot(&after),
                                     p,
                                     index,
                                     false,
                                     &movement,
-                                ))
+                                )))
                             }
                         }
-                    };
+                    }
+                };
+                if let Some(exit) = gap_exit {
                     if let Some(sel) = exit {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
@@ -169,16 +175,15 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // checks), so a non-gap move falls through to the range
                 // endpoint policy below. Independent of resolve_movement's
                 // result.
-                if selection.is_unit_node_selection(&editor.state.doc) {
-                    let parent = selection.anchor.node_id;
+                if is_unit_node_selection(&selection, &editor.state.view()) {
+                    let parent = selection.anchor.node;
                     let idx = selection.anchor.offset.min(selection.head.offset);
-                    let doc = &editor.state.doc;
-                    let entry = if backward && parent == NodeId::ROOT && idx == 0 {
-                        gap_cursor_selection_leading(doc)
+                    let entry = if backward && parent == Dot::ROOT && idx == 0 {
+                        gap_cursor_selection_leading(&editor.state.view())
                     } else if backward {
-                        gap_cursor_selection_between(doc, parent, idx)
+                        gap_cursor_selection_between(parent, idx, &editor.state.view())
                     } else {
-                        gap_cursor_selection_between(doc, parent, idx + 1)
+                        gap_cursor_selection_between(parent, idx + 1, &editor.state.view())
                     };
                     if let Some(sel) = entry {
                         editor.transact(|tr| {
@@ -202,7 +207,8 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // movement base: backward starts from `from`, forward starts
                 // from `to`.
                 if !selection.is_collapsed() {
-                    let Some(resolved) = selection.resolve(&editor.state.doc) else {
+                    let view = editor.state.view();
+                    let Some(resolved) = selection.resolve(&view) else {
                         return Ok(());
                     };
                     let base = if backward {
@@ -213,10 +219,49 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     let left_or_right = matches!(movement, Movement::Grapheme { .. });
                     let base_position = Position::from(base);
                     let base_is_inline = base.is_inline_position();
-                    // Drop the doc borrow before calling the mutable wrapper.
                     drop(resolved);
 
-                    let target = if left_or_right && base_is_inline {
+                    // Block-level Left/Right enters the adjacent textblock's
+                    // content (start for backward, end for forward); non-textblock
+                    // units fall through to geometric/gap movement.
+                    let block_entry: Option<Position> = if left_or_right && !base_is_inline {
+                        let parent = if base_position.node == Dot::ROOT {
+                            view.root()
+                        } else {
+                            view.node(base_position.node)
+                        };
+                        let child = if backward {
+                            parent.and_then(|n| n.child_at(base_position.offset))
+                        } else {
+                            base_position
+                                .offset
+                                .checked_sub(1)
+                                .and_then(|i| parent.and_then(|n| n.child_at(i)))
+                        };
+                        match child {
+                            Some(ChildView::Block(b))
+                                if b.spec().is_textblock() && b.children().next().is_some() =>
+                            {
+                                if backward {
+                                    first_cursor_position(&b)
+                                } else {
+                                    last_cursor_position(&b).map(|mut p| {
+                                        p.affinity = Affinity::Upstream;
+                                        p
+                                    })
+                                }
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    // Drop the doc borrow before calling the mutable wrapper.
+                    drop(view);
+
+                    let target = if let Some(entered) = block_entry {
+                        Selection::collapsed(entered)
+                    } else if left_or_right && base_is_inline {
                         // Left/Right from inline content only collapses the range.
                         Selection::collapsed(base_position)
                     } else if !left_or_right
@@ -284,23 +329,28 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         }
                 );
                 if is_cell_movement {
-                    let doc = &editor.state.doc;
-                    if let Some(rect) = selection.resolve(doc).and_then(|rs| rs.as_cell_rect()) {
-                        let anchor_cell_id = rect.anchor_cell.id();
-                        let head_cell_id = rect.head_cell.id();
-                        let is_vertical = matches!(movement, Movement::Line { .. });
-                        let new_head_cell_id = step_cell(doc, head_cell_id, backward, is_vertical)
-                            .unwrap_or(head_cell_id);
-                        if let Some(new_sel) =
-                            cell_rect_selection(doc, anchor_cell_id, new_head_cell_id)
-                        {
-                            editor.transact(|tr| {
-                                tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                                tr.set_selection(Some(new_sel))?;
-                                Ok(())
-                            })?;
-                            return Ok(());
-                        }
+                    let new_sel = {
+                        let view = editor.state.view();
+                        selection
+                            .resolve(&view)
+                            .and_then(|rs| rs.as_cell_rect())
+                            .and_then(|rect| {
+                                let anchor_cell_id = rect.anchor_cell.id();
+                                let head_cell_id = rect.head_cell.id();
+                                let is_vertical = matches!(movement, Movement::Line { .. });
+                                let new_head_cell_id =
+                                    step_cell(&view, head_cell_id, backward, is_vertical)
+                                        .unwrap_or(head_cell_id);
+                                cell_rect_selection(anchor_cell_id, new_head_cell_id, &view)
+                            })
+                    };
+                    if let Some(new_sel) = new_sel {
+                        editor.transact(|tr| {
+                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                            tr.set_selection(Some(new_sel))?;
+                            Ok(())
+                        })?;
+                        return Ok(());
                     }
                 }
             }
@@ -322,17 +372,22 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                             }
                     );
                     if is_cell_movement {
-                        let doc = &editor.state.doc;
-                        if let Some(current_cell) =
-                            enclosing_table_cell(doc, selection.head.node_id)
-                        {
+                        let current_cell =
+                            enclosing_table_cell(&editor.state.view(), selection.head.node);
+                        if let Some(current_cell) = current_cell {
                             let stays_in_cell =
-                                enclosing_table_cell(doc, new_selection.head.node_id)
+                                enclosing_table_cell(&editor.state.view(), new_selection.head.node)
                                     == Some(current_cell);
-                            if !stays_in_cell
-                                && let Some(cell_sel) =
-                                    cell_rect_selection(doc, current_cell, current_cell)
-                            {
+                            let cell_sel = if !stays_in_cell {
+                                cell_rect_selection(
+                                    current_cell,
+                                    current_cell,
+                                    &editor.state.view(),
+                                )
+                            } else {
+                                None
+                            };
+                            if let Some(cell_sel) = cell_sel {
                                 editor.transact(|tr| {
                                     tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
                                     tr.set_selection(Some(cell_sel))?;
@@ -355,17 +410,24 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
     Ok(())
 }
 
+fn child_view_dot(child: &ChildView) -> Dot {
+    match child {
+        ChildView::Block(b) => b.id(),
+        ChildView::Leaf(l) => l.dot(),
+    }
+}
+
 fn gap_cursor_from_inner_edge(
     editor: &Editor,
     head: Position,
     backward: bool,
     movement: &Movement,
 ) -> Option<Selection> {
-    let doc = &editor.state.doc;
-    let start = doc.node(head.node_id)?;
+    let doc = editor.state.view();
+    let start = doc.node(head.node)?;
     let vertical = matches!(movement, Movement::Line { .. });
     for monolithic in start.ancestors() {
-        if !Schema::node_spec(monolithic.as_type()).monolithic {
+        if !Schema::node_spec(monolithic.node_type()).monolithic {
             continue;
         }
         let (Some(parent), Some(index)) = (monolithic.parent(), monolithic.index()) else {
@@ -382,26 +444,26 @@ fn gap_cursor_from_inner_edge(
             else {
                 continue;
             };
-            edge.node_id == head.node_id && edge.offset == head.offset
+            edge.node == head.node && edge.offset == head.offset
         };
         if !at_edge {
             continue;
         }
         let parent_id = parent.id();
         return if backward {
-            if parent_id == NodeId::ROOT && index == 0 {
-                gap_cursor_selection_leading(doc)
+            if parent_id == Dot::ROOT && index == 0 {
+                gap_cursor_selection_leading(&doc)
             } else {
-                gap_cursor_selection_between(doc, parent_id, index)
+                gap_cursor_selection_between(parent_id, index, &doc)
             }
         } else {
-            gap_cursor_selection_between(doc, parent_id, index + 1)
+            gap_cursor_selection_between(parent_id, index + 1, &doc)
         };
     }
     None
 }
 
-/// Exit a gap into `node_id`'s inner content; if it has none (e.g. an
+/// Exit a gap into `node`'s inner content; if it has none (e.g. an
 /// atom / horizontal-rule leaf), node-select that node at its
 /// `(parent, idx)` bracket instead — the only representable state for a
 /// unit with no inner navigable. `at_end` encodes direction: `true` =
@@ -418,27 +480,27 @@ fn gap_cursor_from_inner_edge(
 /// first/last-position landing applies.
 fn exit_into_or_node_select(
     editor: &Editor,
-    node_id: NodeId,
-    parent: NodeId,
+    node: Dot,
+    parent: Dot,
     idx: usize,
     at_end: bool,
     movement: &Movement,
 ) -> Selection {
     if matches!(movement, Movement::Line { .. })
-        && let Some(pos) = editor.view.position_at_preferred_x_in(node_id, at_end)
+        && let Some(pos) = editor.view.position_at_preferred_x_in(node, at_end)
     {
         return Selection::collapsed(pos);
     }
-    if let Some(pos) = editor.view.editable_position_inside(node_id, at_end) {
+    if let Some(pos) = editor.view.editable_position_inside(node, at_end) {
         return Selection::collapsed(pos);
     }
     let front = Position {
-        node_id: parent,
+        node: parent,
         offset: idx,
         affinity: Affinity::Downstream,
     };
     let back = Position {
-        node_id: parent,
+        node: parent,
         offset: idx + 1,
         affinity: Affinity::Upstream,
     };
@@ -449,7 +511,12 @@ fn exit_into_or_node_select(
     }
 }
 
-fn step_cell(doc: &Doc, cell_id: NodeId, backward: bool, vertical: bool) -> Option<NodeId> {
+fn step_cell<'a>(
+    doc: &'a DocView<'a>,
+    cell_id: Dot,
+    backward: bool,
+    vertical: bool,
+) -> Option<Dot> {
     let cell = doc.node(cell_id)?;
     let row = cell.parent()?;
     let col = cell.index()?;
@@ -461,15 +528,15 @@ fn step_cell(doc: &Doc, cell_id: NodeId, backward: bool, vertical: bool) -> Opti
         } else {
             row_idx + 1
         };
-        let new_row = table.children().nth(new_row_idx)?;
-        Some(new_row.children().nth(col)?.id())
+        let new_row = table.child_blocks().nth(new_row_idx)?;
+        Some(new_row.child_blocks().nth(col)?.id())
     } else {
         let new_col = if backward {
             col.checked_sub(1)?
         } else {
             col + 1
         };
-        Some(row.children().nth(new_col)?.id())
+        Some(row.child_blocks().nth(new_col)?.id())
     }
 }
 
@@ -477,8 +544,8 @@ fn step_cell(doc: &Doc, cell_id: NodeId, backward: bool, vertical: bool) -> Opti
 mod tests {
     use editor_macros::state;
     use editor_state::{
-        Affinity, Position, Selection, assert_state_eq, gap_cursor_selection_between,
-        gap_cursor_selection_leading,
+        Affinity, Position, Selection, as_gap_cursor, gap_cursor_selection_between,
+        gap_cursor_selection_leading, is_unit_node_selection,
     };
 
     use crate::editor::Editor;
@@ -488,8 +555,8 @@ mod tests {
     #[test]
     fn probe_move_forward_in_middle() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         assert_probe_predicts_apply(
             state,
@@ -507,8 +574,8 @@ mod tests {
     #[test]
     fn probe_move_forward_at_end() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
         };
         assert_probe_predicts_apply(
             state,
@@ -582,21 +649,21 @@ mod tests {
 
     #[test]
     fn shift_right_from_range_ending_at_empty_paragraph_start_stops_at_empty_paragraph_break() {
-        let (state, r, t1, _p1) = state! {
+        let (state, r, p1, _p2) = state! {
             doc {
                 r: root [block_gap(200)] {
-                    paragraph {
-                        t1: text("bb")
+                    p1: paragraph {
+                        text("bb")
                     }
-                    p1: paragraph {}
+                    p2: paragraph {}
                     image
                     paragraph {}
                 }
             }
-            selection: (t1, 1, >) -> (p1, 0, <)
+            selection: (p1, 1, >) -> (p2, 0, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_right(&mut editor);
 
@@ -604,12 +671,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: t1,
+                    node: p1,
                     offset: 1,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 2,
                     affinity: Affinity::Upstream,
                 },
@@ -632,7 +699,7 @@ mod tests {
             selection: (p1, 0, >) -> (p1, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_right(&mut editor);
 
@@ -640,12 +707,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: p1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: p2,
+                    node: p2,
                     offset: 0,
                     affinity: Affinity::Upstream,
                 },
@@ -656,21 +723,21 @@ mod tests {
     #[test]
     fn shift_word_right_from_range_ending_at_empty_paragraph_start_stops_at_empty_paragraph_break()
     {
-        let (state, r, t1, _p1) = state! {
+        let (state, r, p1, _p2) = state! {
             doc {
                 r: root [block_gap(200)] {
-                    paragraph {
-                        t1: text("bb")
+                    p1: paragraph {
+                        text("bb")
                     }
-                    p1: paragraph {}
+                    p2: paragraph {}
                     image
                     paragraph {}
                 }
             }
-            selection: (t1, 1, >) -> (p1, 0, <)
+            selection: (p1, 1, >) -> (p2, 0, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_word_right(&mut editor);
 
@@ -678,12 +745,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: t1,
+                    node: p1,
                     offset: 1,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 2,
                     affinity: Affinity::Upstream,
                 },
@@ -693,21 +760,21 @@ mod tests {
 
     #[test]
     fn shift_left_from_range_ending_at_empty_paragraph_start_stops_at_previous_paragraph_break() {
-        let (state, t1, _p1) = state! {
+        let (state, p1, _p2) = state! {
             doc {
                 root [block_gap(200)] {
-                    paragraph {
-                        t1: text("bb")
+                    p1: paragraph {
+                        text("bb")
                     }
-                    p1: paragraph {}
+                    p2: paragraph {}
                     image
                     paragraph {}
                 }
             }
-            selection: (t1, 0, >) -> (p1, 0, <)
+            selection: (p1, 0, >) -> (p2, 0, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_left(&mut editor);
 
@@ -715,12 +782,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: t1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: t1,
+                    node: p1,
                     offset: 2,
                     affinity: Affinity::Upstream,
                 },
@@ -741,7 +808,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_right(&mut editor);
         shift_right(&mut editor);
@@ -749,12 +816,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: p1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 2,
                     affinity: Affinity::Upstream,
                 },
@@ -767,12 +834,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: p1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },
@@ -802,7 +869,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_right(&mut editor);
         shift_right(&mut editor);
@@ -811,12 +878,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: p1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: p2,
+                    node: p2,
                     offset: 0,
                     affinity: Affinity::Upstream,
                 },
@@ -839,7 +906,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_right(&mut editor);
         shift_right(&mut editor);
@@ -847,12 +914,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: p1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: p2,
+                    node: p2,
                     offset: 0,
                     affinity: Affinity::Upstream,
                 },
@@ -865,12 +932,12 @@ mod tests {
             editor.state().selection,
             Some(Selection::new(
                 Position {
-                    node_id: p1,
+                    node: p1,
                     offset: 0,
                     affinity: Affinity::Downstream,
                 },
                 Position {
-                    node_id: r,
+                    node: r,
                     offset: 1,
                     affinity: Affinity::Upstream,
                 },
@@ -891,7 +958,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_left(&mut editor);
 
@@ -901,8 +968,8 @@ mod tests {
         } else {
             (s.head.offset, s.anchor.offset)
         };
-        assert_eq!(s.anchor.node_id, r);
-        assert_eq!(s.head.node_id, r);
+        assert_eq!(s.anchor.node, r);
+        assert_eq!(s.head.node, r);
         assert_eq!(
             (lo, hi),
             (0, 2),
@@ -923,7 +990,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_right(&mut editor);
 
@@ -933,13 +1000,25 @@ mod tests {
         } else {
             (s.head.offset, s.anchor.offset)
         };
-        assert_eq!(s.anchor.node_id, r);
-        assert_eq!(s.head.node_id, r);
+        assert_eq!(s.anchor.node, r);
+        assert_eq!(s.head.node, r);
         assert_eq!(
             (lo, hi),
             (1, 3),
             "shift+right from image#1 node-selection must envelop both images"
         );
+    }
+
+    fn assert_single_paragraph(editor: &Editor, text: &str, head_offset: usize) {
+        let view = editor.state.view();
+        let blocks: Vec<_> = view.root().expect("root exists").child_blocks().collect();
+        assert_eq!(blocks.len(), 1, "exactly one block remains");
+        assert_eq!(blocks[0].node_type(), editor_model::NodeType::Paragraph);
+        assert_eq!(blocks[0].inline_text(), text);
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert!(sel.is_collapsed(), "selection collapsed");
+        assert_eq!(sel.head.node, blocks[0].id());
+        assert_eq!(sel.head.offset, head_offset);
     }
 
     #[test]
@@ -949,13 +1028,13 @@ mod tests {
                 root {
                     image
                     image
-                    paragraph { t1: text("bottom") }
+                    p1: paragraph { text("bottom") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_up(&mut editor);
         shift_up(&mut editor);
@@ -965,15 +1044,7 @@ mod tests {
             op: DeletionOp::Selection,
         });
 
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("bottom") }
-                }
-            }
-            selection: (t1, 0)
-        };
-        assert_state_eq!(editor.state(), &expected);
+        assert_single_paragraph(&editor, "bottom", 0);
     }
 
     #[test]
@@ -989,7 +1060,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_up(&mut editor);
         shift_up(&mut editor);
@@ -998,15 +1069,7 @@ mod tests {
             op: DeletionOp::Selection,
         });
 
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("bottom") }
-                }
-            }
-            selection: (t1, 0)
-        };
-        assert_state_eq!(editor.state(), &expected);
+        assert_single_paragraph(&editor, "bottom", 0);
     }
 
     #[test]
@@ -1014,15 +1077,15 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("top") }
+                    p1: paragraph { text("top") }
                     image
                     image
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_down(&mut editor);
         shift_down(&mut editor);
@@ -1032,15 +1095,7 @@ mod tests {
             op: DeletionOp::Selection,
         });
 
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph { t1: text("top") }
-                }
-            }
-            selection: (t1, 3)
-        };
-        assert_state_eq!(editor.state(), &expected);
+        assert_single_paragraph(&editor, "top", 3);
     }
 
     /// Strict monotonic head progression is precisely what the shared-boundary
@@ -1053,15 +1108,13 @@ mod tests {
                     paragraph { text("top") }
                     image
                     image
-                    paragraph { t1: text("bottom") }
+                    p2: paragraph { text("bottom") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p2, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let doc = editor.state.doc.clone();
-
+        editor.view.layout(&editor.state);
         let h0 = editor
             .state()
             .selection
@@ -1086,7 +1139,8 @@ mod tests {
             .expect("selection exists in test")
             .head;
 
-        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        let view = editor.state.view();
+        let r = |p: Position| p.resolve(&view).expect("resolves");
         assert!(r(h1) < r(h0), "1st Shift+Up must move head up");
         assert!(
             r(h2) < r(h1),
@@ -1097,18 +1151,16 @@ mod tests {
 
     #[test]
     fn shift_right_through_consecutive_hard_breaks_visits_each_offset() {
-        let (state, _p1, _t_a, _t_b) = state! {
+        let (state, _p1) = state! {
             doc {
                 root {
-                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                    p1: paragraph { text("a") hard_break hard_break text("b") }
                 }
             }
-            selection: (t_a, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let doc = editor.state.doc.clone();
-
+        editor.view.layout(&editor.state);
         let h0 = editor
             .state()
             .selection
@@ -1139,7 +1191,8 @@ mod tests {
             .expect("selection exists in test")
             .head;
 
-        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        let view = editor.state.view();
+        let r = |p: Position| p.resolve(&view).expect("resolves");
         assert!(r(h1) > r(h0), "1st Shift+Right selects 'a'");
         assert!(r(h2) > r(h1), "2nd Shift+Right passes first hard_break");
         assert!(
@@ -1151,18 +1204,16 @@ mod tests {
 
     #[test]
     fn shift_left_through_consecutive_hard_breaks_visits_each_offset() {
-        let (state, _p1, _t_a, _t_b) = state! {
+        let (state, _p1) = state! {
             doc {
                 root {
-                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                    p1: paragraph { text("a") hard_break hard_break text("b") }
                 }
             }
-            selection: (t_b, 1)
+            selection: (p1, 4)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let doc = editor.state.doc.clone();
-
+        editor.view.layout(&editor.state);
         let h0 = editor
             .state()
             .selection
@@ -1193,7 +1244,8 @@ mod tests {
             .expect("selection exists in test")
             .head;
 
-        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        let view = editor.state.view();
+        let r = |p: Position| p.resolve(&view).expect("resolves");
         assert!(r(h1) < r(h0), "1st Shift+Left selects 'b'");
         assert!(r(h2) < r(h1), "2nd Shift+Left passes second hard_break");
         assert!(r(h3) < r(h2), "3rd Shift+Left passes first hard_break");
@@ -1202,18 +1254,16 @@ mod tests {
 
     #[test]
     fn shift_down_through_consecutive_hard_breaks_visits_each_line() {
-        let (state, _p1, _t_a, _t_b) = state! {
+        let (state, _p1) = state! {
             doc {
                 root {
-                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                    p1: paragraph { text("a") hard_break hard_break text("b") }
                 }
             }
-            selection: (t_a, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let doc = editor.state.doc.clone();
-
+        editor.view.layout(&editor.state);
         let h0 = editor
             .state()
             .selection
@@ -1232,7 +1282,8 @@ mod tests {
             .expect("selection exists in test")
             .head;
 
-        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        let view = editor.state.view();
+        let r = |p: Position| p.resolve(&view).expect("resolves");
         assert!(
             r(h1) > r(h0),
             "1st Shift+Down lands on the empty hard_break line"
@@ -1245,18 +1296,16 @@ mod tests {
 
     #[test]
     fn shift_down_from_wrapped_line_start_keeps_extending_downward() {
-        let (state, _t) = state! {
+        let (state, _p1) = state! {
             doc {
                 root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 40 }) {
-                    paragraph { t: text("aaaaaaaaaaaaaaaaaaaa") }
+                    p1: paragraph { text("aaaaaaaaaaaaaaaaaaaa") }
                 }
             }
-            selection: (t, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let doc = editor.state.doc.clone();
-
+        editor.view.layout(&editor.state);
         let h0 = editor
             .state()
             .selection
@@ -1275,7 +1324,8 @@ mod tests {
             .expect("selection exists in test")
             .head;
 
-        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        let view = editor.state.view();
+        let r = |p: Position| p.resolve(&view).expect("resolves");
         assert_eq!(
             h1.affinity,
             editor_state::Affinity::Downstream,
@@ -1293,18 +1343,16 @@ mod tests {
 
     #[test]
     fn shift_up_through_consecutive_hard_breaks_visits_each_line() {
-        let (state, _p1, _t_a, _t_b) = state! {
+        let (state, _p1) = state! {
             doc {
                 root {
-                    p1: paragraph { t_a: text("a") hard_break hard_break t_b: text("b") }
+                    p1: paragraph { text("a") hard_break hard_break text("b") }
                 }
             }
-            selection: (t_b, 1)
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let doc = editor.state.doc.clone();
-
+        editor.view.layout(&editor.state);
         let h0 = editor
             .state()
             .selection
@@ -1323,7 +1371,8 @@ mod tests {
             .expect("selection exists in test")
             .head;
 
-        let r = |p: Position| p.resolve(&doc).expect("resolves");
+        let view = editor.state.view();
+        let r = |p: Position| p.resolve(&view).expect("resolves");
         assert!(
             r(h1) < r(h0),
             "1st Shift+Up lands on the empty hard_break line"
@@ -1347,7 +1396,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_up(&mut editor);
 
@@ -1359,11 +1408,11 @@ mod tests {
         });
 
         assert!(
-            editor.state().doc.node(i1).is_none(),
+            editor.state().view().leaf(i1).is_none(),
             "upper atom must be replaced away"
         );
         assert!(
-            editor.state().doc.node(i2).is_none(),
+            editor.state().view().leaf(i2).is_none(),
             "lower atom must be replaced away"
         );
         assert!(
@@ -1387,16 +1436,16 @@ mod tests {
 
     #[test]
     fn arrow_left_from_text_selection_collapses_to_sorted_start_without_extra_move() {
-        let (state, t) = state! {
+        let (state, p1) = state! {
             doc {
                 root {
-                    paragraph { t: text("abcd") }
+                    p1: paragraph { text("abcd") }
                 }
             }
-            selection: (t, 1) -> (t, 3)
+            selection: (p1, 1) -> (p1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         arrow(
             &mut editor,
@@ -1407,22 +1456,22 @@ mod tests {
 
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.node, p1);
         assert_eq!(s.head.offset, 1);
     }
 
     #[test]
     fn arrow_right_from_backward_text_selection_collapses_to_sorted_end_without_extra_move() {
-        let (state, t) = state! {
+        let (state, p1) = state! {
             doc {
                 root {
-                    paragraph { t: text("abcd") }
+                    p1: paragraph { text("abcd") }
                 }
             }
-            selection: (t, 3) -> (t, 1)
+            selection: (p1, 3) -> (p1, 1)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         arrow(
             &mut editor,
@@ -1433,22 +1482,22 @@ mod tests {
 
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.node, p1);
         assert_eq!(s.head.offset, 3);
     }
 
     #[test]
     fn word_left_from_text_selection_moves_from_sorted_start() {
-        let (state, t) = state! {
+        let (state, p1) = state! {
             doc {
                 root {
-                    paragraph { t: text("hello world") }
+                    p1: paragraph { text("hello world") }
                 }
             }
-            selection: (t, 6) -> (t, 11)
+            selection: (p1, 6) -> (p1, 11)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         arrow(
             &mut editor,
@@ -1459,24 +1508,24 @@ mod tests {
 
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.node, p1);
         assert_eq!(s.head.offset, 0);
     }
 
     #[test]
     fn arrow_down_from_backward_text_selection_moves_from_sorted_end() {
-        let (state, _, next) = state! {
+        let (state, _p1, _p2, p3) = state! {
             doc {
                 root {
-                    paragraph { text("abcdef") }
-                    paragraph { current: text("abcdef") }
-                    paragraph { next: text("abcdef") }
+                    p1: paragraph { text("abcdef") }
+                    p2: paragraph { text("abcdef") }
+                    p3: paragraph { text("abcdef") }
                 }
             }
-            selection: (current, 6) -> (current, 0)
+            selection: (p2, 6) -> (p2, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         arrow(
             &mut editor,
@@ -1488,7 +1537,7 @@ mod tests {
 
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, next);
+        assert_eq!(s.head.node, p3);
         assert_eq!(s.head.offset, 6);
     }
 
@@ -1497,15 +1546,15 @@ mod tests {
         let (state, first, short, _third) = state! {
             doc {
                 root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 400 }) {
-                    paragraph { first: text("aaaaaaaaaaaa") }
-                    paragraph { short: text("aaa") }
-                    paragraph { third: text("aaaaaaaaaaaa") }
+                    first: paragraph { text("aaaaaaaaaaaa") }
+                    short: paragraph { text("aaa") }
+                    third: paragraph { text("aaaaaaaaaaaa") }
                 }
             }
             selection: (third, 8)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         arrow(
             &mut editor,
@@ -1515,7 +1564,7 @@ mod tests {
             },
         );
         let first_up = editor.state().selection.expect("selection exists in test");
-        assert_eq!(first_up.head.node_id, short);
+        assert_eq!(first_up.head.node, short);
         assert_eq!(first_up.head.offset, 3);
 
         arrow(
@@ -1526,16 +1575,16 @@ mod tests {
             },
         );
         let second_up = editor.state().selection.expect("selection exists in test");
-        assert_eq!(second_up.head.node_id, first);
+        assert_eq!(second_up.head.node, first);
         assert_eq!(second_up.head.offset, 8);
     }
 
     #[test]
     fn arrow_left_from_block_boundary_selection_lands_at_previous_leaf_end() {
-        let (state, _, prev) = state! {
+        let (state, _, p1) = state! {
             doc {
                 r: root {
-                    paragraph { prev: text("prev") }
+                    p1: paragraph { text("prev") }
                     image
                     paragraph { text("next") }
                 }
@@ -1543,7 +1592,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         arrow(
             &mut editor,
@@ -1554,17 +1603,17 @@ mod tests {
 
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, prev);
+        assert_eq!(s.head.node, p1);
         assert_eq!(s.head.offset, 4);
     }
 
     #[test]
     fn arrow_left_right_from_paragraph_boundary_selection_lands_inside_paragraph() {
-        let (state, _r1, t1) = state! {
+        let (state, _r1, p1) = state! {
             doc {
                 r1: root {
-                    paragraph {
-                        t1: text("aa")
+                    p1: paragraph {
+                        text("aa")
                     }
                 }
             }
@@ -1572,7 +1621,7 @@ mod tests {
         };
 
         let mut left_editor = Editor::new_test(state.clone());
-        left_editor.view.layout(&left_editor.state.doc);
+        left_editor.view.layout(&left_editor.state);
         arrow(
             &mut left_editor,
             Movement::Grapheme {
@@ -1581,11 +1630,11 @@ mod tests {
         );
         assert_eq!(
             left_editor.state().selection,
-            Some(Selection::collapsed(Position::new(t1, 0)))
+            Some(Selection::collapsed(Position::new(p1, 0)))
         );
 
         let mut right_editor = Editor::new_test(state);
-        right_editor.view.layout(&right_editor.state.doc);
+        right_editor.view.layout(&right_editor.state);
         arrow(
             &mut right_editor,
             Movement::Grapheme {
@@ -1595,7 +1644,7 @@ mod tests {
         assert_eq!(
             right_editor.state().selection,
             Some(Selection::collapsed(Position {
-                node_id: t1,
+                node: p1,
                 offset: 2,
                 affinity: Affinity::Upstream,
             }))
@@ -1604,15 +1653,15 @@ mod tests {
 
     #[test]
     fn arrow_right_from_fold_node_selection_moves_off_the_fold() {
-        let (state, _, after) = state! {
+        let (state, _, p2) = state! {
             doc { r1: root {
                 fold { fold_title { text("123123") } fold_content { paragraph { text("123") } } }
-                paragraph { after: text("1231231232131") }
+                p2: paragraph { text("1231231232131") }
             } }
             selection: (r1, 0, >) -> (r1, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         let before = editor.state().selection.expect("selection exists in test");
         arrow(
@@ -1629,7 +1678,7 @@ mod tests {
             "arrow-right from a fold node-selection must change the selection (was a silent no-op)"
         );
         assert!(moved.is_collapsed());
-        assert_eq!(moved.head.node_id, after);
+        assert_eq!(moved.head.node, p2);
         assert_eq!(moved.head.offset, 0);
     }
 
@@ -1643,7 +1692,7 @@ mod tests {
             selection: (r1, 0, >) -> (r1, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         let before = editor.state().selection.expect("selection exists in test");
         arrow(
             &mut editor,
@@ -1665,14 +1714,14 @@ mod tests {
         let (state, _, ft) = state! {
             doc {
                 r: root {
-                    fold { fold_title { ft: text("T") } fold_content { paragraph { text("c") } } }
+                    fold { ft: fold_title { text("T") } fold_content { paragraph { text("c") } } }
                     paragraph { text("after") }
                 }
             }
             selection: (r, 0, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -1681,7 +1730,7 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, ft);
+        assert_eq!(s.head.node, ft);
         assert_eq!(s.head.offset, 0);
     }
 
@@ -1692,7 +1741,7 @@ mod tests {
             selection: (r, 0, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         let before = editor.state().selection.expect("selection exists in test");
         arrow(
             &mut editor,
@@ -1715,7 +1764,7 @@ mod tests {
             selection: (r, 0, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -1727,7 +1776,7 @@ mod tests {
             !s.is_collapsed(),
             "image gap-exit must node-select the image"
         );
-        assert!(s.is_unit_node_selection(&editor.state.doc));
+        assert!(is_unit_node_selection(&s, &editor.state.view()));
     }
 
     /// Forward enters the *first* inner of the fold ahead (its title);
@@ -1741,15 +1790,15 @@ mod tests {
             let (state, _, a, b) = state! {
                 doc {
                     r: root {
-                        fold { fold_title { a: text("A") } fold_content { paragraph { text("x") } } }
-                        fold { fold_title { b: text("B") } fold_content { paragraph { text("y") } } }
+                        fold { a: fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                        fold { b: fold_title { text("B") } fold_content { paragraph { text("y") } } }
                         paragraph {}
                     }
                 }
                 selection: (r, 1)
             };
             let mut editor = Editor::new_test(state);
-            editor.view.layout(&editor.state.doc);
+            editor.view.layout(&editor.state);
             (editor, a, b)
         };
 
@@ -1766,7 +1815,7 @@ mod tests {
                 .selection
                 .expect("selection exists in test")
                 .head
-                .node_id,
+                .node,
             b,
             "right enters 2nd fold inner"
         );
@@ -1778,13 +1827,13 @@ mod tests {
                 direction: Direction::Backward,
             },
         );
-        let doc = &e_bwd.state().doc;
+        let doc = e_bwd.state().view();
         let head = e_bwd
             .state()
             .selection
             .expect("selection exists in test")
             .head
-            .node_id;
+            .node;
         let first_fold = doc
             .node(a)
             .unwrap()
@@ -1810,7 +1859,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -1819,7 +1868,7 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
+        assert_eq!(s.head.node, editor_crdt::Dot::ROOT);
         assert_eq!(s.head.offset, 0);
         assert_eq!(s.head.affinity, editor_state::Affinity::Upstream);
     }
@@ -1836,7 +1885,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Line {
@@ -1849,23 +1898,23 @@ mod tests {
             s.is_collapsed(),
             "Up from leading-unit node-sel must enter the gap (not no-op)"
         );
-        assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
+        assert_eq!(s.head.node, editor_crdt::Dot::ROOT);
         assert_eq!(s.head.offset, 0);
     }
 
     #[test]
     fn arrow_up_from_leading_fold_title_range_enters_gap() {
-        let (state, ..) = state! {
+        let (state, _ft) = state! {
             doc { root {
-                fold { fold_title { title: text("Title") } fold_content { paragraph { text("c") } } }
+                fold { ft: fold_title { text("Title") } fold_content { paragraph { text("c") } } }
                 paragraph { text("after") }
             } }
-            selection: (title, 0) -> (title, 1)
+            selection: (ft, 0) -> (ft, 1)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         let expected =
-            gap_cursor_selection_leading(&editor.state.doc).expect("leading fold gap is valid");
+            gap_cursor_selection_leading(&editor.state.view()).expect("leading fold gap is valid");
 
         arrow(
             &mut editor,
@@ -1890,7 +1939,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -1899,7 +1948,7 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
+        assert_eq!(s.head.node, editor_crdt::Dot::ROOT);
         assert_eq!(s.head.offset, 1);
     }
 
@@ -1907,12 +1956,12 @@ mod tests {
     fn arrow_right_from_leading_image_node_selection_no_gap() {
         // image (non-monolithic) <-> paragraph: between-gap builder returns
         // None -> existing behavior.
-        let (state, _, t) = state! {
-            doc { r: root { image paragraph { t: text("b") } } }
+        let (state, _, p1) = state! {
+            doc { r: root { image p1: paragraph { text("b") } } }
             selection: (r, 0, >) -> (r, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -1921,7 +1970,7 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t);
+        assert_eq!(s.head.node, p1);
     }
 
     #[test]
@@ -1938,7 +1987,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -1950,7 +1999,7 @@ mod tests {
         assert_eq!(
             s.anchor,
             Position {
-                node_id: r,
+                node: r,
                 offset: 2,
                 affinity: editor_state::Affinity::Downstream,
             },
@@ -1958,7 +2007,7 @@ mod tests {
         assert_eq!(
             s.head,
             Position {
-                node_id: r,
+                node: r,
                 offset: 3,
                 affinity: editor_state::Affinity::Upstream,
             },
@@ -1979,7 +2028,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Line {
@@ -1992,7 +2041,7 @@ mod tests {
         assert_eq!(
             s.anchor,
             Position {
-                node_id: r,
+                node: r,
                 offset: 2,
                 affinity: editor_state::Affinity::Downstream,
             },
@@ -2000,7 +2049,7 @@ mod tests {
         assert_eq!(
             s.head,
             Position {
-                node_id: r,
+                node: r,
                 offset: 3,
                 affinity: editor_state::Affinity::Upstream,
             },
@@ -2022,7 +2071,7 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -2031,7 +2080,7 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, editor_model::NodeId::ROOT);
+        assert_eq!(s.head.node, editor_crdt::Dot::ROOT);
         assert_eq!(s.head.offset, 1);
     }
 
@@ -2048,8 +2097,8 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2075,8 +2124,8 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2101,8 +2150,8 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2117,18 +2166,18 @@ mod tests {
 
     #[test]
     fn arrow_down_through_between_gap_preserves_column() {
-        let (state, _, t2) = state! {
+        let (state, _, p2) = state! {
             doc {
                 root {
-                    callout { paragraph { t1: text("cdcdcdcdcd") } }
-                    callout { paragraph { t2: text("efefefefef") } }
+                    callout { p1: paragraph { text("cdcdcdcdcd") } }
+                    callout { p2: paragraph { text("efefefefef") } }
                     paragraph {}
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_up(&mut editor);
 
@@ -2144,8 +2193,8 @@ mod tests {
                 .state()
                 .selection
                 .expect("selection exists in test")
-                .resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+                .resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_some(),
         );
 
@@ -2158,24 +2207,24 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t2);
+        assert_eq!(s.head.node, p2);
         assert_eq!(s.head.offset, 3);
     }
 
     #[test]
     fn arrow_up_through_between_gap_preserves_column() {
-        let (state, t1, _) = state! {
+        let (state, p1, _p2) = state! {
             doc {
                 root {
-                    callout { paragraph { t1: text("cdcdcdcdcd") } }
-                    callout { paragraph { t2: text("efefefefef") } }
+                    callout { p1: paragraph { text("cdcdcdcdcd") } }
+                    callout { p2: paragraph { text("efefefefef") } }
                     paragraph {}
                 }
             }
-            selection: (t2, 3)
+            selection: (p2, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
 
         shift_down(&mut editor);
 
@@ -2191,8 +2240,8 @@ mod tests {
                 .state()
                 .selection
                 .expect("selection exists in test")
-                .resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+                .resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_some(),
         );
 
@@ -2205,7 +2254,7 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t1);
+        assert_eq!(s.head.node, p1);
         assert_eq!(s.head.offset, 3);
     }
 
@@ -2214,16 +2263,16 @@ mod tests {
         let (state, r, ..) = state! {
             doc {
                 r: root {
-                    callout { paragraph { t1: text("1234") } }
+                    callout { p1: paragraph { text("1234") } }
                     callout { paragraph {} }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2241,17 +2290,17 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    callout { paragraph { t1: text("1234") } }
+                    callout { p1: paragraph { text("1234") } }
                     callout { paragraph {} }
                     paragraph {}
                 }
             }
-            selection: (t1, 4)
+            selection: (p1, 4)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected =
-            gap_cursor_selection_leading(&editor.state.doc).expect("leading-callout gap is valid");
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_leading(&editor.state.view())
+            .expect("leading-callout gap is valid");
         arrow(
             &mut editor,
             Movement::Line {
@@ -2269,15 +2318,15 @@ mod tests {
             doc {
                 r: root {
                     callout { paragraph {} }
-                    callout { paragraph { t2: text("abcd") } }
+                    callout { p2: paragraph { text("abcd") } }
                     paragraph {}
                 }
             }
-            selection: (t2, 2)
+            selection: (p2, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2296,14 +2345,14 @@ mod tests {
             doc {
                 root {
                     callout { paragraph {} }
-                    callout { paragraph { t2: text("abcd") } }
+                    callout { p2: paragraph { text("abcd") } }
                     paragraph {}
                 }
             }
-            selection: (t2, 2)
+            selection: (p2, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Line {
@@ -2313,8 +2362,8 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "no between-gap when the next sibling is a paragraph; normal exit"
         );
@@ -2322,18 +2371,18 @@ mod tests {
 
     #[test]
     fn arrow_left_from_text_mid_in_callout_does_not_enter_gap() {
-        let (state, t2) = state! {
+        let (state, p2) = state! {
             doc {
                 root {
                     callout { paragraph {} }
-                    callout { paragraph { t2: text("abcd") } }
+                    callout { p2: paragraph { text("abcd") } }
                     paragraph {}
                 }
             }
-            selection: (t2, 2)
+            selection: (p2, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -2342,13 +2391,13 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "grapheme-left from mid-text must not jump straight into the gap"
         );
         assert!(s.is_collapsed());
-        assert_eq!(s.head.node_id, t2);
+        assert_eq!(s.head.node, p2);
         assert_eq!(s.head.offset, 1);
     }
 
@@ -2365,8 +2414,8 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2391,8 +2440,8 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2416,9 +2465,9 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected =
-            gap_cursor_selection_leading(&editor.state.doc).expect("leading-callout gap is valid");
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_leading(&editor.state.view())
+            .expect("leading-callout gap is valid");
         arrow(
             &mut editor,
             Movement::Line {
@@ -2454,8 +2503,8 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, fc, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(fc, 1, &editor.state.view())
             .expect("inner between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2481,7 +2530,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Document {
@@ -2490,8 +2539,8 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "Document-backward must not stop at an intermediate gap"
         );
@@ -2514,7 +2563,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Page {
@@ -2523,8 +2572,8 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "Page is outside the stepping allowlist; Page-backward must not enter a gap"
         );
@@ -2543,7 +2592,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Line {
@@ -2553,8 +2602,8 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "no between-gap when the previous sibling is a paragraph; normal exit"
         );
@@ -2573,7 +2622,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         editor.apply(Message::Navigation {
             op: NavigationOp::Move {
                 movement: Movement::Line {
@@ -2585,8 +2634,8 @@ mod tests {
         });
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "extend (Shift) must not enter the gap"
         );
@@ -2598,14 +2647,14 @@ mod tests {
             doc {
                 root {
                     callout { paragraph {} }
-                    callout { paragraph { t: text("xy") } }
+                    callout { p2: paragraph { text("xy") } }
                     paragraph {}
                 }
             }
-            selection: (t, 1)
+            selection: (p2, 1)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Grapheme {
@@ -2614,8 +2663,8 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "a caret not at the monolithic's inner edge must not enter the gap"
         );
@@ -2634,8 +2683,8 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let gap = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let gap = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2659,7 +2708,7 @@ mod tests {
             },
         );
         let inside = editor.state().selection.expect("selection exists in test");
-        assert!(inside.is_collapsed() && inside.head.node_id != r);
+        assert!(inside.is_collapsed() && inside.head.node != r);
         arrow(
             &mut editor,
             Movement::Line {
@@ -2691,7 +2740,7 @@ mod tests {
                             table_cell { paragraph { text("c") } }
                         }
                         table_row {
-                            table_cell { paragraph { t: text("d") } }
+                            table_cell { tc1: paragraph { text("d") } }
                             table_cell { paragraph { text("e") } }
                             table_cell { paragraph { text("f") } }
                         }
@@ -2700,11 +2749,11 @@ mod tests {
                     paragraph {}
                 }
             }
-            selection: (t, 1)
+            selection: (tc1, 1)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("table↔fold between gap is valid");
         arrow(
             &mut editor,
@@ -2736,18 +2785,18 @@ mod tests {
                         table_row {
                             table_cell { paragraph { text("d") } }
                             table_cell { paragraph { text("e") } }
-                            table_cell { paragraph { t: text("f") } }
+                            table_cell { tc3: paragraph { text("f") } }
                         }
                     }
                     fold { fold_title { text("T") } fold_content { paragraph { text("x") } } }
                     paragraph {}
                 }
             }
-            selection: (t, 1)
+            selection: (tc3, 1)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        let expected = gap_cursor_selection_between(&editor.state.doc, r, 1)
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
             .expect("table↔fold between gap is valid");
         arrow(
             &mut editor,
@@ -2770,7 +2819,7 @@ mod tests {
     // 마찬가지여야 한다.
     #[test]
     fn arrow_down_from_non_last_column_of_table_last_row_with_paragraph_neighbor_moves_out() {
-        let (state, _t, below) = state! {
+        let (state, _tc1, p2) = state! {
             doc {
                 root {
                     table {
@@ -2780,18 +2829,18 @@ mod tests {
                             table_cell { paragraph { text("c") } }
                         }
                         table_row {
-                            table_cell { paragraph { t: text("d") } }
+                            table_cell { tc1: paragraph { text("d") } }
                             table_cell { paragraph { text("e") } }
                             table_cell { paragraph { text("f") } }
                         }
                     }
-                    paragraph { below: text("below") }
+                    p2: paragraph { text("below") }
                 }
             }
-            selection: (t, 1)
+            selection: (tc1, 1)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Line {
@@ -2801,14 +2850,14 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "paragraph neighbor is not a between-gap; must not enter a gap cursor"
         );
         assert!(s.is_collapsed());
         assert_eq!(
-            s.head.node_id, below,
+            s.head.node, p2,
             "down must move into the paragraph below the table, not stay in the cell"
         );
     }
@@ -2819,18 +2868,18 @@ mod tests {
     // 같은 단락의 둘째 줄로 가야 한다.
     #[test]
     fn arrow_down_within_multiline_paragraph_in_callout_does_not_exit() {
-        let (state, _t_a, t_b) = state! {
+        let (state, p1) = state! {
             doc {
                 root {
-                    callout { paragraph { t_a: text("a") hard_break t_b: text("b") } }
+                    callout { p1: paragraph { text("a") hard_break text("b") } }
                     callout { paragraph {} }
                     paragraph {}
                 }
             }
-            selection: (t_a, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
+        editor.view.layout(&editor.state);
         arrow(
             &mut editor,
             Movement::Line {
@@ -2840,15 +2889,251 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert!(
-            s.resolve(&editor.state().doc)
-                .and_then(|rs| rs.as_gap_cursor())
+            s.resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
                 .is_none(),
             "down from the first wrapped line must not exit the callout into the gap"
         );
         assert!(s.is_collapsed());
         assert_eq!(
-            s.head.node_id, t_b,
+            s.head.node, p1,
             "down must move to the second line within the same paragraph"
         );
+        assert_eq!(
+            s.head.offset, 2,
+            "down must move to offset after 'a' (1 char) + hard_break (1 offset)"
+        );
+    }
+
+    #[test]
+    fn _zz_debug_scratch() {
+        let dump = |editor: &Editor, label: &str| {
+            let s = editor.state().selection;
+            eprintln!("[{label}] sel = {s:?}");
+        };
+
+        eprintln!("=== TEST3 paragraph boundary (left) ===");
+        {
+            let (state, _r1, p1) = state! {
+                doc { r1: root { p1: paragraph { text("aa") } } }
+                selection: (r1, 0, >) -> (r1, 1, <)
+            };
+            eprintln!("p1 = {p1:?}");
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            dump(&editor, "init");
+            {
+                let view = editor.state.view();
+                let sel = editor.state().selection.unwrap();
+                let rs = sel.resolve(&view).unwrap();
+                eprintln!(
+                    "from={:?} to={:?} from_inline={} to_inline={}",
+                    Position::from(rs.from()),
+                    Position::from(rs.to()),
+                    rs.from().is_inline_position(),
+                    rs.to().is_inline_position()
+                );
+            }
+            arrow(
+                &mut editor,
+                Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+            );
+            dump(&editor, "after left");
+        }
+
+        eprintln!("=== TEST5 plus_atom (two right, two left) ===");
+        {
+            let (state, r, p1, _p2) = state! {
+                doc { r: root [block_gap(200)] { p1: paragraph {} image p2: paragraph {} } }
+                selection: (p1, 0)
+            };
+            eprintln!("r={r:?} p1={p1:?}");
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            dump(&editor, "init");
+            shift_right(&mut editor);
+            dump(&editor, "R1");
+            shift_right(&mut editor);
+            dump(&editor, "R2");
+            shift_left(&mut editor);
+            dump(&editor, "L1");
+            shift_left(&mut editor);
+            dump(&editor, "L2");
+        }
+
+        eprintln!("=== TEST7 callout content (two right) ===");
+        {
+            let (state, _r, p1, p2, _p3) = state! {
+                doc { r: root [block_gap(200)] { p1: paragraph {} callout { p2: paragraph {} } p3: paragraph {} } }
+                selection: (p1, 0)
+            };
+            eprintln!("p1={p1:?} p2={p2:?}");
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            dump(&editor, "init");
+            shift_right(&mut editor);
+            dump(&editor, "R1");
+            shift_right(&mut editor);
+            dump(&editor, "R2");
+        }
+
+        eprintln!("=== TEST1 trailing hard_break ===");
+        {
+            let (state, _p1, p2) = state! {
+                doc { root { p1: paragraph { hard_break hard_break } p2: paragraph {} } }
+                selection: (p1, 0, >) -> (p1, 2, <)
+            };
+            eprintln!("p1=p1 p2={p2:?}");
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            dump(&editor, "init");
+            shift_right(&mut editor);
+            dump(&editor, "R1");
+        }
+
+        eprintln!("=== TEST1/2 preferred_x down through gap ===");
+        {
+            let (state, _, p2) = state! {
+                doc { root {
+                    callout { p1: paragraph { text("cdcdcdcdcd") } }
+                    callout { p2: paragraph { text("efefefefef") } }
+                    paragraph {}
+                } }
+                selection: (p1, 3)
+            };
+            eprintln!("p2={p2:?}");
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            dump(&editor, "init");
+            shift_up(&mut editor);
+            dump(&editor, "shiftup");
+            arrow(
+                &mut editor,
+                Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Vertical,
+                },
+            );
+            dump(&editor, "down1");
+            arrow(
+                &mut editor,
+                Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Vertical,
+                },
+            );
+            dump(&editor, "down2");
+        }
+
+        eprintln!("=== TEST4 shift_down over atoms ===");
+        {
+            let (state, p1) = state! {
+                doc { root { p1: paragraph { text("top") } image image } }
+                selection: (p1, 3)
+            };
+            eprintln!("p1={p1:?}");
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            dump(&editor, "init");
+            shift_down(&mut editor);
+            dump(&editor, "D1");
+            shift_down(&mut editor);
+            dump(&editor, "D2");
+            shift_down(&mut editor);
+            dump(&editor, "D3");
+        }
+
+        eprintln!("=== resolve_movement probe TEST5 L2 ===");
+        {
+            let (state, r, _p1, _p2) = state! {
+                doc { root3: root [block_gap(200)] { p1: paragraph {} image p2: paragraph {} } }
+                selection: (p1, 0)
+            };
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            shift_right(&mut editor);
+            shift_right(&mut editor);
+            shift_left(&mut editor);
+            // now selection = (p1,0)->(r,1). Probe resolve_movement of head backward.
+            let head = Position {
+                node: r,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            };
+            let tgt = editor.resolve_movement(
+                &head,
+                &Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+            );
+            eprintln!("TEST5 resolve_movement((r,1),back) = {tgt:?}");
+            let ext = editor.resolve_extend_movement(
+                editor.state().selection.unwrap(),
+                &Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+            );
+            eprintln!("TEST5 resolve_extend_movement(L1sel,back) = {ext:?}");
+        }
+
+        eprintln!("=== break probe TEST5 ===");
+        {
+            let (state, r, p1, _p2) = state! {
+                doc { root2: root [block_gap(200)] { p1: paragraph {} image p2: paragraph {} } }
+                selection: (p1, 0)
+            };
+            let editor = Editor::new_test(state);
+            let view = editor.state.view();
+            let from = Position {
+                node: r,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            };
+            let to = Position {
+                node: p1,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            };
+            eprintln!(
+                "TEST5 break(from=(r,1),to=(p1,0)) = {:?}",
+                editor_state::closest_empty_paragraph_break_end_between(&from, &to, &view)
+            );
+        }
+
+        eprintln!("=== break probe TEST7 ===");
+        {
+            let (state, _r, p1, p2, _p3) = state! {
+                doc { rr: root [block_gap(200)] { p1: paragraph {} callout { p2: paragraph {} } p3: paragraph {} } }
+                selection: (p1, 0)
+            };
+            let editor = Editor::new_test(state);
+            let view = editor.state.view();
+            let from = Position {
+                node: editor_crdt::Dot::ROOT,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            };
+            let to = Position {
+                node: p2,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            };
+            eprintln!("p1={p1:?} p2={p2:?}");
+            eprintln!(
+                "TEST7 break(from=(ROOT,1),to=(p2,0)) = {:?}",
+                editor_state::closest_empty_paragraph_break_end_between(&from, &to, &view)
+            );
+            let pbreak = editor_state::paragraph_break_at_end(
+                &Position {
+                    node: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                &view,
+            );
+            eprintln!("TEST7 paragraph_break_at_end(p1,0) = {pbreak:?}");
+        }
     }
 }

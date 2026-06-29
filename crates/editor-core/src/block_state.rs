@@ -1,12 +1,13 @@
+use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{Doc, NodeId, NodeRef, PlainNode};
-use editor_state::{ResolvedSelection, Selection, State};
+use editor_model::{ChildView, DocView, NodeView, PlainNode, Schema};
+use editor_state::{Position, ResolvedSelection, Selection, State};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Block {
-    pub id: NodeId,
+    pub id: Dot,
     pub node: PlainNode,
 }
 
@@ -25,21 +26,21 @@ pub fn resolve_block_state(state: &State) -> Option<BlockState> {
 }
 
 fn resolve_ancestors(state: &State, selection: &Selection) -> Vec<Block> {
-    let doc = &state.doc;
-    let head_chain = ancestor_chain_from(doc, selection.head.node_id);
+    let view = state.view();
+    let head_chain = ancestor_chain_from(&view, selection.head.node);
     if selection.is_collapsed() {
         return head_chain;
     }
-    let anchor_chain = ancestor_chain_from(doc, selection.anchor.node_id);
+    let anchor_chain = ancestor_chain_from(&view, selection.anchor.node);
     common_suffix(&head_chain, &anchor_chain)
 }
 
-fn ancestor_chain_from(doc: &Doc, leaf_id: NodeId) -> Vec<Block> {
+fn ancestor_chain_from(doc: &DocView, leaf_id: Dot) -> Vec<Block> {
     let Some(leaf) = doc.node(leaf_id) else {
         return vec![];
     };
     let mut chain: Vec<Block> = Vec::new();
-    let mut current: Option<NodeRef> = Some(leaf);
+    let mut current: Option<NodeView> = Some(leaf);
     while let Some(n) = current {
         if !n.spec().inline {
             chain.push(Block {
@@ -76,17 +77,20 @@ fn resolve_nodes(state: &State, selection: &Selection) -> Vec<Block> {
     if selection.is_collapsed() {
         return Vec::new();
     }
-    let Some(rs) = selection.resolve(&state.doc) else {
+    let view = state.view();
+    let Some(rs) = selection.resolve(&view) else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    collect_contained(&state.doc.root().unwrap(), &rs, &mut out);
+    collect_contained(&view.root().unwrap(), &rs, &mut out);
     out
 }
 
 /// Collect `node` itself and any descendant non-inline nodes wholly
-/// contained in `rs`, in document (preorder) order.
-fn collect_contained<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection, out: &mut Vec<Block>) {
+/// contained in `rs`, in document (preorder) order. Non-inline atom leaves
+/// (e.g. a top-level image) are leaves, not blocks, so they are matched on the
+/// child sweep rather than via recursion.
+fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Block>) {
     if rs.contains_subtree(node) && !node.spec().inline {
         out.push(Block {
             id: node.id(),
@@ -96,8 +100,29 @@ fn collect_contained<'a>(node: &NodeRef<'a>, rs: &ResolvedSelection, out: &mut V
     // Descend even when self is wholly contained: nested non-inline children
     // (e.g., paragraphs inside a blockquote) must be enumerated too.
     if rs.intersects_subtree(node) {
-        for child in node.children() {
-            collect_contained(&child, rs, out);
+        let view = rs.view();
+        for (i, child) in node.children().enumerate() {
+            match child {
+                ChildView::Block(b) => collect_contained(&b, rs, out),
+                ChildView::Leaf(l) => {
+                    let Some(atom) = l.as_atom() else { continue };
+                    if Schema::node_spec(l.node_type()).inline {
+                        continue;
+                    }
+                    let (Some(start), Some(end)) = (
+                        Position::new(node.id(), i).resolve(view),
+                        Position::new(node.id(), i + 1).resolve(view),
+                    ) else {
+                        continue;
+                    };
+                    if rs.from() <= &start && &end <= rs.to() {
+                        out.push(Block {
+                            id: l.dot(),
+                            node: atom.clone().into_node().to_plain(),
+                        });
+                    }
+                }
+            }
         }
     }
 }
@@ -112,8 +137,8 @@ mod tests {
     #[test]
     fn ancestors_from_text_skips_inline() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hi") } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("Hi") } } }
+            selection: (p1, 1)
         };
         let bs = resolve_block_state(&state).unwrap();
         assert_eq!(bs.ancestors.len(), 2);
@@ -125,10 +150,10 @@ mod tests {
     fn ancestors_common_prefix_when_chain_diverges() {
         let (state, ..) = state! {
             doc { root {
-                p1: paragraph { t1: text("Hi") }
-                p2: paragraph { t2: text("Lo") }
+                p1: paragraph { text("Hi") }
+                p2: paragraph { text("Lo") }
             } }
-            selection: (t1, 0) -> (t2, 2)
+            selection: (p1, 0) -> (p2, 2)
         };
         let bs = resolve_block_state(&state).unwrap();
         assert_eq!(bs.ancestors.len(), 1);
@@ -138,8 +163,8 @@ mod tests {
     #[test]
     fn nodes_empty_for_collapsed() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hi") } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("Hi") } } }
+            selection: (p1, 1)
         };
         let bs = resolve_block_state(&state).unwrap();
         assert!(bs.nodes.is_empty());
@@ -149,11 +174,11 @@ mod tests {
     fn nodes_includes_image_wholly_contained() {
         let (state, ..) = state! {
             doc { root {
-                p1: paragraph { t1: text("ab") }
+                p1: paragraph { text("ab") }
                 img: image
-                p2: paragraph { t2: text("cd") }
+                p2: paragraph { text("cd") }
             } }
-            selection: (t1, 0) -> (t2, 2)
+            selection: (p1, 0) -> (p2, 2)
         };
         let bs = resolve_block_state(&state).unwrap();
         assert!(
@@ -173,11 +198,11 @@ mod tests {
         let (state, ..) = state! {
             doc { r: root {
                 blockquote {
-                    paragraph { _t_inner: text("inside") }
+                    _p_inner: paragraph { text("inside") }
                 }
-                paragraph { t_after: text("after") }
+                p_after: paragraph { text("after") }
             } }
-            selection: (r, 0) -> (t_after, 5)
+            selection: (r, 0) -> (p_after, 5)
         };
         let bs = resolve_block_state(&state).unwrap();
         let has_blockquote = bs

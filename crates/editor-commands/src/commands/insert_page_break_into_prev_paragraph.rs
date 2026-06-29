@@ -1,4 +1,4 @@
-use editor_model::{Node, NodeId, PlainNode, PlainPageBreakNode, Subtree};
+use editor_model::{ChildView, Node, NodeType, PlainNode, PlainPageBreakNode, Subtree};
 use editor_transaction::Transaction;
 
 use crate::helpers::find_ancestor_textblock;
@@ -8,52 +8,59 @@ pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandRes
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
     let pos = selection.head;
 
-    let doc = tr.doc();
-    let Some(paragraph_id) = find_ancestor_textblock(&doc, pos.node_id) else {
-        return Ok(false);
+    let (prev_id, insert_index) = {
+        let view = tr.state().view();
+        let Some(paragraph_id) = find_ancestor_textblock(&view, pos.node) else {
+            return Ok(false);
+        };
+        let paragraph = view
+            .node(paragraph_id)
+            .ok_or(CommandError::NodeNotFound(paragraph_id))?;
+
+        if !matches!(paragraph.node(), Node::Paragraph(_)) {
+            return Ok(false);
+        }
+        if paragraph
+            .parent()
+            .is_none_or(|parent| parent.id() != view.root().unwrap().id())
+        {
+            return Ok(false);
+        }
+
+        let parent = paragraph
+            .parent()
+            .ok_or(CommandError::NoParent(paragraph_id))?;
+        let Some(idx) = parent.child_blocks().position(|b| b.id() == paragraph.id()) else {
+            return Ok(false);
+        };
+        if idx == 0 {
+            return Ok(false);
+        }
+        let Some(prev) = parent.child_blocks().nth(idx - 1) else {
+            return Ok(false);
+        };
+        if !matches!(prev.node(), Node::Paragraph(_)) {
+            return Ok(false);
+        }
+        let has_page_break = prev.children().any(
+            |child| matches!(child, ChildView::Leaf(l) if l.node_type() == NodeType::PageBreak),
+        );
+        if has_page_break {
+            return Ok(false);
+        }
+
+        (prev.id(), prev.children().count())
     };
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
-
-    if !matches!(paragraph.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
-    if paragraph
-        .parent()
-        .is_none_or(|parent| parent.id() != NodeId::ROOT)
-    {
-        return Ok(false);
-    }
-
-    let Some(prev) = paragraph.prev_sibling() else {
-        return Ok(false);
-    };
-    if !matches!(prev.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
-    if prev
-        .children()
-        .any(|child| matches!(child.node(), Node::PageBreak(_)))
-    {
-        return Ok(false);
-    }
-
-    let prev_id = prev.id();
-    let insert_index = prev.entry().children.len();
 
     tr.insert_subtree(
         prev_id,
         insert_index,
-        Subtree::leaf(
-            NodeId::new(),
-            PlainNode::PageBreak(PlainPageBreakNode::default()),
-        ),
+        Subtree::leaf(PlainNode::PageBreak(PlainPageBreakNode::default())),
     )?;
 
     Ok(true)
@@ -72,10 +79,10 @@ mod tests {
             doc {
                 root {
                     paragraph { text("hello") }
-                    paragraph { t2: text("world") }
+                    p2: paragraph { text("world") }
                 }
             }
-            selection: (t2, 0) -> (t2, 3)
+            selection: (p2, 0) -> (p2, 3)
         };
         transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
     }
@@ -83,8 +90,8 @@ mod tests {
     #[test]
     fn no_prev_sibling_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
     }
@@ -95,10 +102,10 @@ mod tests {
             doc {
                 root {
                     blockquote { paragraph { text("a") } }
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
     }
@@ -110,11 +117,11 @@ mod tests {
                 root {
                     blockquote {
                         paragraph { text("a") }
-                        paragraph { t1: text("b") }
+                        p1: paragraph { text("b") }
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
     }
@@ -125,10 +132,10 @@ mod tests {
             doc {
                 root {
                     paragraph { text("hello") page_break {} }
-                    paragraph { t1: text("world") }
+                    p1: paragraph { text("world") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
     }
@@ -140,12 +147,12 @@ mod tests {
                 root {
                     paragraph { text("a") }
                     fold {
-                        fold_title { t1: text("title") }
+                        ft1: fold_title { text("title") }
                         fold_content { paragraph {} }
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (ft1, 0)
         };
         transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
     }
@@ -156,20 +163,20 @@ mod tests {
             doc {
                 root {
                     paragraph { text("hello") }
-                    paragraph { t1: text("world") }
+                    p1: paragraph { text("world") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     paragraph { text("hello") page_break {} }
-                    paragraph { t1: text("world") }
+                    p1: paragraph { text("world") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -194,20 +201,20 @@ mod tests {
             doc {
                 root {
                     paragraph { text("hello") }
-                    paragraph { t1: text("world") }
+                    p1: paragraph { text("world") }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
                     paragraph { text("hello") page_break {} }
-                    paragraph { t1: text("world") }
+                    p1: paragraph { text("world") }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -218,10 +225,10 @@ mod tests {
             doc {
                 root {
                     paragraph { text("hello") }
-                    paragraph { t1: text("world") }
+                    p1: paragraph { text("world") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
             pending_modifiers: [bold]
         };
         let (actual, ..) = transact!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));

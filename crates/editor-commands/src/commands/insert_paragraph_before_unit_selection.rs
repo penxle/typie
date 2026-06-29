@@ -1,44 +1,70 @@
-use editor_model::{NodeId, NodeType, PlainNode, PlainParagraphNode, Subtree};
+use editor_model::{
+    AtomLeaf, ChildView, DocView, NodeType, PlainNode, PlainParagraphNode, Subtree,
+};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::is_block_container;
 use crate::{CommandError, CommandResult};
 
+fn is_unit_node_selection(view: &DocView, sel: &Selection) -> bool {
+    if sel.anchor.node != sel.head.node {
+        return false;
+    }
+    let lo = sel.anchor.offset.min(sel.head.offset);
+    let hi = sel.anchor.offset.max(sel.head.offset);
+    if lo.checked_add(1) != Some(hi) {
+        return false;
+    }
+    match view.node(sel.anchor.node).and_then(|n| n.child_at(lo)) {
+        Some(ChildView::Block(b)) => b.spec().is_unit(),
+        Some(ChildView::Leaf(l)) => l.as_atom().is_some_and(AtomLeaf::is_block_level),
+        None => false,
+    }
+}
+
 pub fn insert_paragraph_before_unit_selection(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let doc = tr.doc();
-
-    if !selection.is_unit_node_selection(&doc) {
-        return Ok(false);
-    }
 
     // A unit-node selection brackets one child: both endpoints share the
     // container node, the offsets are adjacent, and the unit sits at the lower
     // offset. Inserting at that lower offset places the new paragraph right
-    // before the unit. Reading it via min keeps the command direction-agnostic,
-    // matching `is_unit_node_selection`.
-    let parent_id = selection.anchor.node_id;
+    // before the unit.
+    let parent_id = selection.anchor.node;
     let before_index = selection.anchor.offset.min(selection.head.offset);
 
-    let parent = doc
-        .node(parent_id)
-        .ok_or(CommandError::NodeNotFound(parent_id))?;
-    if !is_block_container(parent.node()) || !parent.spec().content.matches(NodeType::Paragraph) {
-        return Ok(false);
+    {
+        let view = tr.state().view();
+        if !is_unit_node_selection(&view, &selection) {
+            return Ok(false);
+        }
+        let parent = view
+            .node(parent_id)
+            .ok_or(CommandError::NodeNotFound(parent_id))?;
+        if !is_block_container(&parent) || !parent.spec().content.matches(NodeType::Paragraph) {
+            return Ok(false);
+        }
     }
 
-    let new_para_id = NodeId::new();
-    let subtree = Subtree::leaf(
-        new_para_id,
-        PlainNode::Paragraph(PlainParagraphNode::default()),
-    );
+    let subtree = Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default()));
     tr.insert_subtree(parent_id, before_index, subtree)?;
 
+    let new_para = {
+        let view = tr.state().view();
+        match view.node(parent_id).and_then(|p| p.child_at(before_index)) {
+            Some(ChildView::Block(b)) => b.id(),
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "inserted paragraph not found before unit".into(),
+                ));
+            }
+        }
+    };
+
     tr.set_selection(Some(Selection::collapsed(Position {
-        node_id: new_para_id,
+        node: new_para,
         offset: 0,
         affinity: Affinity::Downstream,
     })))?;
@@ -158,8 +184,8 @@ mod tests {
     #[test]
     fn collapsed_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| insert_paragraph_before_unit_selection(
             &mut tr
@@ -169,8 +195,8 @@ mod tests {
     #[test]
     fn text_range_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 3)
         };
         transact_fail!(initial, |tr| insert_paragraph_before_unit_selection(
             &mut tr

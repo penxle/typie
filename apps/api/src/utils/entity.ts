@@ -20,7 +20,7 @@ import {
 import { compressZstd } from '#/utils/compression.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { wasm } from '#/utils/wasm.ts';
-import type { Modifier, PlainDoc, PlainRootNode } from '@typie/editor-ffi/server';
+import type { Modifier, PlainDoc, PlainNodeEntry, PlainRootNode } from '@typie/editor-ffi/server';
 import type { Transaction } from '#/db/index.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
@@ -233,7 +233,7 @@ export const extractAssetIdsFromPlainDoc = (
   const embedIds: string[] = [];
   const archivedIds: string[] = [];
 
-  for (const entry of Object.values(plain.nodes)) {
+  const walk = (entry: PlainNodeEntry) => {
     const node = entry.node;
     switch (node.type) {
       case 'image': {
@@ -253,7 +253,9 @@ export const extractAssetIdsFromPlainDoc = (
         break;
       }
     }
-  }
+    for (const child of entry.children) walk(child);
+  };
+  walk(plain.root);
 
   return { imageIds, fileIds, embedIds, archivedIds };
 };

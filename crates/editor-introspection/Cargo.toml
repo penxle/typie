@@ -8,6 +8,7 @@ uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-state/uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm", "editor-state/wasm"]
 
 [dependencies]
+editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state" }
@@ -18,3 +19,4 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 editor-macros = { path = "../editor-macros" }
+editor-state = { path = "../editor-state", features = ["test-utils"] }

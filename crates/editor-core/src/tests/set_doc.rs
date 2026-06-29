@@ -4,21 +4,25 @@ use crate::editor::Editor;
 
 #[test]
 fn set_doc_replaces_rendered_doc() {
-    let (initial, _t) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 5)
+    let (initial, _p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 5)
     };
     let mut editor = Editor::new_test(initial);
-    assert!(editor.state().doc.extract_text().contains("hello"));
+    {
+        let view = editor.state().view();
+        assert!(editor_state::prose(&view).text().contains("hello"));
+    }
 
-    let (other, _t2) = state! {
-        doc { root { paragraph { t2: text("world") } } }
-        selection: (t2, 0)
+    let (other, _p2) = state! {
+        doc { root { p2: paragraph { text("world") } } }
+        selection: (p2, 0)
     };
-    let plain = other.doc.to_plain();
+    let plain = other.to_plain();
 
     editor.set_doc(plain);
-    let text = editor.state().doc.extract_text();
+    let view = editor.state().view();
+    let text = editor_state::prose(&view).text().to_string();
     assert!(
         text.contains("world"),
         "set_doc must replace rendered doc: {text:?}"

@@ -1,148 +1,103 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use editor_model::{Alignment, ChildView, Modifier, ModifierType, NodeType, NodeView};
+use editor_resource::Resource;
+
+use crate::measure::PageBreakPolicy;
+use crate::measure::text::measure::build_strut_only_line;
+use crate::measure::text::resolve::style_from_effective_modifiers;
+use crate::style::{BorderMode, BoxStyle, Direction};
 use editor_common::EdgeInsets;
 
-use crate::style::Alignment;
-use editor_model::{Doc, Modifier, ModifierType, Node, NodeRef};
+use crate::measure::context::MeasureContext;
 
-use crate::measure::Measurer;
-use crate::measure::resolve::resolve_inherited;
-use crate::measure::text::measure::build_strut_only_line;
-use crate::measure::text::resolve::resolve_text_style;
-use crate::measure::types::MeasuredChildren;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
-use crate::style::{BorderMode, BoxStyle, Direction};
-use crate::view_state::ViewState;
+pub struct PaddedLayoutConfig {
+    pub padding: EdgeInsets,
+    pub border: EdgeInsets,
+    pub alignment: crate::style::Alignment,
+    pub page_break_policy: PageBreakPolicy,
+}
+use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent, MeasuredNode};
 
 const BLOCK_GAP_BASE_PX: f32 = 16.0;
+const PHANTOM_INDENT_BASE_PX: f32 = 16.0;
 
-pub fn resolve_gap_after(node: &NodeRef<'_>) -> f32 {
-    match resolve_inherited(node, ModifierType::BlockGap) {
+pub(crate) fn resolve_gap_after(effective: &BTreeMap<ModifierType, Modifier>) -> f32 {
+    match effective.get(&ModifierType::BlockGap) {
         Some(Modifier::BlockGap { value }) => *value as f32 / 100.0 * BLOCK_GAP_BASE_PX,
         _ => 0.0,
     }
 }
 
-const PHANTOM_INDENT_BASE_PX: f32 = 16.0;
+pub(crate) fn child_effective<'a>(child: &ChildView<'a>) -> &'a BTreeMap<ModifierType, Modifier> {
+    match child {
+        ChildView::Block(nv) => nv.effective(),
+        ChildView::Leaf(lv) => lv.effective(),
+    }
+}
 
-/// ParagraphIndent applies to a paragraph only when its parent is Root
-/// (`resolve_paragraph_indent`). The phantom's parent is `node`, so it
-/// applies iff `node` is Root.
-fn phantom_indent(node: &NodeRef<'_>) -> f32 {
-    if !matches!(node.node(), Node::Root(_)) {
+fn phantom_indent(node: &NodeView) -> f32 {
+    if node.node_type() != NodeType::Root {
         return 0.0;
     }
-    match resolve_inherited(node, ModifierType::ParagraphIndent) {
+    match node.effective().get(&ModifierType::ParagraphIndent) {
         Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * PHANTOM_INDENT_BASE_PX,
         _ => 0.0,
     }
 }
 
-/// `(measured_phantom_line, gap_after_px)`. The phantom carries no
-/// modifiers of its own, so its inherited font style and trailing
-/// BlockGap equal what a real `paragraph {}` materialized at this slot
-/// would resolve — guaranteeing jump-free transition. Keyed by the
-/// container so the gap position `(node, index)` resolves to it via the
-/// container-anchored cursor path (`collect_lines`).
 fn make_gap_phantom_block(
-    measurer: &mut Measurer,
-    node: &NodeRef<'_>,
+    node: &NodeView,
     width: f32,
     index: usize,
+    resource: &mut Resource,
 ) -> (Arc<MeasuredNode>, f32) {
-    let base_style = resolve_text_style(node);
+    let base_style =
+        style_from_effective_modifiers(&node.effective().values().cloned().collect::<Vec<_>>());
     let indent = phantom_indent(node);
     let line = build_strut_only_line(
-        measurer,
         node.id(),
         &base_style,
         width,
-        editor_model::Alignment::Left,
+        Alignment::Left,
         indent,
         index..index,
+        resource,
     );
-    (line, resolve_gap_after(node))
+    (
+        Arc::new(MeasuredNode::from_line(width, line)),
+        resolve_gap_after(node.effective()),
+    )
 }
 
-pub fn layout_vertical(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn layout_vertical<'a>(
+    node: &NodeView<'a>,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
+    measure_child: &mut dyn FnMut(
+        ChildView<'a>,
+        f32,
+        &MeasureContext,
+        &mut Resource,
+    ) -> Arc<MeasuredNode>,
 ) -> (MeasuredChildren, f32) {
-    if let Some(patched) = try_patch_vertical(measurer, doc, node, width, view_state) {
-        #[cfg(debug_assertions)]
-        {
-            let full = layout_vertical_full(measurer, doc, node, width, view_state);
-            debug_assert_eq!(
-                patched.0.len(),
-                full.0.len(),
-                "incremental patch changed the child count"
-            );
-            debug_assert!(
-                (patched.1 - full.1).abs() < 0.1,
-                "incremental patch height {} != full rebuild {}",
-                patched.1,
-                full.1
-            );
-        }
-        return patched;
-    }
-    layout_vertical_full(measurer, doc, node, width, view_state)
-}
+    let children: Vec<ChildView<'a>> = node.children().collect();
+    let gap_phantom_index = ctx.gap_phantom_index(&node.id());
 
-/// Incremental fast path: when a pure text edit marked only some of this
-/// container's children dirty, re-measure just those and swap their slots in
-/// the prior children (`O(changed · log N)`), reusing every unchanged child and
-/// its trailing spacing. Returns `None` to fall back to a full rebuild.
-fn try_patch_vertical(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
-    width: f32,
-    view_state: &ViewState,
-) -> Option<(MeasuredChildren, f32)> {
-    let (mut children, dirty) = measurer.patch_plan(node.id())?;
-    for child_id in dirty {
-        let measured = measurer.measure(doc, child_id, width, view_state);
-        if !children.set_block(child_id, measured) {
-            return None;
+    let mut blocks: Vec<(Arc<MeasuredNode>, f32)> = Vec::with_capacity(children.len() + 1);
+    let n_children = children.len();
+    for (i, child) in children.into_iter().enumerate() {
+        if gap_phantom_index == Some(i) {
+            blocks.push(make_gap_phantom_block(node, width, i, resource));
         }
+        let gap_after = resolve_gap_after(child_effective(&child));
+        let m = measure_child(child, width, ctx, resource);
+        blocks.push((m, gap_after));
     }
-    let total_height = children.total_height();
-    Some((children, total_height))
-}
-
-fn layout_vertical_full(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
-    width: f32,
-    view_state: &ViewState,
-) -> (MeasuredChildren, f32) {
-    let children_refs: Vec<_> = node.children().collect();
-    let phantom_index: Option<usize> = view_state
-        .gap_phantom
-        .filter(|gp| gp.parent == node.id())
-        .map(|gp| gp.index);
-
-    let mut blocks: Vec<(Arc<MeasuredNode>, f32)> = Vec::with_capacity(children_refs.len() + 1);
-    for (i, child) in children_refs.iter().enumerate() {
-        if phantom_index == Some(i) {
-            blocks.push(make_gap_phantom_block(measurer, node, width, i));
-        }
-        let m = measurer.measure(doc, child.id(), width, view_state);
-        let child_node = doc.node(child.id()).unwrap();
-        blocks.push((m, resolve_gap_after(&child_node)));
-    }
-    if phantom_index == Some(children_refs.len()) {
-        blocks.push(make_gap_phantom_block(
-            measurer,
-            node,
-            width,
-            children_refs.len(),
-        ));
+    if gap_phantom_index == Some(n_children) {
+        blocks.push(make_gap_phantom_block(node, width, n_children, resource));
     }
 
     let mut result = Vec::with_capacity(blocks.len() * 2);
@@ -158,28 +113,23 @@ fn layout_vertical_full(
         }
     }
 
-    // Total via the children aggregate (tree-order f32 sum) so it matches the
-    // incremental patch's `total_height()` bit-for-bit and the children tree
-    // every downstream consumer reads.
     let children = MeasuredChildren::from_blocks(result);
     let total_height = children.total_height();
     (children, total_height)
 }
 
-pub struct PaddedLayoutConfig {
-    pub padding: EdgeInsets,
-    pub border: EdgeInsets,
-    pub alignment: Alignment,
-    pub page_break_policy: PageBreakPolicy,
-}
-
-pub fn layout_padded(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn layout_padded<'a>(
+    node: &NodeView<'a>,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
     config: PaddedLayoutConfig,
+    measure_child: &mut dyn FnMut(
+        ChildView<'a>,
+        f32,
+        &MeasureContext,
+        &mut Resource,
+    ) -> Arc<MeasuredNode>,
 ) -> MeasuredNode {
     let PaddedLayoutConfig {
         padding,
@@ -188,14 +138,15 @@ pub fn layout_padded(
         page_break_policy,
     } = config;
     let inner_width = width - padding.left - padding.right - border.left - border.right;
-    let (children, children_height) = layout_vertical(measurer, doc, node, inner_width, view_state);
+    let (children, children_height) =
+        layout_vertical(node, inner_width, ctx, resource, measure_child);
     let total_height = children_height + padding.top + padding.bottom + border.top + border.bottom;
 
     MeasuredNode {
         width,
         height: total_height,
         content: MeasuredContent::Box(MeasuredBox {
-            node_id: node.id(),
+            node: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding,
@@ -213,181 +164,255 @@ pub fn layout_padded(
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
-    use editor_model::NodeId;
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, ChildView, DocLogs, DocView, HorizontalRuleVariant, Modifier, ModifierAttrLog,
+        ModifierAttrOp::SetModifier, ModifierType, NodeAttrLog, NodeMarkerLog, NodeStyleLog,
+        NodeType, SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+
+    use crate::measure::PageBreakPolicy;
+    use crate::measure::context::MeasureContext;
+    use crate::view_state::GapPhantom;
 
     use super::*;
+    use crate::measure::types::{MeasuredAtom, MeasuredContent, MeasuredNode};
 
-    #[test]
-    fn sums_children() {
-        let (doc, p1) = doc! {
-            root {
-                p1: paragraph { text("hello") }
-            }
-        };
+    fn stub() -> impl FnMut(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> {
+        |child, _w, _ctx, _r| {
+            let node = match &child {
+                ChildView::Block(nv) => nv.id(),
+                ChildView::Leaf(lv) => lv.dot(),
+            };
+            Arc::new(MeasuredNode {
+                width: 100.0,
+                height: 10.0,
+                content: MeasuredContent::Atom(MeasuredAtom { node }),
+            })
+        }
+    }
 
-        let node = doc.node(p1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = layout_padded(
-            &mut measurer,
-            &doc,
-            &node,
-            300.0,
-            &ViewState::new(),
-            PaddedLayoutConfig {
-                padding: EdgeInsets::ZERO,
-                border: EdgeInsets::ZERO,
-                alignment: Alignment::Start,
-                page_break_policy: PageBreakPolicy::Auto,
-            },
-        );
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
 
-        assert!(matches!(result.content, MeasuredContent::Box(_)));
-        assert_eq!(result.width, 300.0);
+    fn build_root_two_paragraphs(block_gap: Option<Modifier>) -> DocLogs {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 2);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let mut doc = logs(&items);
+        if let Some(modifier) = block_gap {
+            doc.block_modifiers = ModifierAttrLog::new()
+                .apply(
+                    Dot::ROOT,
+                    SetModifier {
+                        target: root,
+                        modifier,
+                    },
+                )
+                .unwrap();
+        }
+        doc
+    }
+
+    fn build_root_image_paragraph() -> DocLogs {
+        let root = Dot::ROOT;
+        let img = Dot::new(1, 1);
+        let p = Dot::new(1, 2);
+        let items = vec![
+            (
+                img,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::default(),
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                p,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        logs(&items)
     }
 
     #[test]
-    fn inserts_gap_as_spacing() {
-        let (doc,) = doc! {
-            root [block_gap(200)] {
-                paragraph { text("a") }
-                paragraph { text("b") }
-            }
-        };
+    fn spacing_inserted_between_blocks() {
+        let doc_gap = build_root_two_paragraphs(Some(Modifier::BlockGap { value: 100 }));
+        let pd = project_document(&doc_gap).unwrap();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let mut res = Resource::new_test();
 
-        let node = doc.node(NodeId::ROOT).unwrap();
-        let mut measurer = Measurer::new_test();
-        let (children, _) = layout_vertical(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-
+        let (children, total) = layout_vertical(
+            &root,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+            &mut stub(),
+        );
         assert_eq!(children.len(), 3);
         assert!(matches!(children[1].content, MeasuredContent::Spacing(_)));
+        assert!((total - (2.0 * 10.0 + 16.0)).abs() < 1e-3);
+
+        let doc_no_gap = build_root_two_paragraphs(None);
+        let pd2 = project_document(&doc_no_gap).unwrap();
+        let view2 = DocView::new(&pd2);
+        let root2 = view2.root().unwrap();
+        let (children2, _) = layout_vertical(
+            &root2,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+            &mut stub(),
+        );
+        assert_eq!(children2.len(), 2);
+        assert!(
+            !children2
+                .iter()
+                .any(|n| matches!(n.content, MeasuredContent::Spacing(_)))
+        );
     }
 
     #[test]
     fn resolve_gap_after_converts_block_gap() {
-        let (doc, p1) = doc! { root [block_gap(100)] { p1: paragraph } };
-        let node = doc.node(p1).unwrap();
-        assert_eq!(resolve_gap_after(&node), 16.0);
+        let mut eff = BTreeMap::new();
+        eff.insert(ModifierType::BlockGap, Modifier::BlockGap { value: 100 });
+        assert!((resolve_gap_after(&eff) - 16.0).abs() < 1e-3);
+
+        let empty: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+        assert_eq!(resolve_gap_after(&empty), 0.0);
     }
 
     #[test]
-    fn resolve_gap_after_returns_zero_when_no_block_gap() {
-        let (doc, p1) = doc! { root [] { p1: paragraph } };
-        let node = doc.node(p1).unwrap();
-        assert_eq!(resolve_gap_after(&node), 0.0);
-    }
+    fn block_atom_leaf_not_dropped() {
+        let doc = build_root_image_paragraph();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let mut res = Resource::new_test();
 
-    fn count_lines_with(
-        children: &crate::measure::types::MeasuredChildren,
-        id: NodeId,
-        range: std::ops::Range<usize>,
-    ) -> usize {
-        children
-            .iter()
-            .filter(|n| {
-                matches!(&n.content,
-            crate::measure::MeasuredContent::Line(l)
-                if l.node_id == id && l.child_range == Some(range.clone()))
-            })
-            .count()
-    }
-
-    #[test]
-    fn gap_phantom_matches_real_paragraph_layout_jump_free() {
-        use crate::measure::Measurer;
-        use crate::view_state::{GapPhantom, ViewState};
-        let (doc_gap,) = doc! {
-            root {
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            }
-        };
-        let (doc_real,) = doc! {
-            root {
-                fold { fold_title { text("a") } fold_content { paragraph { text("x") } } }
-                paragraph {}
-                fold { fold_title { text("b") } fold_content { paragraph { text("y") } } }
-                paragraph {}
-            }
-        };
-        let mut m = Measurer::new_test();
-        let mut vs = ViewState::new();
-        vs.gap_phantom = Some(GapPhantom {
-            parent: NodeId::ROOT,
-            index: 1,
-        });
-        let (cg, hg) = layout_vertical(
-            &mut m,
-            &doc_gap,
-            &doc_gap.node(NodeId::ROOT).unwrap(),
+        let (children, _) = layout_vertical(
+            &root,
             300.0,
-            &vs,
+            &MeasureContext::default(),
+            &mut res,
+            &mut stub(),
         );
-        let (cr, hr) = layout_vertical(
-            &mut m,
-            &doc_real,
-            &doc_real.node(NodeId::ROOT).unwrap(),
-            300.0,
-            &ViewState::new(),
-        );
+        assert_eq!(children.len(), 2);
+        let hr_dot = Dot::new(1, 1);
         assert!(
-            (hg - hr).abs() < 0.5,
-            "phantom height {hg} must match real-paragraph height {hr}"
+            children
+                .iter()
+                .any(|n| matches!(&n.content, MeasuredContent::Atom(a) if a.node == hr_dot))
         );
-        assert_eq!(count_lines_with(&cg, NodeId::ROOT, 1..1), 1);
-        let sp = |c: &crate::measure::types::MeasuredChildren| {
-            c.iter()
-                .filter(|n| matches!(n.content, crate::measure::MeasuredContent::Spacing(_)))
-                .count()
+    }
+
+    #[test]
+    fn gap_phantom_inserts_strut_line() {
+        let doc = build_root_two_paragraphs(None);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let mut res = Resource::new_test();
+
+        let ctx_phantom = MeasureContext {
+            gap_phantom: Some(GapPhantom {
+                parent: root.id(),
+                index: 0,
+            }),
+            ..Default::default()
         };
-        assert_eq!(
-            sp(&cg),
-            sp(&cr),
-            "gap spacing count must match the real-paragraph case"
-        );
-    }
-
-    #[test]
-    fn gap_phantom_index_zero_leading() {
-        use crate::measure::Measurer;
-        use crate::view_state::{GapPhantom, ViewState};
-        let (doc,) = doc! { root { image paragraph { text("b") } } };
-        let mut m = Measurer::new_test();
-        let mut vs = ViewState::new();
-        vs.gap_phantom = Some(GapPhantom {
-            parent: NodeId::ROOT,
-            index: 0,
-        });
-        let (c, h0) = layout_vertical(&mut m, &doc, &doc.node(NodeId::ROOT).unwrap(), 300.0, &vs);
-        let (_c2, h1) = layout_vertical(
-            &mut m,
-            &doc,
-            &doc.node(NodeId::ROOT).unwrap(),
+        let (children_phantom, total_phantom) =
+            layout_vertical(&root, 300.0, &ctx_phantom, &mut res, &mut stub());
+        let (_, total_none) = layout_vertical(
+            &root,
             300.0,
-            &ViewState::new(),
+            &MeasureContext::default(),
+            &mut res,
+            &mut stub(),
         );
-        assert!(h0 > h1, "leading phantom must add height");
-        assert_eq!(count_lines_with(&c, NodeId::ROOT, 0..0), 1);
+
+        let first = &children_phantom[0];
+        assert!(matches!(
+            &first.content,
+            MeasuredContent::Line(l) if l.offset_range == Some(0..0) && !l.is_phantom
+        ));
+        assert!(total_phantom > total_none);
     }
 
     #[test]
-    fn no_phantom_when_parent_mismatch_or_none() {
-        use crate::measure::Measurer;
-        use crate::view_state::{GapPhantom, ViewState};
-        let (doc, p1) = doc! { root { p1: paragraph { text("hello") } } };
-        let mut m = Measurer::new_test();
-        let node = doc.node(p1).unwrap();
-        let base = layout_vertical(&mut m, &doc, &node, 300.0, &ViewState::new()).1;
-        let mut vs = ViewState::new();
-        vs.gap_phantom = Some(GapPhantom {
-            parent: NodeId::new(),
-            index: 0,
-        });
-        let mismatch = layout_vertical(&mut m, &doc, &node, 300.0, &vs).1;
-        assert_eq!(
-            base, mismatch,
-            "mismatched parent descriptor must have no effect"
+    fn padded_wraps_box() {
+        let doc = build_root_two_paragraphs(None);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root = view.root().unwrap();
+        let mut res = Resource::new_test();
+
+        let result = layout_padded(
+            &root,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+            PaddedLayoutConfig {
+                padding: EdgeInsets::ZERO,
+                border: EdgeInsets::ZERO,
+                alignment: crate::style::Alignment::Start,
+                page_break_policy: PageBreakPolicy::Auto,
+            },
+            &mut stub(),
         );
+
+        assert!(matches!(result.content, MeasuredContent::Box(_)));
+        assert!((result.width - 300.0).abs() < 1e-3);
+        if let MeasuredContent::Box(b) = &result.content {
+            assert_eq!(b.style.monolithic, root.spec().monolithic);
+        }
     }
 }

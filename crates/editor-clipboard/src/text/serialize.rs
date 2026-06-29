@@ -89,13 +89,17 @@ fn collect_cell_text(node: &Fragment, out: &mut String) {
 mod tests {
     use super::*;
     use crate::slice::Slice;
+    use crate::test_doc::DocBuilder;
+    use editor_crdt::Dot;
     use editor_macros::state;
+    use editor_model::{AtomLeaf, NodeType};
+    use editor_state::{Position, Selection};
 
     #[test]
     fn to_text_single_paragraph() {
-        let (s, ..) = state! {
-            doc { root { paragraph { t1: text("Hello World") } } }
-            selection: (t1, 0) -> (t1, 11)
+        let (s, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello World") } } }
+            selection: (p1, 0) -> (p1, 11)
         };
         let slice = Slice::extract(&s).unwrap();
         assert_eq!(to_text(&slice), "Hello World");
@@ -103,13 +107,18 @@ mod tests {
 
     #[test]
     fn to_text_multi_paragraph_with_hardbreak() {
-        let (s, ..) = state! {
-            doc { root {
-                paragraph { t1: text("first") hard_break {} text("line") }
-                paragraph { t2: text("second") }
-            } }
-            selection: (t1, 0) -> (t2, 6)
-        };
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let p1 = b.block(NodeType::Paragraph, &[root]);
+        b.text("first");
+        b.atom(AtomLeaf::HardBreak, &[]);
+        b.text("line");
+        let p2 = b.block(NodeType::Paragraph, &[root]);
+        b.text("second");
+        let s = b.finish(Some(Selection::new(
+            Position::new(p1, 0),
+            Position::new(p2, 6),
+        )));
         let slice = Slice::extract(&s).unwrap();
         assert_eq!(slice.to_text(), "first\nline\n\nsecond");
     }
@@ -122,10 +131,16 @@ mod tests {
 
     #[test]
     fn to_text_emits_tab_for_tab_node() {
-        let (s2, ..) = state! {
-            doc { root { paragraph { t1: text("a") tab {} t2: text("b") } } }
-            selection: (t1, 0) -> (t2, 1)
-        };
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let para = b.block(NodeType::Paragraph, &[root]);
+        b.text("a");
+        b.atom(AtomLeaf::Tab, &[]);
+        b.text("b");
+        let s2 = b.finish(Some(Selection::new(
+            Position::new(para, 0),
+            Position::new(para, 3),
+        )));
         let slice = Slice::extract(&s2).unwrap();
         assert_eq!(slice.to_text(), "a\tb");
     }
@@ -145,7 +160,7 @@ mod tests {
             } } }
             selection: (c00, 0)
         };
-        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let sel = cell_rect_sel(&s, c00, c11);
         let s = editor_state::State {
             selection: Some(sel),
             ..s
@@ -156,21 +171,43 @@ mod tests {
 
     #[test]
     fn cell_internal_tab_flattens_to_space_not_column() {
-        let (s, c00, c11) = state! {
-            doc { root { table {
-                table_row {
-                    c00: table_cell { paragraph { text("x") tab {} text("y") } }
-                    c11: table_cell { paragraph { text("z") } }
-                }
-            } } }
-            selection: (c00, 0)
-        };
-        let sel = editor_state::cell_rect_selection(&s.doc, c00, c11).unwrap();
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let table = b.block(NodeType::Table, &[root]);
+        let row = b.block(NodeType::TableRow, &[root, table]);
+        let c00 = b.block(NodeType::TableCell, &[root, table, row]);
+        let _cp0 = b.block(NodeType::Paragraph, &[root, table, row, c00]);
+        b.text("x");
+        b.atom(AtomLeaf::Tab, &[]);
+        b.text("y");
+        let c11 = b.block(NodeType::TableCell, &[root, table, row]);
+        let _cp1 = b.block(NodeType::Paragraph, &[root, table, row, c11]);
+        b.text("z");
+        let s = b.finish(None);
+        let sel = cell_rect_sel(&s, c00, c11);
         let s = editor_state::State {
             selection: Some(sel),
             ..s
         };
         let slice = Slice::extract(&s).unwrap();
         assert_eq!(slice.to_text(), "x y\tz");
+    }
+
+    fn cell_rect_sel(
+        state: &editor_state::State,
+        anchor_cell: Dot,
+        head_cell: Dot,
+    ) -> editor_state::Selection {
+        use editor_state::{Position, Selection};
+        let view = state.view();
+        let a = view.node(anchor_cell).unwrap();
+        let h = view.node(head_cell).unwrap();
+        let a_row = a.parent().unwrap().id();
+        let h_row = h.parent().unwrap().id();
+        let a_col = a.index().unwrap();
+        let h_col = h.index().unwrap();
+        let lo = a_col.min(h_col);
+        let hi = a_col.max(h_col);
+        Selection::new(Position::new(a_row, lo), Position::new(h_row, hi + 1))
     }
 }

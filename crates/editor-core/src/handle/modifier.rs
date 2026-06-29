@@ -18,10 +18,23 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
                 Ok(())
             })
         }
-        ModifierOp::Toggle { modifier_type } => editor.transact(|tr| {
-            commands::toggle_modifier(tr, modifier_type)?;
-            Ok(())
-        }),
+        ModifierOp::Toggle { modifier_type } => {
+            // toggle_modifier records a span op even when the selected range has
+            // no applicable target (e.g. a fold title that suppresses the
+            // modifier). That op produces no observable change but still pushes a
+            // history entry, which would make editor.can (observable-state based)
+            // disagree with apply. Skip the transaction when there is nothing to
+            // observe.
+            let mut probe = editor_transaction::Transaction::new(&editor.state);
+            commands::toggle_modifier(&mut probe, modifier_type)?;
+            if !editor_state::state_observably_changed(&editor.state, probe.state()) {
+                return Ok(());
+            }
+            editor.transact(|tr| {
+                commands::toggle_modifier(tr, modifier_type)?;
+                Ok(())
+            })
+        }
         ModifierOp::Set { modifier } => editor.transact(|tr| {
             commands::set_modifier(tr, modifier)?;
             Ok(())
@@ -57,8 +70,8 @@ mod tests {
     #[test]
     fn probe_toggle_bold_with_textblock() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1)
         };
         assert_probe_predicts_apply(
             state,
@@ -73,8 +86,8 @@ mod tests {
     #[test]
     fn probe_toggle_italic_with_no_applicable_target() {
         let (state, ..) = state! {
-            doc { root { fold { fold_title { t1: text("title") } fold_content { paragraph { text("body") } } } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { fold { ft1: fold_title { text("title") } fold_content { paragraph { text("body") } } } } }
+            selection: (ft1, 0) -> (ft1, 5)
         };
         assert_probe_predicts_apply(
             state,
@@ -89,8 +102,8 @@ mod tests {
     #[test]
     fn probe_set_modifier_same_value_noop() {
         let (state, ..) = state! {
-            doc { root [font_size(1600)] { paragraph { t1: text("hi") } } }
-            selection: (t1, 0)
+            doc { root [font_size(1600)] { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
         };
         assert_probe_predicts_apply(
             state,
@@ -105,8 +118,8 @@ mod tests {
     #[test]
     fn probe_clear_all_empty_pending() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         assert_probe_predicts_apply(
             state,
@@ -119,8 +132,8 @@ mod tests {
     #[test]
     fn clear_all_collapsed_unsets_effective_inline() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") [italic] } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") [italic] } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Modifier {
@@ -136,28 +149,30 @@ mod tests {
 
     #[test]
     fn clear_all_range_removes_inline_from_doc() {
-        let (state, t1) = state! {
-            doc { root { paragraph { t1: text("Hello") [italic] } } }
-            selection: (t1, 0) -> (t1, 5)
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") [italic] } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Modifier {
             op: ModifierOp::ClearAll,
         });
-        let entry = editor.state().doc.get_entry(t1).unwrap();
+        let view = editor.state().view();
+        let para = view.node(p1).unwrap();
         assert!(
-            !entry
-                .modifiers
-                .iter()
-                .any(|(_, m)| matches!(m, editor_model::Modifier::Italic))
+            !para.inline().iter().any(|item| item
+                .effective
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Italic))),
+            "italic must be cleared from all leaves"
         );
     }
 
     #[test]
     fn toggle_italic_via_message() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Modifier {
@@ -178,10 +193,10 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_size(1600)] {
-                    paragraph { t1: text("hello") }
+                    p1: paragraph { text("hello") }
                 }
             }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Modifier {
@@ -202,16 +217,16 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root [font_family("Pretendard".to_string()), font_weight(400)] {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
 
         let events = editor.apply(Message::Modifier {
             op: ModifierOp::SetOnNode {
-                id: editor_model::NodeId::ROOT,
+                id: editor_crdt::Dot::ROOT,
                 modifier: editor_model::Modifier::FontFamily {
                     value: "Paperlogy".to_string(),
                 },
@@ -222,9 +237,11 @@ mod tests {
             e,
             EditorEvent::StateChanged { fields } if fields.contains(&StateField::Modifiers)
         )));
-        let root = editor.state().doc.node(editor_model::NodeId::ROOT).unwrap();
-        assert!(root.explicit_modifiers().any(
-            |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "Paperlogy")
+        let view = editor.state().view();
+        let root = view.node(editor_crdt::Dot::ROOT).unwrap();
+        assert!(matches!(
+            root.block_modifier(editor_model::ModifierType::FontFamily),
+            Some(editor_model::Modifier::FontFamily { value }) if value == "Paperlogy"
         ));
     }
 
@@ -233,11 +250,11 @@ mod tests {
         let (state, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") } }
+                    ft1: fold_title { text("Title") }
+                    fold_content { p1: paragraph { text("Body") } }
                 }
             } }
-            selection: (t1, 0) -> (t2, 4)
+            selection: (ft1, 0) -> (p1, 4)
         };
         let mut editor = Editor::new_test(state);
 
@@ -250,11 +267,11 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("Title") }
-                    fold_content { paragraph { t2: text("Body") [italic] } }
+                    ft1: fold_title { text("Title") }
+                    fold_content { p1: paragraph { text("Body") [italic] } }
                 }
             } }
-            selection: (t1, 0) -> (t2, 4)
+            selection: (ft1, 0) -> (p1, 4)
         };
         assert_state_eq!(editor.state(), &expected);
     }

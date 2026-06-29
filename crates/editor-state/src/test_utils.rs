@@ -1,129 +1,365 @@
-use editor_model::{Doc, NodeId};
+use std::collections::HashMap;
 
-use crate::{Position, State};
+use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph, OrMapOp, OrSetOp};
+use editor_model::{
+    Anchor, AtomLeaf, Bias, EditOp, ModifierAttrOp, NodeAttrOp, NodeLwwOp, PlainDoc, PlainNode,
+    PlainNodeEntry, SeqClass, SeqItem, SpanOp, StyleOp, StyleRegOp, classify,
+};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PathPosition {
-    path: Vec<usize>,
-    offset: usize,
+use crate::{ProjectedState, State};
+
+/// Builds a projected [`State`] from a [`PlainDoc`] template (the shape emitted
+/// by the `state!` macro). Returns a map from each node's child-index path (from
+/// the root; root = empty path) to the projected `Dot`s: block nodes map to their
+/// own block `Dot`, text nodes map to their containing block (text has no
+/// projected identity).
+pub fn build_state_from_plain(plain: PlainDoc) -> (State, HashMap<Vec<usize>, Dot>) {
+    build_state_from_plain_with_actor(plain, 1)
 }
 
-fn node_path(doc: &Doc, node_id: NodeId) -> Vec<usize> {
-    let mut path = Vec::new();
-    let mut current = node_id;
-    while let Some(entry) = doc.get_entry(current) {
-        if let Some(parent_id) = *entry.parent.get() {
-            if let Some(parent_entry) = doc.get_entry(parent_id)
-                && let Some(idx) = parent_entry
-                    .children
-                    .iter()
-                    .copied()
-                    .position(|id| id == current)
-            {
-                path.push(idx);
-            }
-            current = parent_id;
-        } else {
-            break;
+/// Like [`build_state_from_plain`], but allocates the document's `Dot`s under
+/// `actor`. Tests that need two documents with disjoint `Dot` namespaces (e.g.
+/// to verify that a stable selection captured from one does not spuriously
+/// resolve against the other) build the second with a distinct actor.
+pub fn build_state_from_plain_with_actor(
+    plain: PlainDoc,
+    actor: u64,
+) -> (State, HashMap<Vec<usize>, Dot>) {
+    let mut graph = OpGraph::<EditOp>::with_actor(actor);
+    let mut handles: HashMap<Vec<usize>, Dot> = HashMap::new();
+    let mut seq_pos: usize = 0;
+
+    emit_node(
+        &plain.root,
+        &[],
+        &mut Vec::new(),
+        &mut graph,
+        &mut handles,
+        &mut seq_pos,
+    );
+
+    for (style_id, entry) in plain.styles.iter() {
+        graph
+            .add_mut(EditOp::Style(StyleRegOp {
+                style_id: style_id.clone(),
+                op: StyleOp::Presence(OrMapOp::Set {
+                    key: style_id.clone(),
+                    value: (),
+                }),
+            }))
+            .expect("local style presence never conflicts");
+        graph
+            .add_mut(EditOp::Style(StyleRegOp {
+                style_id: style_id.clone(),
+                op: StyleOp::Name(LwwRegOp::Set {
+                    value: entry.name.clone(),
+                }),
+            }))
+            .expect("local style name never conflicts");
+        for modifier in entry.modifiers.iter() {
+            graph
+                .add_mut(EditOp::Style(StyleRegOp {
+                    style_id: style_id.clone(),
+                    op: StyleOp::Modifiers(OrSetOp::Add {
+                        elem: modifier.clone(),
+                    }),
+                }))
+                .expect("local style modifier never conflicts");
         }
     }
-    path.reverse();
-    path
+
+    graph.commit_mut();
+    let projected = ProjectedState::from_graph(graph).expect("template always projects");
+    (State::new(projected, None), handles)
 }
 
-fn position_to_path_position(doc: &Doc, pos: &Position) -> PathPosition {
-    PathPosition {
-        path: node_path(doc, pos.node_id),
-        offset: pos.offset,
+fn emit_node(
+    entry: &PlainNodeEntry,
+    parents: &[Dot],
+    path: &mut Vec<usize>,
+    graph: &mut OpGraph<EditOp>,
+    handles: &mut HashMap<Vec<usize>, Dot>,
+    seq_pos: &mut usize,
+) {
+    let node_type = entry.node.as_type();
+
+    match classify(node_type) {
+        SeqClass::Block => {
+            // The root is implicit (Dot::ROOT): no Block op in the seq, children
+            // parent to Dot::ROOT, and its overlays target Dot::ROOT.
+            let dot = if matches!(entry.node, PlainNode::Root(_)) {
+                Dot::ROOT
+            } else {
+                let d = graph
+                    .add_mut(EditOp::Seq(ListOp::Ins {
+                        pos: *seq_pos,
+                        item: SeqItem::Block {
+                            node_type,
+                            parents: parents.to_vec(),
+                        },
+                    }))
+                    .expect("local seq block insert never conflicts")
+                    .id;
+                *seq_pos += 1;
+                d
+            };
+            handles.insert(path.clone(), dot);
+
+            for modifier in entry.modifiers.values() {
+                graph
+                    .add_mut(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                        target: dot,
+                        modifier: modifier.clone(),
+                    }))
+                    .expect("local block modifier never conflicts");
+            }
+            if let Some(style_id) = &entry.style {
+                graph
+                    .add_mut(EditOp::NodeStyle(NodeLwwOp {
+                        target: dot,
+                        op: LwwRegOp::Set {
+                            value: Some(style_id.clone()),
+                        },
+                    }))
+                    .expect("local node style never conflicts");
+            }
+            if let Some(marker) = &entry.marker {
+                graph
+                    .add_mut(EditOp::NodeMarker(NodeLwwOp {
+                        target: dot,
+                        op: LwwRegOp::Set {
+                            value: Some(marker.clone()),
+                        },
+                    }))
+                    .expect("local node marker never conflicts");
+            }
+            for attr in entry.node.to_attrs() {
+                graph
+                    .add_mut(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))
+                    .expect("local node attr never conflicts");
+            }
+
+            let mut child_parents = parents.to_vec();
+            child_parents.push(dot);
+            for (i, child) in entry.children.iter().enumerate() {
+                path.push(i);
+                emit_node(child, &child_parents, path, graph, handles, seq_pos);
+                path.pop();
+            }
+        }
+        SeqClass::Text => {
+            if let PlainNode::Text(text_node) = &entry.node {
+                let mut char_dots = Vec::with_capacity(text_node.text.chars().count());
+                for ch in text_node.text.chars() {
+                    let d = graph
+                        .add_mut(EditOp::Seq(ListOp::Ins {
+                            pos: *seq_pos,
+                            item: SeqItem::Char(ch),
+                        }))
+                        .expect("local char insert never conflicts")
+                        .id;
+                    *seq_pos += 1;
+                    char_dots.push(d);
+                }
+                if let (Some(&first), Some(&last)) = (char_dots.first(), char_dots.last()) {
+                    for modifier in entry.modifiers.values() {
+                        graph
+                            .add_mut(EditOp::Span(SpanOp::AddSpan {
+                                start: Anchor {
+                                    id: first,
+                                    bias: Bias::Before,
+                                },
+                                end: Anchor {
+                                    id: last,
+                                    bias: Bias::After,
+                                },
+                                modifier: modifier.clone(),
+                            }))
+                            .expect("local span never conflicts");
+                    }
+                    if let Some(style_id) = &entry.style {
+                        for &d in &char_dots {
+                            graph
+                                .add_mut(EditOp::NodeStyle(NodeLwwOp {
+                                    target: d,
+                                    op: LwwRegOp::Set {
+                                        value: Some(style_id.clone()),
+                                    },
+                                }))
+                                .expect("local leaf style never conflicts");
+                        }
+                    }
+                }
+            }
+            if let Some(parent_dot) = parents.last() {
+                handles.insert(path.clone(), *parent_dot);
+            }
+        }
+        SeqClass::Atom => {
+            let leaf = AtomLeaf::from_plain_node(&entry.node).expect("atom plain node converts");
+            let item = if leaf.is_block_level() {
+                SeqItem::BlockAtom {
+                    leaf,
+                    parents: parents.to_vec(),
+                }
+            } else {
+                SeqItem::Atom(leaf)
+            };
+            let dot = graph
+                .add_mut(EditOp::Seq(ListOp::Ins {
+                    pos: *seq_pos,
+                    item,
+                }))
+                .expect("local seq atom insert never conflicts")
+                .id;
+            *seq_pos += 1;
+            handles.insert(path.clone(), dot);
+
+            for modifier in entry.modifiers.values() {
+                graph
+                    .add_mut(EditOp::Span(SpanOp::AddSpan {
+                        start: Anchor {
+                            id: dot,
+                            bias: Bias::Before,
+                        },
+                        end: Anchor {
+                            id: dot,
+                            bias: Bias::After,
+                        },
+                        modifier: modifier.clone(),
+                    }))
+                    .expect("local atom span never conflicts");
+            }
+            if let Some(style_id) = &entry.style {
+                graph
+                    .add_mut(EditOp::NodeStyle(NodeLwwOp {
+                        target: dot,
+                        op: LwwRegOp::Set {
+                            value: Some(style_id.clone()),
+                        },
+                    }))
+                    .expect("local atom style never conflicts");
+            }
+        }
     }
+}
+
+// ── assert_state_eq ──────────────────────────────────────────────────────────
+// Structural state equality for tests: compares the projected tree (node types,
+// inline content, effective/own modifiers, styles, markers) ignoring the concrete
+// `Dot` identities, plus selection-by-path and pending state.
+
+fn node_style(state: &State, dot: Dot) -> Option<String> {
+    state.projected.node_styles().value_of(dot)
+}
+
+fn block_fingerprint(state: &State, block: &editor_model::NodeView, out: &mut Vec<String>) {
+    let style = node_style(state, block.id());
+    let marker = state.projected.node_markers().value_of(block.id());
+    let mut mods: Vec<editor_model::Modifier> = block.effective().values().cloned().collect();
+    mods.sort_by_key(editor_model::Modifier::as_type);
+    out.push(format!(
+        "OPEN {:?} style={:?} marker={:?} mods={:?}",
+        block.node_type(),
+        style,
+        marker,
+        mods
+    ));
+    for child in block.children() {
+        match child {
+            editor_model::ChildView::Block(b) => block_fingerprint(state, &b, out),
+            editor_model::ChildView::Leaf(l) => {
+                let lstyle = node_style(state, l.dot());
+                let mut lmods: Vec<editor_model::Modifier> = l
+                    .own_modifiers()
+                    .values()
+                    .map(|o| o.value.clone())
+                    .collect();
+                lmods.sort_by_key(editor_model::Modifier::as_type);
+                let content = match l.as_char() {
+                    Some(c) => format!("char {c:?}"),
+                    None => format!("atom {:?}", l.node_type()),
+                };
+                out.push(format!("LEAF {content} style={lstyle:?} mods={lmods:?}"));
+            }
+        }
+    }
+    out.push("CLOSE".to_string());
+}
+
+fn doc_fingerprint(state: &State) -> Vec<String> {
+    let view = state.view();
+    let mut out = Vec::new();
+    if let Some(root) = view.root() {
+        block_fingerprint(state, &root, &mut out);
+    }
+    out
+}
+
+fn selection_path(
+    view: &editor_model::DocView,
+    pos: &crate::Position,
+) -> Option<(Vec<usize>, usize)> {
+    pos.resolve(view).map(|r| (r.path().to_vec(), pos.offset))
 }
 
 pub fn assert_state_eq_impl(actual: &State, expected: &State) {
-    editor_model::assert_doc_eq_impl(&actual.doc, &expected.doc);
+    assert_eq!(
+        doc_fingerprint(actual),
+        doc_fingerprint(expected),
+        "document structure differs"
+    );
 
     match (&actual.selection, &expected.selection) {
         (None, None) => {}
         (Some(_), None) => panic!("Selection mismatch: actual has Some, expected has None"),
         (None, Some(_)) => panic!("Selection mismatch: actual has None, expected has Some"),
-        (Some(sel1), Some(sel2)) => {
-            let anchor1 = position_to_path_position(&actual.doc, &sel1.anchor);
-            let anchor2 = position_to_path_position(&expected.doc, &sel2.anchor);
+        (Some(s1), Some(s2)) => {
+            let av = actual.view();
+            let ev = expected.view();
             assert_eq!(
-                anchor1, anchor2,
-                "Selection anchors differ: {:?} vs {:?}",
-                anchor1, anchor2,
+                selection_path(&av, &s1.anchor),
+                selection_path(&ev, &s2.anchor),
+                "selection anchors differ"
             );
-
-            let head1 = position_to_path_position(&actual.doc, &sel1.head);
-            let head2 = position_to_path_position(&expected.doc, &sel2.head);
             assert_eq!(
-                head1, head2,
-                "Selection heads differ: {:?} vs {:?}",
-                head1, head2,
+                selection_path(&av, &s1.head),
+                selection_path(&ev, &s2.head),
+                "selection heads differ"
             );
         }
     }
 
     assert_eq!(
         actual.pending_modifiers, expected.pending_modifiers,
-        "Pending modifiers differ",
+        "pending modifiers differ"
     );
-
     assert_eq!(
         actual.pending_style, expected.pending_style,
-        "Pending style ref differs",
+        "pending style differs"
     );
 }
 
 #[macro_export]
 macro_rules! assert_state_eq {
     ($actual:expr, $expected:expr) => {
-        $crate::assert_state_eq_impl(&$actual, &$expected)
+        $crate::test_utils::assert_state_eq_impl(&$actual, &$expected)
     };
 }
 
-#[cfg(test)]
-mod tests {
-    use editor_macros::state;
+/// Document-structure-only equality (ignores selection and pending state) — the
+/// projected-model replacement for the old `editor_model::assert_doc_eq!`.
+pub fn assert_doc_eq_impl(actual: &State, expected: &State) {
+    assert_eq!(
+        doc_fingerprint(actual),
+        doc_fingerprint(expected),
+        "document structure differs"
+    );
+}
 
-    #[test]
-    fn assert_state_eq_identical_states() {
-        let (state1, ..) = state! {
-            doc { root { paragraph { t1: text("Hello World") } } }
-            selection: (t1, 5)
-        };
-        let (state2, ..) = state! {
-            doc { root { paragraph { t1: text("Hello World") } } }
-            selection: (t1, 5)
-        };
-        crate::assert_state_eq!(&state1, &state2);
-    }
-
-    #[test]
-    #[should_panic(expected = "Node at index")]
-    fn assert_state_eq_different_text() {
-        let (state1, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
-        };
-        let (state2, ..) = state! {
-            doc { root { paragraph { t1: text("World") } } }
-            selection: (t1, 0)
-        };
-        crate::assert_state_eq!(&state1, &state2);
-    }
-
-    #[test]
-    #[should_panic(expected = "Selection anchors differ")]
-    fn assert_state_eq_different_selection() {
-        let (state1, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
-        };
-        let (state2, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
-        };
-        crate::assert_state_eq!(&state1, &state2);
-    }
+#[macro_export]
+macro_rules! assert_doc_eq {
+    ($actual:expr, $expected:expr) => {
+        $crate::test_utils::assert_doc_eq_impl(&$actual, &$expected)
+    };
 }

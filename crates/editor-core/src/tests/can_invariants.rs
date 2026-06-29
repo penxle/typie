@@ -6,8 +6,8 @@ use crate::test_utils::{assert_probe_is_safe, assert_probe_predicts_apply};
 
 fn fixture_state() -> editor_state::State {
     let (s, ..) = state! {
-        doc { root { paragraph { t1: text("hello") } } }
-        selection: (t1, 2)
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 2)
     };
     s
 }
@@ -74,7 +74,7 @@ fn build_corpus() -> Vec<Message> {
         Message::Dnd { op: DndOp::Leave },
         Message::View {
             op: ViewOp::ToggleFold {
-                id: editor_model::NodeId::ROOT,
+                id: editor_crdt::Dot::ROOT,
             },
         },
         Message::Key {
@@ -214,8 +214,8 @@ fn message_variants_are_enumerated() {
 #[test]
 fn can_does_not_leave_editor_in_probe_after_normal_use() {
     let (state, ..) = state! {
-        doc { root { paragraph { t1: text("hi") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("hi") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(state);
     let _ = editor
@@ -241,8 +241,8 @@ fn probe_guard_drop_restores_mode_on_panic() {
     use std::panic::AssertUnwindSafe;
 
     let (state, ..) = state! {
-        doc { root { paragraph { t1: text("hi") } } }
-        selection: (t1, 0)
+        doc { root { p1: paragraph { text("hi") } } }
+        selection: (p1, 0)
     };
     let mut editor = Editor::new_test(state);
 

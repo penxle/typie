@@ -4,34 +4,141 @@ use std::fmt::Write;
 
 use crate::labeler::Labeler;
 
+enum Disp<'a> {
+    Block(NodeView<'a>),
+    Text {
+        text: String,
+        modifiers: Vec<Modifier>,
+        style: Option<String>,
+    },
+    Atom(LeafView<'a>),
+}
+
+fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>> {
+    let mut out: Vec<Disp<'a>> = Vec::new();
+    let mut run: Option<(String, Vec<Modifier>, Option<String>)> = None;
+    for child in node.children() {
+        match child {
+            ChildView::Block(b) => {
+                if let Some((text, modifiers, style)) = run.take() {
+                    out.push(Disp::Text {
+                        text,
+                        modifiers,
+                        style,
+                    });
+                }
+                out.push(Disp::Block(b));
+            }
+            ChildView::Leaf(l) => match l.as_char() {
+                Some(c) => {
+                    let modifiers = explicit_leaf_mods(pd, l.dot());
+                    let style = pd.node_styles.get(&l.dot()).and_then(|o| o.clone());
+                    let extend = matches!(&run, Some((_, m, s)) if *m == modifiers && *s == style);
+                    if extend {
+                        if let Some((text, _, _)) = run.as_mut() {
+                            text.push(c);
+                        }
+                    } else {
+                        if let Some((text, modifiers, style)) = run.take() {
+                            out.push(Disp::Text {
+                                text,
+                                modifiers,
+                                style,
+                            });
+                        }
+                        run = Some((c.to_string(), modifiers, style));
+                    }
+                }
+                None => {
+                    if let Some((text, modifiers, style)) = run.take() {
+                        out.push(Disp::Text {
+                            text,
+                            modifiers,
+                            style,
+                        });
+                    }
+                    out.push(Disp::Atom(l));
+                }
+            },
+        }
+    }
+    if let Some((text, modifiers, style)) = run.take() {
+        out.push(Disp::Text {
+            text,
+            modifiers,
+            style,
+        });
+    }
+    out
+}
+
+fn atom_node(leaf: &LeafView, pd: &ProjectedDoc) -> Node {
+    pd.node_attrs
+        .get(&leaf.dot())
+        .cloned()
+        .unwrap_or_else(|| leaf.as_atom().expect("atom leaf").clone().into_node())
+}
+
+/// Modifiers explicitly set on a block (`SetModifier`), excluding inherited and
+/// schema-default modifiers — required for the emitted macro to round-trip.
+fn explicit_block_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier> {
+    let mut mods: Vec<Modifier> = pd
+        .block_modifiers
+        .get(&dot)
+        .map(|m| m.values().cloned().collect())
+        .unwrap_or_default();
+    mods.sort_by_key(|m| m.as_type());
+    mods
+}
+
+/// Modifiers explicitly applied to a leaf via spans (excluding style-derived and
+/// inherited modifiers).
+fn explicit_leaf_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier> {
+    let mut mods: Vec<Modifier> = pd
+        .own_modifiers
+        .get(&dot)
+        .map(|m| {
+            m.values()
+                .filter(|o| !o.from_style)
+                .map(|o| o.value.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    mods.sort_by_key(|m| m.as_type());
+    mods
+}
+
 pub fn inspect_state_as_macro(state: &State) -> String {
-    let labeler = Labeler::new(&state.doc, state.selection.as_ref());
+    let view = state.view();
+    let pd = state.projected.projected();
+    let labeler = Labeler::new(&view, state.selection.as_ref());
     let mut output = String::new();
 
     output.push_str("state! {\n");
     write_indent(&mut output, 1);
     output.push_str("doc {\n");
 
-    write_styles_macro(&state.doc, &mut output);
+    write_styles_macro(pd, &mut output);
 
-    let root = state.doc.root().unwrap();
-    let children: Vec<_> = root.children().collect();
+    let root = view.root().unwrap();
+    let children = display_children(&root, pd);
 
     write_indent(&mut output, 2);
     if let Some(l) = labeler.label(root.id()) {
         write!(output, "{l}: ").unwrap();
     }
     output.push_str("root");
-    write_node_style(&root, &mut output);
-    let mut root_mods: Vec<Modifier> = root.explicit_modifiers().cloned().collect();
-    root_mods.sort_by_key(|m| m.as_type());
-    write_modifiers_macro(&non_default_root_modifiers(&root_mods), &mut output);
+    write_node_style(&root, pd, &mut output);
+    write_modifiers_macro(
+        &non_default_root_modifiers(&explicit_block_mods(pd, root.id())),
+        &mut output,
+    );
     if children.is_empty() {
         output.push_str(" {}\n");
     } else {
         output.push_str(" {\n");
         for child in &children {
-            write_macro_node(child, 3, &labeler, &mut output);
+            write_macro_node(child, 3, &labeler, pd, &mut output);
         }
         write_indent(&mut output, 2);
         output.push_str("}\n");
@@ -53,52 +160,71 @@ fn write_indent(output: &mut String, level: usize) {
 }
 
 fn write_macro_node(
-    node_ref: &NodeRef,
+    item: &Disp,
     indent_level: usize,
     labeler: &Labeler,
+    pd: &ProjectedDoc,
     output: &mut String,
 ) {
     write_indent(output, indent_level);
 
-    if let Some(l) = labeler.label(node_ref.id()) {
-        write!(output, "{l}: ").unwrap();
-    }
+    match item {
+        Disp::Block(node) => {
+            if let Some(l) = labeler.label(node.id()) {
+                write!(output, "{l}: ").unwrap();
+            }
 
-    let type_name: &str = node_ref.as_type().into();
-    write!(output, "{type_name}").unwrap();
+            let type_name: &str = node.node_type().into();
+            write!(output, "{type_name}").unwrap();
 
-    if let Node::Text(t) = node_ref.node() {
-        let s = t.text.to_string();
-        write!(output, "(\"{}\")", escape_str(&s)).unwrap();
-    }
+            write_node_style(node, pd, output);
+            write_node_attrs_macro(&node.node(), output);
+            write_modifiers_macro(&explicit_block_mods(pd, node.id()), output);
+            write_node_marker_macro(node, pd, output);
 
-    write_node_style(node_ref, output);
-    write_node_attrs_macro(node_ref.node(), output);
-    let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
-    mods.sort_by_key(|m| m.as_type());
-    write_modifiers_macro(&mods, output);
-    write_node_marker_macro(node_ref, output);
-
-    let children: Vec<_> = node_ref.children().collect();
-    if node_ref.spec().is_leaf() {
-        output.push('\n');
-    } else if children.is_empty() {
-        output.push_str(" {}\n");
-    } else {
-        output.push_str(" {\n");
-        for child in &children {
-            write_macro_node(child, indent_level + 1, labeler, output);
+            let children = display_children(node, pd);
+            if children.is_empty() {
+                output.push_str(" {}\n");
+            } else {
+                output.push_str(" {\n");
+                for child in &children {
+                    write_macro_node(child, indent_level + 1, labeler, pd, output);
+                }
+                write_indent(output, indent_level);
+                output.push_str("}\n");
+            }
         }
-        write_indent(output, indent_level);
-        output.push_str("}\n");
+        Disp::Text {
+            text,
+            modifiers,
+            style,
+        } => {
+            output.push_str("text");
+            write!(output, "(\"{}\")", escape_str(text)).unwrap();
+            if let Some(style_id) = style {
+                write!(output, " @{style_id}").unwrap();
+            }
+            write_modifiers_macro(modifiers, output);
+            output.push('\n');
+        }
+        Disp::Atom(leaf) => {
+            if let Some(l) = labeler.label(leaf.dot()) {
+                write!(output, "{l}: ").unwrap();
+            }
+
+            let type_name: &str = leaf.node_type().into();
+            write!(output, "{type_name}").unwrap();
+
+            write_leaf_style_macro(leaf, pd, output);
+            write_node_attrs_macro(&atom_node(leaf, pd), output);
+            write_modifiers_macro(&explicit_leaf_mods(pd, leaf.dot()), output);
+            output.push('\n');
+        }
     }
 }
 
-fn write_styles_macro(doc: &Doc, output: &mut String) {
-    let mut styles: Vec<(&String, &StyleEntry)> = doc
-        .styles_iter()
-        .filter_map(|(id, _)| doc.style_entry(id).map(|entry| (id, entry)))
-        .collect();
+fn write_styles_macro(pd: &ProjectedDoc, output: &mut String) {
+    let mut styles: Vec<(&String, &StyleEntry)> = pd.styles.iter().collect();
     if styles.is_empty() {
         return;
     }
@@ -124,14 +250,25 @@ fn write_styles_macro(doc: &Doc, output: &mut String) {
     output.push_str("}\n");
 }
 
-fn write_node_style(node_ref: &NodeRef, output: &mut String) {
-    if let Some(style_id) = node_ref.entry().style.get() {
+fn write_node_style(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
+    if let Some(style_id) = pd.node_styles.get(&node.id()).and_then(|o| o.as_ref()) {
         write!(output, " @{style_id}").unwrap();
     }
 }
 
-fn write_node_marker_macro(node_ref: &NodeRef, output: &mut String) {
-    let Some(marker) = node_ref.marker().filter(|m| !m.is_empty()) else {
+fn write_leaf_style_macro(leaf: &LeafView, pd: &ProjectedDoc, output: &mut String) {
+    if let Some(style_id) = pd.node_styles.get(&leaf.dot()).and_then(|o| o.as_ref()) {
+        write!(output, " @{style_id}").unwrap();
+    }
+}
+
+fn write_node_marker_macro(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
+    let Some(marker) = pd
+        .node_markers
+        .get(&node.id())
+        .and_then(|o| o.as_ref())
+        .filter(|m| !m.is_empty())
+    else {
         return;
     };
     output.push_str(" marker(");
@@ -192,9 +329,9 @@ fn write_position_macro(
     labeler: &Labeler,
     output: &mut String,
 ) {
-    match labeler.label(pos.node_id) {
+    match labeler.label(pos.node) {
         Some(l) => write!(output, "{l}").unwrap(),
-        None => write!(output, "{}", pos.node_id).unwrap(),
+        None => write!(output, "{}", pos.node).unwrap(),
     }
     write!(output, ", {}", pos.offset).unwrap();
     if show_affinity {
@@ -368,20 +505,20 @@ mod tests {
     #[test]
     fn simple_state() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
         };
         let output = inspect_state_as_macro(&state);
         let expected = "\
 state! {
     doc {
         root {
-            paragraph {
-                t1: text(\"Hello\")
+            p1: paragraph {
+                text(\"Hello\")
             }
         }
     }
-    selection: (t1, 3)
+    selection: (p1, 3)
 }
 ";
         assert_eq!(output, expected);
@@ -392,16 +529,16 @@ state! {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
+                    p1: paragraph {
+                        text("Hello")
+                        text("World")
                     }
                 }
             }
-            selection: (t1, 0) -> (t2, 3)
+            selection: (p1, 0) -> (p1, 8)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(output.contains("selection: (t1, 0) -> (t2, 3)"));
+        assert!(output.contains("selection: (p1, 0) -> (p1, 8)"));
     }
 
     #[test]
@@ -417,8 +554,8 @@ state! {
     #[test]
     fn text_escaping() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("He said \"hi\"\nnewline") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("He said \"hi\"\nnewline") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         assert!(output.contains(r#"text("He said \"hi\"\nnewline")"#));
@@ -427,18 +564,18 @@ state! {
     #[test]
     fn modifiers_output() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold, italic] } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") [bold, italic] } } }
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(output.contains("t1: text(\"Hello\") [bold, italic]"));
+        assert!(output.contains("text(\"Hello\") [bold, italic]"));
     }
 
     #[test]
     fn non_default_paragraph_align() {
         let (state, ..) = state! {
-            doc { root { paragraph [alignment(Alignment::Center)] { t1: text("Hi") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph [alignment(Alignment::Center)] { text("Hi") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         assert!(output.contains("[alignment(Alignment::Center)]"));
@@ -476,16 +613,16 @@ state! {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
+                    p1: paragraph {
+                        text("Hello")
+                        text("World")
                     }
                 }
             }
-            selection: (t1, 0) -> (t2, 3)
+            selection: (p1, 0) -> (p1, 8)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(output.contains("selection: (t1, 0) -> (t2, 3)"));
+        assert!(output.contains("selection: (p1, 0) -> (p1, 8)"));
         assert!(!output.contains(", >"));
         assert!(!output.contains(", <"));
     }
@@ -495,23 +632,23 @@ state! {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
+                    p1: paragraph {
+                        text("Hello")
+                        text("World")
                     }
                 }
             }
-            selection: (t1, 0, <) -> (t2, 3)
+            selection: (p1, 0, <) -> (p1, 8, >)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(output.contains("selection: (t1, 0, <) -> (t2, 3, >)"));
+        assert!(output.contains("selection: (p1, 0, <) -> (p1, 8, >)"));
     }
 
     #[test]
     fn root_default_modifiers_omitted() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         let root_line = output
@@ -524,8 +661,8 @@ state! {
     #[test]
     fn root_non_default_modifiers_shown() {
         let (state, ..) = state! {
-            doc { root [font_size(1600)] { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root [font_size(1600)] { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         assert!(output.contains("root [font_size(1600)]"));
@@ -535,7 +672,7 @@ state! {
     fn macro_output_for_none_selection() {
         use editor_macros::state;
         let (state, ..) = state! {
-            doc { root { paragraph { t: text("hello") } } }
+            doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
         let output = inspect_state_as_macro(&state);
@@ -548,8 +685,8 @@ state! {
     #[test]
     fn pending_modifiers() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
             pending_modifiers: [bold, !italic]
         };
         let output = inspect_state_as_macro(&state);
@@ -561,12 +698,12 @@ state! {
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Click") [link(href: "https://example.com".to_string())]
+                    p1: paragraph {
+                        text("Click") [link(href: "https://example.com".to_string())]
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         assert!(
@@ -583,12 +720,12 @@ state! {
                     body: [italic]
                 }
                 root {
-                    paragraph @heading {
-                        t1: text("Hello")
+                    p1: paragraph @heading {
+                        text("Hello")
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         assert!(
@@ -675,16 +812,16 @@ state! {
                     emph: [italic]
                 }
                 root {
-                    paragraph {
-                        t1: text("hi") @emph
+                    p1: paragraph {
+                        text("hi") @emph
                     }
                     horizontal_rule @emph
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(output.contains("t1: text(\"hi\") @emph"), "got:\n{output}");
+        assert!(output.contains("text(\"hi\") @emph"), "got:\n{output}");
         assert!(output.contains("horizontal_rule @emph\n"), "got:\n{output}");
     }
 }

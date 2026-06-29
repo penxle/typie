@@ -1,9 +1,12 @@
-use editor_model::{Node, NodeId, PlainHardBreakNode, PlainNode, PlainTextNode, Subtree};
+use editor_common::HistoryTag;
+use editor_crdt::Dot;
+use editor_model::{AtomLeaf, ChildView};
 use editor_resource::{CompiledPattern, Resource, TextReplacementRule};
 use editor_state::{Position, Selection};
-use editor_transaction::{HistoryMeta, HistoryTag, Transaction};
+use editor_transaction::{HistoryMeta, Transaction};
 
-use crate::{CommandError, CommandResult};
+use crate::CommandResult;
+use crate::helpers::insert_hard_break_at_caret;
 
 pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let rules = &resource.text_replacement_rules;
@@ -16,7 +19,7 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
@@ -59,7 +62,7 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
         };
         for (i, part) in full_insert.split('\n').enumerate() {
             if i > 0 {
-                insert_hard_break(tr)?;
+                insert_hard_break_at_caret(tr)?;
             }
             if !part.is_empty() {
                 insert_text_at_cursor(tr, part)?;
@@ -202,95 +205,50 @@ fn offset_len_for_text(text: &str) -> usize {
     len
 }
 
-fn get_text_before_cursor(tr: &Transaction) -> Option<(NodeId, String)> {
+fn get_text_before_cursor(tr: &Transaction) -> Option<(Dot, String)> {
     let selection = tr.selection()?;
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return None;
     }
 
     let head = selection.head;
-    let doc = tr.doc();
-    let cursor_node = doc.node(head.node_id)?;
-
-    let block = cursor_node.ancestors().find(|n| n.spec().is_textblock())?;
-    if cursor_node.id() == block.id() {
+    let view = tr.view();
+    let block = view.node(head.node)?;
+    if !block.spec().is_textblock() {
         return None;
     }
-    let block_id = block.id();
-    let cursor_offset = head.offset;
-    let cursor_index = cursor_node.index()?;
 
     let mut text = String::new();
     for (i, child) in block.children().enumerate() {
-        if i > cursor_index {
+        if i >= head.offset {
             break;
         }
-        match child.node() {
-            Node::Text(text_node) => {
-                let full = text_node.text.to_string();
-                if i == cursor_index {
-                    let partial: String = full.chars().take(cursor_offset).collect();
-                    text.push_str(&partial);
-                } else {
-                    text.push_str(&full);
+        match child {
+            ChildView::Leaf(l) => {
+                if let Some(ch) = l.as_char() {
+                    text.push(ch);
+                } else if matches!(l.as_atom(), Some(AtomLeaf::HardBreak)) {
+                    text.push('\n');
                 }
             }
-            Node::HardBreak(_) if i < cursor_index || cursor_offset > 0 => {
-                text.push('\n');
-            }
-            _ => {}
+            ChildView::Block(_) => {}
         }
     }
 
-    Some((block_id, text))
+    Some((head.node, text))
 }
 
 fn delete_one_backward(tr: &mut Transaction) -> CommandResult {
     let sel = tr.selection().expect("entry caller guaranteed selection");
     let head = sel.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(head.node_id)
-        .ok_or(CommandError::NodeNotFound(head.node_id))?;
-    let Node::Text(text_node) = node.node() else {
-        return Ok(false);
-    };
-
-    if head.offset > 0 {
-        let new_offset = head.offset - 1;
-        tr.remove_text(head.node_id, new_offset, 1)?;
-        tr.set_selection(Some(Selection::collapsed(Position::new(
-            head.node_id,
-            new_offset,
-        ))))?;
-        return Ok(true);
-    }
-
-    let Some(prev) = node.prev_sibling() else {
-        return Ok(false);
-    };
-    if !matches!(prev.node(), Node::HardBreak(_)) {
+    if head.offset == 0 {
         return Ok(false);
     }
-
-    let hard_break_id = prev.id();
-    let current_text_id = head.node_id;
-    let current_is_empty = text_node.text.is_empty();
-    let target = prev.prev_sibling().and_then(|n| match n.node() {
-        Node::Text(t) => Some((n.id(), t.text.len())),
-        _ => None,
-    });
-
-    tr.remove_subtree(hard_break_id)?;
-    if let Some((target_id, target_offset)) = target {
-        if current_is_empty {
-            tr.remove_subtree(current_text_id)?;
-        }
-        tr.set_selection(Some(Selection::collapsed(Position::new(
-            target_id,
-            target_offset,
-        ))))?;
-    }
+    tr.remove_text(head.node, head.offset - 1, 1)?;
+    tr.set_selection(Some(Selection::collapsed(Position::new(
+        head.node,
+        head.offset - 1,
+    ))))?;
     Ok(true)
 }
 
@@ -300,109 +258,11 @@ fn insert_text_at_cursor(tr: &mut Transaction, text: &str) -> CommandResult {
     }
     let sel = tr.selection().expect("entry caller guaranteed selection");
     let head = sel.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(head.node_id)
-        .ok_or(CommandError::NodeNotFound(head.node_id))?;
-
-    let (text_node_id, start_offset) = if matches!(node.node(), Node::Text(_)) {
-        (head.node_id, head.offset)
-    } else {
-        let new_id = NodeId::new();
-        let subtree = Subtree::leaf(
-            new_id,
-            PlainNode::Text(PlainTextNode {
-                text: String::new(),
-            }),
-        );
-        tr.insert_subtree(head.node_id, head.offset, subtree)?;
-        (new_id, 0)
-    };
-
     let insert_len = text.chars().count();
-    tr.insert_text(text_node_id, start_offset, text)?;
-    let new_offset = start_offset + insert_len;
+    tr.insert_text(head.node, head.offset, text)?;
     tr.set_selection(Some(Selection::collapsed(Position::new(
-        text_node_id,
-        new_offset,
+        head.node,
+        head.offset + insert_len,
     ))))?;
-    Ok(true)
-}
-
-fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
-    let sel = tr.selection().expect("entry caller guaranteed selection");
-    let head = sel.head;
-
-    let (node_id, text_node_exists, text_len) = {
-        let doc = tr.doc();
-        let node = doc
-            .node(head.node_id)
-            .ok_or(CommandError::NodeNotFound(head.node_id))?;
-        match node.node() {
-            Node::Text(t) => (head.node_id, true, t.text.len()),
-            _ => (head.node_id, false, 0),
-        }
-    };
-
-    let break_id = NodeId::new();
-    let break_subtree = Subtree::leaf(
-        break_id,
-        PlainNode::HardBreak(PlainHardBreakNode::default()),
-    );
-
-    if text_node_exists {
-        let (parent_id, node_index) = {
-            let doc = tr.doc();
-            let node = doc
-                .node(node_id)
-                .ok_or(CommandError::NodeNotFound(node_id))?;
-            let parent = node.parent().ok_or(CommandError::NoParent(node_id))?;
-            let index = node
-                .index()
-                .ok_or(CommandError::orphan_child(node_id, parent.id()))?;
-            (parent.id(), index)
-        };
-
-        let hb_pos = head.offset;
-        if hb_pos == 0 {
-            tr.insert_subtree(parent_id, node_index, break_subtree)?;
-            tr.set_selection(Some(Selection::collapsed(Position::new(node_id, 0))))?;
-        } else if hb_pos == text_len {
-            tr.insert_subtree(parent_id, node_index + 1, break_subtree)?;
-            let doc = tr.doc();
-            let break_node = doc
-                .node(break_id)
-                .ok_or(CommandError::NodeNotFound(break_id))?;
-            if let Some(next) = break_node.next_sibling() {
-                if matches!(next.node(), Node::Text(_)) {
-                    tr.set_selection(Some(Selection::collapsed(Position::new(next.id(), 0))))?;
-                } else {
-                    let idx = next
-                        .index()
-                        .ok_or(CommandError::orphan_child(next.id(), parent_id))?;
-                    tr.set_selection(Some(Selection::collapsed(Position::new(parent_id, idx))))?;
-                }
-            } else {
-                let break_idx = break_node
-                    .index()
-                    .ok_or(CommandError::orphan_child(break_id, parent_id))?;
-                tr.set_selection(Some(Selection::collapsed(Position::new(
-                    parent_id,
-                    break_idx + 1,
-                ))))?;
-            }
-        } else {
-            let split_id = NodeId::new();
-            tr.split_node(node_id, hb_pos, split_id)?;
-            tr.insert_subtree(parent_id, node_index + 1, break_subtree)?;
-            tr.set_selection(Some(Selection::collapsed(Position::new(split_id, 0))))?;
-        }
-    } else {
-        tr.insert_subtree(node_id, head.offset, break_subtree)?;
-        tr.set_selection(Some(Selection::collapsed(Position::new(
-            node_id,
-            head.offset + 1,
-        ))))?;
-    }
     Ok(true)
 }

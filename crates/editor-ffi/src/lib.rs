@@ -17,5 +17,5 @@ pub mod host;
 mod platform;
 mod prelude;
 mod root;
-#[cfg(feature = "wasm-server")]
+#[cfg(any(test, feature = "wasm-server"))]
 mod server;

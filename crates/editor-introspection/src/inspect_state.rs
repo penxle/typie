@@ -13,13 +13,120 @@ pub struct InspectStateOptions {
     pub show_node_ids: bool,
 }
 
+enum Disp<'a> {
+    Block(NodeView<'a>),
+    Text {
+        text: String,
+        modifiers: Vec<Modifier>,
+        style: Option<String>,
+    },
+    Atom(LeafView<'a>),
+}
+
+fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>> {
+    let mut out: Vec<Disp<'a>> = Vec::new();
+    let mut run: Option<(String, Vec<Modifier>, Option<String>)> = None;
+    for child in node.children() {
+        match child {
+            ChildView::Block(b) => {
+                if let Some((text, modifiers, style)) = run.take() {
+                    out.push(Disp::Text {
+                        text,
+                        modifiers,
+                        style,
+                    });
+                }
+                out.push(Disp::Block(b));
+            }
+            ChildView::Leaf(l) => match l.as_char() {
+                Some(c) => {
+                    let modifiers = explicit_leaf_mods(pd, l.dot());
+                    let style = pd.node_styles.get(&l.dot()).and_then(|o| o.clone());
+                    let extend = matches!(&run, Some((_, m, s)) if *m == modifiers && *s == style);
+                    if extend {
+                        if let Some((text, _, _)) = run.as_mut() {
+                            text.push(c);
+                        }
+                    } else {
+                        if let Some((text, modifiers, style)) = run.take() {
+                            out.push(Disp::Text {
+                                text,
+                                modifiers,
+                                style,
+                            });
+                        }
+                        run = Some((c.to_string(), modifiers, style));
+                    }
+                }
+                None => {
+                    if let Some((text, modifiers, style)) = run.take() {
+                        out.push(Disp::Text {
+                            text,
+                            modifiers,
+                            style,
+                        });
+                    }
+                    out.push(Disp::Atom(l));
+                }
+            },
+        }
+    }
+    if let Some((text, modifiers, style)) = run.take() {
+        out.push(Disp::Text {
+            text,
+            modifiers,
+            style,
+        });
+    }
+    out
+}
+
+fn atom_node(leaf: &LeafView, pd: &ProjectedDoc) -> Node {
+    pd.node_attrs
+        .get(&leaf.dot())
+        .cloned()
+        .unwrap_or_else(|| leaf.as_atom().expect("atom leaf").clone().into_node())
+}
+
+/// Modifiers explicitly set on a block (via `SetModifier`), excluding inherited
+/// and schema-default modifiers — the persisted-only view the inspector and the
+/// round-trip macro both want.
+fn explicit_block_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier> {
+    let mut mods: Vec<Modifier> = pd
+        .block_modifiers
+        .get(&dot)
+        .map(|m| m.values().cloned().collect())
+        .unwrap_or_default();
+    mods.sort_by_key(|m| m.as_type());
+    mods
+}
+
+/// Modifiers explicitly applied to a leaf via spans (excluding style-derived and
+/// inherited modifiers).
+fn explicit_leaf_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier> {
+    let mut mods: Vec<Modifier> = pd
+        .own_modifiers
+        .get(&dot)
+        .map(|m| {
+            m.values()
+                .filter(|o| !o.from_style)
+                .map(|o| o.value.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    mods.sort_by_key(|m| m.as_type());
+    mods
+}
+
 pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
-    let labeler = Labeler::new(&state.doc, state.selection.as_ref());
+    let view = state.view();
+    let pd = state.projected.projected();
+    let labeler = Labeler::new(&view, state.selection.as_ref());
     let mut output = String::new();
 
-    write_styles_tree(&state.doc, &mut output);
+    write_styles_tree(pd, &mut output);
 
-    let root = state.doc.root().unwrap();
+    let root = view.root().unwrap();
     if let Some(l) = labeler.label(root.id()) {
         write!(output, "{l}: ").unwrap();
     }
@@ -27,13 +134,16 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     if options.show_node_ids {
         write!(output, " ({})", root.id()).unwrap();
     }
-    write_node_style_tree(&root, &mut output);
-    let mut root_mods: Vec<Modifier> = root.explicit_modifiers().cloned().collect();
-    root_mods.sort_by_key(|m| m.as_type());
-    write_modifiers_tree(&non_default_root_modifiers(&root_mods), &mut output);
+    write_node_style_tree(&root, pd, &mut output);
+    // The macro/builder seeds the root with the full schema-default modifier set
+    // (so font resolution always finds a family/weight); only surface overrides.
+    write_modifiers_tree(
+        &non_default_root_modifiers(&explicit_block_mods(pd, root.id())),
+        &mut output,
+    );
     output.push('\n');
 
-    let children: Vec<_> = root.children().collect();
+    let children = display_children(&root, pd);
     for (i, child) in children.iter().enumerate() {
         write_tree_node(
             child,
@@ -41,6 +151,7 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
             i == children.len() - 1,
             &labeler,
             options,
+            pd,
             &mut output,
         );
     }
@@ -52,55 +163,84 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
 }
 
 fn write_tree_node(
-    node_ref: &NodeRef,
+    item: &Disp,
     prefix: &str,
     is_last: bool,
     labeler: &Labeler,
     options: &InspectStateOptions,
+    pd: &ProjectedDoc,
     output: &mut String,
 ) {
     let connector = if is_last { "└─ " } else { "├─ " };
     write!(output, "{prefix}{connector}").unwrap();
 
-    if let Some(l) = labeler.label(node_ref.id()) {
-        write!(output, "{l}: ").unwrap();
-    }
+    match item {
+        Disp::Block(node) => {
+            if let Some(l) = labeler.label(node.id()) {
+                write!(output, "{l}: ").unwrap();
+            }
 
-    let type_name: &str = node_ref.as_type().into();
-    write!(output, "{type_name}").unwrap();
+            let type_name: &str = node.node_type().into();
+            write!(output, "{type_name}").unwrap();
 
-    if options.show_node_ids {
-        write!(output, " ({})", node_ref.id()).unwrap();
-    }
+            if options.show_node_ids {
+                write!(output, " ({})", node.id()).unwrap();
+            }
 
-    if let Node::Text(t) = node_ref.node() {
-        let s = t.text.to_string();
-        write!(output, " \"{}\"", truncate_text(&s, 50)).unwrap();
-    }
+            write_node_style_tree(node, pd, output);
+            write_node_attrs_tree(&node.node(), output);
+            write_modifiers_tree(&explicit_block_mods(pd, node.id()), output);
+            write_node_marker_tree(node, pd, output);
+            output.push('\n');
 
-    write_node_style_tree(node_ref, output);
-    write_node_attrs_tree(node_ref.node(), output);
-    let mut mods: Vec<Modifier> = node_ref.explicit_modifiers().cloned().collect();
-    mods.sort_by_key(|m| m.as_type());
-    write_modifiers_tree(&mods, output);
-    write_node_marker_tree(node_ref, output);
-    output.push('\n');
+            let child_prefix = if is_last {
+                format!("{prefix}   ")
+            } else {
+                format!("{prefix}│  ")
+            };
+            let children = display_children(node, pd);
+            for (i, child) in children.iter().enumerate() {
+                write_tree_node(
+                    child,
+                    &child_prefix,
+                    i == children.len() - 1,
+                    labeler,
+                    options,
+                    pd,
+                    output,
+                );
+            }
+        }
+        Disp::Text {
+            text,
+            modifiers,
+            style,
+        } => {
+            output.push_str("text");
+            write!(output, " \"{}\"", truncate_text(text, 50)).unwrap();
+            if let Some(style_id) = style {
+                write!(output, " style=\"{style_id}\"").unwrap();
+            }
+            write_modifiers_tree(modifiers, output);
+            output.push('\n');
+        }
+        Disp::Atom(leaf) => {
+            if let Some(l) = labeler.label(leaf.dot()) {
+                write!(output, "{l}: ").unwrap();
+            }
 
-    let child_prefix = if is_last {
-        format!("{prefix}   ")
-    } else {
-        format!("{prefix}│  ")
-    };
-    let children: Vec<_> = node_ref.children().collect();
-    for (i, child) in children.iter().enumerate() {
-        write_tree_node(
-            child,
-            &child_prefix,
-            i == children.len() - 1,
-            labeler,
-            options,
-            output,
-        );
+            let type_name: &str = leaf.node_type().into();
+            write!(output, "{type_name}").unwrap();
+
+            if options.show_node_ids {
+                write!(output, " ({})", leaf.dot()).unwrap();
+            }
+
+            write_leaf_style_tree(leaf, pd, output);
+            write_node_attrs_tree(&atom_node(leaf, pd), output);
+            write_modifiers_tree(&explicit_leaf_mods(pd, leaf.dot()), output);
+            output.push('\n');
+        }
     }
 }
 
@@ -127,9 +267,9 @@ fn write_selection_tree(
 }
 
 fn write_position_tree(pos: &editor_state::Position, labeler: &Labeler, output: &mut String) {
-    match labeler.label(pos.node_id) {
+    match labeler.label(pos.node) {
         Some(l) => write!(output, "{l}").unwrap(),
-        None => write!(output, "{}", pos.node_id).unwrap(),
+        None => write!(output, "{}", pos.node).unwrap(),
     }
     let aff = match pos.affinity {
         Affinity::Downstream => ">",
@@ -187,11 +327,8 @@ fn write_node_attrs_tree(node: &Node, output: &mut String) {
     }
 }
 
-fn write_styles_tree(doc: &Doc, output: &mut String) {
-    let mut styles: Vec<(&String, &StyleEntry)> = doc
-        .styles_iter()
-        .filter_map(|(id, _)| doc.style_entry(id).map(|entry| (id, entry)))
-        .collect();
+fn write_styles_tree(pd: &ProjectedDoc, output: &mut String) {
+    let mut styles: Vec<(&String, &StyleEntry)> = pd.styles.iter().collect();
     if styles.is_empty() {
         return;
     }
@@ -212,14 +349,25 @@ fn write_styles_tree(doc: &Doc, output: &mut String) {
     output.push('\n');
 }
 
-fn write_node_style_tree(node_ref: &NodeRef, output: &mut String) {
-    if let Some(style_id) = node_ref.entry().style.get() {
+fn write_node_style_tree(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
+    if let Some(style_id) = pd.node_styles.get(&node.id()).and_then(|o| o.as_ref()) {
         write!(output, " style=\"{style_id}\"").unwrap();
     }
 }
 
-fn write_node_marker_tree(node_ref: &NodeRef, output: &mut String) {
-    let Some(marker) = node_ref.marker().filter(|m| !m.is_empty()) else {
+fn write_leaf_style_tree(leaf: &LeafView, pd: &ProjectedDoc, output: &mut String) {
+    if let Some(style_id) = pd.node_styles.get(&leaf.dot()).and_then(|o| o.as_ref()) {
+        write!(output, " style=\"{style_id}\"").unwrap();
+    }
+}
+
+fn write_node_marker_tree(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
+    let Some(marker) = pd
+        .node_markers
+        .get(&node.id())
+        .and_then(|o| o.as_ref())
+        .filter(|m| !m.is_empty())
+    else {
         return;
     };
     output.push_str(" marker=");
@@ -323,16 +471,16 @@ mod tests {
     #[test]
     fn simple_paragraph() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         let expected = "\
 root
-└─ paragraph
-   └─ t1: text \"Hello\"
+└─ p1: paragraph
+   └─ text \"Hello\"
 
-selection: (t1, 0, >)
+selection: (p1, 0, >)
 ";
         assert_eq!(output, expected);
     }
@@ -342,21 +490,21 @@ selection: (t1, 0, >)
         let (state, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("A") }
-                    paragraph { t2: text("B") }
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("B") }
                 }
             }
-            selection: (t1, 0) -> (t2, 1)
+            selection: (p1, 0) -> (p2, 1)
         };
         let output = inspect_state(&state, &opts());
         let expected = "\
 root
-├─ paragraph
-│  └─ t1: text \"A\"
-└─ paragraph
-   └─ t2: text \"B\"
+├─ p1: paragraph
+│  └─ text \"A\"
+└─ p2: paragraph
+   └─ text \"B\"
 
-selection: (t1, 0, >) -> (t2, 1, >)
+selection: (p1, 0, >) -> (p2, 1, >)
 ";
         assert_eq!(output, expected);
     }
@@ -380,11 +528,11 @@ selection: (p1, 0, >)
     #[test]
     fn collapsed_selection() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
         };
         let output = inspect_state(&state, &opts());
-        assert!(output.contains("selection: (t1, 3, >)"));
+        assert!(output.contains("selection: (p1, 3, >)"));
     }
 
     #[test]
@@ -400,8 +548,8 @@ selection: (p1, 0, >)
     #[test]
     fn paragraph_hides_default_align() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
@@ -411,8 +559,8 @@ selection: (p1, 0, >)
     #[test]
     fn paragraph_shows_non_default_align() {
         let (state, ..) = state! {
-            doc { root { paragraph [alignment(Alignment::Center)] { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph [alignment(Alignment::Center)] { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         assert!(output.contains("[alignment(Center)]"));
@@ -421,8 +569,8 @@ selection: (p1, 0, >)
     #[test]
     fn text_with_modifiers() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") [bold, italic] } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") [bold, italic] } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         assert!(output.contains("text \"Hello\" [bold, italic]"));
@@ -431,14 +579,14 @@ selection: (p1, 0, >)
     #[test]
     fn show_node_ids() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let options = InspectStateOptions {
             show_node_ids: true,
         };
         let output = inspect_state(&state, &options);
-        assert!(output.starts_with("root (0)"));
+        assert!(output.starts_with("root ("));
         let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
         assert!(para_line.contains("("));
     }
@@ -446,8 +594,8 @@ selection: (p1, 0, >)
     #[test]
     fn root_default_modifiers_hidden() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         let root_line = output.lines().next().unwrap();
@@ -457,8 +605,8 @@ selection: (p1, 0, >)
     #[test]
     fn root_non_default_modifiers_shown() {
         let (state, ..) = state! {
-            doc { root [font_size(1600)] { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root [font_size(1600)] { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         assert!(output.starts_with("root [font_size(1600)]"));
@@ -467,8 +615,8 @@ selection: (p1, 0, >)
     #[test]
     fn text_truncation() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") } } }
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         assert!(output.contains("...\""));
@@ -483,12 +631,12 @@ selection: (p1, 0, >)
                     body: [italic]
                 }
                 root {
-                    paragraph @heading {
-                        t1: text("Hello")
+                    p1: paragraph @heading {
+                        text("Hello")
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         assert!(
@@ -537,13 +685,13 @@ selection: (p1, 0, >)
             doc {
                 styles { emph: [italic] }
                 root {
-                    paragraph {
-                        t1: text("hi") @emph
+                    p1: paragraph {
+                        text("hi") @emph
                     }
                     horizontal_rule @emph
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         let text_line = output.lines().find(|l| l.contains("text")).unwrap();

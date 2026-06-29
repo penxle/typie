@@ -1,79 +1,49 @@
-use editor_model::Node;
+use editor_crdt::Dot;
+use editor_model::ChildView;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::{remove_atom_leaf, remove_subtree_full};
 use crate::{CommandError, CommandResult};
+
+enum ForwardTarget {
+    InlineAtom,
+    Block(Dot),
+}
 
 pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    match node.node() {
-        Node::Text(text_node) => {
-            let text_len = text_node.text.len();
-            if pos.offset < text_len {
-                return Ok(false);
-            }
+    let target = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
 
-            let next = match node.next_sibling() {
-                Some(next) => next,
-                None => return Ok(false),
-            };
-
-            if matches!(next.node(), Node::Text(_)) {
-                return Ok(false);
-            }
-
-            tr.remove_subtree(next.id())?;
-            tr.set_selection(Some(Selection::collapsed(Position {
-                node_id: pos.node_id,
-                offset: pos.offset,
-                affinity: Affinity::Upstream,
-            })))?;
+        match node.child_at(pos.offset) {
+            Some(ChildView::Leaf(l)) if l.as_char().is_none() => ForwardTarget::InlineAtom,
+            Some(ChildView::Block(b)) => ForwardTarget::Block(b.id()),
+            _ => return Ok(false),
         }
-        _ => {
-            let children_len = node.entry().children.len();
-            if pos.offset >= children_len {
-                return Ok(false);
-            }
+    };
 
-            let child_id =
-                *node
-                    .entry()
-                    .children
-                    .iter()
-                    .nth(pos.offset)
-                    .ok_or(CommandError::Corrupted(format!(
-                        "child at index {} not found in {:?}",
-                        pos.offset, pos.node_id
-                    )))?;
-
-            let child = doc
-                .node(child_id)
-                .ok_or(CommandError::NodeNotFound(child_id))?;
-
-            if matches!(child.node(), Node::Text(_)) {
-                return Ok(false);
-            }
-
-            tr.remove_subtree(child_id)?;
-            tr.set_selection(Some(Selection::collapsed(Position {
-                node_id: pos.node_id,
-                offset: pos.offset,
-                affinity: Affinity::Downstream,
-            })))?;
-        }
+    match target {
+        ForwardTarget::InlineAtom => remove_atom_leaf(tr, pos.node, pos.offset)?,
+        ForwardTarget::Block(child) => remove_subtree_full(tr, child)?,
     }
+
+    tr.set_selection(Some(Selection::collapsed(Position {
+        node: pos.node,
+        offset: pos.offset,
+        affinity: Affinity::Upstream,
+    })))?;
 
     Ok(true)
 }
@@ -88,8 +58,8 @@ mod tests {
     #[test]
     fn non_collapsed_selection_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0) -> (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 3)
         };
         transact_fail!(initial, |tr| delete_node_forward(&mut tr));
     }
@@ -99,26 +69,25 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello")
+                    p1: paragraph {
+                        text("Hello")
                         hard_break
-                        t2: text("World")
+                        text("World")
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| delete_node_forward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
+                    p1: paragraph {
+                        text("HelloWorld")
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -130,7 +99,7 @@ mod tests {
                 root {
                     p1: paragraph {
                         hard_break
-                        t1: text("Hello")
+                        text("Hello")
                     }
                 }
             }
@@ -140,12 +109,12 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("Hello")
+                    p1: paragraph {
+                        text("Hello")
                     }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0, <)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -153,8 +122,8 @@ mod tests {
     #[test]
     fn no_next_sibling_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| delete_node_forward(&mut tr));
     }
@@ -162,15 +131,8 @@ mod tests {
     #[test]
     fn next_is_text_returns_false() {
         let (initial, ..) = state! {
-            doc {
-                root {
-                    paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
-                    }
-                }
-            }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("HelloWorld") } } }
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| delete_node_forward(&mut tr));
     }
@@ -178,8 +140,8 @@ mod tests {
     #[test]
     fn in_middle_of_text_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
         };
         transact_fail!(initial, |tr| delete_node_forward(&mut tr));
     }
@@ -187,7 +149,7 @@ mod tests {
     #[test]
     fn at_paragraph_end_returns_false() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hello") } } }
+            doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 1)
         };
         transact_fail!(initial, |tr| delete_node_forward(&mut tr));

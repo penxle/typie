@@ -49,7 +49,7 @@ macro_rules! impl_wire_for_smaller_uint {
     };
 }
 
-impl_wire_for_smaller_uint!(u16 => "u16", u32 => "u32");
+impl_wire_for_smaller_uint!(u16 => "u16", u32 => "u32", usize => "usize");
 
 macro_rules! impl_wire_for_signed {
     ($($t:ty => $u:ty, $name:literal),*) => {

@@ -1,28 +1,32 @@
-use editor_model::{Doc, Expand, Modifier, Node, NodeId, NodeRef, Schema};
+use editor_crdt::Dot;
+use editor_model::{Expand, LeafView, Marker, Modifier, NodeType, Schema};
+use editor_state::State;
 use editor_transaction::Transaction;
 
 use crate::CommandError;
 
 pub(crate) struct CapturedFirstTextMarker {
-    paragraph_id: NodeId,
+    paragraph_id: Dot,
     had_text: bool,
     first_text_carryable: Vec<Modifier>,
     first_text_style: Option<String>,
 }
 
 pub(crate) fn capture_first_text_marker(
-    doc: &Doc,
-    paragraph_id: NodeId,
+    state: &State,
+    paragraph_id: Dot,
 ) -> Option<CapturedFirstTextMarker> {
-    let paragraph = doc.node(paragraph_id)?;
-    if !matches!(paragraph.node(), Node::Paragraph(_)) {
+    let view = state.view();
+    let paragraph = view.node(paragraph_id)?;
+    if paragraph.node_type() != NodeType::Paragraph {
         return None;
     }
-    let first_text = paragraph
-        .children()
-        .find(|c| matches!(c.node(), Node::Text(_)));
+    let first_text = first_char_leaf(&paragraph);
     let (had_text, first_text_carryable, first_text_style) = match first_text {
-        Some(t) => (true, collect_carryable(&t), t.entry().style.get().clone()),
+        Some(leaf) => {
+            let style = state.projected.node_styles().value_of(leaf.dot());
+            (true, collect_carryable(&leaf), style)
+        }
         None => (false, Vec::new(), None),
     };
     Some(CapturedFirstTextMarker {
@@ -42,20 +46,20 @@ pub(crate) fn apply_first_text_marker_lift(
     {
         return Ok(());
     }
-    let doc = tr.doc();
-    let Some(paragraph) = doc.node(captured.paragraph_id) else {
-        return Ok(());
+    let still_has_text = {
+        let view = tr.state().view();
+        let Some(paragraph) = view.node(captured.paragraph_id) else {
+            return Ok(());
+        };
+        if paragraph.node_type() != NodeType::Paragraph {
+            return Ok(());
+        }
+        first_char_leaf(&paragraph).is_some()
     };
-    if !matches!(paragraph.node(), Node::Paragraph(_)) {
-        return Ok(());
-    }
-    let still_has_text = paragraph
-        .children()
-        .any(|c| matches!(c.node(), Node::Text(_)));
     if still_has_text {
         return Ok(());
     }
-    let marker = editor_model::Marker {
+    let marker = Marker {
         modifiers: captured.first_text_carryable.clone(),
         style: captured.first_text_style.clone(),
     };
@@ -65,154 +69,23 @@ pub(crate) fn apply_first_text_marker_lift(
     Ok(())
 }
 
-fn collect_carryable(text_node: &NodeRef) -> Vec<Modifier> {
-    text_node
-        .modifiers()
-        .filter(|m| {
+fn first_char_leaf<'a>(paragraph: &editor_model::NodeView<'a>) -> Option<LeafView<'a>> {
+    paragraph.children().find_map(|c| match c {
+        editor_model::ChildView::Leaf(l) if l.as_char().is_some() => Some(l),
+        _ => None,
+    })
+}
+
+fn collect_carryable(leaf: &LeafView) -> Vec<Modifier> {
+    leaf.own_modifiers()
+        .iter()
+        .filter(|(_, o)| !o.from_style)
+        .filter(|(t, _)| {
             matches!(
-                Schema::modifier_spec(m.as_type()).expand,
+                Schema::modifier_spec(**t).expand,
                 Expand::After | Expand::Both
             )
         })
-        .cloned()
+        .map(|(_, o)| o.value.clone())
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use editor_macros::state;
-    use editor_transaction::Transaction;
-
-    use super::*;
-
-    #[test]
-    fn capture_returns_none_for_non_paragraph() {
-        let (state, ft1) = state! {
-            doc { root { fold { ft1: fold_title { text("T") } fold_content { paragraph {} } } } }
-            selection: (ft1, 0)
-        };
-        assert!(capture_first_text_marker(&state.doc, ft1).is_none());
-    }
-
-    #[test]
-    fn capture_returns_some_with_no_text_for_empty_paragraph() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph {} } }
-            selection: (p1, 0)
-        };
-        let captured = capture_first_text_marker(&state.doc, p1).unwrap();
-        assert!(!captured.had_text);
-        assert!(captured.first_text_carryable.is_empty());
-    }
-
-    #[test]
-    fn capture_extracts_carryable_from_first_text() {
-        let (state, p1, ..) = state! {
-            doc {
-                root {
-                    p1: paragraph {
-                        text("Hi") [bold, font_weight(700)]
-                        text("There") [italic]
-                    }
-                }
-            }
-            selection: (p1, 0)
-        };
-        let captured = capture_first_text_marker(&state.doc, p1).unwrap();
-        assert!(captured.had_text);
-        assert!(
-            captured
-                .first_text_carryable
-                .iter()
-                .any(|m| matches!(m, Modifier::Bold))
-        );
-        assert!(
-            captured
-                .first_text_carryable
-                .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
-        );
-        assert!(
-            !captured
-                .first_text_carryable
-                .iter()
-                .any(|m| matches!(m, Modifier::Italic))
-        );
-    }
-
-    #[test]
-    fn lift_no_op_when_text_remains() {
-        let (state, p1, ..) = state! {
-            doc { root { p1: paragraph { t1: text("Hi") [bold] } } }
-            selection: (p1, 0)
-        };
-        let captured = capture_first_text_marker(&state.doc, p1).unwrap();
-        let mut tr = Transaction::new(&state);
-        apply_first_text_marker_lift(&mut tr, &captured).unwrap();
-        let (new_state, _, _, _, _) = tr.commit();
-        let p = new_state.doc.node(p1).unwrap();
-        assert_eq!(p.modifiers().count(), 0);
-    }
-
-    #[test]
-    fn lift_writes_marker_field() {
-        let (state, p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hi") [bold, font_weight(700)] } } }
-            selection: (t1, 0)
-        };
-        let captured = capture_first_text_marker(&state.doc, p1).unwrap();
-        let mut tr = Transaction::new(&state);
-        tr.remove_subtree(t1).unwrap();
-        apply_first_text_marker_lift(&mut tr, &captured).unwrap();
-        let (new_state, _, _, _, _) = tr.commit();
-        let p = new_state.doc.node(p1).unwrap();
-
-        let marker = p.marker().expect("marker should be written");
-        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
-        assert!(
-            marker
-                .modifiers
-                .iter()
-                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
-        );
-        assert_eq!(marker.style, None);
-
-        assert_eq!(p.modifiers().count(), 0);
-        assert_eq!(p.entry().style.get().as_deref(), None);
-    }
-
-    #[test]
-    fn lift_writes_style_marker_field() {
-        use editor_model::PlainStyleEntry;
-        let (state, p1, t1) = state! {
-            doc { root { p1: paragraph { t1: text("Hi") } } }
-            selection: (t1, 0)
-        };
-        let mut setup = Transaction::new(&state);
-        setup
-            .set_style(
-                "s1".into(),
-                Some(PlainStyleEntry {
-                    name: "s".into(),
-                    modifiers: Default::default(),
-                }),
-            )
-            .unwrap();
-        setup.set_node_style(t1, Some("s1".into())).unwrap();
-        let (state, ..) = setup.commit();
-
-        let captured = capture_first_text_marker(&state.doc, p1).unwrap();
-        let mut tr = Transaction::new(&state);
-        tr.remove_subtree(t1).unwrap();
-        apply_first_text_marker_lift(&mut tr, &captured).unwrap();
-        let (new_state, ..) = tr.commit();
-        let p = new_state.doc.node(p1).unwrap();
-
-        let marker = p.marker().expect("marker should be written");
-        assert_eq!(marker.style.as_deref(), Some("s1"));
-        assert!(marker.modifiers.is_empty());
-
-        assert_eq!(p.entry().style.get().as_deref(), None);
-        assert_eq!(p.modifiers().count(), 0);
-    }
 }

@@ -5,8 +5,6 @@ pub(crate) fn build_default_doc(
     root: editor_model::PlainRootNode,
     modifiers: Vec<editor_model::Modifier>,
 ) -> editor_model::PlainDoc {
-    let paragraph_id = editor_model::NodeId::new();
-
     // type당 1개로 정규화. BTreeSet은 완전 동일 값만 dedupe하고 같은 type 다른 값은 둘 다 남기므로 ModifierType 기준으로 정규화.
     let mut by_type = std::collections::BTreeMap::new();
     for m in modifiers {
@@ -22,31 +20,22 @@ pub(crate) fn build_default_doc(
         },
     );
 
-    let mut nodes = std::collections::BTreeMap::new();
-    nodes.insert(
-        editor_model::NodeId::ROOT,
-        editor_model::PlainNodeEntry {
-            parent: None,
-            children: vec![paragraph_id],
-            modifiers: Default::default(),
-            style: Some(BASE_STYLE_ID.to_string()),
-            marker: None,
-            node: editor_model::PlainNode::Root(root),
-        },
-    );
-    nodes.insert(
-        paragraph_id,
-        editor_model::PlainNodeEntry {
-            parent: Some(editor_model::NodeId::ROOT),
-            children: vec![],
-            modifiers: Default::default(),
-            style: None,
-            marker: None,
-            node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
-        },
-    );
+    let paragraph = editor_model::PlainNodeEntry {
+        node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
+        modifiers: Default::default(),
+        style: None,
+        marker: None,
+        children: vec![],
+    };
+    let root = editor_model::PlainNodeEntry {
+        node: editor_model::PlainNode::Root(root),
+        modifiers: Default::default(),
+        style: Some(BASE_STYLE_ID.to_string()),
+        marker: None,
+        children: vec![paragraph],
+    };
 
-    editor_model::PlainDoc { nodes, styles }
+    editor_model::PlainDoc { root, styles }
 }
 
 #[cfg(test)]
@@ -73,7 +62,7 @@ mod tests {
                 .contains(&editor_model::Modifier::BlockGap { value: 100 })
         );
 
-        let root_entry = plain.nodes.get(&editor_model::NodeId::ROOT).unwrap();
+        let root_entry = &plain.root;
         assert!(
             root_entry.modifiers.is_empty(),
             "root must not carry modifiers"

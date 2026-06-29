@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '../editor.svelte';
+  import { linkRectKey } from './link-tooltip';
   import type { LinkRect } from '@typie/editor-ffi/browser';
 
   type Props = {
@@ -24,7 +25,7 @@
   };
 </script>
 
-{#each links as link (link.node_id)}
+{#each links as link (linkRectKey(link))}
   {@const href = safeHref(link.href)}
   {#each link.rects as rect, i (i)}
     <a

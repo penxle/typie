@@ -11,6 +11,11 @@ type RectLike = LinkTooltipTarget['anchorRect'];
 // The tooltip anchors to the link's first rect, independent of pointer/selection.
 export const pickLinkTooltipAnchorRect = (rects: RectLike[]): RectLike | null => rects[0] ?? null;
 
+// Stable identity for a link occurrence. A LinkRect carries no node id (a link is
+// an inline modifier), so identity is (page, href, first-rect origin) — unique per
+// occurrence and stable while it stays in place.
+export const linkRectKey = (link: LinkRect): string => `${link.page_idx}:${link.href}:${link.rects[0]?.x ?? 0},${link.rects[0]?.y ?? 0}`;
+
 type SelectionTargetOptions = {
   linkRects: LinkRect[];
   modifierStateLink: ModifierState['link'] | undefined;
@@ -33,7 +38,7 @@ export const resolveSelectionTarget = ({
   const sameHrefRects = linkRects.filter((rect) => rect.href === uniformHref);
   if (sameHrefRects.length === 0) return;
 
-  const link = pickSelectedLinkRect(sameHrefRects, selection, selectionHeadRect);
+  const link = pickSelectedLinkRect(sameHrefRects, selectionHeadRect);
 
   // Anchor to the link's own first rect, independent of the pointer/selection
   // position, so the tooltip stays fixed — matching the hover path.
@@ -47,19 +52,9 @@ export const resolveSelectionTarget = ({
   };
 };
 
-// Among link rects sharing the selected href, choose the one the selection refers
-// to, in priority order:
-//   1. a rect whose node is a selection endpoint (exact match),
-//   2. a rect on the same line as the selection head,
-//   3. the first occurrence in the document (fallback).
-const pickSelectedLinkRect = (sameHrefRects: LinkRect[], selection: Selection, selectionHeadRect: PageRect | null): LinkRect => {
-  // Prefer the head node over the anchor node (matches caret-led navigation).
-  const endpointNodeIds = [selection.head.node_id, selection.anchor.node_id];
-  const endpointMatch = endpointNodeIds
-    .map((nodeId) => sameHrefRects.find((rect) => rect.node_id === nodeId))
-    .find((rect) => rect !== undefined);
-  if (endpointMatch) return endpointMatch;
-
+// Among link rects sharing the selected href, choose the occurrence the selection
+// refers to: a rect on the same line as the selection head, else the first.
+const pickSelectedLinkRect = (sameHrefRects: LinkRect[], selectionHeadRect: PageRect | null): LinkRect => {
   const lineMatch =
     selectionHeadRect &&
     sameHrefRects.find(

@@ -1,127 +1,129 @@
+use editor_crdt::Dot;
 use editor_macros::state;
-use editor_model::*;
-use editor_state::*;
-use editor_transaction::test_utils::DocTestExt;
-use editor_transaction::*;
+use editor_model::{
+    CalloutVariant, ChildView, Modifier, ModifierType, Node, PlainCalloutNode, PlainNode,
+};
+use editor_state::{Position, Selection};
+use editor_transaction::Step;
+
+fn block_text(state: &editor_state::State, elem: &Dot) -> String {
+    state.view().node(*elem).unwrap().inline_text()
+}
+
+fn char_dot(state: &editor_state::State, block: &Dot, offset: usize) -> Dot {
+    match state.view().node(*block).unwrap().child_at(offset).unwrap() {
+        ChildView::Leaf(l) => l.dot(),
+        ChildView::Block(_) => panic!("expected a char leaf at offset {offset}"),
+    }
+}
+
+fn root_block_count(state: &editor_state::State) -> usize {
+    state.view().root().unwrap().child_blocks().count()
+}
 
 #[test]
-fn paragraph_split_scenario() {
-    let (state, p1, t2) = state! {
+fn paragraph_split_merge_scenario() {
+    let (state, p1) = state! {
         doc {
             root {
                 p1: paragraph {
                     text("Hello ") [bold]
-                    t2: text("beautiful ") [italic]
-                    text("world")
+                    text("beautiful world")
                 }
             }
         }
-        selection: (t2, 4)
+        selection: (p1, 0)
     };
 
-    let t_new = NodeId::new();
-    let p_new = NodeId::new();
+    assert_eq!(block_text(&state, &p1), "Hello beautiful world");
 
-    // Step 1: Split "beautiful " at offset 4 -> "beau" | "tiful "
-    let split_text = Step::SplitNode {
-        node_id: t2,
-        offset: 4,
-        new_node_id: t_new,
+    // Split the paragraph after "Hello " (offset 6).
+    let split = Step::SplitNode {
+        block: p1,
+        offset: 6,
     };
-    let state2 = split_text.apply(&state).unwrap().state;
+    let state2 = split.apply(&state).unwrap().state;
+    assert_eq!(root_block_count(&state2), 2);
+    let view = state2.view();
+    let blocks: Vec<_> = view.root().unwrap().child_blocks().collect();
+    assert_eq!(blocks[0].inline_text(), "Hello ");
+    assert_eq!(blocks[1].inline_text(), "beautiful world");
 
-    // Verify text split
-    assert_eq!(state2.text(t2).text.to_string(), "beau");
-    assert_eq!(state2.text(t_new).text.to_string(), "tiful ");
-
-    // Step 2: Split paragraph — t_new and t3 move to new paragraph
-    let split_para = Step::SplitNode {
-        node_id: p1,
-        offset: 2,
-        new_node_id: p_new,
-    };
-    let state3 = split_para.apply(&state2).unwrap().state;
-
-    // Verify structure: root has 2 paragraphs now
-    assert_eq!(state3.node(NodeId::ROOT).children().count(), 2);
-
-    // Undo: reverse order
-    let state4 = split_para.inverse().apply(&state3).unwrap().state;
-    let state5 = split_text.inverse().apply(&state4).unwrap().state;
-
-    // Verify fully restored
-    assert_eq!(state5.node(NodeId::ROOT).children().count(), 1);
-    assert!(!state5.has_node(t_new));
-    assert!(!state5.has_node(p_new));
-    assert_eq!(state5.node(p1).children().count(), 3);
+    // Inverse (MergeNode survivor=p1, offset=6) restores the single paragraph.
+    let state3 = split.inverse().apply(&state2).unwrap().state;
+    assert_eq!(root_block_count(&state3), 1);
+    assert_eq!(block_text(&state3, &p1), "Hello beautiful world");
 }
 
 #[test]
 fn insert_text_then_bold_scenario() {
-    let (state, t1) = state! {
+    let (state, p1) = state! {
         doc {
             root {
-                paragraph {
-                    t1: text("Hello World")
+                p1: paragraph {
+                    text("Hello World")
                 }
             }
         }
-        selection: (t1, 5)
+        selection: (p1, 5)
     };
 
-    // Insert " amazing" at end of t1
+    // Insert " amazing" at end of the block.
     let insert = Step::InsertText {
-        node_id: t1,
+        block: p1,
         offset: 11,
         text: " amazing".to_string(),
     };
     let state2 = insert.apply(&state).unwrap().state;
-    assert_eq!(state2.text(t1).text.to_string(), "Hello World amazing");
+    assert_eq!(block_text(&state2, &p1), "Hello World amazing");
 
-    // Bold the whole node
+    // Bold the block.
     let bold = Step::AddModifier {
-        node_id: t1,
+        block: p1,
         modifier: Modifier::Bold,
     };
     let state3 = bold.apply(&state2).unwrap().state;
     assert_eq!(
         state3
-            .doc
-            .get_entry(t1)
+            .view()
+            .node(p1)
             .unwrap()
-            .modifiers
-            .iter()
-            .map(|(_, m)| m.clone())
-            .collect::<Vec<_>>(),
-        vec![Modifier::Bold]
+            .block_modifier(ModifierType::Bold),
+        Some(&Modifier::Bold)
     );
 
-    // Undo both
+    // Undo both.
     let state4 = bold.inverse().apply(&state3).unwrap().state;
     let state5 = insert.inverse().apply(&state4).unwrap().state;
 
-    assert_eq!(state5.text(t1).text.to_string(), "Hello World");
-    assert!(state5.doc.get_entry(t1).unwrap().modifiers.is_empty());
+    assert_eq!(block_text(&state5, &p1), "Hello World");
+    assert_eq!(
+        state5
+            .view()
+            .node(p1)
+            .unwrap()
+            .block_modifier(ModifierType::Bold),
+        None
+    );
 }
 
 #[test]
 fn set_node_and_selection_combined() {
-    let (state, c1, t1) = state! {
+    let (state, c1, p1) = state! {
         doc {
             root {
                 c1: callout {
-                    paragraph {
-                        t1: text("Hello World")
+                    p1: paragraph {
+                        text("Hello World")
                     }
                 }
             }
         }
-        selection: (t1, 0)
+        selection: (p1, 0)
     };
 
-    // Change callout variant
     let set_node = Step::SetNode {
-        node_id: c1,
+        block: c1,
         old_node: PlainNode::Callout(PlainCalloutNode::default()),
         new_node: PlainNode::Callout(PlainCalloutNode {
             variant: CalloutVariant::Warning,
@@ -129,25 +131,64 @@ fn set_node_and_selection_combined() {
     };
     let state2 = set_node.apply(&state).unwrap().state;
 
-    // Move selection
-    let new_sel = Selection::collapsed(Position::new(t1, 5));
+    let new_sel = Selection::collapsed(Position::new(p1, 5));
     let set_sel = Step::SetSelection {
-        old: state2
-            .selection
-            .as_ref()
-            .map(|s| StableSelection::capture(s, &state2.doc)),
-        new: Some(StableSelection::capture(&new_sel, &state2.doc)),
+        old: state2.selection,
+        new: Some(new_sel),
     };
     let state3 = set_sel.apply(&state2).unwrap().state;
+    assert_eq!(state3.selection, Some(new_sel));
 
-    // Undo both
     let state4 = set_sel.inverse().apply(&state3).unwrap().state;
     let state5 = set_node.inverse().apply(&state4).unwrap().state;
 
     assert_eq!(state5.selection, state.selection);
-    if let Node::Callout(n) = state5.node(c1).node() {
+    if let Node::Callout(n) = state5.view().node(c1).unwrap().node() {
         assert_eq!(*n.variant.get(), CalloutVariant::Info);
     } else {
         panic!("expected Callout node");
     }
+}
+
+#[test]
+fn inline_span_modifier_bolds_range_and_inverts() {
+    let (state, p1) = state! {
+        doc {
+            root {
+                p1: paragraph {
+                    text("Hello World")
+                }
+            }
+        }
+        selection: (p1, 0)
+    };
+
+    // Bold "World" (offsets 6..=10).
+    let first = char_dot(&state, &p1, 6);
+    let last = char_dot(&state, &p1, 10);
+    let bold = Step::AddSpanModifier {
+        first,
+        last,
+        modifier: Modifier::Bold,
+    };
+    let state2 = bold.apply(&state).unwrap().state;
+
+    let view = state2.view();
+    let bold_at = |off: usize| -> bool {
+        let d = char_dot(&state2, &p1, off);
+        view.leaf(d).unwrap().effective().get(&ModifierType::Bold) == Some(&Modifier::Bold)
+    };
+    assert!(!bold_at(0), "'H' is outside the span");
+    assert!(bold_at(6), "'W' is inside the span");
+    assert!(bold_at(10), "'d' is the last char of the span");
+
+    // Inverse removes the span.
+    let state3 = bold.inverse().apply(&state2).unwrap().state;
+    let view3 = state3.view();
+    let d6 = char_dot(&state3, &p1, 6);
+    assert_eq!(
+        view3.leaf(d6).unwrap().effective().get(&ModifierType::Bold),
+        None,
+        "inverse of AddSpanModifier removes the span"
+    );
 }

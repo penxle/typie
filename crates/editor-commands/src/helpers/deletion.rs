@@ -1,38 +1,331 @@
-use editor_model::{Doc, Node, NodeId, NodeRef, PlainNode, PlainParagraphNode, Subtree};
-use editor_state::{Affinity, Position, Selection, paragraph_break_selection_at_paragraph_end};
-use editor_transaction::{Transaction, compact, fulfill, prune};
+use editor_crdt::Dot;
+use editor_model::{
+    ChildView, DocView, NodeType, NodeView, PlainNode, PlainParagraphNode, PlainTextNode, Subtree,
+};
+use editor_state::paragraph_break_at_end;
+use editor_state::{Affinity, Position, Selection, State};
+use editor_transaction::{Step, Transaction, fulfill};
 
 use super::{
     apply_first_text_marker_lift, capture_first_text_marker, find_ancestor_textblock,
     find_enclosing_paragraph_id, find_lowest_common_ancestor, is_block_container,
-    merge_element_cross_parent, path_from_ancestor,
+    merge_element_cross_parent, next_sibling, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
 
-pub(crate) fn selection_for_node(
-    doc: &Doc,
-    node_id: NodeId,
-) -> Result<Option<Selection>, CommandError> {
-    let target = doc
-        .node(node_id)
-        .ok_or(CommandError::NodeNotFound(node_id))?;
-    let parent = match target.parent() {
-        Some(parent) => parent,
-        None => return Ok(None),
+enum SlotKind {
+    Char,
+    Atom,
+    Block(Dot),
+}
+
+fn slot_kind(view: &DocView, block: Dot, idx: usize) -> Option<SlotKind> {
+    match view.node(block)?.child_at(idx)? {
+        ChildView::Leaf(l) => {
+            if l.as_char().is_some() {
+                Some(SlotKind::Char)
+            } else {
+                Some(SlotKind::Atom)
+            }
+        }
+        ChildView::Block(b) => Some(SlotKind::Block(b.id())),
+    }
+}
+
+fn child_count(view: &DocView, block: Dot) -> usize {
+    view.node(block).map(|n| n.children().count()).unwrap_or(0)
+}
+
+fn is_structural(view: &DocView, id: Dot) -> bool {
+    view.node(id).is_some_and(|n| n.spec().structural)
+}
+
+/// Delete child slots `[from, to)` of `block`, high index first to avoid shifts.
+fn delete_child_slots(
+    tr: &mut Transaction,
+    block: Dot,
+    from: usize,
+    to: usize,
+) -> Result<(), CommandError> {
+    if to <= from {
+        return Ok(());
+    }
+    for idx in (from..to).rev() {
+        let kind = {
+            let view = tr.state().view();
+            slot_kind(&view, block, idx)
+        };
+        match kind {
+            Some(SlotKind::Char) => {
+                tr.remove_text(block, idx, 1)?;
+            }
+            Some(SlotKind::Atom) => {
+                remove_atom_leaf(tr, block, idx)?;
+            }
+            Some(SlotKind::Block(id)) => {
+                remove_or_clear(tr, id)?;
+            }
+            None => {}
+        }
+    }
+    Ok(())
+}
+
+fn elem_id_of(child: &ChildView) -> Dot {
+    match child {
+        ChildView::Block(b) => b.id(),
+        ChildView::Leaf(l) => l.dot(),
+    }
+}
+
+fn text_subtree(text: String) -> Subtree {
+    Subtree::leaf(PlainNode::Text(PlainTextNode { text }))
+}
+
+/// Snapshot of a projected block's subtree (block overlays + char/atom/block
+/// children), mirroring the substrate's capture so the removal step carries the
+/// data needed for its inverse. Char runs collapse into `Text` subtrees.
+fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
+    let view = state.view();
+    let nv = view.node(block)?;
+    let node = nv.node().to_plain();
+    let dot = nv.dot();
+    let modifiers: Vec<_> = dot
+        .map(|d| {
+            state
+                .projected
+                .block_modifiers()
+                .modifiers_of(d)
+                .into_values()
+                .collect()
+        })
+        .unwrap_or_default();
+    let style = dot.and_then(|d| state.projected.node_styles().value_of(d));
+    let marker = dot.and_then(|d| state.projected.node_markers().value_of(d));
+
+    let mut children: Vec<Subtree> = Vec::new();
+    let mut pending = String::new();
+    for c in nv.children() {
+        match c {
+            ChildView::Leaf(l) => {
+                if let Some(ch) = l.as_char() {
+                    pending.push(ch);
+                } else if let Some(atom) = l.as_atom() {
+                    if !pending.is_empty() {
+                        children.push(text_subtree(std::mem::take(&mut pending)));
+                    }
+                    children.push(Subtree::leaf(atom.clone().into_node().to_plain()));
+                }
+            }
+            ChildView::Block(b) => {
+                if !pending.is_empty() {
+                    children.push(text_subtree(std::mem::take(&mut pending)));
+                }
+                if let Some(sub) = capture_subtree(state, b.id()) {
+                    children.push(sub);
+                }
+            }
+        }
+    }
+    if !pending.is_empty() {
+        children.push(text_subtree(pending));
+    }
+
+    Some(Subtree {
+        node,
+        modifiers,
+        style,
+        marker,
+        children,
+    })
+}
+
+/// Remove a leaf atom (image/HR/tab/break) child at full-child `index`.
+/// The convenience `Transaction::remove_subtree` cannot address leaf atoms
+/// (it resolves index via `child_blocks()` and parent via the node map), so
+/// build the `RemoveSubtree` step directly with the full-child slot index.
+pub(crate) fn remove_atom_leaf(
+    tr: &mut Transaction,
+    parent: Dot,
+    index: usize,
+) -> Result<(), CommandError> {
+    let subtree = {
+        let view = tr.state().view();
+        let node = view
+            .node(parent)
+            .ok_or(CommandError::NodeNotFound(parent))?;
+        let atom = match node.child_at(index) {
+            Some(ChildView::Leaf(l)) => l
+                .as_atom()
+                .ok_or_else(|| CommandError::Corrupted("expected atom leaf".into()))?
+                .clone(),
+            _ => return Err(CommandError::Corrupted("expected leaf at slot".into())),
+        };
+        Subtree::leaf(atom.into_node().to_plain())
     };
-    let parent_id = parent.id();
-    let index = target
-        .index()
-        .ok_or_else(|| CommandError::orphan_child(node_id, parent_id))?;
+    tr.apply_steps(vec![Step::RemoveSubtree {
+        parent,
+        index,
+        subtree,
+    }])?;
+    Ok(())
+}
+
+/// Remove a block (or leaf-atom) child by stable id, addressing it at its FULL
+/// child-slot index. The convenience `Transaction::remove_subtree` resolves the
+/// index via `child_blocks()`, which mismatches the step's full-child indexing
+/// whenever leaf atoms precede the target — removing the wrong element. This
+/// computes the true slot and captures the subtree for the inverse.
+pub(crate) fn remove_subtree_full(tr: &mut Transaction, child_id: Dot) -> Result<(), CommandError> {
+    let (parent_id, index, subtree) = {
+        let state = tr.state();
+        let view = state.view();
+        match view.node(child_id) {
+            Some(nv) => {
+                let parent = nv.parent().ok_or(CommandError::NoParent(child_id))?;
+                let parent_id = parent.id();
+                let index = parent
+                    .children()
+                    .position(|c| elem_id_of(&c) == child_id)
+                    .ok_or_else(|| CommandError::orphan_child(child_id, parent_id))?;
+                let subtree =
+                    capture_subtree(state, child_id).ok_or(CommandError::NodeNotFound(child_id))?;
+                (parent_id, index, subtree)
+            }
+            None => {
+                let Some(op) = child_id.as_op_dot() else {
+                    return Err(CommandError::NodeNotFound(child_id));
+                };
+                let dot = op.dot();
+                let leaf = view.leaf(dot).ok_or(CommandError::NodeNotFound(child_id))?;
+                let parent = leaf.parent().ok_or(CommandError::NoParent(child_id))?;
+                let parent_id = parent.id();
+                let (index, subtree) = parent
+                    .children()
+                    .enumerate()
+                    .find_map(|(i, c)| match &c {
+                        ChildView::Leaf(l) if l.dot() == dot => {
+                            let subtree = if let Some(ch) = l.as_char() {
+                                text_subtree(ch.to_string())
+                            } else {
+                                Subtree::leaf(l.as_atom()?.clone().into_node().to_plain())
+                            };
+                            Some((i, subtree))
+                        }
+                        _ => None,
+                    })
+                    .ok_or_else(|| CommandError::orphan_child(child_id, parent_id))?;
+                (parent_id, index, subtree)
+            }
+        }
+    };
+    tr.apply_steps(vec![Step::RemoveSubtree {
+        parent: parent_id,
+        index,
+        subtree,
+    }])?;
+    Ok(())
+}
+
+fn is_real_child(child: &ChildView) -> bool {
+    match child {
+        ChildView::Block(b) => b.id().as_op_dot().is_some(),
+        ChildView::Leaf(_) => true,
+    }
+}
+
+/// A container is structurally empty when it holds no real children — only the
+/// `Derived` placeholder paragraph the projection synthesizes for an otherwise
+/// empty container. The projected `children()` is therefore never literally
+/// empty, so emptiness must be tested against real ids.
+pub(crate) fn is_structurally_empty(node: &NodeView) -> bool {
+    !node.children().any(|c| is_real_child(&c))
+}
+
+/// Like `prune`, but removes the (structurally) empty node and any ancestor that
+/// becomes empty as a result, using full-child-slot indexing. The substrate
+/// `prune` resolves the slot via `child_blocks()` (wrong when leaf atoms precede
+/// the target) and tests emptiness against projected children (which always show
+/// the synthesized placeholder).
+pub(crate) fn prune_empty_full(tr: &mut Transaction, node_id: Dot) -> Result<(), CommandError> {
+    let mut current = node_id;
+    loop {
+        let next = {
+            let view = tr.state().view();
+            let Some(nv) = view.node(current) else {
+                break;
+            };
+            if !is_structurally_empty(&nv) {
+                break;
+            }
+            if nv.spec().content.min_required() == 0 {
+                break;
+            }
+            if nv.spec().structural {
+                break;
+            }
+            let Some(parent) = nv.parent() else {
+                break;
+            };
+            let parent_id = parent.id();
+            let parent_real_children = parent.children().filter(|c| is_real_child(c)).count();
+            let parent_cascades = parent_real_children == 1
+                && parent.spec().content.min_required() > 0
+                && !parent.spec().structural;
+            (parent_id, parent_cascades)
+        };
+        remove_subtree_full(tr, current)?;
+        let (parent_id, parent_cascades) = next;
+        if parent_cascades {
+            current = parent_id;
+        } else {
+            break;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn selection_for_node(
+    view: &DocView,
+    node_id: Dot,
+) -> Result<Option<Selection>, CommandError> {
+    let (parent_id, index) = match view.node(node_id) {
+        Some(target) => {
+            let parent = match target.parent() {
+                Some(parent) => parent,
+                None => return Ok(None),
+            };
+            let parent_id = parent.id();
+            let index = target
+                .index()
+                .ok_or_else(|| CommandError::orphan_child(node_id, parent_id))?;
+            (parent_id, index)
+        }
+        None => {
+            // Block-level atoms (image/HR/...) project as leaves, not nodes.
+            let Some(op) = node_id.as_op_dot() else {
+                return Err(CommandError::NodeNotFound(node_id));
+            };
+            let dot = op.dot();
+            let leaf = view.leaf(dot).ok_or(CommandError::NodeNotFound(node_id))?;
+            let parent = leaf.parent().ok_or(CommandError::NoParent(node_id))?;
+            let parent_id = parent.id();
+            let index = parent
+                .children()
+                .position(|c| matches!(&c, ChildView::Leaf(l) if l.dot() == dot))
+                .ok_or_else(|| CommandError::orphan_child(node_id, parent_id))?;
+            (parent_id, index)
+        }
+    };
 
     Ok(Some(Selection::new(
         Position {
-            node_id: parent_id,
+            node: parent_id,
             offset: index,
             affinity: Affinity::Downstream,
         },
         Position {
-            node_id: parent_id,
+            node: parent_id,
             offset: index + 1,
             affinity: Affinity::Upstream,
         },
@@ -40,137 +333,141 @@ pub(crate) fn selection_for_node(
 }
 
 pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection) -> CommandResult {
-    let selection = lower_exact_empty_paragraph_break_delete_range(&tr.doc(), selection);
-    if selection.is_collapsed() {
+    let selection = lower_exact_empty_paragraph_break_delete_range(tr, selection);
+    if selection.anchor == selection.head {
         return Ok(false);
     }
 
-    let doc = tr.doc();
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+    // Resolve the geometry under an immutable borrow, collecting only owned data.
+    let plan = {
+        let view = tr.state().view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or_else(|| CommandError::Corrupted("cannot resolve selection".into()))?;
 
-    // A cell-rect is the corner-bracket encoding of a rectangular cell block —
-    // not a linear range. Decode it via the selection layer, then apply the
-    // same generic structural clear: every selected cell keeps its structure
-    // and is emptied to one paragraph; no cell/row is removed.
-    if let Some(rect) = resolved.as_cell_rect() {
-        let cell_ids: Vec<NodeId> = rect.cells().map(|c| c.id()).collect();
-        let anchor_id = rect.anchor_cell.id();
-        tr.batch::<_, CommandError>(|tr| {
-            for cell_id in cell_ids {
-                clear_structural_subtree(tr, cell_id)?;
+        if let Some(rect) = resolved.as_cell_rect() {
+            let cell_ids: Vec<Dot> = rect.cells().iter().map(|c| c.id()).collect();
+            let anchor_id = rect.anchor_cell.id();
+            Plan::CellRect {
+                cell_ids,
+                anchor_id,
             }
-            Ok(())
-        })?;
-        let cursor = find_first_text_position(&tr.doc(), anchor_id).ok_or(
-            CommandError::Corrupted("anchor cell has no text position".into()),
-        )?;
-        tr.set_selection(Some(Selection::collapsed(cursor)))?;
-        return Ok(true);
-    }
+        } else {
+            let from = resolved.from().position();
+            let to = resolved.to().position();
+            Plan::Range { from, to }
+        }
+    };
 
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
-
-    let captured_paragraph_id = find_enclosing_paragraph_id(&doc, from.node_id);
-    let captured = captured_paragraph_id.and_then(|id| capture_first_text_marker(&doc, id));
-
-    if from.node_id == to.node_id {
-        if tr
-            .doc()
-            .node(from.node_id)
-            .is_some_and(|n| is_block_container(n.node()))
-        {
+    match plan {
+        Plan::CellRect {
+            cell_ids,
+            anchor_id,
+        } => {
             tr.batch::<_, CommandError>(|tr| {
-                delete_within_node(tr, from.node_id, from.offset, to.offset)?;
-                let doc = tr.doc();
-                if let Some(node) = doc.node(from.node_id) {
-                    tr.apply_steps(fulfill(&node))?;
+                for cell_id in cell_ids {
+                    clear_structural_subtree(tr, cell_id)?;
                 }
                 Ok(())
             })?;
-            let sel = ensure_selection_after_child_range_delete(tr, from.node_id, from.offset)?;
-            tr.set_selection(Some(sel))?;
-        } else {
-            let cursor = delete_within_node(tr, from.node_id, from.offset, to.offset)?;
+            let cursor = {
+                let view = tr.state().view();
+                find_first_text_position(&view, anchor_id)
+            }
+            .ok_or_else(|| CommandError::Corrupted("anchor cell has no text position".into()))?;
             tr.set_selection(Some(Selection::collapsed(cursor)))?;
+            Ok(true)
         }
-    } else {
-        let lca_id = find_lowest_common_ancestor(&doc, from.node_id, to.node_id)
-            .ok_or(CommandError::Corrupted("no common ancestor".into()))?;
-
-        let from_tb = find_ancestor_textblock(&doc, from.node_id);
-        let to_tb = find_ancestor_textblock(&doc, to.node_id);
-
-        // Record cursor info for inline from that may be deleted
-        let from_parent_id = doc
-            .node(from.node_id)
-            .and_then(|n| n.parent())
-            .map(|p| p.id());
-        let from_index = doc.node(from.node_id).and_then(|n| n.index());
-        let from_is_text = doc
-            .node(from.node_id)
-            .is_some_and(|n| matches!(n.node(), Node::Text(_)));
-        let from_will_be_deleted = from_is_text && from.offset == 0;
-
-        let mut from_path = path_from_ancestor(&doc, from.node_id, lca_id).ok_or(
-            CommandError::Corrupted("from is not descendant of LCA".into()),
-        )?;
-        from_path.push(from.offset);
-
-        let mut to_path = path_from_ancestor(&doc, to.node_id, lca_id).ok_or(
-            CommandError::Corrupted("to is not descendant of LCA".into()),
-        )?;
-        to_path.push(to.offset);
-
-        let from_node_id = from.node_id;
-        let to_node_id = to.node_id;
-        tr.batch::<_, CommandError>(|tr| {
-            delete_range(tr, &from_path, &to_path, lca_id)?;
-            merge_after_delete(tr, from_tb, to_tb, lca_id)?;
-            fulfill_ancestors(tr, from_node_id, lca_id)?;
-            // The to-side endpoint may itself be a structural container whose
-            // non-structural children were emptied by delete_to; fulfill it too.
-            // fulfill_ancestors is idempotent and skips already-removed nodes.
-            fulfill_ancestors(tr, to_node_id, lca_id)?;
-            Ok(())
-        })?;
-
-        let cursor = if from_is_text && !from_will_be_deleted {
-            from
-        } else if from_is_text && from_will_be_deleted {
-            if tr.doc().node(from.node_id).is_some() {
-                from
-            } else {
-                // Re-lookup siblings from the post-merge doc, not pre-recorded ones.
-                // Merge may have moved new children into the parent.
-                let parent_id = from_parent_id.unwrap_or(lca_id);
-                let idx = from_index.unwrap_or(0);
-                let doc = tr.doc();
-                let next_id = doc
-                    .node(parent_id)
-                    .and_then(|p| p.entry().children.iter().nth(idx).copied());
-                let prev_id = if idx > 0 {
-                    doc.node(parent_id)
-                        .and_then(|p| p.entry().children.iter().nth(idx - 1).copied())
-                } else {
-                    None
-                };
-
-                resolve_cursor_after_removal(tr, prev_id, next_id, parent_id, idx)
-            }
-        } else {
-            let sel = resolve_selection_at(&tr.doc(), from.node_id, from.offset);
-            tr.set_selection(Some(sel))?;
-            if let Some(captured) = &captured {
-                apply_first_text_marker_lift(tr, captured)?;
-            }
-            return Ok(true);
-        };
-
-        tr.set_selection(Some(Selection::collapsed(cursor)))?;
+        Plan::Range { from, to } => delete_resolved_range(tr, from, to),
     }
+}
+
+enum Plan {
+    CellRect { cell_ids: Vec<Dot>, anchor_id: Dot },
+    Range { from: Position, to: Position },
+}
+
+fn delete_resolved_range(tr: &mut Transaction, from: Position, to: Position) -> CommandResult {
+    let captured = {
+        let captured_paragraph_id = {
+            let view = tr.state().view();
+            find_enclosing_paragraph_id(&view, from.node)
+        };
+        captured_paragraph_id.and_then(|id| capture_first_text_marker(tr.state(), id))
+    };
+
+    if from.node == to.node {
+        let is_container = {
+            let view = tr.state().view();
+            view.node(from.node).is_some_and(|n| is_block_container(&n))
+        };
+        if is_container {
+            tr.batch::<_, CommandError>(|tr| {
+                delete_child_slots(tr, from.node, from.offset, to.offset)?;
+                let steps = {
+                    let view = tr.state().view();
+                    view.node(from.node)
+                        .map(|n| fulfill(&n))
+                        .unwrap_or_default()
+                };
+                tr.apply_steps(steps)?;
+                Ok(())
+            })?;
+            let sel = ensure_selection_after_child_range_delete(tr, from.node, from.offset)?;
+            tr.set_selection(Some(sel))?;
+        } else {
+            delete_child_slots(tr, from.node, from.offset, to.offset)?;
+            tr.set_selection(Some(Selection::collapsed(Position {
+                node: from.node,
+                offset: from.offset,
+                affinity: Affinity::Downstream,
+            })))?;
+        }
+        if let Some(captured) = captured {
+            apply_first_text_marker_lift(tr, &captured)?;
+        }
+        return Ok(true);
+    }
+
+    // Cross-node range.
+    let (lca_id, from_tb, to_tb, from_path, to_path) = {
+        let view = tr.state().view();
+        let lca_id = find_lowest_common_ancestor(&view, from.node, to.node)
+            .ok_or_else(|| CommandError::Corrupted("no common ancestor".into()))?;
+        let from_tb = find_ancestor_textblock(&view, from.node);
+        let to_tb = find_ancestor_textblock(&view, to.node);
+        let mut from_path = path_from_ancestor(&view, from.node, lca_id)
+            .ok_or_else(|| CommandError::Corrupted("from is not descendant of LCA".into()))?;
+        from_path.push(from.offset);
+        let mut to_path = path_from_ancestor(&view, to.node, lca_id)
+            .ok_or_else(|| CommandError::Corrupted("to is not descendant of LCA".into()))?;
+        to_path.push(to.offset);
+        (lca_id, from_tb, to_tb, from_path, to_path)
+    };
+
+    let from_node_id = from.node;
+    let to_node_id = to.node;
+    tr.batch::<_, CommandError>(|tr| {
+        delete_range(tr, &from_path, &to_path, lca_id)?;
+        merge_after_delete(tr, from_tb, to_tb, lca_id)?;
+        fulfill_ancestors(tr, from_node_id, lca_id)?;
+        fulfill_ancestors(tr, to_node_id, lca_id)?;
+        Ok(())
+    })?;
+
+    let from_still_exists = tr.state().view().node(from.node).is_some();
+    let selection = if from_still_exists {
+        let view = tr.state().view();
+        resolve_selection_at(&view, from.node, from.offset)
+    } else {
+        let view = tr.state().view();
+        let cursor = match find_first_text_position(&view, lca_id) {
+            Some(p) => p,
+            None => Position::new(lca_id, 0),
+        };
+        Selection::collapsed(cursor)
+    };
+    tr.set_selection(Some(selection))?;
 
     if let Some(captured) = captured {
         apply_first_text_marker_lift(tr, &captured)?;
@@ -178,289 +475,205 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
     Ok(true)
 }
 
-fn lower_exact_empty_paragraph_break_delete_range(doc: &Doc, selection: Selection) -> Selection {
-    let Some(resolved) = selection.resolve(doc) else {
+fn lower_exact_empty_paragraph_break_delete_range(
+    tr: &Transaction,
+    selection: Selection,
+) -> Selection {
+    let view = tr.state().view();
+    let Some(resolved) = selection.resolve(&view) else {
         return selection;
     };
-    let from = Position::from(resolved.from());
-    let to = Position::from(resolved.to());
-    let Some(paragraph_break) = paragraph_break_selection_at_paragraph_end(doc, from) else {
+    let from = resolved.from().position();
+    let to = resolved.to().position();
+    let Some(paragraph_break) = paragraph_break_at_end(&from, &view) else {
         return selection;
     };
     if Selection::new(from, to) != paragraph_break {
         return selection;
     }
-    let Some(start) = empty_paragraph_delete_start(doc, from) else {
+    let Some(start) = empty_paragraph_delete_start(&view, &from) else {
         return selection;
     };
-
     Selection::new(start, to)
 }
 
-fn empty_paragraph_delete_start(doc: &Doc, position: Position) -> Option<Position> {
-    let paragraph = doc.node(position.node_id)?;
-    if !matches!(paragraph.node(), Node::Paragraph(_)) || paragraph.children().next().is_some() {
+fn empty_paragraph_delete_start(view: &DocView, position: &Position) -> Option<Position> {
+    let paragraph = view.node(position.node)?;
+    if paragraph.node_type() != NodeType::Paragraph || paragraph.children().next().is_some() {
         return None;
     }
-    before_node_position(&paragraph)
-}
-
-fn before_node_position(node: &NodeRef<'_>) -> Option<Position> {
     Some(Position {
-        node_id: node.parent()?.id(),
-        offset: node.index()?,
+        node: paragraph.parent()?.id(),
+        offset: paragraph.index()?,
         affinity: Affinity::Downstream,
     })
 }
 
 fn ensure_selection_after_child_range_delete(
     tr: &mut Transaction,
-    container_id: NodeId,
+    container_id: Dot,
     offset: usize,
 ) -> Result<Selection, CommandError> {
-    let doc = tr.doc();
-    let Some(container) = doc.node(container_id) else {
-        return Ok(resolve_selection_at(&doc, container_id, offset));
+    let count = {
+        let view = tr.state().view();
+        if view.node(container_id).is_none() {
+            return Ok(resolve_selection_at(&view, container_id, offset));
+        }
+        child_count(&view, container_id)
     };
 
-    let children = &container.entry().children;
-    let next_child_id = children.iter().nth(offset).copied();
-
-    if let Some(child_id) = next_child_id {
-        return Ok(selection_at_child(&doc, container_id, offset, child_id)
-            .unwrap_or_else(|| resolve_selection_at(&doc, container_id, offset)));
+    if offset < count {
+        let view = tr.state().view();
+        match slot_kind(&view, container_id, offset) {
+            // A synthetic scaffold block (no real op) cannot host a caret or
+            // receive inserts; fall through to materialize a real paragraph.
+            Some(SlotKind::Block(child_id)) if child_id.as_op_dot().is_some() => {
+                return Ok(selection_at_child(&view, container_id, offset, child_id)
+                    .unwrap_or_else(|| resolve_selection_at(&view, container_id, offset)));
+            }
+            Some(SlotKind::Atom) => {
+                // A block-level atom (image/HR) now sits at the deletion point;
+                // node-select it rather than inserting a fresh paragraph.
+                return Ok(Selection::new(
+                    Position {
+                        node: container_id,
+                        offset,
+                        affinity: Affinity::Downstream,
+                    },
+                    Position {
+                        node: container_id,
+                        offset: offset + 1,
+                        affinity: Affinity::Downstream,
+                    },
+                ));
+            }
+            _ => {}
+        }
     }
 
-    debug_assert_eq!(offset, children.len());
-
-    let paragraph_id = NodeId::new();
     tr.insert_subtree(
         container_id,
         offset,
-        Subtree::leaf(
-            paragraph_id,
-            PlainNode::Paragraph(PlainParagraphNode::default()),
-        ),
+        Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default())),
     )?;
-    Ok(Selection::collapsed(Position::new(paragraph_id, 0)))
-}
-
-fn delete_within_node(
-    tr: &mut Transaction,
-    node_id: NodeId,
-    from_offset: usize,
-    to_offset: usize,
-) -> Result<Position, CommandError> {
-    let doc = tr.doc();
-    let node = doc
-        .node(node_id)
-        .ok_or(CommandError::NodeNotFound(node_id))?;
-
-    match node.node() {
-        Node::Text(text_node) => {
-            let text_len = text_node.text.len();
-            if from_offset == 0 && to_offset >= text_len {
-                let parent_id = node.parent().ok_or(CommandError::NoParent(node_id))?.id();
-                let node_index = node
-                    .index()
-                    .ok_or(CommandError::orphan_child(node_id, parent_id))?;
-                let prev_id = node.prev_sibling().map(|n| n.id());
-                let next_id = node.next_sibling().map(|n| n.id());
-
-                tr.remove_subtree(node_id)?;
-
-                Ok(resolve_cursor_after_removal(
-                    tr, prev_id, next_id, parent_id, node_index,
-                ))
-            } else {
-                tr.remove_text(node_id, from_offset, to_offset - from_offset)?;
-                Ok(Position {
-                    node_id,
-                    offset: from_offset,
-                    affinity: Affinity::Upstream,
-                })
-            }
-        }
-        _ => {
-            let children_to_remove: Vec<NodeId> = node
-                .entry()
-                .children
-                .iter()
-                .skip(from_offset)
-                .take(to_offset - from_offset)
-                .copied()
-                .collect();
-
-            for child_id in children_to_remove.into_iter().rev() {
-                remove_or_clear(tr, child_id)?;
-            }
-
-            Ok(Position {
-                node_id,
-                offset: from_offset,
-                affinity: Affinity::Downstream,
+    let new_elem = {
+        let view = tr.state().view();
+        view.node(container_id)
+            .and_then(|c| match c.child_at(offset) {
+                Some(ChildView::Block(b)) => Some(b.id()),
+                _ => None,
             })
-        }
+    };
+    match new_elem {
+        Some(id) => Ok(Selection::collapsed(Position::new(id, 0))),
+        None => Ok(Selection::collapsed(Position::new(container_id, offset))),
     }
 }
 
-/// Remove a fully-selected child, honoring the schema `structural` invariant:
-/// a structural node is a fixed part of its parent and is never deleted — its
-/// content is cleared recursively and the node is re-fulfilled instead.
-fn remove_or_clear(tr: &mut Transaction, child_id: NodeId) -> Result<(), CommandError> {
-    let is_structural = tr.doc().node(child_id).is_some_and(|n| n.spec().structural);
-    if is_structural {
+fn remove_or_clear(tr: &mut Transaction, child_id: Dot) -> Result<(), CommandError> {
+    let structural = {
+        let view = tr.state().view();
+        is_structural(&view, child_id)
+    };
+    if structural {
         clear_structural_subtree(tr, child_id)?;
     } else {
-        tr.remove_subtree(child_id)?;
+        remove_subtree_full(tr, child_id)?;
     }
     Ok(())
 }
 
-/// Recursively empties a structural node: structural descendants are preserved
-/// (recursed into), non-structural descendants are removed, then every visited
-/// structural node is re-fulfilled so it regains its minimal required content
-/// (an emptied TableCell/FoldContent gets one empty paragraph; an emptied
-/// FoldTitle stays empty since its content is `Text*`).
-fn clear_structural_subtree(tr: &mut Transaction, node_id: NodeId) -> Result<(), CommandError> {
-    let child_ids: Vec<NodeId> = match tr.doc().node(node_id) {
-        Some(n) => n.entry().children.iter().copied().collect(),
-        None => return Ok(()),
+fn clear_structural_subtree(tr: &mut Transaction, node_id: Dot) -> Result<(), CommandError> {
+    let child_ids: Vec<Dot> = {
+        let view = tr.state().view();
+        match view.node(node_id) {
+            Some(n) => n.children().map(|c| elem_id_of(&c)).collect(),
+            None => return Ok(()),
+        }
     };
     for child_id in child_ids.into_iter().rev() {
-        let child_structural = tr.doc().node(child_id).is_some_and(|n| n.spec().structural);
-        if child_structural {
+        let structural = {
+            let view = tr.state().view();
+            is_structural(&view, child_id)
+        };
+        if structural {
             clear_structural_subtree(tr, child_id)?;
         } else {
-            tr.remove_subtree(child_id)?;
+            remove_subtree_full(tr, child_id)?;
         }
     }
-    let doc = tr.doc();
-    if let Some(node) = doc.node(node_id) {
-        tr.apply_steps(fulfill(&node))?;
-    }
+    let steps = {
+        let view = tr.state().view();
+        view.node(node_id).map(|n| fulfill(&n)).unwrap_or_default()
+    };
+    tr.apply_steps(steps)?;
     Ok(())
-}
-
-fn resolve_cursor_after_removal(
-    tr: &Transaction,
-    prev_id: Option<NodeId>,
-    next_id: Option<NodeId>,
-    parent_id: NodeId,
-    removed_index: usize,
-) -> Position {
-    let doc = tr.doc();
-
-    if let Some(next_id) = next_id
-        && let Some(next) = doc.node(next_id)
-        && matches!(next.node(), Node::Text(_))
-    {
-        return Position {
-            node_id: next_id,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        };
-    }
-
-    if let Some(prev_id) = prev_id
-        && let Some(prev) = doc.node(prev_id)
-        && let Node::Text(t) = prev.node()
-    {
-        return Position {
-            node_id: prev_id,
-            offset: t.text.len(),
-            affinity: Affinity::Upstream,
-        };
-    }
-
-    Position {
-        node_id: parent_id,
-        offset: removed_index,
-        affinity: Affinity::Downstream,
-    }
 }
 
 /// Recursively delete content from path position to end of subtree.
-fn delete_from(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<(), CommandError> {
-    let doc = tr.doc();
-    let node = doc
-        .node(node_id)
-        .ok_or(CommandError::NodeNotFound(node_id))?;
+fn delete_from(tr: &mut Transaction, path: &[usize], node_id: Dot) -> Result<(), CommandError> {
+    // A synthetic scaffold node (e.g. a mandatory trailing paragraph) has no real
+    // op and is regenerated by projection with a slot-dependent id that may have
+    // shifted after preceding slots were deleted; there is nothing to delete in
+    // one, so descending into it is a no-op.
+    if node_id.as_op_dot().is_none() && node_id != Dot::ROOT {
+        return Ok(());
+    }
+    let count = {
+        let view = tr.state().view();
+        if view.node(node_id).is_none() {
+            return Err(CommandError::NodeNotFound(node_id));
+        }
+        child_count(&view, node_id)
+    };
 
     if path.len() == 1 {
         let offset = path[0];
-        match node.node() {
-            Node::Text(t) => {
-                let text_len = t.text.len();
-                if offset == 0 {
-                    tr.remove_subtree(node_id)?;
-                } else if offset < text_len {
-                    tr.remove_text(node_id, offset, text_len - offset)?;
-                }
-            }
-            _ => {
-                let children: Vec<NodeId> =
-                    node.entry().children.iter().skip(offset).copied().collect();
-                for child_id in children.into_iter().rev() {
-                    remove_or_clear(tr, child_id)?;
-                }
-            }
-        }
+        delete_child_slots(tr, node_id, offset, count)?;
     } else {
         let idx = path[0];
-        let children: Vec<NodeId> = node
-            .entry()
-            .children
-            .iter()
-            .skip(idx + 1)
-            .copied()
-            .collect();
-        for child_id in children.into_iter().rev() {
-            remove_or_clear(tr, child_id)?;
-        }
-        let child_id = node.entry().children.iter().nth(idx).copied().unwrap();
+        let child_id = {
+            let view = tr.state().view();
+            match view.node(node_id).and_then(|n| n.child_at(idx)) {
+                Some(ChildView::Block(b)) => b.id(),
+                _ => return Ok(()),
+            }
+        };
+        delete_child_slots(tr, node_id, idx + 1, count)?;
         delete_from(tr, &path[1..], child_id)?;
     }
-
     Ok(())
 }
 
 /// Recursively delete content from start of subtree to path position.
-fn delete_to(tr: &mut Transaction, path: &[usize], node_id: NodeId) -> Result<(), CommandError> {
-    let doc = tr.doc();
-    let node = doc
-        .node(node_id)
-        .ok_or(CommandError::NodeNotFound(node_id))?;
+fn delete_to(tr: &mut Transaction, path: &[usize], node_id: Dot) -> Result<(), CommandError> {
+    // See `delete_from`: a synthetic scaffold node has nothing to delete and its
+    // id may be stale after sibling slots were removed, so no-op.
+    if node_id.as_op_dot().is_none() && node_id != Dot::ROOT {
+        return Ok(());
+    }
+    if tr.state().view().node(node_id).is_none() {
+        return Err(CommandError::NodeNotFound(node_id));
+    }
 
     if path.len() == 1 {
         let offset = path[0];
-        match node.node() {
-            Node::Text(t) => {
-                let text_len = t.text.len();
-                if offset >= text_len {
-                    tr.remove_subtree(node_id)?;
-                } else if offset > 0 {
-                    tr.remove_text(node_id, 0, offset)?;
-                }
-            }
-            _ => {
-                let children: Vec<NodeId> =
-                    node.entry().children.iter().take(offset).copied().collect();
-                for child_id in children.into_iter().rev() {
-                    remove_or_clear(tr, child_id)?;
-                }
-            }
-        }
+        delete_child_slots(tr, node_id, 0, offset)?;
     } else {
         let idx = path[0];
-        let children: Vec<NodeId> = node.entry().children.iter().take(idx).copied().collect();
-        for child_id in children.into_iter().rev() {
-            remove_or_clear(tr, child_id)?;
-        }
-        let child_id = node.entry().children.iter().nth(idx).copied().unwrap();
+        // Resolve the descend target by stable id BEFORE deleting preceding
+        // slots — that deletion shifts later indices, so `child_at(idx)`
+        // afterwards would point at the wrong child.
+        let child_id = {
+            let view = tr.state().view();
+            match view.node(node_id).and_then(|n| n.child_at(idx)) {
+                Some(ChildView::Block(b)) => b.id(),
+                _ => return Ok(()),
+            }
+        };
+        delete_child_slots(tr, node_id, 0, idx)?;
         delete_to(tr, &path[1..], child_id)?;
     }
-
     Ok(())
 }
 
@@ -469,45 +682,65 @@ fn delete_range(
     tr: &mut Transaction,
     from_path: &[usize],
     to_path: &[usize],
-    node_id: NodeId,
+    node_id: Dot,
 ) -> Result<(), CommandError> {
     let from_idx = from_path[0];
     let to_idx = to_path[0];
 
     if from_idx == to_idx {
-        let doc = tr.doc();
-        let node = doc
-            .node(node_id)
-            .ok_or(CommandError::NodeNotFound(node_id))?;
-        let child_id = node.entry().children.iter().nth(from_idx).copied().unwrap();
-
+        let child_id = {
+            let view = tr.state().view();
+            match view.node(node_id).and_then(|n| n.child_at(from_idx)) {
+                Some(ChildView::Block(b)) => Some(b.id()),
+                _ => None,
+            }
+        };
         match (from_path.len(), to_path.len()) {
-            (1, l) if l > 1 => delete_to(tr, &to_path[1..], child_id)?,
-            (l, 1) if l > 1 => delete_from(tr, &from_path[1..], child_id)?,
+            (1, l) if l > 1 => {
+                if let Some(child_id) = child_id {
+                    delete_to(tr, &to_path[1..], child_id)?;
+                }
+            }
+            (l, 1) if l > 1 => {
+                if let Some(child_id) = child_id {
+                    delete_from(tr, &from_path[1..], child_id)?;
+                }
+            }
             (fl, tl) if fl > 1 && tl > 1 => {
-                delete_range(tr, &from_path[1..], &to_path[1..], child_id)?
+                if let Some(child_id) = child_id {
+                    delete_range(tr, &from_path[1..], &to_path[1..], child_id)?;
+                }
             }
             (1, 1) => {
-                let _ = delete_within_node(tr, node_id, from_idx, to_idx)?;
+                delete_child_slots(tr, node_id, from_idx, to_idx)?;
             }
             _ => {}
         }
     } else {
-        let doc = tr.doc();
-        let node = doc
-            .node(node_id)
-            .ok_or(CommandError::NodeNotFound(node_id))?;
-        let children = &node.entry().children;
-
-        let from_child_id = if from_path.len() > 1 {
-            children.iter().nth(from_idx).copied()
-        } else {
-            None
-        };
-        let to_child_id = if to_path.len() > 1 {
-            children.iter().nth(to_idx).copied()
-        } else {
-            None
+        let (from_child_id, to_child_id) = {
+            let view = tr.state().view();
+            let node = view.node(node_id);
+            let from_child_id = if from_path.len() > 1 {
+                node.as_ref()
+                    .and_then(|n| n.child_at(from_idx))
+                    .and_then(|c| match c {
+                        ChildView::Block(b) => Some(b.id()),
+                        _ => None,
+                    })
+            } else {
+                None
+            };
+            let to_child_id = if to_path.len() > 1 {
+                node.as_ref()
+                    .and_then(|n| n.child_at(to_idx))
+                    .and_then(|c| match c {
+                        ChildView::Block(b) => Some(b.id()),
+                        _ => None,
+                    })
+            } else {
+                None
+            };
+            (from_child_id, to_child_id)
         };
 
         let fully_from = if from_path.len() == 1 {
@@ -515,20 +748,12 @@ fn delete_range(
         } else {
             from_idx + 1
         };
-        let fully_selected: Vec<NodeId> = children
-            .iter()
-            .skip(fully_from)
-            .take(to_idx - fully_from)
-            .copied()
-            .collect();
 
         if let Some(child_id) = from_child_id {
             delete_from(tr, &from_path[1..], child_id)?;
         }
 
-        for child_id in fully_selected.into_iter().rev() {
-            remove_or_clear(tr, child_id)?;
-        }
+        delete_child_slots(tr, node_id, fully_from, to_idx)?;
 
         if let Some(child_id) = to_child_id {
             delete_to(tr, &to_path[1..], child_id)?;
@@ -538,107 +763,80 @@ fn delete_range(
     Ok(())
 }
 
-/// Resolve a container position (container_id, offset) to the nearest valid selection.
-fn resolve_selection_at(doc: &Doc, container_id: NodeId, offset: usize) -> Selection {
-    let container = match doc.node(container_id) {
-        Some(node) => node,
+fn resolve_selection_at(view: &DocView, container_id: Dot, offset: usize) -> Selection {
+    let count = match view.node(container_id) {
+        Some(_) => child_count(view, container_id),
         None => return Selection::collapsed(Position::new(container_id, offset)),
     };
-    let children = &container.entry().children;
 
-    // After block-level deletions, cursor may be at a container position like (root, 0).
-    // A collapsed selection at a container position in a block-children container is invalid.
-    // Try forward child first: node selection for a block-level leaf, or collapsed at first text position.
-    if let Some(&child_id) = children.iter().nth(offset)
-        && let Some(selection) = selection_at_child(doc, container_id, offset, child_id)
-    {
-        return selection;
+    if offset < count {
+        let child_id = match slot_kind(view, container_id, offset) {
+            Some(SlotKind::Block(id)) => Some(id),
+            _ => None,
+        };
+        if let Some(child_id) = child_id
+            && let Some(selection) = selection_at_child(view, container_id, offset, child_id)
+        {
+            return selection;
+        }
     }
 
-    // Fall back to previous child.
-    if offset > 0
-        && let Some(&child_id) = children.iter().nth(offset - 1)
-        && let Some(selection) = selection_at_child(doc, container_id, offset - 1, child_id)
-    {
-        return selection;
+    if offset > 0 {
+        let child_id = match slot_kind(view, container_id, offset - 1) {
+            Some(SlotKind::Block(id)) => Some(id),
+            _ => None,
+        };
+        if let Some(child_id) = child_id
+            && let Some(selection) = selection_at_child(view, container_id, offset - 1, child_id)
+        {
+            return selection;
+        }
     }
 
-    // Clamp to children.len() in case the offset became stale after child removals.
-    Selection::collapsed(Position::new(container_id, offset.min(children.len())))
+    Selection::collapsed(Position::new(container_id, offset.min(count)))
 }
 
 fn selection_at_child(
-    doc: &Doc,
-    container_id: NodeId,
+    view: &DocView,
+    container_id: Dot,
     index: usize,
-    child_id: NodeId,
+    child_id: Dot,
 ) -> Option<Selection> {
-    let child = doc.node(child_id)?;
-    if is_block_level_leaf(child.node()) {
+    let child = view.node(child_id)?;
+    let spec = child.spec();
+    if spec.selectable && !spec.inline {
         return Some(Selection::new(
             Position {
-                node_id: container_id,
+                node: container_id,
                 offset: index,
                 affinity: Affinity::Downstream,
             },
             Position {
-                node_id: container_id,
+                node: container_id,
                 offset: index + 1,
                 affinity: Affinity::Upstream,
             },
         ));
     }
-    find_first_text_position(doc, child_id).map(Selection::collapsed)
-}
-
-/// Check if a node is a "block-level leaf" for selection purposes.
-/// These are selectable block nodes with no inline content (e.g., Image, File, HorizontalRule).
-fn is_block_level_leaf(node: &Node) -> bool {
-    let spec = node.spec();
-    spec.selectable && !spec.inline
+    find_first_text_position(view, child_id).map(Selection::collapsed)
 }
 
 /// Walk into a node to find the first valid text-level position.
-pub(crate) fn find_first_text_position(doc: &Doc, node_id: NodeId) -> Option<Position> {
-    let node_ref = doc.node(node_id)?;
-    let node = node_ref.node();
-
-    // Text node -> position at offset 0
-    if matches!(node, Node::Text(_)) {
-        return Some(Position {
-            node_id,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        });
-    }
-
+pub(crate) fn find_first_text_position(view: &DocView, node_id: Dot) -> Option<Position> {
+    let node = view.node(node_id)?;
     if node.spec().is_textblock() {
-        // Textblock with text children -> recurse into first child
-        if let Some(&first_child_id) = node_ref.entry().children.iter().next()
-            && let Some(pos) = find_first_text_position(doc, first_child_id)
-        {
-            return Some(pos);
-        }
-        // Empty textblock — cursor at (textblock, 0)
         return Some(Position {
-            node_id,
+            node: node_id,
             offset: 0,
             affinity: Affinity::Downstream,
         });
     }
-
-    // Otherwise -> recurse into first child
-    let first_child_id = *node_ref.entry().children.iter().next()?;
-    find_first_text_position(doc, first_child_id)
+    let first_child_id = node.child_blocks().next()?.id();
+    find_first_text_position(view, first_child_id)
 }
 
-/// The structural region a node belongs to: the node itself if it is
-/// `structural` (e.g. FoldTitle, which is both a textblock and structural),
-/// otherwise its nearest structural ancestor, otherwise `None` (outermost).
-/// Two textblocks with different regions are separated by a structural
-/// boundary and must not have content merged across it.
-fn structural_region(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
-    let node = doc.node(node_id)?;
+fn structural_region(view: &DocView, node_id: Dot) -> Option<Dot> {
+    let node = view.node(node_id)?;
     if node.spec().structural {
         return Some(node_id);
     }
@@ -651,53 +849,120 @@ fn structural_region(doc: &Doc, node_id: NodeId) -> Option<NodeId> {
     }
 }
 
-/// After deletion, merge boundary textblocks and clean up containers.
+/// Merges `source` (a block container) into `target` by re-parenting each of
+/// source's child blocks to the end of `target`, then removing the emptied
+/// source. Unlike `merge_node` (which only flows up loose char/atom leaves),
+/// this correctly relocates block children whose parents chain would otherwise
+/// dangle to the deleted container.
+fn merge_containers(tr: &mut Transaction, target: Dot, source: Dot) -> Result<(), CommandError> {
+    loop {
+        // Only real children move; the projection synthesizes a Derived
+        // placeholder for an empty required container, so stop when only
+        // placeholders remain (otherwise this loops forever).
+        let child = {
+            let view = tr.state().view();
+            match view.node(source) {
+                Some(s) => s
+                    .child_blocks()
+                    .find(|c| c.id().as_op_dot().is_some())
+                    .map(|c| c.id()),
+                None => return Ok(()),
+            }
+        };
+        let Some(child) = child else { break };
+        let target_len = {
+            let view = tr.state().view();
+            view.node(target)
+                .map(|n| {
+                    n.child_blocks()
+                        .filter(|c| c.id().as_op_dot().is_some())
+                        .count()
+                })
+                .unwrap_or(0)
+        };
+        tr.move_node(child, target, target_len)?;
+    }
+    remove_subtree_full(tr, source)
+}
+
+/// Merges `block`'s next same-parent sibling into it via `merge_containers`
+/// (re-resolving the sibling, whose dot may be fresh after a prior move).
+fn merge_with_next_sibling(tr: &mut Transaction, block: Dot) -> Result<(), CommandError> {
+    let next = {
+        let view = tr.state().view();
+        view.node(block)
+            .and_then(|n| next_sibling(&n))
+            .and_then(|c| match c {
+                ChildView::Block(b) => Some(b.id()),
+                ChildView::Leaf(_) => None,
+            })
+    };
+    match next {
+        Some(next_id) => merge_containers(tr, block, next_id),
+        None => Ok(()),
+    }
+}
+
 fn merge_after_delete(
     tr: &mut Transaction,
-    from_tb: Option<NodeId>,
-    to_tb: Option<NodeId>,
-    lca_id: NodeId,
+    from_tb: Option<Dot>,
+    to_tb: Option<Dot>,
+    lca_id: Dot,
 ) -> Result<(), CommandError> {
     let (from_tb, to_tb) = match (from_tb, to_tb) {
         (Some(a), Some(b)) if a != b => (a, b),
         _ => return Ok(()),
     };
 
-    let doc = tr.doc();
-    if doc.node(from_tb).is_none() || doc.node(to_tb).is_none() {
-        return Ok(());
-    }
-
-    // Never merge content across a structural boundary. If the two textblocks
-    // live in different structural regions, leave both intact.
-    if structural_region(&doc, from_tb) != structural_region(&doc, to_tb) {
-        return Ok(());
-    }
-
-    let to_tb_parent = doc.node(to_tb).and_then(|n| n.parent()).map(|p| p.id());
-
-    // PageBreak is schema-restricted to the trailing child of a paragraph.
-    // Merging into a paragraph whose last child is a PageBreak would place
-    // that PageBreak in the middle of the resulting child list.
-    if let Some(target) = doc.node(from_tb)
-        && let Some(last) = target.last_child()
-        && matches!(last.node(), Node::PageBreak(_))
     {
-        let last_id = last.id();
-        tr.remove_subtree(last_id)?;
+        let view = tr.state().view();
+        if view.node(from_tb).is_none() || view.node(to_tb).is_none() {
+            return Ok(());
+        }
+        if structural_region(&view, from_tb) != structural_region(&view, to_tb) {
+            return Ok(());
+        }
+    }
+
+    let to_tb_parent = {
+        let view = tr.state().view();
+        view.node(to_tb).and_then(|n| n.parent()).map(|p| p.id())
+    };
+
+    // Trailing PageBreak guard: drop it before merging so it does not end up mid-list.
+    let trailing_page_break = {
+        let view = tr.state().view();
+        view.node(from_tb)
+            .and_then(|target| match target.last_child() {
+                Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak => Some(l.dot()),
+                _ => None,
+            })
+    };
+    if let Some(pb) = trailing_page_break {
+        remove_subtree_full(tr, pb)?;
     }
 
     merge_element_cross_parent(tr, to_tb, from_tb)?;
 
-    let doc = tr.doc();
-    if let Some(p) = doc.node(from_tb) {
-        tr.apply_steps(compact(&p))?;
+    // The to-side container that held to_tb is now emptied (its content merged
+    // into from_tb); drop it before the container walk so it is not carried into
+    // the merged container as an empty item.
+    if let Some(parent_id) = to_tb_parent {
+        let empty = {
+            let view = tr.state().view();
+            view.node(parent_id)
+                .map(|p| is_structurally_empty(&p))
+                .unwrap_or(false)
+        };
+        if empty {
+            prune_empty_full(tr, parent_id)?;
+        }
     }
 
-    // Container-level merge: walk up, merge adjacent same-type siblings
+    // Container-level merge: walk up, merge adjacent same-type siblings.
     let mut from_current = {
-        let doc = tr.doc();
-        doc.node(from_tb).and_then(|n| n.parent()).map(|p| p.id())
+        let view = tr.state().view();
+        view.node(from_tb).and_then(|n| n.parent()).map(|p| p.id())
     };
 
     while let Some(from_id) = from_current {
@@ -705,63 +970,93 @@ fn merge_after_delete(
             break;
         }
 
-        let doc = tr.doc();
-        let Some(from_node) = doc.node(from_id) else {
-            break;
+        let (next_id, next_same_type, parent_id, is_list_item) = {
+            let view = tr.state().view();
+            let Some(from_node) = view.node(from_id) else {
+                break;
+            };
+            match next_sibling(&from_node) {
+                Some(ChildView::Block(next)) => {
+                    let same = next.node_type() == from_node.node_type();
+                    (
+                        Some(next.id()),
+                        same,
+                        from_node.parent().map(|p| p.id()),
+                        from_node.node_type() == NodeType::ListItem,
+                    )
+                }
+                Some(ChildView::Leaf(_)) => {
+                    (None, false, from_node.parent().map(|p| p.id()), false)
+                }
+                None => (None, false, from_node.parent().map(|p| p.id()), false),
+            }
         };
 
-        match from_node.next_sibling() {
-            Some(next) if next.node().as_type() == from_node.node().as_type() => {
-                // Same-type next sibling → merge and walk up
-                let next_id = next.id();
-                let parent_id = from_node.parent().map(|p| p.id());
+        match next_id {
+            Some(next_id) if next_same_type => {
+                if is_list_item {
+                    let (target_sublist, moved_sublist) = {
+                        let view = tr.state().view();
+                        let target_sublist = view.node(from_id).and_then(|n| {
+                            n.child_blocks()
+                                .find(|c| {
+                                    matches!(
+                                        c.node_type(),
+                                        NodeType::BulletList | NodeType::OrderedList
+                                    )
+                                })
+                                .map(|c| c.id())
+                        });
+                        let moved_sublist = view.node(next_id).and_then(|n| {
+                            n.child_blocks()
+                                .find(|c| {
+                                    matches!(
+                                        c.node_type(),
+                                        NodeType::BulletList | NodeType::OrderedList
+                                    )
+                                })
+                                .map(|c| c.id())
+                        });
+                        (target_sublist, moved_sublist)
+                    };
 
-                // When merging two adjacent list_items, combine their sublists into one
-                // so the merged list_item still has at most one trailing sublist. Identify
-                // sublists by node type rather than child index because the prior
-                // textblock merge has already removed next_list_item's paragraph child.
-                if matches!(from_node.node(), Node::ListItem(_)) {
-                    let target_sublist_id = from_node
-                        .children()
-                        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-                        .map(|c| c.id());
-                    let moved_sublist_id = next
-                        .children()
-                        .find(|c| matches!(c.node(), Node::BulletList(_) | Node::OrderedList(_)))
-                        .map(|c| c.id());
-
-                    if let Some(moved_id) = moved_sublist_id {
-                        let doc = tr.doc();
-                        let from_li = doc
-                            .node(from_id)
-                            .ok_or(CommandError::NodeNotFound(from_id))?;
-                        let from_len = from_li.entry().children.len();
-                        tr.move_node(moved_id, from_id, from_len)?;
-
-                        if let Some(target_id) = target_sublist_id {
-                            tr.merge_node(moved_id, target_id)?;
+                    if let Some(moved_id) = moved_sublist {
+                        match target_sublist {
+                            // A list item cannot hold two sublists (normalization
+                            // drops the second), so relocate the next item's
+                            // sublist ITEMS into the existing sublist rather than
+                            // moving the sublist whole.
+                            Some(target_id) => merge_containers(tr, target_id, moved_id)?,
+                            None => {
+                                let from_len = {
+                                    let view = tr.state().view();
+                                    view.node(from_id)
+                                        .map(|n| n.child_blocks().count())
+                                        .unwrap_or(0)
+                                };
+                                tr.move_node(moved_id, from_id, from_len)?;
+                            }
                         }
                     }
                 }
 
-                tr.merge_node(next_id, from_id)?;
+                let _ = next_id;
+                merge_with_next_sibling(tr, from_id)?;
                 from_current = parent_id;
             }
-            None => {
-                // No next sibling → walk up (to-branch may be at a higher level)
-                from_current = from_node.parent().map(|p| p.id());
-            }
-            Some(_) => {
-                // Different-type next sibling → stop
-                break;
+            _ => {
+                if next_id.is_none() {
+                    from_current = parent_id;
+                } else {
+                    break;
+                }
             }
         }
     }
 
-    // Collect the ancestor chain from to_tb_parent up to lca_id before any prune
-    // runs, because prune removes nodes and severs the parent link we need to walk.
-    let ancestor_chain: Vec<NodeId> = {
-        let doc = tr.doc();
+    // Repair structural ancestors and prune empties.
+    let ancestor_chain: Vec<Dot> = {
+        let view = tr.state().view();
         let mut chain = Vec::new();
         if let Some(start_id) = to_tb_parent {
             let mut current = start_id;
@@ -770,7 +1065,7 @@ fn merge_after_delete(
                 if current == lca_id {
                     break;
                 }
-                match doc.node(current).and_then(|n| n.parent()).map(|p| p.id()) {
+                match view.node(current).and_then(|n| n.parent()).map(|p| p.id()) {
                     Some(parent_id) => current = parent_id,
                     None => break,
                 }
@@ -779,57 +1074,67 @@ fn merge_after_delete(
         chain
     };
 
-    let doc = tr.doc();
-    if let Some(parent_id) = to_tb_parent
-        && let Some(parent) = doc.node(parent_id)
-        && parent.entry().children.is_empty()
-    {
-        if parent.spec().structural {
-            tr.apply_steps(fulfill(&parent))?;
-        } else {
-            tr.apply_steps(prune(&parent))?;
+    if let Some(parent_id) = to_tb_parent {
+        let (empty, structural) = {
+            let view = tr.state().view();
+            match view.node(parent_id) {
+                Some(parent) => (is_structurally_empty(&parent), parent.spec().structural),
+                None => (false, false),
+            }
+        };
+        if empty {
+            if structural {
+                let steps = {
+                    let view = tr.state().view();
+                    view.node(parent_id)
+                        .map(|parent| fulfill(&parent))
+                        .unwrap_or_default()
+                };
+                tr.apply_steps(steps)?;
+            } else {
+                prune_empty_full(tr, parent_id)?;
+            }
         }
     }
 
-    // The prune cascade above stops at the first structural ancestor but does not
-    // repair it. Any structural node between to_tb_parent and the LCA may have been
-    // emptied by the merge; fulfill them so no structural container is left
-    // schema-invalid. fulfill is idempotent and skips already-removed nodes.
-    for &id in &ancestor_chain {
-        let doc = tr.doc();
-        if let Some(node) = doc.node(id)
-            && node.spec().structural
-        {
-            tr.apply_steps(fulfill(&node))?;
-        }
+    for id in &ancestor_chain {
+        let steps = {
+            let view = tr.state().view();
+            match view.node(*id) {
+                Some(node) if node.spec().structural => fulfill(&node),
+                _ => Vec::new(),
+            }
+        };
+        tr.apply_steps(steps)?;
     }
 
-    let doc = tr.doc();
-    if let Some(lca) = doc.node(lca_id) {
-        tr.apply_steps(fulfill(&lca))?;
-    }
+    let lca_steps = {
+        let view = tr.state().view();
+        view.node(lca_id)
+            .map(|lca| fulfill(&lca))
+            .unwrap_or_default()
+    };
+    tr.apply_steps(lca_steps)?;
 
     Ok(())
 }
 
-/// Walk from `start_id` up to (and including) `lca_id`, running fulfill on each node.
-/// This ensures deeply nested containers that became empty after deletion are fixed.
-fn fulfill_ancestors(
-    tr: &mut Transaction,
-    start_id: NodeId,
-    lca_id: NodeId,
-) -> Result<(), CommandError> {
+fn fulfill_ancestors(tr: &mut Transaction, start_id: Dot, lca_id: Dot) -> Result<(), CommandError> {
     let mut current = start_id;
     loop {
-        let doc = tr.doc();
-        if let Some(node) = doc.node(current) {
-            tr.apply_steps(fulfill(&node))?;
-        }
+        let steps = {
+            let view = tr.state().view();
+            view.node(current).map(|n| fulfill(&n)).unwrap_or_default()
+        };
+        tr.apply_steps(steps)?;
         if current == lca_id {
             break;
         }
-        let doc = tr.doc();
-        match doc.node(current).and_then(|n| n.parent()).map(|p| p.id()) {
+        let parent = {
+            let view = tr.state().view();
+            view.node(current).and_then(|n| n.parent()).map(|p| p.id())
+        };
+        match parent {
             Some(parent_id) => current = parent_id,
             None => break,
         }

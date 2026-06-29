@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
-use editor_state::{DocFlatExt, ResolvedPosition, ResolvedPositionFlatExt, Selection};
+use editor_state::{
+    Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, flat_size, flat_text,
+};
 use editor_transaction::Transaction;
 
 use crate::editor::Editor;
@@ -80,22 +82,27 @@ pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), Edi
 }
 
 fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
-    let doc = tr.doc();
-    let start_pos = ResolvedPosition::from_flat(&doc, start)
-        .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
-    let end_pos = ResolvedPosition::from_flat(&doc, end)
-        .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
+    let (start_pos, end_pos): (Position, Position) = {
+        let doc = tr.view();
+        let start_pos = (&ResolvedPosition::from_flat(&doc, start)
+            .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?)
+            .into();
+        let end_pos = (&ResolvedPosition::from_flat(&doc, end)
+            .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?)
+            .into();
+        (start_pos, end_pos)
+    };
 
     commands::chain!(
         tr,
-        commands::set_selection(Selection::new((&start_pos).into(), (&end_pos).into())),
+        commands::set_selection(Selection::new(start_pos, end_pos)),
         commands::when!(start != end, commands::delete_selection()),
         commands::when!(!text.is_empty(), commands::insert_text(text)),
     )
 }
 
 fn delete_surrounding(tr: &mut Transaction, before: usize, after: usize) -> CommandResult {
-    let doc = tr.doc();
+    let doc = tr.view();
     let selection = tr
         .selection()
         .ok_or(CommandError::Corrupted("no selection".into()))?;
@@ -110,7 +117,7 @@ fn delete_surrounding(tr: &mut Transaction, before: usize, after: usize) -> Comm
         None => (cursor_flat, cursor_flat),
     };
 
-    let doc_size = doc.flat_size();
+    let doc_size = flat_size(&doc);
     let del_start = before_anchor.saturating_sub(before);
     let del_end_after = after_anchor.saturating_add(after).min(doc_size);
 
@@ -129,7 +136,7 @@ fn delete_surrounding(tr: &mut Transaction, before: usize, after: usize) -> Comm
     // left by before_count to preserve its logical position relative to the surrounding text.
     if any_delete {
         let new_cursor_flat = cursor_flat - before_count;
-        let doc_after = tr.doc();
+        let doc_after = tr.view();
         let resolved = ResolvedPosition::from_flat(&doc_after, new_cursor_flat)
             .ok_or(CommandError::Corrupted("cursor restore failed".into()))?;
         commands::set_selection(tr, Selection::collapsed((&resolved).into()))?;
@@ -143,7 +150,7 @@ fn utf16_to_char_counts(
     before_u16: usize,
     after_u16: usize,
 ) -> Result<(usize, usize), CommandError> {
-    let doc = tr.doc();
+    let doc = tr.view();
     let selection = tr
         .selection()
         .ok_or(CommandError::Corrupted("no selection".into()))?;
@@ -152,12 +159,12 @@ fn utf16_to_char_counts(
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cursor unresolvable".into()))?
         .to_flat();
-    let doc_size = doc.flat_size();
+    let doc_size = flat_size(&doc);
 
     let before_window_start = cursor_flat.saturating_sub(before_u16);
     let after_window_end = cursor_flat.saturating_add(after_u16).min(doc_size);
-    let text_before = doc.flat_text(before_window_start..cursor_flat);
-    let text_after = doc.flat_text(cursor_flat..after_window_end);
+    let text_before = flat_text(&doc, before_window_start..cursor_flat);
+    let text_after = flat_text(&doc, cursor_flat..after_window_end);
 
     Ok((
         utf16_count_backward_as_chars(&text_before, before_u16),
@@ -207,8 +214,8 @@ mod tests {
     #[test]
     fn probe_delete_selection_collapsed_at_start() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         assert_probe_predicts_apply(
             state,
@@ -221,8 +228,8 @@ mod tests {
     #[test]
     fn probe_delete_selection_range() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 1) -> (t1, 4)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
         };
         assert_probe_predicts_apply(
             state,
@@ -235,16 +242,16 @@ mod tests {
     #[test]
     fn delete_selection() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 2) -> (t1, 8)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 2) -> (p1, 8)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Deletion {
             op: DeletionOp::Selection,
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("herld") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("herld") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -252,8 +259,8 @@ mod tests {
     #[test]
     fn delete_grapheme_backward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Deletion {
@@ -264,8 +271,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("helo") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("helo") } } }
+            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -273,8 +280,8 @@ mod tests {
     #[test]
     fn delete_grapheme_forward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Deletion {
@@ -285,8 +292,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("helo") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("helo") } } }
+            selection: (p1, 3)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -294,15 +301,15 @@ mod tests {
     fn editor_with_layout(state: editor_state::State) -> Editor {
         let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut editor = Editor::new_test_with_resource(state.clone(), resource);
-        editor.view.layout(&state.doc);
+        editor.view.layout(&state);
         editor
     }
 
     #[test]
     fn delete_word_backward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 11)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 11)
         };
         let mut editor = editor_with_layout(state);
         editor.apply(Message::Deletion {
@@ -313,8 +320,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello ") } } }
-            selection: (t1, 6)
+            doc { root { p1: paragraph { text("hello ") } } }
+            selection: (p1, 6)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -322,8 +329,8 @@ mod tests {
     #[test]
     fn delete_word_forward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0)
         };
         let mut editor = editor_with_layout(state);
         editor.apply(Message::Deletion {
@@ -334,8 +341,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text(" world") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text(" world") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -343,8 +350,8 @@ mod tests {
     #[test]
     fn delete_line_backward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 5)
         };
         let mut editor = editor_with_layout(state);
         editor.apply(Message::Deletion {
@@ -356,8 +363,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text(" world") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text(" world") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -365,8 +372,8 @@ mod tests {
     #[test]
     fn delete_line_forward() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 5)
         };
         let mut editor = editor_with_layout(state);
         editor.apply(Message::Deletion {
@@ -378,8 +385,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -387,8 +394,8 @@ mod tests {
     #[test]
     fn delete_word_at_doc_start_is_noop() {
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         let mut editor = editor_with_layout(state);
         editor.apply(Message::Deletion {
@@ -399,8 +406,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -409,8 +416,8 @@ mod tests {
     fn delete_grapheme_backward_combining_mark() {
         // "aéb" = a + e + U+0301 + b = 4 codepoints, 3 graphemes
         let (state, ..) = state! {
-            doc { root { paragraph { t1: text("ae\u{0301}b") } } }
-            selection: (t1, 3)
+            doc { root { p1: paragraph { text("ae\u{0301}b") } } }
+            selection: (p1, 3)
         };
         let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut editor = Editor::new_test_with_resource(state, resource);
@@ -422,8 +429,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("ab") } } }
-            selection: (t1, 1)
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }

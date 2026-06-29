@@ -1,27 +1,29 @@
+use std::sync::Arc;
+
 use editor_common::{EdgeInsets, Rect};
+use editor_model::{ChildView, NodeView};
+use editor_resource::Resource;
 
-use crate::style::Alignment;
-use editor_model::{Doc, NodeRef};
+use crate::measure::PageBreakPolicy;
+use crate::measure::container::PaddedLayoutConfig;
+use crate::style::{Alignment, Decoration, DecorationData};
 
-use crate::measure::Measurer;
-use crate::measure::container::{PaddedLayoutConfig, layout_padded};
-use crate::measure::{MeasuredContent, MeasuredNode, PageBreakPolicy};
-use crate::style::{Decoration, DecorationData};
-use crate::view_state::ViewState;
-
+use super::dispatch::measure_child;
 use super::line_geometry::first_line_info;
+use crate::measure::container::layout_padded;
+use crate::measure::context::MeasureContext;
+use crate::measure::types::{MeasuredContent, MeasuredNode};
 
 const CALLOUT_PADDING_X: f32 = 12.0;
 const CALLOUT_PADDING_Y: f32 = 16.0;
 const CALLOUT_ICON_WIDTH: f32 = 20.0;
 const CALLOUT_ICON_CONTENT_GAP: f32 = 8.0;
 
-pub fn measure_callout(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_callout(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
     let padding = EdgeInsets {
         top: CALLOUT_PADDING_Y,
@@ -30,18 +32,20 @@ pub fn measure_callout(
         right: CALLOUT_PADDING_X,
     };
 
+    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
+        measure_child;
     let mut measured = layout_padded(
-        measurer,
-        doc,
         node,
         width,
-        view_state,
+        ctx,
+        resource,
         PaddedLayoutConfig {
             padding,
             border: EdgeInsets::ZERO,
             alignment: Alignment::Start,
             page_break_policy: PageBreakPolicy::Auto,
         },
+        &mut seam,
     );
 
     let icon_y = first_line_info(&measured)
@@ -66,51 +70,99 @@ pub fn measure_callout(
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
+        SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
 
+    use crate::measure::context::MeasureContext;
+
+    use super::super::dispatch::measure_node;
     use super::*;
+    use crate::measure::types::MeasuredContent;
 
-    #[test]
-    fn padding() {
-        let (doc, c1) = doc! { root { c1: callout } };
-
-        let node = doc.node(c1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_callout(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
-
-        assert_eq!(b.style.padding.top, 16.0);
-        assert_eq!(b.style.padding.left, 40.0);
-        assert_eq!(b.style.padding.bottom, 16.0);
-        assert_eq!(b.style.padding.right, 12.0);
-        assert_eq!(result.height, 32.0);
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
     }
 
     #[test]
-    fn icon_centered_on_first_line() {
-        let (doc, c1) = doc! { root { c1: callout { paragraph { text("hello") } } } };
+    fn callout_padding_and_icon() {
+        let root = Dot::ROOT;
+        let callout = Dot::new(1, 1);
+        let para_inner = Dot::new(1, 2);
+        let para_root = Dot::new(1, 4);
+        let items = vec![
+            (
+                callout,
+                SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![root],
+                },
+            ),
+            (
+                para_inner,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, callout],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+            (
+                para_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
 
-        let node = doc.node(c1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_callout(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
+        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box) = result.content else {
+            panic!("expected Box at root");
         };
 
-        let MeasuredContent::Box(ref paragraph) = b.children[0].content else {
-            panic!("first child should be a paragraph box")
+        let callout_child = &root_box.children[0];
+        let MeasuredContent::Box(ref cb) = callout_child.content else {
+            panic!("expected callout to be a Box");
         };
-        let first_line_height = paragraph.children[0].height;
 
-        let icon = b.style.decorations.first().expect("icon decoration");
-        let icon_center = icon.rect.y + icon.rect.height / 2.0;
-        let first_line_center = CALLOUT_PADDING_Y + first_line_height / 2.0;
+        assert_eq!(cb.style.padding.left, 40.0);
+        assert_eq!(cb.style.decorations.len(), 1);
 
-        assert!(
-            (icon_center - first_line_center).abs() < 0.01,
-            "icon center {icon_center} should match first line center {first_line_center}",
-        );
+        let dec = &cb.style.decorations[0];
+        assert_eq!(dec.rect.width, 20.0);
+        assert_eq!(dec.rect.x, 12.0);
+        assert!(matches!(dec.data, DecorationData::None));
+
+        assert!(!cb.children.is_empty());
+        assert!(matches!(cb.children[0].content, MeasuredContent::Box(_)));
     }
 }

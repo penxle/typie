@@ -149,7 +149,7 @@
       }}
     ></canvas>
 
-    {#each externalElements as element (element.node_id)}
+    {#each externalElements as element (element.node)}
       <ExternalElement {element} />
     {/each}
 

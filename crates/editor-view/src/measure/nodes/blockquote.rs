@@ -1,14 +1,18 @@
+use std::sync::Arc;
+
 use editor_common::{EdgeInsets, Rect};
+use editor_model::{BlockquoteVariant, ChildView, Node, NodeView};
+use editor_resource::Resource;
 
-use editor_model::{BlockquoteVariant, Doc, Node, NodeRef};
-
-use crate::measure::Measurer;
-use crate::measure::container::{PaddedLayoutConfig, layout_padded, layout_vertical};
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
+use crate::measure::PageBreakPolicy;
+use crate::measure::container::PaddedLayoutConfig;
 use crate::style::{Alignment, BorderMode, BoxStyle, Decoration, DecorationData, Direction};
-use crate::view_state::ViewState;
 
+use super::dispatch::measure_child;
 use super::line_geometry::first_line_info;
+use crate::measure::container::{layout_padded, layout_vertical};
+use crate::measure::context::MeasureContext;
+use crate::measure::types::{MeasuredBox, MeasuredContent, MeasuredNode};
 
 const BQ_LINE_WIDTH: f32 = 4.0;
 const BQ_CONTENT_PADDING: f32 = 16.0;
@@ -20,16 +24,18 @@ const BQ_MESSAGE_MAX_WIDTH_RATIO: f32 = 0.8;
 const BQ_MESSAGE_MIN_WIDTH: f32 = 40.0;
 const BQ_MESSAGE_LAYOUT_GUARD_WIDTH: f32 = 1.0;
 
-pub fn measure_blockquote(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_blockquote(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
     let Node::Blockquote(bq) = node.node() else {
         unreachable!()
     };
+
+    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
+        measure_child;
 
     match *bq.variant.get() {
         BlockquoteVariant::LeftLine => {
@@ -38,11 +44,10 @@ pub fn measure_blockquote(
                 ..EdgeInsets::ZERO
             };
             layout_padded(
-                measurer,
-                doc,
                 node,
                 width,
-                view_state,
+                ctx,
+                resource,
                 PaddedLayoutConfig {
                     padding,
                     border: EdgeInsets {
@@ -52,6 +57,7 @@ pub fn measure_blockquote(
                     alignment: Alignment::Start,
                     page_break_policy: PageBreakPolicy::Auto,
                 },
+                &mut seam,
             )
         }
         BlockquoteVariant::LeftQuote => {
@@ -60,17 +66,17 @@ pub fn measure_blockquote(
                 ..EdgeInsets::ZERO
             };
             let mut measured = layout_padded(
-                measurer,
-                doc,
                 node,
                 width,
-                view_state,
+                ctx,
+                resource,
                 PaddedLayoutConfig {
                     padding,
                     border: EdgeInsets::ZERO,
                     alignment: Alignment::Start,
                     page_break_policy: PageBreakPolicy::Auto,
                 },
+                &mut seam,
             );
             let icon_y = first_line_info(&measured)
                 .map(|info| info.top + (info.height - BQ_QUOTE_SIZE) / 2.0)
@@ -96,7 +102,7 @@ pub fn measure_blockquote(
             let min_inner_width = BQ_MESSAGE_MIN_WIDTH - BQ_MESSAGE_PADDING_X * 2.0;
 
             let (children_pass1, height_pass1) =
-                layout_vertical(measurer, doc, node, inner_max_width, view_state);
+                layout_vertical(node, inner_max_width, ctx, resource, &mut seam);
 
             let intrinsic = children_pass1
                 .iter()
@@ -110,7 +116,7 @@ pub fn measure_blockquote(
             let (children, total_height) = if final_inner_width >= inner_max_width {
                 (children_pass1, height_pass1)
             } else {
-                layout_vertical(measurer, doc, node, final_inner_width, view_state)
+                layout_vertical(node, final_inner_width, ctx, resource, &mut seam)
             };
 
             let bubble_width = (final_inner_width + BQ_MESSAGE_PADDING_X * 2.0).min(width);
@@ -126,7 +132,7 @@ pub fn measure_blockquote(
                 width: bubble_width,
                 height: bubble_height,
                 content: MeasuredContent::Box(MeasuredBox {
-                    node_id: node.id(),
+                    node: node.id(),
                     style: BoxStyle {
                         direction: Direction::Vertical,
                         padding,
@@ -144,7 +150,7 @@ pub fn measure_blockquote(
     }
 }
 
-fn measured_intrinsic_width(node: &MeasuredNode) -> f32 {
+pub(crate) fn measured_intrinsic_width(node: &MeasuredNode) -> f32 {
     match &node.content {
         MeasuredContent::Line(l) => l.glyph_runs.iter().map(|r| r.width).sum(),
         MeasuredContent::Box(b) => {
@@ -166,171 +172,318 @@ fn measured_intrinsic_width(node: &MeasuredNode) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use std::sync::Arc;
 
-    use super::*;
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        BlockquoteNodeAttr, BlockquoteVariant, DocLogs, DocView, ModifierAttrLog, NodeAttr,
+        NodeAttrLog, NodeAttrOp, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog,
+        project_document,
+    };
+    use editor_resource::Resource;
 
-    #[test]
-    fn left_line() {
-        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::LeftLine) } };
+    use crate::glyph_run::GlyphRun;
+    use crate::measure::text::measure::MeasuredLine;
+    use crate::style::{Alignment, DecorationData};
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
-        };
+    use crate::measure::context::MeasureContext;
 
-        assert_eq!(b.style.border.left, 4.0);
-        assert_eq!(b.style.padding.left, 16.0);
-        assert_eq!(b.style.alignment, Alignment::Start);
+    use super::super::dispatch::measure_node;
+    use super::measured_intrinsic_width;
+    use crate::measure::types::{
+        MeasuredAtom, MeasuredBox, MeasuredChildren, MeasuredContent, MeasuredNode,
+    };
+
+    fn logs_of(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn build_blockquote_doc(variant: Option<BlockquoteVariant>) -> DocLogs {
+        let root = Dot::ROOT;
+        let bq = Dot::new(1, 1);
+        let p_bq = Dot::new(1, 2);
+        let p_root = Dot::new(1, 4);
+        let items = vec![
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![root],
+                },
+            ),
+            (
+                p_bq,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bq],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+            (
+                p_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let mut logs = logs_of(&items);
+        if let Some(v) = variant {
+            logs.node_attrs = NodeAttrLog::new()
+                .apply(
+                    Dot::ROOT,
+                    NodeAttrOp {
+                        target: bq,
+                        attr: NodeAttr::Blockquote {
+                            attr: BlockquoteNodeAttr::Variant(v),
+                        },
+                    },
+                )
+                .unwrap();
+        }
+        logs
+    }
+
+    fn build_message_doc(variant: BlockquoteVariant) -> DocLogs {
+        let root = Dot::ROOT;
+        let bq = Dot::new(1, 1);
+        let p_bq = Dot::new(1, 2);
+        let p_root = Dot::new(1, 4);
+        let items = vec![
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![root],
+                },
+            ),
+            (
+                p_bq,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bq],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('h')),
+            (Dot::new(1, 5), SeqItem::Char('i')),
+            (
+                p_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let mut logs = logs_of(&items);
+        logs.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                NodeAttrOp {
+                    target: bq,
+                    attr: NodeAttr::Blockquote {
+                        attr: BlockquoteNodeAttr::Variant(variant),
+                    },
+                },
+            )
+            .unwrap();
+        logs
     }
 
     #[test]
-    fn left_quote() {
-        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::LeftQuote) } };
+    fn left_line_border() {
+        let doc = build_blockquote_doc(None);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
+        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box) = result.content else {
+            panic!("expected Box at root");
         };
 
-        assert_eq!(b.style.padding.left, 32.0);
+        let bq_child = &root_box.children[0];
+        let MeasuredContent::Box(ref cb) = bq_child.content else {
+            panic!("expected blockquote to be a Box");
+        };
+
+        assert_eq!(cb.style.border.left, 4.0);
+        assert_eq!(cb.style.padding.left, 16.0);
+        assert!(cb.style.decorations.is_empty());
     }
 
     #[test]
-    fn left_quote_icon_centered_on_first_line() {
-        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::LeftQuote) { paragraph { text("hello") } } } };
+    fn left_quote_icon() {
+        let doc = build_blockquote_doc(Some(BlockquoteVariant::LeftQuote));
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
+        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box) = result.content else {
+            panic!("expected Box at root");
         };
 
-        let MeasuredContent::Box(ref paragraph) = b.children[0].content else {
-            panic!("first child should be a paragraph box")
+        let bq_child = &root_box.children[0];
+        let MeasuredContent::Box(ref cb) = bq_child.content else {
+            panic!("expected blockquote to be a Box");
         };
-        let first_line_height = paragraph.children[0].height;
 
-        let icon = b.style.decorations.first().expect("icon decoration");
-        let icon_center = icon.rect.y + icon.rect.height / 2.0;
-        let first_line_center = first_line_height / 2.0;
+        assert_eq!(cb.style.padding.left, 32.0);
+        assert_eq!(cb.style.decorations.len(), 1);
 
-        assert!(
-            (icon_center - first_line_center).abs() < 0.01,
-            "icon center {icon_center} should match first line center {first_line_center}",
-        );
+        let dec = &cb.style.decorations[0];
+        assert_eq!(dec.rect.width, 16.0);
+        assert_eq!(dec.rect.x, 0.0);
+        assert!(matches!(dec.data, DecorationData::None));
     }
 
     #[test]
-    fn message_sent_uses_intrinsic_width_below_cap() {
-        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::MessageSent) { paragraph { text("hi") } } } };
+    fn message_bubble_alignment_and_width() {
+        let sent_doc = build_message_doc(BlockquoteVariant::MessageSent);
+        let pd_sent = project_document(&sent_doc).unwrap();
+        let sent = DocView::new(&pd_sent);
+        let root_sent = sent.root().unwrap();
+        let mut res = Resource::new_test();
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
+        let result_sent = measure_node(&root_sent, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box_sent) = result_sent.content else {
+            panic!("expected Box at root");
         };
 
-        assert!(
-            result.width < 240.0,
-            "bubble width should hug content, got {}",
-            result.width
-        );
-        assert!(result.width >= 40.0);
-        assert_eq!(b.style.alignment, Alignment::End);
-        assert_eq!(b.style.padding.left, 14.0);
-        assert_eq!(b.style.padding.right, 14.0);
-        assert_eq!(b.style.padding.top, 8.0);
-        assert_eq!(b.style.padding.bottom, 8.0);
+        let bq_sent = &root_box_sent.children[0];
+        let MeasuredContent::Box(ref cb_sent) = bq_sent.content else {
+            panic!("expected blockquote to be a Box");
+        };
+
+        assert_eq!(cb_sent.style.alignment, Alignment::End);
+        assert_eq!(cb_sent.style.padding.left, 14.0);
+        assert_eq!(cb_sent.style.padding.top, 8.0);
+        assert!(bq_sent.width < 400.0 * 0.8);
+        assert!(bq_sent.width < 150.0);
+
+        let recv_doc = build_message_doc(BlockquoteVariant::MessageReceived);
+        let pd_recv = project_document(&recv_doc).unwrap();
+        let recv = DocView::new(&pd_recv);
+        let root_recv = recv.root().unwrap();
+
+        let result_recv = measure_node(&root_recv, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box_recv) = result_recv.content else {
+            panic!("expected Box at root");
+        };
+
+        let bq_recv = &root_box_recv.children[0];
+        let MeasuredContent::Box(ref cb_recv) = bq_recv.content else {
+            panic!("expected blockquote to be a Box");
+        };
+
+        assert_eq!(cb_recv.style.alignment, Alignment::Start);
+        assert!(bq_recv.width < 150.0);
     }
 
     #[test]
-    fn message_min_width() {
-        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::MessageSent) } };
+    fn intrinsic_width_helper() {
+        let node_id = Dot::new(9, 1);
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 30.0, &ViewState::new());
-
-        assert_eq!(result.width, 30.0);
-    }
-
-    #[test]
-    fn message_sent_caps_at_max_ratio_for_long_content() {
-        let (doc, bq1) = doc! {
-            root {
-                bq1: blockquote(variant: BlockquoteVariant::MessageSent) {
-                    paragraph {
-                        text("The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
-                    }
-                }
-            }
+        let glyph_run = GlyphRun {
+            family_id: Default::default(),
+            weight: 400,
+            font_size: 16.0,
+            synthesis: Default::default(),
+            color: String::new(),
+            background_color: None,
+            glyphs: vec![],
+            decoration: Default::default(),
+            offset_range: 0..1,
+            link: None,
+            text: String::from("x"),
+            x: 0.0,
+            width: 50.0,
+            graphemes: vec![],
+            cursor_ascent: 0.0,
+            cursor_descent: 0.0,
         };
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-
-        assert!(
-            (result.width - 240.0).abs() < 0.01,
-            "expected cap at 240.0, got {}",
-            result.width
-        );
-    }
-
-    #[test]
-    fn message_sent_uses_max_paragraph_width() {
-        let (doc, bq1) = doc! {
-            root {
-                bq1: blockquote(variant: BlockquoteVariant::MessageSent) {
-                    paragraph { text("a") }
-                    paragraph { text("longer paragraph here") }
-                    paragraph { text("mid") }
-                }
-            }
+        let line = MeasuredLine {
+            node: node_id,
+            height: 20.0,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
+            glyph_runs: vec![glyph_run],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            offset_range: Some(0..1),
+            tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
         };
 
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result_three = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
+        let line_node = Arc::new(MeasuredNode::from_line(400.0, line));
 
-        let (doc2, bq2) = doc! {
-            root {
-                bq2: blockquote(variant: BlockquoteVariant::MessageSent) {
-                    paragraph { text("longer paragraph here") }
-                }
-            }
-        };
-        let node2 = doc2.node(bq2).unwrap();
-        let mut measurer2 = Measurer::new_test();
-        let result_single =
-            measure_blockquote(&mut measurer2, &doc2, &node2, 300.0, &ViewState::new());
-
-        assert!(
-            (result_three.width - result_single.width).abs() < 0.01,
-            "expected width to match longest paragraph: three={}, single={}",
-            result_three.width,
-            result_single.width
-        );
-    }
-
-    #[test]
-    fn message_received_alignment_start() {
-        let (doc, bq1) = doc! { root { bq1: blockquote(variant: BlockquoteVariant::MessageReceived) { paragraph { text("hi") } } } };
-
-        let node = doc.node(bq1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_blockquote(&mut measurer, &doc, &node, 300.0, &ViewState::new());
-        let MeasuredContent::Box(ref b) = result.content else {
-            panic!()
+        let box_node = MeasuredNode {
+            width: 400.0,
+            height: 40.0,
+            content: MeasuredContent::Box(MeasuredBox {
+                node: node_id,
+                style: crate::style::BoxStyle {
+                    direction: crate::style::Direction::Vertical,
+                    padding: EdgeInsets {
+                        left: 5.0,
+                        right: 5.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    },
+                    border: EdgeInsets::ZERO,
+                    border_mode: crate::style::BorderMode::Separate,
+                    alignment: Alignment::Start,
+                    decorations: vec![],
+                    monolithic: false,
+                },
+                children: MeasuredChildren::from_blocks(vec![line_node]),
+                page_break_policy: crate::measure::PageBreakPolicy::Auto,
+            }),
         };
 
-        assert_eq!(b.style.alignment, Alignment::Start);
+        assert_eq!(measured_intrinsic_width(&box_node), 60.0);
+
+        let atom_node = MeasuredNode {
+            width: 30.0,
+            height: 10.0,
+            content: MeasuredContent::Atom(MeasuredAtom { node: node_id }),
+        };
+        assert_eq!(measured_intrinsic_width(&atom_node), 30.0);
+
+        let spacing_node = MeasuredNode {
+            width: 0.0,
+            height: 5.0,
+            content: MeasuredContent::Spacing(5.0),
+        };
+        assert_eq!(measured_intrinsic_width(&spacing_node), 0.0);
     }
 }

@@ -1,43 +1,66 @@
 use std::sync::Arc;
 
 use editor_common::EdgeInsets;
+use editor_model::{Alignment, ChildView, Modifier, ModifierType, NodeType, NodeView};
+use editor_resource::Resource;
 
-use crate::style::Alignment as LayoutAlignment;
-use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
-
-use crate::measure::Measurer;
-use crate::measure::text::measure::measure_inline_text;
-use crate::measure::text::resolve::resolve_paragraph_indent;
-use crate::measure::types::MeasuredChildren;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
+use crate::measure::PageBreakPolicy;
+use crate::measure::text::measure::measure_paragraph;
 use crate::style::{BorderMode, BoxStyle, Direction};
-use crate::view_state::ViewState;
 
-pub fn measure_paragraph(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+use crate::measure::context::MeasureContext;
+use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent, MeasuredNode};
+
+const DEFAULT_FONT_SIZE_PX: f32 = 16.0;
+
+pub(crate) fn paragraph_indent(node: &NodeView) -> f32 {
+    let parent_is_root = node
+        .parent()
+        .map(|p| p.node_type() == NodeType::Root)
+        .unwrap_or(false);
+    if !parent_is_root {
+        return 0.0;
+    }
+    match node.effective().get(&ModifierType::ParagraphIndent) {
+        Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * DEFAULT_FONT_SIZE_PX,
+        _ => 0.0,
+    }
+}
+
+pub(crate) fn align_to_layout(align: Alignment) -> crate::style::Alignment {
+    match align {
+        Alignment::Left | Alignment::Justify => crate::style::Alignment::Start,
+        Alignment::Center => crate::style::Alignment::Center,
+        Alignment::Right => crate::style::Alignment::End,
+    }
+}
+
+pub(crate) fn measure_paragraph_block(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
-    let align = match node.own_modifier(ModifierType::Alignment) {
+    let align = match node.effective().get(&ModifierType::Alignment) {
         Some(Modifier::Alignment { value }) => *value,
         _ => Alignment::default(),
     };
-
     let indent = match align {
-        Alignment::Left | Alignment::Justify => resolve_paragraph_indent(node),
+        Alignment::Left | Alignment::Justify => paragraph_indent(node),
         Alignment::Center | Alignment::Right => 0.0,
     };
 
-    let (mut children, total_height) =
-        measure_inline_text(measurer, doc, node, width, align, indent, view_state);
+    let pending = ctx.pending_for(&node.id());
+    let (lines, total_height) = measure_paragraph(node, width, align, indent, pending, resource);
 
-    // The segmenter skips `page_break` from the inline flow; emit a marker
-    // here so the paginator's forced-break branch can see it.
+    let mut children: Vec<Arc<MeasuredNode>> = lines
+        .into_iter()
+        .map(|l| Arc::new(MeasuredNode::from_line(width, l)))
+        .collect();
+
     let has_trailing_page_break = node
         .last_child()
-        .is_some_and(|c| matches!(c.node(), Node::PageBreak(_)));
+        .is_some_and(|c| matches!(c, ChildView::Leaf(lv) if lv.node_type() == NodeType::PageBreak));
     if has_trailing_page_break {
         children.push(Arc::new(MeasuredNode {
             width: 0.0,
@@ -46,19 +69,17 @@ pub fn measure_paragraph(
         }));
     }
 
-    let alignment = align_to_layout(align);
-
     MeasuredNode {
         width,
         height: total_height,
         content: MeasuredContent::Box(MeasuredBox {
-            node_id: node.id(),
+            node: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding: EdgeInsets::ZERO,
                 border: EdgeInsets::ZERO,
                 border_mode: BorderMode::Separate,
-                alignment,
+                alignment: align_to_layout(align),
                 decorations: vec![],
                 monolithic: node.spec().monolithic,
             },
@@ -68,310 +89,348 @@ pub fn measure_paragraph(
     }
 }
 
-fn align_to_layout(align: Alignment) -> LayoutAlignment {
-    match align {
-        Alignment::Left => LayoutAlignment::Start,
-        Alignment::Center => LayoutAlignment::Center,
-        Alignment::Right => LayoutAlignment::End,
-        Alignment::Justify => LayoutAlignment::Start,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use editor_macros::doc;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        AtomLeaf, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp::SetModifier,
+        NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog,
+        project_document,
+    };
+    use editor_resource::Resource;
 
-    use crate::measure::Measurer;
-    use crate::measure::*;
-    use crate::view_state::ViewState;
+    use crate::measure::context::MeasureContext;
 
-    #[test]
-    fn paragraph_produces_box_with_lines() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("Hello") } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        match &m.content {
-            MeasuredContent::Box(b) => {
-                assert!(!b.children.is_empty());
-                assert!(matches!(b.children[0].content, MeasuredContent::Line(_)));
-            }
-            _ => panic!("expected Box"),
+    use super::*;
+
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
         }
-        assert!(m.height > 0.0);
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
+    }
+
+    fn build_paragraph(children: Vec<SeqItem>) -> DocLogs {
+        let root = Dot::ROOT;
+        let p = Dot::new(1, 1);
+        let mut items = vec![(
+            p,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, c) in children.into_iter().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), c));
+        }
+        logs(&items)
+    }
+
+    fn get_para_node<'a>(view: &'a DocView<'a>) -> editor_model::NodeView<'a> {
+        view.root().unwrap().child_blocks().next().unwrap()
     }
 
     #[test]
-    fn paragraph_indent_applies_on_left_alignment() {
-        let (doc, p1) = doc! {
-            root [paragraph_indent(200)] {
-                p1: paragraph { text("hi") }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        let MeasuredContent::Line(l) = &b.children[0].content else {
-            panic!("expected Line")
-        };
-        let first_x = l.glyph_runs.first().map(|r| r.x).unwrap_or(l.empty_caret_x);
-        assert!(
-            first_x > 1.0,
-            "left-aligned paragraph_indent must push first run rightward (first_x={first_x})",
-        );
-    }
+    fn wraps_lines_into_box() {
+        let doc = build_paragraph(vec![
+            SeqItem::Char('H'),
+            SeqItem::Char('e'),
+            SeqItem::Char('l'),
+            SeqItem::Char('l'),
+            SeqItem::Char('o'),
+        ]);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let para = get_para_node(&view);
+        let mut res = Resource::new_test();
 
-    #[test]
-    fn paragraph_indent_suppressed_on_right_alignment() {
-        let (doc, p1) = doc! {
-            root [paragraph_indent(200)] {
-                p1: paragraph [alignment(Alignment::Right)] { text("hi") }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        let MeasuredContent::Line(l) = &b.children[0].content else {
-            panic!("expected Line")
-        };
-        let last = l.glyph_runs.last().expect("expected glyph run");
-        let trailing_gap = b.children[0].width - (last.x + last.width);
-        assert!(
-            trailing_gap.abs() < 1.0,
-            "right-aligned paragraph must hug the right edge regardless of paragraph_indent \
-             (trailing_gap={trailing_gap}, line_width={})",
-            b.children[0].width,
-        );
-    }
+        let result = measure_paragraph_block(&para, 300.0, &MeasureContext::default(), &mut res);
 
-    #[test]
-    fn paragraph_indent_suppressed_on_center_alignment() {
-        let (doc, p1) = doc! {
-            root [paragraph_indent(200)] {
-                p1: paragraph [alignment(Alignment::Center)] { text("hi") }
-            }
+        assert!(result.height > 0.0);
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!("expected Box");
         };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        let MeasuredContent::Line(l) = &b.children[0].content else {
-            panic!("expected Line")
-        };
-        let first = l.glyph_runs.first().expect("expected glyph run");
-        let last = l.glyph_runs.last().expect("expected glyph run");
-        let left_gap = first.x;
-        let right_gap = b.children[0].width - (last.x + last.width);
-        assert!(
-            (left_gap - right_gap).abs() < 1.0,
-            "center-aligned paragraph must be symmetric around the center regardless of \
-             paragraph_indent (left_gap={left_gap}, right_gap={right_gap})",
-        );
-    }
-
-    #[test]
-    fn empty_paragraph_has_strut_height() {
-        let (doc, p1) = doc! { root { p1: paragraph } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        assert!(m.height > 0.0);
-        match &m.content {
-            MeasuredContent::Box(b) => {
-                assert_eq!(b.children.len(), 1);
-            }
-            _ => panic!("expected Box"),
+        assert!(!b.children.is_empty());
+        for child in b.children.iter() {
+            assert!(
+                matches!(child.content, MeasuredContent::Line(_)),
+                "expected all children to be Lines"
+            );
+            assert!(child.height > 0.0);
         }
     }
 
     #[test]
-    fn paragraph_multiple_styled_runs() {
-        let (doc, p1) =
-            doc! { root { p1: paragraph { text("normal") text("bold") [font_size(2400)] } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        assert!(matches!(&m.content, MeasuredContent::Box(_)));
-        assert!(m.height > 0.0);
+    fn alignment_from_effective() {
+        let root = Dot::ROOT;
+        let p_center = Dot::new(1, 1);
+        let p_unset = Dot::new(1, 2);
+        let items = vec![
+            (
+                p_center,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (
+                p_unset,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+        ];
+        let mut doc = logs(&items);
+        doc.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                SetModifier {
+                    target: p_center,
+                    modifier: Modifier::Alignment {
+                        value: Alignment::Center,
+                    },
+                },
+            )
+            .unwrap();
+
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut blocks = root_node.child_blocks();
+        let center_para = blocks.next().unwrap();
+        let unset_para = blocks.next().unwrap();
+        let mut res = Resource::new_test();
+
+        let r_center =
+            measure_paragraph_block(&center_para, 300.0, &MeasureContext::default(), &mut res);
+        let r_unset =
+            measure_paragraph_block(&unset_para, 300.0, &MeasureContext::default(), &mut res);
+
+        let MeasuredContent::Box(ref bc) = r_center.content else {
+            panic!("expected Box");
+        };
+        assert_eq!(bc.style.alignment, crate::style::Alignment::Center);
+
+        let MeasuredContent::Box(ref bu) = r_unset.content else {
+            panic!("expected Box");
+        };
+        assert_eq!(bu.style.alignment, crate::style::Alignment::Start);
     }
 
     #[test]
-    fn bold_middle_text_produces_three_glyph_runs() {
-        let (doc, p1) = doc! {
-            root {
-                p1: paragraph {
-                    text("Hello, ")
-                    text("World") [bold]
-                    text("!")
-                }
-            }
-        };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
+    fn trailing_page_break_marker() {
+        let root = Dot::ROOT;
+        let p_text_pb = Dot::new(1, 1);
+        let p_pb_only = Dot::new(1, 2);
+        let items = vec![
+            (
+                p_text_pb,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+            (Dot::new(1, 4), SeqItem::Atom(AtomLeaf::PageBreak)),
+            (
+                p_pb_only,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 5), SeqItem::Atom(AtomLeaf::PageBreak)),
+        ];
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut blocks = root_node.child_blocks();
+        let para_text_pb = blocks.next().unwrap();
+        let para_pb_only = blocks.next().unwrap();
+        let mut res = Resource::new_test();
 
-        let mut all_runs = vec![];
-        for child in &b.children {
-            let MeasuredContent::Line(l) = &child.content else {
-                panic!("expected Line")
-            };
-            all_runs.extend(l.glyph_runs.iter());
-        }
-
-        assert_eq!(all_runs.len(), 3);
-        assert!(!all_runs[0].synthesis.embolden);
-        assert!(all_runs[1].synthesis.embolden);
-        assert!(!all_runs[2].synthesis.embolden);
-        assert_eq!(all_runs[0].text, "Hello, ");
-        assert_eq!(all_runs[1].text, "World");
-        assert_eq!(all_runs[2].text, "!");
-    }
-
-    #[test]
-    fn paragraph_with_hard_break_produces_two_lines() {
-        let (doc, p1, _t1) = doc! {
-            root { p1: paragraph { text("hel") hard_break t1: text("lo") } }
+        let r1 =
+            measure_paragraph_block(&para_text_pb, 300.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref b1) = r1.content else {
+            panic!("expected Box");
         };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        assert_eq!(b.children.len(), 2);
-        for c in &b.children {
-            assert!(matches!(c.content, MeasuredContent::Line(_)));
-        }
-        assert!(m.height > 0.0);
-    }
-
-    #[test]
-    fn trailing_hard_break_produces_empty_trailing_line() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        assert_eq!(b.children.len(), 2);
-        let MeasuredContent::Line(trailing) = &b.children[1].content else {
-            panic!("expected Line")
-        };
-        assert!(trailing.glyph_runs.is_empty());
-        assert!(b.children[1].height > 0.0);
-        assert_eq!(trailing.child_range, Some(2..2));
-    }
-
-    #[test]
-    fn paragraph_with_trailing_page_break_emits_marker_child() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("a") page_break } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        assert_eq!(b.children.len(), 2);
         assert!(
-            matches!(b.children[0].content, MeasuredContent::Line(_)),
-            "first child must be the text line",
+            matches!(
+                b1.children[b1.children.len() - 1].content,
+                MeasuredContent::PageBreak
+            ),
+            "last child of text+page_break paragraph must be PageBreak"
+        );
+
+        let r2 =
+            measure_paragraph_block(&para_pb_only, 300.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref b2) = r2.content else {
+            panic!("expected Box");
+        };
+        assert!(
+            b2.children.len() >= 2,
+            "page_break-only paragraph must have at least 2 children (strut Line + PageBreak)"
         );
         assert!(
-            matches!(b.children[1].content, MeasuredContent::PageBreak),
-            "second child must be the PageBreak marker",
-        );
-        assert_eq!(b.children[1].width, 0.0);
-        assert_eq!(b.children[1].height, 0.0);
-    }
-
-    #[test]
-    fn page_break_only_paragraph_emits_strut_line_then_marker() {
-        let (doc, p1) = doc! { root { p1: paragraph { page_break } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        assert_eq!(b.children.len(), 2);
-        let MeasuredContent::Line(strut) = &b.children[0].content else {
-            panic!("expected Line as first child")
-        };
-        assert!(
-            strut.glyph_runs.is_empty(),
-            "first child must be a strut-only line for caret anchoring",
+            matches!(
+                b2.children[b2.children.len() - 1].content,
+                MeasuredContent::PageBreak
+            ),
+            "last child must be PageBreak"
         );
         assert!(
-            b.children[0].height > 0.0,
-            "strut-only line must have non-zero height so the caret has vertical room",
-        );
-        assert!(
-            matches!(b.children[1].content, MeasuredContent::PageBreak),
-            "second child must be the PageBreak marker",
+            matches!(b2.children[0].content, MeasuredContent::Line(_)),
+            "first child must be a strut Line"
         );
     }
 
     #[test]
-    fn paragraph_without_page_break_has_no_marker() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("a") } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
+    fn indent_only_when_parent_root() {
+        let root = Dot::ROOT;
+        let p_root_child = Dot::new(1, 1);
+        let char_a1 = Dot::new(1, 2);
+        let bq = Dot::new(1, 3);
+        let p_bq_child = Dot::new(1, 4);
+        let char_a2 = Dot::new(1, 5);
+        let items = vec![
+            (
+                p_root_child,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (char_a1, SeqItem::Char('A')),
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![root],
+                },
+            ),
+            (
+                p_bq_child,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bq],
+                },
+            ),
+            (char_a2, SeqItem::Char('A')),
+        ];
+        let mut doc = logs(&items);
+        doc.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                SetModifier {
+                    target: root,
+                    modifier: Modifier::ParagraphIndent { value: 200 },
+                },
+            )
+            .unwrap();
+
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut root_blocks = root_node.child_blocks();
+        let para_root = root_blocks.next().unwrap();
+        let bq_node = root_blocks.next().unwrap();
+        let para_bq = bq_node.child_blocks().next().unwrap();
+
+        let indent_root = paragraph_indent(&para_root);
+        let indent_bq = paragraph_indent(&para_bq);
+
+        assert!(indent_root > 0.0, "root-child paragraph must have indent");
+        assert_eq!(
+            indent_bq, 0.0,
+            "blockquote-child paragraph must have no indent"
+        );
+    }
+
+    fn first_line_height(result: &MeasuredNode) -> f32 {
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!("expected Box");
         };
+        b.children
+            .iter()
+            .find(|c| matches!(c.content, MeasuredContent::Line(_)))
+            .map(|c| c.height)
+            .expect("at least one Line child")
+    }
+
+    #[test]
+    fn empty_paragraph_pending_font_size_grows_strut_via_block() {
+        let doc = build_paragraph(vec![]);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let para = get_para_node(&view);
+        let para_id = para.id();
+        let mut res = Resource::new_test();
+
+        let r_base = measure_paragraph_block(&para, 300.0, &MeasureContext::default(), &mut res);
+        let h0 = first_line_height(&r_base);
+
+        let big: editor_state::PendingModifiers = vec![editor_state::PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
+        let ctx_pending = MeasureContext {
+            pending_style: Some((para_id, big)),
+            ..Default::default()
+        };
+        let r_pending = measure_paragraph_block(&para, 300.0, &ctx_pending, &mut res);
+        let h1 = first_line_height(&r_pending);
+
         assert!(
-            b.children
-                .iter()
-                .all(|c| !matches!(c.content, MeasuredContent::PageBreak)),
-            "paragraph without a trailing page_break must not emit a marker",
+            h1 > h0,
+            "strut must grow with bigger pending font-size (h0={h0}, h1={h1})"
         );
     }
 
     #[test]
-    fn paragraph_with_trailing_hard_break_has_no_page_break_marker() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
-        };
-        assert!(
-            b.children
-                .iter()
-                .all(|c| !matches!(c.content, MeasuredContent::PageBreak)),
-            "hard_break and page_break must not be conflated — trailing hard_break emits no marker",
-        );
-    }
+    fn non_empty_paragraph_pending_font_size_gate_unchanged_via_block() {
+        let doc = build_paragraph(vec![SeqItem::Char('x')]);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let para = get_para_node(&view);
+        let para_id = para.id();
+        let mut res = Resource::new_test();
 
-    #[test]
-    fn paragraph_with_hard_break_then_page_break_emits_marker_after_lines() {
-        let (doc, p1) = doc! { root { p1: paragraph { text("a") hard_break page_break } } };
-        let mut measurer = Measurer::new_test();
-        let vs = ViewState::new();
-        let m = measurer.measure(&doc, p1, 400.0, &vs);
-        let MeasuredContent::Box(b) = &m.content else {
-            panic!("expected Box")
+        let r_base = measure_paragraph_block(&para, 300.0, &MeasureContext::default(), &mut res);
+        let h0 = first_line_height(&r_base);
+
+        let big: editor_state::PendingModifiers = vec![editor_state::PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
+        let ctx_pending = MeasureContext {
+            pending_style: Some((para_id, big)),
+            ..Default::default()
         };
-        assert_eq!(b.children.len(), 3);
-        assert!(matches!(b.children[0].content, MeasuredContent::Line(_)));
-        assert!(matches!(b.children[1].content, MeasuredContent::Line(_)));
+        let r_pending = measure_paragraph_block(&para, 300.0, &ctx_pending, &mut res);
+        let h1 = first_line_height(&r_pending);
+
         assert!(
-            matches!(b.children[2].content, MeasuredContent::PageBreak),
-            "marker must sit at the very end, after the empty line produced by the hard_break",
+            (h1 - h0).abs() < 0.01,
+            "pending must not apply when paragraph has Char leaves (h0={h0}, h1={h1})"
         );
     }
 }

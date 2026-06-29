@@ -9,7 +9,7 @@ pub fn unset_style_modifier(
     style_id: String,
     ty: ModifierType,
 ) -> CommandResult {
-    let Some(mut entry) = capture_style_entry(&tr.state().doc, &style_id) else {
+    let Some(mut entry) = capture_style_entry(tr.state(), &style_id) else {
         return Ok(false);
     };
     let before_len = entry.modifiers.len();
@@ -33,8 +33,8 @@ mod tests {
     #[test]
     fn removes_modifier_of_type() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 0)
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0)
         };
         let (defined, ..) = transact!(initial, |tr| define_style(
             &mut tr,
@@ -47,7 +47,7 @@ mod tests {
             "heading-1".into(),
             ModifierType::Bold
         ));
-        let style = after.doc.style_entry("heading-1").unwrap();
+        let style = after.projected.styles().style_entry("heading-1").unwrap();
         assert!(!style.modifiers.contains(&Modifier::Bold));
         assert!(
             style

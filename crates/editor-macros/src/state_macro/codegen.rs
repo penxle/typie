@@ -1,5 +1,5 @@
 use heck::ToPascalCase;
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::quote;
 
 use super::parse::{AffinityKind, PendingModifierDef, PositionExpr, SelectionExpr, StateInput};
@@ -8,23 +8,51 @@ use crate::doc_macro::codegen::build_modifier_expr;
 
 pub fn generate(input: &StateInput) -> TokenStream {
     let parts = doc_macro::codegen::generate_parts(&input.doc_tree);
-    let bindings = &parts.bindings;
+    let root_entry = &parts.root_entry;
+    let style_entries = &parts.style_entries;
 
-    let scaffold = doc_macro::codegen::emit_doc_construction(&parts);
+    let binding_idents: Vec<&Ident> = parts.bindings.iter().map(|(ident, _)| ident).collect();
+    let binding_resolves: Vec<TokenStream> = parts
+        .bindings
+        .iter()
+        .map(|(ident, path)| {
+            let path_lits: Vec<Literal> =
+                path.iter().map(|i| Literal::usize_suffixed(*i)).collect();
+            quote! {
+                let #ident = __handles
+                    .get::<[usize]>(&[#(#path_lits),*])
+                    .cloned()
+                    .expect("state! binding resolves to a projected block");
+            }
+        })
+        .collect();
+
     let selection_expr = gen_selection(&input.selection);
     let pending_modifiers_expr = gen_pending_modifiers(&input.pending_modifiers);
 
     quote! {
         {
-            #scaffold
-            let op_graph = _op_graph;
-            use editor_state::*;
+            use ::editor_model::*;
+            use ::std::collections::BTreeMap;
 
-            let selection = #selection_expr;
-            let mut state = State::new(doc, op_graph, selection);
+            let __plain = PlainDoc {
+                root: #root_entry,
+                styles: {
+                    let mut __s: BTreeMap<String, PlainStyleEntry> = BTreeMap::new();
+                    #(#style_entries)*
+                    __s
+                },
+            };
+
+            let (mut state, __handles) =
+                ::editor_state::test_utils::build_state_from_plain(__plain);
+
+            #(#binding_resolves)*
+
+            state.selection = #selection_expr;
             #pending_modifiers_expr
 
-            (state, #(#bindings),*)
+            (state, #(#binding_idents),*)
         }
     }
 }
@@ -34,12 +62,14 @@ fn gen_selection(sel: &SelectionExpr) -> TokenStream {
         SelectionExpr::None => quote! { None },
         SelectionExpr::Collapsed(pos) => {
             let pos_expr = gen_position(pos);
-            quote! { Some(Selection::collapsed(#pos_expr)) }
+            quote! { Some(::editor_state::Selection::collapsed(#pos_expr)) }
         }
         SelectionExpr::Range(anchor, head) => {
             let anchor_expr = gen_position(anchor);
             let head_expr = gen_position(head);
-            quote! { Some(Selection::new(#anchor_expr, #head_expr)) }
+            quote! {
+                Some(::editor_state::Selection::new(#anchor_expr, #head_expr))
+            }
         }
     }
 }
@@ -48,17 +78,26 @@ fn gen_position(pos: &PositionExpr) -> TokenStream {
     let node = &pos.node_ident;
     let offset = &pos.offset;
 
+    let node_expr = quote! { #node.clone() };
+    let offset_expr = quote! { #offset };
+
     match &pos.affinity {
         None => {
-            quote! { Position::new(#node, #offset) }
+            quote! {
+                ::editor_state::Position::new(#node_expr, #offset_expr)
+            }
         }
         Some(kind) => {
             let affinity = match kind {
-                AffinityKind::Upstream => quote! { Affinity::Upstream },
-                AffinityKind::Downstream => quote! { Affinity::Downstream },
+                AffinityKind::Upstream => quote! { ::editor_state::Affinity::Upstream },
+                AffinityKind::Downstream => quote! { ::editor_state::Affinity::Downstream },
             };
             quote! {
-                Position { node_id: #node, offset: #offset, affinity: #affinity }
+                ::editor_state::Position {
+                    node: #node_expr,
+                    offset: #offset_expr,
+                    affinity: #affinity,
+                }
             }
         }
     }
@@ -74,18 +113,22 @@ fn gen_pending_modifiers(modifiers: &[PendingModifierDef]) -> TokenStream {
         .map(|def| match def {
             PendingModifierDef::Set(dec) => {
                 let modifier_expr = build_modifier_expr(dec);
-                quote! { __pending.push(PendingModifier::Set { modifier: #modifier_expr }); }
+                quote! {
+                    __pending.push(::editor_state::PendingModifier::Set { modifier: #modifier_expr });
+                }
             }
             PendingModifierDef::Unset(name) => {
                 let variant = Ident::new(&name.to_string().to_pascal_case(), Span::call_site());
-                quote! { __pending.push(PendingModifier::Unset { ty: ModifierType::#variant }); }
+                quote! {
+                    __pending.push(::editor_state::PendingModifier::Unset { ty: ModifierType::#variant });
+                }
             }
         })
         .collect();
 
     quote! {
         {
-            let mut __pending = PendingModifiers::new();
+            let mut __pending = ::editor_state::PendingModifiers::new();
             #(#push_exprs)*
             state.pending_modifiers = __pending;
         }

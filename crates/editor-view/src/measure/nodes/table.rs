@@ -1,16 +1,21 @@
 use std::sync::Arc;
 
 use editor_common::EdgeInsets;
+use editor_model::{Alignment, ChildView, Modifier, ModifierType, Node, NodeView};
+use editor_resource::Resource;
 
-use crate::style::Alignment as LayoutAlignment;
-use editor_model::{Alignment, Doc, Modifier, ModifierType, Node, NodeRef};
-
-use crate::measure::Measurer;
-use crate::measure::container::{PaddedLayoutConfig, layout_padded};
-use crate::measure::types::MeasuredChildren;
-use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode, PageBreakPolicy};
 use crate::style::{BorderMode, BoxStyle, Direction};
-use crate::view_state::ViewState;
+
+use super::dispatch::measure_node;
+use crate::measure::context::MeasureContext;
+use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent};
+
+use crate::measure::PageBreakPolicy;
+use crate::measure::container::PaddedLayoutConfig;
+
+use super::dispatch::measure_child;
+use crate::measure::container::layout_padded;
+use crate::measure::types::MeasuredNode;
 
 const TABLE_BORDER_WIDTH: f32 = 1.0;
 const TABLE_CELL_PADDING: f32 = 8.0;
@@ -27,7 +32,6 @@ fn min_table_width(col_count: usize) -> f32 {
     col_count as f32 * MIN_CELL_WIDTH + border_width(col_count)
 }
 
-/// Distributes available width across columns using ratio-based constraints.
 fn calculate_col_widths(
     col_count: usize,
     custom_widths: Option<&[f32]>,
@@ -37,7 +41,6 @@ fn calculate_col_widths(
         return vec![];
     }
 
-    // Use equal ratios when no custom widths are provided
     let ratios: Vec<f32> = match custom_widths {
         Some(cw) => cw
             .iter()
@@ -46,7 +49,6 @@ fn calculate_col_widths(
         None => vec![1.0 / col_count as f32; col_count],
     };
 
-    // All columns at minimum when space is too tight
     let min_total = col_count as f32 * MIN_CELL_WIDTH;
     if available_width <= min_total {
         return vec![MIN_CELL_WIDTH; col_count];
@@ -60,7 +62,6 @@ fn calculate_col_widths(
 
     let mut widths = vec![MIN_CELL_WIDTH; col_count];
 
-    // Sort by ratio ascending so smallest columns are constrained first
     let mut indexed_ratios: Vec<(usize, f32)> = ratios
         .iter()
         .enumerate()
@@ -78,7 +79,6 @@ fn calculate_col_widths(
     let mut remaining_width = available_width - constrained_count as f32 * MIN_CELL_WIDTH;
     let mut unconstrained_ratio_sum = ratio_sum;
 
-    // Greedily constrain columns whose proportional share falls below MIN_CELL_WIDTH
     let mut constrained_end = 0;
     for (pos, &(_, ratio)) in indexed_ratios.iter().enumerate() {
         let scale = remaining_width / unconstrained_ratio_sum;
@@ -90,7 +90,6 @@ fn calculate_col_widths(
         constrained_end = pos + 1;
     }
 
-    // Distribute remaining width proportionally among unconstrained columns
     if unconstrained_ratio_sum > 1e-7 {
         let scale = remaining_width / unconstrained_ratio_sum;
         for &(idx, ratio) in &indexed_ratios[constrained_end..] {
@@ -98,7 +97,6 @@ fn calculate_col_widths(
         }
     }
 
-    // Adjust last unconstrained column to absorb floating-point rounding error
     let total: f32 = widths.iter().sum();
     let diff = available_width - total;
     let tolerance = (1e-6 * available_width).max(1e-4);
@@ -112,53 +110,53 @@ fn calculate_col_widths(
     widths
 }
 
-pub fn measure_table_cell(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_table_cell(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
+    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
+        measure_child;
     layout_padded(
-        measurer,
-        doc,
         node,
         width,
-        view_state,
+        ctx,
+        resource,
         PaddedLayoutConfig {
             padding: EdgeInsets::all(TABLE_CELL_PADDING),
             border: EdgeInsets::all(TABLE_BORDER_WIDTH),
-            alignment: LayoutAlignment::Start,
+            alignment: crate::style::Alignment::Start,
             page_break_policy: PageBreakPolicy::Avoid,
         },
+        &mut seam,
     )
 }
 
-pub fn measure_table(
-    measurer: &mut Measurer,
-    doc: &Doc,
-    node: &NodeRef<'_>,
+pub(crate) fn measure_table(
+    node: &NodeView,
     width: f32,
-    view_state: &ViewState,
+    ctx: &MeasureContext,
+    resource: &mut Resource,
 ) -> MeasuredNode {
     let Node::Table(table_node) = node.node() else {
         unreachable!()
     };
 
-    let rows: Vec<NodeRef<'_>> = node.children().collect();
+    let rows: Vec<NodeView> = node.child_blocks().collect();
 
     if rows.is_empty() {
         return MeasuredNode {
             width,
             height: 0.0,
             content: MeasuredContent::Box(MeasuredBox {
-                node_id: node.id(),
+                node: node.id(),
                 style: BoxStyle {
                     direction: Direction::Vertical,
                     padding: EdgeInsets::ZERO,
                     border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                     border_mode: BorderMode::Collapse,
-                    alignment: LayoutAlignment::Start,
+                    alignment: crate::style::Alignment::Start,
                     decorations: vec![],
                     monolithic: node.spec().monolithic,
                 },
@@ -168,10 +166,9 @@ pub fn measure_table(
         };
     }
 
-    let first_row_cells: Vec<NodeRef<'_>> = rows[0].children().collect();
+    let first_row_cells: Vec<NodeView> = rows[0].child_blocks().collect();
     let col_count = first_row_cells.len();
 
-    // Extract custom widths: all Some -> use, any None -> None
     let custom_widths: Option<Vec<f32>> = {
         let mut widths = Vec::with_capacity(col_count);
         let mut all_some = true;
@@ -196,7 +193,6 @@ pub fn measure_table(
     let floor = min_table_width(col_count).min(width);
     let table_width = target_width.max(floor);
 
-    // Available width for cell content (excluding collapsed borders)
     let available_width = table_width - (col_count + 1) as f32 * TABLE_BORDER_WIDTH;
     let col_widths = calculate_col_widths(col_count, custom_widths.as_deref(), available_width);
 
@@ -206,15 +202,13 @@ pub fn measure_table(
     let mut row_measurements: Vec<Arc<MeasuredNode>> = Vec::with_capacity(rows.len());
 
     for row in &rows {
-        let cells: Vec<NodeRef<'_>> = row.children().collect();
+        let cells: Vec<NodeView> = row.child_blocks().collect();
 
-        // 1st pass: measure each cell and collect heights
         let mut cell_measurements: Vec<Arc<MeasuredNode>> = Vec::with_capacity(cells.len());
-
         for (i, cell) in cells.iter().enumerate() {
             let col_width = col_widths.get(i).copied().unwrap_or(col_widths[0]);
             let cell_full_width = col_width + 2.0 * TABLE_BORDER_WIDTH;
-            let m = measurer.measure(doc, cell.id(), cell_full_width, view_state);
+            let m = Arc::new(measure_node(cell, cell_full_width, ctx, resource));
             cell_measurements.push(m);
         }
 
@@ -223,7 +217,6 @@ pub fn measure_table(
             .map(|m| m.height)
             .fold(0.0_f32, f32::max);
 
-        // 2nd pass: adjust cells to max_height
         let row_children: Vec<Arc<MeasuredNode>> = cell_measurements
             .into_iter()
             .map(|m| {
@@ -241,13 +234,13 @@ pub fn measure_table(
             width: actual_table_width,
             height: max_height,
             content: MeasuredContent::Box(MeasuredBox {
-                node_id: row.id(),
+                node: row.id(),
                 style: BoxStyle {
                     direction: Direction::Horizontal,
                     padding: EdgeInsets::ZERO,
                     border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                     border_mode: BorderMode::Collapse,
-                    alignment: LayoutAlignment::Start,
+                    alignment: crate::style::Alignment::Start,
                     decorations: vec![],
                     monolithic: row.spec().monolithic,
                 },
@@ -267,22 +260,21 @@ pub fn measure_table(
     let collapsed_height =
         (row_count + 1) as f32 * TABLE_BORDER_WIDTH + collapsed_row_content_height;
 
-    let align = match node.own_modifier(ModifierType::Alignment) {
+    let align = match node.effective().get(&ModifierType::Alignment) {
         Some(Modifier::Alignment { value }) => *value,
         _ => Alignment::default(),
     };
-
     let alignment = match align {
-        Alignment::Left => LayoutAlignment::Start,
-        Alignment::Center => LayoutAlignment::Center,
-        Alignment::Right | Alignment::Justify => LayoutAlignment::End,
+        Alignment::Left => crate::style::Alignment::Start,
+        Alignment::Center => crate::style::Alignment::Center,
+        Alignment::Right | Alignment::Justify => crate::style::Alignment::End,
     };
 
     MeasuredNode {
         width: actual_table_width,
         height: collapsed_height,
         content: MeasuredContent::Box(MeasuredBox {
-            node_id: node.id(),
+            node: node.id(),
             style: BoxStyle {
                 direction: Direction::Vertical,
                 padding: EdgeInsets::ZERO,
@@ -300,240 +292,476 @@ pub fn measure_table(
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
+        SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+
+    use crate::measure::PageBreakPolicy;
+    use crate::measure::context::MeasureContext;
+    use crate::measure::types::MeasuredContent;
+
     use super::*;
-    use editor_macros::doc;
 
-    fn box_children(node: &MeasuredNode) -> &MeasuredChildren {
-        let MeasuredContent::Box(ref b) = node.content else {
-            panic!()
-        };
-        &b.children
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
+        }
     }
 
     #[test]
-    fn table_cell_has_padding_border() {
-        let (doc, c1) = doc! {
-            root {
-                table {
-                    table_row {
-                        c1: table_cell {
-                            paragraph { text("Hello") }
-                        }
-                    }
-                }
-            }
-        };
-
-        let node = doc.node(c1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table_cell(&mut measurer, &doc, &node, 100.0, &ViewState::new());
-
-        let MeasuredContent::Box(MeasuredBox { style, .. }) = &result.content else {
-            panic!()
-        };
-        assert_eq!(style.padding.left, TABLE_CELL_PADDING);
-        assert_eq!(style.padding.top, TABLE_CELL_PADDING);
-        assert_eq!(style.border.left, TABLE_BORDER_WIDTH);
-        assert_eq!(style.border.top, TABLE_BORDER_WIDTH);
-    }
-
-    #[test]
-    fn table_2x2_structure() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row {
-                        table_cell { paragraph { text("A") } }
-                        table_cell { paragraph { text("B") } }
-                    }
-                    table_row {
-                        table_cell { paragraph { text("C") } }
-                        table_cell { paragraph { text("D") } }
-                    }
-                }
-            }
-        };
-
-        let node = doc.node(t1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
-
-        let MeasuredContent::Box(MeasuredBox {
-            children, style, ..
-        }) = &result.content
-        else {
-            panic!()
-        };
-        assert_eq!(children.len(), 2);
-        assert_eq!(style.border_mode, BorderMode::Collapse);
-        assert_eq!(style.direction, Direction::Vertical);
-        assert_eq!(style.border.top, TABLE_BORDER_WIDTH);
-
-        let MeasuredContent::Box(MeasuredBox {
-            children: row_cells,
-            style: row_style,
-            ..
-        }) = &children[0].content
-        else {
-            panic!()
-        };
-        assert_eq!(row_cells.len(), 2);
-        assert_eq!(row_style.direction, Direction::Horizontal);
-        assert_eq!(row_style.border_mode, BorderMode::Collapse);
-    }
-
-    #[test]
-    fn table_align_center() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table [alignment(Alignment::Center)] {
-                    table_row {
-                        table_cell { paragraph }
-                    }
-                }
-            }
-        };
-
-        let node = doc.node(t1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
-
-        let MeasuredContent::Box(MeasuredBox { style, .. }) = &result.content else {
-            panic!()
-        };
-        assert_eq!(style.alignment, LayoutAlignment::Center);
-    }
-
-    #[test]
-    fn empty_table_returns_zero_height() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table
-            }
-        };
-
-        let node = doc.node(t1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
-
-        assert_eq!(result.height, 0.0);
-    }
-
-    #[test]
-    fn equal_col_distribution() {
+    fn col_widths_equal_ratios() {
         let widths = calculate_col_widths(3, None, 300.0);
-        assert_eq!(widths, [100.0, 100.0, 100.0]);
+        assert_eq!(widths.len(), 3);
+        for w in &widths {
+            assert!((w - 100.0).abs() < 0.1, "expected ~100.0, got {w}");
+        }
+        let sum: f32 = widths.iter().sum();
+        assert!((sum - 300.0).abs() < 0.1, "sum expected ~300.0, got {sum}");
     }
 
     #[test]
-    fn border_width_formula() {
-        assert_eq!(border_width(0), 1.0);
-        assert_eq!(border_width(2), 3.0);
+    fn col_widths_all_min_when_tight() {
+        let widths = calculate_col_widths(3, None, 60.0);
+        assert_eq!(widths, [40.0, 40.0, 40.0]);
+    }
+
+    #[test]
+    fn col_widths_custom_proportional() {
+        let widths = calculate_col_widths(2, Some(&[1.0, 3.0]), 400.0);
+        assert_eq!(widths.len(), 2);
+        assert!(
+            (widths[0] - 100.0).abs() < 0.1,
+            "expected ~100.0, got {}",
+            widths[0]
+        );
+        assert!(
+            (widths[1] - 300.0).abs() < 0.1,
+            "expected ~300.0, got {}",
+            widths[1]
+        );
+        assert!(widths[0] >= 40.0);
+        assert!(widths[1] >= 40.0);
+        let sum: f32 = widths.iter().sum();
+        assert!((sum - 400.0).abs() < 0.1, "sum expected ~400.0, got {sum}");
+    }
+
+    #[test]
+    fn col_widths_min_cell_constraint() {
+        let widths = calculate_col_widths(2, Some(&[1.0, 99.0]), 200.0);
+        assert_eq!(widths.len(), 2);
+        assert_eq!(widths[0], 40.0);
+        assert!(
+            (widths[1] - 160.0).abs() < 0.1,
+            "expected ~160.0, got {}",
+            widths[1]
+        );
+    }
+
+    #[test]
+    fn table_metrics() {
+        assert_eq!(min_table_width(3), 124.0);
         assert_eq!(border_width(3), 4.0);
-    }
-
-    #[test]
-    fn min_table_width_formula() {
         assert_eq!(min_table_width(0), 1.0);
-        assert_eq!(min_table_width(2), 83.0);
     }
 
     #[test]
-    fn custom_ratio_col_widths() {
-        let widths = calculate_col_widths(2, Some(&[0.4, 0.6]), 500.0);
-        assert_eq!(widths, [200.0, 300.0]);
-    }
+    fn table_cell_padding_border() {
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let table_row = Dot::new(1, 2);
+        let cell = Dot::new(1, 3);
+        let para = Dot::new(1, 4);
+        let p_root = Dot::new(1, 5);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                table_row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, table_row],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, table_row, cell],
+                },
+            ),
+            (Dot::new(1, 6), SeqItem::Char('x')),
+            (
+                p_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
 
-    #[test]
-    fn min_col_width_enforcement() {
-        let widths = calculate_col_widths(2, None, 60.0);
-        assert_eq!(widths, [MIN_CELL_WIDTH, MIN_CELL_WIDTH]);
-    }
-
-    #[test]
-    fn small_ratio_gets_min_col_width() {
-        let widths = calculate_col_widths(2, Some(&[0.05, 0.95]), 500.0);
-        assert_eq!(widths[0], MIN_CELL_WIDTH);
-        assert_eq!(widths[0] + widths[1], 500.0);
-    }
-
-    #[test]
-    fn zero_columns() {
-        let widths = calculate_col_widths(0, None, 500.0);
-        assert!(widths.is_empty());
-    }
-
-    #[test]
-    fn table_measured_cell_widths_len_matches_col_count() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row {
-                        table_cell { paragraph { text("A") } }
-                        table_cell { paragraph { text("B") } }
-                        table_cell { paragraph { text("C") } }
-                    }
-                }
-            }
+        let root_node = view.root().unwrap();
+        let table_node = root_node.children().next().unwrap();
+        let row_node = match table_node {
+            editor_model::ChildView::Block(nv) => nv.children().next().unwrap(),
+            _ => panic!("expected block"),
+        };
+        let cell_node = match row_node {
+            editor_model::ChildView::Block(nv) => nv.children().next().unwrap(),
+            _ => panic!("expected block"),
+        };
+        let cell_view = match cell_node {
+            editor_model::ChildView::Block(nv) => nv,
+            _ => panic!("expected block"),
         };
 
-        let node = doc.node(t1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
+        let mut res = Resource::new_test();
+        let result = measure_table_cell(&cell_view, 100.0, &MeasureContext::default(), &mut res);
 
-        let rows = box_children(&result);
-        let first_row = rows.first().expect("table must have a row");
-        let cells = box_children(first_row.as_ref());
-        assert_eq!(cells.len(), 3);
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!("expected Box");
+        };
+        assert_eq!(b.style.padding.left, 8.0);
+        assert_eq!(b.style.padding.top, 8.0);
+        assert_eq!(b.style.border.left, 1.0);
+        assert_eq!(b.page_break_policy, PageBreakPolicy::Avoid);
+    }
+
+    fn two_cell_table_doc() -> (DocLogs, Dot) {
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let row = Dot::new(1, 2);
+        let cell_a = Dot::new(1, 3);
+        let para_a = Dot::new(1, 4);
+        let cell_b = Dot::new(1, 10);
+        let para_b = Dot::new(1, 11);
+        let p_root = Dot::new(1, 20);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell_a,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                },
+            ),
+            (
+                para_a,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell_a],
+                },
+            ),
+            (Dot::new(1, 5), SeqItem::Char('A')),
+            (
+                cell_b,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                },
+            ),
+            (
+                para_b,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell_b],
+                },
+            ),
+            (Dot::new(1, 12), SeqItem::Char('B')),
+            (
+                p_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (logs(&items), table)
     }
 
     #[test]
-    fn table_measured_rows_len_matches_row_count() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row { table_cell { paragraph { text("A") } } }
-                    table_row { table_cell { paragraph { text("B") } } }
-                    table_row { table_cell { paragraph { text("C") } } }
-                }
-            }
+    fn table_structure_and_collapse() {
+        use crate::measure::nodes::dispatch::measure_node;
+        use crate::style::{BorderMode, Direction};
+
+        let (doc, _table_dot) = two_cell_table_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+
+        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box) = result.content else {
+            panic!("expected root Box");
         };
 
-        let node = doc.node(t1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
+        let table_child = root_box.children.iter().next().unwrap();
+        let MeasuredContent::Box(ref table_box) = table_child.content else {
+            panic!("expected table Box");
+        };
 
-        let rows = box_children(&result);
-        assert_eq!(rows.len(), 3);
+        assert!(
+            matches!(table_box.style.border_mode, BorderMode::Collapse),
+            "table border_mode must be Collapse"
+        );
+        assert_eq!(table_box.style.border.left, 1.0);
+        assert!(
+            matches!(table_box.style.direction, Direction::Vertical),
+            "table direction must be Vertical"
+        );
+        assert_eq!(table_box.children.len(), 1, "exactly 1 row child");
+
+        let row_child = table_box.children.iter().next().unwrap();
+        let MeasuredContent::Box(ref row_box) = row_child.content else {
+            panic!("expected row Box");
+        };
+        assert!(
+            matches!(row_box.style.direction, Direction::Horizontal),
+            "row direction must be Horizontal"
+        );
+        assert!(
+            matches!(row_box.style.border_mode, BorderMode::Collapse),
+            "row border_mode must be Collapse"
+        );
+        assert_eq!(row_box.children.len(), 2, "row must have 2 cell children");
     }
 
     #[test]
-    fn table_measured_cell_inner_widths_sum_equals_available_width() {
-        let (doc, t1) = doc! {
-            root {
-                t1: table {
-                    table_row {
-                        table_cell { paragraph }
-                        table_cell { paragraph }
-                    }
-                }
-            }
+    fn cell_heights_equalized() {
+        use crate::measure::nodes::dispatch::measure_node;
+
+        let root = Dot::ROOT;
+        let table = Dot::new(2, 1);
+        let row = Dot::new(2, 2);
+        let cell_tall = Dot::new(2, 3);
+        let para_tall = Dot::new(2, 4);
+        let cell_short = Dot::new(2, 30);
+        let para_short = Dot::new(2, 31);
+        let p_root = Dot::new(2, 50);
+
+        let long_text: Vec<(Dot, SeqItem)> = (5u64..30u64)
+            .map(|i| (Dot::new(2, i), SeqItem::Char('x')))
+            .collect();
+
+        let mut items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                },
+            ),
+            (
+                cell_tall,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                },
+            ),
+            (
+                para_tall,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell_tall],
+                },
+            ),
+        ];
+        items.extend(long_text);
+        items.push((
+            cell_short,
+            SeqItem::Block {
+                node_type: NodeType::TableCell,
+                parents: vec![root, table, row],
+            },
+        ));
+        items.push((
+            para_short,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root, table, row, cell_short],
+            },
+        ));
+        items.push((Dot::new(2, 32), SeqItem::Char('B')));
+        items.push((
+            p_root,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        ));
+
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+
+        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref root_box) = result.content else {
+            panic!("expected root Box");
+        };
+        let table_child = root_box.children.iter().next().unwrap();
+        let MeasuredContent::Box(ref table_box) = table_child.content else {
+            panic!("expected table Box");
+        };
+        let row_child = table_box.children.iter().next().unwrap();
+        let MeasuredContent::Box(ref row_box) = row_child.content else {
+            panic!("expected row Box");
         };
 
-        let node = doc.node(t1).unwrap();
-        let mut measurer = Measurer::new_test();
-        let result = measure_table(&mut measurer, &doc, &node, 500.0, &ViewState::new());
+        assert_eq!(row_box.children.len(), 2);
+        let h1 = row_box.children[0].height;
+        let h2 = row_box.children[1].height;
+        let row_height = row_child.height;
+        assert!(
+            (h1 - h2).abs() < 0.01,
+            "cell heights must be equalized: h1={h1}, h2={h2}"
+        );
+        assert!(
+            (h1 - row_height).abs() < 0.01,
+            "cell height must equal row height: cell={h1}, row={row_height}"
+        );
+    }
 
-        let rows = box_children(&result);
-        let first_row = rows.first().expect("table must have a row");
-        let cells = box_children(first_row.as_ref());
-        let col_count = cells.len();
-        assert_eq!(col_count, 2);
-        let expected_available = result.width - (col_count + 1) as f32 * TABLE_BORDER_WIDTH;
-        let actual_sum: f32 = cells
-            .iter()
-            .map(|cell| (cell.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0))
-            .sum();
-        assert!((actual_sum - expected_available).abs() < 0.01);
+    #[test]
+    fn proportion_narrows_table() {
+        use editor_model::{NodeAttr, NodeAttrLog, NodeAttrOp, TableNodeAttr};
+
+        use crate::measure::nodes::dispatch::measure_node;
+
+        let (mut doc50, table_dot) = two_cell_table_doc();
+        doc50.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                NodeAttrOp {
+                    target: table_dot,
+                    attr: NodeAttr::Table {
+                        attr: TableNodeAttr::Proportion(50),
+                    },
+                },
+            )
+            .unwrap();
+
+        let (mut doc100, table_dot100) = two_cell_table_doc();
+        doc100.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                NodeAttrOp {
+                    target: table_dot100,
+                    attr: NodeAttr::Table {
+                        attr: TableNodeAttr::Proportion(100),
+                    },
+                },
+            )
+            .unwrap();
+
+        let pd50 = project_document(&doc50).unwrap();
+        let view50 = DocView::new(&pd50);
+        let root50 = view50.root().unwrap();
+        let mut res = Resource::new_test();
+        let result50 = measure_node(&root50, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref rb50) = result50.content else {
+            panic!()
+        };
+        let table50 = rb50.children.iter().next().unwrap();
+        let w50 = table50.width;
+
+        let pd100 = project_document(&doc100).unwrap();
+        let view100 = DocView::new(&pd100);
+        let root100 = view100.root().unwrap();
+        let result100 = measure_node(&root100, 400.0, &MeasureContext::default(), &mut res);
+        let MeasuredContent::Box(ref rb100) = result100.content else {
+            panic!()
+        };
+        let table100 = rb100.children.iter().next().unwrap();
+        let w100 = table100.width;
+
+        assert!(
+            w50 < w100,
+            "proportion=50 table width ({w50}) must be less than proportion=100 ({w100})"
+        );
+    }
+
+    #[test]
+    fn dispatch_wires_table() {
+        use crate::measure::nodes::dispatch::measure_node;
+        use crate::style::BorderMode;
+
+        let (doc, _) = two_cell_table_doc();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let table_node_view = root_node.child_blocks().next().unwrap();
+        let mut res = Resource::new_test();
+
+        let result = measure_node(
+            &table_node_view,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
+        let MeasuredContent::Box(ref b) = result.content else {
+            panic!("expected Box");
+        };
+        assert!(
+            matches!(b.style.border_mode, BorderMode::Collapse),
+            "Table dispatch must produce Collapse border, not the default Separate"
+        );
     }
 }

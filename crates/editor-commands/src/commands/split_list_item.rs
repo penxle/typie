@@ -1,5 +1,6 @@
-use editor_model::{Node, NodeId};
-use editor_state::{Affinity, Position, Selection};
+use editor_crdt::Dot;
+use editor_model::{ChildView, Modifier, NodeType, Subtree};
+use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{carryable_modifiers_at, find_enclosing_list_item_id};
@@ -9,108 +10,144 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
+    let view = tr.view();
 
-    let list_item_id = match find_enclosing_list_item_id(&doc, pos.node_id) {
+    let list_item_id = match find_enclosing_list_item_id(&view, pos.node) {
         Some(id) => id,
         None => return Ok(false),
     };
 
-    let list_item = doc
+    let list_item = view
         .node(list_item_id)
         .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    let paragraph = list_item.first_child().ok_or(CommandError::Corrupted(
-        "list_item missing paragraph".into(),
-    ))?;
+    let paragraph = match list_item.first_child() {
+        Some(ChildView::Block(p)) => p,
+        _ => {
+            return Err(CommandError::Corrupted(
+                "list_item missing paragraph".into(),
+            ));
+        }
+    };
     let paragraph_id = paragraph.id();
 
-    if paragraph.first_child().is_none() {
+    if pos.node != paragraph_id {
+        return Ok(false);
+    }
+    if paragraph.children().count() == 0 {
         return Ok(false);
     }
 
-    // Decide whether a mid-text split is needed and where to split the paragraph.
-    // The structural changes themselves run inside tr.batch so the whole sequence
-    // is atomic against transaction failure.
-    enum SplitPlan {
-        Text {
-            text_id: NodeId,
-            text_offset: usize,
-            paragraph_split_index: usize,
-        },
-        Direct {
-            paragraph_split_index: usize,
-        },
-    }
+    let split_index = pos.offset;
+    let para_len = paragraph.children().count();
 
-    let split_plan = match node.node() {
-        Node::Text(text_node) => {
-            let parent = node.parent().ok_or(CommandError::NoParent(pos.node_id))?;
-            if parent.id() != paragraph_id {
-                return Ok(false);
-            }
-            let node_index = node
-                .index()
-                .ok_or(CommandError::orphan_child(pos.node_id, parent.id()))?;
-            let text_len = text_node.text.len();
-            if pos.offset == 0 {
-                SplitPlan::Direct {
-                    paragraph_split_index: node_index,
-                }
-            } else if pos.offset == text_len {
-                SplitPlan::Direct {
-                    paragraph_split_index: node_index + 1,
-                }
-            } else {
-                SplitPlan::Text {
-                    text_id: pos.node_id,
-                    text_offset: pos.offset,
-                    paragraph_split_index: node_index + 1,
-                }
-            }
-        }
-        Node::Paragraph(_) => {
-            if node.id() != paragraph_id {
-                return Ok(false);
-            }
-            SplitPlan::Direct {
-                paragraph_split_index: pos.offset,
-            }
-        }
-        _ => return Ok(false),
+    // The leaves after the cursor cannot be reparented (move/split re-emit drops
+    // identity, and a list_item rejects a second paragraph), so capture their
+    // char + explicit (non-style) span modifiers and re-create them in the new
+    // item with the formatting intact.
+    let tail: Vec<(char, Vec<Modifier>)> = paragraph
+        .children()
+        .skip(split_index)
+        .filter_map(|c| match c {
+            ChildView::Leaf(l) => l.as_char().map(|ch| {
+                let mods = l
+                    .own_modifiers()
+                    .iter()
+                    .filter(|(_, o)| !o.from_style)
+                    .map(|(_, o)| o.value.clone())
+                    .collect();
+                (ch, mods)
+            }),
+            ChildView::Block(_) => None,
+        })
+        .collect();
+    let tail_len = para_len - split_index;
+
+    let sublist_id: Option<Dot> = list_item
+        .child_blocks()
+        .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
+        .map(|b| b.id());
+
+    let (list_id, li_block_index) = {
+        let list = list_item
+            .parent()
+            .ok_or(CommandError::NoParent(list_item_id))?;
+        let idx = list
+            .child_blocks()
+            .position(|b| b.id() == list_item_id)
+            .ok_or_else(|| CommandError::orphan_child(list_item_id, list.id()))?;
+        (list.id(), idx)
     };
 
-    let carryable = carryable_modifiers_at(&doc, pos, tr.pending_modifiers());
+    let carryable = carryable_modifiers_at(&view, pos, tr.pending_modifiers());
+    drop(view);
 
-    let new_paragraph_id = NodeId::new();
-    let new_list_item_id = NodeId::new();
+    if tail_len > 0 {
+        tr.remove_text(paragraph_id, split_index, tail_len)?;
+    }
 
-    tr.batch::<_, CommandError>(|tr| {
-        let paragraph_split_index = match split_plan {
-            SplitPlan::Text {
-                text_id,
-                text_offset,
-                paragraph_split_index,
-            } => {
-                let split_text_id = NodeId::new();
-                tr.split_node(text_id, text_offset, split_text_id)?;
-                paragraph_split_index
+    let new_li = Subtree::leaf(NodeType::ListItem.into_node().to_plain()).with_children(vec![
+        Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+    ]);
+    tr.insert_subtree(list_id, li_block_index + 1, new_li)?;
+
+    let (new_list_item_id, new_paragraph_id) = {
+        let view = tr.view();
+        let list = view
+            .node(list_id)
+            .ok_or(CommandError::NodeNotFound(list_id))?;
+        let new_li = list
+            .child_blocks()
+            .nth(li_block_index + 1)
+            .ok_or(CommandError::Corrupted("new list_item missing".into()))?;
+        let new_li_id = new_li.id();
+        let new_para = match new_li.first_child() {
+            Some(ChildView::Block(p)) => p.id(),
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "new list_item missing paragraph".into(),
+                ));
             }
-            SplitPlan::Direct {
-                paragraph_split_index,
-            } => paragraph_split_index,
         };
-        tr.split_node(paragraph_id, paragraph_split_index, new_paragraph_id)?;
-        tr.split_node(list_item_id, 1, new_list_item_id)?;
-        Ok(())
-    })?;
+        (new_li_id, new_para)
+    };
+
+    if let Some(sublist) = &sublist_id {
+        let at = {
+            let view = tr.view();
+            view.node(new_list_item_id)
+                .map(|li| li.child_blocks().count())
+                .unwrap_or(1)
+        };
+        tr.move_node(*sublist, new_list_item_id, at)?;
+    }
+
+    if !tail.is_empty() {
+        let text: String = tail.iter().map(|(ch, _)| *ch).collect();
+        tr.insert_text(new_paragraph_id, 0, &text)?;
+        let char_dots: Vec<_> = {
+            let view = tr.view();
+            view.node(new_paragraph_id)
+                .map(|p| {
+                    p.children()
+                        .filter_map(|c| match c {
+                            ChildView::Leaf(l) => l.as_char().map(|_| l.dot()),
+                            ChildView::Block(_) => None,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        for (dot, (_, mods)) in char_dots.iter().zip(tail.iter()) {
+            for m in mods {
+                tr.add_span_modifier(*dot, *dot, m.clone())?;
+            }
+        }
+    }
 
     let marker = editor_model::Marker {
         modifiers: carryable,
@@ -120,26 +157,10 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         tr.set_marker(new_paragraph_id, Some(marker))?;
     }
 
-    let doc = tr.doc();
-    let new_li = doc
-        .node(new_list_item_id)
-        .ok_or(CommandError::NodeNotFound(new_list_item_id))?;
-    let new_para = new_li.first_child().ok_or(CommandError::Corrupted(
-        "new list_item missing paragraph".into(),
-    ))?;
-    let cursor_pos = match new_para.first_child() {
-        Some(child) if matches!(child.node(), Node::Text(_)) => Position {
-            node_id: child.id(),
-            offset: 0,
-            affinity: Affinity::Downstream,
-        },
-        _ => Position {
-            node_id: new_para.id(),
-            offset: 0,
-            affinity: Affinity::Downstream,
-        },
-    };
-    tr.set_selection(Some(Selection::collapsed(cursor_pos)))?;
+    tr.set_selection(Some(Selection::collapsed(Position::new(
+        new_paragraph_id,
+        0,
+    ))))?;
 
     Ok(true)
 }
@@ -153,23 +174,23 @@ mod tests {
 
     #[test]
     fn split_text_end() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                         list_item { p2: paragraph {} }
                     }
                     paragraph {}
@@ -182,9 +203,9 @@ mod tests {
 
     #[test]
     fn non_collapsed_returns_false() {
-        let (initial, ..) = state! {
-            doc { root { bullet_list { list_item { paragraph { t1: text("A") } } } paragraph {} } }
-            selection: (t1, 0) -> (t1, 1)
+        let (initial, _p1) = state! {
+            doc { root { bullet_list { list_item { p1: paragraph { text("A") } } } paragraph {} } }
+            selection: (p1, 0) -> (p1, 1)
         };
         transact_fail!(initial, |tr| split_list_item(&mut tr));
     }
@@ -200,93 +221,93 @@ mod tests {
 
     #[test]
     fn outside_list_returns_false() {
-        let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("Hello") } } }
-            selection: (t1, 2)
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| split_list_item(&mut tr));
     }
 
     #[test]
     fn split_text_middle() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("He") } }
-                        list_item { paragraph { t2: text("llo") } }
+                        list_item { p1: paragraph { text("He") } }
+                        list_item { p2: paragraph { text("llo") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn split_text_start() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item { paragraph {} }
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn split_with_sublist_moves_sublist_to_new_item() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph { t1: text("Hello") }
+                            p1: paragraph { text("Hello") }
                             bullet_list { list_item { paragraph { text("sub") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                         list_item {
                             p2: paragraph {}
                             bullet_list { list_item { paragraph { text("sub") } } }
@@ -302,86 +323,86 @@ mod tests {
 
     #[test]
     fn split_in_ordered_list() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     ordered_list {
-                        list_item { paragraph { t1: text("Hello") } }
+                        list_item { p1: paragraph { text("Hello") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     ordered_list {
-                        list_item { paragraph { t1: text("He") } }
-                        list_item { paragraph { t2: text("llo") } }
+                        list_item { p1: paragraph { text("He") } }
+                        list_item { p2: paragraph { text("llo") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn split_multiple_text_children() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
                         list_item {
-                            paragraph {
-                                t1: text("Hello")
-                                t2: text("World")
+                            p1: paragraph {
+                                text("Hello")
+                                text("World")
                             }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") } }
-                        list_item { paragraph { t2: text("World") } }
+                        list_item { p1: paragraph { text("Hello") } }
+                        list_item { p2: paragraph { text("World") } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
     fn split_list_item_at_end_attaches_marker_to_new_paragraph() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") [bold] } }
+                        list_item { p1: paragraph { text("Hello") [bold] } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") [bold] } }
+                        list_item { p1: paragraph { text("Hello") [bold] } }
                         list_item { p2: paragraph marker([bold]) {} }
                     }
                     paragraph {}
@@ -394,29 +415,29 @@ mod tests {
 
     #[test]
     fn split_list_item_in_middle_attaches_marker_to_new_paragraph() {
-        let (initial, ..) = state! {
+        let (initial, _p1) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("Hello") [bold] } }
+                        list_item { p1: paragraph { text("Hello") [bold] } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 2)
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
-        let (expected, ..) = state! {
+        let (expected, _p1, _p2) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { paragraph { t1: text("He") [bold] } }
-                        list_item { paragraph marker([bold]) { t2: text("llo") [bold] } }
+                        list_item { p1: paragraph { text("He") [bold] } }
+                        list_item { p2: paragraph marker([bold]) { text("llo") [bold] } }
                     }
                     paragraph {}
                 }
             }
-            selection: (t2, 0)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

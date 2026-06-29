@@ -1,5 +1,6 @@
-use editor_model::Node;
-use editor_state::{NodeRefCursorExt, Position, Selection};
+use editor_model::ChildView;
+use editor_state::{Position, Selection};
+use editor_state::{first_cursor_position, last_cursor_position};
 use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
@@ -8,80 +9,79 @@ pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> Comm
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if selection.is_collapsed() {
+    if selection.anchor == selection.head {
         return Ok(false);
     }
 
-    let doc = tr.doc();
-    let resolved = selection
-        .resolve(&doc)
-        .ok_or_else(|| CommandError::Corrupted("cannot resolve selection".into()))?;
+    let (from_pos, to_pos) = {
+        let view = tr.view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or_else(|| CommandError::Corrupted("cannot resolve selection".into()))?;
 
-    let raw_from_id = resolved.from().node_id();
-    let raw_from_offset = resolved.from().offset();
-    let raw_to_id = resolved.to().node_id();
-    let raw_to_offset = resolved.to().offset();
+        let raw_from_id = resolved.from().node();
+        let raw_from_offset = resolved.from().offset();
+        let raw_from_affinity = resolved.from().affinity();
+        let raw_to_id = resolved.to().node();
+        let raw_to_offset = resolved.to().offset();
+        let raw_to_affinity = resolved.to().affinity();
 
-    let from_pos = {
-        let doc = tr.doc();
-        let node = doc
-            .node(raw_from_id)
-            .ok_or(CommandError::NodeNotFound(raw_from_id))?;
-        if matches!(node.node(), Node::Text(_)) {
-            Position {
-                node_id: raw_from_id,
-                offset: raw_from_offset,
-                affinity: resolved.from().affinity(),
-            }
-        } else {
-            let child = node
-                .children()
-                .nth(raw_from_offset)
-                .and_then(|c| c.first_cursor_position());
-            match child {
-                Some(pos)
-                    if doc
-                        .node(pos.node_id)
-                        .is_some_and(|n| matches!(n.node(), Node::Text(_))) =>
-                {
-                    pos
+        let from_pos = {
+            let node = view
+                .node(raw_from_id)
+                .ok_or(CommandError::NodeNotFound(raw_from_id))?;
+            if node.spec().is_textblock() {
+                Position {
+                    node: raw_from_id,
+                    offset: raw_from_offset,
+                    affinity: raw_from_affinity,
                 }
-                _ => return Ok(false),
+            } else {
+                let child = match node.child_at(raw_from_offset) {
+                    Some(ChildView::Block(b)) => first_cursor_position(&b),
+                    _ => None,
+                };
+                match child {
+                    Some(pos) if view.node(pos.node).is_some_and(|n| n.spec().is_textblock()) => {
+                        pos
+                    }
+                    _ => return Ok(false),
+                }
             }
-        }
+        };
+
+        let to_pos = {
+            let node = view
+                .node(raw_to_id)
+                .ok_or(CommandError::NodeNotFound(raw_to_id))?;
+            if node.spec().is_textblock() {
+                Position {
+                    node: raw_to_id,
+                    offset: raw_to_offset,
+                    affinity: raw_to_affinity,
+                }
+            } else {
+                let child = raw_to_offset
+                    .checked_sub(1)
+                    .and_then(|idx| node.child_at(idx))
+                    .and_then(|c| match c {
+                        ChildView::Block(b) => last_cursor_position(&b),
+                        _ => None,
+                    });
+                match child {
+                    Some(pos) if view.node(pos.node).is_some_and(|n| n.spec().is_textblock()) => {
+                        pos
+                    }
+                    _ => return Ok(false),
+                }
+            }
+        };
+
+        (from_pos, to_pos)
     };
 
-    let to_pos = {
-        let doc = tr.doc();
-        let node = doc
-            .node(raw_to_id)
-            .ok_or(CommandError::NodeNotFound(raw_to_id))?;
-        if matches!(node.node(), Node::Text(_)) {
-            Position {
-                node_id: raw_to_id,
-                offset: raw_to_offset,
-                affinity: resolved.to().affinity(),
-            }
-        } else {
-            let child = raw_to_offset
-                .checked_sub(1)
-                .and_then(|idx| node.children().nth(idx))
-                .and_then(|c| c.last_cursor_position());
-            match child {
-                Some(pos)
-                    if doc
-                        .node(pos.node_id)
-                        .is_some_and(|n| matches!(n.node(), Node::Text(_))) =>
-                {
-                    pos
-                }
-                _ => return Ok(false),
-            }
-        }
-    };
-
-    let from_id = from_pos.node_id;
-    let to_id = to_pos.node_id;
+    let from_id = from_pos.node;
+    let to_id = to_pos.node;
     let from_offset = from_pos.offset;
     let to_offset = to_pos.offset;
 
@@ -99,12 +99,12 @@ pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> Comm
     };
 
     let new_from = Position {
-        node_id: from_id,
+        node: from_id,
         offset: from_offset,
         affinity: from_pos.affinity,
     };
     let new_to = Position {
-        node_id: to_id,
+        node: to_id,
         offset: new_to_offset,
         affinity: to_pos.affinity,
     };
@@ -116,7 +116,6 @@ pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> Comm
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::assert_state_eq;
 
     use super::*;
     use crate::test_utils::*;
@@ -124,8 +123,8 @@ mod tests {
     #[test]
     fn collapsed_selection_returns_false() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 2)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
         };
         transact_fail!(initial, |tr| surround_selection(&mut tr, "(", ")"));
     }
@@ -133,13 +132,13 @@ mod tests {
     #[test]
     fn surrounds_within_single_text_node() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 6) -> (t1, 11)
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6) -> (p1, 11)
         };
         let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "(", ")"));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello (world)") } } }
-            selection: (t1, 6) -> (t1, 13)
+            doc { root { p1: paragraph { text("hello (world)") } } }
+            selection: (p1, 6) -> (p1, 13)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -148,18 +147,18 @@ mod tests {
     fn surrounds_across_two_paragraphs() {
         let (initial, ..) = state! {
             doc { root {
-                paragraph { t1: text("hello") }
-                paragraph { t2: text("world") }
+                p1: paragraph { text("hello") }
+                p2: paragraph { text("world") }
             } }
-            selection: (t1, 2) -> (t2, 3)
+            selection: (p1, 2) -> (p2, 3)
         };
         let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "[", "]"));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("he[llo") }
-                paragraph { t2: text("wor]ld") }
+                p1: paragraph { text("he[llo") }
+                p2: paragraph { text("wor]ld") }
             } }
-            selection: (t1, 2) -> (t2, 4)
+            selection: (p1, 2) -> (p2, 4)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -167,15 +166,15 @@ mod tests {
     #[test]
     fn surrounds_block_unit_selection() {
         // Unit selection: the whole paragraph is selected at the root container level.
-        // auto_surround must descend into the block and find the text endpoints.
+        // surround_selection must descend into the block and find the text endpoints.
         let (initial, _r1, ..) = state! {
-            doc { r1: root { paragraph { t1: text("A") } } }
+            doc { r1: root { p1: paragraph { text("A") } } }
             selection: (r1, 0, >) -> (r1, 1, <)
         };
         let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "(", ")"));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("(A)") } } }
-            selection: (t1, 0) -> (t1, 3)
+            doc { root { p1: paragraph { text("(A)") } } }
+            selection: (p1, 0) -> (p1, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -183,15 +182,15 @@ mod tests {
     #[test]
     fn ascii_quote_maps_to_curly_pair() {
         let (initial, ..) = state! {
-            doc { root { paragraph { t1: text("hello") } } }
-            selection: (t1, 0) -> (t1, 5)
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| surround_selection(
             &mut tr, "\u{201C}", "\u{201D}"
         ));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("\u{201C}hello\u{201D}") } } }
-            selection: (t1, 0) -> (t1, 7)
+            doc { root { p1: paragraph { text("\u{201C}hello\u{201D}") } } }
+            selection: (p1, 0) -> (p1, 7)
         };
         assert_state_eq!(&actual, &expected);
     }

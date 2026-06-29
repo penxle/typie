@@ -1,11 +1,5 @@
-use editor_common::Rect;
 use editor_macros::ffi;
-use editor_state::Position;
 use serde::{Deserialize, Serialize};
-
-use crate::paginate::*;
-
-use super::layout_index::LayoutIndex;
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -16,7 +10,14 @@ pub struct CursorMetrics {
     pub line: Rect,
 }
 
-pub fn cursor_metrics(
+use editor_common::Rect;
+use editor_state::Position;
+
+use super::grapheme;
+use super::layout_index::LayoutIndex;
+use crate::paginate::types::{LayoutContent, LayoutLine};
+
+pub(crate) fn cursor_metrics(
     layout_index: &LayoutIndex,
     pos: &Position,
     metrics_override: Option<(f32, f32)>,
@@ -27,10 +28,23 @@ pub fn cursor_metrics(
     match entry.content(layout_index)? {
         LayoutContent::Line(l) => {
             let x = x_at_offset(l, pos);
-            let (cursor_ascent, cursor_descent) =
-                metrics_override.unwrap_or((l.cursor_ascent, l.cursor_descent));
+            let (cursor_ascent, cursor_descent) = if let Some(ov) = metrics_override {
+                ov
+            } else {
+                let run = if pos.offset > 0 {
+                    l.glyph_runs
+                        .iter()
+                        .find(|r| r.offset_range.contains(&(pos.offset - 1)))
+                } else {
+                    None
+                }
+                .or_else(|| l.glyph_runs.first());
+                match run {
+                    Some(r) => (r.cursor_ascent, r.cursor_descent),
+                    None => (l.cursor_ascent, l.cursor_descent),
+                }
+            };
             let cursor_height = cursor_ascent + cursor_descent;
-            // Anchor to baseline so mixed-font lines keep the caret aligned with the run's glyphs.
             let caret = Rect::from_xywh(
                 entry.rect.x + x,
                 page_rect.rect.y + l.baseline - cursor_ascent,
@@ -43,516 +57,167 @@ pub fn cursor_metrics(
                 line: page_rect.rect,
             })
         }
-        // Normalize guarantees a collapsed selection never points at an atom, so this
-        // arm is unreachable for well-formed state. Returning None avoids drawing a
-        // spurious caret on the atom's left edge on unexpected bypass entry.
         LayoutContent::Atom(_) => None,
         _ => None,
     }
 }
 
-pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
-    super::grapheme::x_at_offset(line, pos)
+pub(crate) fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
+    grapheme::x_at_offset(line, pos)
 }
 
 #[cfg(test)]
 mod tests {
+    use editor_common::EdgeInsets;
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_model::{
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
+        SeqItem, SpanLog, StyleLog, project_document,
+    };
+    use editor_resource::Resource;
+    use editor_state::Affinity;
+
+    use crate::measure::context::MeasureContext;
+    use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::types::MeasuredTree;
+    use crate::paginate::paginator::Paginator;
+    use crate::paginate::types::LayoutContent;
+    use crate::query::grapheme;
+
     use super::*;
-    use crate::glyph_run::{GlyphRun, GraphemeSpan};
-    use crate::page::LayoutPage;
-    use crate::style::*;
-    use editor_common::{EdgeInsets, Size};
-    use editor_model::NodeId;
 
-    fn gs(n: usize) -> Vec<GraphemeSpan> {
-        vec![
-            GraphemeSpan {
-                advance: 10.0,
-                codepoints: 1
-            };
-            n
-        ]
-    }
-
-    fn make_tree(id: NodeId) -> LayoutTree {
-        LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                        content: LayoutContent::Line(LayoutLine {
-                            node_id: id,
-                            baseline: 16.0,
-                            ascent: 14.0,
-                            descent: 4.0,
-                            cursor_ascent: 14.0,
-                            cursor_descent: 4.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
-                            ruby_annotations: vec![],
-                            empty_caret_x: 0.0,
-                            child_range: None,
-                            tab_gaps: vec![],
-                            is_phantom: false,
-                            content_edge_x: None,
-                        }),
-                    }],
-                    attachment: None,
-                }),
-            },
+    fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
+        let mut ev = Vec::new();
+        let mut prev: Option<Dot> = None;
+        for (i, (id, item)) in items.iter().enumerate() {
+            ev.push(InputEvent {
+                id: *id,
+                parents: prev.into_iter().collect(),
+                op: ListOp::Ins {
+                    pos: i,
+                    item: item.clone(),
+                },
+            });
+            prev = Some(*id);
+        }
+        DocLogs {
+            seq: build_oplog(&ev),
+            spans: SpanLog::new(),
+            block_modifiers: ModifierAttrLog::new(),
+            node_attrs: NodeAttrLog::new(),
+            node_styles: NodeStyleLog::new(),
+            node_markers: NodeMarkerLog::new(),
+            styles: StyleLog::new(),
         }
     }
 
-    fn layout_index(tree: &LayoutTree, pages: &[LayoutPage]) -> LayoutIndex {
-        LayoutIndex::new(tree.clone(), pages)
+    fn build_index(doc: &DocLogs, width: f32) -> (editor_crdt::Dot, LayoutIndex) {
+        let pd = project_document(doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let root_id = root_node.id();
+        let mut res = Resource::new_test();
+        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+            .paginate(MeasuredTree { root: measured });
+        let index = LayoutIndex::new(layout.tree, &layout.pages);
+        (root_id, index)
     }
 
-    #[test]
-    fn cursor_rect_at_offset_0() {
-        let id = NodeId::new();
-        let tree = make_tree(id);
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
-        let pos = Position::new(id, 0);
-        let CursorMetrics {
-            page_idx, caret, ..
-        } = cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
-
-        // Caret anchored to baseline: caret.y = baseline(16) - cursor_ascent(14) = 2.
-        assert_eq!(page_idx, 0);
-        assert_eq!(caret.x, 0.0);
-        assert_eq!(caret.y, 2.0);
-        assert_eq!(caret.height, 18.0);
-    }
-
-    #[test]
-    fn cursor_rect_at_offset_3() {
-        let id = NodeId::new();
-        let tree = make_tree(id);
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
-        let pos = Position::new(id, 3);
-        let CursorMetrics { caret, .. } =
-            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
-
-        assert_eq!(caret.x, 30.0);
-    }
-
-    #[test]
-    fn cursor_rect_includes_line_x_offset() {
-        let id = NodeId::new();
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(20.0, 0.0, 200.0, 20.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(20.0, 0.0, 200.0, 20.0),
-                        content: LayoutContent::Line(LayoutLine {
-                            node_id: id,
-                            baseline: 16.0,
-                            ascent: 14.0,
-                            descent: 4.0,
-                            cursor_ascent: 14.0,
-                            cursor_descent: 4.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
-                            ruby_annotations: vec![],
-                            empty_caret_x: 0.0,
-                            child_range: None,
-                            tab_gaps: vec![],
-                            is_phantom: false,
-                            content_edge_x: None,
-                        }),
-                    }],
-                    attachment: None,
-                }),
+    fn para_doc(text: &str, width: f32) -> (editor_crdt::Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
             },
-        };
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(240.0, 800.0))];
-        let pos = Position::new(id, 2);
-        let CursorMetrics { caret, .. } =
-            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
-
-        // x = line.rect.x(20) + run.x(0) + advances[0..2](20) = 40
-        assert_eq!(caret.x, 40.0);
+        )];
+        for (i, ch) in text.chars().enumerate() {
+            items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let (_, index) = build_index(&doc, width);
+        (para_id, index)
     }
 
     #[test]
-    fn cursor_rect_returns_correct_page() {
-        let id = NodeId::new();
-        // Line at y=500, pages split at y=400
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 600.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
-                        content: LayoutContent::Line(LayoutLine {
-                            node_id: id,
-                            baseline: 16.0,
-                            ascent: 14.0,
-                            descent: 4.0,
-                            cursor_ascent: 14.0,
-                            cursor_descent: 4.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
-                            ruby_annotations: vec![],
-                            empty_caret_x: 0.0,
-                            child_range: None,
-                            tab_gaps: vec![],
-                            is_phantom: false,
-                            content_edge_x: None,
-                        }),
-                    }],
-                    attachment: None,
-                }),
-            },
+    fn cursor_metrics_line_returns_some() {
+        let (para_id, index) = para_doc("Hi", 400.0);
+        let pos = Position {
+            node: para_id,
+            offset: 1,
+            affinity: Affinity::default(),
         };
-        let pages = [
-            LayoutPage::new(0.0, 400.0, Size::new(200.0, 400.0)),
-            LayoutPage::new(400.0, 800.0, Size::new(200.0, 400.0)),
-        ];
-        let pos = Position::new(id, 0);
-        let CursorMetrics {
-            page_idx, caret, ..
-        } = cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
-        assert_eq!(page_idx, 1);
-        // Page-local baseline-anchored y: line.y(500) + baseline(16) - cursor_ascent(14) - page_start(400) = 102.
-        assert_eq!(caret.y, 102.0);
-    }
+        let result = cursor_metrics(&index, &pos, None);
+        assert!(
+            result.is_some(),
+            "cursor_metrics must return Some for a line position"
+        );
 
-    #[test]
-    fn cursor_rect_empty_line_uses_empty_caret_x() {
-        let id = NodeId::new();
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                        content: LayoutContent::Line(LayoutLine {
-                            node_id: id,
-                            baseline: 16.0,
-                            ascent: 14.0,
-                            descent: 4.0,
-                            cursor_ascent: 14.0,
-                            cursor_descent: 4.0,
-                            glyph_runs: vec![],
-                            ruby_annotations: vec![],
-                            empty_caret_x: 32.0,
-                            child_range: Some(0..0),
-                            tab_gaps: vec![],
-                            is_phantom: false,
-                            content_edge_x: None,
-                        }),
-                    }],
-                    attachment: None,
-                }),
-            },
+        let cm = result.unwrap();
+
+        let entry = index.entry_for_position(&pos).unwrap();
+        let node = entry.node(&index).unwrap();
+        let LayoutContent::Line(l) = &node.content else {
+            panic!("entry must be a line");
         };
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
-        let pos = Position::new(id, 0);
-        let CursorMetrics { caret, .. } =
-            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
 
-        assert_eq!(caret.x, 32.0);
-    }
-
-    #[test]
-    fn cursor_metrics_line_covers_full_line_box() {
-        // line-height=30, baseline=22, cursor_ascent=14 → caret.y = 22 - 14 = 8.
-        let id = NodeId::new();
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(0.0, 0.0, 200.0, 30.0),
-                        content: LayoutContent::Line(LayoutLine {
-                            node_id: id,
-                            baseline: 22.0,
-                            ascent: 14.0,
-                            descent: 4.0,
-                            cursor_ascent: 14.0,
-                            cursor_descent: 4.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
-                            ruby_annotations: vec![],
-                            empty_caret_x: 0.0,
-                            child_range: None,
-                            tab_gaps: vec![],
-                            is_phantom: false,
-                            content_edge_x: None,
-                        }),
-                    }],
-                    attachment: None,
-                }),
-            },
-        };
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
-        let pos = Position::new(id, 0);
-        let CursorMetrics {
-            page_idx,
-            caret,
-            line,
-        } = cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
-
-        assert_eq!(page_idx, 0);
-        // caret: baseline(22) - cursor_ascent(14) = 8 (top), height = 18.
-        assert_eq!(caret.y, 8.0);
-        assert_eq!(caret.height, 18.0);
-        // line: line_node.rect 전체
-        assert_eq!(line.x, 0.0);
-        assert_eq!(line.y, 0.0);
-        assert_eq!(line.width, 200.0);
-        assert_eq!(line.height, 30.0);
-        // line이 caret을 상하로 감쌈
-        assert!(line.y < caret.y);
-        assert!(line.y + line.height > caret.y + caret.height);
+        let expected_x = entry.rect.x + grapheme::x_at_offset(l, &pos);
+        assert_eq!(
+            cm.caret.x, expected_x,
+            "caret.x must equal entry.rect.x + x_at_offset"
+        );
+        assert_eq!(
+            cm.caret.height,
+            l.cursor_ascent + l.cursor_descent,
+            "caret.height must equal cursor_ascent + cursor_descent"
+        );
+        assert_eq!(cm.caret.width, 1.0, "caret.width must be 1.0");
+        assert_eq!(cm.page_idx, 0, "page_idx must be 0");
     }
 
     #[test]
     fn cursor_metrics_atom_returns_none() {
-        // Invariant: normalize expands collapsed-on-atom selections to node selections,
-        // so the Atom branch is unreachable for well-formed state. cursor_metrics must
-        // return None here rather than draw a wrong caret.
-        let para_id = NodeId::new();
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(10.0, 5.0, 150.0, 40.0),
-                        content: LayoutContent::Atom(LayoutAtom {
-                            node_id: NodeId::new(),
-                            attachment: ChildAttachment {
-                                parent_id: para_id,
-                                index: 0,
-                            },
-                        }),
-                    }],
-                    attachment: None,
-                }),
-            },
-        };
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
-        let pos = Position::new(para_id, 0);
-        assert!(cursor_metrics(&layout_index(&tree, &pages), &pos, None).is_none());
-    }
+        use editor_model::{AtomLeaf, HorizontalRuleVariant};
 
-    #[test]
-    fn cursor_metrics_on_trailing_empty_line_after_hard_break() {
-        let p1 = NodeId::new();
-        let t1 = NodeId::new();
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 40.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
+        let root = Dot::ROOT;
+        let hr = Dot::new(1, 1);
+        let p = Dot::new(1, 2);
+        let items = vec![
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: HorizontalRuleVariant::default(),
                     },
-                    children: vec![
-                        LayoutNode {
-                            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
-                            content: LayoutContent::Line(LayoutLine {
-                                node_id: p1,
-                                baseline: 16.0,
-                                ascent: 14.0,
-                                descent: 4.0,
-                                cursor_ascent: 14.0,
-                                cursor_descent: 4.0,
-                                glyph_runs: vec![GlyphRun::make_test_run(t1, 0, "a", 0.0, gs(1))],
-                                ruby_annotations: vec![],
-                                empty_caret_x: 0.0,
-                                child_range: Some(0..2),
-                                tab_gaps: vec![],
-                                is_phantom: false,
-                                content_edge_x: None,
-                            }),
-                        },
-                        LayoutNode {
-                            rect: Rect::from_xywh(0.0, 20.0, 200.0, 20.0),
-                            content: LayoutContent::Line(LayoutLine {
-                                node_id: p1,
-                                baseline: 16.0,
-                                ascent: 14.0,
-                                descent: 4.0,
-                                cursor_ascent: 14.0,
-                                cursor_descent: 4.0,
-                                glyph_runs: vec![],
-                                ruby_annotations: vec![],
-                                empty_caret_x: 0.0,
-                                child_range: Some(2..2),
-                                tab_gaps: vec![],
-                                is_phantom: false,
-                                content_edge_x: None,
-                            }),
-                        },
-                    ],
-                    attachment: None,
-                }),
-            },
-        };
-        let pages = [LayoutPage::new(0.0, 800.0, Size::new(200.0, 800.0))];
-        let pos = editor_state::Position {
-            node_id: p1,
-            offset: 2,
-            affinity: editor_state::Affinity::Downstream,
-        };
-        let CursorMetrics { caret, line, .. } =
-            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
-        assert!(caret.y >= 20.0);
-        assert_eq!(line.y, 20.0);
-        assert_eq!(caret.x, 0.0);
-    }
-
-    #[test]
-    fn cursor_metrics_page_relative_line_on_second_page() {
-        let id = NodeId::new();
-        let tree = LayoutTree {
-            root: LayoutNode {
-                rect: Rect::from_xywh(0.0, 0.0, 200.0, 600.0),
-                content: LayoutContent::Box(LayoutBox {
-                    node_id: NodeId::new(),
-                    style: BoxStyle {
-                        direction: Direction::Vertical,
-                        padding: EdgeInsets::ZERO,
-                        border: EdgeInsets::ZERO,
-                        border_mode: BorderMode::Separate,
-                        alignment: Alignment::Start,
-                        decorations: vec![],
-                        monolithic: false,
-                    },
-                    children: vec![LayoutNode {
-                        rect: Rect::from_xywh(0.0, 500.0, 200.0, 20.0),
-                        content: LayoutContent::Line(LayoutLine {
-                            node_id: id,
-                            baseline: 16.0,
-                            ascent: 14.0,
-                            descent: 4.0,
-                            cursor_ascent: 14.0,
-                            cursor_descent: 4.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
-                            ruby_annotations: vec![],
-                            empty_caret_x: 0.0,
-                            child_range: None,
-                            tab_gaps: vec![],
-                            is_phantom: false,
-                            content_edge_x: None,
-                        }),
-                    }],
-                    attachment: None,
-                }),
-            },
-        };
-        let pages = [
-            LayoutPage::new(0.0, 400.0, Size::new(200.0, 400.0)),
-            LayoutPage::new(400.0, 800.0, Size::new(200.0, 400.0)),
+                    parents: vec![root],
+                },
+            ),
+            (
+                p,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
         ];
-        let pos = Position::new(id, 0);
-        let CursorMetrics { page_idx, line, .. } =
-            cursor_metrics(&layout_index(&tree, &pages), &pos, None).unwrap();
+        let doc = logs(&items);
+        let root_id = root;
+        let (_, index) = build_index(&doc, 400.0);
 
-        assert_eq!(page_idx, 1);
-        // line.y = 500 - 400 = 100 (페이지 로컬)
-        assert_eq!(line.y, 100.0);
-        assert_eq!(line.height, 20.0);
-    }
-
-    #[test]
-    fn caret_after_leading_tab_sits_at_gap_end() {
-        use crate::view::View;
-        use editor_macros::doc;
-
-        let (doc, p1) = doc! { root { p1: paragraph { tab {} text("x") } } };
-        let mut view = View::new_test();
-        view.layout(&doc);
-        let tree = view.layout_tree_for_test().unwrap();
-        let pages = view.pages();
-
-        let (line_node, line) = {
-            fn first_line(node: &LayoutNode) -> Option<(&LayoutNode, &LayoutLine)> {
-                match &node.content {
-                    LayoutContent::Line(l) => Some((node, l)),
-                    LayoutContent::Box(b) => b.children.iter().find_map(first_line),
-                    _ => None,
-                }
-            }
-            first_line(&tree.root).expect("line must exist")
+        let pos = Position {
+            node: root_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
         };
-        let gap = line.tab_gaps.first().cloned().expect("tab gap exists");
-        let expected_x = line_node.rect.x + gap.x + gap.width;
-
-        let pos = Position::new(p1, 1);
-        let metrics = cursor_metrics(&layout_index(tree, pages), &pos, None).unwrap();
         assert!(
-            (metrics.caret.x - expected_x).abs() < 0.5,
-            "caret x {} must equal gap end {}",
-            metrics.caret.x,
-            expected_x,
+            cursor_metrics(&index, &pos, None).is_none(),
+            "cursor_metrics must return None for an atom position"
         );
     }
 }

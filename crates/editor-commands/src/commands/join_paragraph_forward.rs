@@ -1,5 +1,5 @@
-use editor_model::Node;
-use editor_transaction::{Transaction, compact};
+use editor_model::{ChildView, NodeType};
+use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
@@ -7,63 +7,43 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    if !selection.is_collapsed() {
+    if selection.anchor != selection.head {
         return Ok(false);
     }
 
     let pos = selection.head;
-    let doc = tr.doc();
-    let node = doc
-        .node(pos.node_id)
-        .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    let paragraph_id = match node.node() {
-        Node::Text(text_node) => {
-            let text_len = text_node.text.len();
-            if pos.offset < text_len || node.next_sibling().is_some() {
-                return Ok(false);
-            }
-            node.parent()
-                .ok_or(CommandError::NoParent(pos.node_id))?
-                .id()
+    let paragraph_id = {
+        let view = tr.state().view();
+        let node = view
+            .node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if node.node_type() != NodeType::Paragraph {
+            return Ok(false);
         }
-        Node::Paragraph(_) => {
-            let children_len = node.entry().children.len();
-            if pos.offset < children_len {
-                return Ok(false);
-            }
-            pos.node_id
+        let child_count = node.children().count();
+        if pos.offset < child_count {
+            return Ok(false);
         }
-        _ => return Ok(false),
+        let parent = node.parent().ok_or(CommandError::NoParent(pos.node))?;
+        // Index by the full child list: a block-level atom (image/HR) next to the
+        // paragraph projects as a leaf and would be skipped by child_blocks(),
+        // and an invalid trailing container is patched with a Derived paragraph —
+        // both would mislead a block-only lookup into a bogus merge.
+        let index = node
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(pos.node, parent.id()))?;
+        match parent.child_at(index + 1) {
+            Some(ChildView::Block(b))
+                if b.node_type() == NodeType::Paragraph && b.dot().is_some() => {}
+            _ => return Ok(false),
+        }
+        pos.node
     };
 
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
+    tr.merge_node(paragraph_id)?;
 
-    let next = match paragraph.next_sibling() {
-        Some(next) => next,
-        None => return Ok(false),
-    };
-
-    if !matches!(next.node(), Node::Paragraph(_)) {
-        return Ok(false);
-    }
-
-    let next_id = next.id();
-
-    // Record cursor position before merge (stays at current position)
-    let cursor_selection = selection;
-
-    tr.merge_node(next_id, paragraph_id)?;
-
-    let doc = tr.doc();
-    if let Some(p) = doc.node(paragraph_id) {
-        tr.apply_steps(compact(&p))?;
-    }
-
-    tr.set_selection(Some(cursor_selection))?;
+    tr.set_selection(Some(selection))?;
 
     Ok(true)
 }
@@ -80,11 +60,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t1, 0) -> (t1, 3)
+            selection: (p1, 0) -> (p1, 3)
         };
         transact_fail!(initial, |tr| join_paragraph_forward(&mut tr));
     }
@@ -94,22 +74,22 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| join_paragraph_forward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("HelloWorld")
+                    p1: paragraph {
+                        text("HelloWorld")
                     }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -119,20 +99,20 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| join_paragraph_forward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -143,7 +123,7 @@ mod tests {
             doc {
                 root {
                     p1: paragraph {}
-                    paragraph { t1: text("Hello") }
+                    p2: paragraph { text("Hello") }
                 }
             }
             selection: (p1, 0)
@@ -152,10 +132,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 0)
+            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -188,10 +168,10 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| join_paragraph_forward(&mut tr));
     }
@@ -201,11 +181,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
+                    p1: paragraph { text("Hello") }
                     horizontal_rule
                 }
             }
-            selection: (t1, 5)
+            selection: (p1, 5)
         };
         transact_fail!(initial, |tr| join_paragraph_forward(&mut tr));
     }
@@ -215,11 +195,11 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph { t1: text("Hello") }
-                    paragraph { t2: text("World") }
+                    p1: paragraph { text("Hello") }
+                    p2: paragraph { text("World") }
                 }
             }
-            selection: (t1, 3)
+            selection: (p1, 3)
         };
         transact_fail!(initial, |tr| join_paragraph_forward(&mut tr));
     }
@@ -229,30 +209,29 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("A")
-                        t2: text("B") [bold]
+                    p1: paragraph {
+                        text("A")
+                        text("B") [bold]
                     }
                     paragraph {
-                        t3: text("C")
-                        t4: text("D")
+                        text("CD")
                     }
                 }
             }
-            selection: (t2, 1)
+            selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| join_paragraph_forward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph {
-                        t1: text("A")
-                        t2: text("B") [bold]
-                        t3: text("CD")
+                    m: paragraph {
+                        text("A")
+                        text("B") [bold]
+                        text("CD")
                     }
                 }
             }
-            selection: (t3, 0)
+            selection: (m, 2)
         };
         assert_state_eq!(&actual, &expected);
     }

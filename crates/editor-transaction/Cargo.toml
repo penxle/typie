@@ -36,5 +36,6 @@ wasm-bindgen = { workspace = true, optional = true }
 [dev-dependencies]
 editor-crdt = { path = "../editor-crdt" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
 proptest.workspace = true
 serde_json.workspace = true
