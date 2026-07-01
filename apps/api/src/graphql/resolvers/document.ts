@@ -128,19 +128,38 @@ IDocument.implement({
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
     excerpt: t.string({
       resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'Document.excerpt',
-          load: async (ids) => {
+        const stateLoader = ctx.loader({
+          name: 'Document.excerpt.v2',
+          nullable: true,
+          load: async (ids: string[]) => {
             return await db
-              .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
-              .from(DocumentContents)
-              .where(inArray(DocumentContents.documentId, ids));
+              .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
+              .from(DocumentStates)
+              .where(inArray(DocumentStates.documentId, ids));
           },
-          key: ({ documentId }) => documentId,
+          key: (row) => row?.documentId,
         });
 
-        const content = await loader.load(self.id);
-        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+        const state = await stateLoader.load(self.id);
+
+        let text: string;
+        if (state) {
+          text = state.text.replaceAll(/\s+/g, ' ').trim();
+        } else {
+          const loader = ctx.loader({
+            name: 'Document.excerpt',
+            load: async (ids: string[]) => {
+              return await db
+                .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
+                .from(DocumentContents)
+                .where(inArray(DocumentContents.documentId, ids));
+            },
+            key: ({ documentId }: { documentId: string }) => documentId,
+          });
+
+          const content = await loader.load(self.id);
+          text = content.text.replaceAll(/\s+/g, ' ').trim();
+        }
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
@@ -324,15 +343,32 @@ Document.implement({
 
     characterCount: t.int({
       resolve: async (self, _, ctx) => {
+        const stateLoader = ctx.loader({
+          name: 'Document.characterCount.v2',
+          nullable: true,
+          load: async (ids: string[]) => {
+            return await db
+              .select({ documentId: DocumentStates.documentId, characterCount: DocumentStates.characterCount })
+              .from(DocumentStates)
+              .where(inArray(DocumentStates.documentId, ids));
+          },
+          key: (row) => row?.documentId,
+        });
+
+        const state = await stateLoader.load(self.id);
+        if (state) {
+          return state.characterCount;
+        }
+
         const loader = ctx.loader({
           name: 'Document.characterCount',
-          load: async (ids) => {
+          load: async (ids: string[]) => {
             return await db
               .select({ documentId: DocumentContents.documentId, characterCount: DocumentContents.characterCount })
               .from(DocumentContents)
               .where(inArray(DocumentContents.documentId, ids));
           },
-          key: ({ documentId }) => documentId,
+          key: ({ documentId }: { documentId: string }) => documentId,
         });
 
         const content = await loader.load(self.id);
