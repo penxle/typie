@@ -102,8 +102,14 @@ fn hash_style<H: Hasher>(s: &ResolvedTextStyle, h: &mut H) {
 
 /// Content hash capturing everything a segment's measured output depends on: its
 /// text, the width/alignment/indent, the paragraph base style, and every inline
-/// run's byte range (relative), font style, and effective modifiers (so a color or
-/// decoration change — same glyphs, different output — still misses).
+/// run's byte range (relative), font style, effective modifiers, and own modifiers
+/// (so a color or decoration change — same glyphs, different output — still misses).
+///
+/// `own_modifiers` (value + `from_style` provenance) is hashed alongside `effective`
+/// because the rendered link/color/decoration in the cached `MeasuredLine` are
+/// resolved from `own_modifiers` via `resolve_link`/`resolve_colors`/`resolve_decoration`
+/// (which branch on `from_style`), a distinction `effective` merges away — so two
+/// runs with identical `effective` but different provenance must still miss.
 pub(crate) fn segment_hash(
     seg_text: &str,
     seg_off: &Range<usize>,
@@ -130,7 +136,81 @@ pub(crate) fn segment_hash(
             k.hash(&mut h);
             v.hash(&mut h);
         }
+        h.write_u8(0xfe);
+        for (k, o) in r.own_modifiers.iter() {
+            k.hash(&mut h);
+            o.value.hash(&mut h);
+            o.from_style.hash(&mut h);
+        }
         h.write_u8(0xff);
     }
     h.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use editor_model::{Modifier, ModifierType, OwnModifier};
+
+    use super::*;
+
+    fn style() -> ResolvedTextStyle {
+        ResolvedTextStyle {
+            font_family: "sans".to_string(),
+            font_weight: 400,
+            font_size: 16.0,
+            letter_spacing: 0.0,
+            line_height: 1.6,
+        }
+    }
+
+    // Two runs identical in every input the pre-fix hash covered (text, offsets,
+    // font style, effective) but differing only in own-modifier provenance: a Link
+    // supplied via a named style (from_style: true) resolves to no link/underline
+    // and default color, while the same href set directly (from_style: false)
+    // resolves to a clickable, underlined LINK_COLOR run. The cached MeasuredLine
+    // carries that resolved output, so their segment hashes must differ.
+    #[test]
+    fn segment_hash_distinguishes_own_modifier_provenance() {
+        let effective: BTreeMap<ModifierType, Modifier> = [(
+            ModifierType::Link,
+            Modifier::Link {
+                href: "https://example.com".to_string(),
+            },
+        )]
+        .into_iter()
+        .collect();
+
+        let mk_own = |from_style: bool| -> BTreeMap<ModifierType, OwnModifier> {
+            [(
+                ModifierType::Link,
+                OwnModifier {
+                    value: Modifier::Link {
+                        href: "https://example.com".to_string(),
+                    },
+                    from_style,
+                },
+            )]
+            .into_iter()
+            .collect()
+        };
+
+        let hash_for = |own: &BTreeMap<ModifierType, OwnModifier>| {
+            let runs = vec![TextRun {
+                byte_range: 0..1,
+                offset_range: 0..1,
+                own_modifiers: own,
+                effective: &effective,
+                style: style(),
+            }];
+            segment_hash("a", &(0..1), &runs, 100.0, Alignment::Left, 0.0, &style())
+        };
+
+        assert_ne!(
+            hash_for(&mk_own(true)),
+            hash_for(&mk_own(false)),
+            "runs differing only in own-modifier from_style must hash differently"
+        );
+    }
 }
