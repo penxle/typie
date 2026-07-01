@@ -1,6 +1,5 @@
 use editor_model::{
-    Fragment, PlainHardBreakNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainTabNode,
-    PlainTextNode,
+    Fragment, PlainNode, PlainParagraphNode, PlainRootNode, PlainTabNode, PlainTextNode,
 };
 
 use crate::slice::Slice;
@@ -11,7 +10,7 @@ pub fn from_text(text: &str) -> Slice {
     let children: Vec<Fragment> = if normalized.is_empty() {
         Vec::new()
     } else {
-        normalized.split("\n\n").map(paragraph_from_block).collect()
+        normalized.split('\n').map(paragraph_from_line).collect()
     };
     let open_depth = u32::from(!children.is_empty());
 
@@ -42,28 +41,15 @@ fn push_line_with_tabs(line: &str, inline: &mut Vec<Fragment>) {
     }
 }
 
-fn paragraph_from_block(block: &str) -> Fragment {
+fn paragraph_from_line(line: &str) -> Fragment {
+    let mut inline = Vec::new();
+    push_line_with_tabs(line, &mut inline);
     Fragment {
         node: PlainNode::Paragraph(PlainParagraphNode::default()),
         modifiers: vec![],
         style: None,
-        children: inline_from_block(block),
+        children: inline,
     }
-}
-
-fn inline_from_block(block: &str) -> Vec<Fragment> {
-    let mut inline = Vec::new();
-    let mut first = true;
-    for line in block.split('\n') {
-        if !first {
-            inline.push(Fragment::leaf(PlainNode::HardBreak(
-                PlainHardBreakNode::default(),
-            )));
-        }
-        push_line_with_tabs(line, &mut inline);
-        first = false;
-    }
-    inline
 }
 
 #[cfg(test)]
@@ -76,6 +62,17 @@ mod tests {
         let paragraph = &slice.fragment.children[0];
         assert!(matches!(paragraph.node, PlainNode::Paragraph(_)));
         paragraph
+    }
+
+    fn paragraph_text(fragment: &Fragment) -> String {
+        fragment
+            .children
+            .iter()
+            .filter_map(|child| match &child.node {
+                PlainNode::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     #[test]
@@ -102,22 +99,38 @@ mod tests {
     }
 
     #[test]
-    fn from_text_double_newline_splits_paragraph() {
+    fn from_text_multiple_lines_become_multiple_paragraphs() {
+        let slice = Slice::from_text("a\nb\nc");
+        assert_eq!(slice.fragment.children.len(), 3);
+        assert_eq!(paragraph_text(&slice.fragment.children[0]), "a");
+        assert_eq!(paragraph_text(&slice.fragment.children[1]), "b");
+        assert_eq!(paragraph_text(&slice.fragment.children[2]), "c");
+    }
+
+    #[test]
+    fn from_text_blank_line_becomes_empty_paragraph() {
         let slice = Slice::from_text("first\n\nsecond");
-        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(slice.fragment.children.len(), 3);
+        assert_eq!(paragraph_text(&slice.fragment.children[0]), "first");
+        assert!(slice.fragment.children[1].children.is_empty());
+        assert_eq!(paragraph_text(&slice.fragment.children[2]), "second");
         assert_eq!(slice.open_start, 1);
         assert_eq!(slice.open_end, 1);
     }
 
     #[test]
-    fn from_text_single_newline_hardbreak() {
+    fn from_text_single_newline_splits_paragraph() {
         let slice = Slice::from_text("line1\nline2");
-        let paragraph = only_paragraph(&slice);
-        assert_eq!(paragraph.children.len(), 3);
-        assert!(matches!(
-            paragraph.children[1].node,
-            PlainNode::HardBreak(_)
-        ));
+        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(paragraph_text(&slice.fragment.children[0]), "line1");
+        assert_eq!(paragraph_text(&slice.fragment.children[1]), "line2");
+        assert!(
+            !slice.fragment.children.iter().any(|p| p
+                .children
+                .iter()
+                .any(|c| matches!(c.node, PlainNode::HardBreak(_)))),
+            "plain-text lines must not produce hard breaks"
+        );
         assert_eq!(slice.open_start, 1);
         assert_eq!(slice.open_end, 1);
     }
@@ -136,39 +149,24 @@ mod tests {
     #[test]
     fn from_text_crlf_normalizes_to_lf() {
         let slice = Slice::from_text("a\r\nb");
-        let paragraph = only_paragraph(&slice);
-        assert_eq!(paragraph.children.len(), 3);
-        if let PlainNode::Text(t) = &paragraph.children[0].node {
-            assert_eq!(t.text, "a");
-        } else {
-            panic!("expected text");
-        }
-        assert!(matches!(
-            paragraph.children[1].node,
-            PlainNode::HardBreak(_)
-        ));
-        if let PlainNode::Text(t) = &paragraph.children[2].node {
-            assert_eq!(t.text, "b");
-        } else {
-            panic!("expected text");
-        }
+        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(paragraph_text(&slice.fragment.children[0]), "a");
+        assert_eq!(paragraph_text(&slice.fragment.children[1]), "b");
     }
 
     #[test]
     fn from_text_crlf_double_splits_paragraph() {
         let slice = Slice::from_text("a\r\n\r\nb");
-        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(slice.fragment.children.len(), 3);
+        assert!(slice.fragment.children[1].children.is_empty());
     }
 
     #[test]
-    fn from_text_bare_cr_treated_as_lf() {
+    fn from_text_bare_cr_splits_paragraph() {
         let slice = Slice::from_text("a\rb");
-        let paragraph = only_paragraph(&slice);
-        assert_eq!(paragraph.children.len(), 3);
-        assert!(matches!(
-            paragraph.children[1].node,
-            PlainNode::HardBreak(_)
-        ));
+        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(paragraph_text(&slice.fragment.children[0]), "a");
+        assert_eq!(paragraph_text(&slice.fragment.children[1]), "b");
     }
 
     #[test]
