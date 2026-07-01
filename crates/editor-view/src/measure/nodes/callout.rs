@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use editor_common::{EdgeInsets, Rect};
-use editor_model::{ChildView, NodeView};
+use editor_model::NodeView;
 use editor_resource::Resource;
 
 use crate::measure::PageBreakPolicy;
@@ -10,6 +8,7 @@ use crate::style::{Alignment, Decoration, DecorationData};
 
 use super::dispatch::measure_child;
 use super::line_geometry::first_line_info;
+use crate::measure::Measurer;
 use crate::measure::container::layout_padded;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredContent, MeasuredNode};
@@ -20,6 +19,7 @@ const CALLOUT_ICON_WIDTH: f32 = 20.0;
 const CALLOUT_ICON_CONTENT_GAP: f32 = 8.0;
 
 pub(crate) fn measure_callout(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -32,8 +32,9 @@ pub(crate) fn measure_callout(
         right: CALLOUT_PADDING_X,
     };
 
-    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
-        measure_child;
+    let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
+        measure_child(measurer, child, w, ctx, r)
+    };
     let mut measured = layout_padded(
         node,
         width,
@@ -144,7 +145,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box) = result.content else {
             panic!("expected Box at root");
         };

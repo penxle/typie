@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::Arc;
 
 use editor_common::{EdgeInsets, Rect};
 use editor_model::{ChildView, Node, NodeView};
@@ -16,6 +15,7 @@ use crate::style::{Alignment, Decoration, DecorationData};
 
 use super::dispatch::measure_child;
 use super::line_geometry::{LineStrutExpansion, expand_first_line, first_line_info};
+use crate::measure::Measurer;
 use crate::measure::container::layout_padded;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredContent, MeasuredNode};
@@ -142,6 +142,7 @@ fn apply_baseline(mut glyph_runs: Vec<GlyphRun>, baseline: f32) -> DecorationDat
 }
 
 pub(crate) fn measure_list_item(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -175,8 +176,9 @@ pub(crate) fn measure_list_item(
         ..EdgeInsets::ZERO
     };
 
-    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
-        measure_child;
+    let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
+        measure_child(measurer, child, w, ctx, r)
+    };
     let measured = layout_padded(
         node,
         width,
@@ -570,7 +572,13 @@ mod tests {
         let pd = project_document(&doc).unwrap();
         let view = DocView::new(&pd);
         let root_node = view.root().unwrap();
-        measure_node(&root_node, 400.0, &MeasureContext::default(), resource)
+        measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            resource,
+        )
     }
 
     fn extract_list_item_box(result: &MeasuredNode) -> &MeasuredBox {
@@ -634,7 +642,13 @@ mod tests {
         let li_node = get_list_item(&view, li_dot);
         let mut res = resource_with_font();
 
-        let result = measure_node(&li_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &li_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = result.content else {
             panic!("expected Box at list_item");
         };
@@ -740,7 +754,13 @@ mod tests {
         let pd_s = project_document(&doc_s).unwrap();
         let s = DocView::new(&pd_s);
         let li_s_node = get_list_item(&s, li_s);
-        let result_s = measure_list_item(&li_s_node, 400.0, &MeasureContext::default(), &mut res);
+        let result_s = measure_list_item(
+            &mut Measurer::new(),
+            &li_s_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b_s) = result_s.content else {
             panic!("expected Box for small list_item");
         };
@@ -749,7 +769,13 @@ mod tests {
         let pd_l = project_document(&doc_l).unwrap();
         let l = DocView::new(&pd_l);
         let li_l_node = get_list_item(&l, li_l);
-        let result_l = measure_list_item(&li_l_node, 400.0, &MeasureContext::default(), &mut res);
+        let result_l = measure_list_item(
+            &mut Measurer::new(),
+            &li_l_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b_l) = result_l.content else {
             panic!("expected Box for large list_item");
         };

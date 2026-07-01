@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
 use editor_common::EdgeInsets;
-use editor_model::{Alignment, ChildView, Modifier, ModifierType, Node, NodeView};
+use editor_model::{Alignment, Modifier, ModifierType, Node, NodeView};
 use editor_resource::Resource;
 
 use crate::style::{BorderMode, BoxStyle, Direction};
 
-use super::dispatch::measure_node;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent};
 
+use crate::measure::Measurer;
 use crate::measure::PageBreakPolicy;
 use crate::measure::container::PaddedLayoutConfig;
 
@@ -111,13 +111,15 @@ fn calculate_col_widths(
 }
 
 pub(crate) fn measure_table_cell(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
     resource: &mut Resource,
 ) -> MeasuredNode {
-    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
-        measure_child;
+    let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
+        measure_child(measurer, child, w, ctx, r)
+    };
     layout_padded(
         node,
         width,
@@ -134,6 +136,7 @@ pub(crate) fn measure_table_cell(
 }
 
 pub(crate) fn measure_table(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -208,7 +211,7 @@ pub(crate) fn measure_table(
         for (i, cell) in cells.iter().enumerate() {
             let col_width = col_widths.get(i).copied().unwrap_or(col_widths[0]);
             let cell_full_width = col_width + 2.0 * TABLE_BORDER_WIDTH;
-            let m = Arc::new(measure_node(cell, cell_full_width, ctx, resource));
+            let m = measurer.measure(cell, cell_full_width, ctx, resource);
             cell_measurements.push(m);
         }
 
@@ -452,7 +455,13 @@ mod tests {
         };
 
         let mut res = Resource::new_test();
-        let result = measure_table_cell(&cell_view, 100.0, &MeasureContext::default(), &mut res);
+        let result = measure_table_cell(
+            &mut Measurer::new(),
+            &cell_view,
+            100.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
 
         let MeasuredContent::Box(ref b) = result.content else {
             panic!("expected Box");
@@ -539,7 +548,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box) = result.content else {
             panic!("expected root Box");
         };
@@ -652,7 +667,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box) = result.content else {
             panic!("expected root Box");
         };
@@ -715,7 +736,13 @@ mod tests {
         let view50 = DocView::new(&pd50);
         let root50 = view50.root().unwrap();
         let mut res = Resource::new_test();
-        let result50 = measure_node(&root50, 400.0, &MeasureContext::default(), &mut res);
+        let result50 = measure_node(
+            &mut Measurer::new(),
+            &root50,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref rb50) = result50.content else {
             panic!()
         };
@@ -725,7 +752,13 @@ mod tests {
         let pd100 = project_document(&doc100).unwrap();
         let view100 = DocView::new(&pd100);
         let root100 = view100.root().unwrap();
-        let result100 = measure_node(&root100, 400.0, &MeasureContext::default(), &mut res);
+        let result100 = measure_node(
+            &mut Measurer::new(),
+            &root100,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref rb100) = result100.content else {
             panic!()
         };
@@ -751,6 +784,7 @@ mod tests {
         let mut res = Resource::new_test();
 
         let result = measure_node(
+            &mut Measurer::new(),
             &table_node_view,
             400.0,
             &MeasureContext::default(),

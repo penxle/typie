@@ -27,12 +27,13 @@ pub(crate) fn apply_to(
             index,
             len: children.len(),
         })?;
-        let dots = match ps.view().node(elem) {
-            Some(_) => support::subtree_dots(ps, elem).ok_or(StepError::NodeNotFound(elem))?,
-            None => match elem.as_op_dot() {
+        let dots = if ps.is_block(elem) {
+            support::subtree_dots(ps, elem).ok_or(StepError::NodeNotFound(elem))?
+        } else {
+            match elem.as_op_dot() {
                 Some(d) => vec![d.dot()],
                 None => return Ok(()),
-            },
+            }
         };
         support::delete_dots_ops(ps, &dots)
     };

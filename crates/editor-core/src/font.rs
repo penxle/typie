@@ -69,7 +69,7 @@ fn collect_for_block(block: &NodeView, font_registry: &FontRegistry, output: &mu
     }
 }
 
-fn collect_block_recursive(
+pub(crate) fn collect_block_recursive(
     block: &NodeView,
     font_registry: &FontRegistry,
     output: &mut FontRequests,
@@ -77,6 +77,13 @@ fn collect_block_recursive(
     collect_for_block(block, font_registry, output);
     for child in block.child_blocks() {
         collect_block_recursive(&child, font_registry, output);
+    }
+}
+
+pub(crate) fn collect_subtree_block_dots(block: &NodeView, output: &mut Vec<Dot>) {
+    output.push(block.id());
+    for child in block.child_blocks() {
+        collect_subtree_block_dots(&child, output);
     }
 }
 
@@ -133,39 +140,21 @@ pub(crate) fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
     })
 }
 
-pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
-    let resource = editor.resource.lock().unwrap();
-    if resource.font_registry.intern_id(family).is_none() {
+fn invalidate_font_affected(editor: &mut Editor, affected_nodes: &[Dot]) {
+    if affected_nodes.is_empty() {
         return;
     }
-    let mut affected_nodes = Vec::new();
-
-    for ((req_family, req_weight), nodes) in editor.pending_fonts.iter_mut() {
-        let Some(req_family_id) = resource.font_registry.intern_id(req_family) else {
-            continue;
-        };
-        for (node_id, pending_cps) in nodes.iter_mut() {
-            pending_cps.retain(|cp| {
-                let is_ready = matches!(
-                    resource
-                        .font_registry
-                        .resolve(req_family_id, *req_weight, *cp),
-                    Resolution::Ready(_)
-                );
-                if is_ready {
-                    affected_nodes.push(*node_id);
-                    false
-                } else {
-                    true
-                }
-            });
+    let mut any = false;
+    {
+        let view = editor.state.view();
+        for node_id in affected_nodes {
+            if let Some(nv) = view.node(*node_id) {
+                any |= editor.view.invalidate_measure_with_ancestors(&nv);
+            }
         }
-        nodes.retain(|_, cps| !cps.is_empty());
     }
-    editor.pending_fonts.retain(|_, nodes| !nodes.is_empty());
-    drop(resource);
-
-    if !affected_nodes.is_empty() && editor.view.invalidate(&editor.state) {
+    if any {
+        editor.view.invalidate(&editor.state);
         // Real font metrics can introduce soft-wrap (page heights grow) and shift
         // line ascent/descent (caret coordinates change), so the host must re-query
         // both — otherwise the canvas stays sized for the pre-load layout.
@@ -178,8 +167,51 @@ pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str) {
                 StateField::Placeholder,
             ],
         });
-        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.invalidate_render();
     }
+}
+
+pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str, base_loaded: bool) {
+    let resource = editor.resource.lock().unwrap();
+    if resource.font_registry.intern_id(family).is_none() {
+        return;
+    }
+    let mut affected_nodes = Vec::new();
+
+    for ((req_family, req_weight), nodes) in editor.pending_fonts.iter_mut() {
+        let Some(req_family_id) = resource.font_registry.intern_id(req_family) else {
+            continue;
+        };
+        for (node_id, pending_cps) in nodes.iter_mut() {
+            let mut node_affected = false;
+            pending_cps.retain(|cp| {
+                match resource
+                    .font_registry
+                    .resolve(req_family_id, *req_weight, *cp)
+                {
+                    Resolution::Ready(_) => {
+                        node_affected = true;
+                        false
+                    }
+                    Resolution::Pending {
+                        needs_base: false, ..
+                    } if base_loaded => {
+                        node_affected = true;
+                        true
+                    }
+                    _ => true,
+                }
+            });
+            if node_affected {
+                affected_nodes.push(*node_id);
+            }
+        }
+        nodes.retain(|_, cps| !cps.is_empty());
+    }
+    editor.pending_fonts.retain(|_, nodes| !nodes.is_empty());
+    drop(resource);
+
+    invalidate_font_affected(editor, &affected_nodes);
 }
 
 #[cfg(test)]

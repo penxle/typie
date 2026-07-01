@@ -96,6 +96,9 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
     editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
   }
   state.markPointerDown(editor, e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate);
+  if (!nativeDragCandidate) {
+    editor.suspendToolbarSync();
+  }
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -133,6 +136,7 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
   state.releasePointer(e.currentTarget, e.pointerId);
   state.finishPointerUp(editor, e.pointerId);
   editor.flush();
+  editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: true });
 };
 
@@ -163,6 +167,7 @@ export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> 
   state.releasePointer(e.currentTarget, e.pointerId);
   state.cancelPointer(e.pointerId);
   editor.flush();
+  editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: false });
 };
 

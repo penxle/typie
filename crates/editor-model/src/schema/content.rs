@@ -48,6 +48,24 @@ impl ContentExpr {
         self.validate(types).is_ok()
     }
 
+    /// Whether `node_type` may appear freely (any count, any position relative
+    /// to peers in the same repeatable group) — i.e. it is inside a `ZeroOrMore`
+    /// or `OneOrMore`. Types only reachable through `Single`/`Optional`/fixed
+    /// `Seq` slots (e.g. a trailing `PageBreak?`) are position-constrained and
+    /// return false, so a splice involving them must not skip normalization.
+    pub fn is_repeatable(&self, node_type: NodeType) -> bool {
+        match self {
+            Self::Empty | Self::Single(_) => false,
+            Self::Optional(inner) => inner.is_repeatable(node_type),
+            Self::ZeroOrMore(inner) | Self::OneOrMore(inner) => {
+                inner.matches(node_type) || inner.is_repeatable(node_type)
+            }
+            Self::Choice(exprs) | Self::Seq(exprs) => {
+                exprs.iter().any(|e| e.is_repeatable(node_type))
+            }
+        }
+    }
+
     pub fn matches(&self, node_type: NodeType) -> bool {
         match self {
             Self::Empty => false,

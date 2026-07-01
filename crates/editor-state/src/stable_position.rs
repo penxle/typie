@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-
-use editor_crdt::sequence::{Bias, BoundaryResolver, checkout_with_resolver};
+use editor_crdt::sequence::{
+    Bias, Boundary, BoundaryResolver, SeqCheckout, checkout_with_resolver,
+};
 use editor_crdt::{Dot, OpLog};
 use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeView, SeqItem};
@@ -53,17 +53,28 @@ impl StablePosition {
             .expect("StablePosition::capture: position node must be a live block");
         let mut chain: Vec<Dot> = host.ancestors().map(|n| n.id()).collect();
         chain.reverse();
-        let children: Vec<ChildView> = host.children().collect();
-        let binding = if children.is_empty() || pos.offset == 0 {
+        // O(log) child lookups instead of collecting every child of the host block —
+        // this runs on the per-keystroke selection-capture path, so a linear scan makes
+        // it `O(block)` inside a large paragraph.
+        let child_count = host.child_count();
+        let binding = if child_count == 0 || pos.offset == 0 {
             StablePositionBinding::ContainerStart
-        } else if bind_affinity == Affinity::Downstream && pos.offset < children.len() {
+        } else if bind_affinity == Affinity::Downstream && pos.offset < child_count {
             StablePositionBinding::Adjacent {
-                anchor: child_elem_id(&children[pos.offset]),
+                anchor: child_elem_id(
+                    &host
+                        .child_at(pos.offset)
+                        .expect("offset < child_count is live"),
+                ),
                 bind: Bind::Left,
             }
         } else {
             StablePositionBinding::Adjacent {
-                anchor: child_elem_id(&children[pos.offset - 1]),
+                anchor: child_elem_id(
+                    &host
+                        .child_at(pos.offset - 1)
+                        .expect("offset-1 within a valid position is live"),
+                ),
                 bind: Bind::Right,
             }
         };
@@ -75,24 +86,57 @@ impl StablePosition {
     }
 }
 
+/// How a `StableResolveCtx` looks up a dot's sequence position. The `Live` variant
+/// borrows the projected state's already-materialized checkout, so restoring a
+/// selection after a remote edit costs `O(anchors · log N)` tree lookups instead of
+/// a fresh `O(N)` whole-sequence checkout + rank map on every changeset.
+enum StableResolver<'a> {
+    Owned(BoundaryResolver),
+    Live(&'a SeqCheckout),
+}
+
+impl StableResolver<'_> {
+    fn boundary(&self, d: Dot) -> Option<Boundary> {
+        match self {
+            StableResolver::Owned(r) => r.resolve_boundary(d, Bias::Before),
+            StableResolver::Live(c) => c.resolve_boundary(d, Bias::Before),
+        }
+    }
+
+    /// Sequence position for any dot, visible or deleted — the ordering key used
+    /// for a target anchor whose element may have been concurrently removed.
+    fn position(&self, d: Dot) -> Option<usize> {
+        self.boundary(d).map(|b| b.position)
+    }
+
+    /// Position of a dot only when it is still visible; `None` for tombstones.
+    /// This mirrors the old visible-only `rank` map used to order a node's live
+    /// children.
+    fn visible_position(&self, d: Dot) -> Option<usize> {
+        self.boundary(d).filter(|b| b.visible).map(|b| b.position)
+    }
+}
+
 pub struct StableResolveCtx<'a> {
     view: &'a DocView<'a>,
-    resolver: BoundaryResolver,
-    rank: HashMap<Dot, usize>,
+    resolver: StableResolver<'a>,
 }
 
 impl<'a> StableResolveCtx<'a> {
     pub fn new(view: &'a DocView<'a>, seq: &OpLog<SeqItem>) -> StableResolveCtx<'a> {
-        let (elems, resolver) = checkout_with_resolver(seq);
-        let rank = elems
-            .iter()
-            .enumerate()
-            .map(|(i, (d, _))| (*d, i))
-            .collect();
+        let (_elems, resolver) = checkout_with_resolver(seq);
         StableResolveCtx {
             view,
-            resolver,
-            rank,
+            resolver: StableResolver::Owned(resolver),
+        }
+    }
+
+    /// Build a resolve context over the projected state's live sequence checkout,
+    /// avoiding the `O(N)` rebuild that `new` pays when it only has the raw oplog.
+    pub fn from_live(view: &'a DocView<'a>, seq: &'a SeqCheckout) -> StableResolveCtx<'a> {
+        StableResolveCtx {
+            view,
+            resolver: StableResolver::Live(seq),
         }
     }
 }
@@ -106,11 +150,7 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
         return 0;
     };
     let d = op.dot();
-    let r = if let Some(&k) = ctx.rank.get(&d) {
-        k
-    } else if let Some(b) = ctx.resolver.resolve_boundary(d, Bias::Before) {
-        b.position
-    } else {
+    let Some(r) = ctx.resolver.position(d) else {
         return 0;
     };
     let mut offset = 0usize;
@@ -118,7 +158,7 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
     for child in c.children() {
         let key = match &child {
             ChildView::Leaf(l) => {
-                let k = ctx.rank.get(&l.dot()).copied();
+                let k = ctx.resolver.visible_position(l.dot());
                 if k.is_some() {
                     prev_real = k;
                 }
@@ -126,7 +166,7 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
             }
             ChildView::Block(b) => match b.dot() {
                 Some(d) => {
-                    let k = ctx.rank.get(&d).copied();
+                    let k = ctx.resolver.visible_position(d);
                     if k.is_some() {
                         prev_real = k;
                     }

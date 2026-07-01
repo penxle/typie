@@ -55,7 +55,7 @@ import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { readMergedGraph } from '#/utils/changeset.ts';
+import { appendBundle, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
 import { compressZstd, decompressZstd } from '#/utils/compression.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, derivePlainRootFromPreset, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
@@ -1507,14 +1507,7 @@ builder.mutationFields((t) => ({
         return { heads: currentHeads };
       }
 
-      await redis.lpush(
-        `document:changesets:pending:${input.documentId}`,
-        JSON.stringify({
-          userId: ctx.session.userId,
-          deviceId: ctx.session.deviceId,
-          changesets: revert.toBase64(),
-        }),
-      );
+      const seq = await appendBundle(input.documentId, revert, ctx.session.userId, ctx.session.deviceId);
 
       const persistedRow = await db
         .select({ graph: DocumentStates.graph })
@@ -1527,9 +1520,12 @@ builder.mutationFields((t) => ({
         durableHeads: host.heads(persistedRow.graph),
       }));
 
+      await setLiveHeads(input.documentId, heads);
+
       pubsub.publish('document:changesets', input.documentId, {
         target: '*',
-        changesets: revert.toBase64(),
+        seq,
+        changesets: [revert.toBase64()],
         heads: heads.toBase64(),
         durableHeads: durableHeads.toBase64(),
       });

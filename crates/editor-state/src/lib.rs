@@ -12,6 +12,7 @@ mod error;
 mod flat;
 mod fragment_builder;
 mod gap_cursor;
+mod layout_dirty;
 mod load_builder;
 mod modifier_resolution;
 mod modifier_span;
@@ -52,6 +53,7 @@ pub use flat::{
     flat_segments_in_range, flat_size, flat_text,
 };
 pub use gap_cursor::{GapCursor, as_gap_cursor, gap_cursor_at};
+pub use layout_dirty::LayoutDirty;
 pub use load_builder::BuildError;
 pub use modifier_span::resolve_modifier_span_selection;
 pub use modifier_state::{resolve_modifier_state, resolve_modifier_state_in_range};

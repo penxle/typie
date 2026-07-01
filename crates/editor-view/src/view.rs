@@ -2,12 +2,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use editor_common::{EdgeInsets, Movement};
 use editor_crdt::Dot;
-use editor_model::{LayoutMode, Node};
+use editor_model::{LayoutMode, Node, NodeType, NodeView};
 use editor_resource::Resource;
-use editor_state::{Position, ResolvedSelection, Selection, State};
+use editor_state::{LayoutDirty, Position, ResolvedSelection, Selection, State};
 
+use crate::measure::Measurer;
 use crate::measure::context::measure_context;
-use crate::measure::nodes::dispatch::measure_node;
 use crate::measure::types::MeasuredTree;
 use crate::page::LayoutPage;
 use crate::page_fragment::{PageFragmentTree, build_page_fragment_tree};
@@ -25,6 +25,7 @@ pub struct View {
     fingerprint: Option<LayoutFingerprint>,
     viewport: Viewport,
     view_state: ViewState,
+    measurer: Measurer,
 }
 
 struct LayoutResult {
@@ -48,12 +49,14 @@ impl View {
             view_state: ViewState::new(),
             layout: None,
             fingerprint: None,
+            measurer: Measurer::new(),
         }
     }
 
     pub fn layout(&mut self, state: &State) {
         self.view_state.pending_style = None;
         self.view_state.gap_phantom = None;
+        self.measurer.clear();
         self.compute(state);
         self.view_state.preferred_x = None;
     }
@@ -61,28 +64,97 @@ impl View {
     pub fn reconcile(
         &mut self,
         state: &State,
+        dirty: LayoutDirty,
         new_pending_style: Option<PendingStyle>,
         new_gap_phantom: Option<GapPhantom>,
     ) -> bool {
         let pending_changed = self.view_state.pending_style != new_pending_style;
         let gap_changed = self.view_state.gap_phantom != new_gap_phantom;
+
+        let mut dirty = dirty;
+        if pending_changed {
+            for id in [
+                self.view_state.pending_style.as_ref().map(|p| p.node_id),
+                new_pending_style.as_ref().map(|p| p.node_id),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                dirty.mark_content(id);
+            }
+        }
+        if gap_changed {
+            for gp in [self.view_state.gap_phantom, new_gap_phantom]
+                .into_iter()
+                .flatten()
+            {
+                dirty.mark_content(gp.parent);
+            }
+        }
+
         self.view_state.pending_style = new_pending_style;
         self.view_state.gap_phantom = new_gap_phantom;
+
+        let dirty_empty = matches!(
+            &dirty,
+            LayoutDirty::Incremental { content, structural }
+                if content.is_empty() && structural.is_empty()
+        );
+        if dirty_empty && self.layout.is_some() {
+            let (_, _, new_fingerprint) = self.build_pipeline(state);
+            if self.fingerprint.as_ref() == Some(&new_fingerprint) {
+                return false;
+            }
+        }
+
         let old_fingerprint = self.fingerprint.clone();
+
+        let view = state.view();
+        match &dirty {
+            LayoutDirty::Full => self.measurer.clear(),
+            LayoutDirty::Incremental {
+                content,
+                structural,
+            } => {
+                for id in content.iter().chain(structural.iter()) {
+                    let Some(node) = view
+                        .node(*id)
+                        .or_else(|| view.leaf(*id).and_then(|l| l.parent()))
+                    else {
+                        continue;
+                    };
+                    let table = if node.node_type() == NodeType::Table {
+                        Some(node.clone())
+                    } else {
+                        node.ancestors().find(|a| a.node_type() == NodeType::Table)
+                    };
+                    let target = table.as_ref().unwrap_or(&node);
+                    self.measurer.invalidate_subtree(target);
+                    self.measurer.invalidate_with_ancestors(target);
+                }
+            }
+        }
+
         self.compute(state);
+
         if pending_changed {
             self.view_state.preferred_x = None;
         }
-        // The eg-walker projection re-measures the whole tree every reconcile (the
-        // incremental measurer cache is not yet wired), so this can only report the
-        // change sources it can see directly. Doc-content changes are signalled to
-        // the caller separately via the applied-op set.
+
         pending_changed || gap_changed || self.fingerprint != old_fingerprint
     }
 
     pub fn invalidate(&mut self, state: &State) -> bool {
         self.compute(state);
         true
+    }
+
+    pub fn invalidate_measure_with_ancestors(&mut self, node: &NodeView) -> bool {
+        self.measurer.invalidate_with_ancestors(node)
+    }
+
+    pub fn clear_measure_cache(&mut self) {
+        self.measurer.clear();
     }
 
     fn doc_layout_mode(state: &State) -> LayoutMode {
@@ -125,11 +197,8 @@ impl View {
                 let avail_content = (self.viewport.width - 2.0 * CONTINUOUS_MARGIN_X).max(0.0);
                 let content_width = (max_width as f32).min(avail_content);
                 let page_width = content_width + 2.0 * CONTINUOUS_MARGIN_X;
-                let paginator = Paginator::continuous(
-                    page_width,
-                    100_000.0,
-                    EdgeInsets::all(CONTINUOUS_MARGIN_X),
-                );
+                let paginator =
+                    Paginator::continuous(page_width, 1024.0, EdgeInsets::all(CONTINUOUS_MARGIN_X));
                 (
                     paginator,
                     content_width,
@@ -143,7 +212,11 @@ impl View {
     }
 
     fn compute(&mut self, state: &State) {
+        let old_fingerprint = self.fingerprint.clone();
         let (paginator, content_width, new_fingerprint) = self.build_pipeline(state);
+        if old_fingerprint.as_ref() != Some(&new_fingerprint) {
+            self.measurer.clear();
+        }
         self.fingerprint = Some(new_fingerprint);
 
         let view = state.view();
@@ -154,7 +227,10 @@ impl View {
         let ctx = measure_context(&self.view_state);
         let measured = {
             let mut resource = self.resource.lock().unwrap();
-            measure_node(&root, content_width, &ctx, &mut resource)
+            let root_arc = self
+                .measurer
+                .measure(&root, content_width, &ctx, &mut resource);
+            Arc::unwrap_or_clone(root_arc)
         };
         let paginated = paginator.paginate(MeasuredTree { root: measured });
         let pages = paginated.pages;
@@ -491,8 +567,21 @@ impl View {
         changed
     }
 
-    pub fn set_fold_state(&mut self, node: Dot, expanded: bool) {
+    pub fn set_fold_state(&mut self, state: &State, node: Dot, expanded: bool) {
         self.view_state.fold_states.insert(node, expanded);
+        self.evict_measure_for(state, node);
+    }
+
+    fn evict_measure_for(&mut self, state: &State, node: Dot) {
+        let view = state.view();
+        let Some(nv) = view
+            .node(node)
+            .or_else(|| view.leaf(node).and_then(|l| l.parent()))
+        else {
+            return;
+        };
+        self.measurer.invalidate_subtree(&nv);
+        self.measurer.invalidate_with_ancestors(&nv);
     }
 
     pub fn set_external_height(&mut self, state: &State, node: Dot, height: f32) -> bool {
@@ -506,6 +595,7 @@ impl View {
             return false;
         }
         self.view_state.external_heights.insert(node, height);
+        self.evict_measure_for(state, node);
         self.compute(state);
         self.view_state.preferred_x = None;
         true
@@ -527,6 +617,7 @@ impl View {
         }
         let expanded = self.view_state.fold_expanded(node);
         self.view_state.fold_states.insert(node, !expanded);
+        self.evict_measure_for(state, node);
         self.compute(state);
         self.view_state.preferred_x = None;
         true
@@ -624,5 +715,599 @@ impl View {
             Viewport::new(800.0, 600.0, 1.0),
             Arc::new(Mutex::new(Resource::new_test())),
         )
+    }
+}
+
+#[cfg(test)]
+mod invalidation_tests {
+    use std::sync::{Arc, Mutex};
+
+    use editor_crdt::{Dot, ListOp, LwwRegOp, OrMapOp, OrSetOp};
+    use editor_model::{
+        CalloutNodeAttr, CalloutVariant, EditOp, Modifier, ModifierAttrOp, NodeAttr, NodeAttrOp,
+        NodeLwwOp, NodeType, SeqItem, StyleOp, StyleRegOp, TableNodeAttr,
+    };
+    use editor_resource::Resource;
+    use editor_state::{LayoutDirty, ProjectedState, State};
+
+    use super::View;
+    use crate::measure::context::measure_context;
+    use crate::measure::types::MeasuredNode;
+    use crate::viewport::Viewport;
+
+    fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Block { node_type, parents },
+        })
+    }
+
+    fn seq_char(pos: usize, c: char) -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Char(c),
+        })
+    }
+
+    fn make_view(width: f32) -> View {
+        View::new(
+            Viewport::new(width, 800.0, 1.0),
+            Arc::new(Mutex::new(Resource::new_test())),
+        )
+    }
+
+    fn cached_arc(view: &mut View, state: &State, node: Dot) -> Arc<MeasuredNode> {
+        let (_, content_width, _) = view.build_pipeline(state);
+        let dv = state.view();
+        let nv = dv.node(node).expect("block node present");
+        let ctx = measure_context(&view.view_state);
+        let mut resource = view.resource.lock().unwrap();
+        view.measurer
+            .measure(&nv, content_width, &ctx, &mut resource)
+    }
+
+    #[test]
+    fn text_insert_marks_owning_block_content() {
+        let mut ps = ProjectedState::empty();
+        ps.commit();
+        let para = ps
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        let _ = ps.take_layout_dirty();
+
+        ps.apply(seq_char(1, 'x')).unwrap();
+
+        match ps.take_layout_dirty() {
+            LayoutDirty::Incremental { content, .. } => {
+                assert!(content.contains(&para));
+                assert!(
+                    !content.contains(&Dot::ROOT),
+                    "char insert must not propagate to ROOT"
+                );
+            }
+            LayoutDirty::Full => panic!("char insert must not force Full"),
+        }
+    }
+
+    #[test]
+    fn attr_change_marks_node_content_dirty() {
+        let mut ps = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let callout = ps
+            .apply(seq_block(1, NodeType::Callout, vec![root]))
+            .unwrap()
+            .id;
+        ps.apply(seq_block(2, NodeType::Paragraph, vec![root, callout]))
+            .unwrap();
+        ps.commit();
+        let _ = ps.take_layout_dirty();
+
+        ps.apply(EditOp::NodeAttr(NodeAttrOp {
+            target: callout,
+            attr: NodeAttr::Callout {
+                attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+            },
+        }))
+        .unwrap();
+
+        match ps.take_layout_dirty() {
+            LayoutDirty::Incremental { content, .. } => {
+                assert!(content.contains(&callout));
+            }
+            LayoutDirty::Full => panic!("NodeAttr must not force Full"),
+        }
+    }
+
+    #[test]
+    fn style_change_invalidates_styled_node() {
+        let mut ps = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let p = ps
+            .apply(seq_block(1, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        ps.apply(seq_char(2, 'h')).unwrap();
+        ps.apply(EditOp::Style(StyleRegOp {
+            style_id: "h1".into(),
+            op: StyleOp::Presence(OrMapOp::Set {
+                key: "h1".into(),
+                value: (),
+            }),
+        }))
+        .unwrap();
+        ps.apply(EditOp::NodeStyle(NodeLwwOp {
+            target: p,
+            op: LwwRegOp::Set {
+                value: Some("h1".into()),
+            },
+        }))
+        .unwrap();
+        ps.commit();
+        let _ = ps.take_layout_dirty();
+
+        ps.apply(EditOp::Style(StyleRegOp {
+            style_id: "h1".into(),
+            op: StyleOp::Modifiers(OrSetOp::Add {
+                elem: Modifier::FontFamily {
+                    value: "Arial".into(),
+                },
+            }),
+        }))
+        .unwrap();
+
+        match ps.take_layout_dirty() {
+            LayoutDirty::Incremental { content, .. } => {
+                assert!(
+                    content.contains(&p),
+                    "styled paragraph must be content-dirty after style modifier change"
+                );
+            }
+            LayoutDirty::Full => panic!("Style op must not force Full"),
+        }
+    }
+
+    #[test]
+    fn modifier_marks_target_preserves_sibling() {
+        {
+            let mut ps = ProjectedState::empty();
+            let root = Dot::ROOT;
+            let p1 = ps
+                .apply(seq_block(1, NodeType::Paragraph, vec![root]))
+                .unwrap()
+                .id;
+            let sibling = ps
+                .apply(seq_block(2, NodeType::Paragraph, vec![root]))
+                .unwrap()
+                .id;
+            ps.commit();
+            let _ = ps.take_layout_dirty();
+
+            ps.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: p1,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+
+            match ps.take_layout_dirty() {
+                LayoutDirty::Incremental { content, .. } => {
+                    assert!(
+                        content.contains(&p1),
+                        "modified paragraph must be content-dirty"
+                    );
+                    assert!(
+                        !content.contains(&sibling),
+                        "unrelated sibling must not be content-dirty"
+                    );
+                }
+                LayoutDirty::Full => panic!("BlockModifier must not force Full"),
+            }
+        }
+
+        {
+            let mut ps = ProjectedState::empty();
+            let root = Dot::ROOT;
+            let p1 = ps
+                .apply(seq_block(1, NodeType::Paragraph, vec![root]))
+                .unwrap()
+                .id;
+            let sibling = ps
+                .apply(seq_block(2, NodeType::Paragraph, vec![root]))
+                .unwrap()
+                .id;
+            ps.commit();
+            let _ = ps.take_layout_dirty();
+
+            let state_pre = State::new(ps.clone(), None);
+            let mut view = make_view(800.0);
+            view.layout(&state_pre);
+            let before = cached_arc(&mut view, &state_pre, sibling);
+
+            ps.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: p1,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+            let dirty = ps.take_layout_dirty();
+
+            let state_post = State::new(ps, None);
+            view.reconcile(&state_post, dirty, None, None);
+            let after = cached_arc(&mut view, &state_post, sibling);
+
+            assert!(
+                Arc::ptr_eq(&before, &after),
+                "sibling cache must survive modifier on the target block"
+            );
+        }
+    }
+
+    #[test]
+    fn modifier_on_root_marks_all_descendants_content_dirty() {
+        let mut ps = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let p = ps
+            .apply(seq_block(1, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        ps.apply(seq_char(2, 'h')).unwrap();
+        ps.commit();
+        let _ = ps.take_layout_dirty();
+
+        ps.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+            target: Dot::ROOT,
+            modifier: Modifier::FontSize { value: 2400 },
+        }))
+        .unwrap();
+
+        match ps.take_layout_dirty() {
+            LayoutDirty::Incremental { content, .. } => {
+                assert!(content.contains(&Dot::ROOT), "ROOT must be content-dirty");
+                assert!(
+                    content.contains(&p),
+                    "descendant paragraph must be content-dirty"
+                );
+            }
+            LayoutDirty::Full => panic!("BlockModifier on ROOT must not force Full"),
+        }
+    }
+
+    #[test]
+    fn table_proportion_marks_table_and_cell_descendants() {
+        let mut ps = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let table = ps
+            .apply(seq_block(1, NodeType::Table, vec![root]))
+            .unwrap()
+            .id;
+        let row = ps
+            .apply(seq_block(2, NodeType::TableRow, vec![root, table]))
+            .unwrap()
+            .id;
+        let cell = ps
+            .apply(seq_block(3, NodeType::TableCell, vec![root, table, row]))
+            .unwrap()
+            .id;
+        let para = ps
+            .apply(seq_block(
+                4,
+                NodeType::Paragraph,
+                vec![root, table, row, cell],
+            ))
+            .unwrap()
+            .id;
+        ps.apply(seq_char(5, 'A')).unwrap();
+        ps.commit();
+        let _ = ps.take_layout_dirty();
+
+        ps.apply(EditOp::NodeAttr(NodeAttrOp {
+            target: table,
+            attr: NodeAttr::Table {
+                attr: TableNodeAttr::Proportion(50),
+            },
+        }))
+        .unwrap();
+
+        match ps.take_layout_dirty() {
+            LayoutDirty::Incremental { content, .. } => {
+                assert!(content.contains(&table), "table must be content-dirty");
+                assert!(
+                    content.contains(&cell),
+                    "cell must be content-dirty: proportion changes its measured width"
+                );
+                assert!(
+                    content.contains(&para),
+                    "cell's paragraph descendant must be content-dirty"
+                );
+            }
+            LayoutDirty::Full => panic!("NodeAttr must not force Full"),
+        }
+    }
+
+    #[test]
+    fn inherited_modifier_dirties_empty_descendant_paragraph() {
+        {
+            let mut ps = ProjectedState::empty();
+            ps.commit();
+            let empty_para = ps
+                .view()
+                .root()
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .dot()
+                .unwrap();
+            let _ = ps.take_layout_dirty();
+
+            ps.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: Dot::ROOT,
+                modifier: Modifier::FontSize { value: 2400 },
+            }))
+            .unwrap();
+
+            match ps.take_layout_dirty() {
+                LayoutDirty::Incremental { content, .. } => {
+                    assert!(
+                        content.contains(&empty_para),
+                        "empty paragraph must be content-dirty when root modifier changes"
+                    );
+                }
+                LayoutDirty::Full => panic!("BlockModifier on ROOT must not force Full"),
+            }
+        }
+
+        {
+            let mut ps = ProjectedState::empty();
+            ps.commit();
+            let empty_para = ps
+                .view()
+                .root()
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .dot()
+                .unwrap();
+            let _ = ps.take_layout_dirty();
+
+            let state_pre = State::new(ps.clone(), None);
+            let mut view = make_view(800.0);
+            view.layout(&state_pre);
+            let before = cached_arc(&mut view, &state_pre, empty_para);
+
+            ps.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: Dot::ROOT,
+                modifier: Modifier::FontSize { value: 2400 },
+            }))
+            .unwrap();
+            let dirty = ps.take_layout_dirty();
+
+            let state_post = State::new(ps, None);
+            view.reconcile(&state_post, dirty, None, None);
+            let after = cached_arc(&mut view, &state_post, empty_para);
+
+            assert!(
+                !Arc::ptr_eq(&before, &after),
+                "empty paragraph cache must be evicted and re-measured after root font-size change"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod incremental_tests {
+    use std::sync::{Arc, Mutex};
+
+    use editor_crdt::{Dot, ListOp, OpGraph};
+    use editor_model::{AtomLeaf, ChildView, EditOp, Node, NodeType, SeqItem};
+    use editor_resource::Resource;
+    use editor_state::{ProjectedState, State};
+
+    use super::View;
+    use crate::measure::context::measure_context;
+    use crate::measure::types::MeasuredNode;
+    use crate::viewport::Viewport;
+
+    fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Block { node_type, parents },
+        })
+    }
+
+    fn seq_char(pos: usize, c: char) -> EditOp {
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Char(c),
+        })
+    }
+
+    fn seq_image(pos: usize, parents: Vec<Dot>) -> EditOp {
+        let node = match NodeType::Image.into_node() {
+            Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::BlockAtom {
+                leaf: AtomLeaf::Image { node },
+                parents,
+            },
+        })
+    }
+
+    fn make_view(width: f32) -> View {
+        View::new(
+            Viewport::new(width, 800.0, 1.0),
+            Arc::new(Mutex::new(Resource::new_test())),
+        )
+    }
+
+    fn cached_arc(view: &mut View, state: &State, node: Dot) -> Arc<MeasuredNode> {
+        let (_, content_width, _) = view.build_pipeline(state);
+        let dv = state.view();
+        let nv = dv.node(node).expect("block node present");
+        let ctx = measure_context(&view.view_state);
+        let mut resource = view.resource.lock().unwrap();
+        view.measurer
+            .measure(&nv, content_width, &ctx, &mut resource)
+    }
+
+    fn all_block_dots(state: &State) -> Vec<Dot> {
+        let view = state.view();
+        let mut out = Vec::new();
+        if let Some(root) = view.root() {
+            for d in root.descendants() {
+                if let ChildView::Block(b) = d {
+                    out.push(b.id());
+                }
+            }
+        }
+        out
+    }
+
+    fn page_sig(view: &View) -> Vec<(f32, f32, f32, f32)> {
+        view.pages()
+            .iter()
+            .map(|p| (p.y_start, p.y_end, p.content_y_start, p.content_y_end))
+            .collect()
+    }
+
+    #[test]
+    fn reconcile_one_char_matches_full_layout() {
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let mut pos = 0;
+        for _ in 0..3 {
+            g.add_mut(seq_block(pos, NodeType::Paragraph, vec![root]))
+                .unwrap();
+            pos += 1;
+            for ch in "mmmmmmmmmmmm".chars() {
+                g.add_mut(seq_char(pos, ch)).unwrap();
+                pos += 1;
+            }
+        }
+        g.commit_mut();
+        let base = ProjectedState::from_graph(g).unwrap();
+
+        let width = 50.0;
+        let pre = State::new(base.clone(), None);
+        let mut view = make_view(width);
+        view.layout(&pre);
+
+        let mut ed = base;
+        let _ = ed.take_layout_dirty();
+        ed.apply(seq_char(1, 'X')).unwrap();
+        let dirty = ed.take_layout_dirty();
+        let post = State::new(ed, None);
+
+        view.reconcile(&post, dirty, None, None);
+
+        let mut fresh = make_view(width);
+        fresh.layout(&post);
+
+        let ids = all_block_dots(&post);
+        assert!(!ids.is_empty());
+        assert_eq!(view.node_box_rects(&ids), fresh.node_box_rects(&ids));
+        assert_eq!(page_sig(&view), page_sig(&fresh));
+    }
+
+    #[test]
+    fn fold_toggle_remeasures_only_the_fold_subtree() {
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let fold = g
+            .add_mut(seq_block(0, NodeType::Fold, vec![root]))
+            .unwrap()
+            .id;
+        g.add_mut(seq_block(1, NodeType::FoldTitle, vec![root, fold]))
+            .unwrap();
+        g.add_mut(seq_char(2, 'T')).unwrap();
+        let fc = g
+            .add_mut(seq_block(3, NodeType::FoldContent, vec![root, fold]))
+            .unwrap()
+            .id;
+        g.add_mut(seq_block(4, NodeType::Paragraph, vec![root, fold, fc]))
+            .unwrap();
+        g.add_mut(seq_char(5, 'C')).unwrap();
+        let unrelated = g
+            .add_mut(seq_block(6, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        g.commit_mut();
+        let state = State::new(ProjectedState::from_graph(g).unwrap(), None);
+
+        let mut view = make_view(800.0);
+        view.layout(&state);
+
+        let before_fold = cached_arc(&mut view, &state, fold);
+        let before_unrelated = cached_arc(&mut view, &state, unrelated);
+
+        assert!(view.toggle_fold(&state, fold));
+
+        let after_fold = cached_arc(&mut view, &state, fold);
+        let after_unrelated = cached_arc(&mut view, &state, unrelated);
+
+        assert!(
+            after_fold.height < before_fold.height,
+            "collapsing the fold must shrink its measured height: {} -> {}",
+            before_fold.height,
+            after_fold.height
+        );
+        assert!(
+            Arc::ptr_eq(&before_unrelated, &after_unrelated),
+            "sibling paragraph must stay cached (cache hit, no re-measure)"
+        );
+    }
+
+    #[test]
+    fn external_height_resize_remeasures_leaf_owner() {
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let fold = g
+            .add_mut(seq_block(0, NodeType::Fold, vec![root]))
+            .unwrap()
+            .id;
+        g.add_mut(seq_block(1, NodeType::FoldTitle, vec![root, fold]))
+            .unwrap();
+        g.add_mut(seq_char(2, 'T')).unwrap();
+        let fc = g
+            .add_mut(seq_block(3, NodeType::FoldContent, vec![root, fold]))
+            .unwrap()
+            .id;
+        let img = g.add_mut(seq_image(4, vec![root, fold, fc])).unwrap().id;
+        let unrelated = g
+            .add_mut(seq_block(5, NodeType::Paragraph, vec![root]))
+            .unwrap()
+            .id;
+        g.commit_mut();
+        let state = State::new(ProjectedState::from_graph(g).unwrap(), None);
+
+        let mut view = make_view(800.0);
+        view.layout(&state);
+
+        let before_fold = cached_arc(&mut view, &state, fold);
+        let before_unrelated = cached_arc(&mut view, &state, unrelated);
+
+        assert!(view.set_external_height(&state, img, 200.0));
+
+        let after_fold = cached_arc(&mut view, &state, fold);
+        let after_unrelated = cached_arc(&mut view, &state, unrelated);
+
+        assert!(
+            after_fold.height > before_fold.height,
+            "growing the image must grow its owning fold subtree: {} -> {}",
+            before_fold.height,
+            after_fold.height
+        );
+        assert!(
+            Arc::ptr_eq(&before_unrelated, &after_unrelated),
+            "unrelated block must stay cached (cache hit, no re-measure)"
+        );
     }
 }

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 const B: usize = 4;
 const MAX: usize = 2 * B;
 
@@ -46,21 +44,24 @@ pub trait Leaf: Sized {
     fn offset_of_lv(&self, lv: usize) -> usize;
 }
 
+#[derive(Clone, Debug)]
 enum Kind<L> {
     Leaf(Vec<L>),
     Internal(Vec<usize>),
 }
 
+#[derive(Clone, Debug)]
 struct Node<L> {
     parent: Option<usize>,
     kind: Kind<L>,
     sum: Sum,
 }
 
+#[derive(Clone, Debug)]
 pub struct ContentTree<L> {
-    nodes: Vec<Node<L>>,
+    nodes: imbl::Vector<Node<L>>,
     root: usize,
-    lv_leaf: BTreeMap<usize, usize>,
+    lv_leaf: imbl::OrdMap<usize, usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -72,23 +73,25 @@ pub struct Cursor {
     pub end_pos: usize,
 }
 
-impl<L: Leaf> Default for ContentTree<L> {
+impl<L: Leaf + Clone> Default for ContentTree<L> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<L: Leaf> ContentTree<L> {
+impl<L: Leaf + Clone> ContentTree<L> {
     pub fn new() -> Self {
         let root = Node {
             parent: None,
             kind: Kind::Leaf(Vec::new()),
             sum: Sum::default(),
         };
+        let mut nodes = imbl::Vector::new();
+        nodes.push_back(root);
         ContentTree {
-            nodes: vec![root],
+            nodes,
             root: 0,
-            lv_leaf: BTreeMap::new(),
+            lv_leaf: imbl::OrdMap::new(),
         }
     }
 
@@ -116,6 +119,39 @@ impl<L: Leaf> ContentTree<L> {
                 Kind::Internal(_) => None,
             })
             .sum()
+    }
+
+    pub fn end_len(&self) -> usize {
+        self.nodes[self.root].sum.end
+    }
+
+    pub fn iter_runs(&self) -> impl Iterator<Item = &L> {
+        let mut leaf = self.root;
+        loop {
+            match &self.nodes[leaf].kind {
+                Kind::Leaf(_) => break,
+                Kind::Internal(children) => leaf = children[0],
+            }
+        }
+        let mut next = Some(leaf);
+        let mut run = 0usize;
+        std::iter::from_fn(move || {
+            loop {
+                let lf = next?;
+                match &self.nodes[lf].kind {
+                    Kind::Leaf(items) => {
+                        if run < items.len() {
+                            let item = &items[run];
+                            run += 1;
+                            return Some(item);
+                        }
+                        next = self.next_leaf(lf);
+                        run = 0;
+                    }
+                    Kind::Internal(_) => unreachable!("next_leaf yields leaf nodes only"),
+                }
+            }
+        })
     }
 
     fn leaf_items(&self, id: usize) -> &Vec<L> {
@@ -149,7 +185,7 @@ impl<L: Leaf> ContentTree<L> {
                 s
             }
         };
-        self.nodes[id].sum = s;
+        self.nodes.get_mut(id).unwrap().sum = s;
     }
 
     fn update_path(&mut self, mut id: usize) {
@@ -203,7 +239,7 @@ impl<L: Leaf> ContentTree<L> {
             self.split_run_in_leaf(leaf, run, off);
             run += 1;
         }
-        match &mut self.nodes[leaf].kind {
+        match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => items.insert(run, item),
             Kind::Internal(_) => unreachable!(),
         }
@@ -214,11 +250,11 @@ impl<L: Leaf> ContentTree<L> {
     }
 
     fn split_run_in_leaf(&mut self, leaf: usize, run: usize, offset: usize) {
-        let right = match &mut self.nodes[leaf].kind {
+        let right = match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => items[run].split_at(offset),
             Kind::Internal(_) => unreachable!(),
         };
-        match &mut self.nodes[leaf].kind {
+        match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => items.insert(run + 1, right),
             Kind::Internal(_) => unreachable!(),
         }
@@ -240,7 +276,7 @@ impl<L: Leaf> ContentTree<L> {
 
     fn coalesce_around(&mut self, leaf: usize, run: usize) {
         let mut removed_starts: [Option<usize>; 2] = [None, None];
-        match &mut self.nodes[leaf].kind {
+        match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => {
                 let merged_left = if run > 0 {
                     if let Some(s) = Self::try_merge_pair(items, run - 1) {
@@ -313,13 +349,54 @@ impl<L: Leaf> ContentTree<L> {
             }
             new_run
         };
-        match &mut self.nodes[leaf].kind {
+        match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => f(&mut items[target_run]),
             Kind::Internal(_) => unreachable!(),
         }
         self.rebuild_leaf_locator(leaf);
         self.update_path(leaf);
         self.maybe_split(leaf);
+    }
+
+    /// Apply `f` to every element in the consecutive-`lv` range `[lv_start, lv_start+count)`,
+    /// isolating whole sub-runs at a time instead of one element per call. Since a run's
+    /// per-element state (e.g. an eg-walker deletion count) lives in one field shared by
+    /// the whole run, bumping a `count`-element span costs `O(runs spanned · log n)` — not
+    /// `O(count · log n)` — which is what collapses a select-all delete from linear-in-
+    /// characters to linear-in-runs. `f` must set the same state for every element in the
+    /// range (it is applied once per spanned sub-run, not once per element).
+    pub fn update_run_by_lv(&mut self, lv_start: usize, count: usize, f: impl Fn(&mut L)) {
+        let end = lv_start + count;
+        let mut lv = lv_start;
+        while lv < end {
+            let leaf = self.leaf_of_lv(lv);
+            let run = self.run_index_in_leaf(leaf, lv);
+            let offset = self.leaf_items(leaf)[run].offset_of_lv(lv);
+            let rl = self.leaf_items(leaf)[run].run_len();
+            let take = (rl - offset).min(end - lv);
+            let target_run = if offset == 0 && take == rl {
+                run
+            } else if offset == 0 {
+                self.split_run_in_leaf(leaf, run, take);
+                run
+            } else {
+                self.split_run_in_leaf(leaf, run, offset);
+                let new_run = run + 1;
+                let new_rl = self.leaf_items(leaf)[new_run].run_len();
+                if new_rl > take {
+                    self.split_run_in_leaf(leaf, new_run, take);
+                }
+                new_run
+            };
+            match &mut self.nodes.get_mut(leaf).unwrap().kind {
+                Kind::Leaf(items) => f(&mut items[target_run]),
+                Kind::Internal(_) => unreachable!(),
+            }
+            self.rebuild_leaf_locator(leaf);
+            self.update_path(leaf);
+            self.maybe_split(leaf);
+            lv += take;
+        }
     }
 
     fn leaf_of_lv(&self, lv: usize) -> usize {
@@ -396,6 +473,40 @@ impl<L: Leaf> ContentTree<L> {
                         remaining -= cc;
                     }
                     id = chosen;
+                }
+            }
+        }
+    }
+
+    pub fn end_pos_to_lv(&self, target: usize) -> Option<usize> {
+        if target >= self.nodes[self.root].sum.end {
+            return None;
+        }
+        let mut id = self.root;
+        let mut remaining = target;
+        loop {
+            match &self.nodes[id].kind {
+                Kind::Internal(children) => {
+                    let mut next = None;
+                    for &c in children {
+                        let e = self.nodes[c].sum.end;
+                        if remaining < e {
+                            next = Some(c);
+                            break;
+                        }
+                        remaining -= e;
+                    }
+                    id = next?;
+                }
+                Kind::Leaf(items) => {
+                    for it in items {
+                        let e = it.sum().end;
+                        if remaining < e {
+                            return Some(it.lv_start() + remaining);
+                        }
+                        remaining -= e;
+                    }
+                    return None;
                 }
             }
         }
@@ -584,7 +695,7 @@ impl<L: Leaf> ContentTree<L> {
         let mid = len / 2;
         let parent = self.nodes[id].parent;
         let new_id = self.nodes.len();
-        match &mut self.nodes[id].kind {
+        match &mut self.nodes.get_mut(id).unwrap().kind {
             Kind::Leaf(items) => {
                 let right: Vec<L> = items.split_off(mid);
                 let new_node = Node {
@@ -592,7 +703,7 @@ impl<L: Leaf> ContentTree<L> {
                     kind: Kind::Leaf(right),
                     sum: Sum::default(),
                 };
-                self.nodes.push(new_node);
+                self.nodes.push_back(new_node);
                 let moved: Vec<usize> = self
                     .leaf_items(new_id)
                     .iter()
@@ -609,10 +720,10 @@ impl<L: Leaf> ContentTree<L> {
                     kind: Kind::Internal(right),
                     sum: Sum::default(),
                 };
-                self.nodes.push(new_node);
+                self.nodes.push_back(new_node);
                 let moved = self.children(new_id).clone();
                 for c in moved {
-                    self.nodes[c].parent = Some(new_id);
+                    self.nodes.get_mut(c).unwrap().parent = Some(new_id);
                 }
             }
         }
@@ -622,7 +733,7 @@ impl<L: Leaf> ContentTree<L> {
         match parent {
             Some(p) => {
                 let pos = self.children(p).iter().position(|&c| c == id).unwrap();
-                match &mut self.nodes[p].kind {
+                match &mut self.nodes.get_mut(p).unwrap().kind {
                     Kind::Internal(children) => children.insert(pos + 1, new_id),
                     Kind::Leaf(_) => unreachable!(),
                 }
@@ -637,9 +748,9 @@ impl<L: Leaf> ContentTree<L> {
                     kind: Kind::Internal(vec![id, new_id]),
                     sum: s,
                 };
-                self.nodes.push(new_root);
-                self.nodes[id].parent = Some(new_root_id);
-                self.nodes[new_id].parent = Some(new_root_id);
+                self.nodes.push_back(new_root);
+                self.nodes.get_mut(id).unwrap().parent = Some(new_root_id);
+                self.nodes.get_mut(new_id).unwrap().parent = Some(new_root_id);
                 self.root = new_root_id;
             }
         }
@@ -901,6 +1012,80 @@ mod tests {
     }
 
     #[test]
+    fn update_run_by_lv_matches_per_element() {
+        // A batched range update must leave the tree in the same *semantic* state as
+        // hiding each element one at a time — identical element order, per-element
+        // visibility, and aggregate sums — even though the batched path leaves fewer,
+        // larger runs. Exercised over a fresh tree and one pre-fragmented by prior hides,
+        // across ranges that start mid-run, end mid-run, and span multiple leaves.
+        let n = 90usize;
+        let build = |prehide: &[usize]| {
+            let mut t: ContentTree<TestRun> = ContentTree::new();
+            for lv in 0..n {
+                t.insert(lv, TestRun::one(lv));
+            }
+            for &lv in prehide {
+                t.update_by_lv(lv, |it| {
+                    it.cur_vis = false;
+                    it.end_vis = false;
+                });
+            }
+            t
+        };
+        let vis = |t: &ContentTree<TestRun>| -> Vec<(usize, bool, bool)> {
+            (0..t.len())
+                .map(|i| {
+                    let (r, off) = t.get(i);
+                    (r.lv_start + off, r.cur_vis, r.end_vis)
+                })
+                .collect()
+        };
+        let prehides: [&[usize]; 3] = [&[], &[5, 6, 7, 40, 80], &[10, 11, 12, 13, 14, 15]];
+        let ranges = [
+            (0usize, 90usize),
+            (3, 20),
+            (0, 1),
+            (17, 50),
+            (85, 5),
+            (44, 2),
+        ];
+        for prehide in prehides {
+            for (start, count) in ranges {
+                if start + count > n {
+                    continue;
+                }
+                let mut batched = build(prehide);
+                batched.update_run_by_lv(start, count, |it| {
+                    it.cur_vis = false;
+                    it.end_vis = false;
+                });
+                let mut per_elem = build(prehide);
+                for lv in start..start + count {
+                    per_elem.update_by_lv(lv, |it| {
+                        it.cur_vis = false;
+                        it.end_vis = false;
+                    });
+                }
+                let (order_b, _) = check(&batched);
+                let (order_p, _) = check(&per_elem);
+                assert_eq!(
+                    order_b, order_p,
+                    "element order diverged for prehide={prehide:?} range=({start},{count})"
+                );
+                assert_eq!(
+                    vis(&batched),
+                    vis(&per_elem),
+                    "visibility diverged for prehide={prehide:?} range=({start},{count})"
+                );
+                assert_eq!(
+                    batched.nodes[batched.root].sum, per_elem.nodes[per_elem.root].sum,
+                    "root sum diverged for prehide={prehide:?} range=({start},{count})"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn cursor_at_cur_pos_skips_invisible_runs() {
         let mut tree: ContentTree<TestRun> = ContentTree::new();
         for lv in 0..60 {
@@ -1084,5 +1269,34 @@ mod tests {
         for i in 10..=30 {
             assert_eq!(tree.end_rank_at_doc_index(i), i - 10, "suffix rank({i})");
         }
+    }
+
+    #[test]
+    fn iter_runs_visits_all_runs_in_order() {
+        let mut t: ContentTree<TestRun> = ContentTree::new();
+        t.insert(0, TestRun::one(0));
+        t.insert(1, TestRun::one(5));
+        t.insert(2, TestRun::one(9));
+        let lvs: Vec<usize> = t.iter_runs().map(|r| r.lv_start()).collect();
+        assert_eq!(lvs, vec![0, 5, 9]);
+        assert_eq!(t.iter_runs().count(), t.run_count());
+    }
+
+    #[test]
+    fn end_len_counts_end_visible() {
+        let mut t: ContentTree<TestRun> = ContentTree::new();
+        t.insert(0, TestRun::one(0));
+        t.insert(1, TestRun::one(1));
+        assert_eq!(t.end_len(), t.len());
+    }
+
+    #[test]
+    fn end_len_excludes_hidden_but_iter_runs_keeps_all() {
+        let mut t: ContentTree<TestRun> = ContentTree::new();
+        t.insert(0, TestRun::one(0));
+        t.insert(1, TestRun::one(1));
+        t.update_by_lv(1, |r| r.end_vis = false);
+        assert_eq!(t.end_len(), 1);
+        assert_eq!(t.iter_runs().count(), t.run_count());
     }
 }

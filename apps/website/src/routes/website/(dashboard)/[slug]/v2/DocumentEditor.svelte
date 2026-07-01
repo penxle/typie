@@ -23,7 +23,6 @@
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
-  import { wasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
@@ -131,6 +130,8 @@
 
               state {
                 graph
+                seq
+                heads
                 durableHeads
               }
 
@@ -275,6 +276,7 @@
 
         editorStore = store;
         editorServerDurableHeads = serverDurableHeads;
+        syncSeq = doc.state?.seq ?? '';
 
         const liveEditor = await Editor.createWithPending(
           graph,
@@ -289,7 +291,7 @@
           return;
         }
 
-        editorServerHeads = graph.length > 0 ? wasm.graph_heads(graph) : new Uint8Array();
+        editorServerHeads = doc.state?.heads ? Uint8Array.fromBase64(doc.state.heads) : new Uint8Array();
         ctx.editor = liveEditor;
         ctx.liveEditor = liveEditor;
       } catch (err) {
@@ -344,6 +346,9 @@
   let subtitleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let pusher = $state<Pusher | null>(null);
   let lastConfirmedHeads = $state<Uint8Array | null>(null);
+  // Sync cursor: the last Redis-Stream id this client has fully caught up to.
+  // Non-reactive — pull/subscription read and advance it without re-subscribing.
+  let syncSeq = '';
 
   const hasHeads = $derived(!!lastConfirmedHeads);
 
@@ -363,8 +368,10 @@
       mutation DocumentEditorV2_PullChangesets($input: PullDocumentChangesetsInput!) {
         pullDocumentChangesets(input: $input) {
           changesets
+          seq
           heads
           durableHeads
+          needsReload
         }
       }
     `),
@@ -372,9 +379,10 @@
 
   createSubscription(
     graphql(`
-      subscription DocumentEditorV2_ChangesetsUpdated($documentId: ID!, $clientId: String!, $heads: Binary!) {
-        documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, heads: $heads) {
+      subscription DocumentEditorV2_ChangesetsUpdated($documentId: ID!, $clientId: String!, $sinceSeq: String) {
+        documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, sinceSeq: $sinceSeq) {
           changesets
+          seq
           heads
           durableHeads
         }
@@ -383,22 +391,30 @@
     () => ({
       documentId: documentId ?? '',
       clientId,
-      heads: untrack(() => lastConfirmedHeads?.toBase64() ?? ''),
+      sinceSeq: untrack(() => syncSeq) || null,
     }),
     () => ({
       skip: ctx.liveEditor === undefined || !hasHeads || !documentId,
       onData: (data) => {
         const editor = ctx.liveEditor;
         if (!editor) return;
-        const payload = Uint8Array.fromBase64(data.documentChangesetsUpdated.changesets);
-        if (payload.length > 0) {
-          editor.receiveRemoteChangeset(payload);
-          editor.flush();
+        const event = data.documentChangesetsUpdated;
+        let applied = false;
+        for (const c of event.changesets) {
+          const payload = Uint8Array.fromBase64(c);
+          if (payload.length > 0) {
+            editor.receiveRemoteChangeset(payload);
+            applied = true;
+          }
         }
-        const merged = Uint8Array.fromBase64(data.documentChangesetsUpdated.heads);
+        if (applied) editor.flush();
+        // Delivery within a live connection is ordered; a reconnect re-catches
+        // up from this cursor, so advancing it here is safe.
+        if (event.seq) syncSeq = event.seq;
+        const merged = Uint8Array.fromBase64(event.heads);
         lastConfirmedHeads = merged;
         pusher?.setConfirmedHeads(merged);
-        pusher?.setDurableHeads(Uint8Array.fromBase64(data.documentChangesetsUpdated.durableHeads));
+        pusher?.setDurableHeads(Uint8Array.fromBase64(event.durableHeads));
       },
     }),
   );
@@ -418,22 +434,40 @@
     const currentDocumentId = documentId;
     if (!currentDocumentId) return;
 
+    // Full-load recovery when the client's cursor has fallen out of the stream's
+    // retained window (offline past retention) — reload rebuilds the editor from
+    // the fresh snapshot. Unpushed local edits survive via the IndexedDB delta
+    // store, which the rebuild replays as pending.
+    const reloadDocument = () => {
+      location.reload();
+    };
+
     const refetchFromServer = async () => {
       const ed = ctx.liveEditor;
-      const heads = lastConfirmedHeads;
-      if (!ed || heads === null) return;
+      if (!ed) return;
       const result = await pullDocumentChangesets({
-        input: { documentId: currentDocumentId, heads: heads.toBase64() },
+        input: { documentId: currentDocumentId, sinceSeq: syncSeq || null },
       });
-      const missing = Uint8Array.fromBase64(result.pullDocumentChangesets.changesets);
-      if (missing.length > 0) {
-        ed.receiveRemoteChangeset(missing);
-        ed.flush();
+      const payload = result.pullDocumentChangesets;
+      if (payload.needsReload) {
+        reloadDocument();
+        return;
       }
-      const merged = Uint8Array.fromBase64(result.pullDocumentChangesets.heads);
+      // O(missing) tail: each entry is a standalone bundle blob.
+      let applied = false;
+      for (const c of payload.changesets) {
+        const bytes = Uint8Array.fromBase64(c);
+        if (bytes.length > 0) {
+          ed.receiveRemoteChangeset(bytes);
+          applied = true;
+        }
+      }
+      if (applied) ed.flush();
+      if (payload.seq) syncSeq = payload.seq;
+      const merged = Uint8Array.fromBase64(payload.heads);
       lastConfirmedHeads = merged;
       pusher?.setConfirmedHeads(merged);
-      pusher?.setDurableHeads(Uint8Array.fromBase64(result.pullDocumentChangesets.durableHeads));
+      pusher?.setDurableHeads(Uint8Array.fromBase64(payload.durableHeads));
     };
 
     const gap = new GapBuffer({

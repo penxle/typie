@@ -1,18 +1,27 @@
 use std::collections::{BTreeMap, HashMap};
 
 use editor_crdt::Dot;
-use editor_crdt::sequence::BoundaryResolver;
+use editor_crdt::sequence::{BoundaryResolver, SeqResolve};
 
 use super::{SpanLog, SpanOp};
 use crate::seq::{BlockNode, BlockTree, Child, SeqItem, anchor_dot};
 use crate::{Modifier, ModifierType, NodeType, Schema};
 
 pub fn leaves_with_paths(tree: &BlockTree) -> Vec<(Vec<NodeType>, Dot)> {
-    fn walk(node: &BlockNode, path: &mut Vec<NodeType>, out: &mut Vec<(Vec<NodeType>, Dot)>) {
+    fn walk(
+        tree: &BlockTree,
+        node: &BlockNode,
+        path: &mut Vec<NodeType>,
+        out: &mut Vec<(Vec<NodeType>, Dot)>,
+    ) {
         path.push(node.node_type);
         for c in &node.children {
             match c {
-                Child::Block(b) => walk(b, path, out),
+                Child::Block(id) => {
+                    if let Some(b) = tree.get(*id) {
+                        walk(tree, b, path, out);
+                    }
+                }
                 Child::Leaf { id, item } => {
                     let mut p = path.clone();
                     p.push(item.as_child_type());
@@ -24,8 +33,8 @@ pub fn leaves_with_paths(tree: &BlockTree) -> Vec<(Vec<NodeType>, Dot)> {
     }
     let mut out = Vec::new();
     let mut path = Vec::new();
-    for r in &tree.roots {
-        walk(r, &mut path, &mut out);
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, &mut path, &mut out);
     }
     out
 }
@@ -38,12 +47,21 @@ pub struct LeafContext {
 }
 
 pub fn leaves_with_context(tree: &BlockTree) -> Vec<LeafContext> {
-    fn walk(node: &BlockNode, path: &mut Vec<(NodeType, Option<Dot>)>, out: &mut Vec<LeafContext>) {
+    fn walk(
+        tree: &BlockTree,
+        node: &BlockNode,
+        path: &mut Vec<(NodeType, Option<Dot>)>,
+        out: &mut Vec<LeafContext>,
+    ) {
         let dot = anchor_dot(node.id);
         path.push((node.node_type, dot));
         for c in &node.children {
             match c {
-                Child::Block(b) => walk(b, path, out),
+                Child::Block(id) => {
+                    if let Some(b) = tree.get(*id) {
+                        walk(tree, b, path, out);
+                    }
+                }
                 Child::Leaf { id, item } => {
                     out.push(LeafContext {
                         block_path: path.clone(),
@@ -57,10 +75,43 @@ pub fn leaves_with_context(tree: &BlockTree) -> Vec<LeafContext> {
     }
     let mut out = Vec::new();
     let mut path = Vec::new();
-    for r in &tree.roots {
-        walk(r, &mut path, &mut out);
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, &mut path, &mut out);
     }
     out
+}
+
+/// Visit every leaf in document order, passing the *borrowed* block path (ancestors
+/// including the leaf's parent block), the leaf's child type, and its dot. Unlike
+/// `leaves_with_context`, this clones nothing per leaf — callers that only need the
+/// path transiently avoid one allocation per character.
+pub fn for_each_leaf(
+    tree: &BlockTree,
+    mut f: impl FnMut(&[(NodeType, Option<Dot>)], NodeType, Dot),
+) {
+    fn walk(
+        tree: &BlockTree,
+        node: &BlockNode,
+        path: &mut Vec<(NodeType, Option<Dot>)>,
+        f: &mut impl FnMut(&[(NodeType, Option<Dot>)], NodeType, Dot),
+    ) {
+        path.push((node.node_type, anchor_dot(node.id)));
+        for c in &node.children {
+            match c {
+                Child::Block(id) => {
+                    if let Some(b) = tree.get(*id) {
+                        walk(tree, b, path, f);
+                    }
+                }
+                Child::Leaf { id, item } => f(path, item.as_child_type(), *id),
+            }
+        }
+        path.pop();
+    }
+    let mut path = Vec::new();
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, &mut path, &mut f);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,9 +123,18 @@ pub enum ExplicitEffect {
 pub fn derive_explicit_effect(
     elements: &[(Dot, SeqItem)],
     tree: &BlockTree,
-    resolver: &BoundaryResolver,
+    resolver: &impl SeqResolve,
     spans: &SpanLog,
 ) -> Vec<(Dot, BTreeMap<ModifierType, ExplicitEffect>)> {
+    // No spans, or no visible leaves → every leaf's explicit effect is empty. Emit the
+    // empty entries directly, skipping the `O(all spans)` resolution (which a reproject
+    // over a select-all-deleted document would otherwise pay for nothing).
+    if spans.is_empty() || elements.is_empty() {
+        return leaves_with_paths(tree)
+            .into_iter()
+            .map(|(_, dot)| (dot, BTreeMap::new()))
+            .collect();
+    }
     let pos_of: HashMap<Dot, usize> = elements
         .iter()
         .enumerate()
@@ -148,6 +208,31 @@ pub fn derive_explicit_effect(
         .collect()
 }
 
+/// Like [`derive_explicit_effect`], but reads each leaf's covering span set from a
+/// precomputed [`LeafSpanCoverage`] instead of resolving every span against the
+/// checkout. A deletion never changes a surviving leaf's covering set (it can't
+/// reorder survivors relative to a span's anchors), so a bulk-delete reprojection can
+/// carry the old coverage forward and derive explicit effects in `O(leaves · covering)`
+/// — independent of the (possibly huge, now-dead) span log.
+pub fn derive_explicit_effect_from_coverage(
+    tree: &BlockTree,
+    coverage: &super::LeafSpanCoverage,
+    spans: &SpanLog,
+) -> Vec<(Dot, BTreeMap<ModifierType, ExplicitEffect>)> {
+    leaves_with_paths(tree)
+        .into_iter()
+        .map(|(leaf_path, dot)| {
+            let covering = coverage.covering(dot);
+            let ex = if covering.is_empty() {
+                BTreeMap::new()
+            } else {
+                super::explicit_from_covering(covering, spans, &leaf_path)
+            };
+            (dot, ex)
+        })
+        .collect()
+}
+
 pub fn derive_effective(
     elements: &[(Dot, SeqItem)],
     tree: &BlockTree,
@@ -173,19 +258,58 @@ pub fn derive_full_effective(
     tree: &BlockTree,
     src: &crate::span::EffectiveSources,
 ) -> Vec<(Dot, BTreeMap<ModifierType, Modifier>)> {
-    leaves_with_context(tree)
-        .into_iter()
-        .map(|ctx| {
-            let eff = crate::span::resolve_effective(
-                &ctx.block_path,
-                Some(ctx.leaf_dot),
-                ctx.leaf_type,
-                true,
-                src,
-            );
-            (ctx.leaf_dot, eff)
-        })
-        .collect()
+    // A leaf's effective set depends only on its block path, leaf type, and its own
+    // per-leaf style inputs (explicit spans / node style / node attr); the block- and
+    // ancestor-level inputs are shared by all leaves of a block. So consecutive leaves
+    // that agree on all of these — a plain run or a uniformly-styled span run alike —
+    // resolve identically. Compute `resolve_effective` once per such run and clone it
+    // for the rest, instead of re-running the full per-modifier resolve for every char.
+    struct CacheKey {
+        block_path: Vec<(NodeType, Option<Dot>)>,
+        leaf_type: NodeType,
+        ex: Option<BTreeMap<ModifierType, ExplicitEffect>>,
+        ns: Option<Option<String>>,
+        na: Option<crate::Node>,
+    }
+    let mut out = Vec::new();
+    let mut cache: Option<(CacheKey, BTreeMap<ModifierType, Modifier>)> = None;
+    for_each_leaf(tree, |path, leaf_type, leaf_dot| {
+        let ex = src.explicit_spans.get(&leaf_dot);
+        let ns = src.node_styles.get(&leaf_dot);
+        let na = src.node_attrs.get(&leaf_dot);
+        let hit = match &cache {
+            Some((k, _)) => {
+                k.leaf_type == leaf_type
+                    && k.block_path.as_slice() == path
+                    && k.ex.as_ref() == ex
+                    && k.ns.as_ref() == ns
+                    && k.na.as_ref() == na
+            }
+            None => false,
+        };
+        let eff = if hit {
+            cache
+                .as_ref()
+                .expect("cache hit implies populated")
+                .1
+                .clone()
+        } else {
+            let e = crate::span::resolve_effective(path, Some(leaf_dot), leaf_type, true, src);
+            cache = Some((
+                CacheKey {
+                    block_path: path.to_vec(),
+                    leaf_type,
+                    ex: ex.cloned(),
+                    ns: ns.cloned(),
+                    na: na.cloned(),
+                },
+                e.clone(),
+            ));
+            e
+        };
+        out.push((leaf_dot, eff));
+    });
+    out
 }
 
 #[cfg(test)]
@@ -210,7 +334,7 @@ mod tests {
     #[test]
     fn leaves_carry_full_path() {
         let elems = para_chars("ab");
-        let tree = project_blocks(&elems).unwrap();
+        let tree = BlockTree::from_raw(&project_blocks(&elems).unwrap());
         let leaves = leaves_with_paths(&tree);
         assert_eq!(leaves.len(), 2);
         assert_eq!(
@@ -251,7 +375,7 @@ mod tests {
         let elems = para_chars("ab");
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let a = Dot::new(1, 2);
         let b = Dot::new(1, 3);
         let spans = SpanLog::new()
@@ -286,7 +410,7 @@ mod tests {
     #[test]
     fn leaf_context_has_block_dot_ancestry() {
         let elems = para_chars("a");
-        let tree = normalize(project_blocks(&elems).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&elems).unwrap()));
         let ctxs = leaves_with_context(&tree);
         assert_eq!(ctxs.len(), 1);
         let c = &ctxs[0];
@@ -312,7 +436,7 @@ mod tests {
         use std::collections::HashMap;
         let log = oplog(elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let explicit: HashMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, spans)
             .into_iter()
             .collect();
@@ -576,7 +700,7 @@ mod tests {
         let elems = para_chars("abc");
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let b = Dot::new(1, 3);
         let c = Dot::new(1, 4);
         let spans = SpanLog::new()
@@ -601,7 +725,7 @@ mod tests {
         let elems = para_chars("a");
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let a = Dot::new(1, 2);
         let spans = SpanLog::new()
             .apply(
@@ -632,7 +756,7 @@ mod tests {
         let elems = para_chars("abc");
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let b = Dot::new(1, 3);
         let spans = SpanLog::new()
             .apply(
@@ -665,7 +789,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let a = Dot::new(1, 2);
         let tab = Dot::new(1, 3);
         let spans = SpanLog::new()
@@ -786,7 +910,7 @@ mod tests {
             let elems = para_chars("abcde");
             let log = oplog(&elems);
             let (els, resolver) = checkout_with_resolver(&log);
-            let tree = normalize(project_blocks(&els).unwrap());
+            let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
             let mut spans = SpanLog::new();
             for (i, (si, ei, sb, eb, m, is_remove)) in ops.into_iter().enumerate() {
                 let start = anc(Dot::new(1, 2 + si as u64), sb);
@@ -809,7 +933,7 @@ mod tests {
             let elems = para_chars("abc");
             let log = oplog(&elems);
             let (els, resolver) = checkout_with_resolver(&log);
-            let tree = normalize(project_blocks(&els).unwrap());
+            let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
             let spans = SpanLog::new().apply(Dot::new(2, 0), SpanOp::AddSpan {
                 start: anc(Dot::new(1, 2), super::super::Bias::Before),
                 end: anc(Dot::new(1, 4), super::super::Bias::After), modifier: Modifier::Italic }).unwrap();

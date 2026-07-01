@@ -1,31 +1,31 @@
 pub type FontId = u16;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Glyph {
     pub id: u32,
     pub x: f32,
     pub y: f32,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Synthesis {
     pub embolden: bool,
     pub skew: Option<f32>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GraphemeSpan {
     pub advance: f32,
     pub codepoints: u8,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct TextDecoration {
     pub underline: bool,
     pub strikethrough: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GlyphRun {
     pub family_id: FontId,
     pub weight: u16,
@@ -46,7 +46,7 @@ pub struct GlyphRun {
     pub cursor_descent: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RubyAnnotation {
     pub family_id: FontId,
     pub weight: u16,

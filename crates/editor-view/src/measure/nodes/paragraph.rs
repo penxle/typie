@@ -8,6 +8,7 @@ use crate::measure::PageBreakPolicy;
 use crate::measure::text::measure::measure_paragraph;
 use crate::style::{BorderMode, BoxStyle, Direction};
 
+use crate::measure::Measurer;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent, MeasuredNode};
 
@@ -36,6 +37,7 @@ pub(crate) fn align_to_layout(align: Alignment) -> crate::style::Alignment {
 }
 
 pub(crate) fn measure_paragraph_block(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -51,7 +53,15 @@ pub(crate) fn measure_paragraph_block(
     };
 
     let pending = ctx.pending_for(&node.id());
-    let (lines, total_height) = measure_paragraph(node, width, align, indent, pending, resource);
+    let (lines, total_height) = measure_paragraph(
+        node,
+        width,
+        align,
+        indent,
+        pending,
+        Some(&mut measurer.seg_cache),
+        resource,
+    );
 
     let mut children: Vec<Arc<MeasuredNode>> = lines
         .into_iter()
@@ -162,7 +172,13 @@ mod tests {
         let para = get_para_node(&view);
         let mut res = Resource::new_test();
 
-        let result = measure_paragraph_block(&para, 300.0, &MeasureContext::default(), &mut res);
+        let result = measure_paragraph_block(
+            &mut Measurer::new(),
+            &para,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
 
         assert!(result.height > 0.0);
         let MeasuredContent::Box(ref b) = result.content else {
@@ -221,10 +237,20 @@ mod tests {
         let unset_para = blocks.next().unwrap();
         let mut res = Resource::new_test();
 
-        let r_center =
-            measure_paragraph_block(&center_para, 300.0, &MeasureContext::default(), &mut res);
-        let r_unset =
-            measure_paragraph_block(&unset_para, 300.0, &MeasureContext::default(), &mut res);
+        let r_center = measure_paragraph_block(
+            &mut Measurer::new(),
+            &center_para,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
+        let r_unset = measure_paragraph_block(
+            &mut Measurer::new(),
+            &unset_para,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
 
         let MeasuredContent::Box(ref bc) = r_center.content else {
             panic!("expected Box");
@@ -270,8 +296,13 @@ mod tests {
         let para_pb_only = blocks.next().unwrap();
         let mut res = Resource::new_test();
 
-        let r1 =
-            measure_paragraph_block(&para_text_pb, 300.0, &MeasureContext::default(), &mut res);
+        let r1 = measure_paragraph_block(
+            &mut Measurer::new(),
+            &para_text_pb,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b1) = r1.content else {
             panic!("expected Box");
         };
@@ -283,8 +314,13 @@ mod tests {
             "last child of text+page_break paragraph must be PageBreak"
         );
 
-        let r2 =
-            measure_paragraph_block(&para_pb_only, 300.0, &MeasureContext::default(), &mut res);
+        let r2 = measure_paragraph_block(
+            &mut Measurer::new(),
+            &para_pb_only,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b2) = r2.content else {
             panic!("expected Box");
         };
@@ -387,7 +423,13 @@ mod tests {
         let para_id = para.id();
         let mut res = Resource::new_test();
 
-        let r_base = measure_paragraph_block(&para, 300.0, &MeasureContext::default(), &mut res);
+        let r_base = measure_paragraph_block(
+            &mut Measurer::new(),
+            &para,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let h0 = first_line_height(&r_base);
 
         let big: editor_state::PendingModifiers = vec![editor_state::PendingModifier::Set {
@@ -397,7 +439,8 @@ mod tests {
             pending_style: Some((para_id, big)),
             ..Default::default()
         };
-        let r_pending = measure_paragraph_block(&para, 300.0, &ctx_pending, &mut res);
+        let r_pending =
+            measure_paragraph_block(&mut Measurer::new(), &para, 300.0, &ctx_pending, &mut res);
         let h1 = first_line_height(&r_pending);
 
         assert!(
@@ -415,7 +458,13 @@ mod tests {
         let para_id = para.id();
         let mut res = Resource::new_test();
 
-        let r_base = measure_paragraph_block(&para, 300.0, &MeasureContext::default(), &mut res);
+        let r_base = measure_paragraph_block(
+            &mut Measurer::new(),
+            &para,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let h0 = first_line_height(&r_base);
 
         let big: editor_state::PendingModifiers = vec![editor_state::PendingModifier::Set {
@@ -425,7 +474,8 @@ mod tests {
             pending_style: Some((para_id, big)),
             ..Default::default()
         };
-        let r_pending = measure_paragraph_block(&para, 300.0, &ctx_pending, &mut res);
+        let r_pending =
+            measure_paragraph_block(&mut Measurer::new(), &para, 300.0, &ctx_pending, &mut res);
         let h1 = first_line_height(&r_pending);
 
         assert!(

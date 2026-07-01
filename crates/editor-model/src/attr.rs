@@ -33,15 +33,19 @@ impl ModifierAttrOp {
     }
 }
 
+type ModWinner = (Dot, Option<Modifier>);
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ModifierAttrLog {
     ops: imbl::HashMap<Dot, ModifierAttrOp>,
+    by_target: imbl::HashMap<Dot, BTreeMap<ModifierType, ModWinner>>,
 }
 
 impl ModifierAttrLog {
     pub fn new() -> Self {
         Self {
             ops: imbl::HashMap::new(),
+            by_target: imbl::HashMap::new(),
         }
     }
 
@@ -52,31 +56,30 @@ impl ModifierAttrLog {
             }
             return Ok(self.clone());
         }
+        let (target, k) = op.target_key();
+        let value = match &op {
+            ModifierAttrOp::SetModifier { modifier, .. } => Some(modifier.clone()),
+            ModifierAttrOp::ClearModifier { .. } => None,
+        };
+        let mut slot = self.by_target.get(&target).cloned().unwrap_or_default();
+        if slot.get(&k).is_none_or(|(cur, _)| &id > cur) {
+            slot.insert(k, (id, value));
+        }
         Ok(Self {
             ops: self.ops.update(id, op),
+            by_target: self.by_target.update(target, slot),
         })
     }
 
     pub fn modifiers_of(&self, target: Dot) -> BTreeMap<ModifierType, Modifier> {
-        let mut by_type: BTreeMap<ModifierType, (Dot, Option<Modifier>)> = BTreeMap::new();
-        for (op_dot, op) in &self.ops {
-            let (t, k) = op.target_key();
-            if t != target {
-                continue;
-            }
-            let value = match op {
-                ModifierAttrOp::SetModifier { modifier, .. } => Some(modifier.clone()),
-                ModifierAttrOp::ClearModifier { .. } => None,
-            };
-            let win = by_type.get(&k).is_none_or(|(cur, _)| op_dot > cur);
-            if win {
-                by_type.insert(k, (*op_dot, value));
-            }
-        }
-        by_type
-            .into_iter()
-            .filter_map(|(k, (_, v))| v.map(|m| (k, m)))
-            .collect()
+        self.by_target
+            .get(&target)
+            .map(|slot| {
+                slot.iter()
+                    .filter_map(|(k, (_, v))| v.clone().map(|m| (*k, m)))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn len(&self) -> usize {

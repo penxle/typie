@@ -1,5 +1,5 @@
 use editor_macros::ffi;
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot};
@@ -81,6 +81,34 @@ impl<P> OpGraph<P> {
 
     pub fn current_heads(&self) -> impl Iterator<Item = &Dot> + '_ {
         self.heads.iter()
+    }
+
+    /// Frontier of a changeset set *without building the graph*: an op is a
+    /// head iff no op references it as a parent, i.e. `all op ids − all
+    /// referenced parent ids`. `O(total ops)` with two plain `HashSet`s and no
+    /// persistent-collection construction, so it is the right primitive when
+    /// only the heads are needed (heads / durableHeads reporting) rather than
+    /// the whole DAG — a full `from_changesets` build is orders of magnitude
+    /// more expensive. For any graph `from_changesets` accepts (no dangling
+    /// parents) this equals [`current_heads`], since `heads` there is exactly
+    /// the set of childless ops.
+    ///
+    /// [`current_heads`]: OpGraph::current_heads
+    pub fn heads_of(css: &[crate::Changeset<P>]) -> Vec<Dot> {
+        let mut all: HashSet<Dot> = HashSet::new();
+        let mut parents: HashSet<Dot> = HashSet::new();
+        for cs in css {
+            for op in &cs.ops {
+                all.insert(op.id);
+                for p in &op.parents {
+                    parents.insert(*p);
+                }
+            }
+        }
+        let mut heads: Vec<Dot> = all.into_iter().filter(|d| !parents.contains(d)).collect();
+        // Deterministic wire output; consumers dedupe into a set anyway.
+        heads.sort();
+        heads
     }
 
     pub fn contains(&self, dot: &Dot) -> bool {
@@ -427,16 +455,17 @@ impl<P: Clone> OpGraph<P> {
 }
 
 impl<P: Clone + Eq> OpGraph<P> {
-    fn try_promote_self_contained(mut self, root: Dot) -> Self {
+    fn try_promote_self_contained_mut(&mut self, root: Dot) {
         let mut queue: Vec<Dot> = vec![root];
         while let Some(dot) = queue.pop() {
             if self.self_contained.contains(&dot) {
                 continue;
             }
-            let Some(op) = self.ops.get(&dot) else {
-                continue;
+            let promotable = match self.ops.get(&dot) {
+                Some(op) => op.parents.iter().all(|p| self.self_contained.contains(p)),
+                None => continue,
             };
-            if !op.parents.iter().all(|p| self.self_contained.contains(p)) {
+            if !promotable {
                 continue;
             }
             self.self_contained.insert(dot);
@@ -444,13 +473,25 @@ impl<P: Clone + Eq> OpGraph<P> {
                 queue.extend(children.iter().copied());
             }
         }
-        self
     }
 
     /// Phase A validates fully against `&self` before any mutation; Phase B
     /// applies a clone-and-replace that is unreachable on the failure
     /// paths above. The whole call is therefore all-or-nothing.
     pub fn receive_changeset(&self, cs: crate::Changeset<P>) -> Result<Self, CrdtError> {
+        let mut next = self.clone();
+        next.receive_changeset_mut(cs)?;
+        Ok(next)
+    }
+
+    /// In-place variant of [`receive_changeset`]. Skips the per-call
+    /// `self.clone()` so a bulk builder (`from_changesets`) that owns the graph
+    /// mutates the persistent collections while they are uniquely referenced —
+    /// each `imbl` insert then updates in place instead of copy-on-write
+    /// path-copying, turning an `O(N)`-clone-per-changeset replay into a single
+    /// linear pass. Validation is Phase-A-before-Phase-B all-or-nothing: on any
+    /// `Err` the graph is left untouched (Phase A only reads `self`).
+    pub fn receive_changeset_mut(&mut self, cs: crate::Changeset<P>) -> Result<(), CrdtError> {
         if cs.ops.is_empty() {
             return Err(CrdtError::EmptyChangeset);
         }
@@ -511,44 +552,45 @@ impl<P: Clone + Eq> OpGraph<P> {
         if !already_dots.is_empty() {
             let all_known = already_dots.len() == cs.ops.len();
             if all_known && self.changesets.iter().any(|c| c.as_ref() == &cs) {
-                return Ok(self.clone());
+                return Ok(());
             }
             return Err(CrdtError::PartialDuplicate { dots: already_dots });
         }
 
-        // Phase A above leaves no rejectable state; the cloned mutation below
-        // is infallible.
-        let mut next = self.clone();
+        // Phase A above leaves no rejectable state; the mutation below is
+        // infallible.
         for op in &cs.ops {
-            next.ops.insert(op.id, op.clone());
+            self.ops.insert(op.id, op.clone());
             for p in &op.parents {
-                next.heads.remove(p);
-                next.children.entry(*p).or_default().insert(op.id);
+                self.heads.remove(p);
+                self.children.entry(*p).or_default().insert(op.id);
             }
-            next.advance_clock_past(&op.id);
+            self.advance_clock_past(&op.id);
         }
         for op in &cs.ops {
-            if next
+            if self
                 .children
                 .get(&op.id)
                 .is_none_or(imbl::HashSet::is_empty)
             {
-                next.heads.insert(op.id);
+                self.heads.insert(op.id);
             }
         }
         for op in &cs.ops {
-            next = next.try_promote_self_contained(op.id);
+            self.try_promote_self_contained_mut(op.id);
         }
-        next.changesets.push_back(std::sync::Arc::new(cs));
-        Ok(next)
+        self.changesets.push_back(std::sync::Arc::new(cs));
+        Ok(())
     }
 
     /// First failure short-circuits and the half-built `OpGraph` never
-    /// escapes — callers see all-or-nothing replay.
+    /// escapes — callers see all-or-nothing replay. Builds in place
+    /// (`receive_changeset_mut`) so the whole replay is a single linear pass,
+    /// not an `O(N)` persistent-collection clone per changeset.
     pub fn from_changesets(css: Vec<crate::Changeset<P>>) -> Result<Self, CrdtError> {
         let mut g = Self::new();
         for cs in css {
-            g = g.receive_changeset(cs)?;
+            g.receive_changeset_mut(cs)?;
         }
         Ok(g)
     }
@@ -597,10 +639,10 @@ impl<P: Clone + Eq> OpGraph<P> {
             if applied[i] {
                 continue;
             }
-            // receive_changeset는 verbatim 중복에 Ok(self.clone)을 돌려주므로 진전으로 처리됨.
-            match graph.receive_changeset(css[i].clone()) {
-                Ok(next) => {
-                    graph = next;
+            // receive_changeset_mut은 verbatim 중복에 Ok(())를 돌려주므로 진전으로 처리됨.
+            // Err 시 Phase A 전량거부라 graph는 무변경 → 안전하게 in-place 재시도/드롭.
+            match graph.receive_changeset_mut(css[i].clone()) {
+                Ok(()) => {
                     applied[i] = true;
                     if let Some(deps) = dependents.get(&i) {
                         for &d in deps {
@@ -690,30 +732,54 @@ impl<P: Clone + Eq> OpGraph<P> {
         &self,
         remote_heads: &HashSet<Dot>,
     ) -> Vec<crate::Changeset<P>> {
-        // missing_changesets_for의 total 변종: 모르는 head는 skip(에러 아님), 부분 포함 changeset은 보낸다.
-        let mut known: HashSet<Dot> = HashSet::new();
-        let mut walk: Vec<Dot> = remote_heads.iter().copied().collect();
-        while let Some(dot) = walk.pop() {
-            if !self.ops.contains_key(&dot) {
-                continue; // 모르는 head: skip
-            }
-            if known.insert(dot)
-                && let Some(op) = self.ops.get(&dot)
-            {
-                walk.extend(op.parents.iter().copied());
+        // Fast path: if the remote already knows every one of our heads, its causal
+        // history is a superset of ours — there is nothing to send. Skips any walk on
+        // the common case of a fully-synced peer (the per-tick sync queries that
+        // otherwise re-walk the whole graph each time).
+        if self.heads.iter().all(|h| remote_heads.contains(h)) {
+            return Vec::new();
+        }
+        // Two ways to find what the remote lacks: forward-walk its frontier to build its
+        // causal history (`O(remote ancestry)`, cheap when it is *far behind*), or
+        // backward-walk our unknown region from our heads (`O(unknown)`, cheap when it is
+        // *nearly synced* — the dominant per-tick case). We don't know a priori which is
+        // smaller, so run both interleaved and take whichever finishes first: total work
+        // is `O(min(remote ancestry, unknown))`, optimal for both extremes with no wasted
+        // half-walk from a mis-guessed budget.
+        match self.remote_frontier_delta(remote_heads) {
+            FrontierDelta::RemoteKnown(known) => self.collect_sendable(|dot| known.contains(dot)),
+            FrontierDelta::LocalUnknown(unknown) => {
+                self.collect_sendable(|dot| !unknown.contains(dot))
             }
         }
+    }
+
+    /// Emit every changeset the remote lacks, given `is_known(dot)` telling whether the
+    /// remote already has an op. A changeset every op of which is known is skipped;
+    /// otherwise it is sent, subject to the `self_contained` filter (a changeset with a
+    /// non-self-contained op — only possible after server-side data loss — cannot be
+    /// replayed and is withheld).
+    fn collect_sendable(&self, is_known: impl Fn(&Dot) -> bool) -> Vec<crate::Changeset<P>> {
+        // When every op is self-contained (the healthy graph — no degraded-storage
+        // descendants), the per-op self-contained filter can never reject a changeset,
+        // so skip it entirely (an O(1) length check vs an O(N log N) sweep of `imbl`
+        // probes over the whole history when sending everything to a fresh peer).
+        let all_self_contained = self.self_contained.len() == self.ops.len();
         let mut out: Vec<crate::Changeset<P>> = Vec::new();
         for cs in &self.changesets {
-            if cs
-                .ops
-                .iter()
-                .any(|op| !self.self_contained.contains(&op.id))
+            // Cheap `is_known` membership (a plain `HashSet`, O(1)) first: a fully-known
+            // changeset is rejected without the per-op `self_contained` probe (a
+            // persistent `imbl` set, O(log N)), reserving that for the ones we may send.
+            if cs.ops.iter().all(|op| is_known(&op.id)) {
+                continue; // fully known → peer already has it
+            }
+            if !all_self_contained
+                && cs
+                    .ops
+                    .iter()
+                    .any(|op| !self.self_contained.contains(&op.id))
             {
                 continue;
-            }
-            if cs.ops.iter().all(|op| known.contains(&op.id)) {
-                continue; // 완전 known → peer가 이미 가짐
             }
             out.push(cs.as_ref().clone());
         }
@@ -721,7 +787,127 @@ impl<P: Clone + Eq> OpGraph<P> {
     }
 }
 
+/// Result of the interleaved frontier race in [`OpGraph::remote_frontier_delta`]:
+/// whichever walk finished first. `RemoteKnown` holds the remote's full causal history
+/// (forward walk won); `LocalUnknown` holds the ops the remote lacks (backward walk won).
+enum FrontierDelta {
+    RemoteKnown(HashSet<Dot>),
+    LocalUnknown(HashSet<Dot>),
+}
+
 impl<P> OpGraph<P> {
+    /// Interleaved forward (remote-ancestry) and backward (our-unknown-region) walks,
+    /// returning whichever completes first. The forward walk builds the remote's causal
+    /// history; the backward walk builds the set of our ops the remote lacks, pruning at
+    /// the frontier. Both are correct on their own — the race just picks the cheaper one,
+    /// giving `O(min(remote ancestry, unknown region))` total.
+    fn remote_frontier_delta(&self, remote_heads: &HashSet<Dot>) -> FrontierDelta {
+        let mut fwd_known: HashSet<Dot> = HashSet::new();
+        let mut fwd_stack: Vec<Dot> = remote_heads.iter().copied().collect();
+
+        let mut bwd_unknown: HashSet<Dot> = HashSet::new();
+        let mut bwd_visited: HashSet<Dot> = HashSet::new();
+        let mut bwd_stack: Vec<Dot> = self.heads.iter().copied().collect();
+        let mut memo: HashMap<Dot, bool> = HashMap::new();
+
+        loop {
+            // One forward step: pop a remote ancestor, enqueue its parents.
+            match fwd_stack.pop() {
+                None => return FrontierDelta::RemoteKnown(fwd_known),
+                Some(dot) => {
+                    if self.ops.contains_key(&dot) && fwd_known.insert(dot) {
+                        if let Some(op) = self.ops.get(&dot) {
+                            fwd_stack.extend(op.parents.iter().copied());
+                        }
+                    }
+                }
+            }
+
+            // One productive backward step: pop until we classify a fresh unknown op
+            // (skipping already-visited and remote-known dots), then descend it.
+            loop {
+                match bwd_stack.pop() {
+                    None => return FrontierDelta::LocalUnknown(bwd_unknown),
+                    Some(d) => {
+                        if !bwd_visited.insert(d) {
+                            continue;
+                        }
+                        if self.is_ancestor_of_frontier(d, remote_heads, &mut memo) {
+                            continue; // remote has this and everything below it
+                        }
+                        bwd_unknown.insert(d);
+                        if let Some(op) = self.ops.get(&d) {
+                            for p in &op.parents {
+                                bwd_stack.push(*p);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether `start` is an ancestor-or-self of some remote head — i.e. the remote
+    /// already has it. Memoized on `memo`. Propagates known-ness *downward* through the
+    /// reverse-parent (`children`) index: `start` is known iff it is a remote head or
+    /// any of its children is known. Iterative post-order to bound the WASM stack.
+    fn is_ancestor_of_frontier(
+        &self,
+        start: Dot,
+        remote_heads: &HashSet<Dot>,
+        memo: &mut HashMap<Dot, bool>,
+    ) -> bool {
+        if let Some(&v) = memo.get(&start) {
+            return v;
+        }
+        let mut stack: Vec<(Dot, bool)> = vec![(start, false)];
+        while let Some((d, expanded)) = stack.pop() {
+            if memo.contains_key(&d) {
+                continue;
+            }
+            if remote_heads.contains(&d) {
+                memo.insert(d, true);
+                continue;
+            }
+            let children = self.children.get(&d);
+            if expanded {
+                let known = children
+                    .map(|cs| cs.iter().any(|c| memo.get(c).copied().unwrap_or(false)))
+                    .unwrap_or(false);
+                memo.insert(d, known);
+                continue;
+            }
+            // First visit: resolve via already-known children, else defer behind the
+            // unresolved ones.
+            let mut pending: Vec<Dot> = Vec::new();
+            let mut known = false;
+            if let Some(cs) = children {
+                for c in cs {
+                    match memo.get(c) {
+                        Some(true) => {
+                            known = true;
+                            break;
+                        }
+                        Some(false) => {}
+                        None => pending.push(*c),
+                    }
+                }
+            }
+            if known {
+                memo.insert(d, true);
+            } else if pending.is_empty() {
+                memo.insert(d, false);
+            } else {
+                stack.push((d, true));
+                for c in pending {
+                    stack.push((c, false));
+                }
+            }
+        }
+        memo[&start]
+    }
+
     /// Phase B caller has already passed `op.id.clock.checked_add(1)` in
     /// Phase A, so the overflow path is unreachable here.
     fn advance_clock_past(&mut self, dot: &Dot) {
@@ -1644,6 +1830,57 @@ mod tests {
     }
 
     #[test]
+    fn heads_of_matches_current_heads() {
+        let root = Op {
+            id: Dot::new(1, 0),
+            parents: vec![],
+            payload: 0u32,
+        };
+        let a = Op {
+            id: Dot::new(1, 1),
+            parents: vec![root.id],
+            payload: 1,
+        };
+        let b = Op {
+            id: Dot::new(2, 0), // concurrent branch, different actor
+            parents: vec![root.id],
+            payload: 2,
+        };
+        let m = Op {
+            id: Dot::new(1, 2),
+            parents: vec![a.id, b.id], // merge
+            payload: 3,
+        };
+
+        let assert_frontier_matches = |css: &[crate::Changeset<u32>]| {
+            let g = OpGraph::<u32>::from_changesets(css.to_vec()).unwrap();
+            let mut expected: Vec<Dot> = g.current_heads().copied().collect();
+            expected.sort();
+            assert_eq!(OpGraph::<u32>::heads_of(css), expected);
+        };
+
+        // Two concurrent heads (a, b).
+        assert_frontier_matches(&[
+            crate::Changeset {
+                ops: vec![root.clone()],
+            },
+            crate::Changeset {
+                ops: vec![a.clone()],
+            },
+            crate::Changeset {
+                ops: vec![b.clone()],
+            },
+        ]);
+        // Merged into a single head (m).
+        assert_frontier_matches(&[
+            crate::Changeset { ops: vec![root] },
+            crate::Changeset { ops: vec![a] },
+            crate::Changeset { ops: vec![b] },
+            crate::Changeset { ops: vec![m] },
+        ]);
+    }
+
+    #[test]
     fn from_changesets_rejects_bad_input() {
         let bad = crate::Changeset {
             ops: vec![Op {
@@ -2077,6 +2314,69 @@ mod proptests {
                     "cycle detected starting from {:?}", start
                 );
             }
+        }
+    }
+
+    /// Forward-walk-only reference: the remote's known set is the ancestry of its
+    /// frontier; a changeset is sent iff not fully known (and self-contained). This is
+    /// the original, obviously-correct algorithm — the interleaved `missing_changesets_
+    /// tolerant` must produce the identical changeset set for every graph and frontier.
+    fn forward_reference(g: &OpGraph<u32>, remote_heads: &HashSet<Dot>) -> HashSet<Vec<Dot>> {
+        let mut known: HashSet<Dot> = HashSet::new();
+        let mut walk: Vec<Dot> = remote_heads.iter().copied().collect();
+        while let Some(dot) = walk.pop() {
+            if !g.ops.contains_key(&dot) {
+                continue;
+            }
+            if known.insert(dot)
+                && let Some(op) = g.ops.get(&dot)
+            {
+                walk.extend(op.parents.iter().copied());
+            }
+        }
+        let all_self_contained = g.self_contained.len() == g.ops.len();
+        let mut out: HashSet<Vec<Dot>> = HashSet::new();
+        for cs in &g.changesets {
+            if cs.ops.iter().all(|op| known.contains(&op.id)) {
+                continue;
+            }
+            if !all_self_contained && cs.ops.iter().any(|op| !g.self_contained.contains(&op.id)) {
+                continue;
+            }
+            out.insert(cs.ops.iter().map(|o| o.id).collect());
+        }
+        out
+    }
+
+    fn changeset_set(css: &[crate::Changeset<u32>]) -> HashSet<Vec<Dot>> {
+        css.iter()
+            .map(|cs| cs.ops.iter().map(|o| o.id).collect())
+            .collect()
+    }
+
+    proptest! {
+        /// The interleaved forward/backward frontier race must return exactly the
+        /// changesets the forward-only reference does — for arbitrary DAGs and arbitrary
+        /// remote frontiers (empty, full, and every partial cut, including non-head ops).
+        #[test]
+        fn missing_changesets_matches_forward_reference(
+            ops in arb_op_sequence(30, 3),
+            perm_seed in any::<u64>(),
+            heads_mask in any::<u64>(),
+        ) {
+            let g = apply_all(&causal_permute(&ops, perm_seed));
+            let mut dots: Vec<Dot> = g.ops.keys().copied().collect();
+            dots.sort();
+            let remote_heads: HashSet<Dot> = dots
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| (heads_mask >> (i % 64)) & 1 == 1)
+                .map(|(_, d)| *d)
+                .collect();
+
+            let got = changeset_set(&g.missing_changesets_tolerant(&remote_heads));
+            let expected = forward_reference(&g, &remote_heads);
+            prop_assert_eq!(got, expected, "remote_heads={:?}", remote_heads);
         }
     }
 

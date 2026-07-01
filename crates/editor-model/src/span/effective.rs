@@ -5,7 +5,7 @@ use strum::IntoEnumIterator;
 
 use crate::nodes::Node;
 use crate::seq::{BlockNode, BlockTree, Child, anchor_dot};
-use crate::span::{ExplicitEffect, leaves_with_context};
+use crate::span::ExplicitEffect;
 use crate::{Modifier, ModifierAttrLog, ModifierType, NodeType, Schema, StyleEntry};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,6 +171,7 @@ pub(crate) struct BlockContext {
 
 pub(crate) fn blocks_with_context(tree: &BlockTree) -> Vec<BlockContext> {
     fn walk(
+        tree: &BlockTree,
         node: &BlockNode,
         path: &mut Vec<(NodeType, Option<Dot>)>,
         out: &mut Vec<BlockContext>,
@@ -183,16 +184,18 @@ pub(crate) fn blocks_with_context(tree: &BlockTree) -> Vec<BlockContext> {
         });
         path.push((node.node_type, anchor_dot(node.id)));
         for c in &node.children {
-            if let Child::Block(b) = c {
-                walk(b, path, out);
+            if let Child::Block(id) = c
+                && let Some(b) = tree.get(*id)
+            {
+                walk(tree, b, path, out);
             }
         }
         path.pop();
     }
     let mut out = Vec::new();
     let mut path = Vec::new();
-    for r in &tree.roots {
-        walk(r, &mut path, &mut out);
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, &mut path, &mut out);
     }
     out
 }
@@ -200,7 +203,7 @@ pub(crate) fn blocks_with_context(tree: &BlockTree) -> Vec<BlockContext> {
 pub fn derive_block_effective(
     tree: &BlockTree,
     src: &EffectiveSources,
-) -> HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
     blocks_with_context(tree)
         .into_iter()
         .map(|ctx| {
@@ -216,51 +219,66 @@ pub struct OwnModifier {
     pub from_style: bool,
 }
 
+/// Own (non-inherited) modifiers of a single leaf: its explicit span effects plus
+/// node-style-provided modifiers, tagged by source. Returns an empty map when the
+/// leaf carries none. `leaf_path` is the full node-type path including the leaf.
+pub fn own_modifiers_for_leaf(
+    leaf_dot: Dot,
+    leaf_path: &[NodeType],
+    src: &EffectiveSources,
+) -> BTreeMap<ModifierType, OwnModifier> {
+    let mut own: BTreeMap<ModifierType, Option<OwnModifier>> = BTreeMap::new();
+    if let Some(ex) = src.explicit_spans.get(&leaf_dot) {
+        for (ty, e) in ex {
+            own.insert(
+                *ty,
+                match e {
+                    ExplicitEffect::Set(m) => Some(OwnModifier {
+                        value: m.clone(),
+                        from_style: false,
+                    }),
+                    ExplicitEffect::Clear => None,
+                },
+            );
+        }
+    }
+    if let Some(Some(sid)) = src.node_styles.get(&leaf_dot)
+        && let Some(style) = src.styles.get(sid)
+    {
+        for (ty, m) in style_modifiers(style, leaf_path) {
+            own.entry(ty).or_insert(Some(OwnModifier {
+                value: m,
+                from_style: true,
+            }));
+        }
+    }
+    own.into_iter()
+        .filter_map(|(t, o)| o.map(|m| (t, m)))
+        .collect()
+}
+
 pub fn derive_own_modifiers(
     tree: &BlockTree,
     src: &EffectiveSources,
-) -> HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> {
-    let mut out: HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> = HashMap::new();
-    for ctx in leaves_with_context(tree) {
-        let leaf_path: Vec<NodeType> = ctx
-            .block_path
+) -> imbl::HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> {
+    let mut out: imbl::HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> = imbl::HashMap::new();
+    crate::span::for_each_leaf(tree, |path, leaf_type, leaf_dot| {
+        // Own modifiers come only from the leaf's own explicit spans or node style.
+        // A leaf with neither has no own modifiers, so skip building its path entirely
+        // (the common case for plain text).
+        if !src.explicit_spans.contains_key(&leaf_dot) && !src.node_styles.contains_key(&leaf_dot) {
+            return;
+        }
+        let leaf_path: Vec<NodeType> = path
             .iter()
             .map(|(t, _)| *t)
-            .chain(std::iter::once(ctx.leaf_type))
+            .chain(std::iter::once(leaf_type))
             .collect();
-        let mut own: BTreeMap<ModifierType, Option<OwnModifier>> = BTreeMap::new();
-        if let Some(ex) = src.explicit_spans.get(&ctx.leaf_dot) {
-            for (ty, e) in ex {
-                own.insert(
-                    *ty,
-                    match e {
-                        ExplicitEffect::Set(m) => Some(OwnModifier {
-                            value: m.clone(),
-                            from_style: false,
-                        }),
-                        ExplicitEffect::Clear => None,
-                    },
-                );
-            }
-        }
-        if let Some(Some(sid)) = src.node_styles.get(&ctx.leaf_dot)
-            && let Some(style) = src.styles.get(sid)
-        {
-            for (ty, m) in style_modifiers(style, &leaf_path) {
-                own.entry(ty).or_insert(Some(OwnModifier {
-                    value: m,
-                    from_style: true,
-                }));
-            }
-        }
-        let map: BTreeMap<ModifierType, OwnModifier> = own
-            .into_iter()
-            .filter_map(|(t, o)| o.map(|m| (t, m)))
-            .collect();
+        let map = own_modifiers_for_leaf(leaf_dot, &leaf_path, src);
         if !map.is_empty() {
-            out.insert(ctx.leaf_dot, map);
+            out.insert(leaf_dot, map);
         }
-    }
+    });
     out
 }
 
@@ -942,7 +960,7 @@ mod tests {
         )];
         let log = oplog_of(&elems);
         let (els, _r) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let bm = ModifierAttrLog::new()
             .apply(
                 Dot::new(7, 0),
@@ -997,7 +1015,7 @@ mod tests {
         ];
         let log = oplog_of(&elems);
         let (els, _r) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let bm = ModifierAttrLog::new();
         let spans = HashMap::new();
         let node_styles = imbl::HashMap::new();
@@ -1065,7 +1083,7 @@ mod tests {
         ];
         let log = oplog_of(&elems);
         let (els, _r) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
 
         let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
         spans.insert(
@@ -1123,7 +1141,7 @@ mod tests {
         ];
         let log = oplog_of(&elems);
         let (els, _r) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
 
         let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
         spans.insert(
@@ -1177,7 +1195,7 @@ mod tests {
         ];
         let log = oplog_of(&elems);
         let (els, _r) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
         let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
         node_styles.insert(a, Some("s".to_string()));

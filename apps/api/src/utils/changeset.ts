@@ -3,9 +3,158 @@ import { redis } from '#/cache.ts';
 import { db, DocumentStates, firstOrThrow } from '#/db/index.ts';
 import { wasm } from './wasm-ffi.ts';
 
-export const readMergedGraph = async (documentId: string, persistedGraph?: Uint8Array): Promise<Uint8Array> => {
-  const pending = await redis.lrange(`document:changesets:pending:${documentId}`, 0, -1);
+// * Sync storage model
+//
+// The un-snapshotted changeset history lives in a single per-document Redis
+// Stream — the ordered, shared, coherence-safe source of truth every API
+// instance reads. Each push appends ONE entry (its changeset bundle), so a
+// client's catch-up is an `O(missing)` `XRANGE` from its last-seen stream id
+// (its "seq") rather than an `O(history)` graph rebuild.
+//
+//   stream:{id}    Redis Stream. fields: c=base64 bundle, u=userId, d=deviceId
+//   collected:{id} last stream id folded into the persisted snapshot by collect
+//   durable:{id}   durableHeads (base64) of the persisted snapshot (collect writes)
+//
+// The persisted snapshot (`DocumentStates.graph`) is materialized by the collect
+// job for text/search/full-load; it is fed from the stream, which is trimmed
+// behind the collected cursor while retaining a catch-up window.
 
+export const streamKey = (documentId: string) => `document:changesets:stream:${documentId}`;
+export const collectedKey = (documentId: string) => `document:changesets:collected:${documentId}`;
+export const durableKey = (documentId: string) => `document:changesets:durable:${documentId}`;
+export const liveKey = (documentId: string) => `document:changesets:live:${documentId}`;
+
+// Retain this much history behind the collected cursor so a briefly-
+// disconnected client catches up incrementally; anyone older full-reloads (see
+// `truncated`). Trimming is keyed to the collected cursor, never `MAXLEN`, so an
+// un-collected backlog (e.g. worker outage) is never trimmed away — no data loss.
+const RETAIN_WINDOW_MS = 30 * 60 * 1000;
+
+export type StreamEntry = { seq: string; changeset: Uint8Array; userId: string; deviceId: string };
+
+// Redis Stream ids are `<ms>-<seq>`; compare numerically part-by-part.
+export const seqCompare = (a: string, b: string): number => {
+  const [am, as] = a.split('-').map(BigInt);
+  const [bm, bs] = b.split('-').map(BigInt);
+  if (am !== bm) return am < bm ? -1 : 1;
+  if (as !== bs) return as < bs ? -1 : 1;
+  return 0;
+};
+
+type XRangeRow = [id: string, fields: string[]];
+
+const parseEntries = (rows: XRangeRow[]): StreamEntry[] =>
+  rows.map(([seq, fields]) => {
+    const map = new Map<string, string>();
+    for (let i = 0; i < fields.length; i += 2) {
+      map.set(fields[i], fields[i + 1]);
+    }
+    return {
+      seq,
+      changeset: Uint8Array.fromBase64(map.get('c') ?? ''),
+      userId: map.get('u') ?? '',
+      deviceId: map.get('d') ?? '',
+    };
+  });
+
+// Append one push bundle to the stream. Returns the assigned stream id (the seq
+// broadcast to peers and returned to the pusher). An accurate confirmed-heads
+// contract keeps a pusher from re-sending already-known changesets, so the
+// stream stays duplicate-free without an explicit dedup index.
+export const appendBundle = async (documentId: string, bundle: Uint8Array, userId: string, deviceId: string): Promise<string> => {
+  // No MAXLEN: trimming is the collect job's responsibility (keyed to the
+  // collected cursor) so un-collected entries are never dropped.
+  const seq = await redis.xadd(streamKey(documentId), '*', 'c', bundle.toBase64(), 'u', userId, 'd', deviceId);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- xadd on a stream always returns an id
+  return seq!;
+};
+
+// Read up to `count` entries strictly after `sinceSeq` — the collect job's
+// bounded batch.
+export const readStreamBatch = async (documentId: string, sinceSeq: string | null, count: number): Promise<StreamEntry[]> => {
+  const start = sinceSeq ? `(${sinceSeq}` : '-';
+  const rows = (await redis.xrange(streamKey(documentId), start, '+', 'COUNT', count)) as XRangeRow[];
+  return parseEntries(rows);
+};
+
+// Trim history older than the catch-up window *behind the collected cursor*.
+// Entries after the cursor (un-collected) are always newer than the floor, so
+// they are never trimmed regardless of how far collect has fallen behind.
+export const trimStream = async (documentId: string, collectedSeq: string): Promise<void> => {
+  const collectedMs = Number(collectedSeq.split('-')[0]);
+  const floorMs = collectedMs - RETAIN_WINDOW_MS;
+  if (floorMs <= 0) return;
+  await redis.xtrim(streamKey(documentId), 'MINID', '~', `${floorMs}-0`);
+};
+
+// All stream entries strictly after `sinceSeq` (exclusive). `truncated` is true
+// when the client's cursor predates the retained window — entries it still needs
+// were already trimmed, so the caller must full-reload instead of incrementally
+// catching up.
+export const readStreamSince = async (
+  documentId: string,
+  sinceSeq: string | null,
+): Promise<{ entries: StreamEntry[]; tip: string | null; truncated: boolean }> => {
+  const key = streamKey(documentId);
+  const start = sinceSeq ? `(${sinceSeq}` : '-';
+  const rows = (await redis.xrange(key, start, '+')) as XRangeRow[];
+  const entries = parseEntries(rows);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- non-empty guarded
+  const tip = entries.length > 0 ? entries.at(-1)!.seq : sinceSeq;
+
+  let truncated = false;
+  if (sinceSeq) {
+    const oldest = (await redis.xrange(key, '-', '+', 'COUNT', 1)) as XRangeRow[];
+    // Oldest retained id newer than the client's cursor ⇒ the entries between
+    // were trimmed. (A caught-up client whose stream is empty is fine.)
+    if (oldest.length > 0 && seqCompare(oldest[0][0], sinceSeq) > 0) {
+      truncated = true;
+    }
+  }
+  return { entries, tip, truncated };
+};
+
+export const streamTip = async (documentId: string): Promise<string | null> => {
+  const rows = (await redis.xrevrange(streamKey(documentId), '+', '-', 'COUNT', 1)) as XRangeRow[];
+  return rows.length > 0 ? rows[0][0] : null;
+};
+
+export const getDurableHeads = async (documentId: string): Promise<Uint8Array | null> => {
+  const b64 = await redis.get(durableKey(documentId));
+  return b64 ? Uint8Array.fromBase64(b64) : null;
+};
+
+// The stream id up to which the persisted snapshot already includes everything.
+// A full-load client starts incremental sync here and pulls only the tail.
+export const getCollectedSeq = async (documentId: string): Promise<string | null> => {
+  return await redis.get(collectedKey(documentId));
+};
+
+// Live frontier of the full document (snapshot + full stream). Push computes it
+// (it must, to give the pusher an accurate confirmed-heads that prevents it from
+// re-broadcasting peers' changesets) and stores it here so the O(1) reads on the
+// pull / catch-up / document-load paths never rebuild the graph.
+export const setLiveHeads = async (documentId: string, heads: Uint8Array): Promise<void> => {
+  await redis.set(liveKey(documentId), heads.toBase64());
+};
+
+export const getLiveHeads = async (documentId: string): Promise<Uint8Array | null> => {
+  const b64 = await redis.get(liveKey(documentId));
+  return b64 ? Uint8Array.fromBase64(b64) : null;
+};
+
+// Advance the collected cursor and record the snapshot's durable heads together
+// (collect job). Everything at or before `seq` is now folded into the persisted
+// snapshot; `readMergedGraph` replays only what comes after.
+export const setCollected = async (documentId: string, seq: string, durableHeads: Uint8Array): Promise<void> => {
+  await redis.set(collectedKey(documentId), seq);
+  await redis.set(durableKey(documentId), durableHeads.toBase64());
+};
+
+// The full current document = persisted snapshot + the stream tail the collect
+// job has not folded in yet. Used by the initial full-load `graph` query, by
+// push to report accurate live heads, and by collect as its base.
+export const readMergedGraph = async (documentId: string, persistedGraph?: Uint8Array): Promise<Uint8Array> => {
   let persisted = persistedGraph;
   if (!persisted) {
     const row = await db
@@ -16,15 +165,31 @@ export const readMergedGraph = async (documentId: string, persistedGraph?: Uint8
     persisted = row.graph;
   }
 
-  if (pending.length === 0) return persisted;
+  const collected = await redis.get(collectedKey(documentId));
+  const { entries } = await readStreamSince(documentId, collected);
+  if (entries.length === 0) return persisted;
 
-  const pendingBundles = pending.toReversed().map((p) => Uint8Array.fromBase64((JSON.parse(p) as { changesets: string }).changesets));
+  // Fold the whole tail in ONE wasm call: `apply` per entry re-decodes the
+  // multi-MB graph every time (`O(tail × N)`, the load/push runaway); `apply_many`
+  // decodes once and applies the tail against an in-memory accumulator (`O(N + tail)`).
+  const packed = packLengthPrefixed(entries.map((e) => e.changeset));
+  return await wasm.use((host) => host.apply_many(persisted, packed));
+};
 
-  return await wasm.use((host) => {
-    let merged = persisted;
-    for (const bundle of pendingBundles) {
-      merged = host.apply(merged, bundle);
-    }
-    return merged;
-  });
+// `[u32 LE count][for each: u32 LE len, bytes]` — matches the Rust
+// `graph::decode_length_prefixed` reader used by `apply_many`.
+export const packLengthPrefixed = (blobs: Uint8Array[]): Uint8Array => {
+  const total = 4 + blobs.reduce((sum, b) => sum + 4 + b.length, 0);
+  const out = new Uint8Array(total);
+  const view = new DataView(out.buffer);
+  let pos = 0;
+  view.setUint32(pos, blobs.length, true);
+  pos += 4;
+  for (const b of blobs) {
+    view.setUint32(pos, b.length, true);
+    pos += 4;
+    out.set(b, pos);
+    pos += b.length;
+  }
+  return out;
 };

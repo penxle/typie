@@ -11,6 +11,7 @@ use crate::style::{BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 
 use super::dispatch::measure_child;
 use super::line_geometry::first_line_info;
+use crate::measure::Measurer;
 use crate::measure::container::layout_padded;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredBox, MeasuredChildren, MeasuredContent, MeasuredNode};
@@ -24,6 +25,7 @@ const FOLD_CONTENT_PADDING_Y: f32 = 16.0;
 const FOLD_BORDER_WIDTH: f32 = 1.0;
 
 pub(crate) fn measure_fold_title(
+    _measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -47,6 +49,7 @@ pub(crate) fn measure_fold_title(
         Alignment::Left,
         0.0,
         ctx.pending_for(&node.id()),
+        None,
         resource,
     );
     let children: Vec<Arc<MeasuredNode>> = lines
@@ -94,14 +97,16 @@ pub(crate) fn measure_fold_title(
 }
 
 pub(crate) fn measure_fold_content(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
     resource: &mut Resource,
 ) -> MeasuredNode {
     let padding = EdgeInsets::symmetric(FOLD_CONTENT_PADDING_X, FOLD_CONTENT_PADDING_Y);
-    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
-        measure_child;
+    let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
+        measure_child(measurer, child, w, ctx, r)
+    };
     layout_padded(
         node,
         width,
@@ -118,6 +123,7 @@ pub(crate) fn measure_fold_content(
 }
 
 pub(crate) fn measure_fold(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -137,7 +143,7 @@ pub(crate) fn measure_fold(
         {
             continue;
         }
-        let m = measure_child(child, content_width, ctx, resource);
+        let m = measure_child(measurer, child, content_width, ctx, resource);
         children_height += m.height;
         children.push(m);
     }
@@ -304,7 +310,13 @@ mod tests {
         let title = get_node(&view, ft_dot);
         let mut res = Resource::new_test();
 
-        let measured = measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res);
+        let measured = measure_fold_title(
+            &mut Measurer::new(),
+            &title,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = measured.content else {
             panic!("expected Box");
         };
@@ -324,7 +336,8 @@ mod tests {
             fold_states: HashMap::from([(editor_crdt::Dot::new(1, 1), false)]),
             ..Default::default()
         };
-        let measured_false = measure_fold_title(&title, 300.0, &ctx_false, &mut res);
+        let measured_false =
+            measure_fold_title(&mut Measurer::new(), &title, 300.0, &ctx_false, &mut res);
         let MeasuredContent::Box(ref bf) = measured_false.content else {
             panic!("expected Box");
         };
@@ -341,9 +354,22 @@ mod tests {
         let mut res = Resource::new_test();
 
         let inner_width = 300.0 - 40.0 - 12.0;
-        let (_, inline_h) =
-            measure_paragraph(&title, inner_width, Alignment::Left, 0.0, None, &mut res);
-        let measured = measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res);
+        let (_, inline_h) = measure_paragraph(
+            &title,
+            inner_width,
+            Alignment::Left,
+            0.0,
+            None,
+            None,
+            &mut res,
+        );
+        let measured = measure_fold_title(
+            &mut Measurer::new(),
+            &title,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         assert!(
             (measured.height - (inline_h + 8.0 * 2.0)).abs() < 0.01,
             "height mismatch: {} vs {}",
@@ -360,7 +386,13 @@ mod tests {
         let content = get_node(&view, fc_dot);
         let mut res = Resource::new_test();
 
-        let measured = measure_fold_content(&content, 300.0, &MeasureContext::default(), &mut res);
+        let measured = measure_fold_content(
+            &mut Measurer::new(),
+            &content,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = measured.content else {
             panic!("expected Box");
         };
@@ -429,7 +461,13 @@ mod tests {
         let root = get_node(&view, root_dot);
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref rb) = result.content else {
             panic!("expected Box at root");
         };
@@ -454,13 +492,19 @@ mod tests {
             fold_states: HashMap::from([(fold_dot, false)]),
             ..Default::default()
         };
-        let collapsed = measure_fold(&fold, 300.0, &ctx_collapsed, &mut res);
+        let collapsed = measure_fold(&mut Measurer::new(), &fold, 300.0, &ctx_collapsed, &mut res);
         let MeasuredContent::Box(ref cb) = collapsed.content else {
             panic!("expected Box");
         };
         assert_eq!(cb.children.len(), 1);
 
-        let expanded = measure_fold(&fold, 300.0, &MeasureContext::default(), &mut res);
+        let expanded = measure_fold(
+            &mut Measurer::new(),
+            &fold,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref eb) = expanded.content else {
             panic!("expected Box");
         };
@@ -476,7 +520,13 @@ mod tests {
         let fold = get_node(&view, fold_dot);
         let mut res = Resource::new_test();
 
-        let result = measure_node(&fold, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &fold,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = result.content else {
             panic!("expected Box");
         };
@@ -496,15 +546,26 @@ mod tests {
             fold_states: HashMap::from([(fold_id, false)]),
             ..Default::default()
         };
-        let measured = measure_fold_title(&title, 300.0, &ctx_collapsed, &mut res);
+        let measured = measure_fold_title(
+            &mut Measurer::new(),
+            &title,
+            300.0,
+            &ctx_collapsed,
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = measured.content else {
             panic!("expected Box");
         };
         let dec = &b.style.decorations[0];
         assert!(matches!(dec.data, DecorationData::Bool(false)));
 
-        let measured_default =
-            measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res);
+        let measured_default = measure_fold_title(
+            &mut Measurer::new(),
+            &title,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref bd) = measured_default.content else {
             panic!("expected Box");
         };
@@ -552,7 +613,14 @@ mod tests {
         let title_id = ft_dot;
         let mut res = Resource::new_test();
 
-        let h_none = measure_fold_title(&title, 300.0, &MeasureContext::default(), &mut res).height;
+        let h_none = measure_fold_title(
+            &mut Measurer::new(),
+            &title,
+            300.0,
+            &MeasureContext::default(),
+            &mut res,
+        )
+        .height;
 
         let big: editor_state::PendingModifiers = vec![PendingModifier::Set {
             modifier: Modifier::FontSize { value: 9600 },
@@ -561,7 +629,8 @@ mod tests {
             pending_style: Some((title_id, big)),
             ..Default::default()
         };
-        let h_pending = measure_fold_title(&title, 300.0, &ctx_pending, &mut res).height;
+        let h_pending =
+            measure_fold_title(&mut Measurer::new(), &title, 300.0, &ctx_pending, &mut res).height;
 
         assert!(
             h_pending > h_none,
@@ -583,7 +652,8 @@ mod tests {
             fold_states: HashMap::from([(fold_id, false)]),
             ..Default::default()
         };
-        let result_collapsed = measure_node(&root, 400.0, &ctx_collapsed, &mut res);
+        let result_collapsed =
+            measure_node(&mut Measurer::new(), &root, 400.0, &ctx_collapsed, &mut res);
         let MeasuredContent::Box(ref rb) = result_collapsed.content else {
             panic!("expected Box at root");
         };
@@ -593,7 +663,13 @@ mod tests {
         };
         assert_eq!(fb.children.len(), 1);
 
-        let result_expanded = measure_node(&root, 400.0, &MeasureContext::default(), &mut res);
+        let result_expanded = measure_node(
+            &mut Measurer::new(),
+            &root,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref rb2) = result_expanded.content else {
             panic!("expected Box at root");
         };

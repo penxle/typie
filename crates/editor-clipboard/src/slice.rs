@@ -359,7 +359,7 @@ mod tests {
         };
         for dot in dots {
             state
-                .projected
+                .projected_mut()
                 .apply(EditOp::NodeStyle(NodeLwwOp {
                     target: dot,
                     op: LwwRegOp::Set {

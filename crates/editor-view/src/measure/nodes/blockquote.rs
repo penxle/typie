@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use editor_common::{EdgeInsets, Rect};
-use editor_model::{BlockquoteVariant, ChildView, Node, NodeView};
+use editor_model::{BlockquoteVariant, Node, NodeView};
 use editor_resource::Resource;
 
 use crate::measure::PageBreakPolicy;
@@ -10,6 +8,7 @@ use crate::style::{Alignment, BorderMode, BoxStyle, Decoration, DecorationData, 
 
 use super::dispatch::measure_child;
 use super::line_geometry::first_line_info;
+use crate::measure::Measurer;
 use crate::measure::container::{layout_padded, layout_vertical};
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredBox, MeasuredContent, MeasuredNode};
@@ -25,6 +24,7 @@ const BQ_MESSAGE_MIN_WIDTH: f32 = 40.0;
 const BQ_MESSAGE_LAYOUT_GUARD_WIDTH: f32 = 1.0;
 
 pub(crate) fn measure_blockquote(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
@@ -34,8 +34,9 @@ pub(crate) fn measure_blockquote(
         unreachable!()
     };
 
-    let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
-        measure_child;
+    let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
+        measure_child(measurer, child, w, ctx, r)
+    };
 
     match *bq.variant.get() {
         BlockquoteVariant::LeftLine => {
@@ -184,6 +185,7 @@ mod tests {
     use editor_resource::Resource;
 
     use crate::glyph_run::GlyphRun;
+    use crate::measure::Measurer;
     use crate::measure::text::measure::MeasuredLine;
     use crate::style::{Alignment, DecorationData};
 
@@ -319,7 +321,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box) = result.content else {
             panic!("expected Box at root");
         };
@@ -342,7 +350,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box) = result.content else {
             panic!("expected Box at root");
         };
@@ -369,7 +383,13 @@ mod tests {
         let root_sent = sent.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result_sent = measure_node(&root_sent, 400.0, &MeasureContext::default(), &mut res);
+        let result_sent = measure_node(
+            &mut Measurer::new(),
+            &root_sent,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box_sent) = result_sent.content else {
             panic!("expected Box at root");
         };
@@ -390,7 +410,13 @@ mod tests {
         let recv = DocView::new(&pd_recv);
         let root_recv = recv.root().unwrap();
 
-        let result_recv = measure_node(&root_recv, 400.0, &MeasureContext::default(), &mut res);
+        let result_recv = measure_node(
+            &mut Measurer::new(),
+            &root_recv,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref root_box_recv) = result_recv.content else {
             panic!("expected Box at root");
         };

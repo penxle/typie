@@ -293,6 +293,12 @@ export class Editor {
   #styleEntries = $state<StyleInfo[]>([]);
   #appliedStyle = $state<Tri<StyleRefValue>>({ type: 'absent' });
   #styleDivergence = $state(false);
+  // While a pointer selection drag is active, the toolbar-state queries
+  // (applied_style/style_divergence/modifier_state/block_state — expensive on
+  // range selections) are deferred: the toolbar only needs the final selection,
+  // so we pull once on release instead of every drag frame.
+  #toolbarSyncSuspended = false;
+  #toolbarSyncPending = false;
   #focused = $state(false);
   #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
@@ -382,21 +388,27 @@ export class Editor {
       this.#rootAttrs = this.#wasm.root_attrs();
     }
 
-    if (fields.includes('modifiers')) {
-      this.#modifierState = this.#wasm.modifier_state();
-    }
+    if (this.#toolbarSyncSuspended) {
+      if (fields.includes('modifiers') || fields.includes('block') || fields.includes('styles')) {
+        this.#toolbarSyncPending = true;
+      }
+    } else {
+      if (fields.includes('modifiers')) {
+        this.#modifierState = this.#wasm.modifier_state();
+      }
 
-    if (fields.includes('block')) {
-      this.#blockState = this.#wasm.block_state();
-    }
+      if (fields.includes('block')) {
+        this.#blockState = this.#wasm.block_state();
+      }
 
-    if (fields.includes('styles')) {
-      this.#styleEntries = this.#wasm.style_entries();
-      this.#appliedStyle = this.#wasm.applied_style();
-    }
+      if (fields.includes('styles')) {
+        this.#styleEntries = this.#wasm.style_entries();
+        this.#appliedStyle = this.#wasm.applied_style();
+      }
 
-    if (fields.includes('styles') || fields.includes('modifiers')) {
-      this.#styleDivergence = this.#wasm.style_divergence();
+      if (fields.includes('styles') || fields.includes('modifiers')) {
+        this.#styleDivergence = this.#wasm.style_divergence();
+      }
     }
 
     if (fields.includes('tracked_ranges')) {
@@ -1195,6 +1207,22 @@ export class Editor {
     this.tickRevision += 1;
   }
 
+  suspendToolbarSync(): void {
+    this.#toolbarSyncSuspended = true;
+  }
+
+  resumeToolbarSync(): void {
+    this.#toolbarSyncSuspended = false;
+    if (!this.#toolbarSyncPending) return;
+    this.#toolbarSyncPending = false;
+    if (this.#destroyed) return;
+    this.#modifierState = this.#wasm.modifier_state();
+    this.#blockState = this.#wasm.block_state();
+    this.#styleEntries = this.#wasm.style_entries();
+    this.#appliedStyle = this.#wasm.applied_style();
+    this.#styleDivergence = this.#wasm.style_divergence();
+  }
+
   attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {
     if (this.#destroyed) return;
     this.#wasm.attach_surface(page, canvas, width, height, this.surfaceScaleFactor);
@@ -1229,6 +1257,10 @@ export class Editor {
 
   localChangesetsSince(remoteHeads: Uint8Array): Uint8Array {
     return this.#wasm.local_changesets_since(remoteHeads);
+  }
+
+  changesetIds(): string[] {
+    return this.#wasm.changeset_ids();
   }
 
   missingChangesetsFor(confirmedHeads: Uint8Array): Uint8Array {

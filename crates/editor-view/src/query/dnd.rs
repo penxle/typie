@@ -332,7 +332,13 @@ mod tests {
         let view = DocView::new(pd);
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
-        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let measured = measure_node(
+            &mut crate::measure::Measurer::new(),
+            &root_node,
+            width,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
             .paginate(MeasuredTree { root: measured });
         let index = LayoutIndex::new(layout.tree, &layout.pages);

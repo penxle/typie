@@ -697,7 +697,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let root_id = root_node.id();
         let mut res = Resource::new_test();
-        let measured = measure_node(&root_node, width, &MeasureContext::default(), &mut res);
+        let measured = measure_node(
+            &mut crate::measure::Measurer::new(),
+            &root_node,
+            width,
+            &MeasureContext::default(),
+            &mut res,
+        );
         (root_id, MeasuredTree { root: measured })
     }
 

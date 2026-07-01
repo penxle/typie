@@ -15,13 +15,13 @@ pub(crate) fn apply_to(
 ) -> Result<(), StepError> {
     let sib_dot = {
         let ps = &batched.projected;
-        let view = ps.view();
-        let nv = match view.node(block) {
-            Some(nv) => nv,
-            None => return Ok(()),
-        };
-        let parent = nv.parent().ok_or(StepError::MergeNoSibling { block })?;
-        let siblings: Vec<Dot> = parent.child_blocks().map(|b| b.id()).collect();
+        if !ps.is_block(block) {
+            return Ok(());
+        }
+        let parent = ps
+            .parent_of(block)
+            .ok_or(StepError::MergeNoSibling { block })?;
+        let siblings = ps.child_block_dots(parent);
         let pos = siblings
             .iter()
             .position(|id| *id == block)

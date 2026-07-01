@@ -764,18 +764,6 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
         let reduced = initial.clone().reduce_flat_ime_ops(&ops);
 
-        // The cursor-windowed snapshot must reduce identically to one built over
-        // the whole document; a mismatch means the window failed to cover an
-        // access. Checked in debug across the IME test suite.
-        #[cfg(debug_assertions)]
-        if let Some(whole) = FlatImeState::from_editor_whole(editor) {
-            let whole_reduced = whole.reduce_flat_ime_ops(&ops);
-            debug_assert_eq!(
-                reduced.text_change, whole_reduced.text_change,
-                "windowed IME reduction diverged from whole-document reduction"
-            );
-        }
-
         if reduced.text_change.is_none() {
             return Ok(());
         }

@@ -1,5 +1,5 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Marker, Modifier, PlainNode, PlainStyleEntry, Subtree};
+use editor_model::{DocView, Marker, Modifier, PlainNode, PlainStyleEntry, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
 use editor_state::{Composition, PendingModifiers, PendingStyle, State};
@@ -97,13 +97,14 @@ impl Transaction {
     }
 
     pub fn savepoint(&self) -> Savepoint {
-        Savepoint {
+        let sp = Savepoint {
             state: self.state.clone(),
             steps_len: self.steps.len(),
             step_records_len: self.step_records.len(),
             recorded_len: self.recorded.len(),
             effects_len: self.effects.len(),
-        }
+        };
+        sp
     }
 
     pub fn rollback(&mut self, sp: Savepoint) {
@@ -145,19 +146,18 @@ impl Transaction {
     }
 
     pub fn remove_subtree(&mut self, block: Dot) -> Result<(), StepError> {
-        let (parent, index) = {
-            let view = self.state.view();
-            let nv = view.node(block).ok_or(StepError::NodeNotFound(block))?;
-            let parent = nv.parent().ok_or(StepError::NodeNotFound(block))?;
-            let parent_id = parent.id();
-            let index = parent
-                .children()
-                .position(|c| matches!(&c, ChildView::Block(b) if b.id() == block))
+        let (parent, index, subtree) = {
+            let ps = &self.state.projected;
+            let parent = ps.parent_of(block).ok_or(StepError::NodeNotFound(block))?;
+            let index = ps
+                .child_elem_dots(parent)
+                .iter()
+                .position(|d| *d == block)
                 .ok_or(StepError::NodeNotFound(block))?;
-            (parent_id, index)
+            let subtree =
+                support::capture_subtree(ps, block).ok_or(StepError::NodeNotFound(block))?;
+            (parent, index, subtree)
         };
-        let subtree = support::capture_subtree(&self.state.projected, block)
-            .ok_or(StepError::NodeNotFound(block))?;
         self.apply_step(Step::RemoveSubtree {
             parent,
             index,
@@ -172,15 +172,14 @@ impl Transaction {
         new_index: usize,
     ) -> Result<(), StepError> {
         let (old_parent, old_index) = {
-            let view = self.state.view();
-            let nv = view.node(block).ok_or(StepError::NodeNotFound(block))?;
-            let parent = nv.parent().ok_or(StepError::NodeNotFound(block))?;
-            let parent_id = parent.id();
-            let index = parent
-                .child_blocks()
-                .position(|b| b.id() == block)
+            let ps = &self.state.projected;
+            let parent = ps.parent_of(block).ok_or(StepError::NodeNotFound(block))?;
+            let index = ps
+                .child_block_dots(parent)
+                .iter()
+                .position(|d| *d == block)
                 .ok_or(StepError::NodeNotFound(block))?;
-            (parent_id, index)
+            (parent, index)
         };
         self.apply_step(Step::MoveNode {
             block,
@@ -192,13 +191,12 @@ impl Transaction {
     }
 
     pub fn set_node(&mut self, block: Dot, new_node: PlainNode) -> Result<(), StepError> {
-        let old_node = {
-            let view = self.state.view();
-            view.node(block)
-                .ok_or(StepError::NodeNotFound(block))?
-                .node()
-                .to_plain()
-        };
+        let old_node = self
+            .state
+            .projected
+            .block_node(block)
+            .ok_or(StepError::NodeNotFound(block))?
+            .to_plain();
         self.apply_step(Step::SetNode {
             block,
             old_node,
@@ -386,7 +384,12 @@ impl Transaction {
         Vec<Effect>,
         TransactionMeta,
     ) {
-        self.state.projected.commit();
+        // Only take the copy-on-write clone when there is something to commit.
+        // Selection/caret-only transactions leave the graph's pending buffer
+        // empty, so they keep sharing the `Arc<ProjectedState>` untouched.
+        if !self.state.projected.graph().pending().is_empty() {
+            self.state.projected_mut().commit();
+        }
         (
             self.state,
             self.step_records,

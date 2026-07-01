@@ -38,7 +38,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             tr.update_meta(|m| m.history = HistoryMeta::Skip);
             let live = {
                 let view = tr.view();
-                let ctx = StableResolveCtx::new(&view, tr.state().projected.seq());
+                let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
                 selection.resolve(&ctx)
             };
             if let Some(live) = live {

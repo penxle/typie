@@ -218,7 +218,7 @@ where
         editor.push_event(EditorEvent::StateChanged {
             fields: vec![StateField::TrackedRanges],
         });
-        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.invalidate_render();
     }
 }
 
@@ -235,7 +235,7 @@ where
         editor.push_event(EditorEvent::StateChanged {
             fields: vec![StateField::TrackedRanges],
         });
-        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.invalidate_render();
     }
 }
 

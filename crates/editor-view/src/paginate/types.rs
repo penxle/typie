@@ -16,18 +16,18 @@ pub(crate) struct PaginatedLayout {
     pub pages: Vec<LayoutPage>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LayoutTree {
     pub root: LayoutNode,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LayoutNode {
     pub rect: Rect,
     pub content: LayoutContent,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum LayoutContent {
     Box(LayoutBox),
     Line(LayoutLine),
@@ -47,7 +47,7 @@ pub struct ChildAttachment {
     pub index: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LayoutBox {
     pub node: Dot,
     pub style: BoxStyle,
@@ -55,7 +55,7 @@ pub(crate) struct LayoutBox {
     pub attachment: Option<ChildAttachment>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LayoutLine {
     pub node: Dot,
     pub baseline: f32,
@@ -72,7 +72,7 @@ pub(crate) struct LayoutLine {
     pub content_edge_x: Option<f32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LayoutAtom {
     pub node: Dot,
     pub attachment: ChildAttachment,

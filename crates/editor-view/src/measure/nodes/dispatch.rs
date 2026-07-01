@@ -14,29 +14,32 @@ use super::fold::{measure_fold, measure_fold_content, measure_fold_title};
 use super::list_item::measure_list_item;
 use super::paragraph::measure_paragraph_block;
 use super::table::{measure_table, measure_table_cell};
+use crate::measure::Measurer;
 use crate::measure::container::layout_padded;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredContent, MeasuredNode};
 
 pub(crate) fn measure_node(
+    measurer: &mut Measurer,
     node: &NodeView,
     width: f32,
     ctx: &MeasureContext,
     resource: &mut Resource,
 ) -> MeasuredNode {
     match node.node_type() {
-        NodeType::Paragraph => measure_paragraph_block(node, width, ctx, resource),
-        NodeType::Callout => measure_callout(node, width, ctx, resource),
-        NodeType::Blockquote => measure_blockquote(node, width, ctx, resource),
-        NodeType::ListItem => measure_list_item(node, width, ctx, resource),
-        NodeType::Fold => measure_fold(node, width, ctx, resource),
-        NodeType::FoldTitle => measure_fold_title(node, width, ctx, resource),
-        NodeType::FoldContent => measure_fold_content(node, width, ctx, resource),
-        NodeType::Table => measure_table(node, width, ctx, resource),
-        NodeType::TableCell => measure_table_cell(node, width, ctx, resource),
+        NodeType::Paragraph => measure_paragraph_block(measurer, node, width, ctx, resource),
+        NodeType::Callout => measure_callout(measurer, node, width, ctx, resource),
+        NodeType::Blockquote => measure_blockquote(measurer, node, width, ctx, resource),
+        NodeType::ListItem => measure_list_item(measurer, node, width, ctx, resource),
+        NodeType::Fold => measure_fold(measurer, node, width, ctx, resource),
+        NodeType::FoldTitle => measure_fold_title(measurer, node, width, ctx, resource),
+        NodeType::FoldContent => measure_fold_content(measurer, node, width, ctx, resource),
+        NodeType::Table => measure_table(measurer, node, width, ctx, resource),
+        NodeType::TableCell => measure_table_cell(measurer, node, width, ctx, resource),
         _ => {
-            let mut seam: fn(ChildView, f32, &MeasureContext, &mut Resource) -> Arc<MeasuredNode> =
-                measure_child;
+            let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
+                measure_child(measurer, child, w, ctx, r)
+            };
             layout_padded(
                 node,
                 width,
@@ -55,13 +58,14 @@ pub(crate) fn measure_node(
 }
 
 pub(crate) fn measure_child(
+    measurer: &mut Measurer,
     child: ChildView,
     width: f32,
     ctx: &MeasureContext,
     resource: &mut Resource,
 ) -> Arc<MeasuredNode> {
     match child {
-        ChildView::Block(nv) => Arc::new(measure_node(&nv, width, ctx, resource)),
+        ChildView::Block(nv) => measurer.measure(&nv, width, ctx, resource),
         ChildView::Leaf(lv) => match lv.node_type() {
             NodeType::Image
             | NodeType::HorizontalRule
@@ -157,7 +161,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
 
         assert!(result.height > 0.0);
         let MeasuredContent::Box(ref b) = result.content else {
@@ -205,7 +215,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = result.content else {
             panic!("expected Box at root");
         };
@@ -246,7 +262,13 @@ mod tests {
         let view2 = DocView::new(&pd2);
         let root_node2 = view2.root().unwrap();
 
-        let result2 = measure_node(&root_node2, 400.0, &MeasureContext::default(), &mut res);
+        let result2 = measure_node(
+            &mut Measurer::new(),
+            &root_node2,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b2) = result2.content else {
             panic!("expected Box at root2");
         };
@@ -295,7 +317,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = result.content else {
             panic!("expected Box at root");
         };
@@ -344,7 +372,13 @@ mod tests {
         let root_node = view.root().unwrap();
         let mut res = Resource::new_test();
 
-        let result = measure_node(&root_node, 400.0, &MeasureContext::default(), &mut res);
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
         let MeasuredContent::Box(ref b) = result.content else {
             panic!("expected Box at root");
         };

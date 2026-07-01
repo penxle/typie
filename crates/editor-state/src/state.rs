@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use editor_crdt::{Changeset, OpGraph};
 use editor_model::{DocView, EditOp};
 
@@ -10,7 +12,11 @@ use crate::projected_state::ProjectedState;
 
 #[derive(Clone, Debug)]
 pub struct State {
-    pub projected: ProjectedState,
+    // `Arc`-wrapped so `State::clone` (every `Transaction::new`) shares the
+    // projected document by pointer instead of deep-copying it. Transactions
+    // that never touch the document (selection / caret moves) keep the shared
+    // copy; document edits go through `projected_mut` (copy-on-write).
+    pub projected: Arc<ProjectedState>,
     pub selection: Option<Selection>,
     pub pending_modifiers: PendingModifiers,
     pub pending_style: Option<PendingStyle>,
@@ -20,12 +26,18 @@ pub struct State {
 impl State {
     pub fn new(projected: ProjectedState, selection: Option<Selection>) -> Self {
         Self {
-            projected,
+            projected: Arc::new(projected),
             selection,
             pending_modifiers: PendingModifiers::new(),
             pending_style: None,
             composition: None,
         }
+    }
+
+    /// Copy-on-write access to the projected state. Clones the shared
+    /// `ProjectedState` only if another `State` still references it.
+    pub fn projected_mut(&mut self) -> &mut ProjectedState {
+        Arc::make_mut(&mut self.projected)
     }
 
     pub fn empty() -> Self {

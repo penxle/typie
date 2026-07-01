@@ -3,7 +3,7 @@ use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 /// A y-range window into the LayoutTree produced by the two-pass layout.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LayoutPage {
     /// Physical page top in document coordinates.
     pub y_start: f32,
@@ -28,6 +28,7 @@ impl LayoutPage {
         content_y_end: f32,
         size: Size,
     ) -> Self {
+        debug_assert!(y_start.is_finite() && y_end.is_finite());
         Self {
             y_start,
             y_end,

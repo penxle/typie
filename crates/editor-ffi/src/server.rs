@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::prelude::*;
 
 #[ffi]
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ChunkCodepoints {
@@ -11,9 +12,30 @@ pub struct ChunkCodepoints {
 }
 
 #[ffi]
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Materialized {
+    pub plain: editor_model::PlainDoc,
+    pub text: String,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CollectResult {
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub graph: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub heads: Vec<u8>,
+    // Per-bundle: whether it advanced the snapshot (else dead-lettered) and the
+    // document's character count right after it (for per-user attribution).
+    pub applied: Vec<bool>,
+    pub char_counts: Vec<u32>,
+    pub base_char_count: u32,
     pub plain: editor_model::PlainDoc,
     pub text: String,
 }
@@ -22,6 +44,7 @@ pub struct Materialized {
 pub struct EditorServer;
 
 #[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
+#[allow(dead_code)]
 impl EditorServer {
     pub fn create() -> Owned<Self> {
         into_owned(Self)
@@ -150,6 +173,144 @@ impl EditorServer {
         Ok(bytes)
     }
 
+    /// Fold many bundles onto `existing` with a single decode/encode. Calling
+    /// [`apply`] once per bundle re-decodes and re-encodes the whole (multi-MB)
+    /// graph every time — `O(bundles × N)`; here `existing` is decoded once,
+    /// every bundle is applied against an in-memory accumulator, and the result
+    /// is encoded once — `O(N + total ops)`. `packed_bundles` is the
+    /// length-prefixed concatenation of the per-push wire blobs (see
+    /// `graph::decode_length_prefixed`). A bundle that fails validation (dup or
+    /// causal-order break) is skipped rather than aborting the whole fold, so a
+    /// single bad entry can never break a document load.
+    pub fn apply_many(&self, existing: Vec<u8>, packed_bundles: Vec<u8>) -> EditorResult<Vec<u8>> {
+        let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_crdt::wire::decode(&existing[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
+
+        let mut known: hashbrown::HashSet<editor_crdt::Dot> = existing_cs
+            .iter()
+            .flat_map(|cs| cs.ops.iter().map(|op| op.id))
+            .collect();
+        // First-op dot → index in `out`: an `O(1)` dedup probe, versus `apply`'s
+        // `O(out.len())` linear `find` that would make the fold quadratic.
+        let mut first_ops: hashbrown::HashMap<editor_crdt::Dot, usize> = existing_cs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, cs)| cs.ops.first().map(|op| (op.id, i)))
+            .collect();
+        let mut out = existing_cs;
+
+        for bundle in bundles {
+            let Ok(new_cs) = editor_crdt::wire::decode::<editor_model::EditOp>(&bundle[..]) else {
+                continue;
+            };
+            for cs in new_cs {
+                let Some(first) = cs.ops.first() else {
+                    continue;
+                };
+                // Already have a changeset at this boundary (verbatim dup or a
+                // divergent body) → skip; the fold must not abort a whole load.
+                if first_ops.contains_key(&first.id) {
+                    continue;
+                }
+                let mut seen: hashbrown::HashSet<editor_crdt::Dot> = hashbrown::HashSet::new();
+                let mut ok = true;
+                for op in &cs.ops {
+                    if known.contains(&op.id) {
+                        ok = false;
+                        break;
+                    }
+                    if !op
+                        .parents
+                        .iter()
+                        .all(|p| known.contains(p) || seen.contains(p))
+                    {
+                        ok = false;
+                        break;
+                    }
+                    if !seen.insert(op.id) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+                known.extend(seen);
+                first_ops.insert(first.id, out.len());
+                out.push(cs);
+            }
+        }
+
+        let bytes =
+            editor_crdt::wire::encode(&out).map_err(|e| FfiError::Serialization(e.to_string()))?;
+        Ok(bytes)
+    }
+
+    /// Fold a batch onto `existing` for the collect job while attributing
+    /// per-bundle character counts — with the expensive `State` build amortized.
+    /// The old collect ran `validate_and_extract_text` (a full `from_changesets`
+    /// build) per entry (`O(tail × build)`); here the `State` is built once and
+    /// each bundle is projected incrementally (`receive_remote_changesets`), then
+    /// only the text is re-read per entry (`O(tail × extract)`, far cheaper than
+    /// rebuilding). `char_counts[i]` is the document's character count right after
+    /// bundle `i`; `applied[i]` is false for a dead-lettered bundle.
+    pub fn collect_fold(
+        &self,
+        existing: Vec<u8>,
+        packed_bundles: Vec<u8>,
+    ) -> EditorResult<Complex<CollectResult>> {
+        let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_crdt::wire::decode(&existing[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
+
+        let mut state = editor_state::State::from_changesets(existing_cs, None)?;
+        let base_char_count = count_characters(&extract_text_from_view(&state.view()));
+
+        let mut applied: Vec<bool> = Vec::with_capacity(bundles.len());
+        let mut char_counts: Vec<u32> = Vec::with_capacity(bundles.len());
+        let mut last = base_char_count;
+
+        for bundle in bundles {
+            let ok = match editor_crdt::wire::decode::<editor_model::EditOp>(&bundle[..]) {
+                Ok(cs) => match state.receive_remote_changesets(cs) {
+                    Ok((next, ops)) if !ops.is_empty() => {
+                        state = next;
+                        true
+                    }
+                    _ => false,
+                },
+                Err(_) => false,
+            };
+            if ok {
+                last = count_characters(&extract_text_from_view(&state.view()));
+            }
+            applied.push(ok);
+            char_counts.push(last);
+        }
+
+        let graph = editor_crdt::wire::encode(&state.graph().changesets_as_vec())
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let heads: Vec<editor_crdt::Dot> = state.graph().current_heads().copied().collect();
+        let heads = editor_crdt::wire::encode_dots(&heads)
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let plain = state.to_plain();
+        let text = extract_text_from_view(&state.view());
+
+        Ok(CollectResult {
+            graph,
+            heads,
+            applied,
+            char_counts,
+            base_char_count,
+            plain,
+            text,
+        }
+        .into_ffi()?)
+    }
+
     pub fn missing_for(
         &self,
         all_changesets: Vec<u8>,
@@ -206,8 +367,10 @@ impl EditorServer {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let g = editor_crdt::OpGraph::from_changesets(cs)?;
-        let heads: Vec<editor_crdt::Dot> = g.current_heads().copied().collect();
+        // Frontier scan, not a full `from_changesets` build: heads is just
+        // `all ids − referenced parent ids`, and every heads/durableHeads
+        // caller on the server was paying a whole-graph rebuild for it.
+        let heads = editor_crdt::OpGraph::<editor_model::EditOp>::heads_of(&cs);
         let bytes = editor_crdt::wire::encode_dots(&heads)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
@@ -323,6 +486,28 @@ fn extract_text_from_view(view: &editor_model::DocView<'_>) -> String {
         walk(root, &mut out);
     }
     out.trim_end_matches('\n').to_string()
+}
+
+/// Mirror of the API's `countCharacters`: drop zero-width spaces, collapse
+/// whitespace runs to a single space, trim, and count Unicode scalar values.
+fn count_characters(text: &str) -> u32 {
+    let mut collapsed = String::with_capacity(text.len());
+    let mut prev_ws = false;
+    for c in text.chars() {
+        if c == '\u{200B}' {
+            continue;
+        }
+        if c.is_whitespace() {
+            if !prev_ws {
+                collapsed.push(' ');
+            }
+            prev_ws = true;
+        } else {
+            collapsed.push(c);
+            prev_ws = false;
+        }
+    }
+    collapsed.trim().chars().count() as u32
 }
 
 use crate::doc_builder::build_default_doc;
@@ -605,6 +790,71 @@ mod tests {
         assert_eq!(heads, vec![Dot::new(1, 0)]);
     }
 
+    fn pack(blobs: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&(blobs.len() as u32).to_le_bytes());
+        for b in blobs {
+            out.extend_from_slice(&(b.len() as u32).to_le_bytes());
+            out.extend_from_slice(b);
+        }
+        out
+    }
+
+    #[test]
+    fn count_characters_matches_normalization() {
+        assert_eq!(count_characters("hello"), 5);
+        assert_eq!(count_characters("a\u{200B}b"), 2); // zero-width space stripped
+        assert_eq!(count_characters("a  b"), 3); // whitespace run collapsed → "a b"
+        assert_eq!(count_characters("  trim  "), 4); // trimmed → "trim"
+        assert_eq!(count_characters("line1\nline2"), 11); // newline → space → "line1 line2"
+        assert_eq!(count_characters(""), 0);
+        assert_eq!(count_characters("   "), 0);
+    }
+
+    #[test]
+    fn apply_many_matches_folded_apply() {
+        let cs_a = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(1, 0),
+                parents: vec![],
+                payload: dummy_payload(),
+            }],
+        };
+        let cs_b = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(2, 0),
+                parents: vec![Dot::new(1, 0)],
+                payload: dummy_payload(),
+            }],
+        };
+        let cs_c = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(3, 0),
+                parents: vec![Dot::new(2, 0)],
+                payload: dummy_payload(),
+            }],
+        };
+        let server = EditorServer;
+        let base = enc_css(std::slice::from_ref(&cs_a));
+        let b1 = enc_css(std::slice::from_ref(&cs_b));
+        let b2 = enc_css(std::slice::from_ref(&cs_c));
+
+        // Repeated `apply` (the O(tail × N) fold) vs one `apply_many`.
+        let folded = server
+            .apply(server.apply(base.clone(), b1.clone()).unwrap(), b2.clone())
+            .unwrap();
+        let many = server
+            .apply_many(base.clone(), pack(&[b1.clone(), b2.clone()]))
+            .unwrap();
+        assert_eq!(dec_css(&folded), dec_css(&many));
+
+        // A re-pushed (duplicate) bundle in the pack is skipped, not duplicated.
+        let with_dup = server
+            .apply_many(base, pack(&[b1.clone(), b1, b2]))
+            .unwrap();
+        assert_eq!(dec_css(&folded), dec_css(&with_dup));
+    }
+
     #[test]
     fn apply_rejects_same_dot_different_content() {
         let dot = Dot::new(11, 0);
@@ -661,14 +911,14 @@ mod tests {
         let mut state = editor_state::State::empty();
         for (i, ch) in text.chars().enumerate() {
             state
-                .projected
+                .projected_mut()
                 .apply(EditOp::Seq(ListOp::Ins {
                     pos: 1 + i,
                     item: SeqItem::Char(ch),
                 }))
                 .unwrap();
         }
-        state.projected.commit();
+        state.projected_mut().commit();
         state
     }
 

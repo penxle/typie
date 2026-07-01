@@ -79,6 +79,8 @@ const createEditor = ({
     enqueue: vi.fn(),
     flush: vi.fn(),
     scrollIntoView: vi.fn(),
+    suspendToolbarSync: vi.fn(),
+    resumeToolbarSync: vi.fn(),
     gesture: {
       handlePointerDown: vi.fn(),
       handlePointerMove: vi.fn(),
@@ -91,6 +93,8 @@ const createEditor = ({
     flush: ReturnType<typeof vi.fn>;
     scrollIntoView: ReturnType<typeof vi.fn>;
     selectionHitTest: ReturnType<typeof vi.fn>;
+    suspendToolbarSync: ReturnType<typeof vi.fn>;
+    resumeToolbarSync: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -167,6 +171,27 @@ describe('pointer native drag admission', () => {
     expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
     expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+  });
+
+  it('suspends toolbar sync during a regular selection interaction and resumes on pointer up', () => {
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: true });
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+    expect(editor.suspendToolbarSync).toHaveBeenCalledTimes(1);
+    expect(editor.resumeToolbarSync).not.toHaveBeenCalled();
+
+    handlePointerUp(editor, createPointerEvent({ target }));
+    expect(editor.resumeToolbarSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not suspend toolbar sync when admitting a native text-move drag', () => {
+    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false, selection: rangeSelection });
+    const target = createPointerTarget();
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+
+    expect(editor.suspendToolbarSync).not.toHaveBeenCalled();
   });
 
   it('allows collapse for regular drag selection extension', () => {

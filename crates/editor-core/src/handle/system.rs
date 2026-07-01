@@ -2,6 +2,7 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
 use crate::message::*;
+use crate::state_field::StateField;
 
 pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<(), EditorError> {
     match event {
@@ -22,12 +23,12 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
         }
 
         SystemEvent::ThemeVariantChanged => {
-            editor.push_event(EditorEvent::RenderInvalidated);
+            editor.invalidate_render();
             Ok(())
         }
 
         SystemEvent::FontBaseLoaded { family, weight: _ } => {
-            editor.retry_font_load(&family);
+            editor.retry_font_load(&family, true);
             Ok(())
         }
 
@@ -36,7 +37,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             weight: _,
             chunk_id: _,
         } => {
-            editor.retry_font_load(&family);
+            editor.retry_font_load(&family, false);
             Ok(())
         }
 
@@ -45,7 +46,26 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             Ok(())
         }
 
-        SystemEvent::FontsChanged => editor.reresolve_fonts(),
+        SystemEvent::FontsChanged => {
+            editor.reresolve_fonts()?;
+            if !editor.is_probing() {
+                editor.view.clear_measure_cache();
+                let changed = editor.view.invalidate(&editor.state);
+                if changed {
+                    editor.push_event(EditorEvent::StateChanged {
+                        fields: vec![
+                            StateField::Cursor,
+                            StateField::PageSizes,
+                            StateField::ExternalElements,
+                            StateField::TableOverlays,
+                            StateField::Placeholder,
+                        ],
+                    });
+                    editor.invalidate_render();
+                }
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1475,5 +1495,286 @@ mod tests {
             })
             .unwrap();
         assert!(!probed);
+    }
+
+    #[test]
+    fn base_font_load_remeasures_pending_nodes() {
+        let (state, p1) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+        let key = ("TestFont".to_string(), 400u16);
+        assert!(
+            editor
+                .pending_fonts
+                .get(&key)
+                .and_then(|n| n.get(&p1))
+                .is_some_and(|cps| cps.contains(&('A' as u32))),
+            "cp must remain pending until its chunk also loads"
+        );
+    }
+
+    #[test]
+    fn base_font_load_remeasures_node_using_fallback() {
+        let (state, p1) = state! {
+            doc {
+                root [font_family("Primary".to_string()), font_weight(400)] {
+                    p1: paragraph { text("B") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let families = vec![
+                editor_resource::FontFamily {
+                    name: "Primary".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "p".into(),
+                        chunks: vec![vec![0x41, 0x41]],
+                    }],
+                },
+                editor_resource::FontFamily {
+                    name: "Fallback".into(),
+                    source: editor_resource::FontFamilySource::Fallback,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "f".into(),
+                        chunks: vec![vec![0x42, 0x42]],
+                    }],
+                },
+            ];
+            resource.set_fonts(families);
+            // Primary fully loaded; 'B' is not in Primary so it falls back to Fallback.
+            resource
+                .add_font_base("Primary", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("Primary", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        // Load the fallback's base only — 'B' now resolves needs_base=false via Fallback.
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("Fallback", 400, &fake_base_bytes())
+                .unwrap();
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "Fallback".to_string(),
+                weight: 400,
+            },
+        });
+
+        let _ = p1;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+    }
+
+    #[test]
+    fn augment_font_rescans_only_edited_block() {
+        let (state, p1, _p2) = state! {
+            doc {
+                root [font_family("FontA".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("Z") [font_family("FontB".to_string())] }
+                }
+            }
+            selection: (p1, 1)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let families = vec![
+                editor_resource::FontFamily {
+                    name: "FontA".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "a".into(),
+                        chunks: vec![vec![0x41, 0x41]],
+                    }],
+                },
+                editor_resource::FontFamily {
+                    name: "FontB".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "b".into(),
+                        chunks: vec![vec![0x5a, 0x5a]],
+                    }],
+                },
+            ];
+            resource.set_fonts(families);
+            // FontA fully loaded so re-inserting 'A' into p1 raises no missing-data event.
+            resource
+                .add_font_base("FontA", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("FontA", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let _ = p1;
+
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "A".to_string(),
+            },
+        });
+
+        let fontb_missing = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, .. } if family == "FontB"
+            )
+        });
+        assert!(
+            !fontb_missing,
+            "editing block p1 must not rescan untouched block p2's font"
+        );
+    }
+
+    #[test]
+    fn augment_font_drops_stale_request_when_font_removed() {
+        let (state, p1) = state! {
+            doc {
+                root [font_family("FontA".to_string()), font_weight(400)] {
+                    p1: paragraph { text("X") [font_family("FontF".to_string())] }
+                }
+            }
+            selection: (p1, 0) -> (p1, 1)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let families = vec![
+                editor_resource::FontFamily {
+                    name: "FontA".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "a".into(),
+                        chunks: vec![vec![0x58, 0x58]],
+                    }],
+                },
+                editor_resource::FontFamily {
+                    name: "FontF".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "f".into(),
+                        chunks: vec![vec![0x58, 0x58]],
+                    }],
+                },
+            ];
+            resource.set_fonts(families);
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let _ = p1;
+
+        let key_f = ("FontF".to_string(), 400u16);
+        assert!(
+            editor.pending_fonts.contains_key(&key_f),
+            "FontF must be requested before the edit"
+        );
+
+        // Repoint the only FontF-styled run to FontA; nothing references FontF anymore.
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: editor_model::Modifier::FontFamily {
+                    value: "FontA".to_string(),
+                },
+            },
+        });
+
+        assert!(
+            !editor.pending_fonts.contains_key(&key_f),
+            "FontF's pending request must be dropped once no text references it"
+        );
+    }
+
+    #[test]
+    fn fonts_changed_drops_stale_measurements_and_emits_render() {
+        let (state, p1) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let _ = p1;
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontsChanged,
+        });
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
+            "FontsChanged must emit RenderInvalidated so the host repaints"
+        );
     }
 }

@@ -1,9 +1,15 @@
-use editor_crdt::{Changeset, CrdtError, Dot, ListOp, Op, OpGraph, OpLog};
+use editor_crdt::sequence::{Bias, SeqCheckout};
+use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
-    DocLogs, DocView, EditOp, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
-    ProjectedDoc, ProjectionError, SeqItem, SpanLog, SplitError, StyleLog, project_document,
+    BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp, LeafSpanCoverage,
+    ModifierAttrLog, Node, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc,
+    ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
+    SpanOp, SplitError, StyleLog, anchor_dot, block_effective_one, derive_leaf_from_covering,
+    is_modifier_target, normalize_content_shallow, normalize_subtree, project_blocks,
+    project_core_with_coverage, project_from, project_from_tree, seq_parents, split_block_insert,
     split_logs,
 };
+use hashbrown::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub enum SpineError {
@@ -28,26 +34,179 @@ impl From<ProjectionError> for SpineError {
     }
 }
 
+// An inline leaf that lives inside a block like a character: a `Char`, or a
+// non-block-level `Atom` (HardBreak/Tab/PageBreak). Block-level atoms project to
+// `BlockAtom` structural nodes and must take the structural (fallback) path.
+fn is_inline_leaf_item(item: &SeqItem) -> bool {
+    match item {
+        SeqItem::Char(_) => true,
+        SeqItem::Atom(l) => !l.is_block_level(),
+        _ => false,
+    }
+}
+
+fn collect_subtree_nodes(tree: &BlockTree, node: &BlockNode, out: &mut Vec<Dot>) {
+    out.push(node.id);
+    for c in &node.children {
+        match c {
+            Child::Leaf { id, .. } => out.push(*id),
+            Child::Block(id) => {
+                if let Some(b) = tree.get(*id) {
+                    collect_subtree_nodes(tree, b, out);
+                }
+            }
+        }
+    }
+}
+
+/// Plan the index/derivation entries for a freshly re-projected (nested scratch)
+/// subtree about to be grafted into the live tree.
+fn plan_subtree(
+    node: &RawNode,
+    parent: Dot,
+    blocks: &mut Vec<(Dot, Dot, NodeType)>,
+    block_leaves: &mut Vec<(Dot, Vec<(Dot, NodeType)>)>,
+    nodes: &mut HashSet<Dot>,
+) {
+    nodes.insert(node.id);
+    blocks.push((node.id, parent, node.node_type));
+    let mut leaves = Vec::new();
+    for c in &node.children {
+        if let RawChild::Leaf { id, item } = c {
+            nodes.insert(*id);
+            leaves.push((*id, item.as_child_type()));
+        }
+    }
+    block_leaves.push((node.id, leaves));
+    for c in &node.children {
+        if let RawChild::Block(b) = c {
+            plan_subtree(b, node.id, blocks, block_leaves, nodes);
+        }
+    }
+}
+
+/// Remembers where the last incrementally-spliced leaf landed, so a sequential
+/// insert run (paste, typing) can place each new leaf right after the previous one
+/// without a positional search. See `leaf_insert_offset_cursored`.
+#[derive(Clone, Copy, Debug)]
+struct LeafCursor {
+    block: Dot,
+    leaf: Dot,
+    offset: usize,
+}
+
 #[derive(Clone, Debug)]
 pub struct ProjectedState {
     graph: OpGraph<EditOp>,
     logs: DocLogs,
+    seq: SeqCheckout,
     projected: ProjectedDoc,
+    indexes: ProjectionIndexes,
+    leaf_cursor: Option<LeafCursor>,
+    layout_dirty: crate::LayoutDirty,
 }
 
 impl ProjectedState {
-    fn derive(graph: &OpGraph<EditOp>) -> Result<(DocLogs, ProjectedDoc), SpineError> {
+    fn build_warm(
+        graph: &OpGraph<EditOp>,
+    ) -> Result<(DocLogs, SeqCheckout, ProjectedDoc, ProjectionIndexes), SpineError> {
         let logs = split_logs(graph)?;
-        let projected = project_document(&logs)?;
-        Ok((logs, projected))
+        let mut seq = SeqCheckout::new();
+        seq.apply_tail(&logs.seq);
+        let projected = project_from(&logs, &seq)?;
+        let elements = seq.snapshot(&logs.seq);
+        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans, &elements, &seq);
+        Ok((logs, seq, projected, indexes))
+    }
+
+    fn rebuild_from_graph(&mut self) -> Result<(), SpineError> {
+        let (logs, seq, projected, indexes) = Self::build_warm(&self.graph)?;
+        self.logs = logs;
+        self.seq = seq;
+        self.projected = projected;
+        self.indexes = indexes;
+        self.leaf_cursor = None;
+        self.mark_dirty_full();
+        Ok(())
+    }
+
+    fn warm_dispatch(&mut self, op: &Op<EditOp>) -> Result<(), SpineError> {
+        match &op.payload {
+            EditOp::Seq(list_op) => {
+                let ev = InputEvent {
+                    id: op.id,
+                    parents: seq_parents(&self.graph, op.id),
+                    op: list_op.clone(),
+                };
+                self.logs.seq.push(ev);
+                self.seq.apply_tail(&self.logs.seq);
+            }
+            EditOp::Span(o) => {
+                self.logs.spans = self
+                    .logs
+                    .spans
+                    .apply(op.id, o.clone())
+                    .map_err(SplitError::Crdt)?
+            }
+            EditOp::BlockModifier(o) => {
+                self.logs.block_modifiers = self
+                    .logs
+                    .block_modifiers
+                    .apply(op.id, o.clone())
+                    .map_err(SplitError::Crdt)?
+            }
+            EditOp::NodeAttr(o) => {
+                self.logs.node_attrs = self
+                    .logs
+                    .node_attrs
+                    .apply(op.id, o.clone())
+                    .map_err(SplitError::Crdt)?
+            }
+            EditOp::NodeStyle(o) => {
+                self.logs.node_styles = self
+                    .logs
+                    .node_styles
+                    .apply(op.id, o.clone())
+                    .map_err(SplitError::Crdt)?
+            }
+            EditOp::NodeMarker(o) => {
+                self.logs.node_markers = self
+                    .logs
+                    .node_markers
+                    .apply(op.id, o.clone())
+                    .map_err(SplitError::Crdt)?
+            }
+            EditOp::Style(o) => {
+                self.logs.styles = self
+                    .logs
+                    .styles
+                    .apply(op.id, o.clone())
+                    .map_err(SplitError::Style)?
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn apply_op_warm(&mut self, payload: EditOp) -> Result<Op<EditOp>, SpineError> {
+        let op = self.graph.add_mut(payload)?;
+        self.warm_dispatch(&op)?;
+        Ok(op)
+    }
+
+    pub(crate) fn ingest_op_warm(&mut self, op: &Op<EditOp>) -> Result<(), SpineError> {
+        self.warm_dispatch(op)
     }
 
     pub fn from_graph(graph: OpGraph<EditOp>) -> Result<Self, SpineError> {
-        let (logs, projected) = Self::derive(&graph)?;
+        let (logs, seq, projected, indexes) = Self::build_warm(&graph)?;
         Ok(Self {
             graph,
             logs,
+            seq,
             projected,
+            indexes,
+            leaf_cursor: None,
+            layout_dirty: crate::LayoutDirty::Full,
         })
     }
 
@@ -65,30 +224,1399 @@ impl ProjectedState {
         Self::from_graph(graph).expect("seed paragraph always projects")
     }
 
-    pub fn apply(&mut self, payload: EditOp) -> Result<Op<EditOp>, SpineError> {
-        let op = self.graph.add_mut(payload)?;
-        let (logs, projected) = Self::derive(&self.graph)?;
-        self.logs = logs;
+    fn mark_dirty_block(&mut self, dot: Dot) {
+        self.layout_dirty.mark_content(dot);
+    }
+
+    fn mark_dirty_structural(&mut self, dot: Dot) {
+        self.layout_dirty.mark_structural(dot);
+    }
+
+    fn mark_dirty_full(&mut self) {
+        self.layout_dirty.mark_full();
+    }
+
+    pub fn take_layout_dirty(&mut self) -> crate::LayoutDirty {
+        std::mem::replace(&mut self.layout_dirty, crate::LayoutDirty::empty())
+    }
+
+    fn reproject(&mut self) -> Result<(), SpineError> {
+        let elements = self.seq.snapshot(&self.logs.seq);
+        // Resolve the span log ONCE into per-leaf coverage, then derive both the
+        // projection and the coverage index from it — `project_from` + `rebuild_from`
+        // each resolved every span's boundaries independently, paying the `O(#spans·log)`
+        // work twice per full reproject (the dominant cost when a heavily-styled document
+        // hits the fallback, e.g. re-inserting a paragraph after a select-all-delete).
+        let coverage = LeafSpanCoverage::build(&elements, &self.logs.spans, &self.seq);
+        let projected = project_core_with_coverage(&elements, &self.logs, &coverage)?;
+        let paths = BlockPaths::from_tree(&projected.tree);
+        let spans = SpanAnchorIndex::build(&self.logs.spans);
         self.projected = projected;
+        self.indexes = ProjectionIndexes {
+            paths,
+            spans,
+            coverage,
+        };
+        self.leaf_cursor = None;
+        self.mark_dirty_full();
+        Ok(())
+    }
+
+    /// Whole-document reprojection for a bulk delete, reusing the span indexes instead
+    /// of re-resolving the log. A deletion never changes span anchors (so the anchor
+    /// index is carried forward unchanged) and never changes a surviving leaf's covering
+    /// set — removing other leaves can't reorder a survivor relative to a span's anchors
+    /// (so each survivor's coverage is copied from the old index). The projection is then
+    /// rebuilt from the coverage rather than resolving every (now largely dead) span:
+    /// `O(survivors)` instead of `O(#spans)`, which is what a select-all-delete costs.
+    fn reproject_after_delete(&mut self) -> Result<(), SpineError> {
+        let elements = self.seq.snapshot(&self.logs.seq);
+        let spans = self.indexes.spans.clone();
+        let mut coverage = LeafSpanCoverage::new();
+        for (dot, _) in &elements {
+            let cov = self.indexes.coverage.covering(*dot);
+            if !cov.is_empty() {
+                coverage.set(*dot, cov.to_vec());
+            }
+        }
+        let projected = project_core_with_coverage(&elements, &self.logs, &coverage)?;
+        let paths = BlockPaths::from_tree(&projected.tree);
+        self.projected = projected;
+        self.indexes = ProjectionIndexes {
+            paths,
+            spans,
+            coverage,
+        };
+        self.leaf_cursor = None;
+        self.mark_dirty_full();
+        Ok(())
+    }
+
+    fn project_op(&mut self, op: &Op<EditOp>) -> Result<(), SpineError> {
+        let ok = self.try_incremental(op);
+        if !ok {
+            match &op.payload {
+                EditOp::Seq(_) => {
+                    let ar = self.affected_range(op);
+                    match ar {
+                        Some((i, j)) => {
+                            // An insert/undelete can introduce a block BEFORE the
+                            // affected block's marker (lifting a paragraph to the front,
+                            // restoring a leading list), so extend the window's left
+                            // edge down to the earliest affected sequence position.
+                            let floor = match &op.payload {
+                                EditOp::Seq(ListOp::Ins { .. }) => self
+                                    .seq
+                                    .resolve_boundary(op.id, Bias::Before)
+                                    .map(|b| b.position),
+                                EditOp::Seq(ListOp::Undel { del }) => self
+                                    .seq
+                                    .del_target_dots(&self.logs.seq, *del)
+                                    .iter()
+                                    .filter_map(|t| {
+                                        self.seq
+                                            .resolve_boundary(*t, Bias::Before)
+                                            .map(|b| b.position)
+                                    })
+                                    .min(),
+                                _ => None,
+                            };
+                            self.reproject_window(i, j, floor)?;
+                        }
+                        None => self.reproject()?,
+                    }
+                }
+                _ => self.reproject_from_tree()?,
+            }
+        }
+        Ok(())
+    }
+
+    fn top_block_of(&self, dot: Dot) -> Option<Dot> {
+        if !self.indexes.paths.contains(dot) {
+            return None;
+        }
+        let mut cur = self.indexes.paths.block_of(dot).unwrap_or(dot);
+        while let Some(p) = self.indexes.paths.parent_of(cur) {
+            if p == Dot::ROOT {
+                return Some(cur);
+            }
+            cur = p;
+        }
+        Some(cur)
+    }
+
+    fn top_block_index(&self, dot: Dot) -> Option<usize> {
+        let top = self.top_block_of(dot)?;
+        self.projected
+            .tree
+            .root_node()?
+            .children
+            .iter()
+            .position(|c| matches!(c, Child::Block(b) if *b == top))
+    }
+
+    fn top_block_near_pos(&self, pos: usize) -> Option<usize> {
+        for cand in [pos.checked_sub(1), Some(pos), pos.checked_add(1)]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(d) = self.seq.dot_at_visible(&self.logs.seq, cand)
+                && let Some(idx) = self.top_block_index(d)
+            {
+                return Some(idx);
+            }
+        }
+        // The ±1 neighbours are all ghosts (visible in the sequence but dropped from
+        // the tree, e.g. content trailing a mid-text PageBreak). Fall back to the
+        // enclosing top-level block so the op localizes to a window instead of a
+        // whole-document reprojection. This branch is reached only when the cheap ±1
+        // probe fails, so the common path is untouched.
+        self.enclosing_top_block(pos)
+    }
+
+    /// The top-level block whose sequence range contains `pos`: the real block with
+    /// the greatest marker position `≤ pos`. Synthetic/scaffolded blocks (no resolvable
+    /// marker, e.g. a normalizer-inserted trailing paragraph) are skipped.
+    fn enclosing_top_block(&self, pos: usize) -> Option<usize> {
+        let mut best: Option<(usize, usize)> = None; // (marker_pos, child_index)
+        let root = self.projected.tree.root_node()?;
+        for (idx, c) in root.children.iter().enumerate() {
+            if let Child::Block(b) = c
+                && let Some(m) = self
+                    .seq
+                    .resolve_boundary(*b, Bias::Before)
+                    .map(|x| x.position)
+                && m <= pos
+                && best.is_none_or(|(bm, _)| m >= bm)
+            {
+                best = Some((m, idx));
+            }
+        }
+        best.map(|(_, idx)| idx)
+    }
+
+    /// The inclusive range of top-level block indices a structural op affects.
+    /// Over-approximated (±1 sibling) so block merges/splits stay inside the
+    /// window. `None` ⇒ caller can't localize (rare edge / Undel) → full path.
+    fn affected_range(&self, op: &Op<EditOp>) -> Option<(usize, usize)> {
+        let mut idxs: Vec<usize> = Vec::new();
+        match &op.payload {
+            EditOp::Seq(ListOp::Ins { .. }) => {
+                let p = self
+                    .seq
+                    .resolve_boundary(op.id, Bias::Before)
+                    .map(|b| b.position)?;
+                idxs.push(self.top_block_near_pos(p)?);
+            }
+            EditOp::Seq(ListOp::Del { .. }) => {
+                let targets = self.seq.del_target_dots(&self.logs.seq, op.id);
+                for t in &targets {
+                    if let Some(idx) = self.top_block_index(*t) {
+                        idxs.push(idx);
+                    }
+                }
+                // Every target was a ghost (already absent from the tree). Localize to
+                // the top-level block around where the deleted content lived — via the
+                // in-tree neighbours of its position, then the enclosing block — rather
+                // than reprojecting the whole document. `top_block_near_pos` falls back
+                // through both, so even a ghost whose own block marker was already
+                // deleted still localizes through a surviving sibling.
+                if idxs.is_empty() {
+                    for t in &targets {
+                        if let Some(p) = self
+                            .seq
+                            .resolve_boundary(*t, Bias::Before)
+                            .map(|b| b.position)
+                            && let Some(idx) = self.top_block_near_pos(p)
+                        {
+                            idxs.push(idx);
+                            break;
+                        }
+                    }
+                }
+            }
+            EditOp::Seq(ListOp::Undel { del }) => {
+                // Restored elements aren't in the (pre-op) tree; each is located by the
+                // position it reappears at, via its in-tree neighbour. The window only
+                // needs to span the restored range, so localize just its min/max
+                // positions — not every restored element. Localizing all of them is
+                // `O(#targets · #blocks)` (each `top_block_near_pos` scans the root's
+                // children), which makes undoing a large delete quadratic. Resolving
+                // positions is the cheap part; the block scan is what must stay bounded.
+                let mut min_pos = usize::MAX;
+                let mut max_pos = 0usize;
+                for t in self.seq.del_target_dots(&self.logs.seq, *del) {
+                    if let Some(p) = self
+                        .seq
+                        .resolve_boundary(t, Bias::Before)
+                        .map(|b| b.position)
+                    {
+                        min_pos = min_pos.min(p);
+                        max_pos = max_pos.max(p);
+                    }
+                }
+                if min_pos != usize::MAX {
+                    for p in [min_pos, max_pos] {
+                        if let Some(idx) = self.top_block_near_pos(p) {
+                            idxs.push(idx);
+                        }
+                    }
+                }
+            }
+            _ => return None,
+        }
+        if idxs.is_empty() {
+            return None;
+        }
+        let n = self
+            .projected
+            .tree
+            .root_node()
+            .map(|r| r.children.len())
+            .unwrap_or(0);
+        if n == 0 {
+            return None;
+        }
+        let lo = idxs.iter().copied().min()?.saturating_sub(1);
+        let hi = (idxs.iter().copied().max()? + 1).min(n - 1);
+        Some((lo, hi))
+    }
+
+    /// Re-project only top-level blocks `[i, j]` from the live sequence and splice
+    /// the result back, updating just those subtrees' indexes/derivations. Reuses
+    /// `project_blocks` + `normalize` for correctness (all structural shapes,
+    /// normalization) at O(window), never the whole document.
+    fn reproject_window(
+        &mut self,
+        i: usize,
+        j: usize,
+        floor: Option<usize>,
+    ) -> Result<(), SpineError> {
+        let root_id = self.projected.tree.root;
+        // Read-only snapshot of the root's children (O(1) persistent clone) for window
+        // computation; the tree is mutated only after the window is fully planned.
+        let Some(root_children) = self.projected.tree.root_node().map(|r| r.children.clone())
+        else {
+            return self.reproject();
+        };
+        if i > j || j >= root_children.len() {
+            return self.reproject();
+        }
+        let Some(&Child::Block(first)) = root_children.get(i) else {
+            return self.reproject();
+        };
+        let Some(mut window_start) = self
+            .seq
+            .resolve_boundary(first, Bias::Before)
+            .map(|b| b.position)
+        else {
+            return self.reproject();
+        };
+        // The window ends where the first real child *after* `j` begins in the
+        // sequence. Children after `j` whose marker/id doesn't resolve are
+        // synthetic/scaffolded blocks (e.g. the normalizer's trailing paragraph
+        // required by the Root content rule); they own no real sequence elements. Such
+        // a scaffold must be subsumed into the window (`j` extended over it) so the
+        // splice removes it and normalization recreates the correct trailing shape —
+        // otherwise a superseded scaffold lingers as a duplicate empty block. If only
+        // scaffolds trail the window it runs to the sequence end, never a full reproject.
+        let mut j = j;
+        let mut window_end = self.seq.visible_len();
+        let mut k = j + 1;
+        while let Some(c) = root_children.get(k) {
+            let id = match c {
+                Child::Block(b) => *b,
+                Child::Leaf { id, .. } => *id,
+            };
+            if let Some(p) = self
+                .seq
+                .resolve_boundary(id, Bias::Before)
+                .map(|b| b.position)
+            {
+                window_end = p;
+                break;
+            }
+            j = k;
+            k += 1;
+        }
+        if let Some(f) = floor {
+            window_start = window_start.min(f);
+        }
+        let mut old_nodes: Vec<Dot> = Vec::new();
+        for slot in i..=j {
+            if let Some(Child::Block(b)) = root_children.get(slot)
+                && let Some(node) = self.projected.tree.get(*b)
+            {
+                collect_subtree_nodes(&self.projected.tree, node, &mut old_nodes);
+            }
+        }
+
+        let elements = self
+            .seq
+            .snapshot_range(&self.logs.seq, window_start..window_end);
+        for (d, item) in &elements {
+            if let SeqItem::Block { node_type, .. } = item
+                && node_type.spec().is_leaf()
+            {
+                return Err(ProjectionError::LeafTypedBlock {
+                    dot: *d,
+                    node_type: *node_type,
+                }
+                .into());
+            }
+        }
+        let raw = project_blocks(&elements).map_err(ProjectionError::Project)?;
+        // Normalize each top-level block's subtree independently (NOT under a fresh
+        // Root): the Root content model is a whole-document rule and must not be
+        // re-applied to a window, or it scaffolds spurious mid-document content.
+        // The Root's own rule is re-established below via the schema, not hardcoded.
+        let raw_children = raw
+            .roots
+            .into_iter()
+            .next()
+            .map(|r| r.children)
+            .unwrap_or_default();
+        // Normalize each window block, plan its index entries, and graft its subtree
+        // into the live `nodes` map, building the flat child-reference list to splice.
+        let mut plan_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
+        let mut plan_block_leaves: Vec<(Dot, Vec<(Dot, NodeType)>)> = Vec::new();
+        let mut new_nodes: HashSet<Dot> = HashSet::new();
+        let mut new_children: Vec<Child> = Vec::new();
+        // Block-level atoms (image / horizontal rule) project as a `Leaf` directly under
+        // Root; they are leaves of Root, not of any window block, so they need their own
+        // index/derivation maintenance (`plan_subtree` only covers block subtrees).
+        let mut root_leaves: Vec<(Dot, NodeType)> = Vec::new();
+        for c in raw_children {
+            match c {
+                RawChild::Block(mut b) => {
+                    normalize_subtree(&mut b, &[NodeType::Root]);
+                    plan_subtree(
+                        &b,
+                        Dot::ROOT,
+                        &mut plan_blocks,
+                        &mut plan_block_leaves,
+                        &mut new_nodes,
+                    );
+                    let id = self.projected.tree.insert_block_subtree(&b);
+                    new_children.push(Child::Block(id));
+                }
+                RawChild::Leaf { id, item } => {
+                    new_nodes.insert(id);
+                    root_leaves.push((id, item.as_child_type()));
+                    new_children.push(Child::Leaf { id, item });
+                }
+            }
+        }
+
+        self.projected
+            .tree
+            .with_block_children(root_id, |children| {
+                children.splice(i..=j, new_children);
+            });
+
+        for &n in &old_nodes {
+            if !new_nodes.contains(&n) {
+                self.forget_node(n);
+            }
+        }
+
+        for (block, parent, nt) in &plan_blocks {
+            self.indexes.paths.add_block(*block, *parent, *nt);
+            let m = self.logs.block_modifiers.modifiers_of(*block);
+            self.projected.set_block_own_modifiers(*block, m);
+        }
+        for (block, _, _) in &plan_blocks {
+            self.recompute_block_effective(*block);
+        }
+        // A leaf that survived this window — present in the removed subtree AND back in
+        // the re-projection — keeps its covering-span set: a structural edit elsewhere in
+        // the window (this path only ever runs for sequence Ins/Del/Undel, never a span
+        // op) can't reorder it relative to a span's anchors. So carry survivors' coverage
+        // forward and resolve the whole span log only for genuinely NEW leaves (inserted,
+        // or reappearing-after-undelete content absent from the old window). A block/
+        // subtree removal (select-all-delete's shape: delete each paragraph marker)
+        // reprojects only survivors and now skips the `O(all spans)` resolve entirely,
+        // instead of paying it once per removed block.
+        let old_set: HashSet<Dot> = old_nodes.iter().copied().collect();
+        let is_new = |leaf: &Dot| !old_set.contains(leaf);
+        let needs_spans = plan_block_leaves
+            .iter()
+            .any(|(_, l)| l.iter().any(|(d, _)| is_new(d)))
+            || root_leaves.iter().any(|(d, _)| is_new(d));
+        let resolved_spans =
+            needs_spans.then(|| editor_model::ResolvedSpans::build(&self.logs.spans, &self.seq));
+        for (block, leaves) in &plan_block_leaves {
+            for (leaf, lt) in leaves {
+                self.indexes.paths.set_block_of_leaf(*leaf, *block);
+                // Only a new/reappearing leaf needs its coverage resolved; a survivor's is
+                // already correct in the index (re-resolving would waste `O(all spans)`,
+                // and for a delete would overwrite it with a now-empty set).
+                if is_new(leaf)
+                    && let Some(rs) = &resolved_spans
+                    && let Some(p) = self
+                        .seq
+                        .resolve_boundary(*leaf, Bias::Before)
+                        .map(|b| b.position)
+                {
+                    self.indexes.coverage.set(*leaf, rs.covering(p));
+                }
+                self.recompute_leaf(*leaf, *lt, *block);
+            }
+            let pairs: Vec<(Dot, bool)> = leaves
+                .iter()
+                .map(|(d, lt)| (*d, is_modifier_target(*lt)))
+                .collect();
+            self.projected.run_index.set_block_from_leaves(
+                *block,
+                &pairs,
+                &self.projected.effective,
+            );
+        }
+
+        // Root-level block atoms: index them under Root and recompute their effective.
+        for (leaf, lt) in &root_leaves {
+            self.indexes.paths.set_block_of_leaf(*leaf, Dot::ROOT);
+            if is_new(leaf)
+                && let Some(rs) = &resolved_spans
+                && let Some(p) = self
+                    .seq
+                    .resolve_boundary(*leaf, Bias::Before)
+                    .map(|b| b.position)
+            {
+                self.indexes.coverage.set(*leaf, rs.covering(p));
+            }
+            self.recompute_leaf(*leaf, *lt, Dot::ROOT);
+        }
+        // Re-segment Root's own inline runs (its block-atom children) from its current
+        // leaf order, matching what a full reproject's `BlockRuns::build` produces.
+        let root_leaf_pairs: Vec<(Dot, bool)> = self
+            .projected
+            .tree
+            .root_node()
+            .map(|r| {
+                r.children
+                    .iter()
+                    .filter_map(|c| match c {
+                        Child::Leaf { id, item } => {
+                            Some((*id, is_modifier_target(item.as_child_type())))
+                        }
+                        Child::Block(_) => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.projected.run_index.set_block_from_leaves(
+            Dot::ROOT,
+            &root_leaf_pairs,
+            &self.projected.effective,
+        );
+
+        // Re-establish the Root node's OWN schema content rule (whatever it is —
+        // e.g. a required trailing paragraph) by deferring to the normalizer, not
+        // by hardcoding the rule here. Window blocks are already normalized, so
+        // only the Root's direct content is repaired; returns any freshly scaffolded
+        // blocks to index.
+        let scaffolded = self.repair_root_content_shallow();
+        let mut s_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
+        let mut s_block_leaves: Vec<(Dot, Vec<(Dot, NodeType)>)> = Vec::new();
+        let mut s_nodes: HashSet<Dot> = HashSet::new();
+        for b in &scaffolded {
+            plan_subtree(
+                b,
+                Dot::ROOT,
+                &mut s_blocks,
+                &mut s_block_leaves,
+                &mut s_nodes,
+            );
+        }
+        for (block, parent, nt) in &s_blocks {
+            self.indexes.paths.add_block(*block, *parent, *nt);
+            let m = self.logs.block_modifiers.modifiers_of(*block);
+            self.projected.set_block_own_modifiers(*block, m);
+        }
+        for (block, _, _) in &s_blocks {
+            self.recompute_block_effective(*block);
+        }
+        for (block, leaves) in &s_block_leaves {
+            for (leaf, lt) in leaves {
+                self.indexes.paths.set_block_of_leaf(*leaf, *block);
+                self.recompute_leaf(*leaf, *lt, *block);
+            }
+            let pairs: Vec<(Dot, bool)> = leaves
+                .iter()
+                .map(|(d, lt)| (*d, is_modifier_target(*lt)))
+                .collect();
+            self.projected.run_index.set_block_from_leaves(
+                *block,
+                &pairs,
+                &self.projected.effective,
+            );
+        }
+        for (block, _, _) in &plan_blocks {
+            self.mark_dirty_block(*block);
+        }
+        for (block, _, _) in &s_blocks {
+            self.mark_dirty_block(*block);
+        }
+        self.mark_dirty_structural(Dot::ROOT);
+        Ok(())
+    }
+
+    /// Drop every projected derivation, index entry, and tree node for `n` (a block
+    /// or leaf that left the tree). Removing it from `tree.nodes` keeps the flat tree
+    /// free of unreachable blocks (a leaf id is simply absent there, a no-op).
+    fn forget_node(&mut self, n: Dot) {
+        self.projected.effective.remove(&n);
+        self.projected.own_modifiers.remove(&n);
+        self.projected.block_effective.remove(&n);
+        self.projected.block_modifiers.remove(&n);
+        self.projected.node_attrs.remove(&n);
+        self.projected.node_styles.remove(&n);
+        self.projected.node_markers.remove(&n);
+        self.projected.run_index.remove_block(n);
+        self.indexes.paths.remove_block(n);
+        self.indexes.paths.remove_leaf(n);
+        self.indexes.coverage.remove_leaf(n);
+        self.projected.tree.nodes.remove(&n);
+    }
+
+    /// Re-establish the Root's own schema content rule on the flat tree by running the
+    /// nested `normalize_content_shallow` over a shallow (direct-children-only) view of
+    /// the root and reconciling the result back: existing blocks keep their real flat
+    /// subtree, newly scaffolded blocks are grafted in (and returned for indexing), and
+    /// rule-dropped blocks are forgotten. The Root rule only ever appends/drops direct
+    /// children, so an empty-children shallow view is faithful.
+    fn repair_root_content_shallow(&mut self) -> Vec<RawNode> {
+        let root_id = self.projected.tree.root;
+        let Some(root) = self.projected.tree.get(root_id) else {
+            return Vec::new();
+        };
+        let mut shallow = RawNode {
+            id: root_id,
+            node_type: root.node_type,
+            children: Vec::new(),
+        };
+        for c in &root.children {
+            match c {
+                Child::Leaf { id, item } => shallow.children.push(RawChild::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                }),
+                Child::Block(id) => {
+                    let nt = self
+                        .projected
+                        .tree
+                        .get(*id)
+                        .map(|b| b.node_type)
+                        .unwrap_or(NodeType::Paragraph);
+                    shallow.children.push(RawChild::Block(RawNode {
+                        id: *id,
+                        node_type: nt,
+                        children: Vec::new(),
+                    }));
+                }
+            }
+        }
+        let before: HashSet<Dot> = shallow
+            .children
+            .iter()
+            .filter_map(|c| match c {
+                RawChild::Block(b) => Some(b.id),
+                _ => None,
+            })
+            .collect();
+
+        normalize_content_shallow(&mut shallow, &[]);
+
+        let mut new_children: Vec<Child> = Vec::new();
+        let mut after: HashSet<Dot> = HashSet::new();
+        let mut scaffolded: Vec<RawNode> = Vec::new();
+        for c in shallow.children {
+            match c {
+                RawChild::Leaf { id, item } => new_children.push(Child::Leaf { id, item }),
+                RawChild::Block(b) => {
+                    after.insert(b.id);
+                    if self.projected.tree.get(b.id).is_some() {
+                        new_children.push(Child::Block(b.id));
+                    } else {
+                        let id = self.projected.tree.insert_block_subtree(&b);
+                        new_children.push(Child::Block(id));
+                        scaffolded.push(b);
+                    }
+                }
+            }
+        }
+        // Forget any direct block the rule dropped (and its whole subtree).
+        let dropped: Vec<Dot> = before.difference(&after).copied().collect();
+        for d in dropped {
+            let mut sub = Vec::new();
+            if let Some(b) = self.projected.tree.get(d) {
+                collect_subtree_nodes(&self.projected.tree, b, &mut sub);
+            }
+            for n in sub {
+                self.forget_node(n);
+            }
+        }
+        self.projected
+            .tree
+            .with_block_children(root_id, |children| {
+                *children = ChildList::from_iter(new_children);
+            });
+        scaffolded
+    }
+
+    fn reproject_from_tree(&mut self) -> Result<(), SpineError> {
+        let elements = self.seq.snapshot(&self.logs.seq);
+        let tree = self.projected.tree.clone();
+        self.projected = project_from_tree(&elements, tree, &self.seq, &self.logs);
+        self.indexes = ProjectionIndexes::rebuild_from(
+            &self.projected,
+            &self.logs.spans,
+            &elements,
+            &self.seq,
+        );
+        self.mark_dirty_full();
+        Ok(())
+    }
+
+    fn try_incremental(&mut self, op: &Op<EditOp>) -> bool {
+        match &op.payload {
+            EditOp::Seq(ListOp::Ins { item, .. }) if is_inline_leaf_item(item) => {
+                self.try_insert_leaf(op.id, item)
+            }
+            EditOp::Seq(ListOp::Ins {
+                item: SeqItem::Block { node_type, parents },
+                ..
+            }) => self.try_insert_block(op.id, *node_type, parents),
+            EditOp::Seq(ListOp::Del { .. }) => self.try_delete_chars(op.id),
+            EditOp::Seq(ListOp::Undel { del }) => self.try_undelete(*del),
+            EditOp::Span(span_op) => self.try_apply_span(op.id, span_op),
+            EditOp::BlockModifier(_)
+            | EditOp::NodeStyle(_)
+            | EditOp::NodeAttr(_)
+            | EditOp::NodeMarker(_)
+            | EditOp::Style(_) => self.try_apply_node_op(op),
+            _ => false,
+        }
+    }
+
+    fn node_type_of(&self, dot: Dot) -> Option<NodeType> {
+        if self.indexes.paths.block_of(dot).is_some() {
+            return self.leaf_type_of(dot);
+        }
+        self.indexes.paths.node_type_of(dot)
+    }
+
+    fn recompute_leaf(&mut self, leaf: Dot, leaf_type: NodeType, block: Dot) {
+        let covering = self.indexes.coverage.covering(leaf).to_vec();
+        let (eff, own) = derive_leaf_from_covering(
+            &self.indexes.paths,
+            &self.logs,
+            &self.projected,
+            block,
+            leaf,
+            leaf_type,
+            &covering,
+        );
+        self.projected.set_leaf_effective(leaf, eff);
+        self.projected.set_leaf_own(leaf, own);
+    }
+
+    fn recompute_block_effective(&mut self, block: Dot) {
+        let be = block_effective_one(&self.indexes.paths, &self.logs, &self.projected, block);
+        self.projected.set_block_effective(block, be);
+    }
+
+    /// Recompute the projected derivations (effective / block_effective / own /
+    /// runs) for `target` and everything that inherits from it. A leaf target is
+    /// just itself; a block target is its whole subtree (over-invalidation is
+    /// safe — only effective recomputes, never structure). O(subtree).
+    fn recompute_subtree(&mut self, target: Dot) {
+        let tb = self.indexes.paths.block_of(target).unwrap_or(target);
+        self.mark_dirty_block(tb);
+        if let Some(block) = self.indexes.paths.block_of(target) {
+            if let Some(lt) = self.leaf_type_of(target) {
+                self.recompute_leaf(target, lt, block);
+                self.projected.resegment_block(block);
+            }
+            return;
+        }
+        self.recompute_block_effective(target);
+        let mut affected_blocks: HashSet<Dot> = HashSet::new();
+        for d in self.indexes.paths.descendants_of(target) {
+            if let Some(b) = self.indexes.paths.block_of(d) {
+                if let Some(lt) = self.leaf_type_of(d) {
+                    self.recompute_leaf(d, lt, b);
+                    affected_blocks.insert(b);
+                }
+            } else {
+                self.recompute_block_effective(d);
+                self.mark_dirty_block(d);
+            }
+        }
+        for b in affected_blocks {
+            self.mark_dirty_block(b);
+            self.projected.resegment_block(b);
+        }
+    }
+
+    fn try_apply_node_op(&mut self, op: &Op<EditOp>) -> bool {
+        match &op.payload {
+            EditOp::BlockModifier(o) => {
+                let target = o.target_key().0;
+                if !self.indexes.paths.contains(target) {
+                    return true;
+                }
+                let m = self.logs.block_modifiers.modifiers_of(target);
+                self.projected.set_block_own_modifiers(target, m);
+                self.recompute_subtree(target);
+            }
+            EditOp::NodeStyle(o) => {
+                let target = o.target;
+                if !self.indexes.paths.contains(target) {
+                    return true;
+                }
+                let v = self.logs.node_styles.value_of(target);
+                self.projected.node_styles.insert(target, v);
+                self.recompute_subtree(target);
+            }
+            EditOp::NodeAttr(o) => {
+                let target = o.target;
+                if !self.indexes.paths.contains(target) {
+                    return true;
+                }
+                let Some(nt) = self.node_type_of(target) else {
+                    return true;
+                };
+                match self.logs.node_attrs.project_target(target, nt) {
+                    Some(node) => {
+                        self.projected.node_attrs.insert(target, node);
+                    }
+                    None => {
+                        self.projected.node_attrs.remove(&target);
+                    }
+                }
+                self.recompute_subtree(target);
+            }
+            EditOp::NodeMarker(o) => {
+                let target = o.target;
+                if !self.indexes.paths.contains(target) {
+                    return true;
+                }
+                // Markers don't participate in effective/own derivation.
+                let v = self.logs.node_markers.value_of(target);
+                self.projected.node_markers.insert(target, v);
+                self.mark_dirty_block(target);
+            }
+            EditOp::Style(_) => {
+                self.projected.styles = self.logs.styles.registered_entries();
+                let styled: Vec<Dot> = self
+                    .projected
+                    .node_styles
+                    .iter()
+                    .filter(|(_, v)| v.is_some())
+                    .map(|(d, _)| *d)
+                    .collect();
+                for d in styled {
+                    self.recompute_subtree(d);
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn leaf_type_of(&self, dot: Dot) -> Option<NodeType> {
+        let lv = *self.logs.seq.lv_of.get(&dot)?;
+        match &self.logs.seq.ops[lv] {
+            ListOp::Ins { item, .. } => Some(item.as_child_type()),
+            _ => None,
+        }
+    }
+
+    fn span_covers(&self, span_dot: Dot, pos: usize) -> bool {
+        let Some(op) = self.logs.spans.get(span_dot) else {
+            return false;
+        };
+        let (sa, ea) = op.anchors();
+        let (Some(s), Some(e)) = (
+            self.seq
+                .resolve_boundary(sa.id, sa.bias.into())
+                .map(|b| b.position),
+            self.seq
+                .resolve_boundary(ea.id, ea.bias.into())
+                .map(|b| b.position),
+        ) else {
+            return false;
+        };
+        s < e && s <= pos && pos < e
+    }
+
+    /// Span coverage for a leaf newly inserted at visible position `pos`, whose
+    /// left neighbor is `neighbor`. Equals the neighbor's coverage except for
+    /// spans anchored adjacent to the insertion gap (re-resolved here), so this
+    /// is O(neighbor coverage + adjacent spans) — independent of document size.
+    fn coverage_for_inserted(&self, neighbor: Dot, pos: usize) -> Vec<Dot> {
+        if self.indexes.spans.is_empty() {
+            return Vec::new();
+        }
+        // Block-start insert: the neighbour is a block marker, not a leaf, so its
+        // coverage can't seed the new leaf's. Any span covering `pos` may be
+        // anchored far away (not adjacent), so derive coverage directly.
+        if self.indexes.paths.block_of(neighbor).is_none() {
+            return editor_model::spans_covering(pos, &self.logs.spans, &self.seq);
+        }
+        let base = self.indexes.coverage.covering(neighbor);
+        let after = self.seq.dot_at_visible(&self.logs.seq, pos + 1);
+        let mut near = vec![neighbor];
+        if let Some(m) = after {
+            near.push(m);
+        }
+        let boundary = self.indexes.spans.spans_near(near);
+        if boundary.is_empty() {
+            return base.to_vec();
+        }
+        let boundary_set: HashSet<Dot> = boundary.iter().copied().collect();
+        let mut cov: Vec<Dot> = base
+            .iter()
+            .copied()
+            .filter(|s| !boundary_set.contains(s))
+            .collect();
+        for &s in &boundary {
+            if self.span_covers(s, pos)
+                && let Err(i) = cov.binary_search(&s)
+            {
+                cov.insert(i, s);
+            }
+        }
+        cov
+    }
+
+    fn try_apply_span(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
+        self.indexes.spans.add(op_dot, span_op);
+        let (sa, ea) = span_op.anchors();
+        let (Some(start), Some(end)) = (
+            self.seq
+                .resolve_boundary(sa.id, sa.bias.into())
+                .map(|b| b.position),
+            self.seq
+                .resolve_boundary(ea.id, ea.bias.into())
+                .map(|b| b.position),
+        ) else {
+            return true;
+        };
+        if start >= end {
+            return true;
+        }
+        // Recompute each covered leaf's effective, grouped by block in position order.
+        let mut groups: Vec<(Dot, Vec<(Dot, NodeType)>)> = Vec::new();
+        let mut group_of: HashMap<Dot, usize> = HashMap::new();
+        for pos in start..end {
+            let Some(leaf) = self.seq.dot_at_visible(&self.logs.seq, pos) else {
+                continue;
+            };
+            let Some(block) = self.indexes.paths.block_of(leaf) else {
+                continue;
+            };
+            let Some(leaf_type) = self.leaf_type_of(leaf) else {
+                continue;
+            };
+            self.indexes.coverage.add_span_to(leaf, op_dot);
+            let covering = self.indexes.coverage.covering(leaf).to_vec();
+            let (eff, own) = derive_leaf_from_covering(
+                &self.indexes.paths,
+                &self.logs,
+                &self.projected,
+                block,
+                leaf,
+                leaf_type,
+                &covering,
+            );
+            self.projected.set_leaf_effective(leaf, eff);
+            self.projected.set_leaf_own(leaf, own);
+            let gi = *group_of.entry(block).or_insert_with(|| {
+                groups.push((block, Vec::new()));
+                groups.len() - 1
+            });
+            groups[gi].1.push((leaf, leaf_type));
+        }
+        // Update only the covered leaves' run-index entries (the affected leaves are a
+        // contiguous offset range per block), instead of re-segmenting the whole block
+        // per span — `O(covered · log)` vs the `O(block)` that made styled pastes O(N²).
+        for (block, leaves) in &groups {
+            self.mark_dirty_block(*block);
+            let Some(&(first_leaf, _)) = leaves.first() else {
+                continue;
+            };
+            let Some(first_pos) = self
+                .seq
+                .resolve_boundary(first_leaf, Bias::Before)
+                .map(|b| b.position)
+            else {
+                continue;
+            };
+            let o_first = self.leaf_insert_offset(*block, first_pos);
+            for (i, (leaf, lt)) in leaves.iter().enumerate() {
+                let eff = self
+                    .projected
+                    .effective
+                    .get(leaf)
+                    .cloned()
+                    .unwrap_or_default();
+                self.projected.respan_leaf(
+                    *block,
+                    o_first + i,
+                    *leaf,
+                    eff,
+                    !is_modifier_target(*lt),
+                );
+            }
+        }
+        true
+    }
+
+    fn is_inline_leaf(&self, dot: Dot) -> bool {
+        self.logs.seq.lv_of.get(&dot).is_some_and(|&lv| {
+            matches!(&self.logs.seq.ops[lv], ListOp::Ins { item, .. } if is_inline_leaf_item(item))
+        })
+    }
+
+    fn try_insert_leaf(&mut self, leaf: Dot, item: &SeqItem) -> bool {
+        let Some(pos) = self
+            .seq
+            .resolve_boundary(leaf, Bias::Before)
+            .map(|b| b.position)
+        else {
+            return false;
+        };
+        if pos == 0 {
+            return false;
+        }
+        let Some(neighbor) = self.seq.dot_at_visible(&self.logs.seq, pos - 1) else {
+            return false;
+        };
+        let leaf_type = item.as_child_type();
+        // The new leaf's parent block: the neighbor's block if the neighbor is a
+        // leaf, or — when inserting at a block's start — the neighbor block itself.
+        let (block, neighbor_is_leaf) = match self.indexes.paths.block_of(neighbor) {
+            Some(b) => (b, true),
+            None if self.indexes.paths.node_type_of(neighbor).is_some() => (neighbor, false),
+            None => {
+                return false;
+            }
+        };
+        // Splice incrementally only when no normalization can be triggered: the new
+        // leaf must be freely-repeatable content of its block, and (for a mid-block
+        // insert) so must its left neighbor — otherwise the splice could place
+        // content after a position-constrained element (e.g. a trailing PageBreak),
+        // which projection would normalize away. Such inserts fall back.
+        let Some(block_type) = self.indexes.paths.node_type_of(block) else {
+            return false;
+        };
+        let content = &block_type.spec().content;
+        if !content.is_repeatable(leaf_type) {
+            return false;
+        }
+        if neighbor_is_leaf
+            && !self
+                .leaf_type_of(neighbor)
+                .is_some_and(|lt| content.is_repeatable(lt))
+        {
+            return false;
+        }
+        let cov = self.coverage_for_inserted(neighbor, pos);
+        let neighbor_plain = neighbor_is_leaf
+            && self
+                .projected
+                .own_modifiers
+                .get(&neighbor)
+                .is_none_or(|m| m.is_empty());
+        let (eff, own) = if cov.is_empty() && neighbor_plain {
+            // L and its leaf neighbor are both plain leaves of the same block:
+            // identical pure-inheritance effective and no own modifiers.
+            (
+                self.projected
+                    .effective
+                    .get(&neighbor)
+                    .cloned()
+                    .unwrap_or_default(),
+                Default::default(),
+            )
+        } else {
+            derive_leaf_from_covering(
+                &self.indexes.paths,
+                &self.logs,
+                &self.projected,
+                block,
+                leaf,
+                leaf_type,
+                &cov,
+            )
+        };
+        // Place the new leaf right after its sequence neighbor among the block's
+        // children. A sequential run hits the cursor (O(log K) identity check, no
+        // `resolve_boundary`); anything else falls back to the binary search.
+        let offset = self.leaf_insert_offset_cursored(block, neighbor, neighbor_is_leaf, pos);
+        self.projected.splice_char(
+            block,
+            offset,
+            leaf,
+            item.clone(),
+            eff,
+            !is_modifier_target(leaf_type),
+        );
+        self.projected.set_leaf_own(leaf, own);
+        self.indexes.paths.set_block_of_leaf(leaf, block);
+        self.indexes.coverage.set(leaf, cov);
+        self.leaf_cursor = Some(LeafCursor {
+            block,
+            leaf,
+            offset,
+        });
+        self.mark_dirty_block(block);
+        true
+    }
+
+    /// The child offset at which a leaf landing after `neighbor` (sequence position
+    /// `pos`) belongs in `block`. Sequential inserts (paste, typing) place each leaf
+    /// right after the previous one, so the cursor remembers the last
+    /// `(block, leaf, offset)` and — when this leaf's neighbor is exactly that leaf and
+    /// it still sits where we left it — returns `offset + 1` after a single `O(log K)`
+    /// identity check, with no `resolve_boundary`. The validating `get` keeps it correct
+    /// across any intervening edit (a stale cursor simply misses). A miss — block start,
+    /// the first insert, or a non-sequential/remote edit — falls back to the binary
+    /// search. Tree-identity based, so ghost-safe like the fallback.
+    fn leaf_insert_offset_cursored(
+        &self,
+        block: Dot,
+        neighbor: Dot,
+        neighbor_is_leaf: bool,
+        pos: usize,
+    ) -> usize {
+        if !neighbor_is_leaf {
+            // The neighbor is the block marker itself: the new leaf is the first child.
+            return 0;
+        }
+        if let Some(cur) = self.leaf_cursor.as_ref() {
+            if cur.block == block
+                && cur.leaf == neighbor
+                && self
+                    .projected
+                    .tree
+                    .get(block)
+                    .and_then(|n| n.children.get(cur.offset))
+                    .is_some_and(|c| matches!(c, Child::Leaf { id, .. } if *id == neighbor))
+            {
+                return cur.offset + 1;
+            }
+        }
+        self.leaf_insert_offset(block, pos)
+    }
+
+    /// The child offset at which a leaf landing at visible sequence position `pos`
+    /// belongs in `block`. A block keeps its leaves in sequence order, so this binary-
+    /// searches the children by their resolved position — `O(log² K)` and ghost-safe
+    /// (only live tree leaves are weighed), independent of where in the block the insert
+    /// lands (append, middle, or random).
+    fn leaf_insert_offset(&self, block: Dot, pos: usize) -> usize {
+        let Some(node) = self.projected.tree.get(block) else {
+            return 0;
+        };
+        let (mut lo, mut hi) = (0usize, node.children.len());
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            let child_dot = match node.children.get(mid) {
+                Some(Child::Leaf { id, .. }) => *id,
+                Some(Child::Block(d)) => *d,
+                None => break,
+            };
+            let before = self
+                .seq
+                .resolve_boundary(child_dot, Bias::Before)
+                .is_some_and(|b| b.position < pos);
+            if before {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        lo
+    }
+
+    // Incremental block insert for the common, normalization-free case: a new
+    // top-level leaf-bearing block (e.g. pressing Enter to split a paragraph).
+    // The split block and the new block must be the same simple inline-only block
+    // type with no required content, so every prefix/suffix split stays valid.
+    // Anything else (nested blocks, type changes, required content) falls back.
+    fn try_insert_block(&mut self, block_dot: Dot, node_type: NodeType, parents: &[Dot]) -> bool {
+        if parents != [Dot::ROOT] {
+            return false;
+        }
+        let Some(pos) = self
+            .seq
+            .resolve_boundary(block_dot, Bias::Before)
+            .map(|b| b.position)
+        else {
+            return false;
+        };
+        if pos == 0 {
+            return false;
+        }
+        let Some(left) = self.seq.dot_at_visible(&self.logs.seq, pos - 1) else {
+            return false;
+        };
+        let (p_block, split_after) = match self.indexes.paths.block_of(left) {
+            Some(pb) => (pb, Some(left)),
+            None if self.indexes.paths.node_type_of(left).is_some() => (left, None),
+            None => return false,
+        };
+        if self.indexes.paths.parent_of(p_block) != Some(Dot::ROOT) {
+            return false;
+        }
+        let Some(p_type) = self.indexes.paths.node_type_of(p_block) else {
+            return false;
+        };
+        // Same simple inline-only block type, no required content → split is valid.
+        let content = &p_type.spec().content;
+        let simple = node_type == p_type
+            && content.min_required() == 0
+            && content.allowed_types().iter().all(|t| t.spec().inline);
+        if !simple {
+            return false;
+        }
+        let Some(moved) = split_block_insert(
+            &mut self.projected.tree,
+            Dot::ROOT,
+            p_block,
+            split_after,
+            block_dot,
+            node_type,
+        ) else {
+            return false;
+        };
+        self.indexes
+            .paths
+            .add_block(block_dot, Dot::ROOT, node_type);
+        for &leaf in &moved {
+            self.indexes.paths.set_block_of_leaf(leaf, block_dot);
+        }
+        // Moved leaves now inherit from the fresh block; recompute their effective.
+        for &leaf in &moved {
+            if let Some(lt) = self.leaf_type_of(leaf) {
+                self.recompute_leaf(leaf, lt, block_dot);
+            }
+        }
+        self.recompute_block_effective(block_dot);
+        // The split moves p_block's suffix (`moved`) into the new block. p_block's
+        // prefix runs are unchanged, so re-segment it only when leaves actually move
+        // out: the paste / Enter-at-end case (`moved` empty) leaves p_block's
+        // incrementally-built run index already correct and pays nothing (no full
+        // `block_leaves` scan, no re-segment). The new block is segmented from just
+        // the moved leaves.
+        let b_leaves: Vec<(Dot, bool)> = moved
+            .iter()
+            .map(|&d| {
+                let mergeable = self.leaf_type_of(d).is_some_and(is_modifier_target);
+                (d, mergeable)
+            })
+            .collect();
+        if !moved.is_empty() {
+            let p_all = self.projected.run_index.block_leaves(p_block);
+            let keep = p_all.len().saturating_sub(moved.len());
+            let p_prefix: Vec<(Dot, bool)> = p_all[..keep].to_vec();
+            self.projected.run_index.set_block_from_leaves(
+                p_block,
+                &p_prefix,
+                &self.projected.effective,
+            );
+        }
+        self.projected.run_index.set_block_from_leaves(
+            block_dot,
+            &b_leaves,
+            &self.projected.effective,
+        );
+        self.mark_dirty_block(p_block);
+        self.mark_dirty_block(block_dot);
+        self.mark_dirty_structural(Dot::ROOT);
+        true
+    }
+
+    fn try_delete_chars(&mut self, del: Dot) -> bool {
+        // A bulk delete that removes more than remains (select-all-delete: one range op
+        // clears ~everything) is cheaper to rebuild wholesale — `O(visible-after)` — than
+        // to splice each removed leaf out of the projection incrementally, `O(targets)`.
+        // The seq op is already applied, so `visible_len()` is the post-delete count. The
+        // `1024` floor keeps ordinary small deletes on the localized incremental path
+        // (whose cost is below the reproject's fixed index-rebuild overhead). Decide on the
+        // O(1) target count so the bulk path never materializes the O(len) target vector.
+        let target_count = self.seq.del_target_count(del);
+        if target_count == 0 {
+            return false;
+        }
+        if target_count > self.seq.visible_len().max(1024) {
+            return self.reproject_after_delete().is_ok();
+        }
+        let targets = self.seq.del_target_dots(&self.logs.seq, del);
+        if targets.is_empty() {
+            return false;
+        }
+        let mut block = None;
+        for &t in &targets {
+            let Some(b) = self.indexes.paths.block_of(t) else {
+                return false;
+            };
+            if !self.is_inline_leaf(t) {
+                return false;
+            }
+            // Deleting a position-constrained leaf (e.g. a trailing PageBreak) can
+            // un-drop content that normalization previously removed — a non-local
+            // effect a plain leaf removal can't reproduce. Fall back so the block is
+            // re-projected from the sequence, restoring it locally.
+            let constrained = self
+                .leaf_type_of(t)
+                .zip(self.indexes.paths.node_type_of(b))
+                .is_some_and(|(lt, bt)| !bt.spec().content.is_repeatable(lt));
+            if constrained {
+                return false;
+            }
+            match block {
+                None => block = Some(b),
+                Some(bb) if bb == b => {}
+                _ => return false,
+            }
+        }
+        let block = block.expect("non-empty targets set block");
+        self.mark_dirty_block(block);
+        for &t in &targets {
+            if !self.projected.splice_delete_leaf(block, t) {
+                return false;
+            }
+            self.indexes.paths.remove_leaf(t);
+            self.indexes.coverage.remove_leaf(t);
+        }
+        true
+    }
+
+    /// Restore the leaves a prior delete removed (the inverse op an undo replays).
+    /// Re-inserts each restored inline leaf incrementally — the same localized path a
+    /// fresh insert takes — instead of a per-Undel reprojection (the `O(N²)` undo of a
+    /// large delete). Falls back when a target isn't a plain inline leaf (block markers,
+    /// position-constrained content) so the structural cases stay correct.
+    fn try_undelete(&mut self, del: Dot) -> bool {
+        let targets = self.seq.del_target_dots(&self.logs.seq, del);
+        if targets.is_empty() {
+            return false;
+        }
+        // Collect the targets this undel actually re-shows (a concurrently-deleted
+        // target stays invisible — restoring it would diverge from a reproject), as
+        // inline leaves, ordered by visible position so each insert sees its left
+        // neighbour. Restore in ascending order.
+        let mut ordered: Vec<(usize, Dot, SeqItem)> = Vec::with_capacity(targets.len());
+        for &t in &targets {
+            let Some(b) = self.seq.resolve_boundary(t, Bias::Before) else {
+                return false;
+            };
+            if !b.visible {
+                continue;
+            }
+            let Some(&lv) = self.logs.seq.lv_of.get(&t) else {
+                return false;
+            };
+            let ListOp::Ins { item, .. } = &self.logs.seq.ops[lv] else {
+                return false;
+            };
+            if !is_inline_leaf_item(item) {
+                return false;
+            }
+            ordered.push((b.position, t, item.clone()));
+        }
+        if ordered.is_empty() {
+            return false;
+        }
+        ordered.sort_by_key(|(p, _, _)| *p);
+        for (_, t, item) in &ordered {
+            if !self.try_insert_leaf(*t, item) {
+                return false;
+            }
+        }
+        // The incremental insert seeds each restored leaf's span coverage from its
+        // neighbour, which misses spans anchored to the restored leaf itself. Once all
+        // are back (final positions), recompute coverage from the resolved spans (one
+        // resolve for the whole undel) and re-derive — matching a full reproject.
+        if !self.indexes.spans.is_empty() {
+            let resolved = editor_model::ResolvedSpans::build(&self.logs.spans, &self.seq);
+            for (_, t, _) in &ordered {
+                let Some(pos) = self
+                    .seq
+                    .resolve_boundary(*t, Bias::Before)
+                    .map(|b| b.position)
+                else {
+                    continue;
+                };
+                let (Some(block), Some(lt)) =
+                    (self.indexes.paths.block_of(*t), self.leaf_type_of(*t))
+                else {
+                    continue;
+                };
+                let covering = resolved.covering(pos);
+                self.indexes.coverage.set(*t, covering.clone());
+                let (eff, own) = derive_leaf_from_covering(
+                    &self.indexes.paths,
+                    &self.logs,
+                    &self.projected,
+                    block,
+                    *t,
+                    lt,
+                    &covering,
+                );
+                self.projected.set_leaf_own(*t, own);
+                let offset = self.leaf_insert_offset(block, pos);
+                self.projected
+                    .respan_leaf(block, offset, *t, eff, !is_modifier_target(lt));
+            }
+        }
+        true
+    }
+
+    pub fn apply(&mut self, payload: EditOp) -> Result<Op<EditOp>, SpineError> {
+        let op = self.apply_op_warm(payload)?;
+        self.project_op(&op)?;
         Ok(op)
+    }
+
+    /// Apply an op to the sequence/oplog WITHOUT projecting it. For callers that apply
+    /// a run of ops back-to-back and can defer the projection to a single
+    /// [`reproject_all`](Self::reproject_all) afterward — e.g. undoing a large delete,
+    /// where projecting each re-inserted block as its own window reprojection is
+    /// `O(ops · window)` but one final reproject is `O(document)`. Only safe when nothing
+    /// between the ops reads the projection (seq inversion reads the checkout, not the
+    /// projected tree).
+    pub fn apply_warm_only(&mut self, payload: EditOp) -> Result<Op<EditOp>, SpineError> {
+        self.apply_op_warm(payload)
+    }
+
+    /// Force a whole-document reprojection from the current sequence. Pairs with
+    /// [`apply_warm_only`](Self::apply_warm_only) to collapse a batch of deferred ops
+    /// into one projection.
+    pub fn reproject_all(&mut self) -> Result<(), SpineError> {
+        self.reproject()
     }
 
     pub fn apply_batch(&mut self, payloads: Vec<EditOp>) -> Result<Vec<Op<EditOp>>, SpineError> {
         let mut ops = Vec::with_capacity(payloads.len());
         for payload in payloads {
-            match self.graph.add_mut(payload) {
-                Ok(op) => ops.push(op),
+            match self.apply_op_warm(payload) {
+                Ok(op) => {
+                    self.project_op(&op)?;
+                    ops.push(op);
+                }
                 Err(e) => {
-                    let (logs, projected) = Self::derive(&self.graph)?;
-                    self.logs = logs;
-                    self.projected = projected;
-                    return Err(e.into());
+                    self.rebuild_from_graph()?;
+                    return Err(e);
                 }
             }
         }
-        let (logs, projected) = Self::derive(&self.graph)?;
-        self.logs = logs;
-        self.projected = projected;
         Ok(ops)
     }
 
@@ -97,12 +1625,65 @@ impl ProjectedState {
     }
 
     pub fn receive_changeset(&self, cs: Changeset<EditOp>) -> Result<Self, SpineError> {
-        let graph = self.graph.receive_changeset(cs)?;
-        Self::from_graph(graph)
+        let (next, _applied) = self.receive_changesets(vec![cs])?;
+        Ok(next)
+    }
+
+    /// Apply a batch of remote changesets against a single cloned state. A sync
+    /// burst delivers many changesets at once (one payload, or many that pile up
+    /// in the message queue before a tick drains them); receiving each one
+    /// separately re-clones the whole `ProjectedState` — the `O(N)` `lv_of`
+    /// HashMap and the seq `ContentTree` — per changeset, so `K` changesets cost
+    /// `O(K·N)`. Cloning once and folding every changeset into that clone drops it
+    /// to `O(N + novel)`.
+    pub fn receive_changesets(
+        &self,
+        css: Vec<Changeset<EditOp>>,
+    ) -> Result<(Self, Vec<Op<EditOp>>), SpineError> {
+        let mut next = self.clone();
+        // The novel ops are exactly the changesets' ops we don't already have,
+        // accumulated in receive order. A Changeset is stored ancestry-first
+        // (parents before children) and later changesets in the batch can only
+        // depend on earlier ones (or the base graph), so the concatenation is
+        // already a valid projection order. Checking `contains` against the
+        // growing `next.graph` also dedupes ops shared across changesets.
+        let mut all_novel: Vec<Dot> = Vec::new();
+        for cs in css {
+            let mut novel: Vec<Dot> = cs
+                .ops
+                .iter()
+                .map(|o| o.id)
+                .filter(|d| !next.graph.contains(d))
+                .collect();
+            next.graph.receive_changeset_mut(cs)?;
+            all_novel.append(&mut novel);
+        }
+        let applied: Vec<Op<EditOp>> = all_novel
+            .iter()
+            .filter_map(|d| next.graph.get(d).cloned())
+            .collect();
+        // A batch large relative to the current document (a fresh-load pull, or another
+        // peer's bulk paste) is cheaper to project in one pass than op-by-op: the
+        // incremental path pays a fixed per-op cost, so `O(novel)` of it overtakes a
+        // single `O(document)` reprojection once `novel` is more than a small fraction of
+        // the doc. Small deltas (ordinary remote typing) stay incremental and localized.
+        let bulk = all_novel.len().saturating_mul(9) > next.seq.visible_len();
+        for op in &applied {
+            next.ingest_op_warm(op)?;
+            if !bulk {
+                next.project_op(op)?;
+            }
+        }
+        if bulk {
+            next.reproject()?;
+        }
+        Ok((next, applied))
     }
 
     pub fn view(&self) -> DocView<'_> {
-        DocView::new(&self.projected)
+        // O(1): reuse the already-maintained `BlockPaths` index instead of rebuilding
+        // a structural index on every view read.
+        DocView::with_paths(&self.projected, &self.indexes.paths)
     }
 
     pub fn projected(&self) -> &ProjectedDoc {
@@ -119,6 +1700,14 @@ impl ProjectedState {
 
     pub fn seq(&self) -> &OpLog<SeqItem> {
         &self.logs.seq
+    }
+
+    /// The live sequence checkout, already materialized incrementally. Callers that
+    /// only need to resolve a handful of anchors (selection restore) should build a
+    /// `StableResolveCtx::from_live` over this instead of rebuilding a checkout from
+    /// the oplog.
+    pub fn seq_checkout(&self) -> &editor_crdt::sequence::SeqCheckout {
+        &self.seq
     }
 
     pub fn node_attrs(&self) -> &NodeAttrLog {
@@ -141,20 +1730,165 @@ impl ProjectedState {
         &self.logs.spans
     }
 
-    pub fn seq_flat_pos(&self, dot: editor_crdt::Dot) -> Option<usize> {
-        let (_, resolver) = editor_crdt::sequence::checkout_with_resolver(&self.logs.seq);
-        resolver
-            .resolve_boundary(dot, editor_crdt::sequence::Bias::Before)
+    pub fn seq_flat_pos(&self, dot: Dot) -> Option<usize> {
+        self.seq
+            .resolve_boundary(dot, Bias::Before)
             .map(|b| b.position)
+    }
+
+    pub fn seq_boundary_pos(&self, dot: Dot, bias: Bias) -> Option<usize> {
+        self.seq.resolve_boundary(dot, bias).map(|b| b.position)
+    }
+
+    // === Structural navigation for the step layer ===
+    // These read the flat tree (O(1) node access) and the incrementally-maintained
+    // `BlockPaths` index directly, instead of building an `O(n)` `DocView`. The step
+    // helpers call them per insert during a paste, so a `view()` rebuild here is the
+    // paste's dominant non-projection cost.
+
+    /// The block's node type, or `None` if it isn't a live block.
+    pub fn block_node_type(&self, block: Dot) -> Option<NodeType> {
+        self.projected.tree.get(block).map(|n| n.node_type)
+    }
+
+    /// Number of direct children (blocks + leaves) of `block`.
+    pub fn child_count(&self, block: Dot) -> Option<usize> {
+        self.projected.tree.get(block).map(|n| n.children.len())
+    }
+
+    /// Whether `block` is a live block node (not a leaf / absent).
+    pub fn is_block(&self, block: Dot) -> bool {
+        self.projected.tree.get(block).is_some()
+    }
+
+    /// Ordered child dots of `block` — leaves by id, child blocks by id (synthetic
+    /// blocks included), matching the command layer's full child-slot addressing.
+    pub fn child_elem_dots(&self, block: Dot) -> Vec<Dot> {
+        match self.projected.tree.get(block) {
+            Some(n) => n
+                .children
+                .iter()
+                .map(|c| match c {
+                    Child::Leaf { id, .. } => *id,
+                    Child::Block(d) => *d,
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Ordered child *block* dots of `block` (blocks only).
+    pub fn child_block_dots(&self, block: Dot) -> Vec<Dot> {
+        match self.projected.tree.get(block) {
+            Some(n) => n
+                .children
+                .iter()
+                .filter_map(|c| match c {
+                    Child::Block(d) => Some(*d),
+                    Child::Leaf { .. } => None,
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// The dot of `block`'s `index`-th child (leaf id or block id).
+    pub fn child_dot_at(&self, block: Dot, index: usize) -> Option<Dot> {
+        match self.projected.tree.get(block)?.children.get(index)? {
+            Child::Leaf { id, .. } => Some(*id),
+            Child::Block(d) => Some(*d),
+        }
+    }
+
+    /// The maximum sequence position spanned by `block`'s subtree — i.e. the seq
+    /// position of its last element, used to find where the next sibling inserts.
+    /// A subtree is contiguous in the sequence and the flat tree mirrors sequence
+    /// order (each block keeps its children in sequence order), so the deepest
+    /// *last* child holds the max: walking the rightmost path is `O(depth)` and a
+    /// single `resolve_boundary`, versus resolving every dot in the subtree. Falls
+    /// back to the exhaustive `O(subtree)` max if the rightmost path can't resolve.
+    pub fn subtree_max_seq_pos(&self, block: Dot) -> Option<usize> {
+        let mut node = block;
+        loop {
+            let Some(n) = self.projected.tree.get(node) else {
+                break;
+            };
+            match n.children.last() {
+                Some(Child::Block(d)) => node = *d,
+                Some(Child::Leaf { id, .. }) => match self.seq_flat_pos(*id) {
+                    Some(p) => return Some(p),
+                    None => break,
+                },
+                None => match anchor_dot(node).and_then(|d| self.seq_flat_pos(d)) {
+                    Some(p) => return Some(p),
+                    None => break,
+                },
+            }
+        }
+        self.subtree_real_dots(block)
+            .iter()
+            .filter_map(|&d| self.seq_flat_pos(d))
+            .max()
+    }
+
+    /// `block` plus every descendant, real op dots only (synthetic scaffolds dropped).
+    /// Order is unspecified — callers take the max sequence position. O(subtree).
+    pub fn subtree_real_dots(&self, block: Dot) -> Vec<Dot> {
+        let mut out = Vec::new();
+        if anchor_dot(block).is_some() {
+            out.push(block);
+        }
+        for d in self.indexes.paths.descendants_of(block) {
+            if anchor_dot(d).is_some() {
+                out.push(d);
+            }
+        }
+        out
+    }
+
+    /// `block`'s ancestor chain, root-first, real op dots only. Includes `block`
+    /// itself when `inclusive`. O(depth).
+    pub fn ancestor_real_dots(&self, block: Dot, inclusive: bool) -> Vec<Dot> {
+        let mut chain = self.indexes.paths.path_of(block); // self → root
+        if !inclusive && !chain.is_empty() {
+            chain.remove(0);
+        }
+        chain.reverse(); // root → self
+        chain
+            .into_iter()
+            .filter(|d| anchor_dot(*d).is_some())
+            .collect()
+    }
+
+    /// The projected node value of `block` (its overlaid attrs, or the type default).
+    pub fn block_node(&self, block: Dot) -> Option<Node> {
+        let n = self.projected.tree.get(block)?;
+        Some(
+            anchor_dot(block)
+                .and_then(|d| self.projected.node_attrs.get(&d).cloned())
+                .unwrap_or_else(|| n.node_type.into_node()),
+        )
+    }
+
+    /// A clone of `block`'s direct children (leaves carry their item inline). O(children).
+    pub fn block_children(&self, block: Dot) -> Option<Vec<Child>> {
+        self.projected.tree.get(block).map(|n| n.children.to_vec())
+    }
+
+    /// The parent block of `node` (a block or leaf), or `None` for the root / absent.
+    pub fn parent_of(&self, node: Dot) -> Option<Dot> {
+        self.indexes
+            .paths
+            .parent_of(node)
+            .or_else(|| self.indexes.paths.block_of(node))
     }
 
     /// `seq_flat_pos`, but `None` when `dot` is currently a tombstone (already
     /// deleted, e.g. by a concurrent op). Used to invert an `Ins`: re-deleting a
     /// char that is no longer visible would target a non-existent element and
     /// overrun the sequence, so undoing such an insertion must be a no-op.
-    pub fn seq_visible_pos(&self, dot: editor_crdt::Dot) -> Option<usize> {
-        let (_, resolver) = editor_crdt::sequence::checkout_with_resolver(&self.logs.seq);
-        let boundary = resolver.resolve_boundary(dot, editor_crdt::sequence::Bias::Before)?;
+    pub fn seq_visible_pos(&self, dot: Dot) -> Option<usize> {
+        let boundary = self.seq.resolve_boundary(dot, Bias::Before)?;
         boundary.visible.then_some(boundary.position)
     }
 
@@ -162,15 +1896,15 @@ impl ProjectedState {
     /// deletion op `del` removed (used to invert an `Undel` for redo). Concurrently
     /// re-deleted targets are excluded, so each position can be re-deleted with a
     /// single-element `Del` applied in order.
-    pub fn del_target_positions(&self, del: editor_crdt::Dot) -> Vec<usize> {
-        let (_, resolver) = editor_crdt::sequence::checkout_with_resolver(&self.logs.seq);
-        resolver.del_target_positions(del)
+    pub fn del_target_positions(&self, del: Dot) -> Vec<usize> {
+        self.seq.del_target_positions(del)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::LayoutDirty;
     use editor_crdt::{Dot, LwwRegOp, OrMapOp, OrSetOp};
     use editor_model::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, Marker, Modifier, ModifierAttrOp,
@@ -189,6 +1923,45 @@ mod tests {
             pos,
             item: SeqItem::Char(c),
         })
+    }
+
+    #[test]
+    fn char_insert_marks_owning_block_content() {
+        let mut ps = ProjectedState::empty();
+        ps.commit();
+        let para = ps
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        let _ = ps.take_layout_dirty();
+
+        ps.apply(seq_char(1, 'a')).unwrap();
+
+        match ps.take_layout_dirty() {
+            LayoutDirty::Incremental { content, .. } => {
+                assert!(
+                    content.contains(&para),
+                    "edited block must be marked content-dirty"
+                );
+            }
+            LayoutDirty::Full => panic!("a single char insert must not force Full"),
+        }
+    }
+
+    #[test]
+    fn take_layout_dirty_resets_to_empty() {
+        let mut ps = ProjectedState::empty();
+        let _ = ps.take_layout_dirty();
+        assert!(matches!(
+            ps.take_layout_dirty(),
+            LayoutDirty::Incremental { content, structural }
+                if content.is_empty() && structural.is_empty()
+        ));
     }
 
     #[test]
@@ -478,6 +2251,727 @@ mod tests {
         }
     }
 
+    fn arb_seq_script() -> impl proptest::strategy::Strategy<Value = Vec<EditOp>> {
+        use proptest::prelude::*;
+        proptest::collection::vec(
+            (
+                any::<bool>(),
+                any::<u8>(),
+                any::<u8>(),
+                prop::sample::select(vec!['a', 'b', 'c']),
+            ),
+            0..30,
+        )
+        .prop_map(|steps| {
+            let mut count = 1usize;
+            let mut out = Vec::new();
+            for (is_del, raw, raw_len, ch) in steps {
+                if is_del && count > 1 {
+                    let pos = 1 + (raw as usize) % (count - 1);
+                    let len = 1 + (raw_len as usize) % (count - pos);
+                    out.push(EditOp::Seq(ListOp::Del { pos, len }));
+                    count -= len;
+                } else {
+                    let pos = 1 + (raw as usize) % count;
+                    out.push(seq_char(pos, ch));
+                    count += 1;
+                }
+            }
+            out
+        })
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 192, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_matches_cold_from_graph(script in arb_seq_script()) {
+            let mut warm = ProjectedState::empty();
+            for payload in script {
+                warm.apply(payload).expect("valid seq op applies");
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Receiving a remote changeset projects each op incrementally (no whole-doc
+    // reprojection per sync batch); the merged state must equal the cold rebuild.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 192, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn receive_changeset_matches_cold(script in arb_seq_script()) {
+            let mut authored = ProjectedState::empty();
+            for payload in script {
+                authored.apply(payload).expect("valid seq op applies");
+            }
+            let receiver = ProjectedState::empty();
+            let remote_heads: HashSet<Dot> = receiver.graph().current_heads().copied().collect();
+            let missing = authored
+                .graph()
+                .missing_changesets_for(&remote_heads)
+                .expect("changesets derivable");
+            let mut merged = receiver;
+            for cs in missing {
+                merged = merged.receive_changeset(cs).expect("receive applies");
+            }
+            let cold = ProjectedState::from_graph(merged.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(merged.projected(), cold.projected());
+        }
+    }
+
+    fn arb_span_action() -> impl proptest::strategy::Strategy<Value = (u8, u8, u8, u8, char)> {
+        use proptest::prelude::*;
+        (
+            0u8..12,
+            any::<u8>(),
+            any::<u8>(),
+            any::<u8>(),
+            prop::sample::select(vec!['a', 'b', 'c']),
+        )
+    }
+
+    // Drive the incremental spine with a mix of char ins/del and span add/remove
+    // ops (anchored on live char dots), then assert it converges to the cold
+    // full-projection. This exercises the lifted spans guard: insert-into/near
+    // spans (degenerate→covering, bias edges), span apply over covered ranges,
+    // and delete of anchor/covered leaves.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_with_spans_matches_cold(
+            actions in proptest::collection::vec(arb_span_action(), 0..40),
+        ) {
+            let mut warm = ProjectedState::empty();
+            let mut live: Vec<Dot> = Vec::new();
+            let mut count = 1usize;
+            for (kind, a, b, bias, ch) in actions {
+                let pick = |i: u8, v: &[Dot]| v[(i as usize) % v.len()];
+                let bias_s = if bias & 1 == 0 { Bias::Before } else { Bias::After };
+                let bias_e = if bias & 2 == 0 { Bias::Before } else { Bias::After };
+                match kind {
+                    0..=5 => {
+                        let pos = 1 + (a as usize) % count;
+                        let d = warm.apply(seq_char(pos, ch)).unwrap().id;
+                        live.push(d);
+                        count += 1;
+                    }
+                    6..=7 if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    8..=10 if !live.is_empty() => {
+                        let m = match bias % 3 {
+                            0 => Modifier::Bold,
+                            1 => Modifier::Italic,
+                            _ => Modifier::FontSize { value: 1400 },
+                        };
+                        warm.apply(EditOp::Span(SpanOp::AddSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier: m,
+                        }))
+                        .unwrap();
+                    }
+                    11 if !live.is_empty() => {
+                        warm.apply(EditOp::Span(SpanOp::RemoveSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier_type: ModifierType::Bold,
+                        }))
+                        .unwrap();
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // A bulk delete large enough to take the coverage-preserving reprojection path
+    // (`reproject_after_delete`, threshold > 1024 targets) must land on the exact same
+    // projection a cold rebuild produces — including surviving leaves that were, were
+    // partially, or were never covered by a span. Guards the invariant that deletion
+    // preserves each survivor's covering set and every span anchor.
+    #[test]
+    fn bulk_delete_reproject_matches_cold() {
+        let mut warm = ProjectedState::empty();
+        // Three paragraphs of ~600 chars each, so a middle-region delete crosses block
+        // boundaries and leaves spanned survivors on both sides.
+        let mut para_dots: Vec<Dot> = Vec::new();
+        let mut char_dots: Vec<Dot> = Vec::new();
+        let mut pos = 1usize;
+        for p in 0..3 {
+            if p > 0 {
+                let d = warm
+                    .apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+                    .unwrap()
+                    .id;
+                para_dots.push(d);
+                pos += 1;
+            }
+            for i in 0..600 {
+                let ch = char::from(b'a' + (i % 26) as u8);
+                let d = warm.apply(seq_char(pos, ch)).unwrap().id;
+                char_dots.push(d);
+                pos += 1;
+            }
+        }
+        // Spans of varied kinds over varied ranges: fully-deleted, boundary-crossing,
+        // and fully-surviving, plus overlaps that exercise last-writer-wins.
+        let span = |warm: &mut ProjectedState, s: Dot, e: Dot, m: Modifier| {
+            warm.apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: s,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: e,
+                    bias: Bias::After,
+                },
+                modifier: m,
+            }))
+            .unwrap();
+        };
+        let n = char_dots.len();
+        span(&mut warm, char_dots[0], char_dots[50], Modifier::Bold);
+        span(&mut warm, char_dots[40], char_dots[900], Modifier::Italic);
+        span(
+            &mut warm,
+            char_dots[800],
+            char_dots[1200],
+            Modifier::FontSize { value: 1400 },
+        );
+        span(
+            &mut warm,
+            char_dots[n - 100],
+            char_dots[n - 1],
+            Modifier::Bold,
+        );
+        span(
+            &mut warm,
+            char_dots[n - 60],
+            char_dots[n - 5],
+            Modifier::Italic,
+        );
+        span(
+            &mut warm,
+            char_dots[n - 100],
+            char_dots[n - 1],
+            Modifier::Italic,
+        );
+
+        let visible_before = warm.seq.visible_len();
+        // Delete a large contiguous middle span: enough targets (> 1024) to force the
+        // bulk coverage-preserving path, leaving spanned survivors at both ends.
+        let del_len = 1400usize;
+        let del_pos = 30usize;
+        warm.apply(EditOp::Seq(ListOp::Del {
+            pos: del_pos,
+            len: del_len,
+        }))
+        .unwrap();
+        assert!(
+            warm.seq.visible_len() < visible_before,
+            "delete shrank the doc"
+        );
+
+        let cold = ProjectedState::from_graph(warm.graph().clone()).expect("cold rebuild projects");
+        assert_eq!(
+            warm.projected(),
+            cold.projected(),
+            "bulk-delete reprojection diverged from cold rebuild"
+        );
+    }
+
+    // Deleting a whole middle paragraph takes the window-reprojection path (block-marker
+    // removal), which now carries surviving leaves' span coverage forward instead of
+    // re-resolving the span log. The survivors in the untouched paragraphs — some span-
+    // covered, some not — must keep exactly the coverage a cold rebuild derives.
+    #[test]
+    fn window_reproject_preserves_survivor_span_coverage() {
+        let mut warm = ProjectedState::empty();
+        let mut para_char0: Vec<Dot> = Vec::new(); // first char dot of each paragraph
+        let mut pos = 1usize;
+        for p in 0..3usize {
+            if p > 0 {
+                warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+                    .unwrap();
+                pos += 1;
+            }
+            let first = warm.apply(seq_char(pos, 'a')).unwrap().id;
+            para_char0.push(first);
+            pos += 1;
+            for _ in 1..40 {
+                warm.apply(seq_char(pos, 'b')).unwrap();
+                pos += 1;
+            }
+        }
+        // Span the whole first and third paragraphs (survivors), leaving the second
+        // (about to be deleted) partly covered by a span that also reaches into a survivor.
+        let span = |warm: &mut ProjectedState, s: Dot, e: Dot, m: Modifier| {
+            warm.apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: s,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: e,
+                    bias: Bias::After,
+                },
+                modifier: m,
+            }))
+            .unwrap();
+        };
+        span(&mut warm, para_char0[0], para_char0[1], Modifier::Bold);
+        span(&mut warm, para_char0[2], para_char0[2], Modifier::Italic);
+
+        // Delete the entire middle paragraph (its 40 chars + its block marker): a
+        // window reprojection over survivors, not the bulk char path.
+        let p2_start = 41usize; // 1 root para: 40 chars at pos 1..=40, para2 marker at 41
+        warm.apply(EditOp::Seq(ListOp::Del {
+            pos: p2_start,
+            len: 41,
+        }))
+        .unwrap();
+
+        let cold = ProjectedState::from_graph(warm.graph().clone()).expect("cold rebuild projects");
+        assert_eq!(
+            warm.projected(),
+            cold.projected(),
+            "window reprojection over survivors diverged from cold rebuild"
+        );
+    }
+
+    // Typing into a large, heavily-spanned document must stay incremental — no
+    // full O(document) reprojection per keystroke even when many spans exist.
+    #[test]
+    fn large_spanned_doc_typing_is_subquadratic() {
+        let n = 4000usize;
+        let mut state = ProjectedState::empty();
+        let mut dots = Vec::with_capacity(n);
+        for i in 0..n {
+            dots.push(state.apply(seq_char(i + 1, 'a')).unwrap().id);
+        }
+        // 40 overlapping bold spans scattered across the document (heavy formatting).
+        for k in 0..40usize {
+            let off = (k * 93) % (n - 60);
+            state
+                .apply(EditOp::Span(SpanOp::AddSpan {
+                    start: Anchor {
+                        id: dots[off],
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id: dots[off + 50],
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Bold,
+                }))
+                .unwrap();
+        }
+        let m = 2000usize;
+        for _ in 0..m {
+            state.apply(seq_char(n / 2, 'b')).unwrap();
+        }
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
+    }
+
+    // Mix char ins/del + spans + every node op (block modifier, node style +
+    // style registry, node marker) interleaved, then assert the incremental
+    // spine converges to the cold full projection. Validates S4d's per-node-op
+    // map updates + subtree effective recompute against the oracle.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_with_node_ops_matches_cold(
+            actions in proptest::collection::vec(arb_span_action(), 0..50),
+        ) {
+            use editor_crdt::{LwwRegOp, OrMapOp, OrSetOp};
+            let mut warm = ProjectedState::empty();
+            let para = warm
+                .view()
+                .root()
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .dot()
+                .unwrap();
+            let mut live: Vec<Dot> = Vec::new();
+            let mut count = 1usize;
+            for (kind, a, b, bias, ch) in actions {
+                let pick = |i: u8, v: &[Dot]| v[(i as usize) % v.len()];
+                let bias_s = if bias & 1 == 0 { Bias::Before } else { Bias::After };
+                let bias_e = if bias & 2 == 0 { Bias::Before } else { Bias::After };
+                match kind {
+                    0..=4 => {
+                        let pos = 1 + (a as usize) % count;
+                        let d = warm.apply(seq_char(pos, ch)).unwrap().id;
+                        live.push(d);
+                        count += 1;
+                    }
+                    5..=6 if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    7..=8 if !live.is_empty() => {
+                        let m = match bias % 3 {
+                            0 => Modifier::Bold,
+                            1 => Modifier::Italic,
+                            _ => Modifier::FontSize { value: 1400 },
+                        };
+                        warm.apply(EditOp::Span(SpanOp::AddSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier: m,
+                        }))
+                        .unwrap();
+                    }
+                    9..=10 => {
+                        let op = if b & 1 == 0 {
+                            ModifierAttrOp::SetModifier {
+                                target: para,
+                                modifier: Modifier::FontSize { value: 1200 + a as u32 },
+                            }
+                        } else {
+                            ModifierAttrOp::ClearModifier {
+                                target: para,
+                                key: ModifierType::FontSize,
+                            }
+                        };
+                        warm.apply(EditOp::BlockModifier(op)).unwrap();
+                    }
+                    11..=12 if !live.is_empty() => {
+                        let v = if b & 1 == 0 { Some("s".to_string()) } else { None };
+                        warm.apply(EditOp::NodeStyle(NodeLwwOp {
+                            target: pick(a, &live),
+                            op: LwwRegOp::Set { value: v },
+                        }))
+                        .unwrap();
+                    }
+                    13 => {
+                        warm.apply(EditOp::Style(StyleRegOp {
+                            style_id: "s".to_string(),
+                            op: StyleOp::Presence(OrMapOp::Set { key: "s".to_string(), value: () }),
+                        }))
+                        .unwrap();
+                        let elem = if b & 1 == 0 { Modifier::Italic } else { Modifier::Bold };
+                        warm.apply(EditOp::Style(StyleRegOp {
+                            style_id: "s".to_string(),
+                            op: StyleOp::Modifiers(OrSetOp::Add { elem }),
+                        }))
+                        .unwrap();
+                    }
+                    14 => {
+                        let v = if b & 1 == 0 {
+                            Some(Marker { modifiers: vec![Modifier::Bold], style: None })
+                        } else {
+                            None
+                        };
+                        warm.apply(EditOp::NodeMarker(NodeLwwOp {
+                            target: para,
+                            op: LwwRegOp::Set { value: v },
+                        }))
+                        .unwrap();
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Freely-placeable inline atom (HardBreak/Tab) inserts and deletes mixed with
+    // chars must stay incremental and converge to cold. (PageBreak is excluded: it
+    // is position-constrained, so a mid-block insert is dropped by normalization —
+    // a structural case that takes the fallback path.)
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 192, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_with_atoms_matches_cold(
+            actions in proptest::collection::vec(
+                (0u8..10, proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(), 0u8..2),
+                0..40,
+            ),
+        ) {
+            use editor_model::AtomLeaf;
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            for (kind, a, b, atom) in actions {
+                match kind {
+                    0..=4 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_char(pos, 'a')).unwrap();
+                        count += 1;
+                    }
+                    5..=6 => {
+                        let pos = 1 + (a as usize) % count;
+                        let leaf = if atom == 0 { AtomLeaf::HardBreak } else { AtomLeaf::Tab };
+                        warm.apply(EditOp::Seq(ListOp::Ins { pos, item: SeqItem::Atom(leaf) }))
+                            .unwrap();
+                        count += 1;
+                    }
+                    7..=8 if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Char inserts/deletes interleaved with top-level paragraph splits (Enter)
+    // must stay incremental and converge to cold. Validates incremental block
+    // insert (split_block_insert + index/run/effective updates).
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_with_block_splits_matches_cold(
+            actions in proptest::collection::vec(
+                (0u8..10, proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(),
+                 proptest::sample::select(vec!['a', 'b', 'c'])),
+                0..44,
+            ),
+        ) {
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            for (kind, a, b, ch) in actions {
+                match kind {
+                    0..=6 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_char(pos, ch)).unwrap();
+                        count += 1;
+                    }
+                    7..=8 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT])).unwrap();
+                        count += 1;
+                    }
+                    _ if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Randomized structural stress: chars, top-level paragraph splits, blockquote
+    // inserts, paragraphs nested in blockquotes, and range deletes (which merge
+    // across block boundaries). All must converge to cold via incremental paths +
+    // localized window re-projection — no full reproject on the editing path.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_structural_matches_cold(
+            actions in proptest::collection::vec(
+                (0u8..14, proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(),
+                 proptest::sample::select(vec!['a', 'b', 'c'])),
+                0..48,
+            ),
+        ) {
+            let root = Dot::ROOT;
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            let mut blockquotes: Vec<Dot> = Vec::new();
+            for (kind, a, b, ch) in actions {
+                match kind {
+                    0..=5 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_char(pos, ch)).unwrap();
+                        count += 1;
+                    }
+                    6..=7 => {
+                        // `% (count + 1)` allows pos 0 — a top-level block inserted
+                        // at the very document front, landing before the first
+                        // block's marker (the `lift`-to-front shape).
+                        let pos = (a as usize) % (count + 1);
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![root])).unwrap();
+                        count += 1;
+                    }
+                    8 => {
+                        let pos = (a as usize) % (count + 1);
+                        let d = warm
+                            .apply(seq_block(pos, NodeType::Blockquote, vec![root]))
+                            .unwrap()
+                            .id;
+                        blockquotes.push(d);
+                        count += 1;
+                    }
+                    9..=10 if !blockquotes.is_empty() => {
+                        let bq = blockquotes[(a as usize) % blockquotes.len()];
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![root, bq])).unwrap();
+                        count += 1;
+                    }
+                    _ if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Chars/blocks + spans + range deletes + undeletes (undo of a delete) must
+    // converge to cold. Undel routes through localized re-projection (not a full
+    // reproject), and restoring span-covered leaves exercises the coverage rebuild.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_with_undel_matches_cold(
+            actions in proptest::collection::vec(
+                (0u8..12, proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(),
+                 proptest::sample::select(vec!['a', 'b', 'c'])),
+                0..44,
+            ),
+        ) {
+            let root = Dot::ROOT;
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            let mut dels: Vec<(Dot, usize)> = Vec::new();
+            let mut live: Vec<Dot> = Vec::new();
+            for (kind, a, b, ch) in actions {
+                match kind {
+                    0..=4 => {
+                        let pos = 1 + (a as usize) % count;
+                        let d = warm.apply(seq_char(pos, ch)).unwrap().id;
+                        live.push(d);
+                        count += 1;
+                    }
+                    5 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![root])).unwrap();
+                        count += 1;
+                    }
+                    6..=7 if !live.is_empty() => {
+                        let s = live[(a as usize) % live.len()];
+                        let e = live[(b as usize) % live.len()];
+                        let m = if a & 1 == 0 { Modifier::Bold } else { Modifier::Italic };
+                        warm.apply(EditOp::Span(SpanOp::AddSpan {
+                            start: Anchor { id: s, bias: Bias::Before },
+                            end: Anchor { id: e, bias: Bias::After },
+                            modifier: m,
+                        }))
+                        .unwrap();
+                    }
+                    8..=9 if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        let op = warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        dels.push((op.id, len));
+                        count -= len;
+                    }
+                    10..=11 if !dels.is_empty() => {
+                        let i = (a as usize) % dels.len();
+                        let (del, len) = dels.remove(i);
+                        warm.apply(EditOp::Seq(ListOp::Undel { del })).unwrap();
+                        count += len;
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Inline atom inserts including the position-constrained PageBreak, mixed with
+    // chars and range deletes. A mid-text PageBreak is dropped (with trailing
+    // content) by normalization; deleting it must locally restore that content.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 400, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_with_pagebreaks_matches_cold(
+            actions in proptest::collection::vec(
+                (0u8..10, proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(), 0u8..3),
+                0..40,
+            ),
+        ) {
+            use editor_model::AtomLeaf;
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            for (kind, a, b, atom) in actions {
+                match kind {
+                    0..=5 => { let pos = 1 + (a as usize) % count; warm.apply(seq_char(pos, 'a')).unwrap(); count += 1; }
+                    6..=7 => {
+                        let pos = 1 + (a as usize) % count;
+                        let leaf = match atom { 0 => AtomLeaf::HardBreak, 1 => AtomLeaf::Tab, _ => AtomLeaf::PageBreak };
+                        warm.apply(EditOp::Seq(ListOp::Ins { pos, item: SeqItem::Atom(leaf) })).unwrap();
+                        count += 1;
+                    }
+                    _ if count > 1 => {
+                        let pos = 1 + (a as usize) % (count - 1);
+                        let len = 1 + (b as usize) % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    #[test]
+    fn nested_block_edits_match_cold() {
+        let mut state = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let bq = state
+            .apply(seq_block(1, NodeType::Blockquote, vec![root]))
+            .unwrap()
+            .id;
+        state
+            .apply(seq_block(2, NodeType::Paragraph, vec![root, bq]))
+            .unwrap();
+        for (i, ch) in ['a', 'b', 'c', 'd'].iter().enumerate() {
+            state.apply(seq_char(3 + i, *ch)).unwrap();
+        }
+        // Split the inner paragraph (a new paragraph nested in the blockquote).
+        state
+            .apply(seq_block(5, NodeType::Paragraph, vec![root, bq]))
+            .unwrap();
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
+        // A delete spanning the nested split, then re-check.
+        state
+            .apply(EditOp::Seq(ListOp::Del { pos: 3, len: 3 }))
+            .unwrap();
+        let cold2 = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold2.projected());
+    }
+
     #[test]
     fn accessor_smoke_node_style_block_modifier_span() {
         use editor_crdt::LwwRegOp;
@@ -624,5 +3118,182 @@ mod tests {
             })
             .collect();
         assert_eq!(positions, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn large_single_paragraph_paste_is_correct_and_subquadratic() {
+        let mut state = ProjectedState::empty();
+        let para = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        let n = 5000usize;
+        for i in 0..n {
+            state.apply(seq_char(1 + i, 'a')).expect("char applies");
+        }
+        let text = state.view().node(para).unwrap().inline_text();
+        assert_eq!(text.len(), n);
+        assert!(text.chars().all(|c| c == 'a'));
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
+    }
+
+    #[test]
+    fn large_type_and_backspace_is_correct_and_subquadratic() {
+        let mut state = ProjectedState::empty();
+        let para = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap();
+        let n = 3000usize;
+        for i in 0..n {
+            state.apply(seq_char(1 + i, 'a')).expect("char applies");
+        }
+        for _ in 0..n {
+            state
+                .apply(EditOp::Seq(ListOp::Del { pos: 1, len: 1 }))
+                .expect("delete applies");
+        }
+        assert_eq!(state.view().node(para).unwrap().inline_text(), "");
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
+    }
+
+    // Builds a paragraph "abcde" then inserts a PageBreak right after 'a'. The block
+    // content rule keeps `[a, PageBreak]` and drops the trailing `b,c,d,e` from the
+    // tree — they remain in the live sequence as "ghosts" (visible to seq positions,
+    // invisible in the projected tree). Returns the warm state; the four ghosts sit
+    // at visible positions 3..=6.
+    fn ghost_region_state() -> ProjectedState {
+        use editor_model::AtomLeaf;
+        let mut warm = ProjectedState::empty();
+        for (i, ch) in ['a', 'b', 'c', 'd', 'e'].iter().enumerate() {
+            warm.apply(seq_char(1 + i, *ch)).unwrap();
+        }
+        warm.apply(EditOp::Seq(ListOp::Ins {
+            pos: 2,
+            item: SeqItem::Atom(AtomLeaf::PageBreak),
+        }))
+        .unwrap();
+        // Guard the geometry: only "a" survives in the tree, four ghosts trail it.
+        let para_text = warm
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .inline_text();
+        assert_eq!(para_text, "a", "expected a ghost region: only 'a' in tree");
+        assert_eq!(warm.seq.visible_len(), 7, "expected 4 trailing ghosts");
+        warm
+    }
+
+    // An insert whose ±1 sequence neighbours are all ghosts (deep inside the dropped
+    // trailing run) must still localize to the enclosing top-level block — never a
+    // full-document reprojection.
+    #[test]
+    fn insert_into_ghost_region_stays_local() {
+        let mut warm = ghost_region_state();
+        // Insert between ghosts c@4 and d@5: neighbours 4,5,6 are all ghosts.
+        warm.apply(seq_char(5, 'Z')).unwrap();
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(warm.projected(), cold.projected());
+    }
+
+    // The overarching guarantee: realistic editing (chars, inline atoms incl. the
+    // position-constrained PageBreak, range deletes, and Blockquote inserts that force
+    // a synthetic trailing paragraph) must NEVER trigger a whole-document reprojection
+    // — every op stays localized — while still converging to the cold projection.
+    // Deterministic seeds keep this reproducible (not flaky) across ~78k ops.
+    #[test]
+    fn realistic_editing_never_full_reprojects() {
+        use editor_model::AtomLeaf;
+        let mut total_ops = 0u64;
+        for seed in 0..1000u64 {
+            // cheap deterministic PRNG (Date/rand unavailable in this context)
+            let mut s = seed.wrapping_mul(0x9E3779B97F4A7C15).wrapping_add(1);
+            let mut next = || {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                s
+            };
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            for _ in 0..40 {
+                let kind = next() % 12;
+                let a = (next() % 256) as usize;
+                let b = (next() % 256) as usize;
+                match kind {
+                    10 => {
+                        // structural: insert a Blockquote — when it lands last, the Root
+                        // content rule forces a synthetic trailing paragraph after it.
+                        let pos = 1 + a % count;
+                        warm.apply(seq_block(pos, NodeType::Blockquote, vec![Dot::ROOT]))
+                            .unwrap();
+                        count += 1;
+                    }
+                    0..=5 => {
+                        let pos = 1 + a % count;
+                        warm.apply(seq_char(pos, 'a')).unwrap();
+                        count += 1;
+                    }
+                    6..=7 => {
+                        let pos = 1 + a % count;
+                        let leaf = match next() % 3 {
+                            0 => AtomLeaf::HardBreak,
+                            1 => AtomLeaf::Tab,
+                            _ => AtomLeaf::PageBreak,
+                        };
+                        warm.apply(EditOp::Seq(ListOp::Ins {
+                            pos,
+                            item: SeqItem::Atom(leaf),
+                        }))
+                        .unwrap();
+                        count += 1;
+                    }
+                    _ if count > 1 => {
+                        let pos = 1 + a % (count - 1);
+                        let len = 1 + b % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    _ => continue,
+                }
+                total_ops += 1;
+            }
+            // Convergence: the localized warm projection must equal a cold rebuild —
+            // including the subtle structural case where a real block appended after a
+            // synthetic trailing paragraph must supersede (not duplicate) the scaffold.
+            let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+            assert_eq!(warm.projected(), cold.projected(), "diverged (seed={seed})");
+        }
+        assert!(
+            total_ops > 30_000,
+            "expected broad coverage, got {total_ops}"
+        );
+    }
+
+    // A delete whose every target is a ghost (the whole range was already dropped
+    // from the tree) must also localize to the enclosing block, never full-reproject.
+    #[test]
+    fn delete_of_ghost_range_stays_local() {
+        let mut warm = ghost_region_state();
+        // Delete ghosts c@4 and d@5.
+        warm.apply(EditOp::Seq(ListOp::Del { pos: 4, len: 2 }))
+            .unwrap();
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(warm.projected(), cold.projected());
     }
 }

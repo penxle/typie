@@ -13,6 +13,12 @@ struct EditorInner {
     editor: editor_core::Editor,
     #[cfg(not(feature = "wasm-server"))]
     surfaces: HashMap<u32, SurfaceHandle>,
+    // Last render signature presented for each page. `render_surface` skips
+    // re-rasterizing a page whose signature is unchanged (the selection-drag hot
+    // path, where only the page under the moving endpoint actually changes).
+    // Cleared whenever the page's pixel buffer is (re)created: attach/detach/resize.
+    #[cfg(not(feature = "wasm-server"))]
+    last_render_sig: HashMap<u32, u64>,
 }
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
@@ -510,6 +516,28 @@ impl Editor {
         })
     }
 
+    /// The `id` of every local changeset (its first op's `actor:clock`), read straight
+    /// from the graph — `O(#changesets)`. Callers that only need the id set must use
+    /// this instead of `missing_changesets_tolerant(&[])` + `split_changesets`, which
+    /// walk, clone, and re-encode the entire history on every push cycle.
+    pub fn changeset_ids(&self) -> EditorResult<Vec<String>> {
+        self.with_inner(|inner| {
+            let ids = inner
+                .editor
+                .state()
+                .graph()
+                .changesets()
+                .iter()
+                .filter_map(|cs| {
+                    cs.ops
+                        .first()
+                        .map(|op| format!("{}:{}", op.id.actor, op.id.clock))
+                })
+                .collect();
+            Ok(ids)
+        })
+    }
+
     pub fn set_doc(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<()> {
         self.with_inner(|inner| {
             inner.editor.set_doc(plain.from_ffi()?);
@@ -715,6 +743,8 @@ impl Editor {
         let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
         self.with_inner(|inner| {
             inner.surfaces.insert(page, surface);
+            // Fresh buffer: drop any stale signature so the first paint always renders.
+            inner.last_render_sig.remove(&page);
             Ok(())
         })
     }
@@ -722,6 +752,7 @@ impl Editor {
     pub fn detach_surface(&self, page: u32) -> EditorResult<()> {
         self.with_inner(|inner| {
             inner.surfaces.remove(&page);
+            inner.last_render_sig.remove(&page);
             Ok(())
         })
     }
@@ -736,6 +767,8 @@ impl Editor {
         self.with_inner(|inner| {
             if let Some(surface) = inner.surfaces.get_mut(&page) {
                 surface.resize(width, height, scale_factor);
+                // Buffer was recreated/cleared — its old signature no longer reflects pixels.
+                inner.last_render_sig.remove(&page);
             }
             Ok(())
         })
@@ -743,10 +776,19 @@ impl Editor {
 
     pub fn render_surface(&self, page: u32) -> EditorResult<()> {
         self.with_inner(|inner| {
+            // Skip the full re-raster + present when nothing this page draws has
+            // changed since the last presented frame. During a selection drag only
+            // the page under the moving endpoint changes; every other visible page
+            // keeps a stable signature and is skipped here.
+            let sig = inner.editor.page_render_signature(page);
+            if inner.last_render_sig.get(&page) == Some(&sig) {
+                return Ok(());
+            }
             if let Some(surface) = inner.surfaces.get_mut(&page) {
                 let scale_factor = surface.scale_factor() as f32;
                 inner.editor.render_page(page, surface.sink(), scale_factor);
                 surface.present();
+                inner.last_render_sig.insert(page, sig);
             }
             Ok(())
         })
@@ -785,6 +827,8 @@ impl Editor {
                 editor: core,
                 #[cfg(not(feature = "wasm-server"))]
                 surfaces: HashMap::new(),
+                #[cfg(not(feature = "wasm-server"))]
+                last_render_sig: HashMap::new(),
             }),
         }
     }

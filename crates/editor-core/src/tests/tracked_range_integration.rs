@@ -19,7 +19,7 @@ fn restored_offsets(editor: &Editor, id: &str) -> (usize, usize) {
     let range = editor.tracked_ranges().get(id).expect("range present");
     let state = editor.state();
     let view = state.view();
-    let ctx = editor_state::StableResolveCtx::new(&view, state.projected.seq());
+    let ctx = editor_state::StableResolveCtx::from_live(&view, state.projected.seq_checkout());
     let sel = range.selection.resolve(&ctx).expect("range restores");
     (sel.anchor.offset, sel.head.offset)
 }
@@ -627,7 +627,7 @@ fn collapsed_range_on_live_text_is_handled_consistently() {
     let located = range.locate(editor.state());
     let state = editor.state();
     let view = state.view();
-    let ctx = editor_state::StableResolveCtx::new(&view, state.projected.seq());
+    let ctx = editor_state::StableResolveCtx::from_live(&view, state.projected.seq_checkout());
     let restored_collapsed = range
         .selection
         .resolve(&ctx)

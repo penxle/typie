@@ -2,6 +2,7 @@ import type { DeltaStore } from './store';
 
 export type SyncEditor = {
   currentHeads(): Uint8Array;
+  changesetIds(): string[];
   missingChangesetsFor(confirmedHeads: Uint8Array): Uint8Array;
   partitionRemoteChangesets(payload: Uint8Array): { ready: Uint8Array; blocked: Uint8Array };
   splitChangesets(payload: Uint8Array): { id: string; bytes: Uint8Array }[];

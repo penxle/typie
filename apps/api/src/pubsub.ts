@@ -6,7 +6,7 @@ import type { DocumentSyncType } from '@typie/lib/enums';
 
 export const pubsub = createPubSub<{
   'document:sync': [documentId: string, { target: string; type: DocumentSyncType; data: string }];
-  'document:changesets': [documentId: string, { target: string; changesets: string; heads: string; durableHeads: string }];
+  'document:changesets': [documentId: string, { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string }];
   'document:comment': [documentId: string, { threadId: string; originClientId: string }];
   'site:update': [siteId: string, { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, null];

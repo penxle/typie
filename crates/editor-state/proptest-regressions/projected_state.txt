@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 042067b11dd23a356ed69ee5ede332aae0add20d9637f4295ce88fccdb6e1c0c # shrinks to actions = [(0, 0, 0, 'a'), (0, 0, 0, 'a'), (0, 0, 0, 'a'), (9, 13, 32, 'a'), (8, 163, 0, 'a'), (0, 8, 0, 'a'), (0, 100, 0, 'a'), (0, 76, 0, 'a'), (11, 22, 47, 'a'), (11, 145, 94, 'a'), (8, 0, 0, 'a'), (0, 9, 0, 'a'), (0, 0, 0, 'a'), (8, 154, 0, 'a'), (0, 0, 0, 'a'), (0, 128, 0, 'a'), (0, 0, 0, 'a'), (6, 49, 0, 'a'), (0, 247, 0, 'a')]
+cc 244ffc3bf6ede7216a6a91e2ad3f1e4d915b656925a29906ef926dfbf6fb6abf # shrinks to actions = [(0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 0), (8, 0, 63, 0), (0, 0, 0, 0), (6, 89, 0, 2), (0, 35, 0, 0), (0, 159, 0, 0), (8, 4, 14, 0), (0, 33, 0, 0), (0, 224, 0, 0), (0, 88, 0, 0), (0, 5, 0, 0), (8, 123, 81, 0), (0, 5, 0, 0), (0, 180, 0, 0), (0, 72, 0, 0), (8, 13, 66, 0), (0, 40, 0, 0), (0, 72, 0, 0), (0, 160, 0, 0)]
+cc 05d44b18379ed6204a38988287bc33d36127c4f2d95412933af039e7bff17342 # shrinks to actions = [(0, 0, 0, 'a'), (0, 0, 0, 'a'), (0, 0, 0, 'a'), (5, 78, 0, 'a'), (0, 15, 0, 'a'), (0, 126, 0, 'a'), (0, 0, 0, 'a'), (6, 47, 0, 'a'), (0, 120, 0, 'a'), (8, 8, 249, 'a'), (0, 0, 0, 'a'), (0, 0, 0, 'a'), (6, 0, 0, 'a'), (0, 0, 0, 'a'), (0, 0, 0, 'a'), (0, 170, 0, 'a'), (0, 0, 0, 'a'), (10, 0, 0, 'a')]

@@ -2,15 +2,15 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use editor_crdt::Dot;
 use editor_crdt::OpLog;
-use editor_crdt::sequence::checkout_with_resolver;
+use editor_crdt::sequence::{SeqCheckout, SeqResolve, checkout_with_resolver};
 
 use crate::{
-    BlockNode, BlockTree, Child, Modifier, ModifierAttrLog, ModifierType, NodeType, OwnModifier,
-    ProjectError, SchemaError, anchor_dot,
+    BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog, ModifierType, NodeType,
+    OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
 use crate::{
     Marker, Node, NodeAttrLog, NodeMarkerLog, NodeStyleLog, Run, SeqItem, SpanLog, StyleEntry,
-    StyleLog, derive_full_effective, derive_runs, normalize, project_blocks, validate_block_tree,
+    StyleLog, derive_full_effective, normalize, project_blocks, validate_block_tree,
 };
 
 #[derive(Debug)]
@@ -31,22 +31,141 @@ pub struct DocLogs {
     pub styles: StyleLog,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ProjectedDoc {
     pub tree: BlockTree,
-    pub effective: HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
-    pub block_effective: HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
-    pub own_modifiers: HashMap<Dot, BTreeMap<ModifierType, OwnModifier>>,
-    pub runs: Vec<Run>,
-    pub block_modifiers: HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub block_effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub own_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, OwnModifier>>,
+    pub run_index: crate::span::BlockRuns,
+    pub block_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub node_attrs: imbl::HashMap<Dot, Node>,
     pub node_styles: imbl::HashMap<Dot, Option<String>>,
     pub node_markers: imbl::HashMap<Dot, Option<Marker>>,
     pub styles: imbl::HashMap<String, StyleEntry>,
 }
 
+impl ProjectedDoc {
+    pub fn runs(&self) -> Vec<Run> {
+        self.run_index.materialize(&self.tree)
+    }
+
+    pub fn splice_char(
+        &mut self,
+        block: Dot,
+        offset: usize,
+        leaf: Dot,
+        item: SeqItem,
+        eff: BTreeMap<ModifierType, Modifier>,
+        is_atom: bool,
+    ) {
+        insert_leaf_at(&mut self.tree, block, offset, leaf, &item);
+        self.effective.insert(leaf, eff.clone());
+        self.run_index
+            .splice_insert(block, offset, leaf, eff, is_atom);
+    }
+
+    /// Tree-anchored leaf insert: place `leaf` after `after` (or at the block
+    /// start when `None`) using tree identity, not a sequence offset. Returns
+    /// false if `after` isn't a leaf of `block`. Ghost-safe.
+    pub fn splice_leaf_after(
+        &mut self,
+        block: Dot,
+        after: Option<Dot>,
+        leaf: Dot,
+        item: SeqItem,
+        eff: BTreeMap<ModifierType, Modifier>,
+        is_atom: bool,
+    ) -> bool {
+        let Some(offset) = insert_leaf_after(&mut self.tree, block, after, leaf, &item) else {
+            return false;
+        };
+        self.effective.insert(leaf, eff.clone());
+        self.run_index
+            .splice_insert(block, offset, leaf, eff, is_atom);
+        true
+    }
+
+    pub fn splice_delete_leaf(&mut self, block: Dot, leaf: Dot) -> bool {
+        let Some(offset) = remove_leaf_from_block(&mut self.tree, block, leaf) else {
+            return false;
+        };
+        self.effective.remove(&leaf);
+        self.own_modifiers.remove(&leaf);
+        self.node_styles.remove(&leaf);
+        self.node_attrs.remove(&leaf);
+        self.node_markers.remove(&leaf);
+        self.run_index.splice_delete(block, offset);
+        true
+    }
+
+    pub fn set_leaf_effective(&mut self, leaf: Dot, eff: BTreeMap<ModifierType, Modifier>) {
+        self.effective.insert(leaf, eff);
+    }
+
+    /// Re-segment a single leaf in `block`'s run index after its effective changed
+    /// (e.g. a span was added/removed over it), without re-segmenting the whole block.
+    /// Removing then re-inserting the leaf at the same offset lets the run splice
+    /// merge/split runs locally — `O(log K)` instead of `O(block size)` per span, the
+    /// difference between a styled paste being `O(N log N)` and `O(N²)`.
+    pub fn respan_leaf(
+        &mut self,
+        block: Dot,
+        offset: usize,
+        leaf: Dot,
+        eff: BTreeMap<ModifierType, Modifier>,
+        is_atom: bool,
+    ) {
+        self.effective.insert(leaf, eff.clone());
+        self.run_index.splice_delete(block, offset);
+        self.run_index
+            .splice_insert(block, offset, leaf, eff, is_atom);
+    }
+
+    pub fn set_leaf_own(&mut self, leaf: Dot, own: BTreeMap<ModifierType, OwnModifier>) {
+        if own.is_empty() {
+            self.own_modifiers.remove(&leaf);
+        } else {
+            self.own_modifiers.insert(leaf, own);
+        }
+    }
+
+    // `derive_block_effective` emits an entry for every block (empty or not), so
+    // always insert; `collect_block_modifiers` only keeps non-empty blocks.
+    pub fn set_block_effective(&mut self, block: Dot, be: BTreeMap<ModifierType, Modifier>) {
+        self.block_effective.insert(block, be);
+    }
+
+    pub fn set_block_own_modifiers(&mut self, block: Dot, m: BTreeMap<ModifierType, Modifier>) {
+        if m.is_empty() {
+            self.block_modifiers.remove(&block);
+        } else {
+            self.block_modifiers.insert(block, m);
+        }
+    }
+
+    pub fn resegment_block(&mut self, block: Dot) {
+        self.run_index.resegment_from_runs(block, &self.effective);
+    }
+}
+
+impl PartialEq for ProjectedDoc {
+    fn eq(&self, o: &Self) -> bool {
+        self.tree == o.tree
+            && self.effective == o.effective
+            && self.block_effective == o.block_effective
+            && self.own_modifiers == o.own_modifiers
+            && self.block_modifiers == o.block_modifiers
+            && self.node_attrs == o.node_attrs
+            && self.node_styles == o.node_styles
+            && self.node_markers == o.node_markers
+            && self.styles == o.styles
+            && self.runs() == o.runs()
+    }
+}
+
 fn collect_real_ids(tree: &BlockTree) -> HashMap<Dot, NodeType> {
-    fn walk(node: &BlockNode, out: &mut HashMap<Dot, NodeType>) {
+    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut HashMap<Dot, NodeType>) {
         if let Some(d) = anchor_dot(node.id) {
             out.insert(d, node.node_type);
         }
@@ -55,13 +174,17 @@ fn collect_real_ids(tree: &BlockTree) -> HashMap<Dot, NodeType> {
                 Child::Leaf { id, item } => {
                     out.insert(*id, item.as_child_type());
                 }
-                Child::Block(b) => walk(b, out),
+                Child::Block(id) => {
+                    if let Some(b) = tree.get(*id) {
+                        walk(tree, b, out);
+                    }
+                }
             }
         }
     }
     let mut out = HashMap::new();
-    for r in &tree.roots {
-        walk(r, &mut out);
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, &mut out);
     }
     out
 }
@@ -73,11 +196,12 @@ fn filter_live<T: Clone>(map: imbl::HashMap<Dot, T>, live: &HashSet<Dot>) -> imb
 fn collect_block_modifiers(
     tree: &BlockTree,
     log: &ModifierAttrLog,
-) -> HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
     fn walk(
+        tree: &BlockTree,
         node: &BlockNode,
         log: &ModifierAttrLog,
-        out: &mut HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+        out: &mut imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     ) {
         if let Some(d) = anchor_dot(node.id) {
             let m = log.modifiers_of(d);
@@ -86,22 +210,409 @@ fn collect_block_modifiers(
             }
         }
         for c in &node.children {
-            if let Child::Block(b) = c {
-                walk(b, log, out);
+            if let Child::Block(id) = c
+                && let Some(b) = tree.get(*id)
+            {
+                walk(tree, b, log, out);
             }
         }
     }
-    let mut out = HashMap::new();
-    for r in &tree.roots {
-        walk(r, log, &mut out);
+    let mut out = imbl::HashMap::new();
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, log, &mut out);
     }
     out
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BlockPaths {
+    parent: imbl::HashMap<Dot, Dot>,
+    block_of_leaf: imbl::HashMap<Dot, Dot>,
+    node_type: imbl::HashMap<Dot, NodeType>,
+}
+
+impl BlockPaths {
+    pub fn from_tree(tree: &BlockTree) -> Self {
+        fn walk(
+            tree: &BlockTree,
+            node: &BlockNode,
+            parent: &mut imbl::HashMap<Dot, Dot>,
+            bol: &mut imbl::HashMap<Dot, Dot>,
+            nt: &mut imbl::HashMap<Dot, NodeType>,
+        ) {
+            nt.insert(node.id, node.node_type);
+            for c in &node.children {
+                match c {
+                    Child::Block(id) => {
+                        parent.insert(*id, node.id);
+                        if let Some(b) = tree.get(*id) {
+                            walk(tree, b, parent, bol, nt);
+                        }
+                    }
+                    Child::Leaf { id, .. } => {
+                        bol.insert(*id, node.id);
+                    }
+                }
+            }
+        }
+        let mut parent = imbl::HashMap::new();
+        let mut block_of_leaf = imbl::HashMap::new();
+        let mut node_type = imbl::HashMap::new();
+        if let Some(root) = tree.root_node() {
+            walk(tree, root, &mut parent, &mut block_of_leaf, &mut node_type);
+        }
+        Self {
+            parent,
+            block_of_leaf,
+            node_type,
+        }
+    }
+
+    /// The ancestor block chain (root-first, inclusive of `block`) as
+    /// `(NodeType, anchor_dot)` pairs — the `block_path` shape `resolve_effective`
+    /// expects for a leaf whose parent block is `block`.
+    pub fn block_path_of(&self, block: Dot) -> Vec<(NodeType, Option<Dot>)> {
+        let mut chain = self.path_of(block);
+        chain.reverse();
+        chain
+            .into_iter()
+            .filter_map(|d| self.node_type.get(&d).map(|t| (*t, anchor_dot(d))))
+            .collect()
+    }
+
+    pub fn block_of(&self, leaf: Dot) -> Option<Dot> {
+        self.block_of_leaf.get(&leaf).copied()
+    }
+
+    /// Whether `dot` is a live node (leaf or block) in the current tree.
+    pub fn contains(&self, dot: Dot) -> bool {
+        self.block_of_leaf.contains_key(&dot) || self.node_type.contains_key(&dot)
+    }
+
+    pub fn node_type_of(&self, node: Dot) -> Option<NodeType> {
+        self.node_type.get(&node).copied()
+    }
+
+    pub fn parent_of(&self, node: Dot) -> Option<Dot> {
+        self.parent.get(&node).copied()
+    }
+
+    pub fn add_block(&mut self, block: Dot, parent: Dot, node_type: NodeType) {
+        self.parent.insert(block, parent);
+        self.node_type.insert(block, node_type);
+    }
+
+    pub fn remove_block(&mut self, block: Dot) {
+        self.parent.remove(&block);
+        self.node_type.remove(&block);
+    }
+
+    pub fn set_block_of_leaf(&mut self, leaf: Dot, block: Dot) {
+        self.block_of_leaf.insert(leaf, block);
+    }
+
+    pub fn remove_leaf(&mut self, leaf: Dot) {
+        self.block_of_leaf.remove(&leaf);
+    }
+
+    pub fn path_of(&self, node: Dot) -> Vec<Dot> {
+        let mut out = vec![node];
+        let mut cur = node;
+        loop {
+            let next = self
+                .parent
+                .get(&cur)
+                .copied()
+                .or_else(|| self.block_of_leaf.get(&cur).copied());
+            match next {
+                Some(p) if p != cur => {
+                    out.push(p);
+                    cur = p;
+                }
+                _ => break,
+            }
+        }
+        out
+    }
+
+    pub fn descendants_of(&self, block: Dot) -> Vec<Dot> {
+        let mut children: HashMap<Dot, Vec<Dot>> = HashMap::new();
+        for (&child, &par) in &self.parent {
+            children.entry(par).or_default().push(child);
+        }
+        for (&leaf, &par) in &self.block_of_leaf {
+            children.entry(par).or_default().push(leaf);
+        }
+        let mut out = Vec::new();
+        let mut stack = vec![block];
+        while let Some(n) = stack.pop() {
+            if let Some(cs) = children.get(&n) {
+                for &c in cs {
+                    out.push(c);
+                    stack.push(c);
+                }
+            }
+        }
+        out
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ProjectionIndexes {
+    pub paths: BlockPaths,
+    pub spans: crate::span::SpanAnchorIndex,
+    pub coverage: crate::span::LeafSpanCoverage,
+}
+
+impl ProjectionIndexes {
+    pub fn rebuild_from<R: SeqResolve>(
+        projected: &ProjectedDoc,
+        spans: &SpanLog,
+        elements: &[(Dot, SeqItem)],
+        resolver: &R,
+    ) -> Self {
+        Self {
+            paths: BlockPaths::from_tree(&projected.tree),
+            spans: crate::span::SpanAnchorIndex::build(spans),
+            coverage: crate::span::LeafSpanCoverage::build(elements, spans, resolver),
+        }
+    }
+}
+
+/// Resolve a single leaf's effective + own modifier sets from the spans in
+/// `covering`. Reuses the projected node-style/attr/style maps (a freshly
+/// inserted leaf carries none of its own) so only the leaf's span contribution
+/// is recomputed — O(covering + depth), independent of document size.
+pub fn derive_leaf_from_covering(
+    paths: &BlockPaths,
+    logs: &DocLogs,
+    projected: &ProjectedDoc,
+    block: Dot,
+    leaf: Dot,
+    leaf_type: NodeType,
+    covering: &[Dot],
+) -> (
+    BTreeMap<ModifierType, Modifier>,
+    BTreeMap<ModifierType, OwnModifier>,
+) {
+    let block_path = paths.block_path_of(block);
+    let mut leaf_path: Vec<NodeType> = block_path.iter().map(|(t, _)| *t).collect();
+    leaf_path.push(leaf_type);
+    let explicit = crate::span::explicit_from_covering(covering, &logs.spans, &leaf_path);
+    let mut ex_map: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> =
+        HashMap::new();
+    ex_map.insert(leaf, explicit);
+    let src = crate::span::EffectiveSources {
+        block_modifiers: &logs.block_modifiers,
+        explicit_spans: &ex_map,
+        node_styles: &projected.node_styles,
+        styles: &projected.styles,
+        node_attrs: &projected.node_attrs,
+    };
+    let effective = crate::span::resolve_effective(&block_path, Some(leaf), leaf_type, true, &src);
+    let own = crate::span::own_modifiers_for_leaf(leaf, &leaf_path, &src);
+    (effective, own)
+}
+
+/// Resolve a single block's `block_effective` (inheritance + its own modifiers),
+/// matching `derive_block_effective` for that block. O(depth).
+pub fn block_effective_one(
+    paths: &BlockPaths,
+    logs: &DocLogs,
+    projected: &ProjectedDoc,
+    block: Dot,
+) -> BTreeMap<ModifierType, Modifier> {
+    let full_path = paths.block_path_of(block);
+    let Some((self_type, self_dot)) = full_path.last().copied() else {
+        return BTreeMap::new();
+    };
+    let ancestors = &full_path[..full_path.len() - 1];
+    let empty: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> = HashMap::new();
+    let src = crate::span::EffectiveSources {
+        block_modifiers: &logs.block_modifiers,
+        explicit_spans: &empty,
+        node_styles: &projected.node_styles,
+        styles: &projected.styles,
+        node_attrs: &projected.node_attrs,
+    };
+    crate::span::resolve_effective(ancestors, self_dot, self_type, false, &src)
+}
+
+/// Find `block` and run `f` on its children, returning whether it was found.
+/// `O(log N)` — a single `Dot`-keyed lookup, no descent.
+fn with_block_children(tree: &mut BlockTree, block: Dot, f: impl FnOnce(&mut ChildList)) -> bool {
+    tree.with_block_children(block, f)
+}
+
+/// Split a leaf-only block `p_block` (a child of `parent`) at the point just
+/// after `split_after` (or at its start when `None`), moving the tail leaves
+/// into a fresh `new_block` of `new_type` inserted right after `p_block`.
+/// Returns the moved leaf dots, or `None` if the shape isn't a simple leaf-only
+/// split (caller must then fall back). O(block size).
+pub fn split_block_insert(
+    tree: &mut BlockTree,
+    parent: Dot,
+    p_block: Dot,
+    split_after: Option<Dot>,
+    new_block: Dot,
+    new_type: NodeType,
+) -> Option<Vec<Dot>> {
+    // Validate everything (block shapes, split point, that `p_block` is a child of
+    // `parent`) BEFORE mutating, so any bail-out leaves the tree untouched — `p_block`
+    // and `new_block` are addressed directly in `nodes`, no descent.
+    let p_node = tree.get(p_block)?;
+    if p_node.children.iter().any(|c| matches!(c, Child::Block(_))) {
+        return None;
+    }
+    let split_at = match split_after {
+        None => 0,
+        Some(leaf) => {
+            p_node
+                .children
+                .iter()
+                .position(|c| matches!(c, Child::Leaf { id, .. } if *id == leaf))?
+                + 1
+        }
+    };
+    let p_idx = tree
+        .get(parent)?
+        .children
+        .iter()
+        .position(|c| matches!(c, Child::Block(b) if *b == p_block))?;
+
+    // Move the tail leaves out of `p_block` into a fresh `new_block`.
+    let mut p = tree.get(p_block).cloned().expect("validated above");
+    let tail = p.children.split_off(split_at);
+    let moved: Vec<Dot> = tail
+        .iter()
+        .filter_map(|c| match c {
+            Child::Leaf { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    tree.nodes.insert(p_block, p);
+    tree.nodes.insert(
+        new_block,
+        BlockNode {
+            id: new_block,
+            node_type: new_type,
+            children: tail,
+        },
+    );
+    tree.with_block_children(parent, |children| {
+        children.insert(p_idx + 1, Child::Block(new_block));
+    });
+    Some(moved)
+}
+
+/// Insert `leaf` into `block` immediately after the leaf `after` (or at the
+/// block's start when `after` is `None`), returning the new leaf's offset (count
+/// of leaves before it). Tree-anchored — unaffected by sequence "ghosts" (live
+/// seq elements dropped from the tree by normalization). O(block size).
+fn insert_leaf_after(
+    tree: &mut BlockTree,
+    block: Dot,
+    after: Option<Dot>,
+    leaf: Dot,
+    item: &SeqItem,
+) -> Option<usize> {
+    let mut result: Option<usize> = None;
+    with_block_children(tree, block, |children| {
+        let (at, offset) = match after {
+            None => (0, 0),
+            Some(a) => {
+                let mut seen = 0usize;
+                let mut found = None;
+                for (i, c) in children.iter().enumerate() {
+                    if let Child::Leaf { id, .. } = c {
+                        seen += 1;
+                        if *id == a {
+                            found = Some((i + 1, seen));
+                            break;
+                        }
+                    }
+                }
+                match found {
+                    Some(f) => f,
+                    None => return,
+                }
+            }
+        };
+        children.insert(
+            at,
+            Child::Leaf {
+                id: leaf,
+                item: item.clone(),
+            },
+        );
+        result = Some(offset);
+    });
+    result
+}
+
+fn insert_leaf_at(
+    tree: &mut BlockTree,
+    block: Dot,
+    offset: usize,
+    leaf: Dot,
+    item: &SeqItem,
+) -> bool {
+    // Leaf-bearing blocks never interleave block children, so the `offset`-th leaf
+    // is the `offset`-th child; `leaf_slot` finds it in `O(log K)` via the children
+    // tree's leaf-count sum.
+    with_block_children(tree, block, |children| {
+        let slot = children.leaf_slot(offset);
+        children.insert(
+            slot,
+            Child::Leaf {
+                id: leaf,
+                item: item.clone(),
+            },
+        );
+    })
+}
+
+fn remove_leaf_from_block(tree: &mut BlockTree, block: Dot, leaf: Dot) -> Option<usize> {
+    let mut result: Option<usize> = None;
+    with_block_children(tree, block, |children| {
+        let mut seen = 0usize;
+        let mut found = None;
+        for (i, c) in children.iter().enumerate() {
+            match c {
+                Child::Leaf { id, .. } => {
+                    if *id == leaf {
+                        found = Some((i, seen));
+                        break;
+                    }
+                    seen += 1;
+                }
+                Child::Block(_) => {}
+            }
+        }
+        if let Some((idx, offset)) = found {
+            children.remove(idx);
+            result = Some(offset);
+        }
+    });
+    result
+}
+
 pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError> {
     let (elements, resolver) = checkout_with_resolver(&logs.seq);
+    project_core(&elements, &resolver, logs)
+}
 
-    for (d, item) in &elements {
+pub fn project_from(logs: &DocLogs, seq: &SeqCheckout) -> Result<ProjectedDoc, ProjectionError> {
+    let elements = seq.snapshot(&logs.seq);
+    project_core(&elements, seq, logs)
+}
+
+pub fn project_core<R: SeqResolve>(
+    elements: &[(Dot, SeqItem)],
+    resolver: &R,
+    logs: &DocLogs,
+) -> Result<ProjectedDoc, ProjectionError> {
+    for (d, item) in elements {
         if let SeqItem::Block { node_type, .. } = item
             && node_type.spec().is_leaf()
         {
@@ -112,23 +623,33 @@ pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError>
         }
     }
 
-    let raw_tree = project_blocks(&elements).map_err(ProjectionError::Project)?;
-    let tree = normalize(raw_tree);
+    let raw_tree = normalize(project_blocks(elements).map_err(ProjectionError::Project)?);
+    let tree = BlockTree::from_raw(&raw_tree);
     validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
 
+    Ok(project_from_tree(elements, tree, resolver, logs))
+}
+
+pub fn project_from_tree<R: SeqResolve>(
+    elements: &[(Dot, SeqItem)],
+    tree: BlockTree,
+    resolver: &R,
+    logs: &DocLogs,
+) -> ProjectedDoc {
     let node_type_of = collect_real_ids(&tree);
     let live: HashSet<Dot> = node_type_of.keys().copied().collect();
+    let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
     let node_attrs = logs.node_attrs.project(|d| node_type_of.get(&d).copied());
     let node_styles = filter_live(logs.node_styles.project(), &live);
     let node_markers = filter_live(logs.node_markers.project(), &live);
     let styles = logs.styles.registered_entries();
-    let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
     let explicit_spans: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> =
-        crate::span::derive_explicit_effect(&elements, &tree, &resolver, &logs.spans)
+        crate::span::derive_explicit_effect(elements, &tree, resolver, &logs.spans)
             .into_iter()
             .collect();
+
     let (effective, block_effective, own_modifiers) = {
         let src = crate::span::EffectiveSources {
             block_modifiers: &logs.block_modifiers,
@@ -137,20 +658,89 @@ pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError>
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let effective: HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+        let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
             derive_full_effective(&tree, &src).into_iter().collect();
         let block_effective = crate::span::derive_block_effective(&tree, &src);
         let own_modifiers = crate::span::derive_own_modifiers(&tree, &src);
         (effective, block_effective, own_modifiers)
     };
-    let runs = derive_runs(&tree, &effective);
+
+    let run_index = crate::span::BlockRuns::build(&tree, &effective);
+
+    ProjectedDoc {
+        tree,
+        effective,
+        block_effective,
+        own_modifiers,
+        run_index,
+        block_modifiers,
+        node_attrs,
+        node_styles,
+        node_markers,
+        styles,
+    }
+}
+
+/// Build a document from the post-delete sequence while reusing a precomputed span
+/// coverage. Identical to [`project_core`]/[`project_from_tree`] except explicit span
+/// effects come from `coverage` instead of re-resolving the whole span log — the
+/// coverage-preserving bulk-delete reprojection path (`O(survivors)`, not `O(#spans)`).
+pub fn project_core_with_coverage(
+    elements: &[(Dot, SeqItem)],
+    logs: &DocLogs,
+    coverage: &crate::span::LeafSpanCoverage,
+) -> Result<ProjectedDoc, ProjectionError> {
+    for (d, item) in elements {
+        if let SeqItem::Block { node_type, .. } = item
+            && node_type.spec().is_leaf()
+        {
+            return Err(ProjectionError::LeafTypedBlock {
+                dot: *d,
+                node_type: *node_type,
+            });
+        }
+    }
+    let raw_tree = normalize(project_blocks(elements).map_err(ProjectionError::Project)?);
+    let tree = BlockTree::from_raw(&raw_tree);
+    validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
+
+    let node_type_of = collect_real_ids(&tree);
+    let live: HashSet<Dot> = node_type_of.keys().copied().collect();
+    let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
+
+    let node_attrs = logs.node_attrs.project(|d| node_type_of.get(&d).copied());
+    let node_styles = filter_live(logs.node_styles.project(), &live);
+    let node_markers = filter_live(logs.node_markers.project(), &live);
+    let styles = logs.styles.registered_entries();
+
+    let explicit_spans: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> =
+        crate::span::derive_explicit_effect_from_coverage(&tree, coverage, &logs.spans)
+            .into_iter()
+            .collect();
+
+    let (effective, block_effective, own_modifiers) = {
+        let src = crate::span::EffectiveSources {
+            block_modifiers: &logs.block_modifiers,
+            explicit_spans: &explicit_spans,
+            node_styles: &node_styles,
+            styles: &styles,
+            node_attrs: &node_attrs,
+        };
+        let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+            derive_full_effective(&tree, &src).into_iter().collect();
+        let block_effective = crate::span::derive_block_effective(&tree, &src);
+        let own_modifiers = crate::span::derive_own_modifiers(&tree, &src);
+        (effective, block_effective, own_modifiers)
+    };
+
+    let run_index = crate::span::BlockRuns::build(&tree, &effective);
 
     Ok(ProjectedDoc {
         tree,
         effective,
         block_effective,
         own_modifiers,
-        runs,
+        run_index,
         block_modifiers,
         node_attrs,
         node_styles,
@@ -162,7 +752,7 @@ pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AtomLeaf, SeqItem, project_blocks};
+    use crate::{AtomLeaf, SeqItem, derive_runs, project_blocks};
 
     fn elems_nested() -> Vec<(Dot, SeqItem)> {
         let bq = Dot::new(1, 5);
@@ -197,8 +787,75 @@ mod tests {
     }
 
     #[test]
+    fn block_paths_from_tree_matches_ancestry() {
+        let root = Dot::new(1, 0);
+        let bq = Dot::new(1, 1);
+        let para = Dot::new(1, 2);
+        let a = Dot::new(1, 3);
+        let b = Dot::new(1, 4);
+        let raw = crate::RawTree {
+            roots: vec![crate::RawNode {
+                id: root,
+                node_type: NodeType::Root,
+                children: vec![crate::RawChild::Block(crate::RawNode {
+                    id: bq,
+                    node_type: NodeType::Blockquote,
+                    children: vec![crate::RawChild::Block(crate::RawNode {
+                        id: para,
+                        node_type: NodeType::Paragraph,
+                        children: vec![
+                            crate::RawChild::Leaf {
+                                id: a,
+                                item: SeqItem::Char('a'),
+                            },
+                            crate::RawChild::Leaf {
+                                id: b,
+                                item: SeqItem::Char('b'),
+                            },
+                        ],
+                    })],
+                })],
+            }],
+        };
+        let tree = BlockTree::from_raw(&raw);
+        let bp = BlockPaths::from_tree(&tree);
+        assert_eq!(bp.block_of(a), Some(para));
+        assert_eq!(bp.block_of(b), Some(para));
+        assert_eq!(bp.path_of(para), vec![para, bq, root]);
+        assert_eq!(bp.path_of(a), vec![a, para, bq, root]);
+        let mut desc = bp.descendants_of(bq);
+        desc.sort();
+        let mut expect = vec![para, a, b];
+        expect.sort();
+        assert_eq!(desc, expect);
+    }
+
+    #[test]
+    fn projection_indexes_rebuild_matches_derivations() {
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&elems_nested()).unwrap()));
+        let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> = imbl::HashMap::new();
+        let runs = derive_runs(&tree, &effective);
+        let projected = ProjectedDoc {
+            tree: tree.clone(),
+            effective: effective.clone(),
+            block_effective: imbl::HashMap::new(),
+            own_modifiers: imbl::HashMap::new(),
+            run_index: crate::span::BlockRuns::build(&tree, &effective),
+            block_modifiers: imbl::HashMap::new(),
+            node_attrs: imbl::HashMap::new(),
+            node_styles: imbl::HashMap::new(),
+            node_markers: imbl::HashMap::new(),
+            styles: imbl::HashMap::new(),
+        };
+        let idx =
+            ProjectionIndexes::rebuild_from(&projected, &SpanLog::new(), &[], &SeqCheckout::new());
+        assert_eq!(projected.runs(), runs);
+        assert_eq!(idx.paths, BlockPaths::from_tree(&tree));
+    }
+
+    #[test]
     fn collect_real_ids_covers_blocks_chars_atoms() {
-        let tree = project_blocks(&elems_nested()).unwrap();
+        let tree = BlockTree::from_raw(&project_blocks(&elems_nested()).unwrap());
         let ids = collect_real_ids(&tree);
         assert_eq!(ids.get(&Dot::ROOT), Some(&NodeType::Root));
         assert_eq!(ids.get(&Dot::new(1, 1)), Some(&NodeType::Paragraph));
@@ -273,18 +930,18 @@ mod tests {
     #[test]
     fn empty_document_projects_ok() {
         let pd = project_document(&logs_of(&[])).unwrap();
-        assert_eq!(pd.tree.roots.len(), 1);
-        assert_eq!(pd.tree.roots[0].node_type, NodeType::Root);
+        assert_eq!(pd.tree.root_node().iter().count(), 1);
+        assert_eq!(pd.tree.root_node().unwrap().node_type, NodeType::Root);
         assert!(pd.effective.is_empty());
-        assert!(pd.runs.is_empty());
+        assert!(pd.runs().is_empty());
         assert!(pd.node_attrs.is_empty());
     }
 
     #[test]
     fn projects_nested_blocks() {
         let pd = project_document(&logs_of(&elems_nested())).unwrap();
-        assert_eq!(pd.tree.roots.len(), 1);
-        assert_eq!(pd.tree.roots[0].node_type, NodeType::Root);
+        assert_eq!(pd.tree.root_node().iter().count(), 1);
+        assert_eq!(pd.tree.root_node().unwrap().node_type, NodeType::Root);
         assert_eq!(pd.effective.len(), 5);
     }
 
@@ -320,7 +977,7 @@ mod tests {
                 .get(&Dot::new(1, 2))
                 .is_none_or(|m| !m.contains_key(&ModifierType::Bold))
         );
-        assert!(pd.runs.len() >= 2);
+        assert!(pd.runs().len() >= 2);
     }
 
     #[test]
@@ -368,12 +1025,12 @@ mod tests {
                 .and_then(|m| m.get(&ModifierType::Bold)),
             Some(&Modifier::Bold)
         );
-        assert_eq!(pd.runs.len(), 2);
-        assert!(pd.runs.iter().any(|r| {
+        assert_eq!(pd.runs().len(), 2);
+        assert!(pd.runs().iter().any(|r| {
             r.leaves == vec![styled]
                 && r.modifiers.get(&ModifierType::Bold) == Some(&Modifier::Bold)
         }));
-        assert!(pd.runs.iter().any(|r| {
+        assert!(pd.runs().iter().any(|r| {
             r.leaves == vec![Dot::new(1, 3), Dot::new(1, 4)]
                 && !r.modifiers.contains_key(&ModifierType::Bold)
         }));
@@ -716,7 +1373,7 @@ mod tests {
         let ids = collect_real_ids(&pd.tree);
         assert!(!ids.contains_key(&Dot::new(2, 0)));
         assert!(validate_block_tree(&pd.tree).is_ok());
-        assert!(pd.runs.is_empty());
+        assert!(pd.runs().is_empty());
     }
 
     #[test]
@@ -883,7 +1540,7 @@ mod tests {
             )
             .unwrap();
         let (els, resolver) = checkout_with_resolver(&l.seq);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let node_type_of = collect_real_ids(&tree);
         let live: HashSet<Dot> = node_type_of.keys().copied().collect();
         let node_attrs = l.node_attrs.project(|d| node_type_of.get(&d).copied());
@@ -900,7 +1557,7 @@ mod tests {
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let direct: HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+        let direct: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
             derive_full_effective(&tree, &src).into_iter().collect();
         let pd = project_document(&l).unwrap();
         assert_eq!(pd.effective, direct);
@@ -973,7 +1630,7 @@ mod tests {
             let eff_keys: HashSet<Dot> = pd.effective.keys().copied().collect();
             prop_assert_eq!(eff_keys, live_leaves.clone());
 
-            let mut covered: Vec<Dot> = pd.runs.iter().flat_map(|r| r.leaves.clone()).collect();
+            let mut covered: Vec<Dot> = pd.runs().iter().flat_map(|r| r.leaves.clone()).collect();
             covered.sort();
             let mut expect: Vec<Dot> = live_leaves.into_iter().collect();
             expect.sort();
@@ -985,17 +1642,19 @@ mod tests {
             for d in pd.node_markers.keys() { prop_assert!(all_ids.contains(d)); }
             for d in pd.block_modifiers.keys() { prop_assert!(all_ids.contains(d)); }
 
-            fn collect_block_ids(node: &BlockNode, out: &mut HashSet<Dot>) {
+            fn collect_block_ids(tree: &BlockTree, node: &BlockNode, out: &mut HashSet<Dot>) {
                 out.insert(node.id);
                 for c in &node.children {
-                    if let Child::Block(b) = c {
-                        collect_block_ids(b, out);
+                    if let Child::Block(id) = c
+                        && let Some(b) = tree.get(*id)
+                    {
+                        collect_block_ids(tree, b, out);
                     }
                 }
             }
             let mut block_ids: HashSet<Dot> = HashSet::new();
-            for r in &pd.tree.roots {
-                collect_block_ids(r, &mut block_ids);
+            if let Some(r) = pd.tree.root_node() {
+                collect_block_ids(&pd.tree, r, &mut block_ids);
             }
             let be_keys: HashSet<Dot> = pd.block_effective.keys().copied().collect();
             prop_assert_eq!(be_keys, block_ids);
@@ -1011,6 +1670,36 @@ mod tests {
             let mut b = logs_of(&[]);
             b.seq = build_oplog(&rev);
             prop_assert_eq!(project_document(&a).unwrap(), project_document(&b).unwrap());
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+        #[test]
+        fn s4b_char_append_incremental_matches_full(s in "[a-c]{0,24}") {
+            let para = Dot::new(1, 1);
+            let base = vec![(
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            )];
+            let mut full = base.clone();
+            for (i, ch) in s.chars().enumerate() {
+                full.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
+            }
+
+            let mut projected = project_document(&logs_of(&base)).unwrap();
+            for (i, ch) in s.chars().enumerate() {
+                let leaf = Dot::new(1, 2 + i as u64);
+                projected.splice_char(para, i, leaf, SeqItem::Char(ch), BTreeMap::new(), false);
+            }
+
+            let full_pd = project_document(&logs_of(&full)).unwrap();
+            prop_assert_eq!(&projected.tree, &full_pd.tree);
+            prop_assert_eq!(projected.runs(), full_pd.runs());
+            prop_assert_eq!(&projected.effective, &full_pd.effective);
         }
     }
 }

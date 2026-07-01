@@ -42,6 +42,15 @@ fn classify(c: &ChildView) -> ChildClass {
 }
 
 fn block_flat_size(b: &NodeView) -> usize {
+    // A block contributes its two boundary sentinels plus one flat unit per direct
+    // leaf; nested blocks recurse. The overwhelmingly common block (a paragraph with
+    // only inline leaves) is `O(1)` via the leaf-count summary — no child walk — which
+    // keeps `to_flat`/`from_flat` off the per-character path.
+    let total = b.child_count();
+    let leaves = b.leaf_child_count();
+    if leaves == total {
+        return 2 + total;
+    }
     2 + b.children().map(|c| child_flat_size(&c)).sum::<usize>()
 }
 
@@ -66,10 +75,23 @@ pub trait ResolvedPositionFlatExt<'a>: Sized {
 
 impl<'a> ResolvedPositionFlatExt<'a> for ResolvedPosition<'a> {
     fn to_flat(&self) -> usize {
-        let Some(root) = self.view().root() else {
+        let view = self.view();
+        let Some(root) = view.root() else {
             return 0;
         };
-        to_flat_walk(&root, self.node(), self.offset()).unwrap_or(0)
+        let target = self.node();
+        // Ancestor chain of the target block (inclusive). The walk descends only into
+        // blocks on this chain and skips every other subtree via the `O(1)`
+        // `block_flat_size`, so `to_flat` is `O(blocks traversed)` — no per-character
+        // DFS through sibling subtrees. Depth is shallow, so a `Vec` membership test is
+        // cheaper than hashing.
+        let mut ancestors: Vec<Dot> = Vec::new();
+        let mut cur = view.node(target);
+        while let Some(n) = cur {
+            ancestors.push(n.id());
+            cur = n.parent();
+        }
+        to_flat_walk(&root, target, self.offset(), &ancestors).unwrap_or(0)
     }
 
     fn from_flat(view: &'a DocView<'a>, flat: usize) -> Option<Self> {
@@ -79,7 +101,12 @@ impl<'a> ResolvedPositionFlatExt<'a> for ResolvedPosition<'a> {
     }
 }
 
-fn to_flat_walk(current: &NodeView, target: Dot, target_offset: usize) -> Option<usize> {
+fn to_flat_walk(
+    current: &NodeView,
+    target: Dot,
+    target_offset: usize,
+    ancestors: &[Dot],
+) -> Option<usize> {
     if current.id() == target {
         let mut acc = 0usize;
         for (i, c) in current.children().enumerate() {
@@ -95,7 +122,11 @@ fn to_flat_walk(current: &NodeView, target: Dot, target_offset: usize) -> Option
         match c {
             ChildView::Block(b) => {
                 acc += 1;
-                if let Some(inner) = to_flat_walk(&b, target, target_offset) {
+                // Only descend into a block on the target's ancestor chain; every other
+                // subtree is skipped by its `O(1)` flat size, never DFS-searched.
+                if ancestors.contains(&b.id())
+                    && let Some(inner) = to_flat_walk(&b, target, target_offset, ancestors)
+                {
                     return Some(acc + inner);
                 }
                 acc += block_flat_size(&b) - 2;
@@ -123,7 +154,7 @@ fn from_flat_walk(container: &NodeView, start_flat: usize, target: usize) -> Opt
                 }
                 acc += content;
                 if target == acc {
-                    return Some(Position::new(b.id(), b.children().count()));
+                    return Some(Position::new(b.id(), b.child_count()));
                 }
                 acc += 1;
             }
@@ -304,6 +335,145 @@ mod tests {
             items.push((Dot::new(1, 2 + i as u64), c.clone()));
         }
         (project_document(&logs(&items)).unwrap(), para)
+    }
+
+    // Reference flat conversions: the original always-recursive block size and the
+    // unguarded DFS walk. The optimized production versions (O(1) leaf-block size +
+    // ancestor-guarded descent) must agree with these for every position.
+    fn block_flat_size_ref(b: &NodeView) -> usize {
+        2 + b.children().map(|c| child_flat_size_ref(&c)).sum::<usize>()
+    }
+    fn child_flat_size_ref(c: &ChildView) -> usize {
+        match c {
+            ChildView::Leaf(_) => 1,
+            ChildView::Block(b) => block_flat_size_ref(b),
+        }
+    }
+    fn to_flat_ref(view: &DocView, target: Dot, offset: usize) -> usize {
+        fn walk(current: &NodeView, target: Dot, target_offset: usize) -> Option<usize> {
+            if current.id() == target {
+                let mut acc = 0usize;
+                for (i, c) in current.children().enumerate() {
+                    if i == target_offset {
+                        return Some(acc);
+                    }
+                    acc += child_flat_size_ref(&c);
+                }
+                return Some(acc);
+            }
+            let mut acc = 0usize;
+            for c in current.children() {
+                match c {
+                    ChildView::Block(b) => {
+                        acc += 1;
+                        if let Some(inner) = walk(&b, target, target_offset) {
+                            return Some(acc + inner);
+                        }
+                        acc += block_flat_size_ref(&b) - 2;
+                        acc += 1;
+                    }
+                    ChildView::Leaf(_) => acc += 1,
+                }
+            }
+            None
+        }
+        match view.root() {
+            Some(root) => walk(&root, target, offset).unwrap_or(0),
+            None => 0,
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    enum BlockSpec {
+        Para(usize),
+        Quote(Vec<usize>),
+    }
+
+    fn build_specced(specs: &[BlockSpec]) -> (ProjectedDoc, Vec<Dot>) {
+        let root = Dot::ROOT;
+        let mut items: Vec<(Dot, SeqItem)> = Vec::new();
+        let mut blocks: Vec<Dot> = Vec::new();
+        let mut clock = 1u64;
+        let mut next = |items: &mut Vec<(Dot, SeqItem)>, item: SeqItem| {
+            let d = Dot::new(1, clock);
+            clock += 1;
+            items.push((d, item));
+            d
+        };
+        for spec in specs {
+            match spec {
+                BlockSpec::Para(k) => {
+                    let p = next(
+                        &mut items,
+                        SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![root],
+                        },
+                    );
+                    blocks.push(p);
+                    for _ in 0..*k {
+                        next(&mut items, SeqItem::Char('a'));
+                    }
+                }
+                BlockSpec::Quote(inner) => {
+                    let bq = next(
+                        &mut items,
+                        SeqItem::Block {
+                            node_type: NodeType::Blockquote,
+                            parents: vec![root],
+                        },
+                    );
+                    blocks.push(bq);
+                    for k in inner {
+                        let p = next(
+                            &mut items,
+                            SeqItem::Block {
+                                node_type: NodeType::Paragraph,
+                                parents: vec![root, bq],
+                            },
+                        );
+                        blocks.push(p);
+                        for _ in 0..*k {
+                            next(&mut items, SeqItem::Char('a'));
+                        }
+                    }
+                }
+            }
+        }
+        (project_document(&logs(&items)).unwrap(), blocks)
+    }
+
+    proptest::proptest! {
+        /// Optimized `to_flat`/`from_flat` must agree with the reference DFS for every
+        /// position in random flat *and* nested documents, and `from_flat ∘ to_flat`
+        /// must round-trip.
+        #[test]
+        fn flat_conversions_match_reference(
+            specs in proptest::collection::vec(
+                proptest::prop_oneof![
+                    (0usize..6).prop_map(BlockSpec::Para),
+                    proptest::collection::vec(0usize..5, 1..4).prop_map(BlockSpec::Quote),
+                ],
+                1..6,
+            ),
+        ) {
+            let (pd, blocks) = build_specced(&specs);
+            let view = DocView::new(&pd);
+            for &b in &blocks {
+                let node = view.node(b).unwrap();
+                for off in 0..=node.child_count() {
+                    let pos = Position::new(b, off);
+                    let Some(rp) = pos.resolve(&view) else { continue };
+                    let got = rp.to_flat();
+                    let expected = to_flat_ref(&view, b, off);
+                    proptest::prop_assert_eq!(got, expected, "to_flat({:?},{}) ", b, off);
+                    // Round-trip: from_flat lands on a position with the same flat offset.
+                    let back = ResolvedPosition::from_flat(&view, got)
+                        .expect("from_flat resolves");
+                    proptest::prop_assert_eq!(back.to_flat(), got, "round-trip at flat {}", got);
+                }
+            }
+        }
     }
 
     #[test]

@@ -56,8 +56,11 @@ export class Pusher {
   }
 
   private localChangesetIds(): string[] {
-    const all = this.opts.editor.missingChangesetsFor(new Uint8Array());
-    return this.opts.editor.splitChangesets(all).map((e) => e.id);
+    // Read the ids straight from the graph — O(#changesets). The old
+    // `missingChangesetsFor(∅)` + `splitChangesets` walked, cloned, and re-encoded the
+    // entire history on every capture/prune, the dominant per-tick sync cost on a large
+    // document.
+    return this.opts.editor.changesetIds();
   }
 
   private async capture(): Promise<void> {

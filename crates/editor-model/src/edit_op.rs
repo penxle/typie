@@ -38,7 +38,7 @@ pub enum SplitError {
     Style(ModelError),
 }
 
-fn seq_parents(graph: &OpGraph<EditOp>, dot: Dot) -> Vec<Dot> {
+pub fn seq_parents(graph: &OpGraph<EditOp>, dot: Dot) -> Vec<Dot> {
     let mut out: Vec<Dot> = Vec::new();
     let mut seen: HashSet<Dot> = HashSet::new();
     let start: &Op<EditOp> = graph.get(&dot).expect("op exists");
@@ -454,8 +454,8 @@ mod tests {
         let (g, _root, _para) = graph_para("ab");
         let logs = split_logs(&g).unwrap();
         let pd = project_document(&logs).unwrap();
-        assert_eq!(pd.tree.roots.len(), 1);
-        assert_eq!(pd.tree.roots[0].node_type, NodeType::Root);
+        assert_eq!(pd.tree.root_node().iter().count(), 1);
+        assert_eq!(pd.tree.root_node().unwrap().node_type, NodeType::Root);
         assert_eq!(pd.effective.len(), 2);
     }
 
@@ -658,7 +658,7 @@ mod tests {
     fn split_empty_graph_ok() {
         let g: OpGraph<EditOp> = OpGraph::new();
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
-        assert_eq!(pd.tree.roots.len(), 1);
+        assert_eq!(pd.tree.root_node().iter().count(), 1);
         assert!(pd.effective.is_empty());
     }
 
@@ -694,7 +694,7 @@ mod tests {
         };
         let g = OpGraph::from_changesets(vec![cs]).unwrap();
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
-        assert_eq!(pd.tree.roots.len(), 1);
+        assert_eq!(pd.tree.root_node().iter().count(), 1);
     }
 
     fn blk(nt: NodeType, parents: Vec<Dot>) -> SeqItem {

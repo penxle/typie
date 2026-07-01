@@ -11,6 +11,9 @@ export class FakeEditor {
   currentHeads() {
     return this.known.size > 0 ? enc(Math.max(...this.known)) : enc();
   }
+  changesetIds() {
+    return [...this.known].toSorted((a, b) => a - b).map(String);
+  }
   missingChangesetsFor(heads: Uint8Array) {
     const hs = dec(heads).filter((id) => this.known.has(id));
     const eff = hs.length > 0 ? Math.max(...hs) : 0;

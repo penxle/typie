@@ -171,7 +171,7 @@ impl TrackedRange {
             return None;
         }
         let view = state.view();
-        let ctx = StableResolveCtx::new(&view, state.projected.seq());
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
         let sel = self.selection.resolve(&ctx)?;
         let sel = sel.normalize(&view)?;
         sel.resolve(&view)?;

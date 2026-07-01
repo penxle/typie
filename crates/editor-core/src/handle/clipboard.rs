@@ -1499,7 +1499,7 @@ mod tests {
         // Produce a remote changeset by inserting a char on a fork of replica_a's
         // projected graph (continuing actor 1's clock, unknown to replica_b).
         let remote_cs = {
-            let mut pa = replica_a.projected.clone();
+            let mut pa = replica_a.projected.as_ref().clone();
             let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
             pa.apply_batch(vec![EditOp::Seq(ListOp::Ins {
                 pos: 1,

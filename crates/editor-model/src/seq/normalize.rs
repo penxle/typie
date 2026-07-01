@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use editor_crdt::Dot;
 
-use super::project::{BlockNode, BlockTree, Child, synthetic_id};
+use super::project::{RawChild, RawNode, RawTree, synthetic_id};
 use crate::nodes::NodeType;
 use crate::schema::{ContentExpr, ContextExpr};
 
@@ -20,11 +20,11 @@ fn fixed_slot_roles(content: &ContentExpr) -> Option<Vec<NodeType>> {
     }
 }
 
-pub fn reshape_fixed_slots(node: &mut BlockNode) {
+pub fn reshape_fixed_slots(node: &mut RawNode) {
     let roles = fixed_slot_roles(&node.node_type.spec().content).expect("fixed-slot only");
-    let mut by_role: HashMap<NodeType, VecDeque<BlockNode>> = HashMap::new();
+    let mut by_role: HashMap<NodeType, VecDeque<RawNode>> = HashMap::new();
     for c in std::mem::take(&mut node.children) {
-        if let Child::Block(b) = c {
+        if let RawChild::Block(b) = c {
             by_role.entry(b.node_type).or_default().push_back(b);
         }
     }
@@ -33,17 +33,17 @@ pub fn reshape_fixed_slots(node: &mut BlockNode) {
             .get_mut(&role)
             .and_then(|q| q.pop_front())
             .unwrap_or_else(|| scaffold_block(role, 0, node.id));
-        node.children.push(Child::Block(slot));
+        node.children.push(RawChild::Block(slot));
     }
 }
 
 fn match_content(
     expr: &ContentExpr,
-    kids: &mut VecDeque<Child>,
+    kids: &mut VecDeque<RawChild>,
     parent: Dot,
-    out: &mut Vec<Child>,
+    out: &mut Vec<RawChild>,
 ) {
-    let front = |k: &VecDeque<Child>, e: &ContentExpr| {
+    let front = |k: &VecDeque<RawChild>, e: &ContentExpr| {
         k.front().is_some_and(|c| e.matches(c.as_child_type()))
     };
     match expr {
@@ -52,7 +52,7 @@ fn match_content(
             if kids.front().is_some_and(|c| c.as_child_type() == *t) {
                 out.push(kids.pop_front().unwrap());
             } else {
-                out.push(Child::Block(scaffold_block(*t, 0, parent)));
+                out.push(RawChild::Block(scaffold_block(*t, 0, parent)));
             }
         }
         ContentExpr::Optional(inner) => {
@@ -71,12 +71,20 @@ fn match_content(
                 out.push(kids.pop_front().unwrap());
             }
             if out.len() == n {
-                out.push(Child::Block(scaffold_block(first_type(inner), 0, parent)));
+                out.push(RawChild::Block(scaffold_block(
+                    first_type(inner),
+                    0,
+                    parent,
+                )));
             }
         }
         ContentExpr::Choice(cs) => match cs.iter().find(|c| front(kids, c)) {
             Some(c) => match_content(c, kids, parent, out),
-            None => out.push(Child::Block(scaffold_block(first_type(&cs[0]), 0, parent))),
+            None => out.push(RawChild::Block(scaffold_block(
+                first_type(&cs[0]),
+                0,
+                parent,
+            ))),
         },
         ContentExpr::Seq(exprs) => {
             for e in exprs {
@@ -86,16 +94,16 @@ fn match_content(
     }
 }
 
-pub fn repair_general(node: &mut BlockNode) {
+pub fn repair_general(node: &mut RawNode) {
     let content = node.node_type.spec().content.clone();
     loop {
-        let mut kids: VecDeque<Child> = std::mem::take(&mut node.children).into();
+        let mut kids: VecDeque<RawChild> = std::mem::take(&mut node.children).into_iter().collect();
         let mut out = Vec::new();
         match_content(&content, &mut kids, node.id, &mut out);
-        let promoted: Vec<Child> = Vec::from(kids)
+        let promoted: Vec<RawChild> = Vec::from(kids)
             .into_iter()
             .filter_map(|c| match c {
-                Child::Block(b) => Some(b.children),
+                RawChild::Block(b) => Some(b.children),
                 _ => None,
             })
             .flatten()
@@ -108,12 +116,12 @@ pub fn repair_general(node: &mut BlockNode) {
     }
 }
 
-fn normalize_grid(table: &mut BlockNode) {
+fn normalize_grid(table: &mut RawNode) {
     let width = table
         .children
         .iter()
         .filter_map(|c| match c {
-            Child::Block(r) if r.node_type == NodeType::TableRow => Some(
+            RawChild::Block(r) if r.node_type == NodeType::TableRow => Some(
                 r.children
                     .iter()
                     .filter(|cc| cc.as_child_type() == NodeType::TableCell)
@@ -123,29 +131,35 @@ fn normalize_grid(table: &mut BlockNode) {
         })
         .max()
         .unwrap_or(0);
-    for c in &mut table.children {
-        if let Child::Block(row) = c
-            && row.node_type == NodeType::TableRow
-        {
-            let mut count = row
-                .children
-                .iter()
-                .filter(|cc| cc.as_child_type() == NodeType::TableCell)
-                .count();
-            while count < width {
-                let cell = scaffold_block(NodeType::TableCell, count, row.id);
-                row.children.push(Child::Block(cell));
-                count += 1;
-            }
+    for slot in 0..table.children.len() {
+        let Some(RawChild::Block(mut row)) = table.children.get(slot).cloned() else {
+            continue;
+        };
+        if row.node_type != NodeType::TableRow {
+            continue;
         }
+        let mut count = row
+            .children
+            .iter()
+            .filter(|cc| cc.as_child_type() == NodeType::TableCell)
+            .count();
+        if count >= width {
+            continue;
+        }
+        while count < width {
+            let cell = scaffold_block(NodeType::TableCell, count, row.id);
+            row.children.push(RawChild::Block(cell));
+            count += 1;
+        }
+        table.children[slot] = RawChild::Block(row);
     }
 }
 
-fn scaffold_block(role: NodeType, slot: usize, parent: Dot) -> BlockNode {
+fn scaffold_block(role: NodeType, slot: usize, parent: Dot) -> RawNode {
     let id = synthetic_id(parent, slot, role);
     let mut out = Vec::new();
     match_content(&role.spec().content, &mut VecDeque::new(), id, &mut out);
-    BlockNode {
+    RawNode {
         id,
         node_type: role,
         children: out,
@@ -164,7 +178,7 @@ fn first_type(e: &ContentExpr) -> NodeType {
     }
 }
 
-fn drop_context_invalid_here(node: &mut BlockNode, path: &[NodeType]) {
+fn drop_context_invalid_here(node: &mut RawNode, path: &[NodeType]) {
     node.children.retain(|c| {
         let t = c.as_child_type();
         let full: Vec<NodeType> = path.iter().copied().chain(std::iter::once(t)).collect();
@@ -173,25 +187,25 @@ fn drop_context_invalid_here(node: &mut BlockNode, path: &[NodeType]) {
     });
 }
 
-fn fix_roots(tree: &mut BlockTree) {
+fn fix_roots(tree: &mut RawTree) {
     let mut tops = std::mem::take(&mut tree.roots);
     match tops.iter().position(|r| r.node_type == NodeType::Root) {
         Some(i) => {
             let mut root = tops.remove(i);
-            root.children.extend(tops.into_iter().map(Child::Block));
+            root.children.extend(tops.into_iter().map(RawChild::Block));
             tree.roots = vec![root];
         }
         None => {
-            tree.roots = vec![BlockNode {
+            tree.roots = vec![RawNode {
                 id: Dot::ROOT,
                 node_type: NodeType::Root,
-                children: tops.into_iter().map(Child::Block).collect(),
+                children: tops.into_iter().map(RawChild::Block).collect(),
             }];
         }
     }
 }
 
-pub fn normalize(mut tree: BlockTree) -> BlockTree {
+pub fn normalize(mut tree: RawTree) -> RawTree {
     fix_roots(&mut tree);
     for r in &mut tree.roots {
         normalize_node(r, &mut Vec::new());
@@ -199,13 +213,53 @@ pub fn normalize(mut tree: BlockTree) -> BlockTree {
     tree
 }
 
-fn normalize_node(node: &mut BlockNode, path: &mut Vec<NodeType>) {
+/// Normalize a single block's subtree in place under the given ancestor types,
+/// applying only that block's (and descendants') content rules — NOT the
+/// document Root rules. For localized re-projection of one top-level block.
+pub fn normalize_subtree(node: &mut RawNode, ancestors: &[NodeType]) {
+    let mut path = ancestors.to_vec();
+    normalize_node(node, &mut path);
+}
+
+/// Apply only `node`'s own schema content rule (repairing its direct children),
+/// assuming its children are already individually normalized — no deep
+/// recursion. Lets a caller re-establish a container's content invariant (e.g.
+/// the Root's required trailing paragraph) by deferring to the schema rather
+/// than hardcoding it. Newly scaffolded children are themselves shaped by
+/// `match_content`, so they need no further normalization here.
+pub fn normalize_content_shallow(node: &mut RawNode, ancestors: &[NodeType]) {
+    let mut path = ancestors.to_vec();
     path.push(node.node_type);
-    for c in &mut node.children {
-        if let Child::Block(b) = c {
+    let mut passes = 0;
+    loop {
+        passes += 1;
+        debug_assert!(passes <= 100, "normalize_content_shallow did not converge");
+        drop_context_invalid_here(node, &path);
+        let types: Vec<NodeType> = node.children.iter().map(|c| c.as_child_type()).collect();
+        if node.node_type.spec().content.matches_sequence(&types) {
+            break;
+        } else if fixed_slot_roles(&node.node_type.spec().content).is_some() {
+            reshape_fixed_slots(node);
+        } else {
+            repair_general(node);
+        }
+    }
+    path.pop();
+}
+
+/// Recurse `normalize_node` into each direct block child, writing the normalized
+/// child back.
+fn recurse_block_children(children: &mut [RawChild], path: &mut Vec<NodeType>) {
+    for c in children.iter_mut() {
+        if let RawChild::Block(b) = c {
             normalize_node(b, path);
         }
     }
+}
+
+fn normalize_node(node: &mut RawNode, path: &mut Vec<NodeType>) {
+    path.push(node.node_type);
+    recurse_block_children(&mut node.children, path);
     let mut passes = 0;
     loop {
         passes += 1;
@@ -219,11 +273,7 @@ fn normalize_node(node: &mut BlockNode, path: &mut Vec<NodeType>) {
         } else {
             repair_general(node);
         }
-        for c in &mut node.children {
-            if let Child::Block(b) = c {
-                normalize_node(b, path);
-            }
-        }
+        recurse_block_children(&mut node.children, path);
     }
     if node.node_type == NodeType::Table {
         normalize_grid(node);
@@ -236,19 +286,23 @@ mod tests {
     use editor_crdt::Dot;
 
     use super::*;
-    use crate::seq::{AtomLeaf, validate_block_tree};
+    use crate::seq::{AtomLeaf, BlockTree, validate_block_tree as validate_flat};
 
-    fn fold(kids: Vec<(u64, NodeType)>) -> BlockNode {
-        BlockNode {
+    fn valid(t: &RawTree) -> Result<(), crate::SchemaError> {
+        validate_flat(&BlockTree::from_raw(t))
+    }
+
+    fn fold(kids: Vec<(u64, NodeType)>) -> RawNode {
+        RawNode {
             id: Dot::new(1, 0),
             node_type: NodeType::Fold,
             children: kids
                 .into_iter()
                 .map(|(i, t)| {
-                    Child::Block(BlockNode {
+                    RawChild::Block(RawNode {
                         id: Dot::new(1, i),
                         node_type: t,
-                        children: vec![],
+                        children: vec![].into(),
                     })
                 })
                 .collect(),
@@ -267,11 +321,11 @@ mod tests {
         assert_eq!(node.children.len(), 2);
         assert!(matches!(
             &node.children[0],
-            Child::Block(b) if b.node_type == NodeType::FoldTitle && b.id == Dot::new(1, 2)
+            RawChild::Block(b) if b.node_type == NodeType::FoldTitle && b.id == Dot::new(1, 2)
         ));
         assert!(matches!(
             &node.children[1],
-            Child::Block(b) if b.node_type == NodeType::FoldContent && b.id == Dot::new(1, 1)
+            RawChild::Block(b) if b.node_type == NodeType::FoldContent && b.id == Dot::new(1, 1)
         ));
     }
 
@@ -283,24 +337,25 @@ mod tests {
         assert_eq!(node.children.len(), 2);
         assert!(matches!(
             &node.children[0],
-            Child::Block(b) if b.node_type == NodeType::FoldTitle && b.id.is_synthetic()
+            RawChild::Block(b) if b.node_type == NodeType::FoldTitle && b.id.is_synthetic()
         ));
         assert!(matches!(
             &node.children[1],
-            Child::Block(b) if b.node_type == NodeType::FoldContent
+            RawChild::Block(b) if b.node_type == NodeType::FoldContent
         ));
     }
 
     #[test]
     fn repair_root_fills_trailing_paragraph() {
-        let mut node = BlockNode {
+        let mut node = RawNode {
             id: Dot::ROOT,
             node_type: NodeType::Root,
-            children: vec![Child::Block(BlockNode {
+            children: vec![RawChild::Block(RawNode {
                 id: Dot::new(1, 1),
                 node_type: NodeType::Blockquote,
-                children: vec![],
-            })],
+                children: vec![].into(),
+            })]
+            .into(),
         };
         repair_general(&mut node);
 
@@ -308,29 +363,30 @@ mod tests {
         assert_eq!(node.children[0].as_child_type(), NodeType::Blockquote);
         assert!(matches!(
             &node.children[1],
-            Child::Block(b) if b.node_type == NodeType::Paragraph && b.id.is_synthetic()
+            RawChild::Block(b) if b.node_type == NodeType::Paragraph && b.id.is_synthetic()
         ));
     }
 
     #[test]
     fn repair_drops_extra_leaf() {
-        let mut node = BlockNode {
+        let mut node = RawNode {
             id: Dot::new(1, 0),
             node_type: NodeType::Paragraph,
             children: vec![
-                Child::Leaf {
+                RawChild::Leaf {
                     id: Dot::new(1, 1),
                     item: super::super::SeqItem::Char('x'),
                 },
-                Child::Leaf {
+                RawChild::Leaf {
                     id: Dot::new(1, 2),
                     item: super::super::SeqItem::Atom(AtomLeaf::PageBreak),
                 },
-                Child::Leaf {
+                RawChild::Leaf {
                     id: Dot::new(1, 3),
                     item: super::super::SeqItem::Atom(AtomLeaf::PageBreak),
                 },
-            ],
+            ]
+            .into(),
         };
         repair_general(&mut node);
 
@@ -339,31 +395,33 @@ mod tests {
         assert_eq!(node.children[1].as_child_type(), NodeType::PageBreak);
         assert!(matches!(
             &node.children[1],
-            Child::Leaf { id, .. } if *id == Dot::new(1, 2)
+            RawChild::Leaf { id, .. } if *id == Dot::new(1, 2)
         ));
     }
 
     #[test]
     fn repair_promotes_surplus_block_children() {
-        let mut node = BlockNode {
+        let mut node = RawNode {
             id: Dot::ROOT,
             node_type: NodeType::Root,
-            children: vec![Child::Block(BlockNode {
+            children: vec![RawChild::Block(RawNode {
                 id: Dot::new(1, 1),
                 node_type: NodeType::ListItem,
-                children: vec![Child::Block(BlockNode {
+                children: vec![RawChild::Block(RawNode {
                     id: Dot::new(1, 2),
                     node_type: NodeType::Paragraph,
-                    children: vec![],
-                })],
-            })],
+                    children: vec![].into(),
+                })]
+                .into(),
+            })]
+            .into(),
         };
         repair_general(&mut node);
 
         assert!(
             node.children
                 .iter()
-                .any(|c| matches!(c, Child::Block(b) if b.id == Dot::new(1, 2))),
+                .any(|c| matches!(c, RawChild::Block(b) if b.id == Dot::new(1, 2))),
             "promoted Paragraph(1,2) must survive"
         );
         assert!(
@@ -374,32 +432,34 @@ mod tests {
         );
         assert!(matches!(
             node.children.last(),
-            Some(Child::Block(b)) if b.id.is_synthetic() && b.node_type == NodeType::Paragraph
+            Some(RawChild::Block(b)) if b.id.is_synthetic() && b.node_type == NodeType::Paragraph
         ));
     }
 
     #[test]
     fn drop_context_invalid_drops_pagebreak() {
-        let tree = BlockTree {
-            roots: vec![BlockNode {
+        let tree = RawTree {
+            roots: vec![RawNode {
                 id: Dot::new(1, 0),
                 node_type: NodeType::Blockquote,
-                children: vec![Child::Block(BlockNode {
+                children: vec![RawChild::Block(RawNode {
                     id: Dot::new(1, 1),
                     node_type: NodeType::Paragraph,
-                    children: vec![Child::Leaf {
+                    children: vec![RawChild::Leaf {
                         id: Dot::new(1, 2),
                         item: super::super::SeqItem::Atom(AtomLeaf::PageBreak),
-                    }],
-                })],
+                    }]
+                    .into(),
+                })]
+                .into(),
             }],
         };
         let out = normalize(tree);
-        let has_pagebreak = |n: &BlockNode| {
-            fn walk(n: &BlockNode) -> bool {
+        let has_pagebreak = |n: &RawNode| {
+            fn walk(n: &RawNode) -> bool {
                 n.children.iter().any(|c| match c {
-                    Child::Leaf { item, .. } => item.as_child_type() == NodeType::PageBreak,
-                    Child::Block(b) => walk(b),
+                    RawChild::Leaf { item, .. } => item.as_child_type() == NodeType::PageBreak,
+                    RawChild::Block(b) => walk(b),
                 })
             }
             walk(n)
@@ -409,11 +469,11 @@ mod tests {
 
     #[test]
     fn fix_roots_wraps_non_root_top() {
-        let tree = BlockTree {
-            roots: vec![BlockNode {
+        let tree = RawTree {
+            roots: vec![RawNode {
                 id: Dot::new(1, 0),
                 node_type: NodeType::Paragraph,
-                children: vec![],
+                children: vec![].into(),
             }],
         };
         let out = normalize(tree);
@@ -425,89 +485,91 @@ mod tests {
                 .iter()
                 .any(|c| c.as_child_type() == NodeType::Paragraph)
         );
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     #[test]
     fn normalize_messy_sample_is_valid_and_idempotent() {
-        let leaf = |i: u64, item: super::super::SeqItem| Child::Leaf {
+        let leaf = |i: u64, item: super::super::SeqItem| RawChild::Leaf {
             id: Dot::new(1, i),
             item,
         };
-        let blk = |i: u64, t: NodeType, children: Vec<Child>| {
-            Child::Block(BlockNode {
+        let blk = |i: u64, t: NodeType, children: Vec<RawChild>| {
+            RawChild::Block(RawNode {
                 id: Dot::new(1, i),
                 node_type: t,
-                children,
+                children: children.into(),
             })
         };
-        let tree = BlockTree {
+        let tree = RawTree {
             roots: vec![
-                BlockNode {
+                RawNode {
                     id: Dot::new(1, 1),
                     node_type: NodeType::Paragraph,
-                    children: vec![leaf(2, super::super::SeqItem::Char('a'))],
+                    children: vec![leaf(2, super::super::SeqItem::Char('a'))].into(),
                 },
-                BlockNode {
+                RawNode {
                     id: Dot::new(1, 3),
                     node_type: NodeType::Fold,
-                    children: vec![],
+                    children: vec![].into(),
                 },
-                BlockNode {
+                RawNode {
                     id: Dot::new(1, 4),
                     node_type: NodeType::Fold,
                     children: vec![
                         blk(5, NodeType::FoldContent, vec![]),
                         blk(6, NodeType::FoldTitle, vec![]),
-                    ],
+                    ]
+                    .into(),
                 },
-                BlockNode {
+                RawNode {
                     id: Dot::new(1, 7),
                     node_type: NodeType::Blockquote,
                     children: vec![blk(
                         8,
                         NodeType::Paragraph,
                         vec![leaf(9, super::super::SeqItem::Atom(AtomLeaf::PageBreak))],
-                    )],
+                    )]
+                    .into(),
                 },
-                BlockNode {
+                RawNode {
                     id: Dot::new(1, 10),
                     node_type: NodeType::BulletList,
-                    children: vec![leaf(11, super::super::SeqItem::Char('z'))],
+                    children: vec![leaf(11, super::super::SeqItem::Char('z'))].into(),
                 },
             ],
         };
-        assert!(validate_block_tree(&normalize(tree.clone())).is_ok());
+        assert!(valid(&normalize(tree.clone())).is_ok());
         assert_eq!(normalize(normalize(tree.clone())), normalize(tree));
     }
 
-    fn tcell(i: u64) -> Child {
-        Child::Block(BlockNode {
+    fn tcell(i: u64) -> RawChild {
+        RawChild::Block(RawNode {
             id: Dot::new(2, i),
             node_type: NodeType::TableCell,
-            children: vec![],
+            children: vec![].into(),
         })
     }
 
-    fn trow(id: u64, cells: Vec<Child>) -> Child {
-        Child::Block(BlockNode {
+    fn trow(id: u64, cells: Vec<RawChild>) -> RawChild {
+        RawChild::Block(RawNode {
             id: Dot::new(2, id),
             node_type: NodeType::TableRow,
-            children: cells,
+            children: cells.into(),
         })
     }
 
-    fn ttable(rows: Vec<Child>) -> BlockNode {
-        BlockNode {
+    fn ttable(rows: Vec<RawChild>) -> RawNode {
+        RawNode {
             id: Dot::new(2, 0),
             node_type: NodeType::Table,
-            children: rows,
+            children: rows.into(),
         }
     }
 
-    fn cell_count(row: &Child) -> usize {
+    fn cell_count(row: &RawChild) -> usize {
         match row {
-            Child::Block(b) => b
+            RawChild::Block(b) => b
                 .children
                 .iter()
                 .filter(|c| c.as_child_type() == NodeType::TableCell)
@@ -546,16 +608,16 @@ mod tests {
         ]);
         normalize_grid(&mut t);
         let r0 = match &t.children[0] {
-            Child::Block(b) => b,
+            RawChild::Block(b) => b,
             _ => panic!("row0 not block"),
         };
         assert_eq!(r0.children.len(), 3);
         let id1 = match &r0.children[1] {
-            Child::Block(b) => b.id,
+            RawChild::Block(b) => b.id,
             _ => panic!(),
         };
         let id2 = match &r0.children[2] {
-            Child::Block(b) => b.id,
+            RawChild::Block(b) => b.id,
             _ => panic!(),
         };
         assert_eq!(id1, synthetic_id(Dot::new(2, 10), 1, NodeType::TableCell));
@@ -572,22 +634,23 @@ mod tests {
         assert!(t.children.is_empty());
     }
 
-    fn root_with_table(rows: Vec<Child>) -> BlockTree {
-        BlockTree {
-            roots: vec![BlockNode {
+    fn root_with_table(rows: Vec<RawChild>) -> RawTree {
+        RawTree {
+            roots: vec![RawNode {
                 id: Dot::new(2, 100),
                 node_type: NodeType::Root,
-                children: vec![Child::Block(BlockNode {
+                children: vec![RawChild::Block(RawNode {
                     id: Dot::new(2, 0),
                     node_type: NodeType::Table,
-                    children: rows,
-                })],
+                    children: rows.into(),
+                })]
+                .into(),
             }],
         }
     }
 
-    fn table_widths(tree: &BlockTree) -> Vec<usize> {
-        fn find_table(n: &BlockNode) -> Option<&BlockNode> {
+    fn table_widths(tree: &RawTree) -> Vec<usize> {
+        fn find_table(n: &RawNode) -> Option<&RawNode> {
             if n.node_type == NodeType::Table {
                 return Some(n);
             }
@@ -598,7 +661,7 @@ mod tests {
             .children
             .iter()
             .filter_map(|c| match c {
-                Child::Block(r) if r.node_type == NodeType::TableRow => Some(
+                RawChild::Block(r) if r.node_type == NodeType::TableRow => Some(
                     r.children
                         .iter()
                         .filter(|cc| cc.as_child_type() == NodeType::TableCell)
@@ -609,8 +672,8 @@ mod tests {
             .collect()
     }
 
-    fn grid_cell_ids(tree: &BlockTree) -> Vec<Vec<Dot>> {
-        fn find_table(n: &BlockNode) -> Option<&BlockNode> {
+    fn grid_cell_ids(tree: &RawTree) -> Vec<Vec<Dot>> {
+        fn find_table(n: &RawNode) -> Option<&RawNode> {
             if n.node_type == NodeType::Table {
                 return Some(n);
             }
@@ -621,11 +684,11 @@ mod tests {
             .children
             .iter()
             .filter_map(|c| match c {
-                Child::Block(r) if r.node_type == NodeType::TableRow => Some(
+                RawChild::Block(r) if r.node_type == NodeType::TableRow => Some(
                     r.children
                         .iter()
                         .filter_map(|cc| match cc {
-                            Child::Block(b) if b.node_type == NodeType::TableCell => Some(b.id),
+                            RawChild::Block(b) if b.node_type == NodeType::TableCell => Some(b.id),
                             _ => None,
                         })
                         .collect(),
@@ -644,7 +707,7 @@ mod tests {
         ]);
         let out = normalize(t);
         assert_eq!(table_widths(&out), vec![3, 3, 3]);
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     #[test]
@@ -656,7 +719,7 @@ mod tests {
         ]);
         let out = normalize(t);
         assert_eq!(table_widths(&out), vec![4, 4, 4]);
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     #[test]
@@ -664,7 +727,7 @@ mod tests {
         let t = root_with_table(vec![trow(10, vec![tcell(11), tcell(12)]), trow(20, vec![])]);
         let out = normalize(t);
         assert_eq!(table_widths(&out), vec![2, 2]);
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     #[test]
@@ -682,7 +745,7 @@ mod tests {
                 vec![Dot::new(2, 11), Dot::new(2, 12)],
             ]
         );
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     #[test]
@@ -694,7 +757,7 @@ mod tests {
         assert!(widths.iter().all(|&w| w >= 1), "각 행 ≥1 셀");
         let first = widths[0];
         assert!(widths.iter().all(|&w| w == first), "직사각형");
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     #[test]
@@ -707,7 +770,7 @@ mod tests {
         let out = normalize(t);
         assert_eq!(table_widths(&out), vec![4, 4]);
         assert_eq!(grid_cell_ids(&out), before);
-        assert!(validate_block_tree(&out).is_ok());
+        assert!(valid(&out).is_ok());
     }
 
     mod proptests {
@@ -757,25 +820,25 @@ mod tests {
             })
         }
 
-        fn arb_any_block_tree(depth: u32) -> impl Strategy<Value = BlockTree> {
+        fn arb_any_block_tree(depth: u32) -> impl Strategy<Value = RawTree> {
             let block = arb_block(depth)
                 .prop_filter("roots는 블록만", |s| matches!(s, Shape::Block { .. }));
             prop::collection::vec(block, 0..4).prop_map(|roots| {
                 let mut next = 0u64;
-                BlockTree {
+                RawTree {
                     roots: roots.iter().map(|s| build(s, &mut next)).collect(),
                 }
             })
         }
 
-        fn build(s: &Shape, next: &mut u64) -> BlockNode {
+        fn build(s: &Shape, next: &mut u64) -> RawNode {
             let id = Dot::new(1, *next);
             *next += 1;
             match s {
                 Shape::Block {
                     node_type,
                     children,
-                } => BlockNode {
+                } => RawNode {
                     id,
                     node_type: *node_type,
                     children: children.iter().map(|c| build_child(c, next)).collect(),
@@ -784,17 +847,17 @@ mod tests {
             }
         }
 
-        fn build_child(s: &Shape, next: &mut u64) -> Child {
+        fn build_child(s: &Shape, next: &mut u64) -> RawChild {
             match s {
                 Shape::Leaf(item) => {
                     let id = Dot::new(1, *next);
                     *next += 1;
-                    Child::Leaf {
+                    RawChild::Leaf {
                         id,
                         item: item.clone(),
                     }
                 }
-                Shape::Block { .. } => Child::Block(build(s, next)),
+                Shape::Block { .. } => RawChild::Block(build(s, next)),
             }
         }
 
@@ -802,41 +865,42 @@ mod tests {
             #[test]
             fn normalize_makes_any_tree_valid(tree in arb_any_block_tree(6)) {
                 let a = normalize(tree.clone());
-                prop_assert!(validate_block_tree(&a).is_ok());
+                prop_assert!(valid(&a).is_ok());
                 prop_assert_eq!(normalize(tree), a.clone());
                 prop_assert_eq!(normalize(a.clone()), a);
             }
         }
 
-        fn tcell(i: u64) -> Child {
-            Child::Block(BlockNode {
+        fn tcell(i: u64) -> RawChild {
+            RawChild::Block(RawNode {
                 id: Dot::new(2, i),
                 node_type: NodeType::TableCell,
-                children: vec![],
+                children: vec![].into(),
             })
         }
-        fn trow(id: u64, cells: Vec<Child>) -> Child {
-            Child::Block(BlockNode {
+        fn trow(id: u64, cells: Vec<RawChild>) -> RawChild {
+            RawChild::Block(RawNode {
                 id: Dot::new(2, id),
                 node_type: NodeType::TableRow,
-                children: cells,
+                children: cells.into(),
             })
         }
-        fn root_with_table(rows: Vec<Child>) -> BlockTree {
-            BlockTree {
-                roots: vec![BlockNode {
+        fn root_with_table(rows: Vec<RawChild>) -> RawTree {
+            RawTree {
+                roots: vec![RawNode {
                     id: Dot::new(2, 100),
                     node_type: NodeType::Root,
-                    children: vec![Child::Block(BlockNode {
+                    children: vec![RawChild::Block(RawNode {
                         id: Dot::new(2, 0),
                         node_type: NodeType::Table,
-                        children: rows,
-                    })],
+                        children: rows.into(),
+                    })]
+                    .into(),
                 }],
             }
         }
-        fn table_widths(tree: &BlockTree) -> Vec<usize> {
-            fn find_table(n: &BlockNode) -> Option<&BlockNode> {
+        fn table_widths(tree: &RawTree) -> Vec<usize> {
+            fn find_table(n: &RawNode) -> Option<&RawNode> {
                 if n.node_type == NodeType::Table {
                     return Some(n);
                 }
@@ -847,7 +911,7 @@ mod tests {
                 .children
                 .iter()
                 .filter_map(|c| match c {
-                    Child::Block(r) if r.node_type == NodeType::TableRow => Some(
+                    RawChild::Block(r) if r.node_type == NodeType::TableRow => Some(
                         r.children
                             .iter()
                             .filter(|cc| cc.as_child_type() == NodeType::TableCell)
@@ -858,15 +922,15 @@ mod tests {
                 .collect()
         }
 
-        fn arb_table() -> impl Strategy<Value = BlockTree> {
+        fn arb_table() -> impl Strategy<Value = RawTree> {
             prop::collection::vec(0usize..5, 1..5).prop_map(|row_sizes| {
                 let mut next = 10u64;
-                let rows: Vec<Child> = row_sizes
+                let rows: Vec<RawChild> = row_sizes
                     .into_iter()
                     .map(|n| {
                         let row_id = next;
                         next += 1;
-                        let cells: Vec<Child> = (0..n)
+                        let cells: Vec<RawChild> = (0..n)
                             .map(|_| {
                                 let c = tcell(next);
                                 next += 1;
@@ -888,7 +952,7 @@ mod tests {
                 if let Some(&first) = widths.first() {
                     prop_assert!(widths.iter().all(|&w| w == first), "ragged: {widths:?}");
                 }
-                prop_assert!(validate_block_tree(&out).is_ok());
+                prop_assert!(valid(&out).is_ok());
             }
 
             #[test]
@@ -901,12 +965,12 @@ mod tests {
             #[test]
             fn normalize_width_matches_max_reference(row_sizes in prop::collection::vec(0usize..5, 1..5)) {
                 let mut next = 10u64;
-                let rows: Vec<Child> = row_sizes
+                let rows: Vec<RawChild> = row_sizes
                     .iter()
                     .map(|&n| {
                         let row_id = next;
                         next += 1;
-                        let cells: Vec<Child> = (0..n).map(|_| { let c = tcell(next); next += 1; c }).collect();
+                        let cells: Vec<RawChild> = (0..n).map(|_| { let c = tcell(next); next += 1; c }).collect();
                         trow(row_id, cells)
                     })
                     .collect();

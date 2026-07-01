@@ -1,11 +1,18 @@
 import { TypieError } from '@typie/lib/errors';
 import { eq } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
-import { redis } from '#/cache.ts';
 import { db, Documents, DocumentStates, Entities, first, firstOrThrow, TableCode, validateDbId } from '#/db/index.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { readMergedGraph } from '#/utils/changeset.ts';
+import {
+  appendBundle,
+  getCollectedSeq,
+  getDurableHeads,
+  getLiveHeads,
+  readMergedGraph,
+  readStreamSince,
+  setLiveHeads,
+} from '#/utils/changeset.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
@@ -17,13 +24,32 @@ import { Document, DocumentState } from '../objects.ts';
 
 DocumentState.implement({
   fields: (t) => ({
+    // The persisted snapshot as-is — NO folding of the un-collected stream tail.
+    // Folding it here meant an `O(tail × N)` `host.apply` chain (each call
+    // re-decodes the whole multi-MB graph) that ballooned to tens of seconds
+    // whenever collect fell behind. The client loads this snapshot and catches
+    // the tail up with a single `O(tail)` seq-pull instead.
     graph: t.field({
       type: 'Binary',
-      resolve: (self) => readMergedGraph(self.documentId),
+      resolve: (self) => self.graph,
+    }),
+    // Cursor the snapshot corresponds to: the client resumes incremental sync
+    // here and pulls only what the snapshot is missing. Empty ⇒ start from the
+    // stream origin.
+    seq: t.field({
+      type: 'String',
+      resolve: (self) => getCollectedSeq(self.documentId).then((seq) => seq ?? ''),
+    }),
+    // Frontier of the snapshot (matches `graph`). The client seeds its pusher
+    // with this, then its first pull advances it to the live frontier. O(1) read;
+    // the wasm fallback runs only before the first collect.
+    heads: t.field({
+      type: 'Binary',
+      resolve: async (self) => (await getDurableHeads(self.documentId)) ?? (await wasm.use((host) => host.heads(self.graph))),
     }),
     durableHeads: t.field({
       type: 'Binary',
-      resolve: (self) => wasm.use((host) => host.heads(self.graph)),
+      resolve: async (self) => (await getDurableHeads(self.documentId)) ?? (await wasm.use((host) => host.heads(self.graph))),
     }),
     json: t.expose('json', { type: 'JSON' }),
     text: t.exposeString('text'),
@@ -75,34 +101,30 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_changeset_payload' });
       }
 
+      let seq: string | null = null;
       if (opsCount > 0) {
-        await redis.lpush(
-          `document:changesets:pending:${input.documentId}`,
-          JSON.stringify({
-            userId: ctx.session.userId,
-            deviceId: ctx.session.deviceId,
-            changesets: input.changesets.toBase64(),
-          }),
-        );
+        seq = await appendBundle(input.documentId, input.changesets, ctx.session.userId, ctx.session.deviceId);
       }
 
-      // Compute heads after lpush so the merged graph reflects this push.
-      // Receivers of the broadcast see heads that include the just-pushed bundle.
+      // Compute the accurate live frontier once (a pusher needs it to avoid
+      // re-broadcasting peers' changesets) and cache it so the read paths (pull /
+      // catch-up / load) stay O(1). `durableHeads` is a cached read; only this
+      // merged-heads build touches wasm, and it is the write path, not pull.
       const persistedState = await db
         .select({ graph: DocumentStates.graph })
         .from(DocumentStates)
         .where(eq(DocumentStates.documentId, input.documentId))
         .then(firstOrThrow);
       const graph = await readMergedGraph(input.documentId, persistedState.graph);
-      const { heads, durableHeads } = await wasm.use((host) => ({
-        heads: host.heads(graph),
-        durableHeads: host.heads(persistedState.graph),
-      }));
+      const heads = await wasm.use((host) => host.heads(graph));
+      await setLiveHeads(input.documentId, heads);
+      const durableHeads = (await getDurableHeads(input.documentId)) ?? (await wasm.use((host) => host.heads(persistedState.graph)));
 
-      if (opsCount > 0) {
+      if (opsCount > 0 && seq) {
         pubsub.publish('document:changesets', input.documentId, {
           target: `!${input.clientId}`,
-          changesets: input.changesets.toBase64(),
+          seq,
+          changesets: [input.changesets.toBase64()],
           heads: heads.toBase64(),
           durableHeads: durableHeads.toBase64(),
         });
@@ -117,14 +139,16 @@ builder.mutationFields((t) => ({
   pullDocumentChangesets: t.withAuth({ session: true }).fieldWithInput({
     type: builder.simpleObject('PullDocumentChangesetsPayload', {
       fields: (t) => ({
-        changesets: t.field({ type: 'Binary' }),
+        changesets: t.field({ type: ['Binary'] }),
+        seq: t.field({ type: 'String' }),
         heads: t.field({ type: 'Binary' }),
         durableHeads: t.field({ type: 'Binary' }),
+        needsReload: t.field({ type: 'Boolean' }),
       }),
     }),
     input: {
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-      heads: t.input.field({ type: 'Binary' }),
+      sinceSeq: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const docEntity = await db
@@ -136,20 +160,27 @@ builder.mutationFields((t) => ({
 
       await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
 
-      const persistedState = await db
-        .select({ graph: DocumentStates.graph })
-        .from(DocumentStates)
-        .where(eq(DocumentStates.documentId, input.documentId))
-        .then(firstOrThrow);
-      const graph = await readMergedGraph(input.documentId, persistedState.graph);
+      // O(missing) tail read from the shared stream — no graph rebuild.
+      const { entries, tip, truncated } = await readStreamSince(input.documentId, input.sinceSeq ?? null);
 
-      const { changesets, heads, durableHeads } = await wasm.use((host) => ({
-        changesets: host.missing_for(graph, input.heads),
-        heads: host.heads(graph),
-        durableHeads: host.heads(persistedState.graph),
-      }));
+      const [live, durable] = await Promise.all([getLiveHeads(input.documentId), getDurableHeads(input.documentId)]);
+      const durableHeads = durable ?? new Uint8Array();
+      const heads = live ?? durableHeads;
 
-      return { changesets, heads, durableHeads };
+      if (truncated) {
+        // The client's cursor fell out of the retained window: it must reload
+        // the full document (and restart sync from the fresh seq) rather than
+        // incrementally catch up on entries that were already trimmed.
+        return { changesets: [], seq: input.sinceSeq ?? '', heads, durableHeads, needsReload: true };
+      }
+
+      return {
+        changesets: entries.map((e) => e.changeset),
+        seq: tip ?? input.sinceSeq ?? '',
+        heads,
+        durableHeads,
+        needsReload: false,
+      };
     },
   }),
 }));
@@ -162,7 +193,8 @@ builder.subscriptionFields((t) => ({
   documentChangesetsUpdated: t.withAuth({ session: true }).field({
     type: builder.simpleObject('DocumentChangesetsUpdatedEvent', {
       fields: (t) => ({
-        changesets: t.field({ type: 'Binary' }),
+        changesets: t.field({ type: ['Binary'] }),
+        seq: t.field({ type: 'String' }),
         heads: t.field({ type: 'Binary' }),
         durableHeads: t.field({ type: 'Binary' }),
       }),
@@ -170,7 +202,7 @@ builder.subscriptionFields((t) => ({
     args: {
       documentId: t.arg.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
       clientId: t.arg.string(),
-      heads: t.arg({ type: 'Binary' }),
+      sinceSeq: t.arg.string({ required: false }),
     },
     subscribe: async (_, args, ctx) => {
       const docEntity = await db
@@ -191,7 +223,7 @@ builder.subscriptionFields((t) => ({
         throw new TypieError({ code: 'document_state_not_found' });
       }
 
-      type Event = { target: string; changesets: Uint8Array; heads: Uint8Array; durableHeads: Uint8Array };
+      type Event = { target: string; seq: string; changesets: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array };
 
       const repeater = new Repeater<Event>(async (push, stop) => {
         const liveBuffer: Event[] = [];
@@ -203,7 +235,8 @@ builder.subscriptionFields((t) => ({
           for await (const event of liveStream) {
             const decoded: Event = {
               target: event.target,
-              changesets: Uint8Array.fromBase64(event.changesets),
+              seq: event.seq,
+              changesets: event.changesets.map((c) => Uint8Array.fromBase64(c)),
               heads: Uint8Array.fromBase64(event.heads),
               durableHeads: Uint8Array.fromBase64(event.durableHeads),
             };
@@ -215,18 +248,19 @@ builder.subscriptionFields((t) => ({
           }
         })();
 
-        const persistedState = await db
-          .select({ graph: DocumentStates.graph })
-          .from(DocumentStates)
-          .where(eq(DocumentStates.documentId, args.documentId))
-          .then(firstOrThrow);
-        const graph = await readMergedGraph(args.documentId, persistedState.graph);
-        const { changesets, heads, durableHeads } = await wasm.use((host) => ({
-          changesets: host.missing_for(graph, args.heads),
-          heads: host.heads(graph),
-          durableHeads: host.heads(persistedState.graph),
-        }));
-        await push({ target: '*', changesets, heads, durableHeads });
+        // Catch-up is an O(missing) tail read from the client's cursor — no
+        // graph rebuild. Beyond the retained window the client full-reloads
+        // (its poll's `needsReload`), so an empty catch-up here is safe.
+        const { entries, tip, truncated } = await readStreamSince(args.documentId, args.sinceSeq ?? null);
+        const [live, durable] = await Promise.all([getLiveHeads(args.documentId), getDurableHeads(args.documentId)]);
+        const durableHeads = durable ?? new Uint8Array();
+        await push({
+          target: '*',
+          seq: truncated ? '' : (tip ?? args.sinceSeq ?? ''),
+          changesets: truncated ? [] : entries.map((e) => e.changeset),
+          heads: live ?? durableHeads,
+          durableHeads,
+        });
 
         catchupComplete = true;
         for (const event of liveBuffer) {
@@ -246,6 +280,6 @@ builder.subscriptionFields((t) => ({
         }),
       );
     },
-    resolve: ({ changesets, heads, durableHeads }) => ({ changesets, heads, durableHeads }),
+    resolve: ({ changesets, seq, heads, durableHeads }) => ({ changesets, seq, heads, durableHeads }),
   }),
 }));

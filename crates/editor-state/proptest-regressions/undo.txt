@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0e0778076151a23c7d4bacee0dae9d43015e8b3100c745c287cda65299e1b00e # shrinks to cmds = [Type { on_a: true, pos: 0, ch: 0 }, Sync { into_a: false }, Del { on_a: true, pos: 0, len: 0 }, Del { on_a: false, pos: 0, len: 0 }, Undo { on_a: false }]

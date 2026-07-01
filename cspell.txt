@@ -107,6 +107,7 @@ meili
 meilisearch
 memcpy
 metas
+minid
 monzo
 movflags
 msearch
@@ -205,6 +206,7 @@ unclipped
 UNDISPATCHED
 uniffi
 unplugin
+unpushed
 unresolve
 unstub
 unsubscriber
@@ -220,6 +222,7 @@ wbindgen
 webp
 wonka
 xact
+xadd
 xcarchive
 xcargs
 xcconfig
@@ -231,8 +234,11 @@ xcworkspace
 xexpect
 xexplicit
 xlarge
+xrange
+xrevrange
 xlink
 xsmall
+xtrim
 xxlarge
 zadd
 zcard

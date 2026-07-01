@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::EditOp;
 use hashbrown::HashSet;
@@ -23,7 +25,8 @@ impl<'a> BatchedState<'a> {
         // Capture the prior value (for op-level undo) against the pre-op state,
         // then apply. Seq ops carry no prior, so this is a cheap match.
         let prior = capture_prior(&self.inner.projected, &payload);
-        let op = self.inner.projected.apply(payload)?;
+        let pm = self.inner.projected_mut();
+        let op = pm.apply(payload)?;
         self.emitted.push(RecordedOp {
             op: op.clone(),
             prior,
@@ -51,7 +54,7 @@ impl<'a> BatchedState<'a> {
 impl State {
     pub fn apply(&self, payload: EditOp) -> Result<(Self, Op<EditOp>), StateError> {
         let mut next = self.clone();
-        let op = next.projected.apply(payload)?;
+        let op = next.projected_mut().apply(payload)?;
         Ok((next, op))
     }
 
@@ -59,17 +62,17 @@ impl State {
         &self,
         changeset: Changeset<EditOp>,
     ) -> Result<(Self, Vec<Op<EditOp>>), StateError> {
-        let prev_count = self.projected.graph().changesets().len();
-        let next_projected = self.projected.receive_changeset(changeset.clone())?;
-        let next_count = next_projected.graph().changesets().len();
-        let applied_ops = if next_count > prev_count {
-            changeset.ops
-        } else {
-            Vec::new()
-        };
+        self.receive_remote_changesets(vec![changeset])
+    }
+
+    pub fn receive_remote_changesets(
+        &self,
+        css: Vec<Changeset<EditOp>>,
+    ) -> Result<(Self, Vec<Op<EditOp>>), StateError> {
+        let (next_projected, applied) = self.projected.receive_changesets(css)?;
         let mut next = self.clone();
-        next.projected = next_projected;
-        Ok((next, applied_ops))
+        next.projected = Arc::new(next_projected);
+        Ok((next, applied))
     }
 
     pub fn would_receive_remote_changeset(
@@ -111,7 +114,7 @@ impl State {
         let projected = crate::projected_state::ProjectedState::from_graph(graph)
             .expect("merged graph projects");
         let mut next = self.clone();
-        next.projected = projected;
+        next.projected = Arc::new(projected);
         (next, dropped)
     }
 
@@ -229,8 +232,8 @@ mod tests {
     #[test]
     fn missing_changesets_tolerant_returns_all_unconfirmed_without_actor_filter() {
         let mut authored = State::empty();
-        authored.projected.apply(seq_char(1, 'z')).unwrap();
-        authored.projected.commit();
+        authored.projected_mut().apply(seq_char(1, 'z')).unwrap();
+        authored.projected_mut().commit();
         let empty: HashSet<Dot> = HashSet::new();
         let css = authored.missing_changesets_tolerant(&empty);
         assert!(!css.is_empty(), "unconfirmed local changes are returned");
@@ -239,7 +242,7 @@ mod tests {
     #[test]
     fn receive_changesets_ordered_merges_pending_into_state() {
         let mut src = State::empty();
-        src.projected.commit();
+        src.projected_mut().commit();
         let para = src
             .view()
             .root()
@@ -249,9 +252,9 @@ mod tests {
             .unwrap()
             .dot()
             .unwrap();
-        src.projected.apply(seq_char(1, 'h')).unwrap();
-        src.projected.apply(seq_char(2, 'i')).unwrap();
-        src.projected.commit();
+        src.projected_mut().apply(seq_char(1, 'h')).unwrap();
+        src.projected_mut().apply(seq_char(2, 'i')).unwrap();
+        src.projected_mut().commit();
 
         let base = State::empty();
         let base_heads: HashSet<Dot> = base.projected.graph().current_heads().copied().collect();
@@ -265,8 +268,8 @@ mod tests {
     #[test]
     fn would_receive_is_false_for_already_contained_ops() {
         let mut authored = State::empty();
-        authored.projected.apply(seq_char(1, 'z')).unwrap();
-        authored.projected.commit();
+        authored.projected_mut().apply(seq_char(1, 'z')).unwrap();
+        authored.projected_mut().commit();
         let css = authored.local_changesets_since(&HashSet::new()).unwrap();
         assert!(!css.is_empty());
         for cs in css {

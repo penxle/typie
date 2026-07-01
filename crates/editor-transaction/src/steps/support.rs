@@ -1,7 +1,7 @@
-use editor_crdt::sequence::{Bias as SeqBias, checkout_with_resolver};
+use editor_crdt::sequence::Bias as SeqBias;
 use editor_crdt::{Dot, ListOp, LwwRegOp};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, ChildView, EditOp, Marker, Modifier, ModifierAttrOp, ModifierType,
+    Anchor, AtomLeaf, Bias, Child, EditOp, Marker, Modifier, ModifierAttrOp, ModifierType,
     NodeAttrOp, NodeLwwOp, NodeType, PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree,
     classify,
 };
@@ -10,18 +10,15 @@ use editor_state::{BatchedState, ProjectedState};
 use crate::StepError;
 
 pub(crate) fn block_node_type(ps: &ProjectedState, block: Dot) -> Option<NodeType> {
-    Some(ps.view().node(block)?.node_type())
+    ps.block_node_type(block)
 }
 
 pub(crate) fn children_count(ps: &ProjectedState, block: Dot) -> Option<usize> {
-    Some(ps.view().node(block)?.children().count())
+    ps.child_count(block)
 }
 
 pub(crate) fn child_block_ids(ps: &ProjectedState, block: Dot) -> Vec<Dot> {
-    match ps.view().node(block) {
-        Some(nv) => nv.child_blocks().map(|b| b.id()).collect(),
-        None => Vec::new(),
-    }
+    ps.child_block_dots(block)
 }
 
 /// All children of `block` (chars, atom leaves, and nested blocks) as dots,
@@ -29,16 +26,7 @@ pub(crate) fn child_block_ids(ps: &ProjectedState, block: Dot) -> Vec<Dot> {
 /// the addressing the command layer uses (full child-slot index = offset),
 /// distinct from `child_block_ids` which is blocks-only.
 pub(crate) fn child_elem_ids(ps: &ProjectedState, block: Dot) -> Vec<Dot> {
-    match ps.view().node(block) {
-        Some(nv) => nv
-            .children()
-            .map(|c| match c {
-                ChildView::Leaf(l) => l.dot(),
-                ChildView::Block(b) => b.id(),
-            })
-            .collect(),
-        None => Vec::new(),
-    }
+    ps.child_elem_dots(block)
 }
 
 /// Seq position to insert at a full child-slot index of `block` (blocks + atom
@@ -61,106 +49,56 @@ pub(crate) fn child_seq_insert_pos(
         return seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent));
     }
     let prev = children[index - 1];
-    let dots = match ps.view().node(prev) {
-        Some(_) => subtree_dots(ps, prev).ok_or(StepError::NodeNotFound(prev))?,
-        None => match prev.as_op_dot() {
-            Some(d) => vec![d.dot()],
+    // Insert right after the previous sibling's last sequence element. For a block
+    // sibling that's its subtree's max position — found in `O(depth)`, not by
+    // resolving every dot in the subtree (the per-block-insert cost of a paste).
+    let max = if ps.is_block(prev) {
+        ps.subtree_max_seq_pos(prev)
+            .ok_or(StepError::NodeNotFound(prev))?
+    } else {
+        match prev.as_op_dot() {
+            Some(d) => ps
+                .seq_flat_pos(d.dot())
+                .ok_or(StepError::NodeNotFound(prev))?,
             None => return Err(StepError::NodeNotFound(prev)),
-        },
+        }
     };
-    let max = dots
-        .iter()
-        .filter_map(|&d| ps.seq_flat_pos(d))
-        .max()
-        .ok_or(StepError::NodeNotFound(prev))?;
     Ok(max + 1)
 }
 
 pub(crate) fn parents_chain(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> {
-    let view = ps.view();
-    let chain: Vec<Dot> = view
-        .node(block)?
-        .ancestors()
-        .skip(1)
-        .filter_map(|n| n.dot())
-        .collect();
-    Some(chain.into_iter().rev().collect())
+    ps.is_block(block)
+        .then(|| ps.ancestor_real_dots(block, false))
 }
 
 pub(crate) fn self_inclusive_parents(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> {
-    let view = ps.view();
-    let chain: Vec<Dot> = view
-        .node(block)?
-        .ancestors()
-        .filter_map(|n| n.dot())
-        .collect();
-    Some(chain.into_iter().rev().collect())
+    ps.is_block(block)
+        .then(|| ps.ancestor_real_dots(block, true))
 }
 
 pub(crate) fn seq_insert_pos(ps: &ProjectedState, block: Dot, offset: usize) -> Option<usize> {
     let block_dot = block.as_op_dot();
     if block_dot.is_none() && block != Dot::ROOT {
-        let (_, resolver) = checkout_with_resolver(ps.seq());
-        let view = ps.view();
-        let nv = view.node(block)?;
         if offset == 0 {
-            let first_child = nv.child_at(0)?;
-            let first_child_dot = match first_child {
-                ChildView::Leaf(l) => l.dot(),
-                ChildView::Block(b) => b.dot()?,
-            };
-            return resolver
-                .resolve_boundary(first_child_dot, SeqBias::Before)
-                .map(|b| b.position);
+            let first_child = ps.child_dot_at(block, 0)?;
+            return ps.seq_boundary_pos(first_child, SeqBias::Before);
         } else {
-            let child = nv.child_at(offset - 1)?;
-            let child_dot = match child {
-                ChildView::Leaf(l) => l.dot(),
-                ChildView::Block(b) => b.dot()?,
-            };
-            return resolver
-                .resolve_boundary(child_dot, SeqBias::After)
-                .map(|b| b.position);
+            let child = ps.child_dot_at(block, offset - 1)?;
+            return ps.seq_boundary_pos(child, SeqBias::After);
         }
     }
-    let (_, resolver) = checkout_with_resolver(ps.seq());
     if offset == 0 {
         return match block_dot {
-            Some(d) => resolver
-                .resolve_boundary(d.dot(), SeqBias::After)
-                .map(|b| b.position),
+            Some(d) => ps.seq_boundary_pos(d.dot(), SeqBias::After),
             None => Some(0),
         };
     }
-    let view = ps.view();
-    let child = view.node(block)?.child_at(offset - 1)?;
-    let child_dot = match child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-    resolver
-        .resolve_boundary(child_dot, SeqBias::After)
-        .map(|b| b.position)
+    let child = ps.child_dot_at(block, offset - 1)?;
+    ps.seq_boundary_pos(child, SeqBias::After)
 }
 
 pub(crate) fn subtree_dots(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> {
-    let view = ps.view();
-    let nv = view.node(block)?;
-    let mut dots = Vec::new();
-    if let Some(d) = nv.dot() {
-        dots.push(d);
-    }
-    for c in nv.descendants() {
-        match c {
-            ChildView::Leaf(l) => dots.push(l.dot()),
-            ChildView::Block(b) => {
-                if let Some(d) = b.dot() {
-                    dots.push(d);
-                }
-            }
-        }
-    }
-    Some(dots)
+    ps.is_block(block).then(|| ps.subtree_real_dots(block))
 }
 
 /// Seq position at which to insert a new block as the `block_index`-th block
@@ -183,11 +121,8 @@ pub(crate) fn block_seq_insert_pos(
         return seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent));
     }
     let prev = children[block_index - 1];
-    let dots = subtree_dots(ps, prev).ok_or(StepError::NodeNotFound(prev))?;
-    let max = dots
-        .iter()
-        .filter_map(|&d| ps.seq_flat_pos(d))
-        .max()
+    let max = ps
+        .subtree_max_seq_pos(prev)
         .ok_or(StepError::NodeNotFound(prev))?;
     Ok(max + 1)
 }
@@ -220,9 +155,9 @@ pub(crate) fn leaf_dots_in_range(
     offset: usize,
     len: usize,
 ) -> Result<Vec<Dot>, StepError> {
-    let view = ps.view();
-    let nv = view.node(block).ok_or(StepError::NodeNotFound(block))?;
-    let children: Vec<ChildView> = nv.children().collect();
+    let children = ps
+        .block_children(block)
+        .ok_or(StepError::NodeNotFound(block))?;
     let mut dots = Vec::with_capacity(len);
     for i in 0..len {
         let idx = offset + i;
@@ -232,8 +167,10 @@ pub(crate) fn leaf_dots_in_range(
             len: children.len(),
         })?;
         let dot = match child {
-            ChildView::Leaf(l) => l.dot(),
-            ChildView::Block(b) => b.dot().ok_or(StepError::NodeNotFound(block))?,
+            Child::Leaf { id, .. } => *id,
+            Child::Block(d) => {
+                editor_model::anchor_dot(*d).ok_or(StepError::NodeNotFound(block))?
+            }
         };
         dots.push(dot);
     }
@@ -242,18 +179,46 @@ pub(crate) fn leaf_dots_in_range(
 
 pub(crate) fn delete_dots_ops(ps: &ProjectedState, dots: &[Dot]) -> Vec<EditOp> {
     let mut positions: Vec<usize> = dots.iter().filter_map(|&d| ps.seq_flat_pos(d)).collect();
+    // Descending, so deleting a run never shifts the positions of runs still to come.
     positions.sort_unstable_by(|a, b| b.cmp(a));
-    positions
-        .into_iter()
-        .map(|pos| EditOp::Seq(ListOp::Del { pos, len: 1 }))
-        .collect()
+    positions.dedup();
+    // Coalesce a maximal run of consecutive positions into ONE range `Del { pos, len }`.
+    // Deleting a large selection is then `O(runs)` sequence ops (one for a contiguous
+    // text run) instead of one op per character — each op otherwise pays the full
+    // per-op projection + transaction overhead, which made select-all-delete `O(N²)`.
+    let mut ops = Vec::new();
+    let mut i = 0;
+    while i < positions.len() {
+        let mut j = i;
+        while j + 1 < positions.len() && positions[j + 1] == positions[j] - 1 {
+            j += 1;
+        }
+        let run_min = positions[j];
+        ops.push(EditOp::Seq(ListOp::Del {
+            pos: run_min,
+            len: j - i + 1,
+        }));
+        i = j + 1;
+    }
+    ops
 }
 
 pub(crate) fn read_text(ps: &ProjectedState, block: Dot, offset: usize, len: usize) -> String {
-    match ps.view().node(block) {
-        Some(nv) => nv.inline_text().chars().skip(offset).take(len).collect(),
-        None => String::new(),
-    }
+    let Some(children) = ps.block_children(block) else {
+        return String::new();
+    };
+    children
+        .iter()
+        .filter_map(|c| match c {
+            Child::Leaf {
+                item: SeqItem::Char(ch),
+                ..
+            } => Some(*ch),
+            _ => None,
+        })
+        .skip(offset)
+        .take(len)
+        .collect()
 }
 
 pub(crate) fn span_add(first: Dot, last: Dot, modifier: Modifier) -> EditOp {
@@ -327,10 +292,8 @@ pub(crate) fn node_marker_set(target: Dot, value: Option<Marker>) -> EditOp {
 /// leaves are grouped into `Text` subtrees (per-char span styling is dropped —
 /// the M1 move/subtree path is structural). Nested blocks recurse.
 pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
-    let view = ps.view();
-    let nv = view.node(block)?;
-    let node = nv.node().to_plain();
-    let dot = nv.dot();
+    let node = ps.block_node(block)?.to_plain();
+    let dot = editor_model::anchor_dot(block);
     let modifiers: Vec<Modifier> = dot
         .map(|d| {
             ps.block_modifiers()
@@ -345,23 +308,23 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
 
     let mut children: Vec<Subtree> = Vec::new();
     let mut pending_text = String::new();
-    for c in nv.children() {
+    for c in ps.block_children(block)? {
         match c {
-            ChildView::Leaf(l) => {
-                if let Some(ch) = l.as_char() {
-                    pending_text.push(ch);
-                } else if let Some(atom) = l.as_atom() {
+            Child::Leaf { item, .. } => match item {
+                SeqItem::Char(ch) => pending_text.push(ch),
+                SeqItem::Atom(atom) => {
                     if !pending_text.is_empty() {
                         children.push(text_subtree(std::mem::take(&mut pending_text)));
                     }
-                    children.push(Subtree::leaf(atom.clone().into_node().to_plain()));
+                    children.push(Subtree::leaf(atom.into_node().to_plain()));
                 }
-            }
-            ChildView::Block(b) => {
+                _ => {}
+            },
+            Child::Block(d) => {
                 if !pending_text.is_empty() {
                     children.push(text_subtree(std::mem::take(&mut pending_text)));
                 }
-                if let Some(sub) = capture_subtree(ps, b.id()) {
+                if let Some(sub) = capture_subtree(ps, d) {
                     children.push(sub);
                 }
             }

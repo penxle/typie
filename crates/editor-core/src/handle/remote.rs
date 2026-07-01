@@ -24,7 +24,7 @@ mod tests {
     /// clocks, so replica_a and replica_b share the same base op identities —
     /// the new op continues replica_a's clock and is unknown to replica_b.
     fn remote_change(base: &State, ops: Vec<EditOp>) -> Changeset<EditOp> {
-        let mut pa = base.projected.clone();
+        let mut pa = base.projected.as_ref().clone();
         let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
         pa.apply_batch(ops).unwrap();
         pa.commit();
@@ -152,6 +152,126 @@ mod tests {
         let after = EditorSnapshot::capture(&editor);
         assert!(probed, "new remote op must predict true");
         assert_eq!(before, after, "probe must not mutate");
+    }
+
+    /// The tick loop coalesces a consecutive run of remote messages into one batched
+    /// receive. Applying several remote changesets in a single tick must land the same
+    /// document and selection as applying them one tick at a time.
+    #[test]
+    fn coalesced_remote_batch_matches_sequential() {
+        use crate::message::Message;
+
+        let (replica_a, ..) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 1)
+        };
+        let css = replica_a.graph().changesets_as_vec();
+
+        // Two separate committed remote edits → two changesets building on each other.
+        let mut a = replica_a.projected.as_ref().clone();
+        let baseline: HashSet<Dot> = a.graph().current_heads().copied().collect();
+        a.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Char('X'),
+        }))
+        .unwrap();
+        a.commit();
+        a.apply(EditOp::Seq(ListOp::Ins {
+            pos: 2,
+            item: SeqItem::Char('Y'),
+        }))
+        .unwrap();
+        a.commit();
+        let batch = a.graph().local_changesets_since(&baseline).unwrap();
+        assert_eq!(batch.len(), 2, "expected two distinct changesets");
+
+        // Batched: both changesets enqueued, drained in one tick (coalesced).
+        let mut batched =
+            Editor::new_test(State::from_changesets(css.clone(), replica_a.selection).unwrap());
+        for cs in &batch {
+            batched.enqueue(Message::Remote {
+                changeset: cs.clone(),
+            });
+        }
+        let _ = batched.tick().unwrap();
+
+        // Sequential: one changeset per tick.
+        let mut sequential =
+            Editor::new_test(State::from_changesets(css, replica_a.selection).unwrap());
+        for cs in &batch {
+            sequential.apply(Message::Remote {
+                changeset: cs.clone(),
+            });
+        }
+
+        let vb = batched.state().view();
+        let vs = sequential.state().view();
+        let tb = editor_state::flat_text(&vb, 0..editor_state::flat_size(&vb));
+        let ts = editor_state::flat_text(&vs, 0..editor_state::flat_size(&vs));
+        assert_eq!(tb, ts, "batched and sequential must yield identical text");
+        assert!(
+            tb.contains('X') && tb.contains('Y'),
+            "both edits applied: {tb:?}"
+        );
+        assert_eq!(
+            batched.state().selection,
+            sequential.state().selection,
+            "selection must match between batched and sequential receive"
+        );
+    }
+
+    /// Re-receiving an already-applied changeset (a duplicate sync delivery) must be a
+    /// no-op: no document change and the selection is left exactly as-is (the tick skips
+    /// the selection restore entirely).
+    #[test]
+    fn duplicate_remote_batch_is_noop() {
+        use crate::message::Message;
+
+        let (replica_a, _p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 1)
+        };
+        let css = replica_a.graph().changesets_as_vec();
+        let replica_b = State::from_changesets(css, replica_a.selection).unwrap();
+
+        let cs = remote_change(
+            &replica_a,
+            vec![EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('X'),
+            })],
+        );
+
+        let mut editor = Editor::new_test(replica_b);
+        editor.apply(Message::Remote {
+            changeset: cs.clone(),
+        });
+        let after_first = editor.state().selection;
+        let view = editor.state().view();
+        let text_first = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
+
+        // Re-receive the same changeset: duplicate, applies nothing.
+        editor.apply(Message::Remote {
+            changeset: cs.clone(),
+        });
+        // And a batch of duplicates in one tick.
+        editor.enqueue(Message::Remote {
+            changeset: cs.clone(),
+        });
+        editor.enqueue(Message::Remote { changeset: cs });
+        let _ = editor.tick().unwrap();
+
+        let view2 = editor.state().view();
+        let text_after = editor_state::flat_text(&view2, 0..editor_state::flat_size(&view2));
+        assert_eq!(
+            text_first, text_after,
+            "duplicate receive must not change the doc"
+        );
+        assert_eq!(
+            after_first,
+            editor.state().selection,
+            "duplicate receive must leave the selection unchanged"
+        );
     }
 
     #[test]

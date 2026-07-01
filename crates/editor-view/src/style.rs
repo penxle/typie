@@ -23,7 +23,7 @@ pub enum BorderMode {
     Collapse,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct BoxStyle {
     pub direction: Direction,
     pub padding: EdgeInsets,
@@ -34,14 +34,14 @@ pub struct BoxStyle {
     pub monolithic: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Decoration {
     pub id: u32,
     pub rect: Rect,
     pub data: DecorationData,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DecorationData {
     None,
     Bool(bool),

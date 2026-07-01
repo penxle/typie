@@ -19,13 +19,38 @@ fn modifier_target_types() -> HashSet<NodeType> {
         .collect()
 }
 
+/// Whether a leaf of this type participates in mergeable runs (some modifier
+/// targets it). Non-targets (atoms like HardBreak/Tab) form their own run — the
+/// `is_atom` flag the splice path passes is exactly `!is_modifier_target(ty)`.
+pub fn is_modifier_target(node_type: NodeType) -> bool {
+    ModifierType::iter().any(|m| {
+        Schema::modifier_spec(m)
+            .target
+            .rightmost_node_types()
+            .contains(&node_type)
+    })
+}
+
+/// Compare a run's modifiers against a leaf's effective entry without cloning it.
+/// A missing entry is equivalent to an empty map.
+fn modifiers_eq(
+    a: &BTreeMap<ModifierType, Modifier>,
+    b: Option<&BTreeMap<ModifierType, Modifier>>,
+) -> bool {
+    match b {
+        Some(m) => a == m,
+        None => a.is_empty(),
+    }
+}
+
 pub fn derive_runs(
     tree: &BlockTree,
-    effective: &HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
 ) -> Vec<Run> {
     fn walk(
+        tree: &BlockTree,
         node: &BlockNode,
-        effective: &HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+        effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
         targets: &HashSet<NodeType>,
         out: &mut Vec<Run>,
     ) {
@@ -33,10 +58,10 @@ pub fn derive_runs(
         for c in &node.children {
             match c {
                 Child::Leaf { id: d, item } => {
-                    let eff = effective.get(d).cloned().unwrap_or_default();
+                    let eff_ref = effective.get(d);
                     if targets.contains(&item.as_child_type()) {
                         match &mut run {
-                            Some(r) if r.modifiers == eff => r.leaves.push(*d),
+                            Some(r) if modifiers_eq(&r.modifiers, eff_ref) => r.leaves.push(*d),
                             _ => {
                                 if let Some(r) = run.take() {
                                     out.push(r);
@@ -44,7 +69,7 @@ pub fn derive_runs(
                                 run = Some(Run {
                                     block: node.id,
                                     leaves: vec![*d],
-                                    modifiers: eff,
+                                    modifiers: eff_ref.cloned().unwrap_or_default(),
                                 });
                             }
                         }
@@ -55,15 +80,17 @@ pub fn derive_runs(
                         out.push(Run {
                             block: node.id,
                             leaves: vec![*d],
-                            modifiers: eff,
+                            modifiers: eff_ref.cloned().unwrap_or_default(),
                         });
                     }
                 }
-                Child::Block(b) => {
+                Child::Block(id) => {
                     if let Some(r) = run.take() {
                         out.push(r);
                     }
-                    walk(b, effective, targets, out);
+                    if let Some(b) = tree.get(*id) {
+                        walk(tree, b, effective, targets, out);
+                    }
                 }
             }
         }
@@ -73,10 +100,351 @@ pub fn derive_runs(
     }
     let targets = modifier_target_types();
     let mut out = Vec::new();
-    for r in &tree.roots {
-        walk(r, effective, &targets, &mut out);
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, effective, &targets, &mut out);
     }
     out
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunSeg {
+    // Persistent vector: a hot sequential splice (paste/typing) appends into one run,
+    // and `clone`-on-`set` of the run must stay O(log K), not O(run length). A plain
+    // `Vec` made each append clone the whole run, giving an O(N²) paste.
+    pub leaves: imbl::Vector<Dot>,
+    pub modifiers: BTreeMap<ModifierType, Modifier>,
+    pub mergeable: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BlockRuns {
+    blocks: HashMap<Dot, editor_common::SumTree<RunSeg, usize>>,
+}
+
+/// Group an ordered `(leaf, mergeable)` list into run segments by equal
+/// effective modifiers (atoms / non-mergeable leaves always stand alone).
+pub fn segment_leaves(
+    leaves: &[(Dot, bool)],
+    effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+) -> Vec<RunSeg> {
+    let mut out: Vec<RunSeg> = Vec::new();
+    let mut cur: Option<RunSeg> = None;
+    for &(id, mergeable) in leaves {
+        let eff_ref = effective.get(&id);
+        if mergeable {
+            match &mut cur {
+                Some(r) if r.mergeable && modifiers_eq(&r.modifiers, eff_ref) => {
+                    r.leaves.push_back(id)
+                }
+                _ => {
+                    if let Some(r) = cur.take() {
+                        out.push(r);
+                    }
+                    cur = Some(RunSeg {
+                        leaves: imbl::vector![id],
+                        modifiers: eff_ref.cloned().unwrap_or_default(),
+                        mergeable: true,
+                    });
+                }
+            }
+        } else {
+            if let Some(r) = cur.take() {
+                out.push(r);
+            }
+            out.push(RunSeg {
+                leaves: imbl::vector![id],
+                modifiers: eff_ref.cloned().unwrap_or_default(),
+                mergeable: false,
+            });
+        }
+    }
+    if let Some(r) = cur {
+        out.push(r);
+    }
+    out
+}
+
+pub fn resegment_block(
+    node: &BlockNode,
+    effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+) -> Vec<RunSeg> {
+    let targets = modifier_target_types();
+    let mut out: Vec<RunSeg> = Vec::new();
+    let mut cur: Option<RunSeg> = None;
+    for c in &node.children {
+        match c {
+            Child::Leaf { id, item } => {
+                let eff_ref = effective.get(id);
+                if targets.contains(&item.as_child_type()) {
+                    match &mut cur {
+                        Some(r) if r.mergeable && modifiers_eq(&r.modifiers, eff_ref) => {
+                            r.leaves.push_back(*id)
+                        }
+                        _ => {
+                            if let Some(r) = cur.take() {
+                                out.push(r);
+                            }
+                            cur = Some(RunSeg {
+                                leaves: imbl::vector![*id],
+                                modifiers: eff_ref.cloned().unwrap_or_default(),
+                                mergeable: true,
+                            });
+                        }
+                    }
+                } else {
+                    if let Some(r) = cur.take() {
+                        out.push(r);
+                    }
+                    out.push(RunSeg {
+                        leaves: imbl::vector![*id],
+                        modifiers: eff_ref.cloned().unwrap_or_default(),
+                        mergeable: false,
+                    });
+                }
+            }
+            Child::Block(_) => {
+                if let Some(r) = cur.take() {
+                    out.push(r);
+                }
+            }
+        }
+    }
+    if let Some(r) = cur {
+        out.push(r);
+    }
+    out
+}
+
+impl BlockRuns {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn build(
+        tree: &BlockTree,
+        effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    ) -> Self {
+        fn walk(
+            tree: &BlockTree,
+            node: &BlockNode,
+            effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+            out: &mut BlockRuns,
+        ) {
+            out.set_block(node.id, resegment_block(node, effective));
+            for c in &node.children {
+                if let Child::Block(id) = c
+                    && let Some(b) = tree.get(*id)
+                {
+                    walk(tree, b, effective, out);
+                }
+            }
+        }
+        let mut out = BlockRuns::new();
+        if let Some(root) = tree.root_node() {
+            walk(tree, root, effective, &mut out);
+        }
+        out
+    }
+
+    pub fn set_block(&mut self, block: Dot, segs: Vec<RunSeg>) {
+        let tree: editor_common::SumTree<RunSeg, usize> = segs
+            .into_iter()
+            .map(|s| {
+                let n = s.leaves.len();
+                (s, n)
+            })
+            .collect();
+        self.blocks.insert(block, tree);
+    }
+
+    pub fn remove_block(&mut self, block: Dot) {
+        self.blocks.remove(&block);
+    }
+
+    pub fn iter_block(&self, block: Dot) -> Vec<RunSeg> {
+        self.blocks
+            .get(&block)
+            .map(|t| t.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Re-segment a block in place from its current leaf order and updated
+    /// `effective`, without consulting the tree. Sound because leaf-bearing
+    /// blocks (Paragraph, Caption, …) never interleave block children, so the
+    /// stored run leaves are the block's complete inline sequence — no run
+    /// boundary is lost by flattening. O(block size).
+    /// The block's leaves in order, paired with their mergeable flag, recovered
+    /// from the stored run segments.
+    pub fn block_leaves(&self, block: Dot) -> Vec<(Dot, bool)> {
+        self.blocks
+            .get(&block)
+            .map(|t| {
+                t.iter()
+                    .flat_map(|seg| {
+                        let m = seg.mergeable;
+                        seg.leaves.iter().map(move |&id| (id, m))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn set_block_from_leaves(
+        &mut self,
+        block: Dot,
+        leaves: &[(Dot, bool)],
+        effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    ) {
+        self.set_block(block, segment_leaves(leaves, effective));
+    }
+
+    pub fn resegment_from_runs(
+        &mut self,
+        block: Dot,
+        effective: &imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    ) {
+        let leaves = self.block_leaves(block);
+        self.set_block(block, segment_leaves(&leaves, effective));
+    }
+
+    pub fn materialize(&self, tree: &BlockTree) -> Vec<Run> {
+        fn walk(tree: &BlockTree, node: &BlockNode, runs: &BlockRuns, out: &mut Vec<Run>) {
+            if let Some(t) = runs.blocks.get(&node.id) {
+                for seg in t.iter() {
+                    out.push(Run {
+                        block: node.id,
+                        leaves: seg.leaves.iter().copied().collect(),
+                        modifiers: seg.modifiers.clone(),
+                    });
+                }
+            }
+            for c in &node.children {
+                if let Child::Block(id) = c
+                    && let Some(b) = tree.get(*id)
+                {
+                    walk(tree, b, runs, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(root) = tree.root_node() {
+            walk(tree, root, self, &mut out);
+        }
+        out
+    }
+
+    pub fn splice_insert(
+        &mut self,
+        block: Dot,
+        offset: usize,
+        leaf: Dot,
+        eff: BTreeMap<ModifierType, Modifier>,
+        is_atom: bool,
+    ) {
+        let tree = self.blocks.entry(block).or_default();
+        let fresh = RunSeg {
+            leaves: imbl::vector![leaf],
+            modifiers: eff.clone(),
+            mergeable: !is_atom,
+        };
+        match tree.find_by_offset(offset) {
+            None => {
+                if !is_atom && !tree.is_empty() {
+                    let li = tree.len() - 1;
+                    let last = tree.get(li).expect("last exists");
+                    if last.mergeable && last.modifiers == eff {
+                        let mut s = last.clone();
+                        s.leaves.push_back(leaf);
+                        let n = s.leaves.len();
+                        tree.set(li, s, n);
+                        return;
+                    }
+                }
+                tree.push(fresh, 1);
+            }
+            Some((idx, intra)) => {
+                let seg = tree.get(idx).expect("seg exists").clone();
+                if intra == 0 {
+                    if !is_atom && seg.mergeable && seg.modifiers == eff {
+                        let mut s = seg;
+                        s.leaves.push_front(leaf);
+                        let n = s.leaves.len();
+                        tree.set(idx, s, n);
+                    } else if !is_atom
+                        && idx > 0
+                        && tree
+                            .get(idx - 1)
+                            .is_some_and(|p| p.mergeable && p.modifiers == eff)
+                    {
+                        let mut p = tree.get(idx - 1).expect("prev exists").clone();
+                        p.leaves.push_back(leaf);
+                        let n = p.leaves.len();
+                        tree.set(idx - 1, p, n);
+                    } else {
+                        tree.insert(idx, fresh, 1);
+                    }
+                } else if !is_atom && seg.mergeable && seg.modifiers == eff {
+                    let mut s = seg;
+                    s.leaves.insert(intra, leaf);
+                    let n = s.leaves.len();
+                    tree.set(idx, s, n);
+                } else {
+                    let RunSeg {
+                        mut leaves,
+                        modifiers,
+                        mergeable,
+                    } = seg;
+                    let right_leaves = leaves.split_off(intra);
+                    let ln = leaves.len();
+                    let rn = right_leaves.len();
+                    let left = RunSeg {
+                        leaves,
+                        modifiers: modifiers.clone(),
+                        mergeable,
+                    };
+                    let right = RunSeg {
+                        leaves: right_leaves,
+                        modifiers,
+                        mergeable,
+                    };
+                    tree.set(idx, left, ln);
+                    tree.insert(idx + 1, fresh, 1);
+                    tree.insert(idx + 2, right, rn);
+                }
+            }
+        }
+    }
+
+    pub fn splice_delete(&mut self, block: Dot, offset: usize) {
+        let tree = match self.blocks.get_mut(&block) {
+            Some(t) => t,
+            None => return,
+        };
+        let (idx, intra) = match tree.find_by_offset(offset) {
+            Some(x) => x,
+            None => return,
+        };
+        let seg = tree.get(idx).expect("seg exists").clone();
+        if seg.leaves.len() == 1 {
+            tree.remove(idx);
+            if idx > 0 && idx < tree.len() {
+                let left = tree.get(idx - 1).expect("left exists").clone();
+                let right = tree.get(idx).expect("right exists").clone();
+                if left.mergeable && right.mergeable && left.modifiers == right.modifiers {
+                    let mut merged = left;
+                    merged.leaves.append(right.leaves);
+                    let n = merged.leaves.len();
+                    tree.set(idx - 1, merged, n);
+                    tree.remove(idx);
+                }
+            }
+        } else {
+            let mut s = seg;
+            s.leaves.remove(intra);
+            let n = s.leaves.len();
+            tree.set(idx, s, n);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -112,7 +480,7 @@ mod tests {
         tree: &BlockTree,
         resolver: &editor_crdt::sequence::BoundaryResolver,
         spans: &SpanLog,
-    ) -> HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+    ) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
         derive_effective(elems, tree, resolver, spans)
             .into_iter()
             .collect()
@@ -134,7 +502,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let spans = SpanLog::new()
             .apply(
                 Dot::new(2, 0),
@@ -185,7 +553,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let runs = derive_runs(&tree, &eff_map(&els, &tree, &resolver, &SpanLog::new()));
         assert_eq!(runs.len(), 2, "다른 문단은 병합 안 됨");
         assert_eq!(runs[0].leaves, vec![Dot::new(1, 2)]);
@@ -218,7 +586,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let runs = derive_runs(&tree, &eff_map(&els, &tree, &resolver, &SpanLog::new()));
         assert_eq!(
             runs.len(),
@@ -247,7 +615,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let runs = derive_runs(&tree, &eff_map(&els, &tree, &resolver, &SpanLog::new()));
         assert_eq!(runs.len(), 3, "HardBreak(비대상 atom)가 run 분리");
         assert_eq!(runs[0].leaves, vec![Dot::new(1, 2)]);
@@ -279,7 +647,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let runs = derive_runs(&tree, &eff_map(&els, &tree, &resolver, &SpanLog::new()));
         assert_eq!(runs.len(), 3, "연속 비대상 atom은 병합 안 됨");
         assert_eq!(runs[0].leaves, vec![Dot::new(1, 1)]);
@@ -292,7 +660,7 @@ mod tests {
         let elems: Vec<(Dot, SeqItem)> = vec![];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let runs = derive_runs(&tree, &eff_map(&els, &tree, &resolver, &SpanLog::new()));
         assert!(runs.is_empty(), "빈 문서는 run 없음");
     }
@@ -313,7 +681,7 @@ mod tests {
         ];
         let log = oplog(&elems);
         let (els, resolver) = checkout_with_resolver(&log);
-        let tree = normalize(project_blocks(&els).unwrap());
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let attrs = ModifierAttrLog::new()
             .apply(
                 Dot::new(5, 0),
@@ -338,7 +706,7 @@ mod tests {
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let eff: HashMap<Dot, _> = derive_full_effective(&tree, &src).into_iter().collect();
+        let eff: imbl::HashMap<Dot, _> = derive_full_effective(&tree, &src).into_iter().collect();
         let runs = derive_runs(&tree, &eff);
         assert_eq!(runs.len(), 1, "상속 FontSize 동일 → 한 run");
         assert_eq!(
@@ -377,7 +745,7 @@ mod tests {
             }
             let log = oplog(&elems);
             let (els, resolver) = checkout_with_resolver(&log);
-            let tree = normalize(project_blocks(&els).unwrap());
+            let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
             let mut spans = SpanLog::new();
             for (i, (si, ei, sb, eb, m, is_rm)) in ops.into_iter().enumerate() {
                 let start = Anchor { id: Dot::new(1, 2 + si as u64), bias: sb };
@@ -404,6 +772,82 @@ mod tests {
                 if w[0].block == w[1].block {
                     proptest::prop_assert_ne!(&w[0].modifiers, &w[1].modifiers);
                 }
+            }
+        }
+    }
+
+    fn mods_for(c: u8) -> BTreeMap<ModifierType, Modifier> {
+        let mut m = BTreeMap::new();
+        match c {
+            0 => {}
+            1 => {
+                m.insert(ModifierType::Bold, Modifier::Bold);
+            }
+            _ => {
+                m.insert(ModifierType::Italic, Modifier::Italic);
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn splice_atom_forces_split_and_delete_merges() {
+        let block = Dot::new(7, 0);
+        let mut runs = BlockRuns::new();
+        let bold = mods_for(1);
+        runs.splice_insert(block, 0, Dot::new(1, 0), bold.clone(), false);
+        runs.splice_insert(block, 1, Dot::new(1, 1), bold.clone(), false);
+        assert_eq!(runs.iter_block(block).len(), 1);
+        runs.splice_insert(block, 1, Dot::new(1, 2), BTreeMap::new(), true);
+        let segs = runs.iter_block(block);
+        assert_eq!(segs.len(), 3);
+        assert!(!segs[1].mergeable);
+        runs.splice_delete(block, 1);
+        assert_eq!(runs.iter_block(block).len(), 1);
+        assert_eq!(runs.iter_block(block)[0].leaves.len(), 2);
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn run_splice_matches_resegment(
+            steps in proptest::collection::vec(
+                (proptest::prelude::any::<bool>(), proptest::prelude::any::<u8>(), 0u8..3u8),
+                0..40),
+        ) {
+            let block = Dot::new(7, 0);
+            let mut runs = BlockRuns::new();
+            let mut model: Vec<(Dot, BTreeMap<ModifierType, Modifier>)> = Vec::new();
+            let mut next_leaf = 0u64;
+            for (is_del, raw, modc) in steps {
+                let count = model.len();
+                if is_del && count > 0 {
+                    let off = (raw as usize) % count;
+                    model.remove(off);
+                    runs.splice_delete(block, off);
+                } else {
+                    let off = (raw as usize) % (count + 1);
+                    let leaf = Dot::new(1, next_leaf);
+                    next_leaf += 1;
+                    let eff = mods_for(modc);
+                    model.insert(off, (leaf, eff.clone()));
+                    runs.splice_insert(block, off, leaf, eff, false);
+                }
+                let node = BlockNode {
+                    id: block,
+                    node_type: NodeType::Paragraph,
+                    children: model
+                        .iter()
+                        .map(|(d, _)| Child::Leaf {
+                            id: *d,
+                            item: SeqItem::Char('x'),
+                        })
+                        .collect(),
+                };
+                let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+                    model.iter().map(|(d, m)| (*d, m.clone())).collect();
+                let expected = resegment_block(&node, &effective);
+                proptest::prop_assert_eq!(runs.iter_block(block), expected);
             }
         }
     }

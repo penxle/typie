@@ -37,49 +37,382 @@ pub fn anchor_dot(id: Dot) -> Option<Dot> {
     (!id.is_synthetic() || id == Dot::ROOT).then_some(id)
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// The projected document tree, addressed by `Dot`. Every block lives in `nodes`
+/// keyed by its id, so locating a block is `O(1)` (a hash lookup) instead of an
+/// `O(N)` descent — the property the per-character paste path needs. A block's
+/// ordered children live in its `ChildList`: inline leaves are stored by value,
+/// child blocks are referenced by `Dot` (resolved through `nodes`). `nodes` is a
+/// persistent `imbl::HashMap` and `ChildList` a persistent `SumTree`, so cloning a
+/// whole tree is `O(1)` (structural sharing) — cloning a projection per
+/// transaction stays cheap.
+#[derive(Clone, Debug)]
 pub struct BlockTree {
-    pub roots: Vec<BlockNode>,
+    pub nodes: imbl::HashMap<Dot, BlockNode>,
+    pub root: Dot,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockNode {
     pub id: Dot,
     pub node_type: NodeType,
-    pub children: Vec<Child>,
+    pub children: ChildList,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Child {
     Leaf { id: Dot, item: SeqItem },
-    Block(BlockNode),
+    Block(Dot),
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ProjectError {
-    OrphanLeaf { id: Dot },
-    AtomClassMismatch { id: Dot, leaf_type: NodeType },
+impl PartialEq for BlockTree {
+    fn eq(&self, o: &Self) -> bool {
+        self.root == o.root && self.nodes == o.nodes
+    }
 }
 
-impl BlockNode {
-    pub fn child_blocks(&self) -> Vec<&BlockNode> {
+impl BlockTree {
+    pub fn get(&self, id: Dot) -> Option<&BlockNode> {
+        self.nodes.get(&id)
+    }
+    pub fn get_mut(&mut self, id: Dot) -> Option<&mut BlockNode> {
+        self.nodes.get_mut(&id)
+    }
+    pub fn root_node(&self) -> Option<&BlockNode> {
+        self.nodes.get(&self.root)
+    }
+    /// The `BlockNode` a `Child::Block` refers to (`None` for a leaf or a dangling
+    /// reference).
+    pub fn child_block(&self, c: &Child) -> Option<&BlockNode> {
+        match c {
+            Child::Block(id) => self.nodes.get(id),
+            Child::Leaf { .. } => None,
+        }
+    }
+    /// The child's node type — a leaf's item type, or a block's `node_type`
+    /// (resolved through `nodes`). `Root` for a dangling reference (never happens
+    /// for a well-formed tree).
+    pub fn child_type(&self, c: &Child) -> NodeType {
+        match c {
+            Child::Leaf { item, .. } => item.as_child_type(),
+            Child::Block(id) => self
+                .nodes
+                .get(id)
+                .map(|b| b.node_type)
+                .unwrap_or(NodeType::Root),
+        }
+    }
+
+    /// Build the flat tree from a freshly projected/normalized nested scratch tree.
+    /// `O(N)`.
+    pub fn from_raw(raw: &RawTree) -> Self {
+        fn add(raw: &RawNode, nodes: &mut imbl::HashMap<Dot, BlockNode>) {
+            let children: ChildList = raw
+                .children
+                .iter()
+                .map(|c| match c {
+                    RawChild::Leaf { id, item } => Child::Leaf {
+                        id: *id,
+                        item: item.clone(),
+                    },
+                    RawChild::Block(b) => {
+                        add(b, nodes);
+                        Child::Block(b.id)
+                    }
+                })
+                .collect();
+            nodes.insert(
+                raw.id,
+                BlockNode {
+                    id: raw.id,
+                    node_type: raw.node_type,
+                    children,
+                },
+            );
+        }
+        let mut nodes = imbl::HashMap::new();
+        let root = raw.roots.first().map(|r| r.id).unwrap_or(Dot::ROOT);
+        // Only the canonical (first) root is reachable; `normalize` guarantees a
+        // single `Root`, so this never orphans real content.
+        if let Some(r) = raw.roots.first() {
+            add(r, &mut nodes);
+        }
+        BlockTree { nodes, root }
+    }
+
+    /// Insert a nested scratch block (and its whole subtree) into `nodes`, returning
+    /// its id. Used to graft a freshly re-projected window subtree into the live tree.
+    pub fn insert_block_subtree(&mut self, raw: &RawNode) -> Dot {
+        fn add(raw: &RawNode, nodes: &mut imbl::HashMap<Dot, BlockNode>) {
+            let children: ChildList = raw
+                .children
+                .iter()
+                .map(|c| match c {
+                    RawChild::Leaf { id, item } => Child::Leaf {
+                        id: *id,
+                        item: item.clone(),
+                    },
+                    RawChild::Block(b) => {
+                        add(b, nodes);
+                        Child::Block(b.id)
+                    }
+                })
+                .collect();
+            nodes.insert(
+                raw.id,
+                BlockNode {
+                    id: raw.id,
+                    node_type: raw.node_type,
+                    children,
+                },
+            );
+        }
+        add(raw, &mut self.nodes);
+        raw.id
+    }
+
+    /// Remove `block` and its whole block subtree from `nodes`. Leaf children are
+    /// stored inline so they need no separate removal.
+    pub fn remove_block_subtree(&mut self, block: Dot) {
+        let Some(node) = self.nodes.remove(&block) else {
+            return;
+        };
+        for c in &node.children {
+            if let Child::Block(id) = c {
+                self.remove_block_subtree(*id);
+            }
+        }
+    }
+
+    /// Run `f` on `block`'s children if it exists, returning whether it did.
+    /// `O(log N)` (a single map lookup, copy-on-write).
+    pub fn with_block_children(&mut self, block: Dot, f: impl FnOnce(&mut ChildList)) -> bool {
+        match self.nodes.get_mut(&block) {
+            Some(node) => {
+                f(&mut node.children);
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+// ===== Nested scratch tree =====
+//
+// `project_blocks` + `normalize` + `validate_block_tree` + `flatten` operate on
+// this owned, physically-nested form — it suits recursive structural surgery
+// (scaffolding, grandchild promotion, grid repair) where dropping a child just
+// drops its owned subtree. It is converted to the flat `BlockTree` once per
+// re-projection via `BlockTree::from_raw`.
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RawTree {
+    pub roots: Vec<RawNode>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RawNode {
+    pub id: Dot,
+    pub node_type: NodeType,
+    pub children: Vec<RawChild>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RawChild {
+    Leaf { id: Dot, item: SeqItem },
+    Block(RawNode),
+}
+
+impl RawNode {
+    pub fn child_blocks(&self) -> Vec<&RawNode> {
         self.children
             .iter()
             .filter_map(|c| match c {
-                Child::Block(b) => Some(b),
+                RawChild::Block(b) => Some(b),
                 _ => None,
             })
             .collect()
     }
 }
 
-impl Child {
+impl RawChild {
     pub fn as_child_type(&self) -> NodeType {
         match self {
-            Child::Leaf { item, .. } => item.as_child_type(),
-            Child::Block(b) => b.node_type,
+            RawChild::Leaf { item, .. } => item.as_child_type(),
+            RawChild::Block(b) => b.node_type,
         }
     }
+}
+
+/// A block's ordered children, backed by a persistent order-statistics tree
+/// (`SumTree`) summed by direct-leaf count. This makes positional edits
+/// (`insert`/`remove` at a slot, and `leaf_slot` mapping a leaf offset to a child
+/// slot) `O(log K)` instead of the `Vec`'s `O(K)`, and — being persistent — keeps
+/// `clone` `O(1)`. The API mirrors `Vec<Child>` (iter/len/get/push/insert/remove/
+/// index) so call sites that only read or append are unaffected.
+#[derive(Clone, Debug, Default)]
+pub struct ChildList {
+    tree: editor_common::SumTree<Child, u64>,
+}
+
+fn child_leaf_size(c: &Child) -> u64 {
+    match c {
+        Child::Leaf { .. } => 1,
+        Child::Block(_) => 0,
+    }
+}
+
+impl ChildList {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.tree.is_empty()
+    }
+    pub fn iter(&self) -> editor_common::Iter<'_, Child, u64> {
+        self.tree.iter()
+    }
+    pub fn get(&self, i: usize) -> Option<&Child> {
+        self.tree.get(i)
+    }
+    pub fn first(&self) -> Option<&Child> {
+        self.tree.get(0)
+    }
+    pub fn last(&self) -> Option<&Child> {
+        self.len().checked_sub(1).and_then(|i| self.tree.get(i))
+    }
+    pub fn push(&mut self, c: Child) {
+        let s = child_leaf_size(&c);
+        self.tree.push(c, s);
+    }
+    /// Insert at a child *slot* index (counting blocks and leaves alike).
+    pub fn insert(&mut self, slot: usize, c: Child) {
+        let s = child_leaf_size(&c);
+        self.tree.insert(slot, c, s);
+    }
+    /// Remove the child at a slot index, returning it if in range.
+    pub fn remove(&mut self, slot: usize) -> Option<Child> {
+        self.tree.remove(slot).map(|(c, _)| c)
+    }
+    /// The child *slot* holding the `leaf_offset`-th direct leaf child, or `len()`
+    /// when the offset is at/after the last leaf — i.e. where a new leaf inserted at
+    /// that leaf offset belongs. `O(log K)`.
+    pub fn leaf_slot(&self, leaf_offset: usize) -> usize {
+        self.tree
+            .find_by_offset(leaf_offset as u64)
+            .map(|(slot, _)| slot)
+            .unwrap_or_else(|| self.len())
+    }
+    /// Number of direct leaf children — `O(1)`.
+    pub fn leaf_count(&self) -> usize {
+        self.tree.total_size() as usize
+    }
+    /// Replace the child at `slot`. `O(log K)`.
+    pub fn set(&mut self, slot: usize, c: Child) {
+        let s = child_leaf_size(&c);
+        self.tree.set(slot, c, s);
+    }
+    pub fn to_vec(&self) -> Vec<Child> {
+        self.iter().cloned().collect()
+    }
+    pub fn extend(&mut self, iter: impl IntoIterator<Item = Child>) {
+        for c in iter {
+            self.push(c);
+        }
+    }
+    pub fn retain(&mut self, mut keep: impl FnMut(&Child) -> bool) {
+        let kept: Vec<Child> = self.iter().filter(|c| keep(c)).cloned().collect();
+        *self = ChildList::from_iter(kept);
+    }
+    /// Replace the children in the inclusive slot range with `replacement`, like
+    /// `Vec::splice` (but returns nothing). `O((removed + inserted) · log K)`.
+    pub fn splice(
+        &mut self,
+        range: std::ops::RangeInclusive<usize>,
+        replacement: impl IntoIterator<Item = Child>,
+    ) {
+        let start = *range.start();
+        let count = (*range.end() + 1).saturating_sub(start);
+        for _ in 0..count {
+            if start < self.len() {
+                self.remove(start);
+            } else {
+                break;
+            }
+        }
+        let mut at = start;
+        for c in replacement {
+            self.insert(at, c);
+            at += 1;
+        }
+    }
+    /// Split off children at `[at, len)`, leaving `[0, at)` in `self`.
+    pub fn split_off(&mut self, at: usize) -> ChildList {
+        let all = self.to_vec();
+        let tail = all[at.min(all.len())..].to_vec();
+        *self = ChildList::from_iter(all[..at.min(all.len())].iter().cloned());
+        ChildList::from_iter(tail)
+    }
+}
+
+impl From<Vec<Child>> for ChildList {
+    fn from(v: Vec<Child>) -> Self {
+        ChildList::from_iter(v)
+    }
+}
+
+impl PartialEq for ChildList {
+    fn eq(&self, o: &Self) -> bool {
+        self.len() == o.len() && self.iter().eq(o.iter())
+    }
+}
+
+impl<'a> IntoIterator for &'a ChildList {
+    type Item = &'a Child;
+    type IntoIter = editor_common::Iter<'a, Child, u64>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl IntoIterator for ChildList {
+    type Item = Child;
+    type IntoIter = std::vec::IntoIter<Child>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.tree.iter().cloned().collect::<Vec<_>>().into_iter()
+    }
+}
+
+impl FromIterator<Child> for ChildList {
+    fn from_iter<I: IntoIterator<Item = Child>>(iter: I) -> Self {
+        // `O(n)` balanced build, so converting a `Vec<Child>` (normalize's rebuild
+        // passes) costs the same as the `Vec` did — not `O(n log n)` of push-each.
+        let items: Vec<(Child, u64)> = iter
+            .into_iter()
+            .map(|c| {
+                let s = child_leaf_size(&c);
+                (c, s)
+            })
+            .collect();
+        Self {
+            tree: editor_common::SumTree::from_items(items),
+        }
+    }
+}
+
+impl std::ops::Index<usize> for ChildList {
+    type Output = Child;
+    fn index(&self, i: usize) -> &Child {
+        self.get(i).expect("child slot index out of bounds")
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ProjectError {
+    OrphanLeaf { id: Dot },
+    AtomClassMismatch { id: Dot, leaf_type: NodeType },
 }
 
 enum ChildRef {
@@ -117,7 +450,7 @@ fn descend_stack(stack: &mut Vec<(Dot, usize)>, parents: &[Dot]) -> bool {
     descended
 }
 
-pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectError> {
+pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError> {
     let mut nodes: Vec<BuildNode> = vec![BuildNode {
         id: Dot::ROOT,
         node_type: NodeType::Root,
@@ -190,28 +523,28 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<BlockTree, ProjectErro
     }
 
     let root = assemble(&mut nodes, 0);
-    Ok(BlockTree { roots: vec![root] })
+    Ok(RawTree { roots: vec![root] })
 }
 
-fn assemble(nodes: &mut [BuildNode], idx: usize) -> BlockNode {
+fn assemble(nodes: &mut [BuildNode], idx: usize) -> RawNode {
     let id = nodes[idx].id;
     let node_type = nodes[idx].node_type;
     let child_refs = std::mem::take(&mut nodes[idx].children);
     let children = child_refs
         .into_iter()
         .map(|c| match c {
-            ChildRef::Leaf { id, item } => Child::Leaf { id, item },
-            ChildRef::Block(child_idx) => Child::Block(assemble(nodes, child_idx)),
+            ChildRef::Leaf { id, item } => RawChild::Leaf { id, item },
+            ChildRef::Block(child_idx) => RawChild::Block(assemble(nodes, child_idx)),
         })
         .collect();
-    BlockNode {
+    RawNode {
         id,
         node_type,
         children,
     }
 }
 
-pub fn flatten(tree: &BlockTree) -> Vec<(Dot, SeqItem)> {
+pub fn flatten(tree: &RawTree) -> Vec<(Dot, SeqItem)> {
     fn as_dot(id: Dot) -> Dot {
         debug_assert!(
             id.as_op_dot().is_some(),
@@ -220,10 +553,10 @@ pub fn flatten(tree: &BlockTree) -> Vec<(Dot, SeqItem)> {
         id
     }
 
-    fn emit_children(children: &[Child], parents: &mut Vec<Dot>, out: &mut Vec<(Dot, SeqItem)>) {
+    fn emit_children(children: &[RawChild], parents: &mut Vec<Dot>, out: &mut Vec<(Dot, SeqItem)>) {
         for c in children {
             match c {
-                Child::Leaf { id, item } => {
+                RawChild::Leaf { id, item } => {
                     let out_item = match item {
                         SeqItem::Atom(leaf) if leaf.is_block_level() => SeqItem::BlockAtom {
                             leaf: leaf.clone(),
@@ -233,12 +566,12 @@ pub fn flatten(tree: &BlockTree) -> Vec<(Dot, SeqItem)> {
                     };
                     out.push((as_dot(*id), out_item));
                 }
-                Child::Block(b) => walk(b, parents, out),
+                RawChild::Block(b) => walk(b, parents, out),
             }
         }
     }
 
-    fn walk(node: &BlockNode, parents: &mut Vec<Dot>, out: &mut Vec<(Dot, SeqItem)>) {
+    fn walk(node: &RawNode, parents: &mut Vec<Dot>, out: &mut Vec<(Dot, SeqItem)>) {
         let id = as_dot(node.id);
         out.push((
             id,
@@ -262,14 +595,22 @@ pub fn flatten(tree: &BlockTree) -> Vec<(Dot, SeqItem)> {
 }
 
 pub fn validate_block_tree(tree: &BlockTree) -> Result<(), SchemaError> {
-    fn walk(node: &BlockNode, path: &mut Vec<NodeType>) -> Result<(), SchemaError> {
+    fn walk(
+        tree: &BlockTree,
+        node: &BlockNode,
+        path: &mut Vec<NodeType>,
+    ) -> Result<(), SchemaError> {
         path.push(node.node_type);
-        let kids: Vec<NodeType> = node.children.iter().map(|c| c.as_child_type()).collect();
+        let kids: Vec<NodeType> = node.children.iter().map(|c| tree.child_type(c)).collect();
         node.node_type.spec().content.validate(&kids)?;
         check_context(node.node_type, path)?;
         for c in &node.children {
             match c {
-                Child::Block(b) => walk(b, path)?,
+                Child::Block(id) => {
+                    if let Some(b) = tree.get(*id) {
+                        walk(tree, b, path)?;
+                    }
+                }
                 Child::Leaf { item, .. } => {
                     let lt = item.as_child_type();
                     path.push(lt);
@@ -282,17 +623,16 @@ pub fn validate_block_tree(tree: &BlockTree) -> Result<(), SchemaError> {
         Ok(())
     }
 
-    if !tree.roots.is_empty() {
-        let types: Vec<NodeType> = tree.roots.iter().map(|r| r.node_type).collect();
-        if types.as_slice() != [NodeType::Root] {
-            return Err(SchemaError::RootViolation { roots: types });
-        }
+    // An empty tree (no root node) is vacuously valid.
+    let Some(root) = tree.root_node() else {
+        return Ok(());
+    };
+    if root.node_type != NodeType::Root {
+        return Err(SchemaError::RootViolation {
+            roots: vec![root.node_type],
+        });
     }
-
-    for r in &tree.roots {
-        walk(r, &mut Vec::new())?;
-    }
-    Ok(())
+    walk(tree, root, &mut Vec::new())
 }
 
 fn check_context(t: NodeType, path: &[NodeType]) -> Result<(), SchemaError> {
@@ -310,6 +650,10 @@ fn check_context(t: NodeType, path: &[NodeType]) -> Result<(), SchemaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn valid(t: &RawTree) -> Result<(), SchemaError> {
+        validate_block_tree(&BlockTree::from_raw(t))
+    }
 
     #[test]
     fn projects_nested_blocks() {
@@ -382,7 +726,7 @@ mod tests {
         let para_node = tree.roots[0].child_blocks()[0];
         assert_eq!(para_node.children.len(), 1);
         assert!(
-            matches!(&para_node.children[0], Child::Leaf { id, item } if *id == Dot::new(1, 1) && *item == SeqItem::Char('x'))
+            matches!(&para_node.children[0], RawChild::Leaf { id, item } if *id == Dot::new(1, 1) && *item == SeqItem::Char('x'))
         );
     }
 
@@ -423,7 +767,7 @@ mod tests {
         let tree = project_blocks(&seq).unwrap();
         assert_eq!(tree.roots[0].children.len(), 1);
         match &tree.roots[0].children[0] {
-            Child::Block(b) => {
+            RawChild::Block(b) => {
                 assert_eq!(b.id, bq);
                 assert!(b.children.is_empty());
             }
@@ -459,10 +803,10 @@ mod tests {
         let tree = project_blocks(&seq).unwrap();
         assert_eq!(tree.roots[0].children.len(), 1);
         match &tree.roots[0].children[0] {
-            Child::Block(blk) => {
+            RawChild::Block(blk) => {
                 assert_eq!(blk.id, a);
                 assert_eq!(blk.children.len(), 1, "'y' must drop, not adopt into A");
-                assert!(matches!(&blk.children[0], Child::Leaf { id, .. } if *id == ax));
+                assert!(matches!(&blk.children[0], RawChild::Leaf { id, .. } if *id == ax));
             }
             _ => panic!("expected paragraph A"),
         }
@@ -498,13 +842,13 @@ mod tests {
         // (deepest still-valid ancestor), not dropped at root.
         assert_eq!(tree.roots[0].children.len(), 1);
         match &tree.roots[0].children[0] {
-            Child::Block(blk) => {
+            RawChild::Block(blk) => {
                 assert_eq!(blk.id, fold);
                 let leaves: Vec<Dot> = blk
                     .children
                     .iter()
                     .filter_map(|c| match c {
-                        Child::Leaf { id, .. } => Some(*id),
+                        RawChild::Leaf { id, .. } => Some(*id),
                         _ => None,
                     })
                     .collect();
@@ -546,12 +890,12 @@ mod tests {
         let tree = project_blocks(&seq).unwrap();
         assert_eq!(tree.roots[0].children.len(), 1);
         match &tree.roots[0].children[0] {
-            Child::Block(b) => {
+            RawChild::Block(b) => {
                 assert_eq!(b.id, para);
                 assert_eq!(b.children.len(), 1);
                 assert!(matches!(
                     &b.children[0],
-                    Child::Leaf { id, .. } if *id == Dot::new(1, 2)
+                    RawChild::Leaf { id, .. } if *id == Dot::new(1, 2)
                 ));
             }
             _ => panic!("expected paragraph block"),
@@ -692,7 +1036,7 @@ mod tests {
             ),
         ];
         let tree = project_blocks(&items).expect("well-formed");
-        validate_block_tree(&tree).expect("schema valid");
+        valid(&tree).expect("schema valid");
     }
 
     #[test]
@@ -709,10 +1053,7 @@ mod tests {
             (Dot::new(1, 2), SeqItem::Char('x')),
         ];
         let tree = project_blocks(&items).expect("well-formed");
-        assert!(matches!(
-            validate_block_tree(&tree),
-            Err(SchemaError::InvalidContent(_))
-        ));
+        assert!(matches!(valid(&tree), Err(SchemaError::InvalidContent(_))));
     }
 
     #[test]
@@ -749,7 +1090,7 @@ mod tests {
         ];
         let tree = project_blocks(&items).expect("well-formed");
         assert!(matches!(
-            validate_block_tree(&tree),
+            valid(&tree),
             Err(SchemaError::ContextViolation {
                 node_type: NodeType::PageBreak,
                 ..
@@ -759,43 +1100,21 @@ mod tests {
 
     #[test]
     fn validate_empty_tree_is_ok() {
-        validate_block_tree(&BlockTree { roots: vec![] }).expect("empty ok");
+        valid(&RawTree { roots: vec![] }).expect("empty ok");
     }
 
     #[test]
     fn validate_rejects_non_root_top() {
-        let tree = BlockTree {
-            roots: vec![BlockNode {
+        let tree = RawTree {
+            roots: vec![RawNode {
                 id: Dot::new(1, 0),
                 node_type: NodeType::Paragraph,
-                children: vec![],
+                children: vec![].into(),
             }],
         };
         assert!(matches!(
-            validate_block_tree(&tree),
+            valid(&tree),
             Err(SchemaError::RootViolation { roots }) if roots == [NodeType::Paragraph]
-        ));
-    }
-
-    #[test]
-    fn validate_rejects_multiple_roots() {
-        let tree = BlockTree {
-            roots: vec![
-                BlockNode {
-                    id: Dot::ROOT,
-                    node_type: NodeType::Root,
-                    children: vec![],
-                },
-                BlockNode {
-                    id: Dot::new(1, 1),
-                    node_type: NodeType::Root,
-                    children: vec![],
-                },
-            ],
-        };
-        assert!(matches!(
-            validate_block_tree(&tree),
-            Err(SchemaError::RootViolation { roots }) if roots == [NodeType::Root, NodeType::Root]
         ));
     }
 
@@ -866,13 +1185,13 @@ mod tests {
         let tree = project_blocks(&seq).expect("well-formed");
         let root_node = &tree.roots[0];
         assert_eq!(root_node.children.len(), 2);
-        assert!(matches!(&root_node.children[1], Child::Leaf { id, .. } if *id == img2));
+        assert!(matches!(&root_node.children[1], RawChild::Leaf { id, .. } if *id == img2));
         let fold_node = root_node.child_blocks()[0];
         let fcontent_node = fold_node.child_blocks()[1];
         assert_eq!(fcontent_node.node_type, NodeType::FoldContent);
         assert!(matches!(
             fcontent_node.children.last().unwrap(),
-            Child::Leaf { id, .. } if *id == img1
+            RawChild::Leaf { id, .. } if *id == img1
         ));
     }
 
@@ -913,11 +1232,11 @@ mod tests {
         let root_node = &tree.roots[0];
         assert_eq!(root_node.children.len(), 2);
         assert!(
-            matches!(&root_node.children[0], Child::Block(b) if b.node_type == NodeType::Blockquote)
+            matches!(&root_node.children[0], RawChild::Block(b) if b.node_type == NodeType::Blockquote)
         );
         assert!(matches!(
             &root_node.children[1],
-            Child::Leaf { id, item }
+            RawChild::Leaf { id, item }
                 if *id == hr
                 && matches!(item, SeqItem::Atom(AtomLeaf::HorizontalRule { .. }))
         ));
@@ -1148,7 +1467,7 @@ mod tests {
                 prop_assert_eq!(&replayed, &items);
                 let tree = project_blocks(&replayed).expect("well-formed → Ok");
                 prop_assert_eq!(flatten(&tree), replayed);
-                let _ = validate_block_tree(&tree);
+                let _ = valid(&tree);
             }
         }
     }

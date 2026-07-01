@@ -10,6 +10,7 @@ wasm = ["dep:tsify", "dep:wasm-bindgen"]
 [dependencies]
 editor-macros = { path = "../editor-macros" }
 bytecount.workspace = true
+imbl.workspace = true
 log.workspace = true
 serde.workspace = true
 tsify = { workspace = true, optional = true }

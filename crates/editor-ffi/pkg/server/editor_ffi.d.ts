@@ -142,6 +142,16 @@ export interface ClipboardPayload {
     text: string;
 }
 
+export interface CollectResult {
+    graph: Uint8Array;
+    heads: Uint8Array;
+    applied: boolean[];
+    char_counts: number[];
+    base_char_count: number;
+    plain: PlainDoc;
+    text: string;
+}
+
 export interface CursorMetrics {
     page_idx: number;
     caret: Rect;
@@ -691,6 +701,13 @@ declare class Editor {
     applied_style(): Tri;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
+    /**
+     * The `id` of every local changeset (its first op's `actor:clock`), read straight
+     * from the graph — `O(#changesets)`. Callers that only need the id set must use
+     * this instead of `missing_changesets_tolerant(&[])` + `split_changesets`, which
+     * walk, clone, and re-encode the entire history on every push cycle.
+     */
+    changeset_ids(): string[];
     character_counts(): CharacterCounts;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
@@ -766,7 +783,30 @@ declare class EditorServer {
     free(): void;
     [Symbol.dispose](): void;
     apply(existing: Uint8Array, _new: Uint8Array): Uint8Array;
+    /**
+     * Fold many bundles onto `existing` with a single decode/encode. Calling
+     * [`apply`] once per bundle re-decodes and re-encodes the whole (multi-MB)
+     * graph every time — `O(bundles × N)`; here `existing` is decoded once,
+     * every bundle is applied against an in-memory accumulator, and the result
+     * is encoded once — `O(N + total ops)`. `packed_bundles` is the
+     * length-prefixed concatenation of the per-push wire blobs (see
+     * `graph::decode_length_prefixed`). A bundle that fails validation (dup or
+     * causal-order break) is skipped rather than aborting the whole fold, so a
+     * single bad entry can never break a document load.
+     */
+    apply_many(existing: Uint8Array, packed_bundles: Uint8Array): Uint8Array;
     build_font(ttf_data: Uint8Array, chunk_codepoints: ChunkCodepoints): BuiltFont;
+    /**
+     * Fold a batch onto `existing` for the collect job while attributing
+     * per-bundle character counts — with the expensive `State` build amortized.
+     * The old collect ran `validate_and_extract_text` (a full `from_changesets`
+     * build) per entry (`O(tail × build)`); here the `State` is built once and
+     * each bundle is projected incrementally (`receive_remote_changesets`), then
+     * only the text is re-read per entry (`O(tail × extract)`, far cheaper than
+     * rebuilding). `char_counts[i]` is the document's character count right after
+     * bundle `i`; `applied[i]` is false for a dead-lettered bundle.
+     */
+    collect_fold(existing: Uint8Array, packed_bundles: Uint8Array): CollectResult;
     static create(): EditorServer;
     default_doc_with_preset(root: PlainRootNode, modifiers: Modifier[]): PlainDoc;
     extract_text(doc: PlainDoc): string;

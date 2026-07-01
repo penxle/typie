@@ -103,9 +103,13 @@ impl Leaf for Run {
     }
 }
 
+#[derive(Clone, Debug)]
 struct Ctx {
     tree: ContentTree<Run>,
-    del_targets: Vec<Vec<usize>>,
+    // `imbl::Vector` so cloning a `SeqCheckout` (copy-on-write on the typing
+    // path) shares the per-op delete-target lists by pointer instead of
+    // deep-copying ~one (usually empty) allocation per op.
+    del_targets: imbl::Vector<Vec<usize>>,
     cur_version: Vec<usize>,
 }
 
@@ -208,90 +212,77 @@ fn integrate<P>(tree: &ContentTree<Run>, log: &OpLog<P>, new_item: &Run, cursor:
     }
 }
 
-fn apply1<P: Clone>(ctx: &mut Ctx, snap: &mut Vec<(Dot, P)>, log: &OpLog<P>, lv: usize) {
-    match log.ops[lv].clone() {
+/// Apply `f` to every target element, batching maximal consecutive-`lv` spans into one
+/// `update_run_by_lv` call each. A contiguous run of freshly (un)deleted elements is
+/// tombstoned/restored in `O(runs)` instead of `O(len)`. `targets` are collected in
+/// document order; where that matches insertion order (the usual sequential document)
+/// the whole span collapses to a handful of batches. Concurrent-edit reordering just
+/// yields shorter spans — never incorrect ones, since a span is only ever consecutive
+/// `lv`s, and elements sharing a run always share their per-run state.
+fn batch_update_targets(tree: &mut ContentTree<Run>, targets: &[usize], f: impl Fn(&mut Run)) {
+    let mut i = 0;
+    while i < targets.len() {
+        let seg_start = targets[i];
+        let mut j = i;
+        while j + 1 < targets.len() && targets[j + 1] == targets[j] + 1 {
+            j += 1;
+        }
+        let count = targets[j] - seg_start + 1;
+        tree.update_run_by_lv(seg_start, count, &f);
+        i = j + 1;
+    }
+}
+
+fn apply1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
+    match &log.ops[lv] {
         ListOp::Del { pos, len } => {
+            let (pos, len) = (*pos, *len);
             let visible = ctx.tree.cur_len();
             debug_assert!(
                 pos <= visible && len <= visible - pos,
                 "range delete out of bounds: pos={pos} len={len} visible={visible}"
             );
             let mut targets = Vec::with_capacity(len);
-            let mut removals = Vec::with_capacity(len);
             if len > 0 {
                 let mut c = ctx.tree.cursor_at_cur_pos(pos);
                 for _ in 0..len {
                     loop {
-                        let (cur_state, end_run) = {
+                        let cur_state = {
                             let r = ctx.tree.cur_run(&c).expect("del target exists");
-                            (r.cur, item_width(r.end))
+                            r.cur
                         };
                         if cur_state == 0 {
                             break;
                         }
-                        let skipped = ctx.tree.step_run(&mut c);
-                        c.end_pos += end_run * skipped;
+                        ctx.tree.step_run(&mut c);
                     }
-                    let (target_lv, target_end_state) = {
+                    let target_lv = {
                         let r = ctx.tree.cur_run(&c).expect("del target");
-                        (r.op_id_at(c.off), r.end)
+                        r.op_id_at(c.off)
                     };
                     targets.push(target_lv);
-                    if target_end_state == 0 {
-                        removals.push(c.end_pos);
-                    }
                     ctx.tree.step(&mut c);
-                    c.end_pos += item_width(target_end_state);
                 }
-                for &target_lv in &targets {
-                    ctx.tree.update_by_lv(target_lv, |it| {
-                        it.cur += 1;
-                        it.end += 1;
-                    });
-                }
-                for &end_pos in removals.iter().rev() {
-                    snap.remove(end_pos);
-                }
-            }
-            ctx.del_targets[lv] = targets;
-        }
-        ListOp::Undel { del } => {
-            let del_lv = *log.lv_of.get(&del).expect("undel references unknown del");
-            let targets = ctx.del_targets[del_lv].clone();
-            let mut reappear: Vec<usize> = Vec::new();
-            for &target in &targets {
-                let old_end = {
-                    let (run, _) = ctx.tree.get(ctx.tree.doc_index_of_lv(target));
-                    run.end
-                };
-                if old_end == 1 {
-                    reappear.push(target);
-                }
-                ctx.tree.update_by_lv(target, |it| {
-                    assert!(it.cur >= 1 && it.end >= 1, "undel underflow");
-                    it.cur -= 1;
-                    it.end -= 1;
+                batch_update_targets(&mut ctx.tree, &targets, |it| {
+                    it.cur += 1;
+                    it.end += 1;
                 });
             }
-            let mut inserts: Vec<(usize, Dot, P)> = reappear
-                .iter()
-                .map(|&t| {
-                    let rank = ctx.tree.end_rank_at_doc_index(ctx.tree.doc_index_of_lv(t));
-                    let item = match log.ops[t].clone() {
-                        ListOp::Ins { item, .. } => item,
-                        _ => unreachable!("undel target must be an Ins element"),
-                    };
-                    (rank, log.dots[t], item)
-                })
-                .collect();
-            inserts.sort_by_key(|&(r, _, _)| r);
-            for (rank, dot, item) in inserts {
-                snap.insert(rank, (dot, item));
-            }
-            ctx.del_targets[lv] = targets;
+            ctx.del_targets.set(lv, targets);
         }
-        ListOp::Ins { pos, item } => {
-            let c = ctx.tree.cursor_at_cur_pos(pos);
+        ListOp::Undel { del } => {
+            let del = *del;
+            let del_lv = *log.lv_of.get(&del).expect("undel references unknown del");
+            let targets = ctx.del_targets[del_lv].clone();
+            batch_update_targets(&mut ctx.tree, &targets, |it| {
+                assert!(it.cur >= 1 && it.end >= 1, "undel underflow");
+                it.cur -= 1;
+                it.end -= 1;
+            });
+            ctx.del_targets.set(lv, targets);
+        }
+        ListOp::Ins { pos, .. } => {
+            let c = ctx.tree.cursor_at_cur_pos(*pos);
             let origin_left = if c.doc_idx == 0 {
                 -1
             } else {
@@ -319,7 +310,6 @@ fn apply1<P: Clone>(ctx: &mut Ctx, snap: &mut Vec<(Dot, P)>, log: &OpLog<P>, lv:
             let mut c = c;
             integrate(&ctx.tree, log, &new_item, &mut c);
             ctx.tree.insert(c.doc_idx, new_item);
-            snap.insert(c.end_pos, (log.dots[lv], item));
         }
     }
 }
@@ -388,7 +378,7 @@ fn diff<P>(log: &OpLog<P>, a: &[usize], b: &[usize]) -> (Vec<usize>, Vec<usize>)
     (a_only, b_only)
 }
 
-fn apply_one<P: Clone>(ctx: &mut Ctx, snap: &mut Vec<(Dot, P)>, log: &OpLog<P>, lv: usize) {
+fn apply_one<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
     let (a_only, b_only) = diff(log, &ctx.cur_version, &log.parents[lv]);
     let mut retreat = a_only;
     retreat.sort_unstable_by(|x, y| y.cmp(x));
@@ -400,27 +390,175 @@ fn apply_one<P: Clone>(ctx: &mut Ctx, snap: &mut Vec<(Dot, P)>, log: &OpLog<P>, 
     for a in advance {
         advance1(ctx, log, a);
     }
-    apply1(ctx, snap, log, lv);
+    apply1(ctx, log, lv);
     ctx.cur_version = vec![lv];
 }
 
-fn replay<P: Clone>(log: &OpLog<P>) -> (Ctx, Vec<(Dot, P)>) {
-    let n = log.ops.len();
-    let mut ctx = Ctx {
-        tree: ContentTree::new(),
-        del_targets: vec![Vec::new(); n],
-        cur_version: Vec::new(),
-    };
-    let mut snap: Vec<(Dot, P)> = Vec::new();
-    for lv in 0..n {
-        apply_one(&mut ctx, &mut snap, log, lv);
+#[derive(Clone, Debug)]
+pub struct SeqCheckout {
+    ctx: Ctx,
+    // Persistent so a `ProjectedState` clone shares it in `O(1)`; a plain HashMap here
+    // rehashes `O(total ops)` per copy-on-write mutation on the typing path, which on a
+    // large op history dominates the per-keystroke clone.
+    lv_of: imbl::HashMap<Dot, usize>,
+    applied: usize,
+}
+
+impl Default for SeqCheckout {
+    fn default() -> Self {
+        SeqCheckout {
+            ctx: Ctx {
+                tree: ContentTree::new(),
+                del_targets: imbl::Vector::new(),
+                cur_version: Vec::new(),
+            },
+            lv_of: imbl::HashMap::new(),
+            applied: 0,
+        }
     }
-    (ctx, snap)
+}
+
+impl SeqCheckout {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn applied_len(&self) -> usize {
+        self.applied
+    }
+
+    pub fn apply_range<P>(&mut self, log: &OpLog<P>, range: std::ops::Range<usize>) {
+        debug_assert_eq!(range.start, self.applied, "apply_range must be contiguous");
+        while self.ctx.del_targets.len() < log.ops.len() {
+            self.ctx.del_targets.push_back(Vec::new());
+        }
+        for lv in range {
+            apply_one(&mut self.ctx, log, lv);
+            self.lv_of.insert(log.dots[lv], lv);
+            self.applied = lv + 1;
+        }
+    }
+
+    pub fn apply_tail<P>(&mut self, log: &OpLog<P>) {
+        let from = self.applied;
+        self.apply_range(log, from..log.ops.len());
+    }
+
+    pub fn visible_len(&self) -> usize {
+        self.ctx.tree.end_len()
+    }
+
+    pub fn snapshot<P: Clone>(&self, log: &OpLog<P>) -> Vec<(Dot, P)> {
+        let visible = self.ctx.tree.end_len();
+        // A heavily-edited document accumulates tombstone runs; once they dwarf the
+        // visible elements, walking every run is `O(#runs)` and dominates each
+        // reprojection. Above ~8× fragmentation, reading by visible position via the
+        // end-dimension order statistics — `O(visible · log)` — is the cheaper path and
+        // skips the tombstones entirely.
+        if self.ctx.tree.run_count() > visible.saturating_mul(8).max(64) {
+            return self.snapshot_range(log, 0..visible);
+        }
+        let mut out = Vec::with_capacity(visible);
+        for run in self.ctx.tree.iter_runs() {
+            if run.end != 0 {
+                continue;
+            }
+            for off in 0..run.len {
+                let lv = run.start_lv + off;
+                if let ListOp::Ins { item, .. } = &log.ops[lv] {
+                    out.push((log.dots[lv], item.clone()));
+                }
+            }
+        }
+        out
+    }
+
+    /// Snapshot only the visible elements in document-position range `[start,end)`.
+    /// O((end-start) · log) via end-dimension order-statistics — does not scan the
+    /// whole sequence.
+    pub fn snapshot_range<P: Clone>(
+        &self,
+        log: &OpLog<P>,
+        range: std::ops::Range<usize>,
+    ) -> Vec<(Dot, P)> {
+        range
+            .filter_map(|pos| {
+                let lv = self.ctx.tree.end_pos_to_lv(pos)?;
+                match &log.ops[lv] {
+                    ListOp::Ins { item, .. } => Some((log.dots[lv], item.clone())),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
+    pub fn iter_visible<'a, P>(
+        &'a self,
+        log: &'a OpLog<P>,
+    ) -> impl Iterator<Item = (Dot, &'a P)> + 'a {
+        self.ctx
+            .tree
+            .iter_runs()
+            .filter(|r| r.end == 0)
+            .flat_map(move |r| {
+                (0..r.len).filter_map(move |off| {
+                    let lv = r.start_lv + off;
+                    match &log.ops[lv] {
+                        ListOp::Ins { item, .. } => Some((log.dots[lv], item)),
+                        _ => None,
+                    }
+                })
+            })
+    }
+
+    pub fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        resolve_boundary_in(&self.ctx.tree, &self.lv_of, id, bias)
+    }
+
+    pub fn del_target_positions(&self, del: Dot) -> Vec<usize> {
+        del_target_positions_in(&self.ctx.tree, &self.lv_of, &self.ctx.del_targets, del)
+    }
+
+    pub fn dot_at_visible<P>(&self, log: &OpLog<P>, pos: usize) -> Option<Dot> {
+        let lv = self.ctx.tree.end_pos_to_lv(pos)?;
+        Some(log.dots[lv])
+    }
+
+    pub fn del_target_dots<P>(&self, log: &OpLog<P>, del: Dot) -> Vec<Dot> {
+        let Some(&del_lv) = self.lv_of.get(&del) else {
+            return Vec::new();
+        };
+        let Some(targets) = self.ctx.del_targets.get(del_lv) else {
+            return Vec::new();
+        };
+        targets.iter().map(|&lv| log.dots[lv]).collect()
+    }
+
+    /// Number of targets a delete op removed, without materializing their dots. Lets a
+    /// bulk-delete fast path decide on size in `O(1)` instead of building an `O(len)`
+    /// dot vector just to read its length.
+    pub fn del_target_count(&self, del: Dot) -> usize {
+        self.lv_of
+            .get(&del)
+            .and_then(|&del_lv| self.ctx.del_targets.get(del_lv))
+            .map_or(0, |targets| targets.len())
+    }
+
+    pub fn into_resolver(self) -> BoundaryResolver {
+        BoundaryResolver {
+            index: ResolveIndex {
+                tree: self.ctx.tree,
+                lv_of: self.lv_of,
+                del_targets: self.ctx.del_targets,
+            },
+        }
+    }
 }
 
 pub fn checkout<P: Clone>(log: &OpLog<P>) -> Vec<(Dot, P)> {
-    let (_ctx, snap) = replay(log);
-    snap
+    let mut c = SeqCheckout::new();
+    c.apply_tail(log);
+    c.snapshot(log)
 }
 
 #[cfg(test)]
@@ -429,63 +567,68 @@ pub(crate) fn checkout_text(log: &OpLog<char>) -> String {
 }
 
 pub(crate) fn checkout_with_index<P: Clone>(log: &OpLog<P>) -> (Vec<(Dot, P)>, ResolveIndex) {
-    let (ctx, snap) = replay(log);
-    let lv_of: HashMap<Dot, usize> = log.dots.iter().enumerate().map(|(i, d)| (*d, i)).collect();
+    let mut c = SeqCheckout::new();
+    c.apply_tail(log);
+    let snap = c.snapshot(log);
     let index = ResolveIndex {
-        tree: ctx.tree,
-        lv_of,
-        del_targets: ctx.del_targets,
+        tree: c.ctx.tree,
+        lv_of: c.lv_of,
+        del_targets: c.ctx.del_targets,
     };
     (snap, index)
 }
 
 pub(crate) struct ResolveIndex {
     tree: ContentTree<Run>,
-    lv_of: HashMap<Dot, usize>,
-    del_targets: Vec<Vec<usize>>,
+    lv_of: imbl::HashMap<Dot, usize>,
+    del_targets: imbl::Vector<Vec<usize>>,
+}
+
+fn resolve_boundary_in(
+    tree: &ContentTree<Run>,
+    lv_of: &imbl::HashMap<Dot, usize>,
+    id: Dot,
+    bias: Bias,
+) -> Option<Boundary> {
+    let lv = *lv_of.get(&id)?;
+    let doc_idx = tree.doc_index_of_lv(lv);
+    let (run, _off) = tree.get(doc_idx);
+    let visible = run.end == 0;
+    let r = tree.end_rank_at_doc_index(doc_idx);
+    let position = match bias {
+        Bias::Before => r,
+        Bias::After => r + usize::from(visible),
+    };
+    Some(Boundary { position, visible })
+}
+
+fn del_target_positions_in(
+    tree: &ContentTree<Run>,
+    lv_of: &imbl::HashMap<Dot, usize>,
+    del_targets: &imbl::Vector<Vec<usize>>,
+    del: Dot,
+) -> Vec<usize> {
+    let Some(del_lv) = lv_of.get(&del).copied() else {
+        return Vec::new();
+    };
+    let Some(targets) = del_targets.get(del_lv) else {
+        return Vec::new();
+    };
+    let mut positions: Vec<usize> = Vec::new();
+    for &t in targets {
+        let doc_idx = tree.doc_index_of_lv(t);
+        let (run, _off) = tree.get(doc_idx);
+        if run.end == 0 {
+            positions.push(tree.end_rank_at_doc_index(doc_idx));
+        }
+    }
+    positions.sort_unstable_by(|a, b| b.cmp(a));
+    positions
 }
 
 impl ResolveIndex {
-    fn lv_of(&self, id: Dot) -> Option<usize> {
-        self.lv_of.get(&id).copied()
-    }
-
-    fn locate(&self, lv: usize) -> (usize, i32) {
-        let doc_idx = self.tree.doc_index_of_lv(lv);
-        let (run, _off) = self.tree.get(doc_idx);
-        (doc_idx, run.end)
-    }
-
-    fn end_rank_at(&self, doc_idx: usize) -> usize {
-        self.tree.end_rank_at_doc_index(doc_idx)
-    }
-
-    /// Current visible positions (`Before` bias) of `del`'s target elements that
-    /// are still visible, sorted DESCENDING. Used to invert an `Undel` (i.e. redo
-    /// a deletion): re-delete each restored element with a `Del { pos, len: 1 }`
-    /// applied in this order, so an earlier removal never shifts a later position.
-    ///
-    /// Targets that a *concurrent* op independently deleted are skipped — they are
-    /// no longer visible after the undel, so a positional re-delete spanning them
-    /// would overrun the sequence (the "del target exists" panic). Because each
-    /// surviving target is addressed individually, this is also correct when a
-    /// concurrent insert split the original run into non-contiguous pieces.
     fn del_target_positions(&self, del: Dot) -> Vec<usize> {
-        let Some(del_lv) = self.lv_of(del) else {
-            return Vec::new();
-        };
-        let Some(targets) = self.del_targets.get(del_lv) else {
-            return Vec::new();
-        };
-        let mut positions: Vec<usize> = Vec::new();
-        for &t in targets {
-            let (doc_idx, end) = self.locate(t);
-            if end == 0 {
-                positions.push(self.end_rank_at(doc_idx));
-            }
-        }
-        positions.sort_unstable_by(|a, b| b.cmp(a));
-        positions
+        del_target_positions_in(&self.tree, &self.lv_of, &self.del_targets, del)
     }
 }
 
@@ -501,21 +644,29 @@ pub struct BoundaryResolver {
 
 impl BoundaryResolver {
     pub fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
-        let lv = self.index.lv_of(id)?;
-        let (doc_idx, end_state) = self.index.locate(lv);
-        let visible = end_state == 0;
-        let r = self.index.end_rank_at(doc_idx);
-        let position = match bias {
-            Bias::Before => r,
-            Bias::After => r + usize::from(visible),
-        };
-        Some(Boundary { position, visible })
+        resolve_boundary_in(&self.index.tree, &self.index.lv_of, id, bias)
     }
 
     /// Descending current visible positions of `del`'s still-visible targets,
     /// for redoing a deletion. See [`ResolveIndex::del_target_positions`].
     pub fn del_target_positions(&self, del: Dot) -> Vec<usize> {
         self.index.del_target_positions(del)
+    }
+}
+
+pub trait SeqResolve {
+    fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary>;
+}
+
+impl SeqResolve for BoundaryResolver {
+    fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        BoundaryResolver::resolve_boundary(self, id, bias)
+    }
+}
+
+impl SeqResolve for SeqCheckout {
+    fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        SeqCheckout::resolve_boundary(self, id, bias)
     }
 }
 
@@ -526,10 +677,15 @@ pub fn checkout_with_resolver<P: Clone>(log: &OpLog<P>) -> (Vec<(Dot, P)>, Bound
 
 #[cfg(test)]
 pub(crate) fn checkout_runs(log: &OpLog) -> (String, usize, usize) {
-    let (ctx, snap) = replay(log);
-    let elems = ctx.tree.len();
-    let runs = ctx.tree.run_count();
-    (snap.into_iter().map(|(_id, c)| c).collect(), elems, runs)
+    let mut c = SeqCheckout::new();
+    c.apply_tail(log);
+    let elems = c.ctx.tree.len();
+    let runs = c.ctx.tree.run_count();
+    (
+        c.snapshot(log).into_iter().map(|(_id, ch)| ch).collect(),
+        elems,
+        runs,
+    )
 }
 
 #[cfg(test)]
@@ -950,5 +1106,212 @@ mod tests {
             undel(1, 4, &[u1], del),
         ];
         let _ = checkout_text(&build_oplog(&ev));
+    }
+
+    #[test]
+    fn seqcheckout_resolver_matches_cold() {
+        let a = Dot::new(1, 0);
+        let b = Dot::new(1, 1);
+        let c = Dot::new(1, 2);
+        let ev = vec![
+            ins(1, 0, &[], 0, 'a'),
+            ins(1, 1, &[a], 1, 'b'),
+            ins(1, 2, &[b], 2, 'c'),
+            del_at(1, 3, &[c], 1),
+        ];
+        let log = build_oplog(&ev);
+        let (_cold_elems, cold) = checkout_with_resolver(&log);
+        let mut warm = SeqCheckout::new();
+        warm.apply_tail(&log);
+        for (d, bias) in [
+            (a, Bias::Before),
+            (a, Bias::After),
+            (b, Bias::Before),
+            (c, Bias::After),
+        ] {
+            assert_eq!(
+                warm.resolve_boundary(d, bias),
+                cold.resolve_boundary(d, bias)
+            );
+        }
+        let warm_doc: String = warm.iter_visible(&log).map(|(_d, ch)| *ch).collect();
+        assert_eq!(warm_doc, "ac");
+    }
+
+    #[test]
+    fn dot_at_visible_matches_snapshot_order() {
+        let a = Dot::new(1, 0);
+        let b = Dot::new(1, 1);
+        let ev = vec![
+            ins(1, 0, &[], 0, 'a'),
+            ins(1, 1, &[a], 1, 'b'),
+            ins(2, 0, &[a], 1, 'c'),
+            ins(1, 2, &[b], 2, 'd'),
+        ];
+        let log = build_oplog(&ev);
+        let mut sc = SeqCheckout::new();
+        sc.apply_tail(&log);
+        let snap = sc.snapshot(&log);
+        for (i, (d, _)) in snap.iter().enumerate() {
+            assert_eq!(sc.dot_at_visible(&log, i), Some(*d), "pos {i}");
+        }
+        assert_eq!(sc.dot_at_visible(&log, snap.len()), None);
+    }
+
+    use proptest::prelude::*;
+    use std::collections::{BTreeMap, HashSet};
+
+    fn sub(events: &[InputEvent], parents: &[Dot]) -> Vec<InputEvent> {
+        let map: HashMap<Dot, &InputEvent> = events.iter().map(|e| (e.id, e)).collect();
+        let mut anc: HashSet<Dot> = HashSet::new();
+        let mut st = parents.to_vec();
+        while let Some(d) = st.pop() {
+            if anc.insert(d)
+                && let Some(e) = map.get(&d)
+            {
+                st.extend(e.parents.iter().copied());
+            }
+        }
+        events
+            .iter()
+            .filter(|e| anc.contains(&e.id))
+            .cloned()
+            .collect()
+    }
+
+    fn build_undel(raw: Vec<(u64, u8, u8, u8, char, bool)>) -> Vec<InputEvent> {
+        let mut clock: HashMap<u64, u64> = HashMap::new();
+        let mut front: BTreeMap<u64, Dot> = BTreeMap::new();
+        let mut del_authored: HashMap<u64, Vec<Dot>> = HashMap::new();
+        let mut undeled: HashSet<Dot> = HashSet::new();
+        let mut out: Vec<InputEvent> = Vec::new();
+        for (actor, action, target, del_len, ch, sync_other) in raw {
+            let cl = *clock.get(&actor).unwrap_or(&0);
+            clock.insert(actor, cl + 1);
+            let id = Dot::new(actor, cl);
+            let mut parents: Vec<Dot> = Vec::new();
+            if let Some(f) = front.get(&actor) {
+                parents.push(*f);
+            }
+            if sync_other && let Some((_, f)) = front.iter().find(|(act, _)| **act != actor) {
+                parents.push(*f);
+            }
+            let vis = checkout_text(&build_oplog(&sub(&out, &parents)))
+                .chars()
+                .count();
+            let candidates: Vec<Dot> = del_authored
+                .get(&actor)
+                .map(|v| v.iter().copied().filter(|d| !undeled.contains(d)).collect())
+                .unwrap_or_default();
+            let op = if action % 3 == 2 && !candidates.is_empty() {
+                let del = candidates[(target as usize) % candidates.len()];
+                undeled.insert(del);
+                ListOp::Undel { del }
+            } else if action % 3 == 1 && vis > 0 {
+                let pos = (target as usize) % vis;
+                let len = 1 + (del_len as usize) % (vis - pos);
+                del_authored.entry(actor).or_default().push(id);
+                ListOp::Del { pos, len }
+            } else {
+                ListOp::Ins {
+                    pos: (target as usize) % (vis + 1),
+                    item: ch,
+                }
+            };
+            out.push(InputEvent { id, parents, op });
+            front.insert(actor, id);
+        }
+        out
+    }
+
+    fn arb_events_undel(max: usize, actors: u64) -> impl Strategy<Value = Vec<InputEvent>> {
+        proptest::collection::vec(
+            (
+                0u64..actors,
+                any::<u8>(),
+                any::<u8>(),
+                any::<u8>(),
+                any::<char>(),
+                any::<bool>(),
+            ),
+            0..=max,
+        )
+        .prop_map(build_undel)
+    }
+
+    fn chunks(len: usize, sizes: &[usize]) -> Vec<std::ops::Range<usize>> {
+        let mut out = Vec::new();
+        let mut start = 0usize;
+        let mut i = 0usize;
+        while start < len {
+            let step = (sizes.get(i).copied().unwrap_or(1) % len.max(1)).max(1);
+            let end = (start + step).min(len);
+            out.push(start..end);
+            start = end;
+            i += 1;
+        }
+        out
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 384, ..ProptestConfig::default() })]
+        #[test]
+        fn warm_matches_cold_for_any_chunking(
+            events in arb_events_undel(40, 3),
+            sizes in proptest::collection::vec(1usize..7, 0..40),
+        ) {
+            let log = build_oplog(&events);
+            let cold = checkout(&log);
+            let (_cold_elems, cold_res) = checkout_with_resolver(&log);
+
+            let mut warm = SeqCheckout::new();
+            for r in chunks(log.ops.len(), &sizes) {
+                warm.apply_range(&log, r);
+            }
+            prop_assert_eq!(warm.snapshot(&log), cold.clone());
+            prop_assert_eq!(warm.visible_len(), cold.len());
+            for &(dot, _) in &cold {
+                for bias in [Bias::Before, Bias::After] {
+                    prop_assert_eq!(
+                        warm.resolve_boundary(dot, bias),
+                        cold_res.resolve_boundary(dot, bias)
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn chunking_is_independent(events in arb_events_undel(40, 3)) {
+            let log = build_oplog(&events);
+            let mut one = SeqCheckout::new();
+            one.apply_tail(&log);
+            let mut many = SeqCheckout::new();
+            for lv in 0..log.ops.len() {
+                many.apply_range(&log, lv..lv + 1);
+            }
+            prop_assert_eq!(one.snapshot(&log), many.snapshot(&log));
+        }
+    }
+
+    #[test]
+    fn run_compaction_characterization() {
+        let mut ev = Vec::new();
+        for c in 0..200u64 {
+            let parents = if c == 0 {
+                vec![]
+            } else {
+                vec![Dot::new(7, c - 1)]
+            };
+            ev.push(ins(7, c, &parents, c as usize, 'a'));
+        }
+        let log = build_oplog(&ev);
+        let mut warm = SeqCheckout::new();
+        warm.apply_tail(&log);
+        assert_eq!(warm.snapshot(&log).len(), 200);
+        assert_eq!(
+            warm.ctx.tree.run_count(),
+            1,
+            "forward typing must stay one run"
+        );
     }
 }

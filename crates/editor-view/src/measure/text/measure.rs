@@ -18,18 +18,19 @@ use crate::glyph_run::RubyAnnotation;
 use super::extract::LineHeightConfig;
 use super::extract::{ExtractedLine, extract_lines};
 use super::inline::{
-    Segment, TabMark, TextRun, collect_text_runs, identify_ruby_groups, split_segments,
+    RubyGroup, Segment, TabMark, TextRun, collect_text_runs, identify_ruby_groups, split_segments,
 };
 use super::layout::build_layout;
 use super::resolve::{ResolvedTextStyle, apply_pending_to_style, style_from_effective_modifiers};
 use super::ruby::build_ruby_annotations;
 use super::ruby::ruby_extra_top;
+use super::seg_cache::{self, SegmentCache};
 use super::strut::compute_strut;
 use super::style_run::resolve_style_runs;
 use super::tab_metric::tab_px;
 use crate::glyph_run::GlyphRun;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TabGap {
     pub offset_index: usize,
     pub x: f32,
@@ -103,6 +104,7 @@ fn measure_segment<'a>(
     align: Alignment,
     indent: f32,
     base_style: &ResolvedTextStyle,
+    ruby_groups: &[RubyGroup],
     resource: &mut Resource,
 ) -> Vec<MeasuredLine> {
     let para = node.id();
@@ -194,12 +196,11 @@ fn measure_segment<'a>(
         &tab_boxes,
     );
 
-    let ruby_groups = identify_ruby_groups(node);
     let mut group_offsets = vec![0usize; ruby_groups.len()];
     let mut line_outputs: Vec<(ExtractedLine, Vec<RubyAnnotation>)> =
         Vec::with_capacity(lines.len());
     for line in lines {
-        let ruby = build_ruby_annotations(&line, width, &ruby_groups, &mut group_offsets, resource);
+        let ruby = build_ruby_annotations(&line, width, ruby_groups, &mut group_offsets, resource);
         line_outputs.push((line, ruby));
     }
 
@@ -283,6 +284,7 @@ pub(crate) fn measure_paragraph(
     align: Alignment,
     indent: f32,
     pending: Option<&editor_state::PendingModifiers>,
+    mut seg_cache: Option<&mut SegmentCache>,
     resource: &mut Resource,
 ) -> (Vec<MeasuredLine>, f32) {
     let mut base_style = style_from_effective_modifiers(
@@ -300,22 +302,75 @@ pub(crate) fn measure_paragraph(
     }
     let (text, runs, tabs) = collect_text_runs(node);
     let segments = split_segments(node);
+    // Ruby groups depend only on the paragraph, not the segment — compute once here
+    // rather than re-scanning the whole paragraph inside every `measure_segment`
+    // (that made a paragraph with `S` hard-break segments `O(S · paragraph)`).
+    let ruby_groups = identify_ruby_groups(node);
 
+    let node_id = node.id();
     let mut lines: Vec<MeasuredLine> = Vec::new();
     for (i, seg) in segments.iter().enumerate() {
         let seg_indent = if i == 0 { indent } else { 0.0 };
-        lines.extend(measure_segment(
-            node,
-            seg,
-            &text,
-            &runs,
-            &tabs,
-            width,
-            align,
-            seg_indent,
-            &base_style,
-            resource,
-        ));
+        // Only text segments are cache-worthy; empty (hard-break) segments just emit a
+        // cheap strut line. A text segment's shaped output depends solely on its own
+        // content (hard breaks prevent cross-segment reflow), so a content-hash cache
+        // lets an edit re-shape only the changed segment.
+        if let Segment::Text {
+            offset_range,
+            byte_range,
+        } = seg
+        {
+            let hash = seg_cache::segment_hash(
+                &text[byte_range.clone()],
+                offset_range,
+                &runs,
+                width,
+                align,
+                seg_indent,
+                &base_style,
+            );
+            let seg_start = offset_range.start;
+            if let Some(cache) = seg_cache.as_deref_mut()
+                && let Some(reused) = cache.get(node_id, i, hash, seg_start)
+            {
+                lines.extend(reused);
+                continue;
+            }
+            let measured = measure_segment(
+                node,
+                seg,
+                &text,
+                &runs,
+                &tabs,
+                width,
+                align,
+                seg_indent,
+                &base_style,
+                &ruby_groups,
+                resource,
+            );
+            if let Some(cache) = seg_cache.as_deref_mut() {
+                cache.put(node_id, i, hash, &measured, seg_start);
+            }
+            lines.extend(measured);
+        } else {
+            lines.extend(measure_segment(
+                node,
+                seg,
+                &text,
+                &runs,
+                &tabs,
+                width,
+                align,
+                seg_indent,
+                &base_style,
+                &ruby_groups,
+                resource,
+            ));
+        }
+    }
+    if let Some(cache) = seg_cache.as_deref_mut() {
+        cache.prune(node_id, segments.len());
     }
 
     let total_height: f32 = lines.iter().map(|l| l.height).sum();
@@ -421,11 +476,82 @@ mod tests {
         let view = DocView::new(&pd);
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let mut res = Resource::new_test();
-        measure_paragraph(&para, width, Alignment::Left, 0.0, None, &mut res)
+        measure_paragraph(&para, width, Alignment::Left, 0.0, None, None, &mut res)
     }
 
     fn glyph_runs(lines: &[MeasuredLine]) -> Vec<&GlyphRun> {
         lines.iter().flat_map(|l| l.glyph_runs.iter()).collect()
+    }
+
+    #[test]
+    fn seg_cache_reuse_matches_uncached() {
+        use super::seg_cache::SegmentCache;
+        let logs = build_logs(vec![
+            ch('a'),
+            ch('b'),
+            hb(),
+            ch('c'),
+            ch('d'),
+            ch('e'),
+            hb(),
+            ch('f'),
+        ]);
+        let pd = project_document(&logs).unwrap();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        let mut res = Resource::new_test();
+
+        let uncached =
+            measure_paragraph(&para, 200.0, Alignment::Left, 0.0, None, None, &mut res).0;
+
+        let mut cache = SegmentCache::default();
+        // First pass populates the cache (all segments measured + stored relative).
+        let first = measure_paragraph(
+            &para,
+            200.0,
+            Alignment::Left,
+            0.0,
+            None,
+            Some(&mut cache),
+            &mut res,
+        )
+        .0;
+        // Second pass reuses every segment from the cache (rebased back to absolute).
+        let reused = measure_paragraph(
+            &para,
+            200.0,
+            Alignment::Left,
+            0.0,
+            None,
+            Some(&mut cache),
+            &mut res,
+        )
+        .0;
+
+        assert_eq!(uncached.len(), reused.len(), "line count");
+        for (i, (u, r)) in uncached.iter().zip(&reused).enumerate() {
+            assert_eq!(u.offset_range, r.offset_range, "line {i} offset_range");
+            assert_eq!(u.glyph_runs.len(), r.glyph_runs.len(), "line {i} run count");
+            for (ug, rg) in u.glyph_runs.iter().zip(&r.glyph_runs) {
+                assert_eq!(ug.offset_range, rg.offset_range, "line {i} run offset");
+                assert_eq!(ug.text, rg.text, "line {i} run text");
+                assert!((ug.x - rg.x).abs() < 1e-3, "line {i} run x");
+            }
+            assert_eq!(
+                u.tab_gaps
+                    .iter()
+                    .map(|t| t.offset_index)
+                    .collect::<Vec<_>>(),
+                r.tab_gaps
+                    .iter()
+                    .map(|t| t.offset_index)
+                    .collect::<Vec<_>>(),
+                "line {i} tab offsets",
+            );
+            assert!((u.height - r.height).abs() < 1e-3, "line {i} height");
+        }
+        // Uncached and first-cached pass must also agree.
+        assert_eq!(uncached.len(), first.len());
     }
 
     #[test]
@@ -578,7 +704,7 @@ mod tests {
         let view = DocView::new(&pd);
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let mut res = Resource::new_test();
-        measure_paragraph(&para, width, Alignment::Left, 0.0, pending, &mut res)
+        measure_paragraph(&para, width, Alignment::Left, 0.0, pending, None, &mut res)
     }
 
     #[test]

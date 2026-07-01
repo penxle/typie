@@ -77,6 +77,22 @@ impl NodeAttrLog {
         }
         node
     }
+
+    /// The single-target projection, matching `project`: `Some(node)` iff at
+    /// least one of `target`'s attr ops folded successfully, else `None`.
+    pub fn project_target(&self, target: Dot, node_type: NodeType) -> Option<Node> {
+        let mut node = node_type.into_node();
+        let mut any = false;
+        for (op_id, op) in &self.ops {
+            if op.target != target {
+                continue;
+            }
+            if fold_op(&mut node, *op_id, &op.attr) {
+                any = true;
+            }
+        }
+        any.then_some(node)
+    }
 }
 
 fn fold_op(node: &mut Node, op_id: Dot, attr: &NodeAttr) -> bool {

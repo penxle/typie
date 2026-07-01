@@ -35,14 +35,23 @@ pub fn resolve_style_entries(state: &State) -> Vec<StyleInfo> {
 }
 
 fn leaf_style(state: &State, dot: Dot) -> Option<String> {
-    state.projected.node_styles().value_of(dot)
+    state
+        .projected
+        .projected()
+        .node_styles
+        .get(&dot)
+        .cloned()
+        .flatten()
 }
 
 fn block_marker_style(state: &State, block: Dot) -> Option<String> {
     state
         .projected
-        .node_markers()
-        .value_of(block)
+        .projected()
+        .node_markers
+        .get(&block)
+        .cloned()
+        .flatten()
         .and_then(|m| m.style)
 }
 
@@ -76,10 +85,7 @@ fn style_modifier_types(state: &State, style_id: &str) -> Vec<ModifierType> {
 }
 
 fn leaf_diverges(view: &DocView, dot: Dot, style_types: &[ModifierType]) -> bool {
-    let Some(leaf) = view.leaf(dot) else {
-        return false;
-    };
-    leaf.own_modifiers()
+    view.own_modifiers_of(dot)
         .iter()
         .filter(|(_, own)| !own.from_style)
         .any(|(ty, _)| style_types.contains(ty))

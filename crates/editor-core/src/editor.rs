@@ -7,7 +7,7 @@ use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
 use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
-    PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    LayoutDirty, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
     StableSelection, State, closest_empty_paragraph_break_end_between, farther_endpoint,
     is_unit_node_selection,
 };
@@ -145,6 +145,12 @@ pub struct Editor {
     pub(crate) dnd: DndState,
 
     focused: bool,
+    /// Monotonic counter bumped whenever a change can alter rendered page pixels
+    /// beyond the selection overlay (doc edits, layout/reflow, font, theme).
+    /// Selection-only changes intentionally do NOT bump it, so `page_render_signature`
+    /// stays stable for pages whose selection rects are unchanged, letting
+    /// `render_surface` skip re-rasterizing them.
+    render_epoch: u64,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
     pub(crate) pending_ops: Vec<Op<EditOp>>,
@@ -204,6 +210,7 @@ impl Editor {
             tracked_ranges: TrackedRangeRegistry::new(),
             dnd: DndState::default(),
             focused: false,
+            render_epoch: 0,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
@@ -556,12 +563,30 @@ impl Editor {
         let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
         let messages = std::mem::take(&mut self.message_queue);
-        for msg in messages {
-            self.process_message(msg)?;
+        // Coalesce a consecutive run of remote changesets into one batched receive:
+        // a sync burst enqueues many `Message::Remote` back-to-back, and applying
+        // each separately re-clones the whole projected state (O(N)) per changeset.
+        let mut iter = messages.into_iter().peekable();
+        while let Some(msg) = iter.next() {
+            match msg {
+                Message::Remote { changeset } => {
+                    let mut batch = vec![changeset];
+                    while matches!(iter.peek(), Some(Message::Remote { .. })) {
+                        if let Some(Message::Remote { changeset }) = iter.next() {
+                            batch.push(changeset);
+                        }
+                    }
+                    self.apply_remote_changesets(batch)?;
+                }
+                other => {
+                    self.process_message(other)?;
+                }
+            }
         }
+        let layout_dirty = self.state.projected_mut().take_layout_dirty();
 
         if !self.pending_ops.is_empty() {
-            self.augment_font_state_from_ops();
+            self.augment_font_state_from_ops(&layout_dirty);
         }
 
         let effects = std::mem::take(&mut self.pending_effects);
@@ -574,7 +599,10 @@ impl Editor {
         let gap_phantom = normalize_gap_phantom(&self.state);
         // `reconcile` reports view-level change sources (pending style, gap phantom,
         // layout fingerprint); applied doc ops also dirty the rendered layout.
-        let dirty = self.view.reconcile(&self.state, pending_style, gap_phantom) || !ops.is_empty();
+        let dirty = self
+            .view
+            .reconcile(&self.state, layout_dirty, pending_style, gap_phantom)
+            || !ops.is_empty();
 
         let mut fields: HashSet<StateField> = HashSet::new();
 
@@ -585,7 +613,7 @@ impl Editor {
             fields.insert(StateField::TableOverlays);
             fields.insert(StateField::LinkRects);
             fields.insert(StateField::Placeholder);
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.invalidate_render();
         }
 
         if !ops.is_empty() {
@@ -627,6 +655,10 @@ impl Editor {
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
             fields.insert(StateField::Styles);
+            // Selection-only invalidation: deliberately a bare push (NOT
+            // `invalidate_render`), so `render_epoch` stays put and pages whose
+            // selection rects are unchanged keep a stable signature and get
+            // skipped by `render_surface`. This is the drag hot path.
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
@@ -640,7 +672,7 @@ impl Editor {
 
         if old_composition != self.state.composition {
             fields.insert(StateField::Ime);
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.invalidate_render();
         }
 
         if old_last_history_tag_revision != self.undo_history.last_tag_revision() {
@@ -728,6 +760,33 @@ impl Editor {
     #[cfg(test)]
     pub(crate) fn cell_selection_rects_for_test(&self) -> Vec<PageRect> {
         self.selection_mark_rects().unwrap_or_default()
+    }
+
+    /// Cheap fingerprint of everything `render_page` would draw for `page_idx`.
+    /// Equal signatures across two calls guarantee identical page pixels, so
+    /// `render_surface` can skip re-rasterizing a page whose signature is unchanged.
+    ///
+    /// Inputs:
+    /// - `render_epoch` — bumped by every non-selection invalidation (doc edits,
+    ///   reflow, font, theme), so it covers content/layout pixel changes and the
+    ///   non-selection marks (composition, dnd, tracked decorations).
+    /// - `focused` — the selection mark's color depends on it.
+    /// - the selection rects on this page — the only mark that moves without
+    ///   bumping the epoch (the drag hot path).
+    pub fn page_render_signature(&self, page_idx: u32) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.render_epoch.hash(&mut hasher);
+        self.focused.hash(&mut hasher);
+        if let Some(rects) = self.selection_mark_rects() {
+            for r in rects.iter().filter(|r| r.page_idx == page_idx as usize) {
+                r.rect.x.to_bits().hash(&mut hasher);
+                r.rect.y.to_bits().hash(&mut hasher);
+                r.rect.width.to_bits().hash(&mut hasher);
+                r.rect.height.to_bits().hash(&mut hasher);
+            }
+        }
+        hasher.finish()
     }
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
@@ -875,6 +934,19 @@ impl Editor {
         }
     }
 
+    /// Invalidate the rendered surface for a content change (anything that alters
+    /// page pixels beyond the selection overlay). Bumps `render_epoch` so every
+    /// page's signature changes, then emits `RenderInvalidated`. Use this for all
+    /// non-selection invalidations; a bare selection move uses `push_event` directly
+    /// so unaffected pages keep a stable signature and can be skipped.
+    pub(crate) fn invalidate_render(&mut self) {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return;
+        }
+        self.render_epoch = self.render_epoch.wrapping_add(1);
+        self.push_event(EditorEvent::RenderInvalidated);
+    }
+
     fn process_effects(&mut self, effects: HashSet<Effect>) {
         for effect in effects {
             match effect {
@@ -889,17 +961,59 @@ impl Editor {
         }
     }
 
-    fn augment_font_state_from_ops(&mut self) {
-        let updates = {
-            let resource = self.resource.lock().unwrap();
-            let view = self.state.view();
-            crate::font::derive_font_updates_from_ops(
-                &view,
-                &resource.font_registry,
-                &self.pending_ops,
-            )
+    fn augment_font_state_from_ops(&mut self, layout_dirty: &LayoutDirty) {
+        let updates = match layout_dirty {
+            LayoutDirty::Full => {
+                let resource = self.resource.lock().unwrap();
+                let view = self.state.view();
+                crate::font::derive_font_updates_from_ops(
+                    &view,
+                    &resource.font_registry,
+                    &self.pending_ops,
+                )
+            }
+            LayoutDirty::Incremental {
+                content,
+                structural,
+            } => {
+                let mut fresh = crate::font::FontRequests::new();
+                let mut clear_dots: Vec<Dot> = Vec::new();
+                {
+                    let resource = self.resource.lock().unwrap();
+                    let view = self.state.view();
+                    let mut seen: HashSet<Dot> = HashSet::new();
+                    for id in content.iter().chain(structural.iter()) {
+                        let Some(block) = view
+                            .node(*id)
+                            .or_else(|| view.leaf(*id).and_then(|l| l.parent()))
+                        else {
+                            continue;
+                        };
+                        if !seen.insert(block.id()) {
+                            continue;
+                        }
+                        crate::font::collect_subtree_block_dots(&block, &mut clear_dots);
+                        crate::font::collect_block_recursive(
+                            &block,
+                            &resource.font_registry,
+                            &mut fresh,
+                        );
+                    }
+                }
+                for dot in &clear_dots {
+                    for nodes in self.pending_fonts.values_mut() {
+                        nodes.remove(dot);
+                    }
+                }
+                self.pending_fonts.retain(|_, nodes| !nodes.is_empty());
+                fresh
+            }
         };
 
+        self.merge_font_requests(updates);
+    }
+
+    fn merge_font_requests(&mut self, updates: crate::font::FontRequests) {
         for ((family, weight), nodes) in updates {
             let entry = self
                 .pending_fonts
@@ -940,7 +1054,7 @@ impl Editor {
         }
         if would_change {
             self.focused = focused;
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.invalidate_render();
         }
     }
 
@@ -962,7 +1076,7 @@ impl Editor {
                     StateField::Placeholder,
                 ],
             });
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.invalidate_render();
         }
         did_change
     }
@@ -984,7 +1098,7 @@ impl Editor {
                     StateField::ExternalElements,
                 ],
             });
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.invalidate_render();
         }
         did_change
     }
@@ -1004,7 +1118,7 @@ impl Editor {
                     StateField::ExternalElements,
                 ],
             });
-            self.push_event(EditorEvent::RenderInvalidated);
+            self.invalidate_render();
         }
         did_change
     }
@@ -1103,8 +1217,10 @@ impl Editor {
                 // remote-changeset path.
                 self.state.selection = transient.selection.and_then(|ss| {
                     let view = self.state.view();
-                    let ctx =
-                        editor_state::StableResolveCtx::new(&view, self.state.projected.seq());
+                    let ctx = editor_state::StableResolveCtx::from_live(
+                        &view,
+                        self.state.projected.seq_checkout(),
+                    );
                     let restored = ss.resolve(&ctx)?;
                     Some(restored.normalize(&view).unwrap_or(restored))
                 });
@@ -1124,7 +1240,7 @@ impl Editor {
             return false;
         }
         let current = capture_transient(&self.state);
-        let result = self.undo_history.undo(&mut self.state.projected, current);
+        let result = self.undo_history.undo(self.state.projected_mut(), current);
         self.apply_undo_result(result)
     }
 
@@ -1134,7 +1250,7 @@ impl Editor {
             return false;
         }
         let current = capture_transient(&self.state);
-        let result = self.undo_history.redo(&mut self.state.projected, current);
+        let result = self.undo_history.redo(self.state.projected_mut(), current);
         self.apply_undo_result(result)
     }
 
@@ -1152,12 +1268,28 @@ impl Editor {
         &mut self,
         changeset: Changeset<EditOp>,
     ) -> Result<(), EditorError> {
+        self.apply_remote_changesets(vec![changeset])
+    }
+
+    /// Apply a batch of remote changesets as a single unit. A sync burst enqueues
+    /// many `Message::Remote`; the tick loop coalesces the consecutive run and
+    /// hands it here so the whole batch pays one selection freeze/restore and one
+    /// `ProjectedState` clone instead of one per changeset.
+    pub(crate) fn apply_remote_changesets(
+        &mut self,
+        changesets: Vec<Changeset<EditOp>>,
+    ) -> Result<(), EditorError> {
+        if changesets.is_empty() {
+            return Ok(());
+        }
         if let Mode::Probe { ref mut changed } = self.mode {
-            let would_change = self
-                .state
-                .would_receive_remote_changeset(&changeset)
-                .map_err(|e| EditorError::Step(StepError::State(e)))?;
-            *changed |= would_change;
+            for cs in &changesets {
+                let would_change = self
+                    .state
+                    .would_receive_remote_changeset(cs)
+                    .map_err(|e| EditorError::Step(StepError::State(e)))?;
+                *changed |= would_change;
+            }
             return Ok(());
         }
 
@@ -1167,18 +1299,23 @@ impl Editor {
         });
         let (mut next, applied_ops) = self
             .state
-            .receive_remote_changeset(changeset)
+            .receive_remote_changesets(changesets)
             .map_err(|e| EditorError::Step(StepError::State(e)))?;
-        next.selection = frozen.and_then(|f| {
-            let view = next.view();
-            let ctx = editor_state::StableResolveCtx::new(&view, next.projected.seq());
-            let restored = f.resolve(&ctx)?;
-            Some(restored.normalize(&view).unwrap_or(restored))
-        });
-        self.state = next;
+        // A batch that applied nothing (every changeset already known) leaves the
+        // projection byte-identical, so the selection still resolves as-is — skip the
+        // `O(N)` `StableResolveCtx` rebuild + restore entirely. This is the duplicate
+        // re-receive hot path (a sync burst re-delivering known changesets).
         if !applied_ops.is_empty() {
+            next.selection = frozen.and_then(|f| {
+                let view = next.view();
+                let ctx =
+                    editor_state::StableResolveCtx::from_live(&view, next.projected.seq_checkout());
+                let restored = f.resolve(&ctx)?;
+                Some(restored.normalize(&view).unwrap_or(restored))
+            });
             self.undo_history.clear_last_tag();
         }
+        self.state = next;
         self.pending_ops.extend(applied_ops);
         Ok(())
     }
@@ -1190,7 +1327,7 @@ impl Editor {
         self.push_event(EditorEvent::StateChanged {
             fields: StateField::iter().collect(),
         });
-        self.push_event(EditorEvent::RenderInvalidated);
+        self.invalidate_render();
     }
 
     pub fn insert_template_fragment(
@@ -1289,11 +1426,11 @@ impl Editor {
         Ok(())
     }
 
-    pub(crate) fn retry_font_load(&mut self, family: &str) {
+    pub(crate) fn retry_font_load(&mut self, family: &str, base_loaded: bool) {
         if matches!(self.mode, Mode::Probe { .. }) {
             return;
         }
-        crate::font::retry_pending_on_load(self, family);
+        crate::font::retry_pending_on_load(self, family, base_loaded);
     }
 
     pub(crate) fn reresolve_fonts(&mut self) -> Result<(), EditorError> {
@@ -1404,6 +1541,7 @@ impl Editor {
             tracked_ranges: TrackedRangeRegistry::new(),
             dnd: DndState::default(),
             focused: false,
+            render_epoch: 0,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
@@ -1452,15 +1590,11 @@ mod tests {
     use crate::editor::Editor;
     use editor_crdt::{Changeset, Dot, ListOp};
     use editor_macros::state;
-    use editor_model::{
-        ChildView, EditOp, Modifier, ModifierType, Node, NodeType, PlainDoc, PlainNode,
-        PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
-    };
+    use editor_model::{ChildView, EditOp, Modifier, ModifierType, Node, NodeType, SeqItem};
     use editor_state::{
         Affinity, PendingModifier, PendingModifiers, Position, Selection, StableResolveCtx, State,
     };
     use hashbrown::HashSet;
-    use std::collections::BTreeMap;
 
     use super::*;
 
@@ -1471,7 +1605,7 @@ mod tests {
     /// identities — the new op continues replica_a's clock and is unknown to
     /// replica_b. Mirrors `handle/remote.rs`'s helper.
     fn remote_change(base: &State, ops: Vec<EditOp>) -> Changeset<EditOp> {
-        let mut pa = base.projected.clone();
+        let mut pa = base.projected.as_ref().clone();
         let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
         pa.apply_batch(ops).unwrap();
         pa.commit();
@@ -1485,7 +1619,7 @@ mod tests {
     /// sequential changeset per op (each builds on the previous so their op Dots
     /// are distinct and all are unknown to replica_b).
     fn remote_changes(base: &State, ops: Vec<EditOp>) -> Vec<Changeset<EditOp>> {
-        let mut pa = base.projected.clone();
+        let mut pa = base.projected.as_ref().clone();
         let mut out = Vec::new();
         for op in ops {
             let baseline: HashSet<Dot> = pa.graph().current_heads().copied().collect();
@@ -1683,150 +1817,46 @@ mod tests {
         assert_state_eq!(editor.state(), &initial);
     }
 
+    // The batched undo path (a run of sequence inverses deferred into one reproject,
+    // flushed around non-sequence inverses) must round-trip a multi-block edit exactly:
+    // undo restores the pre-edit doc, redo re-applies it. Exercises the flush boundary
+    // via the marker/span ops the typed replacement introduces.
     #[test]
-    fn perf_undo_20_chars() {
-        struct StderrLogger;
-        impl log::Log for StderrLogger {
-            fn enabled(&self, _m: &log::Metadata) -> bool {
-                true
-            }
-            fn log(&self, record: &log::Record) {
-                eprintln!("{}", record.args());
-            }
-            fn flush(&self) {}
-        }
-        let _ = log::set_logger(Box::leak(Box::new(StderrLogger)));
-        log::set_max_level(log::LevelFilter::Info);
+    fn batched_undo_redo_round_trips_multi_paragraph_replace() {
+        use editor_state::assert_state_eq;
 
-        let (state, _p1) = state! {
-            doc { root { p1: paragraph { text("") } } }
-            selection: (p1, 0)
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("alpha") }
+                    paragraph { text("beta") }
+                    paragraph { text("gamma") }
+                    p3: paragraph { text("delta") }
+                }
+            }
+            selection: (p1, 0) -> (p3, 5)
         };
-        let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state);
+        let mut editor = Editor::new_test(initial.clone());
 
-        for ch in "abcdefghijklmnopqrst".chars() {
-            editor.apply(Message::Insertion {
-                op: InsertionOp::Text {
-                    text: ch.to_string(),
-                },
-            });
-        }
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "z".into() },
+        });
+        let after_edit = editor.state().clone();
 
-        eprintln!("==== UNDO STARTS ====");
-        let t = editor_common::time::Instant::now();
         editor.apply(Message::History {
             op: HistoryOp::Undo,
         });
-        eprintln!("==== UNDO TICK TOTAL: {:?} ====", t.elapsed());
-    }
+        assert_state_eq!(editor.state(), &initial);
 
-    // Benchmark: per-keystroke (TextInput) tick latency vs. document size.
-    // Run on demand:
-    //   cargo test --release -p editor-core perf_textinput_large_doc -- --ignored --nocapture
-    #[test]
-    #[ignore = "perf benchmark; run manually with --ignored --nocapture"]
-    fn perf_textinput_large_doc() {
-        struct StderrLogger;
-        impl log::Log for StderrLogger {
-            fn enabled(&self, _m: &log::Metadata) -> bool {
-                true
-            }
-            fn log(&self, record: &log::Record) {
-                eprintln!("{}", record.args());
-            }
-            fn flush(&self) {}
-        }
-        let _ = log::set_logger(Box::leak(Box::new(StderrLogger)));
-        log::set_max_level(log::LevelFilter::Debug);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_edit);
 
-        fn build_editor(n: usize) -> Editor {
-            let mut paragraphs = Vec::with_capacity(n);
-            for _ in 0..n {
-                let text = PlainNodeEntry {
-                    node: PlainNode::Text(PlainTextNode {
-                        text: "The quick brown fox jumps".to_string(),
-                    }),
-                    modifiers: BTreeMap::new(),
-                    style: None,
-                    marker: None,
-                    children: vec![],
-                };
-                paragraphs.push(PlainNodeEntry {
-                    node: PlainNode::Paragraph(PlainParagraphNode {}),
-                    modifiers: BTreeMap::new(),
-                    style: None,
-                    marker: None,
-                    children: vec![text],
-                });
-            }
-            let plain = PlainDoc {
-                root: PlainNodeEntry {
-                    node: PlainNode::Root(PlainRootNode::default()),
-                    modifiers: BTreeMap::new(),
-                    style: None,
-                    marker: None,
-                    children: paragraphs,
-                },
-                styles: BTreeMap::new(),
-            };
-            let last_text_path = vec![n - 1, 0];
-            let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
-            let last_dot = handles[&last_text_path];
-            state.selection = Some(Selection::collapsed(Position::new(last_dot, 5)));
-            let mut editor = Editor::new_test(state);
-            editor.view.layout(&editor.state);
-            editor.apply(Message::TextInput {
-                ops: vec![FlatImeOp::ReplaceSelection { text: "a".into() }],
-            });
-            editor
-        }
-
-        for n in [1000usize, 2000, 4000] {
-            let mut editor = build_editor(n);
-            eprintln!("==== TEXTINPUT STARTS (paragraphs={n}) ====");
-            let t = editor_common::time::Instant::now();
-            editor.apply(Message::TextInput {
-                ops: vec![FlatImeOp::ReplaceSelection { text: "b".into() }],
-            });
-            eprintln!(
-                "==== paragraphs={n} TEXTINPUT TICK TOTAL: {:?} ====",
-                t.elapsed()
-            );
-
-            // Derived-query (host-side, post-tick) cost: whole-doc table_overlays
-            // builds every page's fragment; the per-visible-page call builds one.
-            // Re-layout before each to reset the lazy per-page fragment caches.
-            editor.view.layout(&editor.state);
-            let page_count = editor.view.pages().len();
-            let t = editor_common::time::Instant::now();
-            let _ = editor.view.table_overlays(&editor.state, None);
-            eprintln!(
-                "  table_overlays WHOLE ({page_count} pages): {:?}",
-                t.elapsed()
-            );
-            editor.view.layout(&editor.state);
-            let t = editor_common::time::Instant::now();
-            let _ = editor.view.page_table_overlays(&editor.state, 0, None);
-            eprintln!("  page_table_overlays(visible page 0): {:?}", t.elapsed());
-
-            let t = editor_common::time::Instant::now();
-            let _ = editor.view.external_elements(&editor.state, None);
-            eprintln!("  external_elements WHOLE: {:?}", t.elapsed());
-            let t = editor_common::time::Instant::now();
-            let _ = editor.view.page_external_elements(&editor.state, 0, None);
-            eprintln!(
-                "  page_external_elements(visible page 0): {:?}",
-                t.elapsed()
-            );
-
-            let t = editor_common::time::Instant::now();
-            let _ = editor.view.link_rects();
-            eprintln!("  link_rects WHOLE: {:?}", t.elapsed());
-            let t = editor_common::time::Instant::now();
-            let _ = editor.view.page_link_rects(0);
-            eprintln!("  page_link_rects(visible page 0): {:?}", t.elapsed());
-        }
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
     }
 
     #[test]
@@ -3832,7 +3862,7 @@ mod tests {
                 panic!("expected InternalDnd");
             };
             let view = editor.state.view();
-            let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+            let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
             source.resolve(&ctx).expect("source restores")
         };
 
@@ -3887,7 +3917,7 @@ mod tests {
         // Step 2: insert_slice_at in separate transact
         let target = {
             let view = editor.state.view();
-            let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+            let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
             stable_target.resolve(&ctx).expect("target restores").head
         };
         eprintln!(
@@ -3937,7 +3967,7 @@ mod tests {
             };
             let sel = {
                 let view = editor.state.view();
-                let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+                let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
                 source.resolve(&ctx).expect("source restores")
             };
             assert!(
@@ -4241,6 +4271,99 @@ mod tests {
                 .len(),
             0,
             "stale root modifiers must be cleared"
+        );
+    }
+
+    #[test]
+    fn page_signature_changes_when_selection_extends_on_same_page() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello world foo bar baz") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.state.selection = Some(Selection::new(Position::new(p1, 1), Position::new(p1, 3)));
+        let sig_short = editor.page_render_signature(0);
+
+        editor.state.selection = Some(Selection::new(Position::new(p1, 1), Position::new(p1, 12)));
+        let sig_long = editor.page_render_signature(0);
+
+        assert_ne!(
+            sig_short, sig_long,
+            "extending the selection on page 0 must change page 0's render signature"
+        );
+    }
+
+    #[test]
+    fn page_signature_stable_for_page_untouched_by_selection_change() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello world foo bar baz") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.state.selection = Some(Selection::new(Position::new(p1, 1), Position::new(p1, 3)));
+        let sig_before = editor.page_render_signature(7);
+
+        editor.state.selection = Some(Selection::new(Position::new(p1, 1), Position::new(p1, 12)));
+        let sig_after = editor.page_render_signature(7);
+
+        assert_eq!(
+            sig_before, sig_after,
+            "a page with no selection-rect change keeps a stable signature so render_surface can skip it"
+        );
+    }
+
+    #[test]
+    fn page_signature_changes_after_text_edit() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+
+        let sig_before = editor.page_render_signature(0);
+
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "x".to_string(),
+            },
+        });
+        editor.tick().unwrap();
+
+        let sig_after = editor.page_render_signature(0);
+        assert_ne!(
+            sig_before, sig_after,
+            "a text edit changes content, so the render signature must change even with a collapsed caret"
+        );
+    }
+
+    #[test]
+    fn page_signature_unchanged_on_caret_move() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+
+        let sig_before = editor.page_render_signature(0);
+
+        editor.enqueue(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: false,
+            },
+        });
+        editor.tick().unwrap();
+
+        let sig_after = editor.page_render_signature(0);
+        assert_eq!(
+            sig_before, sig_after,
+            "moving a collapsed caret changes no surface pixels, so the render signature must stay stable"
         );
     }
 }

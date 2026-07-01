@@ -1,7 +1,6 @@
 use crate::dnd::DndState;
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::event::EditorEvent;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
@@ -53,7 +52,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
         } => {
             let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
                 let view = editor.state.view();
-                let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+                let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
                 source
                     .resolve(&ctx)
                     .filter(|selection| !selection.is_collapsed())
@@ -106,7 +105,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
         } => {
             let internal_source = if let DndState::InternalDnd { source, .. } = &editor.dnd {
                 let view = editor.state.view();
-                let ctx = StableResolveCtx::new(&view, editor.state.projected.seq());
+                let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
                 source
                     .resolve(&ctx)
                     .filter(|selection| !selection.is_collapsed())
@@ -174,7 +173,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
         }
     };
     if editor.dnd.drop_target() != previous_drop_target {
-        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.invalidate_render();
     }
     result
 }
@@ -425,7 +424,7 @@ fn drop_internal_selection_at(
 
         let resolved_target = {
             let view = tr.view();
-            let ctx = StableResolveCtx::new(&view, tr.state().projected.seq());
+            let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
             stable_target.resolve(&ctx)
         };
         let Some(target) = resolved_target.map(|sel| sel.head) else {

@@ -39,7 +39,7 @@ pub struct ResolvedPosition<'a> {
 impl Position {
     pub fn resolve<'a>(&self, view: &'a DocView<'a>) -> Option<ResolvedPosition<'a>> {
         let node = view.node(self.node)?;
-        if self.offset > node.children().count() {
+        if self.offset > node.child_count() {
             return None;
         }
         let mut chain: Vec<usize> = node.ancestors().filter_map(|n| n.index()).collect();
@@ -85,13 +85,27 @@ pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position)
     let mut out = Vec::new();
     for block in blocks {
         let block_id = block.id();
+        let mut base: Vec<usize> = block.ancestors().filter_map(|n| n.index()).collect();
+        base.reverse();
         for (i, child) in block.children().enumerate() {
             let ChildView::Leaf(l) = child else { continue };
-            let (Some(start), Some(end)) = (
-                Position::new(block_id, i).resolve(view),
-                Position::new(block_id, i + 1).resolve(view),
-            ) else {
-                continue;
+            let start = ResolvedPosition {
+                view,
+                position: Position::new(block_id, i),
+                path: {
+                    let mut p = base.clone();
+                    p.push(i);
+                    p
+                },
+            };
+            let end = ResolvedPosition {
+                view,
+                position: Position::new(block_id, i + 1),
+                path: {
+                    let mut p = base.clone();
+                    p.push(i + 1);
+                    p
+                },
             };
             if lo_r <= start && end <= hi_r {
                 out.push(l.dot());

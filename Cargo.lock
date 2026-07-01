@@ -690,6 +690,7 @@ version = "0.0.1"
 dependencies = [
  "bytecount",
  "editor-macros",
+ "imbl",
  "log",
  "serde",
  "serde_json",
@@ -718,6 +719,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "itertools",
  "log",
+ "proptest",
  "serde",
  "serde_json",
  "strum",

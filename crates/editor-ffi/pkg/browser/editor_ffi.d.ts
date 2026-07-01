@@ -660,6 +660,13 @@ declare class Editor {
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
+    /**
+     * The `id` of every local changeset (its first op's `actor:clock`), read straight
+     * from the graph — `O(#changesets)`. Callers that only need the id set must use
+     * this instead of `missing_changesets_tolerant(&[])` + `split_changesets`, which
+     * walk, clone, and re-encode the entire history on every push cycle.
+     */
+    changeset_ids(): string[];
     character_counts(): CharacterCounts;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;

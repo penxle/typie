@@ -4,6 +4,7 @@ pub(crate) mod layout;
 pub(crate) mod measure;
 pub(crate) mod resolve;
 pub(crate) mod ruby;
+pub(crate) mod seg_cache;
 pub(crate) mod strut;
 pub(crate) mod style_run;
 pub(crate) mod tab_metric;

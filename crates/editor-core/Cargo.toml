@@ -60,4 +60,5 @@ wasm-bindgen = { workspace = true, optional = true }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state", features = ["test-utils"] }
 editor-view = { path = "../editor-view", features = ["test-utils"] }
+proptest = { workspace = true }
 serde_json.workspace = true

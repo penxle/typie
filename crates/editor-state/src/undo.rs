@@ -187,18 +187,38 @@ impl UndoHistory {
         let restore_transient = entry.transient.clone();
         let mut redo_ops: Vec<RecordedOp> = Vec::new();
         let mut applied: Vec<Op<EditOp>> = Vec::new();
+        // Sequence inverses read only the checkout, so a run of them can be applied
+        // without projecting each — deferred into one `reproject_all` — collapsing the
+        // per-op window reprojections that make undoing a large multi-block delete
+        // quadratic-ish. A non-sequence inverse's `capture_prior` reads the projection,
+        // so flush any deferred run before it.
+        let mut warm_pending = false;
         'entry: for ro in entry.ops.into_iter().rev() {
             for inv_payload in invert(state, &ro) {
+                let is_seq = matches!(inv_payload, EditOp::Seq(_));
+                if !is_seq && warm_pending {
+                    let _ = state.reproject_all();
+                    warm_pending = false;
+                }
                 let prior_for_redo = capture_prior(state, &inv_payload);
-                let Ok(inv_op) = state.apply(inv_payload) else {
+                let res = if is_seq {
+                    state.apply_warm_only(inv_payload)
+                } else {
+                    state.apply(inv_payload)
+                };
+                let Ok(inv_op) = res else {
                     break 'entry;
                 };
+                warm_pending |= is_seq;
                 applied.push(inv_op.clone());
                 redo_ops.push(RecordedOp {
                     op: inv_op,
                     prior: prior_for_redo,
                 });
             }
+        }
+        if warm_pending {
+            let _ = state.reproject_all();
         }
         self.redos.push(UndoEntry {
             ops: redo_ops,
@@ -219,18 +239,35 @@ impl UndoHistory {
         let restore_transient = entry.transient.clone();
         let mut undo_ops: Vec<RecordedOp> = Vec::new();
         let mut applied: Vec<Op<EditOp>> = Vec::new();
+        // See `undo`: defer a run of sequence inverses into one reproject, flushing
+        // before any non-sequence inverse (whose `capture_prior` reads the projection).
+        let mut warm_pending = false;
         'entry: for ro in entry.ops.into_iter().rev() {
             for inv_payload in invert(state, &ro) {
+                let is_seq = matches!(inv_payload, EditOp::Seq(_));
+                if !is_seq && warm_pending {
+                    let _ = state.reproject_all();
+                    warm_pending = false;
+                }
                 let prior_for_undo = capture_prior(state, &inv_payload);
-                let Ok(inv_op) = state.apply(inv_payload) else {
+                let res = if is_seq {
+                    state.apply_warm_only(inv_payload)
+                } else {
+                    state.apply(inv_payload)
+                };
+                let Ok(inv_op) = res else {
                     break 'entry;
                 };
+                warm_pending |= is_seq;
                 applied.push(inv_op.clone());
                 undo_ops.push(RecordedOp {
                     op: inv_op,
                     prior: prior_for_undo,
                 });
             }
+        }
+        if warm_pending {
+            let _ = state.reproject_all();
         }
         self.undos.push(UndoEntry {
             ops: undo_ops,

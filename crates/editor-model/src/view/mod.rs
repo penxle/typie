@@ -4,72 +4,74 @@ use std::sync::LazyLock;
 
 use editor_crdt::Dot;
 
-use crate::projection::ProjectedDoc;
+use crate::projection::{BlockPaths, ProjectedDoc};
 use crate::schema::Schema;
 use crate::seq::{BlockNode, Child, anchor_dot};
 use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, Run, SeqItem};
 
+struct RunsIndex {
+    runs: Vec<Run>,
+    by_block: HashMap<Dot, Vec<usize>>,
+}
+
+/// A read-only view over a `ProjectedDoc`. The flat tree gives O(1) node access by
+/// `Dot` (node type, children, leaf items read straight from it), and the
+/// incrementally-maintained `BlockPaths` gives O(1) parent links — so a `DocView` is
+/// O(1) to construct, with no per-call structural rebuild.
 pub struct DocView<'a> {
     doc: &'a ProjectedDoc,
-    blocks: HashMap<Dot, &'a BlockNode>,
-    parent: HashMap<Dot, Dot>,
-    leaves: HashMap<Dot, (&'a Child, Dot)>,
-    runs_by_block: HashMap<Dot, Vec<usize>>,
+    paths: std::borrow::Cow<'a, BlockPaths>,
+    // Materializing every run is O(n) and only `runs()` (render/measure) needs it;
+    // structural reads (node/children/parent/inline) do not. Build it on first use.
+    runs_cache: std::cell::OnceCell<RunsIndex>,
 }
 
 impl<'a> DocView<'a> {
+    /// Build a standalone view, deriving the parent index from the tree (`O(n)`). For
+    /// callers that hold only a `ProjectedDoc` (a snapshot, tests). The editor's hot
+    /// path uses `with_paths` to reuse the already-maintained index.
     pub fn new(doc: &'a ProjectedDoc) -> Self {
-        fn walk<'a>(
-            node: &'a BlockNode,
-            blocks: &mut HashMap<Dot, &'a BlockNode>,
-            parent: &mut HashMap<Dot, Dot>,
-            leaves: &mut HashMap<Dot, (&'a Child, Dot)>,
-        ) {
-            blocks.insert(node.id, node);
-            for c in &node.children {
-                match c {
-                    Child::Block(b) => {
-                        parent.insert(b.id, node.id);
-                        walk(b, blocks, parent, leaves);
-                    }
-                    Child::Leaf { id, .. } => {
-                        leaves.insert(*id, (c, node.id));
-                    }
-                }
-            }
-        }
-        let mut blocks = HashMap::new();
-        let mut parent = HashMap::new();
-        let mut leaves = HashMap::new();
-        for r in &doc.tree.roots {
-            walk(r, &mut blocks, &mut parent, &mut leaves);
-        }
-        let mut runs_by_block: HashMap<Dot, Vec<usize>> = HashMap::new();
-        for (i, run) in doc.runs.iter().enumerate() {
-            runs_by_block.entry(run.block).or_default().push(i);
-        }
-        DocView {
+        Self {
             doc,
-            blocks,
-            parent,
-            leaves,
-            runs_by_block,
+            paths: std::borrow::Cow::Owned(BlockPaths::from_tree(&doc.tree)),
+            runs_cache: std::cell::OnceCell::new(),
         }
+    }
+
+    /// Build a view reusing an already-maintained parent index (`O(1)`). `paths` must
+    /// match `doc`'s current tree.
+    pub fn with_paths(doc: &'a ProjectedDoc, paths: &'a BlockPaths) -> Self {
+        Self {
+            doc,
+            paths: std::borrow::Cow::Borrowed(paths),
+            runs_cache: std::cell::OnceCell::new(),
+        }
+    }
+
+    fn runs_index(&self) -> &RunsIndex {
+        self.runs_cache.get_or_init(|| {
+            let runs = self.doc.runs();
+            let mut by_block: HashMap<Dot, Vec<usize>> = HashMap::new();
+            for (i, run) in runs.iter().enumerate() {
+                by_block.entry(run.block).or_default().push(i);
+            }
+            RunsIndex { runs, by_block }
+        })
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct NodeView<'a> {
     view: &'a DocView<'a>,
-    node: &'a BlockNode,
+    id: Dot,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct LeafView<'a> {
     view: &'a DocView<'a>,
     dot: Dot,
-    child: &'a Child,
-    parent: Dot,
+    item: &'a SeqItem,
+    block: Dot,
 }
 
 pub enum ChildView<'a> {
@@ -79,88 +81,111 @@ pub enum ChildView<'a> {
 
 impl<'a> DocView<'a> {
     pub fn roots(&'a self) -> impl Iterator<Item = NodeView<'a>> {
-        self.doc.tree.roots.iter().map(move |n| NodeView {
-            view: self,
-            node: n,
-        })
-    }
-    pub fn root(&'a self) -> Option<NodeView<'a>> {
         self.doc
             .tree
-            .roots
-            .iter()
-            .find(|n| n.node_type == NodeType::Root)
-            .map(|n| NodeView {
+            .root_node()
+            .map(|r| NodeView {
                 view: self,
-                node: n,
+                id: r.id,
             })
+            .into_iter()
+    }
+    pub fn root(&'a self) -> Option<NodeView<'a>> {
+        let r = self.doc.tree.root_node()?;
+        (r.node_type == NodeType::Root).then_some(NodeView {
+            view: self,
+            id: r.id,
+        })
     }
     pub fn node(&'a self, id: Dot) -> Option<NodeView<'a>> {
-        self.blocks.get(&id).map(|n| NodeView {
-            view: self,
-            node: n,
-        })
+        self.doc.tree.get(id).map(|_| NodeView { view: self, id })
     }
     pub fn leaf(&'a self, id: Dot) -> Option<LeafView<'a>> {
-        self.leaves.get(&id).map(|(c, p)| LeafView {
+        let block = self.paths.block_of(id)?;
+        let item = self
+            .doc
+            .tree
+            .get(block)?
+            .children
+            .iter()
+            .find_map(|c| match c {
+                Child::Leaf { id: lid, item } if *lid == id => Some(item),
+                _ => None,
+            })?;
+        Some(LeafView {
             view: self,
             dot: id,
-            child: c,
-            parent: *p,
+            item,
+            block,
         })
     }
-}
-
-fn child_view<'a>(view: &'a DocView<'a>, c: &'a Child, parent: Dot) -> ChildView<'a> {
-    match c {
-        Child::Block(b) => ChildView::Block(NodeView { view, node: b }),
-        Child::Leaf { id, .. } => ChildView::Leaf(LeafView {
-            view,
-            dot: *id,
-            child: c,
-            parent,
-        }),
+    pub fn own_modifiers_of(&self, id: Dot) -> &'a BTreeMap<ModifierType, OwnModifier> {
+        self.doc.own_modifiers.get(&id).unwrap_or(&EMPTY_OWN)
     }
 }
 
 impl<'a> NodeView<'a> {
+    fn tree_node(&self) -> Option<&'a BlockNode> {
+        self.view.doc.tree.get(self.id)
+    }
     pub fn id(&self) -> Dot {
-        self.node.id
+        self.id
+    }
+    pub fn child_count(&self) -> usize {
+        self.tree_node().map_or(0, |n| n.children.len())
+    }
+    /// Number of direct *leaf* children (excludes nested blocks). `O(1)` via the
+    /// `ChildList` order-statistics summary.
+    pub fn leaf_child_count(&self) -> usize {
+        self.tree_node().map_or(0, |n| n.children.leaf_count())
     }
     pub fn dot(&self) -> Option<Dot> {
-        anchor_dot(self.node.id)
+        anchor_dot(self.id)
     }
     pub fn node_type(&self) -> NodeType {
-        self.node.node_type
+        self.tree_node()
+            .map(|n| n.node_type)
+            .unwrap_or(NodeType::Root)
     }
     pub fn spec(&self) -> &'static crate::schema::NodeSpec {
-        Schema::node_spec(self.node.node_type)
+        Schema::node_spec(self.node_type())
     }
     pub fn node(&self) -> Node {
         self.dot()
             .and_then(|d| self.view.doc.node_attrs.get(&d).cloned())
-            .unwrap_or_else(|| self.node.node_type.into_node())
+            .unwrap_or_else(|| self.node_type().into_node())
     }
     pub fn parent(&self) -> Option<NodeView<'a>> {
         self.view
-            .parent
-            .get(&self.node.id)
-            .and_then(|p| self.view.node(*p))
+            .paths
+            .parent_of(self.id)
+            .and_then(|p| self.view.node(p))
     }
     pub fn children(&self) -> impl Iterator<Item = ChildView<'a>> {
         let view = self.view;
-        let id = self.node.id;
-        self.node
-            .children
-            .iter()
-            .map(move |c| child_view(view, c, id))
+        let block = self.id;
+        self.tree_node()
+            .into_iter()
+            .flat_map(|n| n.children.iter())
+            .map(move |c| match c {
+                Child::Block(id) => ChildView::Block(NodeView { view, id: *id }),
+                Child::Leaf { id, item } => ChildView::Leaf(LeafView {
+                    view,
+                    dot: *id,
+                    item,
+                    block,
+                }),
+            })
     }
     pub fn child_blocks(&self) -> impl Iterator<Item = NodeView<'a>> {
         let view = self.view;
-        self.node.children.iter().filter_map(move |c| match c {
-            Child::Block(b) => Some(NodeView { view, node: b }),
-            _ => None,
-        })
+        self.tree_node()
+            .into_iter()
+            .flat_map(|n| n.children.iter())
+            .filter_map(move |c| match c {
+                Child::Block(id) => Some(NodeView { view, id: *id }),
+                Child::Leaf { .. } => None,
+            })
     }
     pub fn first_child(&self) -> Option<ChildView<'a>> {
         self.children().next()
@@ -169,7 +194,22 @@ impl<'a> NodeView<'a> {
         self.children().last()
     }
     pub fn child_at(&self, index: usize) -> Option<ChildView<'a>> {
-        self.children().nth(index)
+        // O(log K) via the `ChildList` order-statistics tree, not `O(index)` via
+        // `children().nth`. On a large block (a paragraph with thousands of inline
+        // leaves) the linear form makes every caret-local operation — selection
+        // capture, modifier resolution, inserted-leaf lookup — `O(block)`.
+        let view = self.view;
+        let block = self.id;
+        let c = self.tree_node()?.children.get(index)?;
+        Some(match c {
+            Child::Block(id) => ChildView::Block(NodeView { view, id: *id }),
+            Child::Leaf { id, item } => ChildView::Leaf(LeafView {
+                view,
+                dot: *id,
+                item,
+                block,
+            }),
+        })
     }
     pub fn ancestors(&self) -> impl Iterator<Item = NodeView<'a>> {
         let mut cur = Some(*self);
@@ -195,7 +235,7 @@ impl<'a> NodeView<'a> {
     pub fn index(&self) -> Option<usize> {
         let parent = self.parent()?;
         parent.children().position(|c| match c {
-            ChildView::Block(b) => b.node.id == self.node.id,
+            ChildView::Block(b) => b.id == self.id,
             ChildView::Leaf(_) => false,
         })
     }
@@ -206,31 +246,25 @@ impl<'a> LeafView<'a> {
         self.dot
     }
     pub fn node_type(&self) -> NodeType {
-        match self.child {
-            Child::Leaf { item, .. } => item.as_child_type(),
-            _ => unreachable!(),
-        }
+        self.item().as_child_type()
     }
     pub fn item(&self) -> &'a SeqItem {
-        match self.child {
-            Child::Leaf { item, .. } => item,
-            _ => unreachable!(),
-        }
+        self.item
     }
     pub fn as_char(&self) -> Option<char> {
-        match self.item() {
+        match self.item {
             SeqItem::Char(c) => Some(*c),
             _ => None,
         }
     }
     pub fn as_atom(&self) -> Option<&'a AtomLeaf> {
-        match self.item() {
+        match self.item {
             SeqItem::Atom(a) => Some(a),
             _ => None,
         }
     }
     pub fn parent(&self) -> Option<NodeView<'a>> {
-        self.view.node(self.parent)
+        self.view.node(self.block)
     }
 }
 
@@ -257,26 +291,25 @@ impl<'a> NodeView<'a> {
         self.view
             .doc
             .block_effective
-            .get(&self.node.id)
+            .get(&self.id)
             .unwrap_or(&EMPTY_EFF)
     }
     pub fn block_modifier(&self, ty: ModifierType) -> Option<&'a Modifier> {
-        let dot = anchor_dot(self.node.id)?;
+        let dot = anchor_dot(self.id)?;
         self.view.doc.block_modifiers.get(&dot)?.get(&ty)
     }
-    pub fn runs(&self) -> impl Iterator<Item = &'a Run> {
-        let doc = self.view.doc;
-        self.view
-            .runs_by_block
-            .get(&self.node.id)
+    pub fn runs(&self) -> impl Iterator<Item = &Run> + '_ {
+        let idx = self.view.runs_index();
+        idx.by_block
+            .get(&self.id)
             .into_iter()
             .flatten()
-            .map(move |&i| &doc.runs[i])
+            .map(move |&i| &idx.runs[i])
     }
     pub fn inline_text(&self) -> String {
-        self.node
-            .children
-            .iter()
+        self.tree_node()
+            .into_iter()
+            .flat_map(|n| n.children.iter())
             .filter_map(|c| match c {
                 Child::Leaf {
                     item: SeqItem::Char(ch),
@@ -288,10 +321,13 @@ impl<'a> NodeView<'a> {
     }
     pub fn inline(&self) -> Vec<InlineItem<'a>> {
         let doc = self.view.doc;
+        let Some(node) = self.tree_node() else {
+            return Vec::new();
+        };
         let mut out = Vec::new();
         let mut byte = 0usize;
         let mut char_index = 0usize;
-        for c in &self.node.children {
+        for c in node.children.iter() {
             let Child::Leaf { id: d, item } = c else {
                 continue;
             };
@@ -954,19 +990,25 @@ mod tests {
         fn every_real_block_and_leaf_reachable_once(doc in arb_projected_doc()) {
             let view = DocView::new(&doc);
             let mut ids = std::collections::HashSet::new();
-            fn count(b: &crate::seq::BlockNode, ids: &mut std::collections::HashSet<Dot>) -> bool {
+            fn count(
+                tree: &crate::seq::BlockTree,
+                b: &crate::seq::BlockNode,
+                ids: &mut std::collections::HashSet<Dot>,
+            ) -> bool {
                 let fresh = ids.insert(b.id);
                 let mut ok = fresh;
                 for c in &b.children {
-                    if let crate::seq::Child::Block(cb) = c {
-                        ok &= count(cb, ids);
+                    if let crate::seq::Child::Block(cid) = c
+                        && let Some(cb) = tree.get(*cid)
+                    {
+                        ok &= count(tree, cb, ids);
                     }
                 }
                 ok
             }
             let mut unique = true;
-            for r in &doc.tree.roots {
-                unique &= count(r, &mut ids);
+            if let Some(r) = doc.tree.root_node() {
+                unique &= count(&doc.tree, r, &mut ids);
             }
             proptest::prop_assert!(unique, "duplicate block ElemId");
 
@@ -985,7 +1027,7 @@ mod tests {
                     reconstructed += nv.runs().count();
                 }
             }
-            proptest::prop_assert_eq!(reconstructed, doc.runs.len());
+            proptest::prop_assert_eq!(reconstructed, doc.runs().len());
         }
     }
 

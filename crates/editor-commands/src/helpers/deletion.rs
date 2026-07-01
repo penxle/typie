@@ -50,22 +50,50 @@ fn delete_child_slots(
     if to <= from {
         return Ok(());
     }
-    for idx in (from..to).rev() {
-        let kind = {
-            let view = tr.state().view();
-            slot_kind(&view, block, idx)
+    // Snapshot the slot kinds once (a single `O(range)` children walk) instead of an
+    // `O(range)` `child_at` probe per index, then delete in one reverse pass.
+    let kinds: Vec<SlotKind> = {
+        let view = tr.state().view();
+        let Some(node) = view.node(block) else {
+            return Ok(());
         };
-        match kind {
-            Some(SlotKind::Char) => {
-                tr.remove_text(block, idx, 1)?;
+        node.children()
+            .skip(from)
+            .take(to - from)
+            .map(|c| match c {
+                ChildView::Leaf(l) => {
+                    if l.as_char().is_some() {
+                        SlotKind::Char
+                    } else {
+                        SlotKind::Atom
+                    }
+                }
+                ChildView::Block(b) => SlotKind::Block(b.id()),
+            })
+            .collect()
+    };
+    // Delete high→low so each removal only shifts already-handled higher slots and
+    // lower indices stay valid. Coalesce a run of consecutive `Char` slots into ONE
+    // range `remove_text`: deleting a large selection is then `O(runs)` sequence ops,
+    // not one op per character (which turned a select-all delete into `O(N)` ops, each
+    // paying the full per-op projection/transaction overhead).
+    let mut i = kinds.len();
+    while i > 0 {
+        i -= 1;
+        match &kinds[i] {
+            SlotKind::Char => {
+                let end = i;
+                while i > 0 && matches!(&kinds[i - 1], SlotKind::Char) {
+                    i -= 1;
+                }
+                tr.remove_text(block, from + i, end - i + 1)?;
             }
-            Some(SlotKind::Atom) => {
-                remove_atom_leaf(tr, block, idx)?;
+            SlotKind::Atom => {
+                remove_atom_leaf(tr, block, from + i)?;
             }
-            Some(SlotKind::Block(id)) => {
-                remove_or_clear(tr, id)?;
+            SlotKind::Block(id) => {
+                remove_or_clear(tr, *id)?;
             }
-            None => {}
         }
     }
     Ok(())

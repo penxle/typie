@@ -243,9 +243,10 @@ enum DocumentAvailableAction {
 }
 
 type DocumentChangesetsUpdatedEvent {
-  changesets: Binary!
+  changesets: [Binary!]!
   durableHeads: Binary!
   heads: Binary!
+  seq: String!
 }
 
 type DocumentComment {
@@ -390,7 +391,9 @@ type DocumentState {
   characterCount: Int!
   durableHeads: Binary!
   graph: Binary!
+  heads: Binary!
   json: JSON!
+  seq: String!
   text: String!
   updatedAt: DateTime!
 }
@@ -1150,13 +1153,15 @@ enum PreorderPaymentState {
 
 input PullDocumentChangesetsInput {
   documentId: ID!
-  heads: Binary!
+  sinceSeq: String
 }
 
 type PullDocumentChangesetsPayload {
-  changesets: Binary!
+  changesets: [Binary!]!
   durableHeads: Binary!
   heads: Binary!
+  needsReload: Boolean!
+  seq: String!
 }
 
 input PurchasePaywallInput {
@@ -1410,7 +1415,7 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
-  documentChangesetsUpdated(clientId: String!, documentId: ID!, heads: Binary!): DocumentChangesetsUpdatedEvent!
+  documentChangesetsUpdated(clientId: String!, documentId: ID!, sinceSeq: String): DocumentChangesetsUpdatedEvent!
   documentCommentStream(clientId: String!, documentId: ID!): DocumentCommentThread!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!

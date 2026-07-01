@@ -4,11 +4,17 @@ pub use derive::*;
 mod effective;
 pub use effective::{
     EffectiveSources, OwnEffect, OwnModifier, derive_block_effective, derive_own_modifiers,
-    resolve_effective,
+    own_modifiers_for_leaf, resolve_effective,
 };
 
 mod run;
 pub use run::*;
+
+mod anchor;
+pub use anchor::*;
+
+mod coverage;
+pub use coverage::*;
 
 use editor_crdt::{CrdtError, Dot};
 use serde::{Deserialize, Serialize};
@@ -108,6 +114,10 @@ impl SpanLog {
 
     pub fn iter(&self) -> impl Iterator<Item = (&Dot, &SpanOp)> + '_ {
         self.ops.iter()
+    }
+
+    pub fn get(&self, dot: Dot) -> Option<&SpanOp> {
+        self.ops.get(&dot)
     }
 }
 
