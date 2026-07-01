@@ -541,23 +541,29 @@ internal constructor(
     ): Editor {
       var createdEditor: Editor? = null
       return try {
-        val editor =
-          withContext(Dispatchers.Default) {
-            val editor = Editor(createInner(), scope, dispatcher, onError)
-            createdEditor = editor
+        withContext(Dispatchers.Default) {
+          val editor = Editor(createInner(), scope, dispatcher, onError)
+          createdEditor = editor
 
-            editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+          editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+          var initialized = false
+          EditorRegistry.register(editor)
+          try {
             PlatformModule.editorHost.setThemeVariant(themeVariant)
             editor.awaitOrThrow {
               enqueue(Message.System(SystemEvent.ThemeVariantChanged))
               enqueue(Message.System(SystemEvent.Initialize))
             }
-            editor
+            initialized = true
+          } finally {
+            if (!initialized) {
+              EditorRegistry.unregister(editor)
+            }
           }
 
-        EditorRegistry.register(editor)
-        createdEditor = null
-        editor
+          createdEditor = null
+          editor
+        }
       } finally {
         createdEditor?.dispose()
       }
