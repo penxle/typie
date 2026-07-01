@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor.toolbar.bottom
 
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
@@ -47,8 +48,8 @@ class NodesTest {
       isEditorToolbarUnitSelection(
         selection =
           Selection(
-            anchor = Position(nodeId = "text", offset = 1),
-            head = Position(nodeId = "text", offset = 2),
+            anchor = Position(node = "text", offset = 1, affinity = Affinity.Downstream),
+            head = Position(node = "text", offset = 2, affinity = Affinity.Downstream),
           ),
         hasSelectedBlock = false,
       )
@@ -61,8 +62,8 @@ class NodesTest {
       isEditorToolbarUnitSelection(
         selection =
           Selection(
-            anchor = Position(nodeId = "root", offset = 1),
-            head = Position(nodeId = "root", offset = 2),
+            anchor = Position(node = "root", offset = 1, affinity = Affinity.Downstream),
+            head = Position(node = "root", offset = 2, affinity = Affinity.Downstream),
           ),
         hasSelectedBlock = true,
       )

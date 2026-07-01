@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use editor_crdt::sequence::{Bias, BoundaryResolver, checkout_with_resolver};
 use editor_crdt::{Dot, OpLog};
+use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeView, SeqItem};
 use serde::{Deserialize, Serialize};
 
@@ -9,16 +10,20 @@ use crate::Position;
 use crate::affinity::Affinity;
 use crate::bind::Bind;
 
+#[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-enum Binding {
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum StablePositionBinding {
     Adjacent { anchor: Dot, bind: Bind },
     ContainerStart,
 }
 
+#[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct StablePosition {
     chain: Vec<Dot>,
-    binding: Binding,
+    binding: StablePositionBinding,
     affinity: Affinity,
 }
 
@@ -50,14 +55,14 @@ impl StablePosition {
         chain.reverse();
         let children: Vec<ChildView> = host.children().collect();
         let binding = if children.is_empty() || pos.offset == 0 {
-            Binding::ContainerStart
+            StablePositionBinding::ContainerStart
         } else if bind_affinity == Affinity::Downstream && pos.offset < children.len() {
-            Binding::Adjacent {
+            StablePositionBinding::Adjacent {
                 anchor: child_elem_id(&children[pos.offset]),
                 bind: Bind::Left,
             }
         } else {
-            Binding::Adjacent {
+            StablePositionBinding::Adjacent {
                 anchor: child_elem_id(&children[pos.offset - 1]),
                 bind: Bind::Right,
             }
@@ -158,11 +163,13 @@ impl StablePosition {
         let host = ctx.view.node(self.chain[k]).unwrap();
         let offset = if k == self.chain.len() - 1 {
             match &self.binding {
-                Binding::ContainerStart => 0,
-                Binding::Adjacent { anchor, bind } => match index_of(&host, *anchor) {
-                    Some(j) => j + usize::from(*bind == Bind::Right),
-                    None => offset_within(&host, *anchor, ctx),
-                },
+                StablePositionBinding::ContainerStart => 0,
+                StablePositionBinding::Adjacent { anchor, bind } => {
+                    match index_of(&host, *anchor) {
+                        Some(j) => j + usize::from(*bind == Bind::Right),
+                        None => offset_within(&host, *anchor, ctx),
+                    }
+                }
             }
         } else {
             offset_within(&host, self.chain[k + 1], ctx)
@@ -235,7 +242,7 @@ mod tests {
         let (pd, para) = para_with(&[]);
         let view = DocView::new(&pd);
         let sp = StablePosition::capture(&Position::new(para, 0), &view);
-        assert!(matches!(sp.binding, Binding::ContainerStart));
+        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
         assert_eq!(sp.chain.last(), Some(&para));
         assert_eq!(sp.chain.first(), view.root().map(|r| r.id()).as_ref());
     }
@@ -245,7 +252,7 @@ mod tests {
         let (pd, para) = para_with(&[SeqItem::Char('a'), SeqItem::Char('b')]);
         let view = DocView::new(&pd);
         let sp = StablePosition::capture(&Position::new(para, 0), &view);
-        assert!(matches!(sp.binding, Binding::ContainerStart));
+        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
     }
 
     #[test]
@@ -260,7 +267,7 @@ mod tests {
         let sp = StablePosition::capture(&pos, &view);
         assert_eq!(
             sp.binding,
-            Binding::Adjacent {
+            StablePositionBinding::Adjacent {
                 anchor: Dot::new(1, 3),
                 bind: Bind::Left,
             }
@@ -279,7 +286,7 @@ mod tests {
         let sp = StablePosition::capture(&pos, &view);
         assert_eq!(
             sp.binding,
-            Binding::Adjacent {
+            StablePositionBinding::Adjacent {
                 anchor: Dot::new(1, 3),
                 bind: Bind::Right,
             }
@@ -298,7 +305,7 @@ mod tests {
         let sp = StablePosition::capture(&pos, &view);
         assert_eq!(
             sp.binding,
-            Binding::Adjacent {
+            StablePositionBinding::Adjacent {
                 anchor: Dot::new(1, 3),
                 bind: Bind::Right,
             }
@@ -309,17 +316,17 @@ mod tests {
     fn types_construct_and_compare() {
         let sp = StablePosition {
             chain: vec![Dot::ROOT, Dot::new(1, 1)],
-            binding: Binding::Adjacent {
+            binding: StablePositionBinding::Adjacent {
                 anchor: Dot::new(1, 2),
                 bind: Bind::Left,
             },
             affinity: Affinity::Downstream,
         };
         assert_eq!(sp.clone(), sp);
-        assert!(matches!(sp.binding, Binding::Adjacent { .. }));
+        assert!(matches!(sp.binding, StablePositionBinding::Adjacent { .. }));
         let cs = StablePosition {
             chain: vec![Dot::ROOT],
-            binding: Binding::ContainerStart,
+            binding: StablePositionBinding::ContainerStart,
             affinity: Affinity::Upstream,
         };
         assert_ne!(sp, cs);
@@ -364,7 +371,7 @@ mod tests {
         let ctx = StableResolveCtx::new(&view, &logs.seq);
         let pos = Position::new(para, 0);
         let sp = StablePosition::capture(&pos, &view);
-        assert!(matches!(sp.binding, Binding::ContainerStart));
+        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
         assert_eq!(sp.resolve(&ctx), Some(pos));
     }
 
@@ -615,7 +622,7 @@ mod tests {
         let ctx = StableResolveCtx::new(&view, &logs.seq);
         let sp = StablePosition {
             chain: vec![view.root().unwrap().id(), para],
-            binding: Binding::Adjacent {
+            binding: StablePositionBinding::Adjacent {
                 anchor: Dot::new(9, 9),
                 bind: Bind::Left,
             },
@@ -717,7 +724,7 @@ mod tests {
         let para_view = view.node(para).expect("paragraph survives normalize");
         let sp = StablePosition {
             chain: vec![view.root().unwrap().id(), bq, para],
-            binding: Binding::Adjacent {
+            binding: StablePositionBinding::Adjacent {
                 anchor: pb,
                 bind: Bind::Left,
             },

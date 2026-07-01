@@ -6,4 +6,4 @@ import kotlin.math.abs
 internal fun Selection?.isCollapsed(): Boolean = this == null || anchor == head
 
 internal fun Selection?.isSingleSlotRange(): Boolean =
-  this != null && anchor.nodeId == head.nodeId && abs(anchor.offset - head.offset) == 1
+  this != null && anchor.node == head.node && abs(anchor.offset - head.offset) == 1

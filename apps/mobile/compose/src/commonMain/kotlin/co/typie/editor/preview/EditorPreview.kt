@@ -58,8 +58,8 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
-import co.typie.platform.PlatformModule
 import co.typie.ext.clickable
+import co.typie.platform.PlatformModule
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -360,74 +360,39 @@ private fun EditorPreviewPageStack(
 }
 
 private fun defaultPreviewDoc(layoutMode: LayoutMode): PlainDoc {
-  val paragraphIds = DefaultPreviewParagraphs.indices.map { index -> "${index * 2 + 1}" }
-  val textIds = DefaultPreviewParagraphs.indices.map { index -> "${index * 2 + 2}" }
-  val nodes = buildMap {
-    put(
-      "0",
+  return PlainDoc(
+    root =
       PlainNodeEntry(
-        parent = null,
-        children = paragraphIds,
-        modifiers = DefaultPreviewRootModifiers,
         node = PlainNode.Root(layoutMode = layoutMode),
-      ),
-    )
-
-    DefaultPreviewParagraphs.forEachIndexed { index, paragraph ->
-      put(
-        paragraphIds[index],
-        PlainNodeEntry(
-          parent = "0",
-          children = listOf(textIds[index]),
-          modifiers = emptyMap(),
-          node = PlainNode.Paragraph,
-        ),
+        modifiers = DefaultPreviewRootModifiers,
+        children =
+          DefaultPreviewParagraphs.map { paragraph ->
+            PlainNodeEntry(
+              node = PlainNode.Paragraph,
+              modifiers = emptyMap(),
+              children =
+                listOf(
+                  PlainNodeEntry(
+                    node = PlainNode.Text(text = paragraph),
+                    modifiers = emptyMap(),
+                    children = emptyList(),
+                  )
+                ),
+            )
+          },
       )
-      put(
-        textIds[index],
-        PlainNodeEntry(
-          parent = paragraphIds[index],
-          children = emptyList(),
-          modifiers = emptyMap(),
-          node = PlainNode.Text(text = paragraph),
-        ),
-      )
-    }
-  }
-  return PlainDoc(nodes = nodes)
+  )
 }
 
 private fun PlainDoc.withPreviewRootModifiers(): PlainDoc {
-  val rootEntry = nodes["0"] ?: return this
-  val rootModifiers = DefaultPreviewRootModifiers + rootEntry.modifiers
-  return PlainDoc(
-    nodes =
-      nodes +
-        ("0" to
-          PlainNodeEntry(
-            parent = rootEntry.parent,
-            children = rootEntry.children,
-            modifiers = rootModifiers,
-            node = rootEntry.node,
-          ))
-  )
+  val rootModifiers = DefaultPreviewRootModifiers + root.modifiers
+  return copy(root = root.copy(modifiers = rootModifiers))
 }
 
 private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): PlainDoc {
-  val rootEntry = nodes["0"] ?: return this
   val rootModifiers =
-    DefaultPreviewRootModifiers + rootEntry.modifiers + modifiers.toPreviewRootModifierMap()
-  return PlainDoc(
-    nodes =
-      nodes +
-        ("0" to
-          PlainNodeEntry(
-            parent = rootEntry.parent,
-            children = rootEntry.children,
-            modifiers = rootModifiers,
-            node = rootEntry.node,
-          ))
-  )
+    DefaultPreviewRootModifiers + root.modifiers + modifiers.toPreviewRootModifierMap()
+  return copy(root = root.copy(modifiers = rootModifiers))
 }
 
 private fun List<EditorModifier>.toPreviewRootModifierMap(): Map<ModifierType, EditorModifier> =

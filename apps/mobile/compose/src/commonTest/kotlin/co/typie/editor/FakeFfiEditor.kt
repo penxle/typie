@@ -2,6 +2,7 @@ package co.typie.editor
 
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.BlockState
+import co.typie.editor.ffi.ChangesetEntry
 import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
@@ -18,8 +19,11 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.ModifierType
+import co.typie.editor.ffi.PartitionedChangesets
 import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.PlainDoc
+import co.typie.editor.ffi.PlainNode
+import co.typie.editor.ffi.PlainNodeEntry
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.PointerStyle
 import co.typie.editor.ffi.Position
@@ -28,6 +32,7 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StablePosition
+import co.typie.editor.ffi.StablePositionBinding
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.ffi.StyleInfo
 import co.typie.editor.ffi.StyleRefValue
@@ -167,6 +172,13 @@ internal class FakeFfiEditor(
 
   override fun localChangesetsSince(remoteHeadsPayload: ByteArray): ByteArray = ByteArray(0)
 
+  override fun missingChangesetsTolerant(remoteHeadsPayload: ByteArray): ByteArray = ByteArray(0)
+
+  override fun partitionRemoteChangesets(payload: ByteArray): PartitionedChangesets =
+    PartitionedChangesets(ready = emptyList(), blocked = emptyList())
+
+  override fun splitChangesets(payload: ByteArray): List<ChangesetEntry> = emptyList()
+
   override fun currentHeads(): ByteArray = ByteArray(0)
 
   override fun setDoc(plain: PlainDoc) = Unit
@@ -207,11 +219,24 @@ internal class FakeFfiEditor(
   override fun proseToSelection(start: Int, end: Int): Selection? = null
 
   private companion object {
-    val EmptyPosition = Position(nodeId = "", offset = 0)
-    val EmptyStablePosition = StablePosition.ContainerStart(emptyList(), Affinity.Downstream)
+    val EmptyPosition = Position(node = "", offset = 0, affinity = Affinity.Downstream)
+    val EmptyStablePosition =
+      StablePosition(
+        chain = emptyList(),
+        binding = StablePositionBinding.ContainerStart,
+        affinity = Affinity.Downstream,
+      )
     val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)
     val EmptyRootAttrs = PlainRootNode(layoutMode = LayoutMode.Continuous(maxWidth = 0))
-    val EmptyPlainDoc = PlainDoc(nodes = emptyMap())
+    val EmptyPlainDoc =
+      PlainDoc(
+        root =
+          PlainNodeEntry(
+            node = PlainNode.Root(layoutMode = LayoutMode.Continuous(maxWidth = 0)),
+            modifiers = emptyMap(),
+            children = emptyList(),
+          )
+      )
     val EmptyIme = Ime(text = "", windowStart = 0, selection = ImeRange(0, 0), composing = null)
     val EmptyCharacterCounts =
       CharacterCounts(

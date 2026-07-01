@@ -3,6 +3,7 @@ package co.typie.editor.interaction.semantics
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
@@ -24,13 +25,17 @@ class EditorSelectionExpansionSemanticTest {
   @Test
   fun `double tap drag extension dispatches extend to with materialized base selection`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -65,7 +70,11 @@ class EditorSelectionExpansionSemanticTest {
   @Test
   fun `double tap drag extension materializes without selection endpoints`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { null })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -78,15 +87,23 @@ class EditorSelectionExpansionSemanticTest {
   @Test
   fun `double tap drag extension keeps the initially materialized selection while dragging`() =
     runTest(StandardTestDispatcher()) {
-      val baseSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
-      val expandedSelection = Selection(anchor = Position("text", 0), head = Position("text", 11))
+      val baseSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val expandedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 11, Affinity.Downstream),
+        )
       var currentSelection = baseSelection
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(
@@ -123,13 +140,17 @@ class EditorSelectionExpansionSemanticTest {
   @Test
   fun `double tap drag context adopts the current range without a baseline wait`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -144,15 +165,23 @@ class EditorSelectionExpansionSemanticTest {
   @Test
   fun `word selection commit gate prevents stale context before commit`() =
     runTest(StandardTestDispatcher()) {
-      val staleSelection = Selection(anchor = Position("old", 0), head = Position("old", 5))
-      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 4))
+      val staleSelection =
+        Selection(
+          anchor = Position("old", 0, Affinity.Downstream),
+          head = Position("old", 5, Affinity.Downstream),
+        )
+      val wordSelection =
+        Selection(
+          anchor = Position("word", 0, Affinity.Downstream),
+          head = Position("word", 4, Affinity.Downstream),
+        )
       var currentSelection = staleSelection
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(
@@ -177,15 +206,23 @@ class EditorSelectionExpansionSemanticTest {
   @Test
   fun `word selection context waits until current selection differs from baseline`() =
     runTest(StandardTestDispatcher()) {
-      val staleSelection = Selection(anchor = Position("old", 0), head = Position("old", 5))
-      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 4))
+      val staleSelection =
+        Selection(
+          anchor = Position("old", 0, Affinity.Downstream),
+          head = Position("old", 5, Affinity.Downstream),
+        )
+      val wordSelection =
+        Selection(
+          anchor = Position("word", 0, Affinity.Downstream),
+          head = Position("word", 4, Affinity.Downstream),
+        )
       var currentSelection = staleSelection
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(

@@ -59,7 +59,7 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   val uiState = LocalEditorUiState.current
   val density = LocalDensity.current
   val zoom = if (displayZoom.isFinite() && displayZoom > 0f) displayZoom else 1f
-  var reportedHeight by remember(element.nodeId) { mutableFloatStateOf(Float.NaN) }
+  var reportedHeight by remember(element.node) { mutableFloatStateOf(Float.NaN) }
   val renderScope =
     remember(zoom) {
       EditorExternalElementRenderScope(zoom = zoom, shape = AppShapes.rounded(4.dp * zoom))
@@ -87,7 +87,7 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
           return@onSizeChanged
         }
         reportedHeight = height
-        editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.nodeId, height)))
+        editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.node, height)))
       }
   ) {
     context(renderScope) {
@@ -95,14 +95,13 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
         is ExternalElementData.Image ->
           EditorImageExternalElement(
             data = data,
-            nodeId = element.nodeId,
+            nodeId = element.node,
             boundsWidth = element.bounds.width,
             selected = element.isSelected,
           )
-        is ExternalElementData.File ->
-          EditorFileExternalElement(data = data, nodeId = element.nodeId)
+        is ExternalElementData.File -> EditorFileExternalElement(data = data, nodeId = element.node)
         is ExternalElementData.Embed ->
-          EditorEmbedExternalElement(data = data, nodeId = element.nodeId)
+          EditorEmbedExternalElement(data = data, nodeId = element.node)
         is ExternalElementData.Archived ->
           EditorExternalElementPlaceholder(icon = Lucide.Archive, text = "보관된 블록")
       }

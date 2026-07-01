@@ -1,5 +1,6 @@
 package co.typie.editor
 
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
@@ -29,7 +30,7 @@ import kotlinx.coroutines.test.setMain
 
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
 
-private fun renderInvalidated(): EditorEvent = EditorEvent.RenderInvalidated(emptyList())
+private fun renderInvalidated(): EditorEvent = EditorEvent.RenderInvalidated
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorAwaitTest {
@@ -164,8 +165,8 @@ class EditorAwaitTest {
         TrackedRange(
           id = "comment-1",
           group = "comment",
-          anchor = Position(nodeId = "text", offset = 0),
-          head = Position(nodeId = "text", offset = 4),
+          anchor = Position(node = "text", offset = 0, affinity = Affinity.Downstream),
+          head = Position(node = "text", offset = 4, affinity = Affinity.Downstream),
           metadata = "",
           rects = emptyList(),
           text = "test",

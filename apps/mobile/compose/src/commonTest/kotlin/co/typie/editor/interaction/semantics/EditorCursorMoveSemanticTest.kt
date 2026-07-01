@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
@@ -72,7 +73,11 @@ class EditorCursorMoveSemanticTest {
   @Test
   fun `shift primary click extends from the current selection anchor`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 1), head = Position("text", 3))
+      val selection =
+        Selection(
+          anchor = Position("text", 1, Affinity.Downstream),
+          head = Position("text", 3, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))

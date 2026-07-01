@@ -8,6 +8,7 @@ import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
@@ -144,7 +145,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `tap timer outside page does not open context menu for range selection`() =
     runTest(StandardTestDispatcher()) {
-      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { rangeSelection },
@@ -176,7 +181,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `single tap on range selection hit toggles context menu without moving cursor`() =
     runTest(StandardTestDispatcher()) {
-      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { rangeSelection },
@@ -226,7 +235,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `android single tap on range selection hit moves cursor instead of toggling context menu`() =
     runTest(StandardTestDispatcher()) {
-      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { rangeSelection },
@@ -261,7 +274,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `shift single tap dispatch extends from current selection anchor`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 1), head = Position("text", 3))
+      val selection =
+        Selection(
+          anchor = Position("text", 1, Affinity.Downstream),
+          head = Position("text", 3, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -306,8 +323,16 @@ class EditorInteractionControllerTest {
   @Test
   fun `android single tap that creates range selection opens context menu after commit`() =
     runTest(StandardTestDispatcher()) {
-      val collapsedSelection = Selection(anchor = Position("text", 0), head = Position("text", 0))
-      val nodeSelection = Selection(anchor = Position("node", 0), head = Position("node", 1))
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
+      val nodeSelection =
+        Selection(
+          anchor = Position("node", 0, Affinity.Downstream),
+          head = Position("node", 1, Affinity.Downstream),
+        )
       var currentSelection = collapsedSelection
       var commitNodeSelection = false
       val fake =
@@ -347,8 +372,16 @@ class EditorInteractionControllerTest {
   @Test
   fun `ios single tap that creates range selection opens context menu after commit`() =
     runTest(StandardTestDispatcher()) {
-      val collapsedSelection = Selection(anchor = Position("text", 0), head = Position("text", 0))
-      val nodeSelection = Selection(anchor = Position("node", 0), head = Position("node", 1))
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
+      val nodeSelection =
+        Selection(
+          anchor = Position("node", 0, Affinity.Downstream),
+          head = Position("node", 1, Affinity.Downstream),
+        )
       var currentSelection = collapsedSelection
       var commitNodeSelection = false
       val fake =
@@ -388,8 +421,16 @@ class EditorInteractionControllerTest {
   @Test
   fun `context menu hides when observed editor selection changes`() =
     runTest(StandardTestDispatcher()) {
-      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
-      val collapsedSelection = Selection(anchor = Position("text", 5), head = Position("text", 5))
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 5, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       var currentSelection = rangeSelection
       val fake =
         FakeFfiEditor(
@@ -458,13 +499,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `pinch start clears pending double tap drag state`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -502,13 +547,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `second pinch pointer clears pending double tap drag from outside editor pointer path`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -606,13 +655,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `double tap drag extends selection directly from controller workflow`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -663,13 +716,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `from selection handle drag extends selection from to endpoint anchor`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -714,13 +771,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `to selection handle drag extends selection from from endpoint anchor`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -759,13 +820,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle drag keeps consuming when pointer temporarily resolves outside pages`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -797,13 +862,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle cancel clears drag state scroll lock and magnifier`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -838,14 +907,22 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle drag refreshes context menu after delayed selection commit`() =
     runTest(StandardTestDispatcher()) {
-      var selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
-      val committedSelection = Selection(anchor = Position("text", 0), head = Position("text", 8))
+      var selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val committedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 8, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -880,13 +957,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle edge auto-scroll extends from opposite endpoint anchor without initial selection`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -930,13 +1011,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection from handle drag anchors opposite document endpoint for reverse selection`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 5), head = Position("text", 0))
+      val selection =
+        Selection(
+          anchor = Position("text", 5, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -967,7 +1052,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle edge auto-scroll stops after cancel`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints = selectionEndpoints()
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -1004,7 +1093,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle edge auto-scroll dispatches to viewport edge when scroll reaches boundary`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints = selectionEndpoints()
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -1044,7 +1137,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle down only owns pending drag until movement starts drag`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { selection },
@@ -1079,7 +1176,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `selection handle drag cannot interrupt active long press interaction`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { selection },
@@ -1140,7 +1241,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `pending double tap drag locks scroll gesture until pointer up`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { selection },
@@ -1181,13 +1286,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `double tap drag keeps pending extension when pointer up beats word selection commit`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -1223,15 +1332,23 @@ class EditorInteractionControllerTest {
   @Test
   fun `double tap drag can shrink back to the initial selected word range`() =
     runTest(StandardTestDispatcher()) {
-      val baseSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
-      val expandedSelection = Selection(anchor = Position("text", 0), head = Position("text", 12))
+      val baseSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val expandedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 12, Affinity.Downstream),
+        )
       var currentSelection = baseSelection
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(
@@ -1273,7 +1390,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `double tap drag edge auto-scroll keeps materialized initial selection`() =
     runTest(StandardTestDispatcher()) {
-      val baseSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val baseSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints = selectionEndpoints()
       val fake =
         FakeFfiEditor(
@@ -1324,8 +1445,16 @@ class EditorInteractionControllerTest {
   @Test
   fun `android long press starts word selection and extends after fresh selection materializes`() =
     runTest(StandardTestDispatcher()) {
-      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 5))
-      var currentSelection = Selection(anchor = Position("old", 0), head = Position("old", 0))
+      val wordSelection =
+        Selection(
+          anchor = Position("word", 0, Affinity.Downstream),
+          head = Position("word", 5, Affinity.Downstream),
+        )
+      var currentSelection =
+        Selection(
+          anchor = Position("old", 0, Affinity.Downstream),
+          head = Position("old", 0, Affinity.Downstream),
+        )
       val endpoints = selectionEndpoints()
       val fake =
         FakeFfiEditor(
@@ -1388,8 +1517,16 @@ class EditorInteractionControllerTest {
   @Test
   fun `android long press ending before word selection commit opens context menu after selection settles`() =
     runTest(StandardTestDispatcher()) {
-      val wordSelection = Selection(anchor = Position("word", 0), head = Position("word", 5))
-      var currentSelection = Selection(anchor = Position("old", 0), head = Position("old", 0))
+      val wordSelection =
+        Selection(
+          anchor = Position("word", 0, Affinity.Downstream),
+          head = Position("word", 5, Affinity.Downstream),
+        )
+      var currentSelection =
+        Selection(
+          anchor = Position("old", 0, Affinity.Downstream),
+          head = Position("old", 0, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           selectionProvider = { currentSelection },
@@ -1621,7 +1758,11 @@ class EditorInteractionControllerTest {
   @Test
   fun `android long press on range selection hit is rejected`() =
     runTest(StandardTestDispatcher()) {
-      val rangeSelection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           cursorProvider = { cursorAt(x = 10f) },
@@ -1658,7 +1799,10 @@ class EditorInteractionControllerTest {
         FakeFfiEditor(
           cursorProvider = { cursor },
           selectionProvider = {
-            Selection(anchor = Position("text", 0), head = Position("text", 0))
+            Selection(
+              anchor = Position("text", 0, Affinity.Downstream),
+              head = Position("text", 0, Affinity.Downstream),
+            )
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -1697,7 +1841,10 @@ class EditorInteractionControllerTest {
         FakeFfiEditor(
           cursorProvider = { cursorAt(x = 10f) },
           selectionProvider = {
-            Selection(anchor = Position("text", 0), head = Position("text", 0))
+            Selection(
+              anchor = Position("text", 0, Affinity.Downstream),
+              head = Position("text", 0, Affinity.Downstream),
+            )
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -1726,7 +1873,11 @@ class EditorInteractionControllerTest {
   fun `context menu stays when observed editor cursor changes without selection change`() =
     runTest(StandardTestDispatcher()) {
       var cursor = cursorAt(x = 10f)
-      val collapsedSelection = Selection(anchor = Position("text", 0), head = Position("text", 0))
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(cursorProvider = { cursor }, selectionProvider = { collapsedSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -1804,13 +1955,17 @@ class EditorInteractionControllerTest {
   @Test
   fun `second pointer cancel drops deferred double tap drag extension before word selection commit`() =
     runTest(StandardTestDispatcher()) {
-      val selection = Selection(anchor = Position("text", 0), head = Position("text", 5))
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val endpoints =
         SelectionEndpoints(
           from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
           to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0),
-          toPosition = Position("text", 5),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
@@ -1969,8 +2124,8 @@ class EditorInteractionControllerTest {
       SelectionEndpoints(
         from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
         to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-        fromPosition = Position("text", 0),
-        toPosition = Position("text", 5),
+        fromPosition = Position("text", 0, Affinity.Downstream),
+        toPosition = Position("text", 5, Affinity.Downstream),
       )
 
     fun testEdgeAutoScrollViewport(rect: ComposeRect): EditorEdgeAutoScrollViewport =

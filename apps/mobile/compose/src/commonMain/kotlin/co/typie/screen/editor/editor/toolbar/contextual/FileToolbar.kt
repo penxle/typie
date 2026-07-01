@@ -181,7 +181,7 @@ private suspend fun insertFilePlaceholders(
 
 private fun Editor.fileExternalNodeIds(): List<String> = externalElements.mapNotNull { element ->
   when (element.data) {
-    is ExternalElementData.File -> element.nodeId
+    is ExternalElementData.File -> element.node
     else -> null
   }
 }

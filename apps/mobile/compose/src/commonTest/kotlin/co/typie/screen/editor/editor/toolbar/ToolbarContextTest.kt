@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor.toolbar
 
 import co.typie.editor.EditorState
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Block
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.FontSizeValue
@@ -179,20 +180,20 @@ class ToolbarContextTest {
 
   private fun collapsedSelection(): Selection =
     Selection(
-      anchor = Position(nodeId = "text", offset = 0),
-      head = Position(nodeId = "text", offset = 0),
+      anchor = Position(node = "text", offset = 0, affinity = Affinity.Downstream),
+      head = Position(node = "text", offset = 0, affinity = Affinity.Downstream),
     )
 
   private fun rangeSelection(): Selection =
     Selection(
-      anchor = Position(nodeId = "text", offset = 0),
-      head = Position(nodeId = "text", offset = 2),
+      anchor = Position(node = "text", offset = 0, affinity = Affinity.Downstream),
+      head = Position(node = "text", offset = 2, affinity = Affinity.Downstream),
     )
 
   private fun singleBlockSelection(): Selection =
     Selection(
-      anchor = Position(nodeId = "root", offset = 1),
-      head = Position(nodeId = "root", offset = 2),
+      anchor = Position(node = "root", offset = 1, affinity = Affinity.Downstream),
+      head = Position(node = "root", offset = 2, affinity = Affinity.Downstream),
     )
 
   private fun blockState(

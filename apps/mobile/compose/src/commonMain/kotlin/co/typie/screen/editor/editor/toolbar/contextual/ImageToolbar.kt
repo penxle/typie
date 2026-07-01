@@ -207,7 +207,7 @@ private suspend fun insertImagePlaceholders(
 
 private fun Editor.imageExternalNodeIds(): List<String> = externalElements.mapNotNull { element ->
   when (element.data) {
-    is ExternalElementData.Image -> element.nodeId
+    is ExternalElementData.Image -> element.node
     else -> null
   }
 }
