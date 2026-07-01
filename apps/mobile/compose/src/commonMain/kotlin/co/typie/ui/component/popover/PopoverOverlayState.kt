@@ -175,7 +175,6 @@ internal class PopoverOverlayEntry(
   val collapsedCornerRadius: Dp?,
   val maxWidth: Dp?,
   val minWidth: Dp,
-  val expandToMaxWidth: Boolean,
   val pane: @Composable () -> Unit,
   val anchor: @Composable () -> Unit,
 )

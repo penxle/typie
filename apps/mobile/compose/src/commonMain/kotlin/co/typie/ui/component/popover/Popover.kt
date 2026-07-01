@@ -56,7 +56,6 @@ fun Popover(
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
-  expandToMaxWidth: Boolean = false,
   screenPadding: PaddingValues = PaddingValues(all = PopoverDefaults.ScreenPadding),
   collapsedCornerRadius: Dp? = null,
 ) {
@@ -100,7 +99,6 @@ fun Popover(
       collapsedCornerRadius = collapsedCornerRadius,
       maxWidth = maxWidth,
       minWidth = minWidth,
-      expandToMaxWidth = expandToMaxWidth,
       pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
       anchor = { anchor() },
     )

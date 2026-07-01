@@ -216,7 +216,6 @@ private fun createEntry(owner: Any): PopoverOverlayEntry {
     collapsedCornerRadius = 0.dp,
     maxWidth = null,
     minWidth = 0.dp,
-    expandToMaxWidth = false,
     pane = {},
     anchor = {},
   )

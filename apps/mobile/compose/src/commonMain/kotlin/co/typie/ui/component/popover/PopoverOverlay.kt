@@ -8,7 +8,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -110,7 +109,6 @@ fun PopoverOverlay(state: PopoverOverlayState) {
     screenPadding = entry.screenPadding,
     maxWidth = entry.maxWidth,
     minWidth = entry.minWidth,
-    expandToMaxWidth = entry.expandToMaxWidth,
     onPaneBoundsChanged = { state.updatePaneBounds(entry.owner, it) },
   )
 }
@@ -127,7 +125,6 @@ private fun PopoverPaneContent(
   screenPadding: PopoverScreenPadding,
   maxWidth: Dp?,
   minWidth: Dp,
-  expandToMaxWidth: Boolean,
   onPaneBoundsChanged: (Rect) -> Unit,
 ) {
   val density = LocalDensity.current
@@ -172,7 +169,7 @@ private fun PopoverPaneContent(
           CompositionLocalProvider(
             LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Measure
           ) {
-            ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+            ShrinkWrappedPane(content = pane)
           }
         }
         .map { it.measure(paneConstraints) }
@@ -204,7 +201,7 @@ private fun PopoverPaneContent(
           CompositionLocalProvider(
             LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Measure
           ) {
-            ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+            ShrinkWrappedPane(content = pane)
           }
         }
         .map { it.measure(finalPaneConstraints) }
@@ -212,11 +209,7 @@ private fun PopoverPaneContent(
     val paneWidth = finalPanePlaceables.maxOfOrNull { it.width } ?: initiallyMeasuredWidth
     val paneHeight = finalPanePlaceables.maxOfOrNull { it.height } ?: initiallyMeasuredHeight
     val resolvedPaneWidth =
-      if (expandToMaxWidth) {
-        finalPaneConstraints.maxWidth
-      } else {
-        paneWidth.coerceAtLeast(minWidthPx).coerceAtMost(finalPaneConstraints.maxWidth)
-      }
+      paneWidth.coerceAtLeast(minWidthPx).coerceAtMost(finalPaneConstraints.maxWidth)
     val paneSize = IntSize(resolvedPaneWidth, paneHeight)
     val geometry =
       resolvePopoverGeometry(
@@ -260,7 +253,7 @@ private fun PopoverPaneContent(
             ) {
               PopoverPaneSurface(
                 anchor = anchor,
-                pane = { ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane) },
+                pane = { ShrinkWrappedPane(content = pane) },
                 paneSize = paneSize,
                 anchorContentRect = geometry.anchorBoundsInPopup,
                 progress = progress,
@@ -280,22 +273,14 @@ private fun PopoverPaneContent(
 }
 
 @Composable
-private fun ShrinkWrappedPane(expandToMaxWidth: Boolean = false, content: @Composable () -> Unit) {
+private fun ShrinkWrappedPane(content: @Composable () -> Unit) {
   val scrollState = rememberScrollState()
   val controller = rememberEdgeAutoScrollController(verticalScrollableState = scrollState)
 
   CompositionLocalProvider(LocalPopoverPaneEdgeAutoScrollController provides controller) {
     Box(
       modifier =
-        Modifier.then(
-            if (expandToMaxWidth) {
-              Modifier.fillMaxWidth()
-            } else {
-              Modifier.width(IntrinsicSize.Max)
-            }
-          )
-          .edgeAutoScroll(controller)
-          .verticalScroll(scrollState)
+        Modifier.width(IntrinsicSize.Max).edgeAutoScroll(controller).verticalScroll(scrollState)
     ) {
       content()
     }
