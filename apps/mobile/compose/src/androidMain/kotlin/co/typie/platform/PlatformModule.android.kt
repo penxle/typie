@@ -19,6 +19,9 @@ actual object PlatformModule {
   actual val ksafePrefs: KSafe by lazy {
     KSafe(context = context, fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
   }
+  actual val ksafeState: KSafe by lazy {
+    KSafe(context = context, fileName = "state", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
+  }
   actual val ksafeVault: KSafe by lazy { KSafe(context = context, fileName = "vault") }
   actual val clipboard: Clipboard by lazy { AndroidClipboard(context) }
   actual val deviceInfo: DeviceInfo by lazy { AndroidDeviceInfo(context) }

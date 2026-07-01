@@ -99,12 +99,7 @@ impl EditorHost {
         changesets: Vec<u8>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let mut state = crate::graph::state_from_changesets(changesets)?;
-        let selection = {
-            let view = state.view();
-            editor_state::doc_start_selection(&view)
-        };
-        state.selection = selection;
+        let state = crate::graph::state_from_changesets(changesets)?;
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))
@@ -117,12 +112,7 @@ impl EditorHost {
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let pending = crate::graph::decode_length_prefixed(&pending_encoded)?;
-        let mut state = crate::graph::state_from_changesets_with_pending(server, pending)?;
-        let selection = {
-            let view = state.view();
-            editor_state::doc_start_selection(&view)
-        };
-        state.selection = selection;
+        let state = crate::graph::state_from_changesets_with_pending(server, pending)?;
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
         Ok(into_owned(crate::editor::Editor::new(core)))
@@ -243,6 +233,15 @@ mod tests {
         }
     }
 
+    fn test_viewport() -> editor_view::Viewport {
+        editor_view::Viewport::new(320.0, 640.0, 1.0)
+    }
+
+    fn graph_from_plain(plain: &editor_model::PlainDoc) -> Vec<u8> {
+        let state = editor_state::State::from_plain(plain).unwrap();
+        editor_crdt::wire::encode(&state.graph().changesets_as_vec()).unwrap()
+    }
+
     #[test]
     fn set_theme_variant_returns_true_on_change() {
         let host = make_host();
@@ -280,5 +279,44 @@ mod tests {
 
         assert!(modifiers.contains(&editor_model::Modifier::FontSize { value: 1600 }));
         assert!(modifiers.contains(&editor_model::Modifier::BlockGap { value: 120 }));
+    }
+
+    #[test]
+    fn create_editor_from_graph_preserves_missing_selection() {
+        let host = make_host();
+        let plain =
+            crate::doc_builder::build_default_doc(editor_model::PlainRootNode::default(), vec![]);
+        let graph = graph_from_plain(&plain);
+
+        let editor = host
+            .create_editor_from_graph(graph, test_viewport())
+            .unwrap();
+
+        assert!(editor.selection().unwrap().is_none());
+    }
+
+    #[test]
+    fn create_editor_from_doc_preserves_missing_selection() {
+        let host = make_host();
+        let plain =
+            crate::doc_builder::build_default_doc(editor_model::PlainRootNode::default(), vec![]);
+
+        let editor = host.create_editor_from_doc(plain, test_viewport()).unwrap();
+
+        assert!(editor.selection().unwrap().is_none());
+    }
+
+    #[test]
+    fn create_editor_from_graph_with_pending_preserves_missing_selection() {
+        let host = make_host();
+        let plain =
+            crate::doc_builder::build_default_doc(editor_model::PlainRootNode::default(), vec![]);
+        let graph = graph_from_plain(&plain);
+
+        let editor = host
+            .create_editor_from_graph_with_pending(graph, vec![], test_viewport())
+            .unwrap();
+
+        assert!(editor.selection().unwrap().is_none());
     }
 }

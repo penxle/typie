@@ -14,6 +14,7 @@ enum class Platform {
 expect object PlatformModule {
   val platform: Platform
   val ksafePrefs: KSafe
+  val ksafeState: KSafe
   val ksafeVault: KSafe
   val clipboard: Clipboard
   val deviceInfo: DeviceInfo

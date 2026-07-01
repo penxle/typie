@@ -230,7 +230,7 @@ private fun EditorPreviewContent(
         enqueue(Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.All)))
         modifiers.forEach { modifier -> enqueue(Message.Modifier(ModifierOp.Set(modifier))) }
       }
-      enqueue(Message.Selection(SelectionOp.SetFlat(start = 0, end = 0)))
+      enqueue(Message.Selection(SelectionOp.Unset))
       enqueue(Message.System(SystemEvent.SetFocused(false)))
     }
   }

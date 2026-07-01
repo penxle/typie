@@ -5,9 +5,9 @@ use editor_model::{
     classify,
 };
 
+use crate::Selection;
 use crate::fragment_builder::{GraphSink, emit_text_run};
 use crate::projected_state::{ProjectedState, SpineError};
-use crate::{Selection, doc_start_selection};
 
 #[derive(Debug)]
 pub enum BuildError {
@@ -202,11 +202,7 @@ pub(crate) fn load_from_plain(
     let mut graph = build_graph_from_plain(template)?;
     graph.commit_mut();
     let state = ProjectedState::from_graph(graph)?;
-    let sel = {
-        let view = state.view();
-        doc_start_selection(&view)
-    };
-    Ok((state, sel))
+    Ok((state, None))
 }
 
 #[cfg(test)]
@@ -514,24 +510,15 @@ mod tests {
     }
 
     #[test]
-    fn load_returns_initial_caret() {
+    fn load_returns_no_initial_selection() {
         let template = default_doc();
         let (state, sel) = load_from_plain(&template).expect("loads");
-        let sel = sel.expect("doc-start caret present");
-        assert_eq!(sel.anchor, sel.head, "caret is collapsed");
-
-        let view = state.view();
-        let node = view
-            .node(sel.anchor.node)
-            .expect("caret node is live in the view");
-        assert!(
-            sel.anchor.offset <= node.children().count(),
-            "caret offset within node bounds"
-        );
+        assert!(sel.is_none());
+        assert!(state.view().root().is_some());
     }
 
     #[test]
-    fn load_empty_paragraph_caret_at_zero() {
+    fn load_empty_paragraph_returns_no_initial_selection() {
         let para = block_entry(vec![], PlainNode::Paragraph(PlainParagraphNode {}));
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
         let template = PlainDoc {
@@ -540,7 +527,7 @@ mod tests {
         };
 
         let (state, sel) = load_from_plain(&template).expect("loads");
-        let sel = sel.expect("caret present");
+        assert!(sel.is_none());
 
         let view = state.view();
         let para = view
@@ -549,9 +536,7 @@ mod tests {
             .child_blocks()
             .next()
             .expect("paragraph");
-        let para_dot = para.dot().expect("paragraph is a real node");
-        assert_eq!(sel.anchor.node, para_dot);
-        assert_eq!(sel.anchor.offset, 0);
+        assert!(para.dot().is_some());
     }
 
     #[test]

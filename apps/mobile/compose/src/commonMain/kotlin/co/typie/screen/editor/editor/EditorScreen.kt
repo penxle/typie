@@ -87,6 +87,7 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.route.Route
+import co.typie.screen.editor.editor.entry.rememberEditorEntryStateSession
 import co.typie.screen.editor.editor.findreplace.FindReplaceToolbar
 import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarCenter
 import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarLeading
@@ -241,6 +242,13 @@ fun EditorScreen(entityId: String) {
   val editor = runtime.editor
   val editorState = editor?.state ?: EditorState.Initial
   val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+  val entryState =
+    rememberEditorEntryStateSession(
+      documentId = document?.id,
+      editor = editor,
+      editorFocused = uiState.focused,
+      bringIntoViewRequests = bringIntoViewRequests,
+    )
   val findReplace =
     rememberEditorFindReplaceSession(
       documentLocked = documentLocked,
@@ -727,6 +735,8 @@ fun EditorScreen(entityId: String) {
             subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
             onTitleChange = model::updateTitleDraft,
             onSubtitleChange = model::updateSubtitleDraft,
+            onTitleFocused = entryState::markTitleFocused,
+            onSubtitleFocused = entryState::markSubtitleFocused,
             onHeightChanged = screenState::updateHeaderHeight,
             onEnterDocument = {
               model.flushDraftsAsync()

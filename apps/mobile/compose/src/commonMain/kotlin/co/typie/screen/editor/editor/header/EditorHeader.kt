@@ -61,6 +61,8 @@ internal fun EditorHeader(
   modifier: Modifier = Modifier,
   onTitleChange: (String) -> Unit,
   onSubtitleChange: (String) -> Unit,
+  onTitleFocused: () -> Unit,
+  onSubtitleFocused: () -> Unit,
   onHeightChanged: (Float) -> Unit,
   onEnterDocument: () -> Unit,
 ) {
@@ -129,6 +131,7 @@ internal fun EditorHeader(
         onEnterDocument = { subtitleInputState.requestFocus() },
         onFocusPrevious = {},
         onBackspaceAtStart = {},
+        onFocused = onTitleFocused,
         modifier = Modifier.fillMaxWidth(),
         textInputState = titleInputState,
       )
@@ -161,6 +164,7 @@ internal fun EditorHeader(
             titleInputState.requestFocus()
           }
         },
+        onFocused = onSubtitleFocused,
         modifier = Modifier.fillMaxWidth(),
         textInputState = subtitleInputState,
       )
@@ -189,6 +193,7 @@ private fun EditorHeaderField(
   onEnterDocument: () -> Unit,
   onFocusPrevious: () -> Unit,
   onBackspaceAtStart: () -> Unit,
+  onFocused: () -> Unit,
   modifier: Modifier = Modifier,
   textInputState: TextInputState,
 ) {
@@ -196,43 +201,49 @@ private fun EditorHeaderField(
     value = text,
     onValueChange = onValueChange,
     modifier =
-      modifier.textInputFocusable(textInputState).onPreviewKeyEvent {
-        if (it.type != KeyEventType.KeyDown) {
-          return@onPreviewKeyEvent false
+      modifier
+        .textInputFocusable(textInputState) {
+          if (it.isFocused) {
+            onFocused()
+          }
         }
+        .onPreviewKeyEvent {
+          if (it.type != KeyEventType.KeyDown) {
+            return@onPreviewKeyEvent false
+          }
 
-        when (it.key) {
-          Key.DirectionDown -> {
-            onFocusNext()
-            true
-          }
-          Key.DirectionUp -> {
-            onFocusPrevious()
-            true
-          }
-          Key.Enter -> {
-            if (it.isShiftPressed) {
-              false
-            } else {
-              onEnterDocument()
+          when (it.key) {
+            Key.DirectionDown -> {
+              onFocusNext()
               true
             }
-          }
-          Key.Tab -> {
-            if (it.isShiftPressed) {
+            Key.DirectionUp -> {
               onFocusPrevious()
-            } else {
-              onFocusNext()
+              true
             }
-            true
+            Key.Enter -> {
+              if (it.isShiftPressed) {
+                false
+              } else {
+                onEnterDocument()
+                true
+              }
+            }
+            Key.Tab -> {
+              if (it.isShiftPressed) {
+                onFocusPrevious()
+              } else {
+                onFocusNext()
+              }
+              true
+            }
+            Key.Backspace -> {
+              onBackspaceAtStart()
+              false
+            }
+            else -> false
           }
-          Key.Backspace -> {
-            onBackspaceAtStart()
-            false
-          }
-          else -> false
-        }
-      },
+        },
     textStyle = style.copy(color = AppTheme.colors.textDefault),
     cursorBrush = SolidColor(AppTheme.colors.textDefault),
     keyboardOptions = KeyboardOptions(imeAction = imeAction),

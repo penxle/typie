@@ -13,6 +13,8 @@ actual object PlatformModule {
   actual val platform: Platform = Platform.Desktop
   actual val ksafePrefs: KSafe =
     KSafe(fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
+  actual val ksafeState: KSafe =
+    KSafe(fileName = "state", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
   actual val ksafeVault: KSafe = KSafe(fileName = "vault")
   actual val clipboard: Clipboard = DesktopClipboard()
   actual val deviceInfo: DeviceInfo = DesktopDeviceInfo()

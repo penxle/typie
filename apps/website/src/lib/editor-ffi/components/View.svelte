@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { graphql } from '$mearie';
   import {
     CONTINUOUS_MIN_WIDTH,
@@ -160,9 +160,6 @@
         readyFired = true;
         loadFonts(document.data.editorFontFamilies);
         onReady?.();
-        if (active) {
-          void tick().then(() => editor.focus());
-        }
       }
     });
   });

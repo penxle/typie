@@ -23,6 +23,8 @@ actual object PlatformModule {
   actual val platform: Platform = Platform.iOS
   actual val ksafePrefs: KSafe =
     KSafe(fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
+  actual val ksafeState: KSafe =
+    KSafe(fileName = "state", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
   actual val ksafeVault: KSafe = KSafe(fileName = "vault")
   actual val clipboard: Clipboard = IOSClipboard()
   actual val deviceInfo: DeviceInfo = IOSDeviceInfo()
