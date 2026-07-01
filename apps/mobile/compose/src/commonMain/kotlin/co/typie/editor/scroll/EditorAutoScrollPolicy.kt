@@ -32,11 +32,11 @@ internal fun resolveEditorAutoScrollPolicy(
   pageBottomRevealSpacerHeight: Float = 0f,
   typewriterEnabled: Boolean = false,
   typewriterPosition: Float = 0.5f,
-  cursorLineHeight: Float = 0f,
+  targetLineHeight: Float = 0f,
 ): EditorAutoScrollPolicy {
   val resolvedTypewriterPosition = typewriterPosition.coerceIn(0f, 1f)
   val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
-  val resolvedTargetLineHeight = cursorLineHeight.coerceAtLeast(0f)
+  val resolvedTargetLineHeight = targetLineHeight.coerceAtLeast(0f)
   val targetTop =
     resolveScrollTargetTop(
       visibleArea = visibleArea,

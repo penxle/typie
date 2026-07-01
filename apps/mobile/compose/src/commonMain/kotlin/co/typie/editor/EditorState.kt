@@ -8,6 +8,7 @@ import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeEndpoints
@@ -17,6 +18,7 @@ data class EditorState(
   val documentRevision: Long = 0L,
   val cursor: CursorMetrics?,
   val selection: Selection?,
+  val selectionEndpoints: SelectionEndpoints? = null,
   val pageSizes: List<Size>,
   val externalElements: List<ExternalElement>,
   val rootAttrs: PlainRootNode?,

@@ -403,6 +403,12 @@ internal constructor(
 
   private fun readSnapshot(version: Long, events: List<EditorEvent>): EditorState {
     val selection = inner.selection()
+    val selectionEndpoints =
+      if (selection != null && selection.anchor != selection.head) {
+        inner.selectionEndpoints()
+      } else {
+        null
+      }
     val documentChanged = events.hasStateChangedField(StateField.Doc)
     val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
     val trackedRanges =
@@ -417,6 +423,7 @@ internal constructor(
       documentRevision = state.documentRevision + if (documentChanged) 1L else 0L,
       cursor = inner.cursor(),
       selection = selection,
+      selectionEndpoints = selectionEndpoints,
       pageSizes = inner.pageSizes(),
       externalElements = inner.externalElements(),
       rootAttrs = inner.rootAttrs(),

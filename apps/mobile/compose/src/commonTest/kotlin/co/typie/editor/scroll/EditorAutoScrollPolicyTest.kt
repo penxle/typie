@@ -78,7 +78,7 @@ class EditorAutoScrollPolicyTest {
         baseBottomSpace = 20f,
         typewriterEnabled = false,
         typewriterPosition = 0.5f,
-        cursorLineHeight = 20f,
+        targetLineHeight = 20f,
       )
 
     assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
@@ -111,7 +111,7 @@ class EditorAutoScrollPolicyTest {
         baseBottomSpace = 20f,
         typewriterEnabled = true,
         typewriterPosition = 0.25f,
-        cursorLineHeight = 32f,
+        targetLineHeight = 32f,
       )
 
     assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
@@ -130,7 +130,7 @@ class EditorAutoScrollPolicyTest {
         distanceToPagesBottom = 520f,
         typewriterEnabled = true,
         typewriterPosition = 0.25f,
-        cursorLineHeight = 32f,
+        targetLineHeight = 32f,
       )
 
     assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)

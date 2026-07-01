@@ -4,8 +4,13 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorState
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect as FfiRect
+import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.runtime.EditorUiState
@@ -125,6 +130,96 @@ class EditorScrollResolverTest {
   }
 
   @Test
+  fun `selection head target resolves from selection endpoint instead of cursor line`() {
+    val anchor = position(offset = 1)
+    val head = position(offset = 8)
+    val frame =
+      frame(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = 0,
+                caret = FfiRect(0f, 20f, 0f, 20f),
+                line = FfiRect(0f, 20f, 0f, 20f),
+              ),
+            selection = Selection(anchor = anchor, head = head),
+            selectionEndpoints =
+              SelectionEndpoints(
+                from = PageRect(pageIdx = 0, rect = FfiRect(0f, 20f, 0f, 20f)),
+                to = PageRect(pageIdx = 0, rect = FfiRect(0f, 580f, 0f, 20f)),
+                fromPosition = anchor,
+                toPosition = head,
+              ),
+            pageSizes = listOf(PageSize(width = 300f, height = 620f)),
+          )
+      )
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        currentScroll = 200f,
+      )
+
+    assertScrollTo(intent, 360f)
+  }
+
+  @Test
+  fun `selection head target does not fall back to cursor line without selection`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = 0,
+                caret = FfiRect(0f, 580f, 0f, 20f),
+                line = FfiRect(0f, 580f, 0f, 20f),
+              ),
+            selection = null,
+            selectionEndpoints = null,
+            pageSizes = listOf(PageSize(width = 300f, height = 620f)),
+          )
+      )
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        currentScroll = 200f,
+      )
+
+    assertEquals(EditorScrollIntentResult.ConsumedWithoutScroll, intent)
+  }
+
+  @Test
+  fun `selection head target height resolves from endpoint when range selection has no cursor`() {
+    val anchor = position(offset = 1)
+    val head = position(offset = 8)
+    val height =
+      resolveBringIntoViewTargetHeight(
+        state =
+          state(
+            cursor = null,
+            selection = Selection(anchor = anchor, head = head),
+            selectionEndpoints =
+              SelectionEndpoints(
+                from = PageRect(pageIdx = 0, rect = FfiRect(0f, 20f, 0f, 16f)),
+                to = PageRect(pageIdx = 0, rect = FfiRect(0f, 580f, 0f, 20f)),
+                fromPosition = anchor,
+                toPosition = head,
+              ),
+            pageSizes = listOf(PageSize(width = 300f, height = 620f)),
+          ),
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        displayZoom = 1.5f,
+      )
+
+    assertEquals(30f, requireNotNull(height), 0.0001f)
+  }
+
+  @Test
   fun `distance to pages bottom excludes bottom occlusion so typewriter padding can add it`() {
     val uiState =
       EditorUiState().apply {
@@ -167,11 +262,17 @@ class EditorScrollResolverTest {
     assertEquals(y, scrollTo.y, 0.0001f)
   }
 
-  private fun state(cursor: CursorMetrics, pageSizes: List<PageSize>): EditorState =
+  private fun state(
+    cursor: CursorMetrics?,
+    pageSizes: List<PageSize>,
+    selection: Selection? = null,
+    selectionEndpoints: SelectionEndpoints? = null,
+  ): EditorState =
     EditorState(
       version = 1L,
       cursor = cursor,
-      selection = null,
+      selection = selection,
+      selectionEndpoints = selectionEndpoints,
       pageSizes = pageSizes,
       externalElements = emptyList(),
       rootAttrs = null,
@@ -206,4 +307,7 @@ class EditorScrollResolverTest {
       pageMarginLeft = 0f,
       pageMarginRight = 0f,
     )
+
+  private fun position(offset: Int): Position =
+    Position(node = "paragraph", offset = offset, affinity = Affinity.Downstream)
 }

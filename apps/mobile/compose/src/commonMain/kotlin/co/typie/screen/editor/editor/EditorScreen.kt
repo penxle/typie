@@ -77,6 +77,7 @@ import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
+import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
@@ -494,7 +495,12 @@ fun EditorScreen(entityId: String) {
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode
     val displayZoom = zoomController.displayZoom
-    val cursorLineHeight = (editorState.cursor?.line?.height ?: 0f) * displayZoom
+    val typewriterTargetLineHeight =
+      resolveBringIntoViewTargetHeight(
+        state = editorState,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        displayZoom = displayZoom,
+      ) ?: 0f
     val subPaneLayoutInfo = subPaneState.layoutInfo
     val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneLayoutInfo)
     val editorInputBottomOcclusion =
@@ -557,7 +563,7 @@ fun EditorScreen(entityId: String) {
         pageBottomRevealSpacerHeight = pageBottomRevealSpacerHeight,
         typewriterEnabled = typewriterEnabled,
         typewriterPosition = typewriterPosition,
-        cursorLineHeight = cursorLineHeight,
+        targetLineHeight = typewriterTargetLineHeight,
       )
     val bodyTrackWidth = bodyGeometry.pageColumnWidth.coerceAtLeast(0f)
     val isPaginatedLayout = layoutSpec is EditorDocumentLayoutSpec.Paginated

@@ -4,8 +4,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorState
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
+import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.scroll.EditorScrollFrame
@@ -223,18 +226,20 @@ class EditorViewportScrollReconcileTest {
       scrollToY(scrollY)
     }
 
-  private fun frame(visibleArea: EditorVisibleArea, cursorY: Float = 0f): EditorScrollFrame =
+  private fun frame(visibleArea: EditorVisibleArea, cursorY: Float? = null): EditorScrollFrame =
     EditorScrollFrame(
       state =
         EditorState(
           version = 1L,
           cursor =
-            CursorMetrics(
-              pageIdx = 0,
-              caret = Rect(x = 0f, y = cursorY, width = 0f, height = 20f),
-              line = Rect(x = 0f, y = cursorY, width = 0f, height = 20f),
-            ),
-          selection = null,
+            cursorY?.let {
+              CursorMetrics(
+                pageIdx = 0,
+                caret = Rect(x = 0f, y = it, width = 0f, height = 20f),
+                line = Rect(x = 0f, y = it, width = 0f, height = 20f),
+              )
+            },
+          selection = cursorY?.let { collapsedSelection() },
           pageSizes = listOf(PageSize(width = 300f, height = 900f)),
           externalElements = emptyList(),
           rootAttrs = null,
@@ -249,4 +254,9 @@ class EditorViewportScrollReconcileTest {
       density = 1f,
       editorBounds = EditorBoundsInContainer(x = 0f, y = 0f, width = 300f, height = 900f),
     )
+
+  private fun collapsedSelection(): Selection {
+    val position = Position(node = "paragraph", offset = 0, affinity = Affinity.Downstream)
+    return Selection(anchor = position, head = position)
+  }
 }

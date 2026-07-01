@@ -133,6 +133,15 @@ internal fun isEditorScrollTargetVisible(
   return rect.bottom >= visibleTopInContent && rect.top <= visibleBottomInContent
 }
 
+internal fun resolveBringIntoViewTargetHeight(
+  state: EditorState,
+  target: EditorBringIntoViewTarget,
+  displayZoom: Float,
+): Float? {
+  val targetRect = resolveBringIntoViewTargetPageRect(state = state, target = target) ?: return null
+  return targetRect.height * displayZoom
+}
+
 private fun resolveBringIntoViewTargetRect(
   state: EditorState,
   layoutSpec: EditorDocumentLayoutSpec,
@@ -142,51 +151,59 @@ private fun resolveBringIntoViewTargetRect(
   density: Float,
   target: EditorBringIntoViewTarget,
 ): VerticalSpan? {
-  return when (target) {
-    EditorBringIntoViewTarget.CurrentCursorLine -> {
-      val cursor = state.cursor ?: return null
-      val lineOffsetY =
-        resolveTargetOffsetY(
-          layoutSpec = layoutSpec,
-          pageSizes = state.pageSizes,
-          page = cursor.pageIdx,
-          y = cursor.line.y,
-          displayZoom = displayZoom,
-          density = density,
-        ) ?: return null
-      val lineContentTop = headerHeight + editorTopInContainer + lineOffsetY
-      VerticalSpan(top = lineContentTop, bottom = lineContentTop + cursor.line.height * displayZoom)
-    }
+  val targetRect = resolveBringIntoViewTargetPageRect(state = state, target = target) ?: return null
+  val offsetY =
+    resolveTargetOffsetY(
+      layoutSpec = layoutSpec,
+      pageSizes = state.pageSizes,
+      page = targetRect.pageIdx,
+      y = targetRect.y,
+      displayZoom = displayZoom,
+      density = density,
+    ) ?: return null
+  val contentTop = headerHeight + editorTopInContainer + offsetY
+  return VerticalSpan(top = contentTop, bottom = contentTop + targetRect.height * displayZoom)
+}
 
-    EditorBringIntoViewTarget.CurrentSelectionHead -> {
-      // TODO(editor-parity): KMP selection 모델/FFI가 실제 selection head bounds를 노출하면
-      // 그 값을 써야 한다. 지금은 CurrentSelectionHead가 CurrentCursorLine으로 fallback 되어
-      // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르다.
-      resolveBringIntoViewTargetRect(
-        state = state,
-        layoutSpec = layoutSpec,
-        headerHeight = headerHeight,
-        editorTopInContainer = editorTopInContainer,
-        displayZoom = displayZoom,
-        density = density,
-        target = EditorBringIntoViewTarget.CurrentCursorLine,
-      )
-    }
+private data class BringIntoViewTargetPageRect(val pageIdx: Int, val y: Float, val height: Float)
 
-    is EditorBringIntoViewTarget.OverlayRect -> {
-      val overlayOffsetY =
-        resolveTargetOffsetY(
-          layoutSpec = layoutSpec,
-          pageSizes = state.pageSizes,
-          page = target.pageIdx,
-          y = target.top,
-          displayZoom = displayZoom,
-          density = density,
-        ) ?: return null
-      val contentTop = headerHeight + editorTopInContainer + overlayOffsetY
-      VerticalSpan(top = contentTop, bottom = contentTop + target.height * displayZoom)
-    }
+private fun resolveBringIntoViewTargetPageRect(
+  state: EditorState,
+  target: EditorBringIntoViewTarget,
+): BringIntoViewTargetPageRect? =
+  when (target) {
+    EditorBringIntoViewTarget.CurrentCursorLine -> resolveCurrentCursorLinePageRect(state)
+    EditorBringIntoViewTarget.CurrentSelectionHead -> resolveCurrentSelectionHeadPageRect(state)
+    is EditorBringIntoViewTarget.OverlayRect ->
+      BringIntoViewTargetPageRect(pageIdx = target.pageIdx, y = target.top, height = target.height)
   }
+
+private fun resolveCurrentCursorLinePageRect(state: EditorState): BringIntoViewTargetPageRect? {
+  val cursor = state.cursor ?: return null
+  return BringIntoViewTargetPageRect(
+    pageIdx = cursor.pageIdx,
+    y = cursor.line.y,
+    height = cursor.line.height,
+  )
+}
+
+private fun resolveCurrentSelectionHeadPageRect(state: EditorState): BringIntoViewTargetPageRect? {
+  val selection = state.selection ?: return null
+  if (selection.anchor == selection.head) {
+    return resolveCurrentCursorLinePageRect(state)
+  }
+  val endpoints = state.selectionEndpoints ?: return null
+  val headRect =
+    when (selection.head) {
+      endpoints.toPosition -> endpoints.to
+      endpoints.fromPosition -> endpoints.from
+      else -> return null
+    }
+  return BringIntoViewTargetPageRect(
+    pageIdx = headRect.pageIdx,
+    y = headRect.rect.y,
+    height = headRect.rect.height,
+  )
 }
 
 private fun resolveTargetOffsetY(
