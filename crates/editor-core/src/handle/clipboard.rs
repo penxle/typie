@@ -516,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn paste_crlf_text_does_not_fail() {
+    fn paste_crlf_text_splits_into_paragraphs() {
         let (s, ..) = state! {
             doc { root { p1: paragraph { text("") } } }
             selection: (p1, 0)
@@ -529,8 +529,8 @@ mod tests {
             },
         });
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("a") hard_break text("b") } } }
-            selection: (p1, 3)
+            doc { root { paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: (p2, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }

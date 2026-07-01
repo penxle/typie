@@ -683,7 +683,7 @@ mod tests {
     #[test]
     fn from_payload_text_only() {
         let parsed = Slice::from_payload(None, "hello\n\nworld", &Resource::new_test());
-        assert_eq!(parsed.fragment.children.len(), 2);
+        assert_eq!(parsed.fragment.children.len(), 3);
     }
 
     #[test]

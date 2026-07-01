@@ -178,7 +178,22 @@ mod tests {
             doc { root { p1: paragraph { text("asd") } } }
             selection: (p1, 1)
         };
-        let slice = Slice::from_text("\n\n");
+        let empty_paragraph = || Fragment {
+            node: PlainNode::Paragraph(PlainParagraphNode::default()),
+            modifiers: vec![],
+            style: None,
+            children: vec![],
+        };
+        let slice = Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                style: None,
+                children: vec![empty_paragraph(), empty_paragraph()],
+            },
+            open_start: 1,
+            open_end: 1,
+        };
         let (actual, ..) = transact!(initial, |tr| insert_slice(&mut tr, slice));
         let (expected, ..) = state! {
             doc { root {
