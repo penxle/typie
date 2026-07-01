@@ -85,7 +85,7 @@ internal fun rememberEditorContextMenuActions(
           val read = clipboard.paste() ?: return@launch
           editor.awaitWithBringIntoView(bringIntoViewRequests) {
             enqueue(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))
-            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
           }
         }
       },

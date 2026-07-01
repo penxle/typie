@@ -9,11 +9,13 @@ import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.Clipboard
 import co.typie.platform.ClipboardReadPayload
 import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -85,6 +87,24 @@ class KeyboardTest {
       modifiers = setOf(KeyModifier.Shift),
       expected = Movement.Page(Direction.Forward),
     )
+  }
+
+  @Test
+  fun navigationBindingsRevealCurrentSelectionHead() = runTest {
+    val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
+    val navigationBindings =
+      createBindings(Platform.Desktop).filter { binding ->
+        with(binding) { editor.action(NoopClipboard) }.singleOrNull() is Message.Navigation
+      }
+
+    assertTrue(navigationBindings.isNotEmpty())
+    navigationBindings.forEach { binding ->
+      assertEquals(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        binding.bringIntoViewTarget,
+        "${binding.key} ${binding.modifiers}",
+      )
+    }
   }
 
   @Test

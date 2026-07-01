@@ -2063,7 +2063,7 @@ class EditorInteractionControllerTest {
 
     override fun performSelectionHaptic() = Unit
 
-    override fun requestCurrentCursorLine(version: Long) {
+    override fun requestCurrentSelectionHead(version: Long) {
       requestedBringIntoViewVersions += version
     }
   }

@@ -122,7 +122,7 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
-  fun `typewriter bottom padding can use actual space available below the cursor line top`() {
+  fun `typewriter bottom padding can use actual space available below the target line top`() {
     val policy =
       resolveEditorAutoScrollPolicy(
         visibleArea = testVisibleArea(),

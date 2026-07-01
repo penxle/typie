@@ -229,9 +229,9 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     onSelectionHaptic?.invoke()
   }
 
-  override fun requestCurrentCursorLine(version: Long) {
+  override fun requestCurrentSelectionHead(version: Long) {
     bringIntoViewRequests?.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentCursorLine,
+      target = EditorBringIntoViewTarget.CurrentSelectionHead,
       version = version,
     )
   }

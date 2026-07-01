@@ -16,8 +16,8 @@ internal class EditorCursorMoveSemantic(private val effects: EditorInteractionEf
 
   fun requestFocus(editor: Editor): Boolean = effects.requestFocus(editor)
 
-  fun requestCurrentCursorLine(version: Long) {
-    effects.requestCurrentCursorLine(version = version)
+  fun requestCurrentSelectionHead(version: Long) {
+    effects.requestCurrentSelectionHead(version = version)
   }
 
   fun launchPrimaryClick(

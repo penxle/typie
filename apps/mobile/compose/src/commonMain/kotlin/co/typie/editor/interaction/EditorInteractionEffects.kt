@@ -24,5 +24,5 @@ internal interface EditorInteractionEffects {
 
   fun performSelectionHaptic()
 
-  fun requestCurrentCursorLine(version: Long)
+  fun requestCurrentSelectionHead(version: Long)
 }

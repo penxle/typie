@@ -39,9 +39,8 @@ internal data class KeyBinding(
   val key: ComposeKey,
   val modifiers: Set<KeyModifier> = emptySet(),
   val predicate: (() -> Boolean)? = null,
-  // TODO(editor-parity): movement/selection shortcut은 키별 고정 target보다, dispatch 이후의
-  // 실제 scroll anchor(selection head 또는 cursor)를 따라가도록 정리해야 한다.
-  val bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
+  val bringIntoViewTarget: EditorBringIntoViewTarget? =
+    EditorBringIntoViewTarget.CurrentSelectionHead,
   val action: suspend Editor.(Clipboard) -> List<Message>,
 )
 
@@ -302,43 +301,36 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.B,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Bold)) },
     ),
     KeyBinding(
       ComposeKey.I,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Italic)) },
     ),
     KeyBinding(
       ComposeKey.S,
       setOf(KeyModifier.Mod, KeyModifier.Shift),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Strikethrough)) },
     ),
     KeyBinding(
       ComposeKey.U,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(toggleModifier(ModifierType.Underline)) },
     ),
     KeyBinding(
       ComposeKey.Backslash,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(Message.Modifier(ModifierOp.ClearAll)) },
     ),
     KeyBinding(
       ComposeKey.Z,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(Message.History(HistoryOp.Undo)) },
     ),
     KeyBinding(
       ComposeKey.Z,
       setOf(KeyModifier.Mod, KeyModifier.Shift),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(Message.History(HistoryOp.Redo)) },
     ),
     KeyBinding(
@@ -353,7 +345,6 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.X,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { clipboard ->
         val payload = copySelection() ?: return@KeyBinding emptyList()
         if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
@@ -374,7 +365,6 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.A,
       setOf(KeyModifier.Mod),
-      bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead,
       action = { listOf(Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.All))) },
     ),
     KeyBinding(

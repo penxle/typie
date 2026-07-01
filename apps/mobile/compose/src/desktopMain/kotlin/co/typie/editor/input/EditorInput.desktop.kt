@@ -88,7 +88,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         for (message in batch.drainMessages()) {
           enqueue(message)
         }
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
     }
   }

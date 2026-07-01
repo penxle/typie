@@ -37,7 +37,7 @@ internal class EditorInputConnection(
       for (message in messages) {
         enqueue(message)
       }
-      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
     }
   }
 

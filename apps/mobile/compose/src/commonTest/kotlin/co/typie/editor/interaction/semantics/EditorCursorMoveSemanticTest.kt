@@ -174,7 +174,7 @@ class EditorCursorMoveSemanticTest {
 
     override fun performSelectionHaptic() = error("Unused in direct cursor semantic dispatch tests")
 
-    override fun requestCurrentCursorLine(version: Long) =
+    override fun requestCurrentSelectionHead(version: Long) =
       error("Unused in direct cursor semantic dispatch tests")
   }
 }

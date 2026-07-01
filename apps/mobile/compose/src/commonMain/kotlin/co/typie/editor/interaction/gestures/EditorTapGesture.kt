@@ -365,7 +365,7 @@ private fun EditorTapGesture.dispatchTap(
           else -> {
             context.uiState.contextMenu.hide()
             if (snapshot.cursor != null) {
-              context.semantics.cursorMove.requestCurrentCursorLine(version = snapshot.version)
+              context.semantics.cursorMove.requestCurrentSelectionHead(version = snapshot.version)
             }
           }
         }

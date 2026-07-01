@@ -26,12 +26,12 @@ class EditorAwaitWithBringIntoViewTest {
 
       editor.awaitWithBringIntoView(requests) {
         enqueue(Message.System(SystemEvent.Initialize))
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
 
       assertNull(requests.activateForVersion(version = 0L))
       assertEquals(
-        request(EditorBringIntoViewTarget.CurrentCursorLine),
+        request(EditorBringIntoViewTarget.CurrentSelectionHead),
         requests.activateForVersion(version = 1L),
       )
     }
@@ -44,12 +44,12 @@ class EditorAwaitWithBringIntoViewTest {
 
       editor.syncWithBringIntoView(requests) {
         enqueue(Message.System(SystemEvent.Initialize))
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
 
       assertNull(requests.activateForVersion(version = 0L))
       assertEquals(
-        request(EditorBringIntoViewTarget.CurrentCursorLine),
+        request(EditorBringIntoViewTarget.CurrentSelectionHead),
         requests.activateForVersion(version = 1L),
       )
     }

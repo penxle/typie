@@ -188,7 +188,7 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     coroutineScope.launch {
@@ -222,7 +222,7 @@ internal class EditorInputNode(
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentCursorLine,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor.syncWithBringIntoView(bringIntoViewRequests) {

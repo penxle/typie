@@ -20,8 +20,6 @@ internal data class EditorScrollFrame(
 )
 
 internal sealed interface EditorBringIntoViewTarget {
-  data object CurrentCursorLine : EditorBringIntoViewTarget
-
   data object CurrentSelectionHead : EditorBringIntoViewTarget
 
   data class OverlayRect(
@@ -172,13 +170,14 @@ private fun resolveBringIntoViewTargetPageRect(
   target: EditorBringIntoViewTarget,
 ): BringIntoViewTargetPageRect? =
   when (target) {
-    EditorBringIntoViewTarget.CurrentCursorLine -> resolveCurrentCursorLinePageRect(state)
     EditorBringIntoViewTarget.CurrentSelectionHead -> resolveCurrentSelectionHeadPageRect(state)
     is EditorBringIntoViewTarget.OverlayRect ->
       BringIntoViewTargetPageRect(pageIdx = target.pageIdx, y = target.top, height = target.height)
   }
 
-private fun resolveCurrentCursorLinePageRect(state: EditorState): BringIntoViewTargetPageRect? {
+private fun resolveCollapsedSelectionHeadPageRect(
+  state: EditorState
+): BringIntoViewTargetPageRect? {
   val cursor = state.cursor ?: return null
   return BringIntoViewTargetPageRect(
     pageIdx = cursor.pageIdx,
@@ -190,7 +189,7 @@ private fun resolveCurrentCursorLinePageRect(state: EditorState): BringIntoViewT
 private fun resolveCurrentSelectionHeadPageRect(state: EditorState): BringIntoViewTargetPageRect? {
   val selection = state.selection ?: return null
   if (selection.anchor == selection.head) {
-    return resolveCurrentCursorLinePageRect(state)
+    return resolveCollapsedSelectionHeadPageRect(state)
   }
   val endpoints = state.selectionEndpoints ?: return null
   val headRect =

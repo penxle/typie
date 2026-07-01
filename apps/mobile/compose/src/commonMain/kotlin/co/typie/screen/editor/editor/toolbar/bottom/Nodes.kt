@@ -97,7 +97,7 @@ internal fun BottomToolbarNodes(onEditorInputRequest: () -> Unit, modifier: Modi
           scope.launch {
             currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
               enqueue(item.message)
-              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentCursorLine) }
+              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
             }
           }
           onEditorInputRequest()

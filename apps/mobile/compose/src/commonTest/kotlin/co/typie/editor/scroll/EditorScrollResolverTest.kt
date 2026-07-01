@@ -20,7 +20,7 @@ import kotlin.test.assertNotNull
 
 class EditorScrollResolverTest {
   @Test
-  fun `resolver returns target scroll from cursor line and policy`() {
+  fun `resolver returns target scroll from collapsed selection head and policy`() {
     val frame =
       frame(
         state =
@@ -38,7 +38,7 @@ class EditorScrollResolverTest {
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
-        target = EditorBringIntoViewTarget.CurrentCursorLine,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
         currentScroll = 200f,
       )
 
@@ -66,7 +66,7 @@ class EditorScrollResolverTest {
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
-        target = EditorBringIntoViewTarget.CurrentCursorLine,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
         currentScroll = 200f,
       )
 
@@ -94,7 +94,7 @@ class EditorScrollResolverTest {
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
-        target = EditorBringIntoViewTarget.CurrentCursorLine,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
         currentScroll = 200f,
       )
 
@@ -122,7 +122,7 @@ class EditorScrollResolverTest {
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
-        target = EditorBringIntoViewTarget.CurrentCursorLine,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
         currentScroll = 0f,
       )
 
@@ -130,7 +130,7 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `selection head target resolves from selection endpoint instead of cursor line`() {
+  fun `selection head target resolves from selection endpoint instead of collapsed cursor line`() {
     val anchor = position(offset = 1)
     val head = position(offset = 8)
     val frame =
@@ -249,7 +249,7 @@ class EditorScrollResolverTest {
         uiState = uiState,
         headerHeight = 0f,
         pagesContentHeight = 620f,
-        target = EditorBringIntoViewTarget.CurrentCursorLine,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
         density = 1f,
       )
 
@@ -265,7 +265,7 @@ class EditorScrollResolverTest {
   private fun state(
     cursor: CursorMetrics?,
     pageSizes: List<PageSize>,
-    selection: Selection? = null,
+    selection: Selection? = cursor?.let { collapsedSelection() },
     selectionEndpoints: SelectionEndpoints? = null,
   ): EditorState =
     EditorState(
@@ -310,4 +310,9 @@ class EditorScrollResolverTest {
 
   private fun position(offset: Int): Position =
     Position(node = "paragraph", offset = offset, affinity = Affinity.Downstream)
+
+  private fun collapsedSelection(): Selection {
+    val position = position(offset = 0)
+    return Selection(anchor = position, head = position)
+  }
 }
