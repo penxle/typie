@@ -19,6 +19,7 @@ import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
+import co.typie.editor.ffi.SearchOptions
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
@@ -219,6 +220,11 @@ internal constructor(
   fun freezeSelection(selection: Selection): StableSelection? =
     readInner(defaultValue = { null }) { it.freezeSelection(selection) }
 
+  fun findMatches(query: String, matchWholeWord: Boolean): List<Selection> =
+    readInner(defaultValue = { emptyList() }) {
+      it.findMatches(query, SearchOptions(matchWholeWord = matchWholeWord))
+    }
+
   fun proseText(): String = readInner(defaultValue = { "" }) { it.proseText() }
 
   fun proseToSelection(start: Int, end: Int): Selection? =
@@ -397,6 +403,7 @@ internal constructor(
 
   private fun readSnapshot(version: Long, events: List<EditorEvent>): EditorState {
     val selection = inner.selection()
+    val documentChanged = events.hasStateChangedField(StateField.Doc)
     val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
     val trackedRanges =
       if (trackedRangesChanged) {
@@ -407,6 +414,7 @@ internal constructor(
     val selectionChanged = state.selection != selection
     return EditorState(
       version = version,
+      documentRevision = state.documentRevision + if (documentChanged) 1L else 0L,
       cursor = inner.cursor(),
       selection = selection,
       pageSizes = inner.pageSizes(),

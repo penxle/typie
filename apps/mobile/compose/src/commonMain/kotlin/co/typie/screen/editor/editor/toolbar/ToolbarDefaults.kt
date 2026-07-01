@@ -98,4 +98,5 @@ internal class EditorToolbarPageScope(
   val navigateToPage: (EditorToolbarPageKey) -> Unit,
   val toggleBottomPanel: (EditorToolbarBottomPanelKey) -> Unit,
   val sendMessage: (Message) -> Unit,
+  val performToolAction: (EditorToolbarToolAction) -> Unit,
 )

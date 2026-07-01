@@ -14,6 +14,7 @@ import co.typie.editor.ffi.TrackedRangeEndpoints
 
 data class EditorState(
   val version: Long,
+  val documentRevision: Long = 0L,
   val cursor: CursorMetrics?,
   val selection: Selection?,
   val pageSizes: List<Size>,
@@ -30,6 +31,7 @@ data class EditorState(
     val Initial: EditorState =
       EditorState(
         version = 0L,
+        documentRevision = 0L,
         cursor = null,
         selection = null,
         pageSizes = emptyList(),

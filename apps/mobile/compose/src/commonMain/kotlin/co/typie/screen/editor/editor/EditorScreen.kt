@@ -87,6 +87,11 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.route.Route
+import co.typie.screen.editor.editor.findreplace.FindReplaceToolbar
+import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarCenter
+import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarLeading
+import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarTrailing
+import co.typie.screen.editor.editor.findreplace.rememberEditorFindReplaceSession
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
@@ -160,6 +165,7 @@ fun EditorScreen(entityId: String) {
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
   val document = entity.node.onDocument
+  val documentLocked = document?.locked == true
 
   DisposableEffect(model) {
     onDispose {
@@ -232,35 +238,56 @@ fun EditorScreen(entityId: String) {
       runtime.focus()
     }
   }
-
-  ProvideTopBar(
-    center = {
-      document?.let {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-          EditorDocumentButton(
-            entityIcon = entity.entityIcon_entity,
-            title = model.headingTitle,
-            subtitle = model.headingSubtitle,
-            loading = loading,
-            onClick = {
-              val activeEditor = runtime.editor
-              screenState.prepareToLeaveEditorScene(
-                runtime = runtime,
-                uiState = uiState,
-                flushDrafts = { model.flush(activeEditor) },
-              )
-              nav.navigate(Route.Document(entityId))
-            },
-            modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
-          )
-        }
-      }
-    },
-    trailing = { EditorTopBarMenu(model = model) },
-    scrollOffset = null,
-  )
-
   val editor = runtime.editor
+  val editorState = editor?.state ?: EditorState.Initial
+  val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+  val findReplace =
+    rememberEditorFindReplaceSession(
+      documentLocked = documentLocked,
+      editor = editor,
+      editorState = editorState,
+      bringIntoViewRequests = bringIntoViewRequests,
+    )
+
+  if (findReplace.active) {
+    ProvideTopBar(
+      leading = { FindReplaceTopBarLeading(session = findReplace) },
+      leadingKey = FindReplaceTopBarLeadingKey,
+      center = { FindReplaceTopBarCenter(session = findReplace) },
+      centerKey = FindReplaceTopBarCenterKey,
+      trailing = { FindReplaceTopBarTrailing(session = findReplace) },
+      trailingKey = FindReplaceTopBarTrailingKey,
+      scrollOffset = null,
+    )
+  } else {
+    ProvideTopBar(
+      center = {
+        document?.let {
+          Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            EditorDocumentButton(
+              entityIcon = entity.entityIcon_entity,
+              title = model.headingTitle,
+              subtitle = model.headingSubtitle,
+              loading = loading,
+              onClick = {
+                val activeEditor = runtime.editor
+                screenState.prepareToLeaveEditorScene(
+                  runtime = runtime,
+                  uiState = uiState,
+                  flushDrafts = { model.flush(activeEditor) },
+                )
+                nav.navigate(Route.Document(entityId))
+              },
+              modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
+            )
+          }
+        }
+      },
+      trailing = { EditorTopBarMenu(model = model) },
+      scrollOffset = null,
+    )
+  }
+
   val subtitleFocusRequestVersion = remember(entityId) { mutableStateOf(0) }
   DisposableEffect(editor) {
     val off =
@@ -292,13 +319,11 @@ fun EditorScreen(entityId: String) {
 
   Screen(loadable = model.query, background = background, contentPadding = PaddingValues()) {
     contentPadding ->
-    val editorState = editor?.state ?: EditorState.Initial
-    val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
     val comments =
       rememberEditorCommentsSession(
         entityId = entityId,
         documentId = document?.id,
-        documentLocked = document?.locked == true,
+        documentLocked = documentLocked,
         editor = editor,
         editorState = editorState,
         sheetActive = subPaneState.activeKey == EditorSubPaneKey.Comments,
@@ -330,7 +355,16 @@ fun EditorScreen(entityId: String) {
     val panelTransitionRunning =
       bottomPanelTransition.currentState != bottomPanelTransition.targetState
     val subPaneActive = subPaneState.activeKey != null
-    val editorToolbarVisible = screenState.sceneInForeground && !subPaneActive
+    val editorToolbarVisible =
+      screenState.sceneInForeground && !subPaneActive && !findReplace.active
+    val findReplaceToolbarVisible =
+      screenState.sceneInForeground && !subPaneActive && findReplace.active
+    val findReplaceToolbarTransition = remember {
+      MutableTransitionState(findReplaceToolbarVisible)
+    }
+    findReplaceToolbarTransition.targetState = findReplaceToolbarVisible
+    val findReplaceToolbarInLayout =
+      findReplaceToolbarVisible || !findReplaceToolbarTransition.isIdle
     val toolbarInputEnvironment =
       ToolbarInputEnvironment(
         visible = editorToolbarVisible,
@@ -361,7 +395,7 @@ fun EditorScreen(entityId: String) {
     val spellcheck =
       rememberEditorSpellcheckSession(
         documentId = document?.id,
-        documentLocked = document?.locked == true,
+        documentLocked = documentLocked,
         editor = editor,
         editorState = editorState,
         bringIntoViewRequests = bringIntoViewRequests,
@@ -373,6 +407,7 @@ fun EditorScreen(entityId: String) {
     LaunchedEffect(subPaneActive) {
       if (subPaneActive) {
         spellcheck.close()
+        findReplace.close()
         performInputEffects(listOf(EditorInputEffect.HideKeyboard))
       }
     }
@@ -439,6 +474,14 @@ fun EditorScreen(entityId: String) {
           },
         label = "EditorToolbarBottomOcclusion",
       )
+    val findReplaceToolbarBottomInset =
+      maxOf(bottomSafeInset, toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
+    val findReplaceToolbarOcclusion =
+      if (findReplaceToolbarInLayout) {
+        ToolbarHeight + ToolbarBottomPadding + findReplaceToolbarBottomInset
+      } else {
+        0.dp
+      }
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val devMode = Preference.devMode
@@ -450,7 +493,7 @@ fun EditorScreen(entityId: String) {
       if (subPaneActive && subPaneLayoutInfo != null) {
         0f
       } else {
-        toolbarBottomOcclusion.value.value.coerceAtLeast(0f)
+        maxOf(toolbarBottomOcclusion.value, findReplaceToolbarOcclusion).value.coerceAtLeast(0f)
       }
     val visibleAreas =
       screenState.resolveEditorVisibleAreas(
@@ -752,6 +795,12 @@ fun EditorScreen(entityId: String) {
           }
         },
         toolbar = {
+          FindReplaceToolbar(
+            session = findReplace,
+            visibleState = findReplaceToolbarTransition,
+            bottomInset = findReplaceToolbarBottomInset,
+            modifier = Modifier,
+          )
           EditorToolbarHost(
             editorState = editorState,
             pagerState = toolbarPagerState,
@@ -766,16 +815,27 @@ fun EditorScreen(entityId: String) {
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
               when (action) {
+                EditorToolbarToolAction.Search -> {
+                  spellcheck.close()
+                  uiState.contextMenu.hide()
+                  performInputEffects(
+                    toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment)
+                  )
+                  findReplace.open()
+                }
                 EditorToolbarToolAction.RelatedNotes -> {
+                  findReplace.close()
                   spellcheck.close()
                   uiState.contextMenu.hide()
                   subPaneState.open(EditorSubPaneKey.RelatedNotes)
                 }
                 EditorToolbarToolAction.Comment -> {
+                  findReplace.close()
                   spellcheck.close()
                   comments.openFromToolPanel()
                 }
                 EditorToolbarToolAction.Spellcheck -> {
+                  findReplace.close()
                   spellcheck.openFromToolPanel()
                   performInputEffects(
                     toolbarInputState.dispatch(
@@ -864,3 +924,7 @@ private fun EditorTopBarMenu(model: EditorViewModel) {
 }
 
 private fun Boolean.debugToggleLabel(label: String): String = "$label ${if (this) "끄기" else "켜기"}"
+
+private val FindReplaceTopBarLeadingKey = Any()
+private val FindReplaceTopBarCenterKey = Any()
+private val FindReplaceTopBarTrailingKey = Any()

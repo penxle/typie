@@ -275,6 +275,7 @@ internal fun EditorToolbarHost(
             onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment))
           },
           onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
+          onToolAction = onToolAction,
           onCurrentPageKeyChange = { pageKey ->
             if (pageKey != EditorToolbarPageKey.Text && sessionState.activeTextOptionMode != null) {
               sessionState.activeTextOptionMode = null

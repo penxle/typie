@@ -49,7 +49,11 @@ private fun EditorMainToolbar(
       onClick = { scope.sendMessage(Message.History(HistoryOp.Redo)) },
     )
     Spacer(Modifier.weight(1f))
-    EditorToolbarButton(icon = Lucide.Search, contentDescription = "찾기", onClick = {})
+    EditorToolbarButton(
+      icon = Lucide.Search,
+      contentDescription = "찾기",
+      onClick = { scope.performToolAction(EditorToolbarToolAction.Search) },
+    )
     EditorToolbarButton(
       icon = Lucide.Ellipsis,
       contentDescription = "도구",

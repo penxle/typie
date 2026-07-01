@@ -123,6 +123,7 @@ internal fun EditorToolbarPages(
   onKeyboardDismissRequest: () -> Unit,
   onBottomPanelToggle: (EditorToolbarBottomPanelKey) -> Unit,
   onEditorMessage: (Message) -> Unit = {},
+  onToolAction: (EditorToolbarToolAction) -> Unit = {},
   onCurrentPageKeyChange: (EditorToolbarPageKey?) -> Unit = {},
   secondaryToolbarVisible: Boolean = false,
   onSecondaryToolbarInLayoutChange: (Boolean) -> Unit = {},
@@ -628,6 +629,7 @@ internal fun EditorToolbarPages(
                   navigateToPage = ::navigateToPage,
                   toggleBottomPanel = onBottomPanelToggle,
                   sendMessage = onEditorMessage,
+                  performToolAction = onToolAction,
                 )
 
               Box(
