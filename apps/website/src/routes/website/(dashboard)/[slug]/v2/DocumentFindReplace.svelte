@@ -3,6 +3,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { onMount, tick, untrack } from 'svelte';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
@@ -12,6 +13,7 @@
   import XIcon from '~icons/lucide/x';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
   type Props = {
     close: () => void;
@@ -20,18 +22,47 @@
   let { close }: Props = $props();
 
   const ctx = getEditorContext();
+  const app = getAppContext();
 
   let findInputEl: HTMLInputElement;
-
   let findText = $state('');
   let replaceText = $state('');
-  let matchWholeWord = $state(false);
+
+  let lastSearch:
+    | {
+        editor: Editor;
+        query: string;
+        matchWholeWord: boolean;
+        documentRevision: number | undefined;
+      }
+    | undefined;
+
+  const toSingleLineText = (text: string) => text.replaceAll(/\r\n?/g, ' ').replaceAll('\n', ' ');
 
   $effect(() => {
-    void findText;
-    void matchWholeWord;
+    const editor = ctx.editor;
+    const documentRevision = editor?.documentRevision ?? 0;
+    const matchWholeWord = app.preference.current.searchMatchWholeWord;
+    const query = findText;
+
     untrack(() => {
-      ctx.editor?.search(findText, { matchWholeWord });
+      if (!editor) return;
+
+      const searchInputChanged =
+        lastSearch?.editor !== editor || lastSearch.query !== query || lastSearch.matchWholeWord !== matchWholeWord;
+
+      if (query.length === 0) {
+        if (searchInputChanged || lastSearch?.documentRevision !== undefined) {
+          editor.clearSearch();
+          lastSearch = { editor, query, matchWholeWord, documentRevision: undefined };
+        }
+        return;
+      }
+
+      if (!searchInputChanged && lastSearch?.documentRevision === documentRevision) return;
+
+      editor.search(query, { matchWholeWord });
+      lastSearch = { editor, query, matchWholeWord, documentRevision };
     });
   });
 
@@ -73,11 +104,18 @@
   };
 
   onMount(() => {
+    const editor = ctx.editor;
+    const selectionText = editor && !editor.isSelectionCollapsed ? editor.copySelection()?.text : undefined;
+    if (selectionText !== undefined) {
+      findText = toSingleLineText(selectionText);
+    }
+
     tick().then(() => {
       findInputEl?.select();
     });
 
     return () => {
+      lastSearch = undefined;
       ctx.editor?.clearSearch();
     };
   });
@@ -137,8 +175,8 @@
           _pressed: { color: 'accent.brand.default', backgroundColor: 'accent.brand.subtle' },
           _focus: { backgroundColor: 'surface.muted' },
         })}
-        aria-pressed={matchWholeWord}
-        onclick={() => (matchWholeWord = !matchWholeWord)}
+        aria-pressed={app.preference.current.searchMatchWholeWord}
+        onclick={() => (app.preference.current.searchMatchWholeWord = !app.preference.current.searchMatchWholeWord)}
         tabindex={-1}
         type="button"
         use:tooltip={{ message: '어절 단위로 찾기' }}

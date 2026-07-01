@@ -14,6 +14,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.storage.Preference
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 
@@ -56,6 +57,7 @@ internal fun rememberEditorFindReplaceSession(
 ): EditorFindReplaceSession {
   val state = remember { FindReplaceSessionController() }
   val toast = LocalToast.current
+  val matchWholeWord = Preference.searchMatchWholeWord
 
   DisposableEffect(editor) { onDispose { editor?.clearFindReplaceRanges() } }
 
@@ -70,16 +72,20 @@ internal fun rememberEditorFindReplaceSession(
     editor,
     editorState.documentRevision,
     state.findText,
-    state.matchWholeWord,
+    matchWholeWord,
   ) {
-    state.runSearch(editor = editor, bringIntoViewRequests = bringIntoViewRequests)
+    state.runSearch(
+      editor = editor,
+      matchWholeWord = matchWholeWord,
+      bringIntoViewRequests = bringIntoViewRequests,
+    )
   }
 
   return EditorFindReplaceSession(
     active = state.active,
     findText = state.findText,
     replaceText = state.replaceText,
-    matchWholeWord = state.matchWholeWord,
+    matchWholeWord = matchWholeWord,
     matchCount = state.matches.size,
     activeMatchNumber = state.activeIndex?.let { it + 1 },
     searchInputFocusRequest = state.searchInputFocusRequest,
@@ -87,7 +93,7 @@ internal fun rememberEditorFindReplaceSession(
     close = { state.close(editor) },
     updateFindText = state::updateFindText,
     updateReplaceText = state::updateReplaceText,
-    updateMatchWholeWord = { enabled -> state.matchWholeWord = enabled },
+    updateMatchWholeWord = { enabled -> Preference.searchMatchWholeWord = enabled },
     findPrevious = {
       state.findBy(offset = -1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
     },
@@ -117,7 +123,6 @@ private class FindReplaceSessionController {
   var active by mutableStateOf(false)
   var findText by mutableStateOf("")
   var replaceText by mutableStateOf("")
-  var matchWholeWord by mutableStateOf(false)
   var matches by mutableStateOf(emptyList<FindReplaceMatch>())
   var activeIndex by mutableStateOf<Int?>(null)
   var searchInputFocusRequest by mutableIntStateOf(0)
@@ -134,7 +139,6 @@ private class FindReplaceSessionController {
     active = false
     findText = ""
     replaceText = ""
-    matchWholeWord = false
     clearSearchState(editor)
   }
 
@@ -148,6 +152,7 @@ private class FindReplaceSessionController {
 
   fun runSearch(
     editor: Editor?,
+    matchWholeWord: Boolean,
     bringIntoViewRequests: EditorBringIntoViewRequests,
     force: Boolean = false,
   ) {
@@ -230,7 +235,12 @@ private class FindReplaceSessionController {
         matches.isEmpty() -> null
         else -> replaceIndex.coerceAtMost(matches.lastIndex)
       }
-    runSearch(editor = activeEditor, bringIntoViewRequests = bringIntoViewRequests, force = true)
+    runSearch(
+      editor = activeEditor,
+      matchWholeWord = Preference.searchMatchWholeWord,
+      bringIntoViewRequests = bringIntoViewRequests,
+      force = true,
+    )
   }
 
   fun replaceAllMatches(
@@ -253,7 +263,12 @@ private class FindReplaceSessionController {
     )
     matches = emptyList()
     activeIndex = null
-    runSearch(editor = activeEditor, bringIntoViewRequests = bringIntoViewRequests, force = true)
+    runSearch(
+      editor = activeEditor,
+      matchWholeWord = Preference.searchMatchWholeWord,
+      bringIntoViewRequests = bringIntoViewRequests,
+      force = true,
+    )
   }
 
   private fun activeMatchId(): String? = activeIndex?.let { matches.getOrNull(it)?.id }
@@ -311,5 +326,5 @@ private fun String.containsLineBreak(): Boolean = any { it == '\r' || it == '\n'
 
 private fun Editor.findReplaceInitialFindTextFromSelection(): String? {
   if (selection.isCollapsed()) return null
-  return copySelection()?.text?.toSingleLineText()?.takeIf { it.isNotBlank() }
+  return copySelection()?.text?.toSingleLineText()
 }

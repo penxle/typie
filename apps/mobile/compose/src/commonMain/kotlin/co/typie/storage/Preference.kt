@@ -31,6 +31,7 @@ object Preference {
   var typewriterPosition by prefs("typewriter_position", 0.5)
   var lineHighlightEnabled by prefs("line_highlight_enabled", true)
   var autoSurroundEnabled by prefs("auto_surround_enabled", true)
+  var searchMatchWholeWord by prefs("search_match_whole_word", false)
   var characterCountFloatingEnabled by prefs("character_count_floating_enabled", false)
   var widgetAutoFadeEnabled by prefs("widget_auto_fade_enabled", true)
 

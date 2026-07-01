@@ -305,7 +305,7 @@ export class Editor {
   #linkHover = $state<{ link: LinkRect; page: number; clientX: number; clientY: number } | undefined>();
   #modifierHeld = $state(false);
 
-  #searchQuery = $state('');
+  #searchInput = { query: '', matchWholeWord: false };
   #searchMatches = $state<{ id: string; selection: Selection }[]>([]);
   #searchActiveIdx = $state<number | undefined>();
 
@@ -363,6 +363,10 @@ export class Editor {
 
     if (fields.includes('doc') || fields.includes('selection')) {
       this.characterCountsVersion++;
+    }
+
+    if (fields.includes('doc')) {
+      this.documentRevision++;
     }
 
     if (fields.includes('page_sizes')) {
@@ -440,6 +444,7 @@ export class Editor {
   };
 
   tickRevision = $state(0);
+  documentRevision = $state(0);
 
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
@@ -1256,7 +1261,10 @@ export class Editor {
 
   search(query: string, options?: { matchWholeWord?: boolean }): void {
     const matchWholeWord = options?.matchWholeWord ?? false;
-    this.#searchQuery = query;
+    const previousInput = this.#searchInput;
+    const searchInputChanged = previousInput.query !== query || previousInput.matchWholeWord !== matchWholeWord;
+    const previousActiveIndex = this.#searchActiveIdx;
+    this.#searchInput = { query, matchWholeWord };
 
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match' } });
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match-active' } });
@@ -1278,15 +1286,22 @@ export class Editor {
     }
 
     this.#searchMatches = matches;
-    this.#searchActiveIdx = matches.length === 0 ? undefined : 0;
+    this.#searchActiveIdx =
+      matches.length === 0
+        ? undefined
+        : searchInputChanged || previousActiveIndex === undefined
+          ? 0
+          : Math.min(previousActiveIndex, matches.length - 1);
     if (this.#searchActiveIdx !== undefined) {
       this.#applyActiveMark(true);
-      this.#scrollToActiveMatch();
+      if (searchInputChanged) {
+        this.#scrollToActiveMatch();
+      }
     }
   }
 
   clearSearch(): void {
-    this.#searchQuery = '';
+    this.#searchInput = { query: '', matchWholeWord: false };
     this.#searchMatches = [];
     this.#searchActiveIdx = undefined;
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'search-match' } });
@@ -1308,13 +1323,13 @@ export class Editor {
     if (!match) return;
     this.enqueue({
       type: 'tracked_range',
-      op: { type: 'replace_text', id: match.id, expected_text: this.#searchQuery, replacement },
+      op: { type: 'replace_text', id: match.id, expected_text: this.#searchInput.query, replacement },
     });
   }
 
   replaceAll(replacement: string): void {
     if (replacement.includes('\n') || replacement.includes('\r')) return;
-    const query = this.#searchQuery;
+    const query = this.#searchInput.query;
     if (query.length === 0) return;
     for (const m of this.#searchMatches) {
       this.enqueue({
