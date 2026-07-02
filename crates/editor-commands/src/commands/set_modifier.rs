@@ -1,12 +1,11 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Modifier, ModifierType, NodeView};
-use editor_state::ResolvedSelection;
+use editor_model::{ChildView, DocView, Modifier, ModifierType};
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
     apply_modifier_to_node, collect_applicable_targets_in_range, is_text_applicable,
-    is_unit_variant, resolve_applicable_target_collapsed,
+    is_unit_variant, resolve_applicable_target_collapsed, span_dots,
 };
 use crate::{CommandError, CommandResult};
 
@@ -31,39 +30,6 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
         (false, true) => set_modifier_range_text(tr, &modifier),
         (false, false) => set_modifier_range_block(tr, &modifier),
     }
-}
-
-fn last_leaf_dot(block: &NodeView) -> Option<Dot> {
-    block
-        .descendants()
-        .filter_map(|c| match c {
-            ChildView::Leaf(l) => Some(l.dot()),
-            ChildView::Block(_) => None,
-        })
-        .last()
-}
-
-fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        // The block token precedes its content in the flat sequence, so an
-        // `After` anchor on it stops short of the block's text; anchor the
-        // block's last leaf so the span covers the whole block.
-        ChildView::Block(b) => last_leaf_dot(&b).or_else(|| b.dot())?,
-    };
-
-    Some((first, last))
 }
 
 /// The value at a collapsed caret supplied by the leaf's applied style or by

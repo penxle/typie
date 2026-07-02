@@ -1,35 +1,14 @@
 use editor_common::Tri;
 use editor_crdt::Dot;
-use editor_model::{
-    ChildView, DEFAULT_FONT_FAMILY, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType,
-};
+use editor_model::{DEFAULT_FONT_FAMILY, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_state::{ResolvedSelection, inline_leaf_dots_in_range};
 use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 use editor_transaction::Transaction;
 
+use crate::helpers::span_dots;
 use crate::{CommandError, CommandResult};
-
-fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    Some((first, last))
-}
 
 fn block_weight(view: &DocView, elem: Dot) -> Option<u16> {
     match view.node(elem)?.effective().get(&ModifierType::FontWeight) {
@@ -530,6 +509,33 @@ mod tests {
                 }
             }
             selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn block_unit_selection_toggle_on_applies_weight_to_text() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                r1: root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                r1: root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (r1, 0, >) -> (r1, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }

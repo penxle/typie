@@ -1,11 +1,10 @@
 use editor_common::Tri;
-use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Modifier, ModifierState, ModifierType};
-use editor_state::ResolvedSelection;
+use editor_model::{Modifier, ModifierState, ModifierType};
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 use editor_transaction::Transaction;
 
+use crate::helpers::span_dots;
 use crate::{CommandError, CommandResult};
 
 fn modifier_from_unit_type(modifier_type: ModifierType) -> Result<Modifier, CommandError> {
@@ -29,26 +28,6 @@ fn range_has_modifier(ms: &ModifierState, ty: ModifierType) -> bool {
         },
         Tri::Uniform { .. }
     )
-}
-
-fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    Some((first, last))
 }
 
 pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> CommandResult {
@@ -320,6 +299,34 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { p: paragraph { text("HelloWorld") [italic] } } }
             selection: (p, 0) -> (p, 10)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn block_unit_selection_toggle_italic_on() {
+        let (initial, ..) = state! {
+            doc { r1: root { p1: paragraph { text("Hello") } } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let (expected, ..) = state! {
+            doc { r1: root { p1: paragraph { text("Hello") [italic] } } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn block_unit_selection_toggle_italic_off() {
+        let (initial, ..) = state! {
+            doc { r1: root { p1: paragraph { text("Hello") [italic] } } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let (expected, ..) = state! {
+            doc { r1: root { p1: paragraph { text("Hello") } } }
+            selection: (r1, 0, >) -> (r1, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }

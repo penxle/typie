@@ -318,6 +318,27 @@ mod tests {
     }
 
     #[test]
+    fn toggle_italic_on_block_unit_selection_via_message() {
+        let (state, ..) = state! {
+            doc { r1: root { p1: paragraph { text("안녕하세요") } } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Italic,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { r1: root { p1: paragraph { text("안녕하세요") [italic] } } }
+            selection: (r1, 0, >) -> (r1, 1, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn toggle_italic_skips_fold_title_and_applies_to_paragraph_via_message() {
         let (state, ..) = state! {
             doc { root {

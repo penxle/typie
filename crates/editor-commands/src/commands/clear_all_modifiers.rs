@@ -2,12 +2,11 @@ use std::collections::BTreeSet;
 
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::ResolvedSelection;
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
 
-use crate::helpers::is_text_applicable;
+use crate::helpers::{is_text_applicable, span_dots};
 use crate::{CommandError, CommandResult};
 
 pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
@@ -18,26 +17,6 @@ pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
         return clear_all_modifiers_collapsed(tr);
     }
     clear_all_modifiers_range(tr)
-}
-
-fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    Some((first, last))
 }
 
 fn placeholder_modifier(ty: ModifierType) -> Modifier {

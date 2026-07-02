@@ -1,9 +1,9 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::{Position, ResolvedSelection};
+use editor_state::Position;
 use editor_transaction::Transaction;
 
-use crate::helpers::is_text_applicable;
+use crate::helpers::{is_text_applicable, span_dots};
 use crate::{CommandError, CommandResult};
 
 pub fn edit_modifier(
@@ -35,26 +35,6 @@ pub fn edit_modifier(
     } else {
         edit_modifier_range(tr, modifier_type, modifier)
     }
-}
-
-fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    Some((first, last))
 }
 
 /// The contiguous char run around a collapsed caret that shares the same

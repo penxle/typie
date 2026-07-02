@@ -2,14 +2,14 @@ use std::collections::BTreeMap;
 
 use editor_common::Tri;
 use editor_crdt::Dot;
-use editor_model::{ChildView, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType, NodeView};
+use editor_model::{ChildView, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, match_weight};
 use editor_state::{
-    PendingModifier, PendingModifiers, ResolvedSelection, inline_leaf_dots_in_range,
-    resolve_modifier_state,
+    PendingModifier, PendingModifiers, inline_leaf_dots_in_range, resolve_modifier_state,
 };
 use editor_transaction::Transaction;
 
+use crate::helpers::span_dots;
 use crate::{CommandError, CommandResult};
 
 pub fn set_font_family(tr: &mut Transaction, value: String, resource: &Resource) -> CommandResult {
@@ -238,36 +238,6 @@ fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) 
     }
 
     Ok(true)
-}
-
-fn last_leaf_dot(block: &NodeView) -> Option<Dot> {
-    block
-        .descendants()
-        .filter_map(|c| match c {
-            ChildView::Leaf(l) => Some(l.dot()),
-            ChildView::Block(_) => None,
-        })
-        .last()
-}
-
-fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => last_leaf_dot(&b).or_else(|| b.dot())?,
-    };
-
-    Some((first, last))
 }
 
 #[cfg(test)]
