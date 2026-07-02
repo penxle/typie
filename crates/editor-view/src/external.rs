@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_crdt::Dot;
 use editor_macros::ffi;
 use editor_model::{AtomLeaf, DocView};
-use editor_state::{Position, ResolvedSelection, Selection};
+use editor_state::{Affinity, Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
 use crate::paginate::types::LayoutContent;
@@ -47,8 +47,16 @@ pub(crate) fn page_external_elements(
             continue;
         };
         let slot = Selection::new(
-            Position::new(atom.attachment.parent, atom.attachment.index),
-            Position::new(atom.attachment.parent, atom.attachment.index + 1),
+            Position {
+                node: atom.attachment.parent,
+                offset: atom.attachment.index,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: atom.attachment.parent,
+                offset: atom.attachment.index + 1,
+                affinity: Affinity::Upstream,
+            },
         );
         let is_selected = selection.is_some_and(|sel| sel.contains_range(slot));
         elements.push(ExternalElement {
@@ -256,6 +264,26 @@ mod tests {
         assert!(
             elements_covered[0].is_selected,
             "Trap-2: selection covering atom slot must yield is_selected=true"
+        );
+
+        let covering_upstream_head = Selection::new(
+            Position::new(root_id, atom_index),
+            Position {
+                node: root_id,
+                offset: atom_index + 1,
+                affinity: editor_state::Affinity::Upstream,
+            },
+        );
+        let covering_upstream_resolved = covering_upstream_head
+            .resolve(&view)
+            .expect("covering selection with upstream head must resolve");
+        let elements_upstream =
+            page_external_elements(&index, &view, 0, Some(&covering_upstream_resolved));
+        assert_eq!(elements_upstream.len(), 1);
+        assert!(
+            elements_upstream[0].is_selected,
+            "Trap-3: canonical forward selection (Downstream anchor, Upstream head at block end) \
+             covering the atom slot must yield is_selected=true"
         );
 
         let collapsed = Selection::new(
