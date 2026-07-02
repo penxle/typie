@@ -35,6 +35,16 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
                 Ok(())
             })
         }
+        ModifierOp::Set {
+            modifier: editor_model::Modifier::FontFamily { value },
+        } => {
+            let resource = Arc::clone(&editor.resource);
+            let resource = resource.lock().unwrap();
+            editor.transact(|tr| {
+                commands::set_font_family(tr, value, &resource)?;
+                Ok(())
+            })
+        }
         ModifierOp::Set { modifier } => editor.transact(|tr| {
             commands::set_modifier(tr, modifier)?;
             Ok(())
@@ -59,13 +69,38 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use editor_macros::state;
+    use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource};
     use editor_state::assert_state_eq;
 
     use super::*;
     use crate::event::EditorEvent;
     use crate::state_field::StateField;
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(
+            families
+                .into_iter()
+                .map(|(name, weights)| FontFamily {
+                    name: name.to_string(),
+                    source: FontFamilySource::Default,
+                    weights: weights
+                        .into_iter()
+                        .map(|value| FontWeight {
+                            value,
+                            hash: format!("{name}-{value}"),
+                            chunks: vec![vec![0x0000, 0xFFFF]],
+                        })
+                        .collect(),
+                })
+                .collect(),
+        );
+        resource
+    }
 
     #[test]
     fn probe_toggle_bold_with_textblock() {
@@ -210,6 +245,43 @@ mod tests {
                 modifier: editor_model::Modifier::FontSize { value: 2400 }
             }]
         );
+    }
+
+    #[test]
+    fn set_font_family_via_message_normalizes_unavailable_weight() {
+        let resource = Arc::new(Mutex::new(make_resource([
+            ("Source", vec![400, 700]),
+            ("LightFont", vec![100, 300]),
+        ])));
+        let (state, ..) = state! {
+            doc {
+                root [font_family("Source".to_string()), font_weight(400)] {
+                    p1: paragraph { text("hello") [font_weight(700)] }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let mut editor = Editor::new_test_with_resource(state, resource);
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: editor_model::Modifier::FontFamily {
+                    value: "LightFont".to_string(),
+                },
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root [font_family("Source".to_string()), font_weight(400)] {
+                    p1: paragraph {
+                        text("hello") [font_weight(300), font_family("LightFont".to_string()), bold]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]

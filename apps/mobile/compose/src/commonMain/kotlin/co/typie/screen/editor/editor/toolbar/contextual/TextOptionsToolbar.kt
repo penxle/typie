@@ -398,7 +398,7 @@ private fun FontWeightOptions(
   val fontOptions =
     if (family != null) {
       family.fonts
-        .filter { it.state == FontState.ACTIVE || it.weight == currentWeight }
+        .filter { it.state == FontState.ACTIVE }
         .distinctBy { it.weight }
         .sortedBy { it.weight }
     } else {

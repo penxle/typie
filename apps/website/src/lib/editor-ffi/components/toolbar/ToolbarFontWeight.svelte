@@ -33,7 +33,7 @@
         const fonts = [
           ...new Map(
             family.fonts
-              .filter((f) => f.state === 'ACTIVE' || (currentWeight !== undefined && f.weight === currentWeight))
+              .filter((f) => f.state === 'ACTIVE')
               .toSorted((a, b) => a.weight - b.weight)
               .map((f) => [f.weight, f]),
           ).values(),
@@ -64,11 +64,6 @@
         values.fontWeight.find((f) => f.value === font.weight)?.label ??
         (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     }));
-
-    if (currentWeight != null && items.every((w) => w.value !== currentWeight)) {
-      items.push({ value: currentWeight, label: values.fontWeight.find((f) => f.value === currentWeight)?.label ?? String(currentWeight) });
-      items.sort((a, b) => a.value - b.value);
-    }
 
     return items;
   });
