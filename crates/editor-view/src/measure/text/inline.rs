@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn clear_splits_run_despite_equal_empty_own() {
-        // root block FontSize(1600): char a inherits it; char b CLEARS it (Add then Remove span).
+        // root block FontSize(1600): char a inherits it; char b CLEARS it (Add then Clear span).
         // Both have empty own_modifiers, but a.effective has FontSize and b.effective does not
         // (the Clear barrier). An own-only key would merge them -> must be TWO runs.
         let mut l = build_logs(vec![ch('a'), ch('b')]);
@@ -498,7 +498,7 @@ mod tests {
             .unwrap()
             .apply(
                 Dot::new(59, 1),
-                SpanOp::RemoveSpan {
+                SpanOp::ClearSpan {
                     start: anc(leaf(1), Bias::Before),
                     end: anc(leaf(1), Bias::After),
                     modifier_type: ModifierType::FontSize,
@@ -651,7 +651,7 @@ mod tests {
             .unwrap()
             .apply(
                 Dot::new(63, 1),
-                SpanOp::RemoveSpan {
+                SpanOp::ClearSpan {
                     start: anc(leaf(1), Bias::Before),
                     end: anc(leaf(1), Bias::After),
                     modifier_type: ModifierType::FontSize,

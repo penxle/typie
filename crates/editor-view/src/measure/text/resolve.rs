@@ -121,7 +121,7 @@ mod tests {
         assert!((style.font_size - DEFAULT_FONT_SIZE_PX).abs() < 0.01);
         assert!((style.line_height - DEFAULT_LINE_HEIGHT_RATIO).abs() < 0.01);
         assert!((style.letter_spacing - 0.0).abs() < 0.01);
-        assert_eq!(style.font_family, "");
+        assert_eq!(style.font_family, DEFAULT_FONT_FAMILY);
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
 
         apply_pending_to_style(&mut style, &pending);
 
-        assert_eq!(style.font_family, "");
+        assert_eq!(style.font_family, DEFAULT_FONT_FAMILY);
         assert_eq!(style.font_weight, DEFAULT_FONT_WEIGHT);
         assert!((style.font_size - DEFAULT_FONT_SIZE_PX).abs() < 0.01);
         assert!((style.letter_spacing - 0.0).abs() < 0.01);

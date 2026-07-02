@@ -2336,7 +2336,7 @@ mod tests {
     }
 
     #[test]
-    fn line_with_ruby_annotation_invokes_ruby_svg_path_rendering() {
+    fn line_with_ruby_annotation_renders_glyph_through_raster_path() {
         use editor_view::glyph_run::{Glyph, RubyAnnotation, Synthesis};
 
         // Pretendard-Regular 'A' (U+0041) is glyph id 3, which has an outline.
@@ -2415,12 +2415,13 @@ mod tests {
         );
         v.line(&line_node, line_fragment(&line_node));
 
-        // Pretendard outline glyph 는 SVG path glyph 로 캐시되어 fill_path 경로로 렌더되어야 한다.
+        // SVG 테이블이 없는 Pretendard outline glyph 는 raster 경로(draw_glyph → draw_image)로
+        // 렌더된다. fill_path 는 SVG 테이블 glyph 전용.
         assert!(
-            sink.path_fills > 0,
-            "ruby annotation glyph must be rendered through fill_path"
+            sink.image_draws > 0,
+            "ruby annotation glyph must be rendered through the raster glyph path"
         );
-        assert_eq!(sink.image_draws, 0);
+        assert_eq!(sink.path_fills, 0);
     }
 
     #[test]

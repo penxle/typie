@@ -466,7 +466,7 @@ mod tests {
             }))
             .unwrap();
         state
-            .apply(EditOp::Span(SpanOp::RemoveSpan {
+            .apply(EditOp::Span(SpanOp::ClearSpan {
                 start: Anchor {
                     id: leaf_a,
                     bias: Bias::Before,
