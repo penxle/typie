@@ -528,11 +528,7 @@ impl Editor {
                 .graph()
                 .changesets()
                 .iter()
-                .filter_map(|cs| {
-                    cs.ops
-                        .first()
-                        .map(|op| format!("{}:{}", op.id.actor, op.id.clock))
-                })
+                .filter_map(|cs| cs.first().map(|d| format!("{}:{}", d.actor, d.clock)))
                 .collect();
             Ok(ids)
         })

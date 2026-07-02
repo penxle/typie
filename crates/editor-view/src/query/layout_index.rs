@@ -3,6 +3,7 @@ use editor_crdt::Dot;
 use editor_state::Affinity;
 use editor_state::Position;
 use rstar::{AABB, RTree, RTreeObject};
+use smallvec::SmallVec;
 use std::collections::HashMap;
 
 use crate::page::{LayoutPage, PageRect};
@@ -25,8 +26,8 @@ pub(crate) struct LayoutIndex {
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutEntry {
     pub(crate) rect: Rect,
-    path: Vec<usize>,
-    ancestors: Vec<Dot>,
+    path: SmallVec<[usize; 8]>,
+    ancestors: SmallVec<[Dot; 4]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,6 +83,38 @@ impl LayoutIndex {
 
     pub(crate) fn tree(&self) -> &LayoutTree {
         &self.tree
+    }
+
+    /// Reuse every derived structure (entries, node maps, per-page lists,
+    /// spatial entries — even a built R-tree) under a new `LayoutTree` whose
+    /// geometry is byte-identical to the old one. Sound only when the caller
+    /// has verified geometry equality; all index data derives from rects,
+    /// node ids and traversal structure, never from line content.
+    pub(crate) fn rebind_tree(mut self, tree: LayoutTree) -> Self {
+        self.tree = tree;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rtree_built(&self) -> bool {
+        self.rtree.get().is_some()
+    }
+
+    /// Whether `new_tree` is geometry-identical to the current tree at
+    /// `block`'s subtree — same rects, ids, structure and attachment; line
+    /// content is deliberately ignored (the index never derives from it).
+    pub(crate) fn subtree_geometry_matches(&self, new_tree: &LayoutTree, block: &Dot) -> bool {
+        let Some(&entry_id) = self.boxes_by_node_id.get(block) else {
+            return false;
+        };
+        let path = &self.entries[entry_id].path;
+        let (Some(old), Some(new)) = (
+            node_at_path(&self.tree.root, path),
+            node_at_path(&new_tree.root, path),
+        ) else {
+            return false;
+        };
+        node_geometry_eq(old, new)
     }
 
     pub(crate) fn pages(&self) -> &[LayoutPage] {
@@ -379,8 +412,8 @@ impl LayoutIndexBuilder<'_> {
         let entry_id = self.entries.len();
         self.entries.push(LayoutEntry {
             rect,
-            path: self.path.clone(),
-            ancestors: self.ancestors.clone(),
+            path: SmallVec::from_slice(&self.path),
+            ancestors: SmallVec::from_slice(&self.ancestors),
         });
         if rect.width > 0.0 && rect.height > 0.0 {
             let bounds = AABB::from_corners([rect.x, rect.y], [rect.right(), rect.bottom()]);
@@ -409,6 +442,31 @@ impl RTreeObject for SpatialEntry {
 
     fn envelope(&self) -> Self::Envelope {
         self.bounds
+    }
+}
+
+fn node_geometry_eq(a: &LayoutNode, b: &LayoutNode) -> bool {
+    if a.rect != b.rect {
+        return false;
+    }
+    match (&a.content, &b.content) {
+        (LayoutContent::Box(x), LayoutContent::Box(y)) => {
+            x.node == y.node
+                && x.attachment == y.attachment
+                && x.children.len() == y.children.len()
+                && x.children
+                    .iter()
+                    .zip(&y.children)
+                    .all(|(c, d)| node_geometry_eq(c, d))
+        }
+        (LayoutContent::Line(x), LayoutContent::Line(y)) => {
+            x.node == y.node && x.is_phantom == y.is_phantom
+        }
+        (LayoutContent::Atom(x), LayoutContent::Atom(y)) => {
+            x.node == y.node && x.attachment == y.attachment
+        }
+        (LayoutContent::Spacing(x), LayoutContent::Spacing(y)) => x == y,
+        _ => false,
     }
 }
 

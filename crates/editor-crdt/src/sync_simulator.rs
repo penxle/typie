@@ -126,8 +126,8 @@ impl<P: Clone + Eq> Replica<P> {
                     .op_graph
                     .changesets()
                     .iter()
-                    .filter(|cs| cs.ops.iter().any(|op| ancestry.contains(&op.id)))
-                    .map(|cs| cs.as_ref().clone())
+                    .filter(|r| r.dots().any(|d| ancestry.contains(&d)))
+                    .map(|r| self.op_graph.materialize_changeset(r))
                     .collect();
                 if !to_send.is_empty() {
                     outgoing.push(SyncMessage::Changesets(to_send));
@@ -171,8 +171,8 @@ impl<P: Clone + Eq> Replica<P> {
                 .op_graph
                 .changesets()
                 .iter()
-                .filter(|cs| cs.ops.iter().any(|op| self.pending_push.contains(&op.id)))
-                .map(|cs| cs.as_ref().clone())
+                .filter(|r| r.dots().any(|d| self.pending_push.contains(&d)))
+                .map(|r| self.op_graph.materialize_changeset(r))
                 .collect();
             if to_send.is_empty() {
                 None

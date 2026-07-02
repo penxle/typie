@@ -228,19 +228,22 @@ mod tests {
         content_edge_x: Option<f32>,
     ) -> LayoutLine {
         LayoutLine {
-            node,
-            baseline: 16.0,
-            ascent: 14.0,
-            descent: 4.0,
-            cursor_ascent: 14.0,
-            cursor_descent: 4.0,
-            glyph_runs: runs,
-            ruby_annotations: vec![],
-            empty_caret_x,
-            offset_range,
-            tab_gaps,
-            is_phantom: false,
-            content_edge_x,
+            measured: std::sync::Arc::new(crate::measure::text::measure::MeasuredLine {
+                height: 0.0,
+                node,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: runs,
+                ruby_annotations: vec![],
+                empty_caret_x,
+                offset_range,
+                tab_gaps,
+                is_phantom: false,
+                content_edge_x,
+            }),
         }
     }
 

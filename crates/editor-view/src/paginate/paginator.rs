@@ -101,19 +101,7 @@ impl Paginator {
                 LayoutNode {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Line(LayoutLine {
-                        node: l.node,
-                        baseline: l.baseline,
-                        ascent: l.ascent,
-                        descent: l.descent,
-                        cursor_ascent: l.cursor_ascent,
-                        cursor_descent: l.cursor_descent,
-                        glyph_runs: l.glyph_runs.clone(),
-                        ruby_annotations: l.ruby_annotations.clone(),
-                        empty_caret_x: l.empty_caret_x,
-                        offset_range: l.offset_range.clone(),
-                        tab_gaps: l.tab_gaps.clone(),
-                        is_phantom: l.is_phantom,
-                        content_edge_x: l.content_edge_x,
+                        measured: std::sync::Arc::clone(l),
                     }),
                 }
             }
@@ -609,19 +597,7 @@ fn place_node_at(
         MeasuredContent::Line(l) => LayoutNode {
             rect: Rect::from_xywh(x, y, node.width, node.height),
             content: LayoutContent::Line(LayoutLine {
-                node: l.node,
-                baseline: l.baseline,
-                ascent: l.ascent,
-                descent: l.descent,
-                cursor_ascent: l.cursor_ascent,
-                cursor_descent: l.cursor_descent,
-                glyph_runs: l.glyph_runs.clone(),
-                ruby_annotations: l.ruby_annotations.clone(),
-                empty_caret_x: l.empty_caret_x,
-                offset_range: l.offset_range.clone(),
-                tab_gaps: l.tab_gaps.clone(),
-                is_phantom: l.is_phantom,
-                content_edge_x: l.content_edge_x,
+                measured: std::sync::Arc::clone(l),
             }),
         },
         MeasuredContent::Atom(a) => LayoutNode {

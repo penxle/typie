@@ -20,7 +20,7 @@ pub use changeset::Changeset;
 pub use dot::{Dot, Dots, OpDot};
 pub use error::CrdtError;
 pub use lwwreg::{LwwReg, LwwRegOp};
-pub use op_graph::{Op, OpGraph};
+pub use op_graph::{ChangesetRef, Op, OpGraph};
 pub use oplog::{InputEvent, ListOp, OpLog, build_oplog};
 pub use ormap::{OrMap, OrMapOp};
 pub use orset::{OrSet, OrSetOp};

@@ -110,12 +110,14 @@ impl View {
         let old_fingerprint = self.fingerprint.clone();
 
         let view = state.view();
+        let mut content_targets: Option<Vec<editor_crdt::Dot>> = None;
         match &dirty {
             LayoutDirty::Full => self.measurer.clear(),
             LayoutDirty::Incremental {
                 content,
                 structural,
             } => {
+                let mut targets = structural.is_empty().then(Vec::new);
                 for id in content.iter().chain(structural.iter()) {
                     let Some(node) = view
                         .node(*id)
@@ -131,11 +133,15 @@ impl View {
                     let target = table.as_ref().unwrap_or(&node);
                     self.measurer.invalidate_subtree(target);
                     self.measurer.invalidate_with_ancestors(target);
+                    if let Some(t) = targets.as_mut() {
+                        t.push(target.id());
+                    }
                 }
+                content_targets = targets;
             }
         }
 
-        self.compute(state);
+        self.compute_inner(state, content_targets.as_deref());
 
         if pending_changed {
             self.view_state.preferred_x = None;
@@ -213,9 +219,14 @@ impl View {
     }
 
     fn compute(&mut self, state: &State) {
+        self.compute_inner(state, None);
+    }
+
+    fn compute_inner(&mut self, state: &State, content_targets: Option<&[editor_crdt::Dot]>) {
         let old_fingerprint = self.fingerprint.clone();
         let (paginator, content_width, new_fingerprint) = self.build_pipeline(state);
-        if old_fingerprint.as_ref() != Some(&new_fingerprint) {
+        let fingerprint_unchanged = old_fingerprint.as_ref() == Some(&new_fingerprint);
+        if !fingerprint_unchanged {
             self.measurer.clear();
         }
         self.fingerprint = Some(new_fingerprint);
@@ -235,8 +246,36 @@ impl View {
         };
         let paginated = paginator.paginate(MeasuredTree { root: measured });
         let pages = paginated.pages;
+        let prev = self.layout.take();
+
+        // Content-only edit whose blocks kept their exact geometry: every
+        // index structure (entries, node maps, per-page lists, R-tree) is a
+        // pure function of geometry/ids, so reuse it under the new tree
+        // instead of rebuilding it O(document). Verification is O(edited
+        // blocks): unchanged sibling geometry follows from unchanged block
+        // heights (pagination is deterministic in its geometric inputs).
+        let reusable = if let (true, Some(prev_layout), Some(targets)) =
+            (fingerprint_unchanged, &prev, content_targets)
+        {
+            prev_layout.pages == pages
+                && !targets.is_empty()
+                && targets.iter().all(|d| {
+                    prev_layout
+                        .layout_index
+                        .subtree_geometry_matches(&paginated.tree, d)
+                })
+        } else {
+            false
+        };
+        let layout_index = if reusable {
+            prev.expect("checked above")
+                .layout_index
+                .rebind_tree(paginated.tree)
+        } else {
+            LayoutIndex::new(paginated.tree, &pages)
+        };
+
         let page_fragments = (0..pages.len()).map(|_| OnceLock::new()).collect();
-        let layout_index = LayoutIndex::new(paginated.tree, &pages);
         self.layout = Some(LayoutResult {
             pages,
             page_fragments,
@@ -1220,6 +1259,70 @@ mod incremental_tests {
         assert!(!ids.is_empty());
         assert_eq!(view.node_box_rects(&ids), fresh.node_box_rects(&ids));
         assert_eq!(page_sig(&view), page_sig(&fresh));
+    }
+
+    #[test]
+    fn reconcile_content_edit_reuses_index_when_geometry_unchanged() {
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let mut pos = 0;
+        for _ in 0..3 {
+            g.add_mut(seq_block(pos, NodeType::Paragraph, vec![root]))
+                .unwrap();
+            pos += 1;
+            for ch in "mmmmmmmmmmmm".chars() {
+                g.add_mut(seq_char(pos, ch)).unwrap();
+                pos += 1;
+            }
+        }
+        g.commit_mut();
+        let base = ProjectedState::from_graph(g).unwrap();
+
+        // Wide enough that one extra char never wraps: block geometry is
+        // unchanged and the index-reuse fast path must engage.
+        let width = 800.0;
+        let pre = State::new(base.clone(), None);
+        let mut view = make_view(width);
+        view.layout(&pre);
+
+        // Force the lazy R-tree so reuse (which keeps it) is observable.
+        let _ = view.hit_test(0, 1.0, 1.0);
+        assert!(
+            view.layout
+                .as_ref()
+                .is_some_and(|l| l.layout_index.rtree_built()),
+            "hit_test must have built the R-tree"
+        );
+
+        let mut ed = base;
+        let _ = ed.take_layout_dirty();
+        ed.apply(seq_char(1, 'X')).unwrap();
+        let dirty = ed.take_layout_dirty();
+        assert!(matches!(
+            &dirty,
+            editor_state::LayoutDirty::Incremental { structural, .. } if structural.is_empty()
+        ));
+        let post = State::new(ed, None);
+
+        view.reconcile(&post, dirty, None, None);
+
+        // Reuse keeps the already-built R-tree; a rebuild would reset it.
+        assert!(
+            view.layout
+                .as_ref()
+                .is_some_and(|l| l.layout_index.rtree_built()),
+            "geometry-unchanged content edit must reuse the layout index"
+        );
+
+        let mut fresh = make_view(width);
+        fresh.layout(&post);
+        let ids = all_block_dots(&post);
+        assert!(!ids.is_empty());
+        assert_eq!(view.node_box_rects(&ids), fresh.node_box_rects(&ids));
+        assert_eq!(page_sig(&view), page_sig(&fresh));
+        for (x, y) in [(1.0, 1.0), (60.0, 10.0), (120.0, 40.0)] {
+            assert_eq!(view.hit_test(0, x, y), fresh.hit_test(0, x, y));
+        }
     }
 
     #[test]

@@ -23,6 +23,59 @@ fn child_remove(set: &mut ChildSet, dot: &Dot) {
     }
 }
 
+/// Sealed-changeset descriptor: the member dots, in op order, compressed as
+/// consecutive-clock runs. Storing the full `Changeset` duplicated every
+/// op's payload and parents in memory; the wire/FFI `Changeset` is
+/// materialized from `ops` on demand instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangesetRef {
+    runs: smallvec::SmallVec<[(Dot, u32); 2]>,
+    len: u32,
+}
+
+impl ChangesetRef {
+    fn from_ops<P>(ops: &[Op<P>]) -> Self {
+        let mut runs: smallvec::SmallVec<[(Dot, u32); 2]> = smallvec::SmallVec::new();
+        for op in ops {
+            match runs.last_mut() {
+                Some((start, len))
+                    if op.id.actor == start.actor
+                        && op.id.clock == start.clock + u64::from(*len) =>
+                {
+                    *len += 1
+                }
+                _ => runs.push((op.id, 1)),
+            }
+        }
+        ChangesetRef {
+            runs,
+            len: ops.len() as u32,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn first(&self) -> Option<Dot> {
+        self.runs.first().map(|(d, _)| *d)
+    }
+
+    pub fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
+        self.runs.iter().flat_map(|(start, len)| {
+            (0..u64::from(*len)).map(move |i| Dot::new(start.actor, start.clock + i))
+        })
+    }
+
+    fn matches_ops<P>(&self, ops: &[Op<P>]) -> bool {
+        self.len() == ops.len() && self.dots().zip(ops).all(|(d, op)| d == op.id)
+    }
+}
+
 /// One node in the op-DAG. `id` is the op's unique identifier (also reused as
 /// the semantic identifier — RGA element id, OR-Set add token — by the
 /// payload). `parents` are the op-DAG parents of this op (the heads of the
@@ -42,13 +95,7 @@ pub struct OpGraph<P> {
     actor: u64,
     next_clock: u64,
 
-    // `Arc`-wrapped so cloning the `OpGraph` (every transaction does, via
-    // `State::clone`) shares each sealed changeset by pointer. A bare
-    // `Vector<Changeset>` with few elements stores them inline and deep-copies
-    // the contained ops `Vec` on every clone — `O(total ops)` per keystroke when
-    // `from_plain` seals the whole document into one changeset. The `Arc` is an
-    // internal storage detail; the wire/FFI form is still `Changeset`.
-    changesets: imbl::Vector<std::sync::Arc<crate::Changeset<P>>>,
+    changesets: imbl::Vector<ChangesetRef>,
 
     /// Local-write accumulator. `add` pushes here; `commit` drains into
     /// `changesets`. Remote ingestion (`receive_changeset`) never touches
@@ -166,7 +213,7 @@ impl<P: Clone> OpGraph<P> {
         self.ops.is_empty()
     }
 
-    pub fn changesets(&self) -> &imbl::Vector<std::sync::Arc<crate::Changeset<P>>> {
+    pub fn changesets(&self) -> &imbl::Vector<ChangesetRef> {
         &self.changesets
     }
 
@@ -196,9 +243,11 @@ impl<P: Clone> OpGraph<P> {
         let all = self
             .changesets
             .iter()
-            .flat_map(|cs| cs.ops.iter())
-            .chain(self.pending.iter());
+            .flat_map(|r| r.dots())
+            .map(|d| self.ops.get(&d))
+            .chain(self.pending.iter().map(Some));
         for op in all {
+            let op = op?;
             if !op.parents.iter().all(|p| seen.contains(p)) || !seen.insert(op.id) {
                 return None;
             }
@@ -291,10 +340,23 @@ impl<P: Clone> Default for OpGraph<P> {
 }
 
 impl<P: Clone> OpGraph<P> {
+    /// Rebuild the wire-form `Changeset` for a sealed descriptor from `ops`.
+    /// Every dot of a sealed changeset is present in `ops` (the test-only
+    /// `debug_remove` is the sole violation, and its callers filter through
+    /// `self_contained` first).
+    pub fn materialize_changeset(&self, r: &ChangesetRef) -> crate::Changeset<P> {
+        crate::Changeset {
+            ops: r
+                .dots()
+                .map(|d| self.ops.get(&d).expect("sealed op present").clone())
+                .collect(),
+        }
+    }
+
     pub fn changesets_as_vec(&self) -> Vec<crate::Changeset<P>> {
         self.changesets
             .iter()
-            .map(|cs| cs.as_ref().clone())
+            .map(|r| self.materialize_changeset(r))
             .collect()
     }
 
@@ -364,8 +426,7 @@ impl<P: Clone> OpGraph<P> {
     pub fn commit_mut(&mut self) {
         if !self.pending.is_empty() {
             let ops = std::mem::take(&mut self.pending);
-            self.changesets
-                .push_back(std::sync::Arc::new(crate::Changeset { ops }));
+            self.changesets.push_back(ChangesetRef::from_ops(&ops));
         }
     }
 
@@ -400,21 +461,17 @@ impl<P: Clone> OpGraph<P> {
         }
 
         let mut out: Vec<crate::Changeset<P>> = Vec::new();
-        for cs in &self.changesets {
+        for r in &self.changesets {
             // Self-contained filter must precede the membership classification
             // below: a cs holding a dangling-ancestor descendant is a degraded-
             // storage case to drop silently, not an atomicity violation.
-            if cs
-                .ops
-                .iter()
-                .any(|op| !self.self_contained.contains_key(&op.id))
-            {
+            if r.dots().any(|d| !self.self_contained.contains_key(&d)) {
                 continue;
             }
             let mut all_known = true;
             let mut any_known = false;
-            for op in &cs.ops {
-                if known.contains(&op.id) {
+            for d in r.dots() {
+                if known.contains(&d) {
                     any_known = true;
                 } else {
                     all_known = false;
@@ -424,15 +481,10 @@ impl<P: Clone> OpGraph<P> {
                 continue;
             }
             if any_known {
-                let dots: Vec<Dot> = cs
-                    .ops
-                    .iter()
-                    .filter(|op| known.contains(&op.id))
-                    .map(|op| op.id)
-                    .collect();
+                let dots: Vec<Dot> = r.dots().filter(|d| known.contains(d)).collect();
                 return Err(CrdtError::PartialDuplicate { dots });
             }
-            out.push(cs.as_ref().clone());
+            out.push(self.materialize_changeset(r));
         }
         Ok(out)
     }
@@ -643,8 +695,11 @@ impl<P: Clone + Eq> OpGraph<P> {
         // the cs matches a stored changeset verbatim — same dots under a
         // different boundary, or partial overlap, both signal corruption.
         if !already_dots.is_empty() {
+            // Phase A already proved every known dot's stored op matches this
+            // cs verbatim (parents + payload), so idempotency only needs a
+            // stored changeset with the exact same dot sequence.
             let all_known = already_dots.len() == cs.ops.len();
-            if all_known && self.changesets.iter().any(|c| c.as_ref() == &cs) {
+            if all_known && self.changesets.iter().any(|r| r.matches_ops(&cs.ops)) {
                 return Ok(());
             }
             return Err(CrdtError::PartialDuplicate {
@@ -655,7 +710,6 @@ impl<P: Clone + Eq> OpGraph<P> {
         // Phase A above leaves no rejectable state; the mutation below is
         // infallible.
         for op in &cs.ops {
-            self.ops.insert(op.id, op.clone());
             for p in &op.parents {
                 self.heads.remove(p);
                 child_insert(self.children.entry_or_default(*p), op.id);
@@ -667,10 +721,15 @@ impl<P: Clone + Eq> OpGraph<P> {
                 self.heads.insert(op.id);
             }
         }
-        for op in &cs.ops {
-            self.try_promote_self_contained_mut(op.id, &mut scratch.promote_queue);
+        let cref = ChangesetRef::from_ops(&cs.ops);
+        for op in cs.ops {
+            let id = op.id;
+            self.ops.insert(id, op);
         }
-        self.changesets.push_back(std::sync::Arc::new(cs));
+        for d in cref.dots() {
+            self.try_promote_self_contained_mut(d, &mut scratch.promote_queue);
+        }
+        self.changesets.push_back(cref);
         Ok(())
     }
 
@@ -859,22 +918,17 @@ impl<P: Clone + Eq> OpGraph<P> {
         // probes over the whole history when sending everything to a fresh peer).
         let all_self_contained = self.self_contained.len() == self.ops.len();
         let mut out: Vec<crate::Changeset<P>> = Vec::new();
-        for cs in &self.changesets {
+        for r in &self.changesets {
             // Cheap `is_known` membership (a plain `HashSet`, O(1)) first: a fully-known
-            // changeset is rejected without the per-op `self_contained` probe (a
-            // persistent `imbl` set, O(log N)), reserving that for the ones we may send.
-            if cs.ops.iter().all(|op| is_known(&op.id)) {
+            // changeset is rejected without the per-op `self_contained` probe,
+            // reserving that for the ones we may send.
+            if r.dots().all(|d| is_known(&d)) {
                 continue; // fully known → peer already has it
             }
-            if !all_self_contained
-                && cs
-                    .ops
-                    .iter()
-                    .any(|op| !self.self_contained.contains_key(&op.id))
-            {
+            if !all_self_contained && r.dots().any(|d| !self.self_contained.contains_key(&d)) {
                 continue;
             }
-            out.push(cs.as_ref().clone());
+            out.push(self.materialize_changeset(r));
         }
         out
     }
@@ -1643,7 +1697,7 @@ mod tests {
         let (g, _) = g.add(2).unwrap();
         let g = g.commit();
         assert_eq!(g.changesets().len(), 1);
-        assert_eq!(g.changesets()[0].ops.len(), 2);
+        assert_eq!(g.changesets()[0].len(), 2);
         assert!(g.pending().is_empty());
     }
 
@@ -1663,8 +1717,8 @@ mod tests {
         let (g, _) = g.add(2).unwrap();
         let g = g.commit();
         assert_eq!(g.changesets().len(), 2);
-        assert_eq!(g.changesets()[0].ops.len(), 1);
-        assert_eq!(g.changesets()[1].ops.len(), 1);
+        assert_eq!(g.changesets()[0].len(), 1);
+        assert_eq!(g.changesets()[1].len(), 1);
     }
 
     #[test]
@@ -1900,7 +1954,7 @@ mod tests {
         };
         let g2 = g.receive_changeset(cs).unwrap();
         assert_eq!(g2.changesets().len(), 1);
-        assert_eq!(g2.changesets()[0].ops.len(), 2);
+        assert_eq!(g2.changesets()[0].len(), 2);
         assert_eq!(g2.len(), 2);
         let heads: HashSet<Dot> = g2.current_heads().copied().collect();
         assert_eq!(heads, [b.id].into_iter().collect());
@@ -2429,19 +2483,14 @@ mod proptests {
         }
         let all_self_contained = g.self_contained.len() == g.ops.len();
         let mut out: HashSet<Vec<Dot>> = HashSet::new();
-        for cs in &g.changesets {
-            if cs.ops.iter().all(|op| known.contains(&op.id)) {
+        for r in &g.changesets {
+            if r.dots().all(|d| known.contains(&d)) {
                 continue;
             }
-            if !all_self_contained
-                && cs
-                    .ops
-                    .iter()
-                    .any(|op| !g.self_contained.contains_key(&op.id))
-            {
+            if !all_self_contained && r.dots().any(|d| !g.self_contained.contains_key(&d)) {
                 continue;
             }
-            out.insert(cs.ops.iter().map(|o| o.id).collect());
+            out.insert(r.dots().collect());
         }
         out
     }

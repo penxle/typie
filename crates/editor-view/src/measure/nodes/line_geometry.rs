@@ -105,7 +105,7 @@ fn expand_line(
         return MeasuredNode {
             width,
             height: 0.0,
-            content: MeasuredContent::Line(line.clone()),
+            content: MeasuredContent::Line(std::sync::Arc::new(line.clone())),
         };
     }
 

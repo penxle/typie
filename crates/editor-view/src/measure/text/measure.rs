@@ -41,7 +41,7 @@ pub struct TabGap {
 /// identity in the projected coordinate: `node: Dot`, `offset_range`,
 /// `Vec<GlyphRun>`, `Vec<TabGap>`. Carries its own `height` (the old
 /// height lived on the wrapper `MeasuredNode`; d-3-3 wraps these later).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct MeasuredLine {
     pub node: Dot,
     pub height: f32,

@@ -92,7 +92,7 @@ pub(crate) struct MeasuredNode {
 #[derive(Debug, Clone)]
 pub(crate) enum MeasuredContent {
     Box(MeasuredBox),
-    Line(MeasuredLine),
+    Line(Arc<MeasuredLine>),
     Atom(MeasuredAtom),
     Spacing(f32),
     PageBreak,
@@ -106,7 +106,7 @@ impl MeasuredNode {
         let node = Self {
             width,
             height,
-            content: MeasuredContent::Line(line),
+            content: MeasuredContent::Line(Arc::new(line)),
         };
         debug_assert_eq!(node.height, height);
         node

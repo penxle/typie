@@ -1,12 +1,10 @@
-use std::ops::Range;
+use std::sync::Arc;
 
 use editor_common::Rect;
 use editor_crdt::Dot;
 use editor_state::Position;
 
-use crate::glyph_run::GlyphRun;
-use crate::glyph_run::RubyAnnotation;
-use crate::measure::text::measure::TabGap;
+use crate::measure::text::measure::MeasuredLine;
 use crate::page::LayoutPage;
 use crate::style::BoxStyle;
 
@@ -55,21 +53,21 @@ pub(crate) struct LayoutBox {
     pub attachment: Option<ChildAttachment>,
 }
 
+/// A positioned line. Shares the measured payload (glyph runs, ruby, tab
+/// gaps) by `Arc` instead of deep-cloning it — pagination re-walks the whole
+/// document per edit, and copying every line's glyphs dominated the
+/// per-keystroke cost on large documents.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LayoutLine {
-    pub node: Dot,
-    pub baseline: f32,
-    pub ascent: f32,
-    pub descent: f32,
-    pub cursor_ascent: f32,
-    pub cursor_descent: f32,
-    pub glyph_runs: Vec<GlyphRun>,
-    pub ruby_annotations: Vec<RubyAnnotation>,
-    pub empty_caret_x: f32,
-    pub offset_range: Option<Range<usize>>,
-    pub tab_gaps: Vec<TabGap>,
-    pub is_phantom: bool,
-    pub content_edge_x: Option<f32>,
+    pub measured: Arc<MeasuredLine>,
+}
+
+impl std::ops::Deref for LayoutLine {
+    type Target = MeasuredLine;
+
+    fn deref(&self) -> &MeasuredLine {
+        &self.measured
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,19 +96,22 @@ mod tests {
     #[test]
     fn constructs_box_with_line_child() {
         let line = LayoutLine {
-            node: Dot::new(1, 1),
-            baseline: 8.0,
-            ascent: 8.0,
-            descent: 2.0,
-            cursor_ascent: 8.0,
-            cursor_descent: 2.0,
-            glyph_runs: vec![],
-            ruby_annotations: vec![],
-            empty_caret_x: 0.0,
-            offset_range: Some(0..1),
-            tab_gaps: vec![],
-            is_phantom: false,
-            content_edge_x: None,
+            measured: std::sync::Arc::new(crate::measure::text::measure::MeasuredLine {
+                height: 0.0,
+                node: Dot::new(1, 1),
+                baseline: 8.0,
+                ascent: 8.0,
+                descent: 2.0,
+                cursor_ascent: 8.0,
+                cursor_descent: 2.0,
+                glyph_runs: vec![],
+                ruby_annotations: vec![],
+                empty_caret_x: 0.0,
+                offset_range: Some(0..1),
+                tab_gaps: vec![],
+                is_phantom: false,
+                content_edge_x: None,
+            }),
         };
         let tree = LayoutTree {
             root: LayoutNode {
