@@ -481,6 +481,41 @@ class EditorAwaitTest {
     }
 
   @Test
+  fun render_skip_settles_page_and_releases_await() =
+    runTest(dispatcher) {
+      val fakeCursor =
+        CursorMetrics(pageIdx = 0, caret = Rect(1f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+      val fake =
+        FakeFfiEditor(
+          onTick = {
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor)), renderInvalidated())
+          },
+          cursorProvider = { fakeCursor },
+          renderSurfaceProvider = { false },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      var returned = false
+      val job =
+        launch(dispatcher) {
+          editor.await { enqueue(sampleMessage) }
+          returned = true
+        }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertFalse(returned)
+
+      // A skipped render presents no new frame, so no bitmap commit (and no
+      // onPageSettled from the surface) will ever arrive for this page.
+      editor.renderSurface(0)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(returned)
+      assertEquals(fakeCursor, editor.cursor)
+      job.join()
+    }
+
+  @Test
   fun await_commits_immediately_when_attached_pages_empty() =
     runTest(dispatcher) {
       val fakeCursor =

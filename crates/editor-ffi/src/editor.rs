@@ -774,7 +774,11 @@ impl Editor {
         })
     }
 
-    pub fn render_surface(&self, page: u32) -> EditorResult<()> {
+    /// Returns whether a new frame was presented. `false` means no frame will arrive
+    /// from this call — the page's pixels already match the current state — so hosts
+    /// that wait for a present (the mobile settle handshake) must treat the page as
+    /// settled instead of waiting.
+    pub fn render_surface(&self, page: u32) -> EditorResult<bool> {
         self.with_inner(|inner| {
             // Skip the full re-raster + present when nothing this page draws has
             // changed since the last presented frame. During a selection drag only
@@ -782,15 +786,17 @@ impl Editor {
             // keeps a stable signature and is skipped here.
             let sig = inner.editor.page_render_signature(page);
             if inner.last_render_sig.get(&page) == Some(&sig) {
-                return Ok(());
+                return Ok(false);
             }
             if let Some(surface) = inner.surfaces.get_mut(&page) {
                 let scale_factor = surface.scale_factor() as f32;
                 inner.editor.render_page(page, surface.sink(), scale_factor);
                 surface.present();
                 inner.last_render_sig.insert(page, sig);
+                Ok(true)
+            } else {
+                Ok(false)
             }
-            Ok(())
         })
     }
 }

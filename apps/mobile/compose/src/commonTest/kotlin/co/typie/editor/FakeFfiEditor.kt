@@ -66,6 +66,7 @@ internal class FakeFfiEditor(
     { _, _ ->
       emptyList()
     },
+  var renderSurfaceProvider: (Int) -> Boolean = { true },
 ) : co.typie.editor.ffi.Editor {
   val enqueued = mutableListOf<Message>()
   var tickCount: Int = 0
@@ -165,9 +166,10 @@ internal class FakeFfiEditor(
 
   override fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) = Unit
 
-  override fun renderSurface(page: Int) {
+  override fun renderSurface(page: Int): Boolean {
     renderCount += 1
     lastRenderedPage = page
+    return renderSurfaceProvider(page)
   }
 
   override fun inspectState(options: InspectStateOptions?): String = ""
@@ -177,6 +179,8 @@ internal class FakeFfiEditor(
   override fun receiveRemoteChangeset(payload: ByteArray) = Unit
 
   override fun localChangesetsSince(remoteHeadsPayload: ByteArray): ByteArray = ByteArray(0)
+
+  override fun changesetIds(): List<String> = emptyList()
 
   override fun missingChangesetsTolerant(remoteHeadsPayload: ByteArray): ByteArray = ByteArray(0)
 

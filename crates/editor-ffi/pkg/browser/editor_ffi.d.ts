@@ -701,7 +701,13 @@ declare class Editor {
     prose_text(): string;
     prose_to_selection(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
-    render_surface(page: number): void;
+    /**
+     * Returns whether a new frame was presented. `false` means no frame will arrive
+     * from this call — the page's pixels already match the current state — so hosts
+     * that wait for a present (the mobile settle handshake) must treat the page as
+     * settled instead of waiting.
+     */
+    render_surface(page: number): boolean;
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;
     root_attrs(): PlainRootNode;
     root_modifiers(): Modifier[];

@@ -322,10 +322,14 @@ internal constructor(
 
   fun renderSurface(page: Int): Long = runBlocking {
     withSuspendFailureNotification(defaultValue = { versionCounter.load() }) {
-      mutex.withLock {
-        inner.renderSurface(page)
-        versionCounter.load()
+      val (presented, version) =
+        mutex.withLock { inner.renderSurface(page) to versionCounter.load() }
+      if (!presented) {
+        // Skipped render: the page already shows the current state and no new frame
+        // (hence no onBitmapCommitted → onPageSettled) will arrive — settle it here.
+        onPageSettled(page, version)
       }
+      version
     }
   }
 
