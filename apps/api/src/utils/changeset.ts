@@ -138,6 +138,24 @@ export const setLiveHeads = async (documentId: string, heads: Uint8Array): Promi
   await redis.set(liveKey(documentId), heads.toBase64());
 };
 
+// Advance the cached live frontier by one push bundle — `O(bundle)`, no graph
+// read: a dot is a head iff nothing references it as a parent, so the new
+// frontier is `(prev ∪ bundle ids) − bundle parents` (`host.update_heads`).
+// Returns null on a cold cache (no frontier yet); the caller bootstraps once
+// via the merged-graph path. A concurrent push can interleave between GET and
+// SET; the folds are commutative and a momentarily-stale frontier self-heals
+// as soon as the missing ops gain children — the same staleness window the
+// previous rebuild-from-merged-graph write had.
+export const advanceLiveHeads = async (documentId: string, bundle: Uint8Array): Promise<Uint8Array | null> => {
+  const prev = await getLiveHeads(documentId);
+  if (!prev) {
+    return null;
+  }
+  const next = await wasm.use((host) => host.update_heads(prev, bundle));
+  await setLiveHeads(documentId, next);
+  return next;
+};
+
 export const getLiveHeads = async (documentId: string): Promise<Uint8Array | null> => {
   const b64 = await redis.get(liveKey(documentId));
   return b64 ? Uint8Array.fromBase64(b64) : null;

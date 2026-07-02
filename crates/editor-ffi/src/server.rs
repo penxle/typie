@@ -376,6 +376,40 @@ impl EditorServer {
         Ok(bytes)
     }
 
+    /// Advance a cached frontier by one push bundle without touching the
+    /// graph: a dot is a head iff no op references it as a parent, so
+    /// `F' = (F ∪ ids(bundle)) − parents(bundle)` — `O(bundle)`, while
+    /// rebuilding the frontier from the merged graph is `O(history)` (the
+    /// 8MB-document push paid a full decode + merge + re-encode per push).
+    /// Set arithmetic makes it idempotent under duplicate redelivery and
+    /// order-independent across concurrent pushes.
+    pub fn update_heads(&self, prev_heads: Vec<u8>, bundle: Vec<u8>) -> EditorResult<Vec<u8>> {
+        let prev = editor_crdt::wire::decode_dots(&prev_heads[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_crdt::wire::decode(&bundle[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+
+        let mut heads: hashbrown::HashSet<editor_crdt::Dot> = prev.into_iter().collect();
+        for cs in &cs {
+            for op in &cs.ops {
+                heads.insert(op.id);
+            }
+        }
+        for cs in &cs {
+            for op in &cs.ops {
+                for p in &op.parents {
+                    heads.remove(p);
+                }
+            }
+        }
+        let mut heads: Vec<editor_crdt::Dot> = heads.into_iter().collect();
+        heads.sort();
+        let bytes = editor_crdt::wire::encode_dots(&heads)
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        Ok(bytes)
+    }
+
     pub fn revert(&self, graph: Vec<u8>, target_heads: Vec<u8>) -> EditorResult<Vec<u8>> {
         let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
             editor_crdt::wire::decode(&graph[..])
@@ -853,6 +887,56 @@ mod tests {
             .apply_many(base, pack(&[b1.clone(), b1, b2]))
             .unwrap();
         assert_eq!(dec_css(&folded), dec_css(&with_dup));
+    }
+
+    #[test]
+    fn update_heads_matches_merged_graph_frontier() {
+        // Two concurrent branches off cs_a, then a merge op — exercises head
+        // replacement, concurrent-head accumulation, and multi-parent removal.
+        let cs_a = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(1, 0),
+                parents: vec![],
+                payload: dummy_payload(),
+            }],
+        };
+        let cs_b = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(2, 0),
+                parents: vec![Dot::new(1, 0)],
+                payload: dummy_payload(),
+            }],
+        };
+        let cs_c = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(3, 0),
+                parents: vec![Dot::new(1, 0)],
+                payload: dummy_payload(),
+            }],
+        };
+        let cs_d = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(2, 1),
+                parents: vec![Dot::new(2, 0), Dot::new(3, 0)],
+                payload: dummy_payload(),
+            }],
+        };
+        let server = EditorServer;
+
+        let mut graph = enc_css(std::slice::from_ref(&cs_a));
+        let mut live = server.heads(graph.clone()).unwrap();
+        for cs in [&cs_b, &cs_c, &cs_d] {
+            let bundle = enc_css(std::slice::from_ref(cs));
+            live = server.update_heads(live, bundle.clone()).unwrap();
+            graph = server.apply(graph, bundle).unwrap();
+            let full = server.heads(graph.clone()).unwrap();
+            assert_eq!(dec_dots(&live), dec_dots(&full));
+        }
+
+        // Duplicate redelivery is a no-op.
+        let dup = enc_css(std::slice::from_ref(&cs_d));
+        let redelivered = server.update_heads(live.clone(), dup).unwrap();
+        assert_eq!(dec_dots(&redelivered), dec_dots(&live));
     }
 
     #[test]

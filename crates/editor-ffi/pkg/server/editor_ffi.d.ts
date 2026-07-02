@@ -824,6 +824,16 @@ declare class EditorServer {
     to_graph(plain: PlainDoc): Uint8Array;
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
     to_plain_resolved(changeset_payloads: Uint8Array): PlainDoc;
+    /**
+     * Advance a cached frontier by one push bundle without touching the
+     * graph: a dot is a head iff no op references it as a parent, so
+     * `F' = (F ∪ ids(bundle)) − parents(bundle)` — `O(bundle)`, while
+     * rebuilding the frontier from the merged graph is `O(history)` (the
+     * 8MB-document push paid a full decode + merge + re-encode per push).
+     * Set arithmetic makes it idempotent under duplicate redelivery and
+     * order-independent across concurrent pushes.
+     */
+    update_heads(prev_heads: Uint8Array, bundle: Uint8Array): Uint8Array;
     validate_and_extract_text(changeset_payloads: Uint8Array): string;
     /**
      * Verifies a PlainDoc's structural invariants by attempting to load it.

@@ -5,6 +5,7 @@ import { db, Documents, DocumentStates, Entities, first, firstOrThrow, TableCode
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import {
+  advanceLiveHeads,
   appendBundle,
   getCollectedSeq,
   getDurableHeads,
@@ -106,19 +107,31 @@ builder.mutationFields((t) => ({
         seq = await appendBundle(input.documentId, input.changesets, ctx.session.userId, ctx.session.deviceId);
       }
 
-      // Compute the accurate live frontier once (a pusher needs it to avoid
-      // re-broadcasting peers' changesets) and cache it so the read paths (pull /
-      // catch-up / load) stay O(1). `durableHeads` is a cached read; only this
-      // merged-heads build touches wasm, and it is the write path, not pull.
-      const persistedState = await db
-        .select({ graph: DocumentStates.graph })
-        .from(DocumentStates)
-        .where(eq(DocumentStates.documentId, input.documentId))
-        .then(firstOrThrow);
-      const graph = await readMergedGraph(input.documentId, persistedState.graph);
-      const heads = await wasm.use((host) => host.heads(graph));
-      await setLiveHeads(input.documentId, heads);
-      const durableHeads = (await getDurableHeads(input.documentId)) ?? (await wasm.use((host) => host.heads(persistedState.graph)));
+      // The pusher needs the accurate live frontier (to avoid re-broadcasting
+      // peers' changesets); the read paths (pull / catch-up / load) consume the
+      // cached value. Warm path: fold just this bundle into the cached frontier
+      // — `O(bundle)`. The old rebuild (fetch the multi-MB snapshot, merge the
+      // stream tail, re-scan the whole graph for heads) made every push on a
+      // large document `O(history)` — ~3 s of blocking wasm per push at 8MB.
+      let heads = opsCount > 0 ? await advanceLiveHeads(input.documentId, input.changesets) : await getLiveHeads(input.documentId);
+      let durableHeads = await getDurableHeads(input.documentId);
+
+      // Cold cache (fresh document, Redis flush, or pre-cache deploys):
+      // bootstrap both frontiers from the snapshot + tail once, then the warm
+      // path above keeps them current.
+      if (!heads || !durableHeads) {
+        const persistedState = await db
+          .select({ graph: DocumentStates.graph })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, input.documentId))
+          .then(firstOrThrow);
+        if (!heads) {
+          const graph = await readMergedGraph(input.documentId, persistedState.graph);
+          heads = await wasm.use((host) => host.heads(graph));
+          await setLiveHeads(input.documentId, heads);
+        }
+        durableHeads ??= await wasm.use((host) => host.heads(persistedState.graph));
+      }
 
       if (opsCount > 0 && seq) {
         pubsub.publish('document:changesets', input.documentId, {
