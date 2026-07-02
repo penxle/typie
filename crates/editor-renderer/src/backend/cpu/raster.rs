@@ -7,6 +7,9 @@ use editor_common::Color;
 
 use crate::types::{Path, PathElement, Stroke, StrokeCap, StrokeJoin, Transform};
 
+pub(crate) const MITER_LIMIT: f32 = 4.0;
+pub(crate) const MIN_STROKE_WIDTH: f32 = 0.01;
+
 pub struct RasterScratch {
     zeno: Scratch,
     mask: Vec<u8>,
@@ -102,6 +105,7 @@ pub fn rasterize_stroke_to_mask(
     let mut zstroke = ZStroke::new(stroke.width);
     zstroke.cap(to_zcap(stroke.cap));
     zstroke.join(to_zjoin(stroke.join));
+    zstroke.miter_limit(MITER_LIMIT);
     scratch.mask.clear();
     Mask::with_scratch(&commands[..], &mut scratch.zeno)
         .format(Format::Alpha)

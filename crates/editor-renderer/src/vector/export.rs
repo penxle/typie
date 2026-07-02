@@ -332,9 +332,10 @@ mod tests {
     fn draw_image_produces_image_op() {
         // 이미지 그리기 명령이 VectorPage에서 Image op로 바뀌는지 확인한다.
         let image = crate::types::Image {
-            data: vec![0u8; 4],
+            data: vec![0u8; 4].into(),
             width: 1,
             height: 1,
+            glyph: None,
         };
         let mut sink = VectorSink::new();
         sink.draw_image(
@@ -350,9 +351,10 @@ mod tests {
     fn image_is_vectorized_as_image_op() {
         // 이미지 리소스가 표시 위치와 표시 크기를 포함한 Image op로 보존되는지 확인한다.
         let image = crate::types::Image {
-            data: vec![1, 2, 3, 4],
+            data: vec![1, 2, 3, 4].into(),
             width: 1,
             height: 1,
+            glyph: None,
         };
         let mut sink = VectorSink::new();
         sink.draw_image(
@@ -372,7 +374,7 @@ mod tests {
                 render_width,
                 render_height,
             } => {
-                assert_eq!(data, &vec![1, 2, 3, 4]);
+                assert_eq!(&data[..], &[1, 2, 3, 4]);
                 assert_eq!(*width, 1);
                 assert_eq!(*height, 1);
                 assert!((*x - 10.0).abs() < 0.001);

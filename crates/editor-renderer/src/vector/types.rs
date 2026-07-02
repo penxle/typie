@@ -60,7 +60,7 @@ pub enum VectorOp {
         line_join: VectorLineJoin,
     },
     Image {
-        data: Vec<u8>,
+        data: std::sync::Arc<[u8]>,
         width: u32,
         height: u32,
         x: f32,

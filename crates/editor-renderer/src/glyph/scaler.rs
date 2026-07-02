@@ -207,7 +207,7 @@ fn try_outline_raster(
     }
 
     Some(RasterizedGlyph {
-        data: mask_buf.clone(),
+        data: mask_buf.as_slice().into(),
         width: placement.width,
         height: placement.height,
         placement_left: placement.left,

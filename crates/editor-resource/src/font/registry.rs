@@ -26,6 +26,7 @@ pub struct FontRegistry {
     manifests: HashMap<(u16, u16), FontManifest>,
     font_hashes: HashMap<(u16, u16), String>,
     placeholder_family_id: Option<u16>,
+    font_generation: u64,
 }
 
 impl FontRegistry {
@@ -41,10 +42,17 @@ impl FontRegistry {
             manifests: HashMap::default(),
             font_hashes: HashMap::default(),
             placeholder_family_id: None,
+            font_generation: 0,
         }
     }
 
+    pub fn font_generation(&self) -> u64 {
+        self.font_generation
+    }
+
     pub fn set_fonts(&mut self, families: Vec<FontFamily>) {
+        self.font_generation += 1;
+
         // Phase 1: intern names and build the target (family_id, weight) -> hash map.
         let mut new_hashes: HashMap<(u16, u16), String> = HashMap::default();
         for family in &families {
@@ -242,6 +250,8 @@ impl FontRegistry {
             self.loaded_chunks.insert(key, Vec::new());
         }
 
+        self.font_generation += 1;
+
         Ok(())
     }
 
@@ -287,6 +297,8 @@ impl FontRegistry {
             bv[chunk_id as usize] = true;
         }
 
+        self.font_generation += 1;
+
         Ok(())
     }
 
@@ -316,6 +328,7 @@ impl FontRegistry {
         self.font_versions
             .insert((id, super::placeholder::PLACEHOLDER_WEIGHT), 0);
         self.placeholder_family_id = Some(id);
+        self.font_generation += 1;
     }
 
     pub fn placeholder_family_id(&self) -> Option<u16> {
@@ -337,6 +350,7 @@ impl FontRegistry {
         self.font_versions.insert(key, 0);
         self.loaded_chunks
             .insert(key, vec![true; chunk_count as usize]);
+        self.font_generation += 1;
     }
 }
 

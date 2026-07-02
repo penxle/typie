@@ -20,4 +20,12 @@ internal actual object RenderBuffer {
   @JvmStatic actual external fun getPixelWidth(handle: Long): Int
 
   @JvmStatic actual external fun getPixelHeight(handle: Long): Int
+
+  @JvmStatic actual external fun getPinnedVersion(handle: Long): Long
+
+  @JvmStatic actual external fun getPinnedDamageFrom(handle: Long): Long
+
+  @JvmStatic actual external fun getPinnedDamagePointer(handle: Long): Long
+
+  @JvmStatic actual external fun getPinnedDamageCount(handle: Long): Int
 }

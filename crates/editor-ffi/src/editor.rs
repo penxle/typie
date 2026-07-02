@@ -19,6 +19,16 @@ struct EditorInner {
     // Cleared whenever the page's pixel buffer is (re)created: attach/detach/resize.
     #[cfg(not(feature = "wasm-server"))]
     last_render_sig: HashMap<u32, u64>,
+    #[cfg(not(feature = "wasm-server"))]
+    prev_dl: HashMap<u32, editor_renderer::display_list::DisplayList>,
+}
+
+#[cfg(not(feature = "wasm-server"))]
+impl EditorInner {
+    fn clear_page_present_state(&mut self, page: u32) {
+        self.last_render_sig.remove(&page);
+        self.prev_dl.remove(&page);
+    }
 }
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
@@ -739,8 +749,8 @@ impl Editor {
         let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
         self.with_inner(|inner| {
             inner.surfaces.insert(page, surface);
-            // Fresh buffer: drop any stale signature so the first paint always renders.
-            inner.last_render_sig.remove(&page);
+            // Fresh buffer: drop any stale signature/display-list so the first paint always renders.
+            inner.clear_page_present_state(page);
             Ok(())
         })
     }
@@ -748,7 +758,7 @@ impl Editor {
     pub fn detach_surface(&self, page: u32) -> EditorResult<()> {
         self.with_inner(|inner| {
             inner.surfaces.remove(&page);
-            inner.last_render_sig.remove(&page);
+            inner.clear_page_present_state(page);
             Ok(())
         })
     }
@@ -763,9 +773,9 @@ impl Editor {
         self.with_inner(|inner| {
             if let Some(surface) = inner.surfaces.get_mut(&page) {
                 surface.resize(width, height, scale_factor);
-                // Buffer was recreated/cleared — its old signature no longer reflects pixels.
-                inner.last_render_sig.remove(&page);
             }
+            // Buffer was recreated/cleared — its old signature/display-list no longer reflects pixels.
+            inner.clear_page_present_state(page);
             Ok(())
         })
     }
@@ -776,21 +786,34 @@ impl Editor {
     /// settled instead of waiting.
     pub fn render_surface(&self, page: u32) -> EditorResult<bool> {
         self.with_inner(|inner| {
-            // Skip the full re-raster + present when nothing this page draws has
-            // changed since the last presented frame. During a selection drag only
-            // the page under the moving endpoint changes; every other visible page
-            // keeps a stable signature and is skipped here.
+            // Skip the rebuild + incremental raster + present when nothing this page
+            // draws has changed since the last presented frame. During a selection
+            // drag only the page under the moving endpoint changes; every other
+            // visible page keeps a stable signature and is skipped here.
             let sig = inner.editor.page_render_signature(page);
             if inner.last_render_sig.get(&page) == Some(&sig) {
                 return Ok(false);
             }
-            if let Some(surface) = inner.surfaces.get_mut(&page) {
-                let scale_factor = surface.scale_factor() as f32;
-                inner.editor.render_page(page, surface.sink(), scale_factor);
-                surface.present();
+            let scale_factor = match inner.surfaces.get(&page) {
+                Some(surface) => surface.scale_factor() as f32,
+                None => return Ok(false),
+            };
+            let (dl, page_bounds) = inner.editor.build_display_list(page, scale_factor);
+            let prev = inner.prev_dl.get(&page);
+            let surface = inner.surfaces.get_mut(&page).unwrap();
+            let damage = editor_renderer::diff::render_incremental(
+                prev,
+                &dl,
+                surface.cpu_sink(),
+                page_bounds,
+            );
+            let committed = surface.present_damage(&damage);
+            if committed {
+                inner.prev_dl.insert(page, dl);
                 inner.last_render_sig.insert(page, sig);
                 Ok(true)
             } else {
+                inner.clear_page_present_state(page);
                 Ok(false)
             }
         })
@@ -831,6 +854,8 @@ impl Editor {
                 surfaces: HashMap::new(),
                 #[cfg(not(feature = "wasm-server"))]
                 last_render_sig: HashMap::new(),
+                #[cfg(not(feature = "wasm-server"))]
+                prev_dl: HashMap::new(),
             }),
         }
     }
@@ -1966,5 +1991,39 @@ mod tests {
             "page with horizontal_rule must produce at least one op (non-vacuity)"
         );
         assert_no_image_ops(&bytes);
+    }
+
+    #[test]
+    fn clear_page_present_state_removes_prev_dl_and_sig() {
+        let (initial, ..) =
+            state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
+        let editor = make_ffi_editor(initial);
+        {
+            let mut g = editor.inner.lock().unwrap();
+            g.prev_dl
+                .insert(0, editor_renderer::display_list::DisplayList::default());
+            g.last_render_sig.insert(0, 123);
+        }
+        editor.inner.lock().unwrap().clear_page_present_state(0);
+        let g = editor.inner.lock().unwrap();
+        assert!(!g.prev_dl.contains_key(&0));
+        assert!(!g.last_render_sig.contains_key(&0));
+    }
+
+    #[test]
+    fn detach_surface_clears_prev_dl() {
+        let (initial, ..) =
+            state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
+        let editor = make_ffi_editor(initial);
+        {
+            let mut g = editor.inner.lock().unwrap();
+            g.prev_dl
+                .insert(0, editor_renderer::display_list::DisplayList::default());
+            g.last_render_sig.insert(0, 123);
+        }
+        editor.detach_surface(0).expect("detach must succeed");
+        let g = editor.inner.lock().unwrap();
+        assert!(!g.prev_dl.contains_key(&0));
+        assert!(!g.last_render_sig.contains_key(&0));
     }
 }

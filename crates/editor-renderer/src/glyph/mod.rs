@@ -8,11 +8,18 @@ mod outline_pen;
 mod scaler;
 mod scratch;
 
-pub use cache::{GlyphCache, SvgPathGlyphCache};
+pub use cache::{BakedGlyphCache, GlyphCache, SvgPathGlyphCache};
 pub use scaler::ScaleContext;
 
-use crate::types::{Path, Transform as RenderTransform};
-use cache::GlyphCacheKey;
+use crate::types::{Color, Path, Transform as RenderTransform};
+pub(crate) use cache::GlyphCacheKey;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GlyphKey {
+    pub cache_key: GlyphCacheKey,
+    pub color: Color,
+    pub font_generation: u64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Content {
@@ -22,7 +29,7 @@ pub enum Content {
 
 #[derive(Debug, Clone)]
 pub struct RasterizedGlyph {
-    pub data: Vec<u8>,
+    pub data: std::sync::Arc<[u8]>,
     pub width: u32,
     pub height: u32,
     pub placement_left: i32,
@@ -42,6 +49,7 @@ pub struct PositionedGlyph {
     pub raster: RasterizedGlyph,
     pub blit_x: i32,
     pub blit_y: i32,
+    pub cache_key: GlyphCacheKey,
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +170,42 @@ pub fn rasterize(
             raster,
             blit_x,
             blit_y,
+            cache_key: key,
         });
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GlyphCacheKey, GlyphKey};
+    use crate::types::Color;
+
+    #[test]
+    fn glyph_key_is_structural_and_color_sensitive() {
+        let ck = GlyphCacheKey::new(1, 400, 42, 16.0, false, false, 0);
+        let a = GlyphKey {
+            cache_key: ck,
+            color: Color::rgb(10, 20, 30),
+            font_generation: 7,
+        };
+        let b = GlyphKey {
+            cache_key: ck,
+            color: Color::rgb(10, 20, 30),
+            font_generation: 7,
+        };
+        let c = GlyphKey {
+            cache_key: ck,
+            color: Color::rgb(11, 20, 30),
+            font_generation: 7,
+        };
+        let d = GlyphKey {
+            cache_key: ck,
+            color: Color::rgb(10, 20, 30),
+            font_generation: 8,
+        };
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(a, d);
+    }
 }

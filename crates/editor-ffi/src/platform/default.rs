@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use editor_macros::ffi;
-use editor_renderer::RenderSink;
+use editor_renderer::backend::cpu::CpuSink;
+use editor_renderer::damage::IRect;
 
 use crate::error::FfiError;
 
@@ -24,11 +25,11 @@ impl SurfaceHandle {
         unreachable!();
     }
 
-    pub fn sink(&mut self) -> &mut dyn RenderSink {
+    pub fn cpu_sink(&mut self) -> &mut CpuSink {
         unreachable!();
     }
 
-    pub fn present(&mut self) {
+    pub fn present_damage(&mut self, _damage: &[IRect]) -> bool {
         unreachable!();
     }
 

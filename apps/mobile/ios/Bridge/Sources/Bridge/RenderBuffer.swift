@@ -24,6 +24,18 @@ private func renderBufferWidth(_ handle: Int64) -> Int32
 @_silgen_name("render_buffer_height")
 private func renderBufferHeight(_ handle: Int64) -> Int32
 
+@_silgen_name("render_buffer_pinned_version")
+private func renderBufferPinnedVersion(_ handle: Int64) -> Int64
+
+@_silgen_name("render_buffer_pinned_damage_from")
+private func renderBufferPinnedDamageFrom(_ handle: Int64) -> Int64
+
+@_silgen_name("render_buffer_pinned_damage_pointer")
+private func renderBufferPinnedDamagePointer(_ handle: Int64) -> Int64
+
+@_silgen_name("render_buffer_pinned_damage_count")
+private func renderBufferPinnedDamageCount(_ handle: Int64) -> Int32
+
 @objc public class RenderBuffer: NSObject {
     @objc public static func allocate(_ width: Int32, _ height: Int32) -> Int64 {
         renderBufferAllocate(width, height)
@@ -55,5 +67,21 @@ private func renderBufferHeight(_ handle: Int64) -> Int32
 
     @objc public static func height(_ handle: Int64) -> Int32 {
         renderBufferHeight(handle)
+    }
+
+    @objc public static func pinnedVersion(_ handle: Int64) -> Int64 {
+        renderBufferPinnedVersion(handle)
+    }
+
+    @objc public static func pinnedDamageFrom(_ handle: Int64) -> Int64 {
+        renderBufferPinnedDamageFrom(handle)
+    }
+
+    @objc public static func pinnedDamagePointer(_ handle: Int64) -> Int64 {
+        renderBufferPinnedDamagePointer(handle)
+    }
+
+    @objc public static func pinnedDamageCount(_ handle: Int64) -> Int32 {
+        renderBufferPinnedDamageCount(handle)
     }
 }

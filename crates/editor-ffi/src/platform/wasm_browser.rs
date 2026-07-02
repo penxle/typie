@@ -1,4 +1,6 @@
-use editor_renderer::{RenderBackend, RenderSink};
+use editor_renderer::RenderBackend;
+use editor_renderer::backend::cpu::CpuSink;
+use editor_renderer::damage::IRect;
 use wasm_bindgen::prelude::*;
 
 use crate::error::FfiError;
@@ -41,36 +43,44 @@ impl SurfaceHandle {
         self.scale_factor
     }
 
-    pub fn sink(&mut self) -> &mut dyn RenderSink {
-        self.backend.sink()
+    pub fn cpu_sink(&mut self) -> &mut CpuSink {
+        self.backend.cpu_sink()
     }
 
-    pub fn present(&mut self) {
-        match &mut self.backend {
-            RenderBackend::Cpu(sink) => {
-                let buf_size = (self.width * self.height * 4) as usize;
-                let mut buf = vec![0u8; buf_size];
-                sink.flush_to(&mut buf);
-
-                let ctx = self
-                    .handle
-                    .get_context("2d")
-                    .unwrap()
-                    .unwrap()
-                    .dyn_into::<web_sys::CanvasRenderingContext2d>()
-                    .unwrap();
-
-                let clamped = wasm_bindgen::Clamped(&buf[..]);
-                let image_data = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
-                    clamped,
-                    self.width,
-                    self.height,
-                )
-                .unwrap();
-
-                ctx.put_image_data(&image_data, 0.0, 0.0).unwrap();
-            }
+    pub fn present_damage(&mut self, damage: &[IRect]) -> bool {
+        if damage.is_empty() {
+            return true;
         }
+
+        let ctx = self
+            .handle
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<web_sys::CanvasRenderingContext2d>()
+            .unwrap();
+
+        for &r in damage {
+            let w = r.width() as u32;
+            let h = r.height() as u32;
+            if w == 0 || h == 0 {
+                continue;
+            }
+
+            let mut buf = vec![0u8; (w * h * 4) as usize];
+            self.backend
+                .cpu_sink()
+                .read_back_rect(&mut buf, (w * 4) as usize, r);
+
+            let clamped = wasm_bindgen::Clamped(&buf[..]);
+            let image_data =
+                web_sys::ImageData::new_with_u8_clamped_array_and_sh(clamped, w, h).unwrap();
+
+            ctx.put_image_data(&image_data, r.x0 as f64, r.y0 as f64)
+                .unwrap();
+        }
+
+        true
     }
 
     pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) {

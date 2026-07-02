@@ -72,7 +72,7 @@ pub fn rasterize_color_outline(
     }
 
     Some(RasterizedGlyph {
-        data: canvas,
+        data: canvas.into(),
         width,
         height,
         placement_left: base_x,

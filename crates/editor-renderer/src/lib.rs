@@ -1,6 +1,9 @@
 editor_macros::preamble!();
 
 pub mod backend;
+pub mod damage;
+pub mod diff;
+pub mod display_list;
 pub(crate) mod glyph;
 pub mod icon_data;
 pub mod icons;

@@ -9,7 +9,8 @@ use editor_view::{
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{
-    Content, GlyphCache, PositionedGlyph, PositionedSvgPathGlyph, ScaleContext, SvgPathGlyphCache,
+    BakedGlyphCache, Content, GlyphCache, GlyphKey, PositionedGlyph, PositionedSvgPathGlyph,
+    ScaleContext, SvgPathGlyphCache,
 };
 use crate::icons::ICONS;
 use crate::sink::RenderSink;
@@ -20,29 +21,60 @@ use crate::types::{
 use crate::vector::codec::encode_vector_page;
 use crate::vector::export::VectorSink;
 
-fn bake_mask_to_premul_rgba(mask: &[u8], width: u32, height: u32, color: Color) -> Image {
+#[cfg(test)]
+thread_local! {
+    pub(crate) static BAKE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn bake_mask_to_premul_rgba(
+    mask: &[u8],
+    width: u32,
+    height: u32,
+    color: Color,
+    glyph: Option<GlyphKey>,
+) -> Image {
+    #[cfg(test)]
+    BAKE_COUNT.with(|c| c.set(c.get() + 1));
+
     let mut data = Vec::with_capacity((width * height * 4) as usize);
     for &m in mask {
         data.extend_from_slice(&crate::backend::cpu::raster::premul_pixel(m, color));
     }
     Image {
-        data,
+        data: data.into(),
         width,
         height,
+        glyph,
     }
 }
 
-fn draw_positioned_raster_glyph(sink: &mut dyn RenderSink, pg: &PositionedGlyph, color: Color) {
-    let image = match pg.raster.content {
-        Content::Mask => {
-            bake_mask_to_premul_rgba(&pg.raster.data, pg.raster.width, pg.raster.height, color)
-        }
+fn draw_positioned_raster_glyph(
+    sink: &mut dyn RenderSink,
+    baked_cache: &mut BakedGlyphCache,
+    pg: &PositionedGlyph,
+    color: Color,
+    font_generation: u64,
+) {
+    let key = GlyphKey {
+        cache_key: pg.cache_key,
+        color,
+        font_generation,
+    };
+    let image = baked_cache.get_or_bake(key, || match pg.raster.content {
+        Content::Mask => bake_mask_to_premul_rgba(
+            &pg.raster.data,
+            pg.raster.width,
+            pg.raster.height,
+            color,
+            Some(key),
+        ),
         Content::Color => Image {
             data: pg.raster.data.clone(),
             width: pg.raster.width,
             height: pg.raster.height,
+            glyph: Some(key),
         },
-    };
+    });
 
     sink.draw_glyph(&image, pg.blit_x, pg.blit_y);
 }
@@ -493,6 +525,7 @@ pub struct Renderer {
     pub(crate) scale_ctx: ScaleContext,
     pub(crate) glyph_cache: GlyphCache,
     pub(crate) svg_path_glyph_cache: SvgPathGlyphCache,
+    pub(crate) baked_glyph_cache: BakedGlyphCache,
 }
 
 impl Renderer {
@@ -502,6 +535,7 @@ impl Renderer {
             scale_ctx: ScaleContext::new(),
             glyph_cache: GlyphCache::new(),
             svg_path_glyph_cache: SvgPathGlyphCache::new(),
+            baked_glyph_cache: BakedGlyphCache::new(),
         }
     }
 
@@ -797,6 +831,7 @@ impl<'a> RenderVisitor<'a> {
 
             let resource = Arc::clone(&self.renderer.resource);
             let resource_guard = resource.lock().unwrap();
+            let font_generation = resource_guard.font_registry.font_generation();
             let positioned = crate::glyph::rasterize(
                 run,
                 &resource_guard.font_registry,
@@ -809,7 +844,13 @@ impl<'a> RenderVisitor<'a> {
             drop(resource_guard);
 
             for pg in &positioned.rasters {
-                draw_positioned_raster_glyph(self.sink, pg, color);
+                draw_positioned_raster_glyph(
+                    self.sink,
+                    &mut self.renderer.baked_glyph_cache,
+                    pg,
+                    color,
+                    font_generation,
+                );
             }
             for pg in &positioned.svg_paths {
                 draw_positioned_svg_path_glyph(self.sink, pg, color);
@@ -855,6 +896,7 @@ impl<'a> RenderVisitor<'a> {
 
             let resource = Arc::clone(&self.renderer.resource);
             let resource_guard = resource.lock().unwrap();
+            let font_generation = resource_guard.font_registry.font_generation();
             let positioned = crate::glyph::rasterize(
                 &adapter,
                 &resource_guard.font_registry,
@@ -867,7 +909,13 @@ impl<'a> RenderVisitor<'a> {
             drop(resource_guard);
 
             for pg in &positioned.rasters {
-                draw_positioned_raster_glyph(self.sink, pg, color);
+                draw_positioned_raster_glyph(
+                    self.sink,
+                    &mut self.renderer.baked_glyph_cache,
+                    pg,
+                    color,
+                    font_generation,
+                );
             }
             for pg in &positioned.svg_paths {
                 draw_positioned_svg_path_glyph(self.sink, pg, color);
@@ -2373,6 +2421,101 @@ mod tests {
             "ruby annotation glyph must be rendered through fill_path"
         );
         assert_eq!(sink.image_draws, 0);
+    }
+
+    #[test]
+    fn baked_glyph_mask_is_cached_across_identical_renders() {
+        use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
+
+        const TEST_FONT: &[u8] = include_bytes!("../../../assets/Pretendard-Regular.ttf");
+
+        struct NoopSink;
+        impl RenderSink for NoopSink {
+            fn pixel_size(&self) -> (u32, u32) {
+                (1000, 1000)
+            }
+            fn fill_rect(&mut self, _r: Rect, _c: Color, _t: Transform) {}
+            fn fill_path(&mut self, _p: &Path, _c: Color, _t: Transform) {}
+            fn stroke_path(&mut self, _p: &Path, _c: Color, _s: &Stroke, _t: Transform) {}
+            fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+        }
+
+        let mut resource = Resource::new_test();
+        let compressed = editor_resource::compress_zstd(TEST_FONT);
+        resource.add_font_base("test", 400, &compressed).unwrap();
+        let family_id = resource
+            .font_registry
+            .intern_id("test")
+            .expect("test font must be registered");
+
+        let state = State::empty();
+        let doc = state.view();
+        let mut renderer = Renderer::new(Arc::new(Mutex::new(resource)));
+
+        let make_line = || {
+            let run = GlyphRun {
+                family_id,
+                weight: 400,
+                font_size: 16.0,
+                synthesis: Synthesis::default(),
+                color: "text.black".to_string(),
+                background_color: None,
+                glyphs: vec![
+                    Glyph {
+                        id: 3,
+                        x: 0.0,
+                        y: 0.0,
+                    },
+                    Glyph {
+                        id: 3,
+                        x: 12.0,
+                        y: 0.0,
+                    },
+                ],
+                decoration: TextDecoration::default(),
+                offset_range: 0..0,
+                link: None,
+                text: "AA".to_string(),
+                x: 0.0,
+                width: 24.0,
+                graphemes: vec![],
+                cursor_ascent: 0.0,
+                cursor_descent: 0.0,
+            };
+            fragment_line(
+                Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
+                LineMetrics {
+                    baseline: 16.0,
+                    ascent: 14.0,
+                    descent: 4.0,
+                },
+                vec![run],
+                vec![],
+            )
+        };
+
+        let render_once = |renderer: &mut Renderer| {
+            let mut sink = NoopSink;
+            let line = make_line();
+            let mut v =
+                renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Content]));
+            v.line(&line, line_fragment(&line));
+        };
+
+        BAKE_COUNT.with(|c| c.set(0));
+        render_once(&mut renderer);
+        let first = BAKE_COUNT.with(|c| c.get());
+        assert!(
+            first > 0,
+            "first render of real-font text must bake at least one glyph mask"
+        );
+
+        render_once(&mut renderer);
+        let second = BAKE_COUNT.with(|c| c.get()) - first;
+        assert_eq!(
+            second, 0,
+            "second render of identical text must hit the baked-glyph cache (zero re-bakes)"
+        );
     }
 
     #[test]

@@ -1,8 +1,9 @@
 use hashbrown::HashMap;
 
-use crate::glyph::{RasterizedGlyph, SvgPathGlyph};
+use crate::glyph::{GlyphKey, RasterizedGlyph, SvgPathGlyph};
+use crate::types::Image;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GlyphCacheKey {
     pub family_id: u16,
     pub weight: u16,
@@ -123,11 +124,54 @@ impl SvgPathGlyphCache {
     }
 }
 
+const BAKED_GLYPH_CACHE_CAP: usize = 4096;
+
+pub struct BakedGlyphCache {
+    current: HashMap<GlyphKey, Image>,
+    previous: HashMap<GlyphKey, Image>,
+    cap: usize,
+}
+
+impl BakedGlyphCache {
+    pub fn new() -> Self {
+        Self::with_cap(BAKED_GLYPH_CACHE_CAP)
+    }
+
+    fn with_cap(cap: usize) -> Self {
+        Self {
+            current: HashMap::new(),
+            previous: HashMap::new(),
+            cap,
+        }
+    }
+
+    pub fn get_or_bake(&mut self, key: GlyphKey, bake: impl FnOnce() -> Image) -> Image {
+        if let Some(img) = self.current.get(&key) {
+            return img.clone();
+        }
+        let img = match self.previous.remove(&key) {
+            Some(img) => img,
+            None => bake(),
+        };
+        if self.current.len() >= self.cap {
+            self.previous = std::mem::take(&mut self.current);
+        }
+        self.current.insert(key, img.clone());
+        img
+    }
+}
+
+impl Default for BakedGlyphCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{GlyphCacheKey, SvgPathGlyphCache};
-    use crate::glyph::SvgPathGlyph;
-    use crate::types::{Path, PathElement};
+    use super::{BakedGlyphCache, GlyphCacheKey, SvgPathGlyphCache};
+    use crate::glyph::{GlyphKey, SvgPathGlyph};
+    use crate::types::{Color, Image, Path, PathElement};
 
     #[test]
     fn svg_path_cache_preserves_svg_path_glyph() {
@@ -158,5 +202,85 @@ mod tests {
         assert_eq!(cached.placement_left, 3);
         assert_eq!(cached.placement_top, 4);
         assert_eq!(cached.path.elements.len(), 3);
+    }
+
+    fn baked_glyph_key(id: u32) -> GlyphKey {
+        GlyphKey {
+            cache_key: GlyphCacheKey::new(1, 400, id, 16.0, false, false, 0),
+            color: Color::rgb(0, 0, 0),
+            font_generation: 0,
+        }
+    }
+
+    fn baked_image(byte: u8) -> Image {
+        Image {
+            data: vec![byte; 4].into(),
+            width: 1,
+            height: 1,
+            glyph: None,
+        }
+    }
+
+    #[test]
+    fn baked_glyph_cache_survives_rotation_via_previous_generation() {
+        let mut cache = BakedGlyphCache::with_cap(2);
+        let mut bakes = 0;
+
+        let key1 = baked_glyph_key(1);
+        let key2 = baked_glyph_key(2);
+        let key3 = baked_glyph_key(3);
+
+        cache.get_or_bake(key1, || {
+            bakes += 1;
+            baked_image(1)
+        });
+        cache.get_or_bake(key2, || {
+            bakes += 1;
+            baked_image(2)
+        });
+        cache.get_or_bake(key3, || {
+            bakes += 1;
+            baked_image(3)
+        });
+        assert_eq!(bakes, 3, "3 distinct keys must each bake once");
+
+        cache.get_or_bake(key1, || {
+            bakes += 1;
+            baked_image(1)
+        });
+        assert_eq!(
+            bakes, 3,
+            "key #1 must survive rotation in the previous generation (no re-bake)"
+        );
+
+        cache.get_or_bake(key1, || {
+            bakes += 1;
+            baked_image(1)
+        });
+        assert_eq!(
+            bakes, 3,
+            "repeated current-generation hits must not re-bake"
+        );
+
+        assert!(cache.current.len() + cache.previous.len() <= 2 * cache.cap);
+    }
+
+    #[test]
+    fn baked_glyph_cache_second_render_adds_zero_bakes() {
+        let mut cache = BakedGlyphCache::new();
+        let mut bakes = 0;
+        let key = baked_glyph_key(42);
+
+        cache.get_or_bake(key, || {
+            bakes += 1;
+            baked_image(9)
+        });
+        assert_eq!(bakes, 1);
+
+        cache.get_or_bake(key, || {
+            bakes += 1;
+            baked_image(9)
+        });
+        assert_eq!(bakes, 1, "second lookup of the same key must hit the cache");
     }
 }

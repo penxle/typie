@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
 use editor_common::Rect;
 use editor_view::Edges;
 
 pub use editor_common::Color;
 
-#[derive(Debug, Clone, Copy)]
+pub(crate) use crate::glyph::GlyphKey;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transform {
     pub m: [f32; 6],
 }
@@ -42,7 +46,7 @@ impl From<Transform> for kurbo::Affine {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PathElement {
     MoveTo {
         x: f32,
@@ -90,7 +94,7 @@ impl CornerRadii {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Path {
     pub elements: Vec<PathElement>,
 }
@@ -182,6 +186,45 @@ impl Path {
 
         Self { elements }
     }
+
+    pub fn bounds(&self) -> Option<Rect> {
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        let mut acc = |x: f32, y: f32| {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        };
+        for el in &self.elements {
+            match *el {
+                PathElement::MoveTo { x, y } | PathElement::LineTo { x, y } => acc(x, y),
+                PathElement::QuadTo { x1, y1, x, y } => {
+                    acc(x1, y1);
+                    acc(x, y);
+                }
+                PathElement::CurveTo {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    x,
+                    y,
+                } => {
+                    acc(x1, y1);
+                    acc(x2, y2);
+                    acc(x, y);
+                }
+                PathElement::Close => {}
+            }
+        }
+        if min_x > max_x {
+            return None;
+        }
+        Some(Rect::from_xywh(min_x, min_y, max_x - min_x, max_y - min_y))
+    }
 }
 
 impl From<&Path> for kurbo::BezPath {
@@ -252,7 +295,7 @@ pub struct IconData {
     pub elements: &'static [IconElement],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stroke {
     pub width: f32,
     pub cap: StrokeCap,
@@ -291,9 +334,10 @@ impl From<StrokeJoin> for kurbo::Join {
 
 #[derive(Debug, Clone)]
 pub struct Image {
-    pub data: Vec<u8>,
+    pub data: Arc<[u8]>,
     pub width: u32,
     pub height: u32,
+    pub glyph: Option<GlyphKey>,
 }
 
 #[cfg(test)]
@@ -381,5 +425,35 @@ mod tests {
         assert_eq!(radii.top_right, 0.0);
         assert_eq!(radii.bottom_left, 8.0);
         assert_eq!(radii.bottom_right, 8.0);
+    }
+
+    #[test]
+    fn path_bounds_covers_all_points() {
+        let p = Path::rect(editor_common::Rect::from_xywh(10.0, 20.0, 30.0, 40.0));
+        let b = p.bounds().unwrap();
+        assert_eq!((b.x, b.y, b.width, b.height), (10.0, 20.0, 30.0, 40.0));
+    }
+
+    #[test]
+    fn path_bounds_includes_quad_control_point() {
+        let p = Path {
+            elements: vec![
+                PathElement::MoveTo { x: 0.0, y: 0.0 },
+                PathElement::QuadTo {
+                    x1: 50.0,
+                    y1: 100.0,
+                    x: 10.0,
+                    y: 0.0,
+                },
+            ],
+        };
+        let b = p.bounds().unwrap();
+        assert!(b.bottom() >= 100.0);
+        assert!(b.right() >= 50.0);
+    }
+
+    #[test]
+    fn path_bounds_empty_is_none() {
+        assert!(Path::default().bounds().is_none());
     }
 }

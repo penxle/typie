@@ -29,4 +29,22 @@ impl RenderBackend {
             Self::Cpu(s) => s,
         }
     }
+
+    pub fn cpu_sink(&mut self) -> &mut CpuSink {
+        match self {
+            Self::Cpu(s) => s,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cpu_sink_returns_concrete_cpu_sink_with_matching_dims() {
+        let mut backend = RenderBackend::new_cpu(10, 10);
+        let sink = backend.cpu_sink();
+        assert_eq!(sink.pixel_size(), (10, 10));
+    }
 }

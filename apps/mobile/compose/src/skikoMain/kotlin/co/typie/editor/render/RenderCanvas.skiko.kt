@@ -72,6 +72,7 @@ internal actual fun RenderCanvas(
     var cachedHeight = 0
     var cachedBytes: ByteArray? = null
     var cachedSkBitmap: Bitmap? = null
+    var readerLastVersion = 0L
 
     trigger.conflate().collect { version ->
       if (!RenderBuffer.beginRead(handle)) return@collect
@@ -88,7 +89,41 @@ internal actual fun RenderCanvas(
       val bytes =
         cachedBytes?.takeIf { it.size == byteCount }
           ?: ByteArray(byteCount).also { cachedBytes = it }
-      copyNativeBytes(dataAddr, bytes, byteCount)
+
+      val pinnedVersion = RenderBuffer.getPinnedVersion(handle)
+      val damageFrom = RenderBuffer.getPinnedDamageFrom(handle)
+      val damageCount = RenderBuffer.getPinnedDamageCount(handle)
+      val damagePtr = RenderBuffer.getPinnedDamagePointer(handle)
+      val partial =
+        shouldPartialUpload(
+          cachedBytes != null,
+          cachedWidth,
+          cachedHeight,
+          w,
+          h,
+          readerLastVersion,
+          damageFrom,
+          damageCount,
+        )
+      if (partial && damagePtr != 0L && damageCount.toLong() * 4 <= Int.MAX_VALUE) {
+        val ints = readNativeInts(damagePtr, damageCount * 4)
+        val rr = damageRowRange(ints, damageCount, h)
+        val rowStride = w.toLong() * 4
+        val offL = rr.minY.toLong() * rowStride
+        val lenL = (rr.maxY - rr.minY).toLong() * rowStride
+        if (
+          rr.minY < rr.maxY &&
+            offL >= 0 &&
+            lenL <= Int.MAX_VALUE &&
+            offL <= bytes.size.toLong() - lenL
+        ) {
+          copyNativeBytesRange(dataAddr, bytes, offL.toInt(), lenL.toInt())
+        } else {
+          copyNativeBytes(dataAddr, bytes, byteCount)
+        }
+      } else {
+        copyNativeBytes(dataAddr, bytes, byteCount)
+      }
       RenderBuffer.endRead(handle)
 
       val skBitmap =
@@ -103,6 +138,7 @@ internal actual fun RenderCanvas(
       skBitmap.installPixels(skBitmap.imageInfo, bytes, w * 4)
       bitmap = SkImage.makeFromBitmap(skBitmap).toComposeImageBitmap()
       currentOnBitmapCommitted(IntSize(w, h), version)
+      readerLastVersion = pinnedVersion
     }
   }
 

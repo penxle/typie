@@ -16,4 +16,12 @@ internal expect object RenderBuffer {
   fun getPixelWidth(handle: Long): Int
 
   fun getPixelHeight(handle: Long): Int
+
+  fun getPinnedVersion(handle: Long): Long
+
+  fun getPinnedDamageFrom(handle: Long): Long
+
+  fun getPinnedDamagePointer(handle: Long): Long
+
+  fun getPinnedDamageCount(handle: Long): Int
 }

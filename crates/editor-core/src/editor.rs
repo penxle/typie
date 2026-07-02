@@ -2,7 +2,7 @@ use editor_clipboard::Slice;
 use editor_common::{HistoryTag, Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{EditOp, ModifierState, ModifierType, NodeType, Schema};
-use editor_renderer::{Mark, MarkData, RenderSink, Renderer};
+use editor_renderer::{Mark, MarkData, RenderSink, Renderer, damage::IRect};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
@@ -768,11 +768,13 @@ impl Editor {
     ///
     /// Inputs:
     /// - `render_epoch` — bumped by every non-selection invalidation (doc edits,
-    ///   reflow, font, theme), so it covers content/layout pixel changes and the
+    ///   reflow), so it covers content/layout pixel changes and the
     ///   non-selection marks (composition, dnd, tracked decorations).
     /// - `focused` — the selection mark's color depends on it.
     /// - the selection rects on this page — the only mark that moves without
     ///   bumping the epoch (the drag hot path).
+    /// - `theme.variant()` / `font_generation()` — hashed directly since
+    ///   `set_theme_variant`/`set_fonts` mutate resource without bumping the epoch.
     pub fn page_render_signature(&self, page_idx: u32) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -786,10 +788,14 @@ impl Editor {
                 r.rect.height.to_bits().hash(&mut hasher);
             }
         }
+        let res = self.resource.lock().unwrap();
+        res.theme.variant().hash(&mut hasher);
+        res.font_registry.font_generation().hash(&mut hasher);
+        drop(res);
         hasher.finish()
     }
 
-    pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
+    fn collect_page_marks(&self) -> Vec<Mark> {
         let mut marks: Vec<Mark> = Vec::new();
 
         // Push before selection so selection draws on top within BelowContent.
@@ -830,6 +836,12 @@ impl Editor {
             });
         }
 
+        marks
+    }
+
+    pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
+        let marks = self.collect_page_marks();
+        let doc = self.state.view();
         self.renderer.render_page(
             sink,
             &doc,
@@ -838,6 +850,33 @@ impl Editor {
             scale_factor,
             &marks,
         );
+    }
+
+    pub fn build_display_list(
+        &mut self,
+        page_idx: u32,
+        scale_factor: f32,
+    ) -> (editor_renderer::display_list::DisplayList, IRect) {
+        let size = self.view.pages()[page_idx as usize].size;
+        let page_bounds = IRect {
+            x0: 0,
+            y0: 0,
+            x1: (size.width * scale_factor).round() as i32,
+            y1: (size.height * scale_factor).round() as i32,
+        };
+
+        let marks = self.collect_page_marks();
+        let doc = self.state.view();
+        let mut recorder = editor_renderer::display_list::DisplayListRecorder::new(page_bounds);
+        self.renderer.render_page(
+            &mut recorder,
+            &doc,
+            &self.view,
+            page_idx as usize,
+            scale_factor,
+            &marks,
+        );
+        (recorder.into_list(), page_bounds)
     }
 
     pub fn export_page_vector(&mut self, page_idx: u32, scale_factor: f32) -> Vec<u8> {
@@ -1590,11 +1629,15 @@ mod tests {
     use crate::editor::Editor;
     use editor_crdt::{Changeset, Dot, ListOp};
     use editor_macros::state;
-    use editor_model::{ChildView, EditOp, Modifier, ModifierType, Node, NodeType, SeqItem};
+    use editor_model::{
+        ChildView, EditOp, LayoutMode, Modifier, ModifierType, Node, NodeType, PlainDoc, PlainNode,
+        PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
+    };
     use editor_state::{
         Affinity, PendingModifier, PendingModifiers, Position, Selection, StableResolveCtx, State,
     };
     use hashbrown::HashSet;
+    use std::collections::BTreeMap;
 
     use super::*;
 
@@ -4406,6 +4449,506 @@ mod tests {
         assert_eq!(
             sig_before, sig_after,
             "moving a collapsed caret changes no surface pixels, so the render signature must stay stable"
+        );
+    }
+
+    #[test]
+    fn page_signature_changes_when_theme_variant_changes() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+
+        let sig_before = editor.page_render_signature(0);
+
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .theme
+            .set_variant(ThemeVariant::DarkBlack);
+
+        let sig_after = editor.page_render_signature(0);
+        assert_ne!(
+            sig_before, sig_after,
+            "a theme variant change must change the render signature so a stale page isn't skipped"
+        );
+    }
+
+    #[test]
+    fn page_signature_changes_when_font_generation_changes() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+
+        let sig_before = editor.page_render_signature(0);
+
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .add_font_base("test", 400, compressed_test_font())
+            .unwrap();
+
+        let sig_after = editor.page_render_signature(0);
+        assert_ne!(
+            sig_before, sig_after,
+            "a font_generation bump must change the render signature so a stale page isn't skipped"
+        );
+    }
+
+    #[test]
+    fn build_display_list_replay_matches_full_render() {
+        use editor_renderer::backend::cpu::CpuSink;
+        use editor_renderer::damage::IRect;
+        let (state, _p) =
+            state! { doc { root { p1: paragraph { text("hello world") } } } selection: (p1, 0) };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+        let sf = 2.0f32;
+        let size = editor.view().pages()[0].size;
+        let (pw, ph) = (
+            (size.width * sf).round() as u16,
+            (size.height * sf).round() as u16,
+        );
+        let full = IRect {
+            x0: 0,
+            y0: 0,
+            x1: pw as i32,
+            y1: ph as i32,
+        };
+
+        let mut a = CpuSink::new(pw, ph);
+        editor.render_page(0, &mut a, sf);
+        let mut buf_full = vec![0u8; pw as usize * ph as usize * 4];
+        a.read_back_rect(&mut buf_full, pw as usize * 4, full);
+
+        let (dl, _b) = editor.build_display_list(0, sf);
+        let mut c = CpuSink::new(pw, ph);
+        editor_renderer::diff::replay(&dl, full, &mut c);
+        let mut buf_dl = vec![0u8; pw as usize * ph as usize * 4];
+        c.read_back_rect(&mut buf_dl, pw as usize * 4, full);
+
+        assert_eq!(buf_full, buf_dl);
+    }
+
+    #[test]
+    fn build_display_list_replay_matches_full_render_with_strokes() {
+        use editor_renderer::backend::cpu::CpuSink;
+        use editor_renderer::damage::IRect;
+        let (state, _callout, _p1) = state! {
+            doc { root { c: callout { p1: paragraph { text("quoted line") } } } } selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+        let sf = 2.0f32;
+        let size = editor.view().pages()[0].size;
+        let (pw, ph) = (
+            (size.width * sf).round() as u16,
+            (size.height * sf).round() as u16,
+        );
+        let full = IRect {
+            x0: 0,
+            y0: 0,
+            x1: pw as i32,
+            y1: ph as i32,
+        };
+
+        let mut a = CpuSink::new(pw, ph);
+        editor.render_page(0, &mut a, sf);
+        let mut buf_full = vec![0u8; pw as usize * ph as usize * 4];
+        a.read_back_rect(&mut buf_full, pw as usize * 4, full);
+
+        let (dl, _b) = editor.build_display_list(0, sf);
+        let mut c = CpuSink::new(pw, ph);
+        editor_renderer::diff::replay(&dl, full, &mut c);
+        let mut buf_dl = vec![0u8; pw as usize * ph as usize * 4];
+        c.read_back_rect(&mut buf_dl, pw as usize * 4, full);
+
+        assert_eq!(buf_full, buf_dl);
+    }
+
+    #[test]
+    fn build_display_list_records_text_content_primitive_for_real_font() {
+        use editor_renderer::display_list::PrimPayload;
+        let (state, _p) = state! { doc { root [font_family("test".to_string()), font_weight(400)] {
+            p1: paragraph { text("hello") }
+        } } selection: (p1, 0) };
+        let mut editor = editor_with_real_font(state);
+
+        let (dl, _b) = editor.build_display_list(0, 2.0);
+
+        assert!(
+            dl.primitives.iter().any(|p| matches!(
+                p.payload,
+                PrimPayload::Glyph { .. } | PrimPayload::FillPath { .. }
+            )),
+            "build_display_list must record a text content primitive for real-font text"
+        );
+    }
+
+    use editor_renderer::backend::cpu::CpuSink;
+    use editor_renderer::display_list::DisplayList;
+    use proptest::prelude::Strategy;
+
+    struct PageBuf {
+        sink: CpuSink,
+        prev: Option<DisplayList>,
+        w: u16,
+        h: u16,
+    }
+
+    fn page_px(editor: &Editor, i: usize, sf: f32) -> (u16, u16) {
+        let s = editor.view().pages()[i].size;
+        (
+            (s.width * sf).round() as u16,
+            (s.height * sf).round() as u16,
+        )
+    }
+
+    fn full_page_buf(editor: &mut Editor, i: usize, sf: f32, w: u16, h: u16) -> Vec<u8> {
+        let mut s = CpuSink::new(w, h);
+        editor.render_page(i as u32, &mut s, sf);
+        let mut buf = vec![0u8; w as usize * h as usize * 4];
+        s.read_back_rect(
+            &mut buf,
+            w as usize * 4,
+            IRect {
+                x0: 0,
+                y0: 0,
+                x1: w as i32,
+                y1: h as i32,
+            },
+        );
+        buf
+    }
+
+    fn changes_within_damage(old: &[u8], new: &[u8], w: u16, damage: &[IRect]) -> bool {
+        let pitch = w as usize * 4;
+        for (idx, (a, b)) in old.chunks_exact(4).zip(new.chunks_exact(4)).enumerate() {
+            if a != b {
+                let px = (idx * 4 % pitch / 4) as i32;
+                let py = (idx * 4 / pitch) as i32;
+                if !damage
+                    .iter()
+                    .any(|r| r.x0 <= px && px < r.x1 && r.y0 <= py && py < r.y1)
+                {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(48))]
+        #[test]
+        fn incremental_render_equals_full_render(
+            sf in proptest::prop_oneof![
+                proptest::strategy::Just(1.0f32), proptest::strategy::Just(1.5),
+                proptest::strategy::Just(2.0), proptest::strategy::Just(3.0)],
+            ops in proptest::collection::vec(
+                proptest::prop_oneof![
+                    "[a-z ]{1,4}".prop_map(|s| Message::TextInput { ops: vec![FlatImeOp::ReplaceSelection { text: s }] }),
+                    proptest::strategy::Just(Message::Key { event: KeyEvent { key: Key::Enter, modifiers: InputModifiers::default() } }),
+                    proptest::strategy::Just(Message::Navigation { op: NavigationOp::Move {
+                        movement: Movement::Grapheme { direction: Direction::Backward }, extend: false } }),
+                    proptest::strategy::Just(Message::Navigation { op: NavigationOp::Move {
+                        movement: Movement::Grapheme { direction: Direction::Forward }, extend: true } }),
+                ], 1..24)
+        ) {
+            let (state, _p) = state! { doc { root (
+                layout_mode: LayoutMode::Paginated {
+                    page_width: 400,
+                    page_height: 600,
+                    page_margin_top: 20,
+                    page_margin_bottom: 20,
+                    page_margin_left: 20,
+                    page_margin_right: 20,
+                }
+            ) [font_family("test".to_string()), font_weight(400)] {
+                p1: paragraph { text("the quick brown fox jumps over the lazy dog") }
+                paragraph { text("second line of seed content here") }
+            } } selection: (p1, 4) };
+            let mut editor = editor_with_real_font(state);
+
+            let mut pages: Vec<PageBuf> = Vec::new();
+            for i in 0..editor.view().pages().len() {
+                let (w, h) = page_px(&editor, i, sf);
+                let full = IRect { x0: 0, y0: 0, x1: w as i32, y1: h as i32 };
+                let mut pb = PageBuf { sink: CpuSink::new(w, h), prev: None, w, h };
+                let (dl, _b) = editor.build_display_list(i as u32, sf);
+                editor_renderer::diff::render_incremental(pb.prev.as_ref(), &dl, &mut pb.sink, full);
+                pb.prev = Some(dl);
+                pages.push(pb);
+            }
+
+            for op in ops {
+                let old_bufs: Vec<Vec<u8>> = (0..pages.len())
+                    .map(|i| { let (w, h) = (pages[i].w, pages[i].h); full_page_buf(&mut editor, i, sf, w, h) })
+                    .collect();
+
+                editor.apply(op);
+                editor.tick().unwrap();
+
+                let n = editor.view().pages().len();
+                pages.truncate(n);
+
+                for i in 0..n {
+                    let (w, h) = page_px(&editor, i, sf);
+                    if i >= pages.len() || pages[i].w != w || pages[i].h != h {
+                        let pb = PageBuf { sink: CpuSink::new(w, h), prev: None, w, h };
+                        if i >= pages.len() { pages.push(pb); } else { pages[i] = pb; }
+                    }
+                    let full = IRect { x0: 0, y0: 0, x1: w as i32, y1: h as i32 };
+                    let (dl, _b) = editor.build_display_list(i as u32, sf);
+                    let pb = &mut pages[i];
+                    let damage = editor_renderer::diff::render_incremental(pb.prev.as_ref(), &dl, &mut pb.sink, full);
+                    pb.prev = Some(dl);
+                    let mut inc = vec![0u8; w as usize * h as usize * 4];
+                    pb.sink.read_back_rect(&mut inc, w as usize * 4, full);
+                    let fresh = full_page_buf(&mut editor, i, sf, w, h);
+
+                    proptest::prop_assert_eq!(&inc, &fresh);
+                    if let Some(old) = old_bufs.get(i) {
+                        if old.len() == fresh.len() {
+                            proptest::prop_assert!(changes_within_damage(old, &fresh, w, &damage));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    const TEST_FONT_TTF: &[u8] = include_bytes!("../../../assets/Pretendard-Regular.ttf");
+
+    fn compressed_test_font() -> &'static [u8] {
+        static C: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+        C.get_or_init(|| editor_resource::compress_zstd(TEST_FONT_TTF))
+    }
+
+    fn real_font_resource() -> Arc<Mutex<editor_resource::Resource>> {
+        use editor_resource::{FontFamily, FontFamilySource, FontWeight};
+        let mut res = editor_resource::Resource::new_test();
+        res.set_fonts(vec![FontFamily {
+            name: "test".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "test-400".into(),
+                chunks: vec![vec![0x0000, 0xFFFF]],
+            }],
+        }]);
+        res.add_font_base("test", 400, compressed_test_font())
+            .unwrap();
+        Arc::new(Mutex::new(res))
+    }
+
+    fn root_font_modifiers() -> BTreeMap<ModifierType, Modifier> {
+        BTreeMap::from([
+            (
+                ModifierType::FontFamily,
+                Modifier::FontFamily {
+                    value: "test".into(),
+                },
+            ),
+            (
+                ModifierType::FontWeight,
+                Modifier::FontWeight { value: 400 },
+            ),
+        ])
+    }
+
+    fn editor_with_real_font(state: State) -> Editor {
+        let res = real_font_resource();
+        let mut editor = Editor::new_test_with_resource(state, Arc::clone(&res));
+        editor.view = View::new(Viewport::new(800.0, 600.0, 1.0), res);
+        editor.view.layout(&editor.state);
+        editor.tick().unwrap();
+        editor
+    }
+
+    fn big_doc_editor(n_paras: usize) -> Editor {
+        let mut paras = Vec::with_capacity(n_paras);
+        for _ in 0..n_paras {
+            let text = PlainNodeEntry {
+                node: PlainNode::Text(PlainTextNode {
+                    text: "the quick brown fox jumps over the lazy dog".into(),
+                }),
+                modifiers: BTreeMap::new(),
+                style: None,
+                marker: None,
+                children: vec![],
+            };
+            paras.push(PlainNodeEntry {
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+                modifiers: BTreeMap::new(),
+                style: None,
+                marker: None,
+                children: vec![text],
+            });
+        }
+        let plain = PlainDoc {
+            root: PlainNodeEntry {
+                node: PlainNode::Root(PlainRootNode {
+                    layout_mode: LayoutMode::Paginated {
+                        page_width: 400,
+                        page_height: 600,
+                        page_margin_top: 20,
+                        page_margin_bottom: 20,
+                        page_margin_left: 20,
+                        page_margin_right: 20,
+                    },
+                }),
+                modifiers: root_font_modifiers(),
+                style: None,
+                marker: None,
+                children: paras,
+            },
+            styles: BTreeMap::new(),
+        };
+        let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
+        state.selection = Some(Selection::collapsed(Position::new(handles[&vec![0, 0]], 0)));
+        editor_with_real_font(state)
+    }
+
+    #[test]
+    fn localized_edit_damage_is_small_and_correct() {
+        let mut editor = big_doc_editor(80);
+        let sf = 2.0f32;
+        let size = editor.view().pages()[0].size;
+        let (w, h) = (
+            (size.width * sf).round() as u16,
+            (size.height * sf).round() as u16,
+        );
+        let full = IRect {
+            x0: 0,
+            y0: 0,
+            x1: w as i32,
+            y1: h as i32,
+        };
+
+        let mut sink = CpuSink::new(w, h);
+        let (dl0, _b) = editor.build_display_list(0, sf);
+        editor_renderer::diff::render_incremental(None, &dl0, &mut sink, full);
+        let old_full = full_page_buf(&mut editor, 0, sf, w, h);
+        let prev = dl0;
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "x".into() }],
+        });
+        editor.tick().unwrap();
+        let (dl1, _b) = editor.build_display_list(0, sf);
+        let damage = editor_renderer::diff::render_incremental(Some(&prev), &dl1, &mut sink, full);
+
+        let mut inc = vec![0u8; w as usize * h as usize * 4];
+        sink.read_back_rect(&mut inc, w as usize * 4, full);
+        let fresh = full_page_buf(&mut editor, 0, sf, w, h);
+
+        assert_eq!(inc, fresh, "incremental must equal full render");
+        let dmg_area: i64 = damage.iter().map(|r| r.area()).sum();
+        assert!(
+            dmg_area > 0 && dmg_area * 5 < full.area(),
+            "localized edit damage {dmg_area} must be small vs full {}",
+            full.area()
+        );
+        assert!(changes_within_damage(&old_full, &fresh, w, &damage));
+    }
+
+    struct SeedPage {
+        sink: CpuSink,
+        prev: DisplayList,
+        w: u16,
+        h: u16,
+    }
+
+    #[test]
+    fn top_insert_reflows_lower_page() {
+        let mut editor = big_doc_editor(60);
+        let sf = 1.0f32;
+        assert!(
+            editor.view().pages().len() >= 2,
+            "seed must span 2+ pages -- increase paragraph count"
+        );
+
+        let mut pages: Vec<SeedPage> = Vec::new();
+        for i in 0..editor.view().pages().len() {
+            let size = editor.view().pages()[i].size;
+            let (w, h) = (
+                (size.width * sf).round() as u16,
+                (size.height * sf).round() as u16,
+            );
+            let full = IRect {
+                x0: 0,
+                y0: 0,
+                x1: w as i32,
+                y1: h as i32,
+            };
+            let mut sink = CpuSink::new(w, h);
+            let (dl, _b) = editor.build_display_list(i as u32, sf);
+            editor_renderer::diff::render_incremental(None, &dl, &mut sink, full);
+            pages.push(SeedPage {
+                sink,
+                prev: dl,
+                w,
+                h,
+            });
+        }
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection {
+                text: "the quick brown fox jumps over the lazy dog ".repeat(20),
+            }],
+        });
+        editor.tick().unwrap();
+
+        let n = editor.view().pages().len();
+        pages.truncate(n);
+        let mut lower_damaged = false;
+        for i in 0..n {
+            let size = editor.view().pages()[i].size;
+            let (w, h) = (
+                (size.width * sf).round() as u16,
+                (size.height * sf).round() as u16,
+            );
+            let full = IRect {
+                x0: 0,
+                y0: 0,
+                x1: w as i32,
+                y1: h as i32,
+            };
+            let (dl, _b) = editor.build_display_list(i as u32, sf);
+            if i >= pages.len() || pages[i].w != w || pages[i].h != h {
+                let mut sink = CpuSink::new(w, h);
+                editor_renderer::diff::render_incremental(None, &dl, &mut sink, full);
+                let mut inc = vec![0u8; w as usize * h as usize * 4];
+                sink.read_back_rect(&mut inc, w as usize * 4, full);
+                let fresh = full_page_buf(&mut editor, i, sf, w, h);
+                assert_eq!(inc, fresh, "new page {i} mismatch");
+                continue;
+            }
+            let pb = &mut pages[i];
+            let damage =
+                editor_renderer::diff::render_incremental(Some(&pb.prev), &dl, &mut pb.sink, full);
+            if i >= 1 && !damage.is_empty() {
+                lower_damaged = true;
+            }
+            let mut inc = vec![0u8; w as usize * h as usize * 4];
+            pb.sink.read_back_rect(&mut inc, w as usize * 4, full);
+            let fresh = full_page_buf(&mut editor, i, sf, w, h);
+            assert_eq!(
+                inc, fresh,
+                "page {i} incremental(prev->new) must equal full after top reflow"
+            );
+        }
+        assert!(
+            lower_damaged,
+            "top insert must propagate damage to a lower page (reflow), not just page 0"
         );
     }
 }

@@ -22,4 +22,13 @@ internal actual object RenderBuffer {
   actual fun getPixelWidth(handle: Long): Int = SwiftRenderBuffer.width(handle)
 
   actual fun getPixelHeight(handle: Long): Int = SwiftRenderBuffer.height(handle)
+
+  actual fun getPinnedVersion(handle: Long): Long = SwiftRenderBuffer.pinnedVersion(handle)
+
+  actual fun getPinnedDamageFrom(handle: Long): Long = SwiftRenderBuffer.pinnedDamageFrom(handle)
+
+  actual fun getPinnedDamagePointer(handle: Long): Long =
+    SwiftRenderBuffer.pinnedDamagePointer(handle)
+
+  actual fun getPinnedDamageCount(handle: Long): Int = SwiftRenderBuffer.pinnedDamageCount(handle)
 }

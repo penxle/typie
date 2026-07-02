@@ -72,6 +72,7 @@ internal actual fun RenderCanvas(
     var cachedHeight = 0
     var cachedBytes: ByteArray? = null
     var cachedAndroidBitmap: Bitmap? = null
+    var readerLastVersion = 0L
 
     trigger.conflate().collect { version ->
       if (!RenderBuffer.beginRead(handle)) return@collect
@@ -88,7 +89,41 @@ internal actual fun RenderCanvas(
       val bytes =
         cachedBytes?.takeIf { it.size == byteCount }
           ?: ByteArray(byteCount).also { cachedBytes = it }
-      copyNativeBytes(dataAddr, bytes, byteCount)
+
+      val pinnedVersion = RenderBuffer.getPinnedVersion(handle)
+      val damageFrom = RenderBuffer.getPinnedDamageFrom(handle)
+      val damageCount = RenderBuffer.getPinnedDamageCount(handle)
+      val damagePtr = RenderBuffer.getPinnedDamagePointer(handle)
+      val partial =
+        shouldPartialUpload(
+          cachedBytes != null,
+          cachedWidth,
+          cachedHeight,
+          w,
+          h,
+          readerLastVersion,
+          damageFrom,
+          damageCount,
+        )
+      if (partial && damagePtr != 0L && damageCount.toLong() * 4 <= Int.MAX_VALUE) {
+        val ints = readNativeInts(damagePtr, damageCount * 4)
+        val rr = damageRowRange(ints, damageCount, h)
+        val rowStride = w.toLong() * 4
+        val offL = rr.minY.toLong() * rowStride
+        val lenL = (rr.maxY - rr.minY).toLong() * rowStride
+        if (
+          rr.minY < rr.maxY &&
+            offL >= 0 &&
+            lenL <= Int.MAX_VALUE &&
+            offL <= bytes.size.toLong() - lenL
+        ) {
+          copyNativeBytesRange(dataAddr, bytes, offL.toInt(), lenL.toInt())
+        } else {
+          copyNativeBytes(dataAddr, bytes, byteCount)
+        }
+      } else {
+        copyNativeBytes(dataAddr, bytes, byteCount)
+      }
       RenderBuffer.endRead(handle)
 
       // ARGB_8888 stores bytes in R,G,B,A order in memory (despite the name) and is
@@ -105,6 +140,7 @@ internal actual fun RenderCanvas(
       androidBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bytes))
       imageBitmap = androidBitmap.asImageBitmap()
       currentOnBitmapCommitted(IntSize(w, h), version)
+      readerLastVersion = pinnedVersion
     }
   }
 
@@ -123,3 +159,10 @@ internal actual fun RenderCanvas(
 internal actual fun copyNativeBytes(srcAddr: Long, dst: ByteArray, length: Int) {
   Pointer(srcAddr).read(0, dst, 0, length)
 }
+
+internal actual fun copyNativeBytesRange(srcAddr: Long, dst: ByteArray, offset: Int, length: Int) {
+  Pointer(srcAddr).read(offset.toLong(), dst, offset, length)
+}
+
+internal actual fun readNativeInts(srcAddr: Long, count: Int): IntArray =
+  Pointer(srcAddr).getIntArray(0, count)

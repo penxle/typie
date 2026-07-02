@@ -56,7 +56,7 @@ pub fn rasterize_bitmap(
                 alpha
             };
             Some(RasterizedGlyph {
-                data,
+                data: data.into(),
                 width: dst_w,
                 height: dst_h,
                 placement_left,
@@ -73,7 +73,7 @@ pub fn rasterize_bitmap(
                 rgba
             };
             Some(RasterizedGlyph {
-                data,
+                data: data.into(),
                 width: dst_w,
                 height: dst_h,
                 placement_left,
@@ -90,7 +90,7 @@ pub fn rasterize_bitmap(
                 rgba
             };
             Some(RasterizedGlyph {
-                data,
+                data: data.into(),
                 width: dst_w,
                 height: dst_h,
                 placement_left,

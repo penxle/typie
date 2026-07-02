@@ -1,5 +1,7 @@
 use editor_macros::ffi;
-use editor_renderer::{RenderBackend, RenderSink};
+use editor_renderer::RenderBackend;
+use editor_renderer::backend::cpu::CpuSink;
+use editor_renderer::damage::IRect;
 
 use super::render_buffer::RenderBuffer;
 use crate::error::FfiError;
@@ -46,20 +48,22 @@ impl SurfaceHandle {
         self.scale_factor
     }
 
-    pub fn sink(&mut self) -> &mut dyn RenderSink {
-        self.backend.sink()
+    pub fn cpu_sink(&mut self) -> &mut CpuSink {
+        self.backend.cpu_sink()
     }
 
-    pub fn present(&mut self) {
+    pub fn present_damage(&mut self, damage: &[IRect]) -> bool {
+        if self.handle == 0 {
+            return true;
+        }
+
+        let (w, handle) = (self.width, self.handle);
         match &mut self.backend {
-            RenderBackend::Cpu(sink) => {
-                if self.handle == 0 {
-                    return;
-                }
-                unsafe {
-                    (*(self.handle as *const RenderBuffer)).commit(|data| sink.flush_to(data));
-                }
-            }
+            RenderBackend::Cpu(sink) => unsafe {
+                (*(handle as *const RenderBuffer)).commit_damage(damage, |data, r| {
+                    sink.read_back_rect_absolute(data, w as usize * 4, r);
+                })
+            },
         }
     }
 
