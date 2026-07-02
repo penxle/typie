@@ -442,4 +442,49 @@ mod tests {
             "pending style must be consumed"
         );
     }
+
+    #[test]
+    fn materializes_synthetic_trailing_paragraph_after_unit() {
+        use editor_model::NodeType;
+        use editor_state::{Affinity, Position, Selection};
+
+        // Real ops = [HR] only; the Root schema derives a synthetic trailing
+        // paragraph and the caret lands inside it. Typing must materialize the
+        // scaffold into a real paragraph instead of erroring OffsetOutOfBounds.
+        let (initial, _root) = state! {
+            doc { r: root { horizontal_rule } }
+            selection: (r, 0)
+        };
+        let synth_p = {
+            let view = initial.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(
+            synth_p.is_synthetic(),
+            "trailing paragraph must be synthetic"
+        );
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_selection(Some(Selection::collapsed(Position {
+            node: synth_p,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        })))
+        .unwrap();
+        assert!(insert_text(&mut tr, "x").unwrap());
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                horizontal_rule
+                p1: paragraph { text("x") }
+            } }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
 }

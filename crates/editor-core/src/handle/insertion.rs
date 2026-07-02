@@ -181,6 +181,49 @@ mod tests {
     }
 
     #[test]
+    fn insert_text_into_synthetic_trailing_paragraph_after_unit() {
+        use editor_model::NodeType;
+        use editor_state::{Position, Selection};
+
+        // The doc's real content ends with a horizontal rule; the Root schema
+        // derives a synthetic trailing paragraph. Placing the caret in it and
+        // typing must materialize it into a real paragraph — previously this
+        // panicked with OffsetOutOfBounds and no text was inserted at all.
+        let (state, _root) = state! {
+            doc { r: root { horizontal_rule } }
+            selection: (r, 0)
+        };
+        let synth_p = {
+            let view = state.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(synth_p.is_synthetic());
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(synth_p, 0)),
+            },
+        });
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "hi".into() },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                horizontal_rule
+                p1: paragraph { text("hi") }
+            } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn insert_break_block() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }

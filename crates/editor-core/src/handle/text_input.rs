@@ -1139,6 +1139,48 @@ mod tests {
     }
 
     #[test]
+    fn ime_commit_into_synthetic_trailing_paragraph_after_unit() {
+        use editor_model::NodeType;
+        use editor_state::{Position, Selection};
+
+        // A Korean/IME commit into the synthetic trailing paragraph after a unit
+        // block must materialize it too — the flat-IME path funnels through the
+        // same insert_text command as direct typing, so it must not crash.
+        let (state, _root) = state! {
+            doc { r: root { horizontal_rule } }
+            selection: (r, 0)
+        };
+        let synth_p = {
+            let view = state.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(synth_p.is_synthetic());
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(synth_p, 0)),
+            },
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "가".into() }],
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                horizontal_rule
+                p1: paragraph { text("가") }
+            } }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn set_region_rejects_cross_block() {
         let (state, ..) = state! {
             doc {
