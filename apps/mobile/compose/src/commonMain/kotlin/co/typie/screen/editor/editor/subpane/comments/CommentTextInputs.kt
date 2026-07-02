@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -36,6 +37,7 @@ import co.typie.ext.pressScale
 import co.typie.ext.rememberTextInputState
 import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
+import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
@@ -63,10 +65,12 @@ internal fun CommentComposer(
   value: String,
   onValueChange: (String) -> Unit,
   placeholder: String,
+  submitting: Boolean,
   onFocusChange: (Boolean) -> Unit,
   onSubmit: (String) -> Unit,
 ) {
   val hasText = value.isNotBlank()
+  val filled = hasText || submitting
 
   Box(modifier = Modifier.fillMaxWidth()) {
     CommentTextInput(
@@ -86,32 +90,49 @@ internal fun CommentComposer(
           .padding(end = 6.dp, bottom = 6.dp)
           .size(28.dp)
           .clip(CircleShape)
-          .background(if (hasText) AppTheme.colors.surfaceInverse else Color.Transparent)
-          .clickable(enabled = hasText) { onSubmit(value) },
+          .background(if (filled) AppTheme.colors.surfaceInverse else Color.Transparent)
+          .clickable(enabled = hasText && !submitting) { onSubmit(value) },
       contentAlignment = Alignment.Center,
     ) {
-      Icon(
-        icon = Lucide.ArrowUp,
-        modifier = Modifier.size(16.dp),
-        tint = if (hasText) AppTheme.colors.textOnInverse else AppTheme.colors.textHint,
-      )
+      if (submitting) {
+        Spinner(color = AppTheme.colors.textOnInverse, modifier = Modifier.size(16.dp))
+      } else {
+        Icon(
+          icon = Lucide.ArrowUp,
+          modifier = Modifier.size(16.dp),
+          tint = if (hasText) AppTheme.colors.textOnInverse else AppTheme.colors.textHint,
+        )
+      }
     }
   }
 }
 
 @Composable
-internal fun CommentTextActionButton(text: String, color: Color, onClick: () -> Unit) {
+internal fun CommentTextActionButton(
+  text: String,
+  color: Color,
+  loading: Boolean = false,
+  onClick: () -> Unit,
+) {
   InteractionScope {
     Box(
       modifier =
         Modifier.height(28.dp)
           .clip(RoundedCornerShape(6.dp))
-          .clickable { onClick() }
+          .clickable(enabled = !loading) { onClick() }
           .pressScale(0.95f)
           .padding(horizontal = 4.dp),
       contentAlignment = Alignment.Center,
     ) {
-      Text(text = text, style = AppTheme.typography.action, color = color)
+      Text(
+        text = text,
+        modifier = Modifier.graphicsLayer { alpha = if (loading) 0f else 1f },
+        style = AppTheme.typography.action,
+        color = color,
+      )
+      if (loading) {
+        Spinner(color = color)
+      }
     }
   }
 }

@@ -168,10 +168,23 @@ private fun CommentsSheetContent(
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var pendingReopenedThreadId by remember { mutableStateOf<String?>(null) }
+  var commentSubmitInProgress by remember { mutableStateOf(false) }
 
   suspend fun afterDiscardingCommentInput(block: suspend () -> Unit) {
     if (confirmDiscardCommentInput(state = state, dialog = dialog)) {
       block()
+    }
+  }
+
+  suspend fun submitCommentDraft(block: suspend () -> Unit) {
+    if (commentSubmitInProgress) {
+      return
+    }
+    commentSubmitInProgress = true
+    try {
+      block()
+    } finally {
+      commentSubmitInProgress = false
     }
   }
 
@@ -240,25 +253,38 @@ private fun CommentsSheetContent(
   }
 
   suspend fun submitReply(threadId: String, content: String) {
-    when (model.createComment(threadId = threadId, content = content.trim())) {
-      is Result.Ok -> state.clearReplyText()
-      is Result.Err,
-      is Result.Exception -> toast.show(ToastType.Error, "코멘트를 작성할 수 없어요.")
+    val trimmedContent = content.trim()
+    if (trimmedContent.isEmpty()) {
+      return
+    }
+    submitCommentDraft {
+      when (model.createComment(threadId = threadId, content = trimmedContent)) {
+        is Result.Ok -> state.clearReplyText()
+        is Result.Err,
+        is Result.Exception -> toast.show(ToastType.Error, "코멘트를 작성할 수 없어요.")
+      }
     }
   }
 
   suspend fun submitVirtual(content: String) {
     val virtualThread = state.virtualThread ?: return
-    when (
-      val result = model.createThread(selection = virtualThread.selection, content = content.trim())
-    ) {
-      is Result.Ok -> {
-        state.clearVirtualThread()
-        state.activateThread(result.value.id)
-      }
+    val trimmedContent = content.trim()
+    if (trimmedContent.isEmpty()) {
+      return
+    }
+    submitCommentDraft {
+      when (
+        val result =
+          model.createThread(selection = virtualThread.selection, content = trimmedContent)
+      ) {
+        is Result.Ok -> {
+          state.clearVirtualThread()
+          state.activateThread(result.value.id)
+        }
 
-      is Result.Err,
-      is Result.Exception -> toast.show(ToastType.Error, "코멘트를 작성할 수 없어요.")
+        is Result.Err,
+        is Result.Exception -> toast.show(ToastType.Error, "코멘트를 작성할 수 없어요.")
+      }
     }
   }
 
@@ -320,10 +346,12 @@ private fun CommentsSheetContent(
       state.clearEditing()
       return
     }
-    when (model.updateComment(commentId = comment.id, content = content)) {
-      is Result.Ok -> state.clearEditing()
-      is Result.Err,
-      is Result.Exception -> toast.show(ToastType.Error, "코멘트를 수정할 수 없어요.")
+    submitCommentDraft {
+      when (model.updateComment(commentId = comment.id, content = content)) {
+        is Result.Ok -> state.clearEditing()
+        is Result.Err,
+        is Result.Exception -> toast.show(ToastType.Error, "코멘트를 수정할 수 없어요.")
+      }
     }
   }
 
@@ -442,6 +470,7 @@ private fun CommentsSheetContent(
             isOwner = isOwner,
             editingCommentId = state.editingCommentId,
             editingText = state.editingText,
+            submittingDraft = commentSubmitInProgress,
             replyText = state.replyText(thread.id),
             onClick = { scope.launch { activateThread(thread) } },
             onStartEdit = { comment -> scope.launch { startEdit(comment) } },
@@ -473,6 +502,7 @@ private fun CommentsSheetContent(
             VirtualCommentThreadRow(
               location = composeLocation,
               value = virtualThread.content,
+              submitting = commentSubmitInProgress,
               onValueChange = state::updateVirtualContent,
               onFocusChange = onInputFocusChanged,
               onSubmit = { content -> scope.launch { submitVirtual(content) } },

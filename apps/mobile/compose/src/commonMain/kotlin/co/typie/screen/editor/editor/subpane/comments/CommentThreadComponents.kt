@@ -68,6 +68,7 @@ internal fun CommentThreadRow(
   isOwner: Boolean,
   editingCommentId: String?,
   editingText: String,
+  submittingDraft: Boolean,
   replyText: String,
   onClick: () -> Unit,
   onStartEdit: (CommentsSheetComment_comment) -> Unit,
@@ -132,6 +133,7 @@ internal fun CommentThreadRow(
         isOwner = isOwner,
         editing = active && editingCommentId == comment.id,
         editingText = editingText,
+        submittingEdit = submittingDraft && editingCommentId == comment.id,
         onStartEdit = { onStartEdit(comment) },
         onEditingTextChange = onEditingTextChange,
         onCancelEdit = onCancelEdit,
@@ -156,6 +158,7 @@ internal fun CommentThreadRow(
         value = replyText,
         onValueChange = onReplyTextChange,
         placeholder = "코멘트 추가...",
+        submitting = submittingDraft,
         onFocusChange = onInputFocusChanged,
         onSubmit = onSubmitReply,
       )
@@ -167,6 +170,7 @@ internal fun CommentThreadRow(
 internal fun VirtualCommentThreadRow(
   location: CommentThreadLocation?,
   value: String,
+  submitting: Boolean,
   onValueChange: (String) -> Unit,
   onFocusChange: (Boolean) -> Unit,
   onSubmit: (String) -> Unit,
@@ -193,6 +197,7 @@ internal fun VirtualCommentThreadRow(
       value = value,
       onValueChange = onValueChange,
       placeholder = "코멘트 추가...",
+      submitting = submitting,
       onFocusChange = onFocusChange,
       onSubmit = onSubmit,
     )
@@ -276,6 +281,7 @@ private fun CommentItem(
   isOwner: Boolean,
   editing: Boolean,
   editingText: String,
+  submittingEdit: Boolean,
   onStartEdit: () -> Unit,
   onEditingTextChange: (String) -> Unit,
   onCancelEdit: () -> Unit,
@@ -348,6 +354,7 @@ private fun CommentItem(
             CommentTextActionButton(
               text = "저장",
               color = AppTheme.colors.textDefault,
+              loading = submittingEdit,
               onClick = onSubmitEdit,
             )
           }
