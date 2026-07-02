@@ -1,14 +1,17 @@
 use std::collections::BTreeMap;
 
 use editor_common::Tri;
-use editor_model::{LeafView, Modifier, ModifierState, ModifierType, NodeType, NodeView, Schema};
+use editor_model::{
+    LeafView, Modifier, ModifierState, ModifierType, NodeType, NodeView, Schema,
+    text_style_default_modifier,
+};
 use strum::IntoEnumIterator;
 
+use crate::modifier_resolution::caret_modifiers;
 use crate::pending_modifier::PendingModifier;
 use crate::projected_state::ProjectedState;
 use crate::selection::ResolvedSelection;
 use crate::selection::Selection;
-use crate::stable_selection::caret_modifiers;
 use crate::traversal;
 
 pub enum RangeNode<'a> {
@@ -62,6 +65,52 @@ pub fn range_nodes<'a>(rs: &ResolvedSelection<'a>) -> Vec<RangeNode<'a>> {
     out
 }
 
+fn modifier_for_range_state(node: &RangeNode, ty: ModifierType) -> Option<Modifier> {
+    node.effective()
+        .get(&ty)
+        .cloned()
+        .or_else(|| text_style_default_modifier(ty))
+}
+
+fn modifier_for_caret_state(
+    caret: &BTreeMap<ModifierType, Modifier>,
+    textblock: &NodeView,
+    ty: ModifierType,
+) -> Option<Modifier> {
+    if !modifier_applies_at_caret(textblock, ty) {
+        return None;
+    }
+    if let Some(modifier) = caret.get(&ty) {
+        return Some(modifier.clone());
+    }
+    let default = text_style_default_modifier(ty)?;
+    (if Schema::modifier_spec(ty).inheritable {
+        textblock.effective().get(&ty).cloned()
+    } else {
+        None
+    })
+    .or(Some(default))
+}
+
+fn modifier_applies_at_caret(textblock: &NodeView, ty: ModifierType) -> bool {
+    let target = &Schema::modifier_spec(ty).target;
+    let targets = target.rightmost_node_types();
+    let block_path = textblock_type_path(textblock);
+    if targets.contains(&textblock.node_type()) && target.matches(&block_path) {
+        return true;
+    }
+    targets.contains(&NodeType::Text)
+        && Schema::node_spec(textblock.node_type())
+            .content
+            .matches(NodeType::Text)
+}
+
+fn textblock_type_path(textblock: &NodeView) -> Vec<NodeType> {
+    let mut path: Vec<_> = textblock.ancestors().map(|n| n.node_type()).collect();
+    path.reverse();
+    path
+}
+
 pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState {
     let mut out = ModifierState::default();
     let nodes = range_nodes(rs);
@@ -78,7 +127,7 @@ pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState 
             if !target.matches(&n.type_path()) {
                 continue;
             }
-            let value = n.effective().get(&ty).cloned();
+            let value = modifier_for_range_state(n, ty);
             match (value, &canonical) {
                 (Some(m), Some(c)) if &m == c => {}
                 (Some(_), Some(_)) => {
@@ -120,7 +169,7 @@ fn is_bold_set<'a>(mut mods: impl Iterator<Item = &'a Modifier>) -> bool {
 }
 
 fn leaf_is_bold(l: &LeafView) -> bool {
-    l.own_no_style(ModifierType::Bold).is_some()
+    matches!(l.effective().get(&ModifierType::Bold), Some(Modifier::Bold))
         || matches!(
             l.effective().get(&ModifierType::FontWeight),
             Some(Modifier::FontWeight { value }) if *value >= 700
@@ -166,11 +215,24 @@ pub fn resolve_modifier_state(
     let rs = sel.resolve(&view)?;
     if rs.is_collapsed() {
         let caret = caret_modifiers(state, &sel.head, pending);
+        let modifiers = if let Some(node) = view.node(sel.head.node)
+            && Schema::node_spec(node.node_type()).is_textblock()
+        {
+            let mut modifiers = BTreeMap::new();
+            for ty in ModifierType::iter() {
+                if let Some(modifier) = modifier_for_caret_state(&caret, &node, ty) {
+                    modifiers.insert(ty, modifier);
+                }
+            }
+            modifiers
+        } else {
+            caret
+        };
         let mut out = ModifierState::default();
-        for m in caret.values() {
+        for m in modifiers.values() {
             out.set_uniform(m);
         }
-        if is_bold_set(caret.values()) {
+        if is_bold_set(modifiers.values()) {
             out.effective_bold = Tri::Uniform { value: () };
         }
         Some(out)
@@ -183,7 +245,9 @@ pub fn resolve_modifier_state(
 mod tests {
     use editor_common::Tri;
     use editor_crdt::{Dot, ListOp, OpGraph};
-    use editor_model::{Anchor, Bias, EditOp, Modifier, ModifierAttrOp, NodeType, SeqItem, SpanOp};
+    use editor_model::{
+        Anchor, Bias, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeType, SeqItem, SpanOp,
+    };
 
     use crate::pending_modifier::PendingModifier;
     use crate::projected_state::ProjectedState;
@@ -218,6 +282,27 @@ mod tests {
         (state, root, para)
     }
 
+    fn fold_title_state() -> (ProjectedState, Dot) {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let fold = graph
+            .add_mut(seq_block(0, NodeType::Fold, vec![root]))
+            .unwrap()
+            .id;
+        let title = graph
+            .add_mut(seq_block(1, NodeType::FoldTitle, vec![root, fold]))
+            .unwrap()
+            .id;
+        let content = graph
+            .add_mut(seq_block(2, NodeType::FoldContent, vec![root, fold]))
+            .unwrap()
+            .id;
+        graph
+            .add_mut(seq_block(3, NodeType::Paragraph, vec![root, fold, content]))
+            .unwrap();
+        (ProjectedState::from_graph(graph).unwrap(), title)
+    }
+
     fn sel(anchor: (Dot, usize), head: (Dot, usize)) -> Selection {
         Selection::new(
             Position::new(anchor.0, anchor.1),
@@ -229,25 +314,27 @@ mod tests {
         Selection::collapsed(Position::new(node, offset))
     }
 
+    fn first_leaf_dot(state: &ProjectedState, para: Dot) -> Dot {
+        let view = state.view();
+        let p = view.node(para).unwrap();
+        p.children()
+            .next()
+            .and_then(|c| {
+                if let editor_model::ChildView::Leaf(l) = c {
+                    Some(l.dot())
+                } else {
+                    None
+                }
+            })
+            .unwrap()
+    }
+
     // §4.1: collapsed uniform — caret inside a bold run → bold == Uniform; pending applies
     #[test]
     fn test_1_collapsed_uniform_bold() {
         let (mut state, _root, para) = simple_para_state(&['a', 'b']);
         // get the dot of 'a' leaf
-        let leaf_a = {
-            let view = state.view();
-            let p = view.node(para).unwrap();
-            p.children()
-                .next()
-                .and_then(|c| {
-                    if let editor_model::ChildView::Leaf(l) = c {
-                        Some(l.dot())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap()
-        };
+        let leaf_a = first_leaf_dot(&state, para);
         state
             .apply(EditOp::Span(SpanOp::AddSpan {
                 start: Anchor {
@@ -291,6 +378,123 @@ mod tests {
         )
         .unwrap();
         assert_eq!(ms.italic, Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn range_clear_inheritable_value_reports_resolved_default_not_parent() {
+        let (mut state, root, para) = simple_para_state(&['a']);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: root,
+                modifier: Modifier::FontWeight { value: 500 },
+            }))
+            .unwrap();
+        let leaf_a = first_leaf_dot(&state, para);
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::FontWeight { value: 700 },
+            }))
+            .unwrap();
+        state
+            .apply(EditOp::Span(SpanOp::RemoveSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier_type: ModifierType::FontWeight,
+            }))
+            .unwrap();
+
+        let s = sel((para, 0), (para, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_weight,
+            Tri::Uniform {
+                value: editor_model::FontWeightValue { value: 400 }
+            }
+        );
+        assert_eq!(ms.effective_bold, Tri::Absent);
+    }
+
+    #[test]
+    fn collapsed_pending_unset_inheritable_value_reports_inserted_resolved_value() {
+        let (mut state, root, para) = simple_para_state(&['a']);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: root,
+                modifier: Modifier::FontWeight { value: 500 },
+            }))
+            .unwrap();
+        let leaf_a = {
+            let view = state.view();
+            let p = view.node(para).unwrap();
+            p.children()
+                .next()
+                .and_then(|c| {
+                    if let editor_model::ChildView::Leaf(l) = c {
+                        Some(l.dot())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        };
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::FontWeight { value: 700 },
+            }))
+            .unwrap();
+
+        let s = collapsed(para, 1);
+        let ms = resolve_modifier_state(
+            &state,
+            &s,
+            &[PendingModifier::Unset {
+                ty: ModifierType::FontWeight,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            ms.font_weight,
+            Tri::Uniform {
+                value: editor_model::FontWeightValue { value: 500 }
+            }
+        );
+        assert_eq!(ms.effective_bold, Tri::Absent);
+    }
+
+    #[test]
+    fn collapsed_fold_title_does_not_report_line_height_default() {
+        let (state, title) = fold_title_state();
+        let s = collapsed(title, 0);
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.line_height, Tri::Absent);
+        assert_eq!(
+            ms.font_weight,
+            Tri::Uniform {
+                value: editor_model::FontWeightValue { value: 500 }
+            }
+        );
     }
 
     // §4.2: collapsed inherits — caret in para under root[font_size] → font_size Uniform
@@ -610,6 +814,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn effective_bold_counts_inherited_bold() {
+        let (mut state, _root, para) = simple_para_state(&['a']);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+
+        let s = sel((para, 0), (para, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.bold, Tri::Uniform { value: () });
+        assert_eq!(ms.effective_bold, Tri::Uniform { value: () });
+    }
+
     // §4.8b: some-bold → Mixed effective_bold
     #[test]
     fn test_8b_effective_bold_mixed() {
@@ -646,13 +866,10 @@ mod tests {
         assert_eq!(ms.effective_bold, Tri::Mixed);
     }
 
-    // §4.9: own-vs-inherited bold asymmetry
-    // A paragraph with a marker Bold applied but own-plain text in range
-    // → range effective_bold == Absent (own-only check via own_no_style)
-    // → collapsed caret in EMPTY paragraph with marker → effective_bold == Uniform
-    //   (caret resolution via empty_or_structural picks up node_markers)
+    // §4.9: marker modifiers seed an empty paragraph caret but do not restyle
+    // existing text in a non-empty paragraph.
     #[test]
-    fn test_9_own_vs_inherited_bold_asymmetry() {
+    fn test_9_marker_bold_applies_to_empty_caret_not_existing_range() {
         use editor_crdt::LwwRegOp;
         use editor_model::{EditOp, Marker, NodeLwwOp};
 
@@ -677,7 +894,7 @@ mod tests {
             "collapsed caret in empty paragraph with marker Bold → effective_bold Uniform"
         );
 
-        // Part B: paragraph with 'a' + marker — range effective_bold uses own_no_style → Absent
+        // Part B: paragraph with 'a' + marker — marker is not part of the leaf's rendered style.
         let (mut state, _root, para) = simple_para_state(&['a']);
         state
             .apply(EditOp::NodeMarker(NodeLwwOp {
@@ -695,7 +912,7 @@ mod tests {
         assert_eq!(
             ms_range.effective_bold,
             Tri::Absent,
-            "range with only inherited bold (no own span) → effective_bold Absent (own-only check)"
+            "range over existing text is not bolded by the paragraph marker"
         );
     }
 

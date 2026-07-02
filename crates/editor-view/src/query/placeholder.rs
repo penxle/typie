@@ -14,15 +14,14 @@ pub struct PlaceholderMetrics {
 }
 
 use editor_common::Rect;
-use editor_model::{Alignment, DocView, Modifier, ModifierType, NodeType};
+use editor_model::{
+    Alignment, DEFAULT_FONT_SIZE, DEFAULT_LETTER_SPACING, DEFAULT_LINE_HEIGHT, DocView, Modifier,
+    ModifierType, NodeType,
+};
 use editor_state::{PendingModifier, PendingModifiers};
 
 use super::layout_index::LayoutIndex;
 use crate::view_state::PendingStyle;
-
-const DEFAULT_FONT_SIZE: u32 = 1200;
-const DEFAULT_LINE_HEIGHT: u32 = 160;
-const DEFAULT_LETTER_SPACING: i32 = 0;
 
 pub(crate) fn placeholder_metrics(
     layout_index: &LayoutIndex,

@@ -1,13 +1,7 @@
-use std::collections::BTreeMap;
-
 use editor_macros::ffi;
-use editor_model::{DocView, Modifier, ModifierType};
+use editor_model::DocView;
 use serde::{Deserialize, Serialize};
 
-use crate::Position;
-use crate::modifier_resolution::{CaretCtx, resolve_caret_modifiers};
-use crate::pending_modifier::PendingModifier;
-use crate::projected_state::ProjectedState;
 use crate::selection::Selection;
 use crate::stable_position::{StablePosition, StableResolveCtx};
 
@@ -50,41 +44,16 @@ impl StableSelection {
     }
 }
 
-/// Effective inline modifiers a caret at `pos` would carry (no pending overrides).
-pub fn resolve_effective_modifiers_at(
-    state: &crate::state::State,
-    pos: &Position,
-) -> Vec<Modifier> {
-    caret_modifiers(&state.projected, pos, &[])
-        .into_values()
-        .collect()
-}
-
-pub(crate) fn caret_modifiers(
-    state: &ProjectedState,
-    pos: &Position,
-    pending: &[PendingModifier],
-) -> BTreeMap<ModifierType, Modifier> {
-    let view = state.view();
-    let ctx = CaretCtx {
-        view: &view,
-        doc: state.projected(),
-        block_modifiers: state.block_modifiers(),
-    };
-    resolve_caret_modifiers(pos, &ctx, pending)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        Anchor, Bias, DocLogs, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
-        ProjectedDoc, SeqItem, SpanLog, StyleLog, project_document,
+        DocLogs, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc,
+        SeqItem, SpanLog, StyleLog, project_document,
     };
 
     use crate::Position;
-    use crate::projected_state::ProjectedState;
 
     fn block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
         SeqItem::Block { node_type, parents }
@@ -130,30 +99,6 @@ mod tests {
         let logs = doclogs(&ev);
         let pd = project_document(&logs).unwrap();
         (pd, logs, root, para)
-    }
-
-    fn state_with_chars(chars: &[char]) -> (ProjectedState, Dot, Dot) {
-        use editor_crdt::OpGraph;
-        use editor_model::EditOp;
-        let mut graph = OpGraph::<EditOp>::with_actor(1);
-        let root = Dot::ROOT;
-        let para = graph
-            .add_mut(EditOp::Seq(ListOp::Ins {
-                pos: 0,
-                item: block(NodeType::Paragraph, vec![root]),
-            }))
-            .unwrap()
-            .id;
-        for (i, c) in chars.iter().enumerate() {
-            graph
-                .add_mut(EditOp::Seq(ListOp::Ins {
-                    pos: 1 + i,
-                    item: SeqItem::Char(*c),
-                }))
-                .unwrap();
-        }
-        let state = ProjectedState::from_graph(graph).unwrap();
-        (state, root, para)
     }
 
     // Test 1: StableSelection round-trip (unchanged doc)
@@ -246,91 +191,6 @@ mod tests {
             .expect("falls back to the canonical root");
         assert_eq!(resolved.anchor.node, Dot::ROOT);
         assert_eq!(resolved.head.node, Dot::ROOT);
-    }
-
-    // Test 5: collapsed caret modifiers — bolded char has Bold
-    #[test]
-    fn test_5_collapsed_caret_modifiers_bold() {
-        use editor_model::{EditOp, SpanOp};
-        let (mut state, _root, para) = state_with_chars(&['a', 'b']);
-        let leaf_a = state
-            .view()
-            .node(para)
-            .unwrap()
-            .children()
-            .next()
-            .and_then(|c| {
-                if let editor_model::ChildView::Leaf(l) = c {
-                    Some(l.dot())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        state
-            .apply(EditOp::Span(SpanOp::AddSpan {
-                start: Anchor {
-                    id: leaf_a,
-                    bias: Bias::Before,
-                },
-                end: Anchor {
-                    id: leaf_a,
-                    bias: Bias::After,
-                },
-                modifier: Modifier::Bold,
-            }))
-            .unwrap();
-
-        let pos = Position::new(para, 1);
-        let result = caret_modifiers(&state, &pos, &[]);
-        assert_eq!(result.get(&ModifierType::Bold), Some(&Modifier::Bold));
-    }
-
-    // Test 5b: empty paragraph with marker surfaces modifiers
-    #[test]
-    fn test_5b_empty_para_marker_modifiers() {
-        use editor_crdt::{LwwRegOp, OpGraph};
-        use editor_model::{EditOp, Marker, NodeLwwOp};
-        let mut graph = OpGraph::<EditOp>::with_actor(1);
-        let root = Dot::ROOT;
-        let para = graph
-            .add_mut(EditOp::Seq(ListOp::Ins {
-                pos: 0,
-                item: block(NodeType::Paragraph, vec![root]),
-            }))
-            .unwrap()
-            .id;
-        let mut state = ProjectedState::from_graph(graph).unwrap();
-        state
-            .apply(EditOp::NodeMarker(NodeLwwOp {
-                target: para,
-                op: LwwRegOp::Set {
-                    value: Some(Marker {
-                        modifiers: vec![Modifier::Bold],
-                        style: None,
-                    }),
-                },
-            }))
-            .unwrap();
-
-        let pos = Position::new(para, 0);
-        let result = caret_modifiers(&state, &pos, &[]);
-        assert_eq!(result.get(&ModifierType::Bold), Some(&Modifier::Bold));
-    }
-
-    // Test 5c: pending overlay applies
-    #[test]
-    fn test_5c_pending_overlay() {
-        let (state, _root, para) = state_with_chars(&[]);
-        let pos = Position::new(para, 0);
-        let result = caret_modifiers(
-            &state,
-            &pos,
-            &[PendingModifier::Set {
-                modifier: Modifier::Italic,
-            }],
-        );
-        assert_eq!(result.get(&ModifierType::Italic), Some(&Modifier::Italic));
     }
 
     // Test 6: direction preserved — head-before-anchor stays that way after resolve

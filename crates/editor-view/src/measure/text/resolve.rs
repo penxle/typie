@@ -1,4 +1,7 @@
-use editor_model::{Modifier, ModifierType};
+use editor_model::{
+    DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_FONT_WEIGHT, DEFAULT_LETTER_SPACING,
+    DEFAULT_LINE_HEIGHT, Modifier, ModifierType,
+};
 use editor_state::{PendingModifier, PendingModifiers};
 
 #[derive(Clone)]
@@ -10,10 +13,9 @@ pub struct ResolvedTextStyle {
     pub line_height: f32,
 }
 
-const DEFAULT_FONT_SIZE_PX: f32 = 16.0;
-const DEFAULT_FONT_WEIGHT: u16 = 400;
-const DEFAULT_LINE_HEIGHT: f32 = 1.6;
 const PT_TO_PX: f32 = 96.0 / 72.0;
+const DEFAULT_FONT_SIZE_PX: f32 = DEFAULT_FONT_SIZE as f32 / 100.0 * PT_TO_PX;
+const DEFAULT_LINE_HEIGHT_RATIO: f32 = DEFAULT_LINE_HEIGHT as f32 / 100.0;
 
 /// `resolve_text_style`와 달리 ancestor 순회·Expand 필터링을 하지 않는다 — 호출자가
 /// 미리 평탄화한 effective set을 넘긴다는 계약.
@@ -47,14 +49,14 @@ pub fn style_from_effective_modifiers(modifiers: &[Modifier]) -> ResolvedTextSty
     }
 
     let final_font_size = font_size.unwrap_or(DEFAULT_FONT_SIZE_PX);
-    let ls_em = letter_spacing.unwrap_or(0.0);
+    let ls_em = letter_spacing.unwrap_or(DEFAULT_LETTER_SPACING as f32 / 100.0);
 
     ResolvedTextStyle {
-        font_family: font_family.unwrap_or_default(),
+        font_family: font_family.unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_string()),
         font_weight: font_weight.unwrap_or(DEFAULT_FONT_WEIGHT),
         font_size: final_font_size,
         letter_spacing: ls_em * final_font_size,
-        line_height: line_height.unwrap_or(DEFAULT_LINE_HEIGHT),
+        line_height: line_height.unwrap_or(DEFAULT_LINE_HEIGHT_RATIO),
     }
 }
 
@@ -87,11 +89,13 @@ pub fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingMo
                 _ => {}
             },
             PendingModifier::Unset { ty } => match ty {
-                ModifierType::FontFamily => font_family = String::new(),
+                ModifierType::FontFamily => font_family = DEFAULT_FONT_FAMILY.to_string(),
                 ModifierType::FontWeight => font_weight = DEFAULT_FONT_WEIGHT,
                 ModifierType::FontSize => font_size = DEFAULT_FONT_SIZE_PX,
-                ModifierType::LetterSpacing => letter_spacing_em = 0.0,
-                ModifierType::LineHeight => line_height = DEFAULT_LINE_HEIGHT,
+                ModifierType::LetterSpacing => {
+                    letter_spacing_em = DEFAULT_LETTER_SPACING as f32 / 100.0;
+                }
+                ModifierType::LineHeight => line_height = DEFAULT_LINE_HEIGHT_RATIO,
                 _ => {}
             },
         }
@@ -115,7 +119,7 @@ mod tests {
         let style = style_from_effective_modifiers(&[]);
         assert_eq!(style.font_weight, DEFAULT_FONT_WEIGHT);
         assert!((style.font_size - DEFAULT_FONT_SIZE_PX).abs() < 0.01);
-        assert!((style.line_height - DEFAULT_LINE_HEIGHT).abs() < 0.01);
+        assert!((style.line_height - DEFAULT_LINE_HEIGHT_RATIO).abs() < 0.01);
         assert!((style.letter_spacing - 0.0).abs() < 0.01);
         assert_eq!(style.font_family, "");
     }
@@ -249,7 +253,7 @@ mod tests {
         assert_eq!(style.font_weight, DEFAULT_FONT_WEIGHT);
         assert!((style.font_size - DEFAULT_FONT_SIZE_PX).abs() < 0.01);
         assert!((style.letter_spacing - 0.0).abs() < 0.01);
-        assert!((style.line_height - DEFAULT_LINE_HEIGHT).abs() < 0.01);
+        assert!((style.line_height - DEFAULT_LINE_HEIGHT_RATIO).abs() < 0.01);
     }
 
     #[test]

@@ -55,6 +55,7 @@ pub use flat::{
 pub use gap_cursor::{GapCursor, as_gap_cursor, gap_cursor_at};
 pub use layout_dirty::LayoutDirty;
 pub use load_builder::BuildError;
+pub use modifier_resolution::resolve_effective_modifiers_at;
 pub use modifier_span::resolve_modifier_span_selection;
 pub use modifier_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 pub use normalize::{doc_start_selection, farther_endpoint, is_unit_node_selection};
@@ -72,7 +73,7 @@ pub use selection_expansion::{
     resolve_word_selection_expansion,
 };
 pub use stable_position::{StablePosition, StableResolveCtx};
-pub use stable_selection::{StableSelection, resolve_effective_modifiers_at};
+pub use stable_selection::StableSelection;
 pub use state::*;
 pub use to_plain::to_plain;
 pub use traversal::{first_cursor_position, last_cursor_position};

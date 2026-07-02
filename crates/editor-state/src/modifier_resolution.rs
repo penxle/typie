@@ -10,6 +10,8 @@ use editor_model::{
 use crate::Position;
 use crate::affinity::Affinity;
 use crate::pending_modifier::PendingModifier;
+use crate::projected_state::ProjectedState;
+use crate::state::State;
 
 pub(crate) struct CaretCtx<'a> {
     pub(crate) view: &'a DocView<'a>,
@@ -60,6 +62,27 @@ fn apply_pending(out: &mut BTreeMap<ModifierType, Modifier>, pending: &[PendingM
             }
         }
     }
+}
+
+/// Effective inline modifiers a caret at `pos` would carry (no pending overrides).
+pub fn resolve_effective_modifiers_at(state: &State, pos: &Position) -> Vec<Modifier> {
+    caret_modifiers(&state.projected, pos, &[])
+        .into_values()
+        .collect()
+}
+
+pub(crate) fn caret_modifiers(
+    state: &ProjectedState,
+    pos: &Position,
+    pending: &[PendingModifier],
+) -> BTreeMap<ModifierType, Modifier> {
+    let view = state.view();
+    let ctx = CaretCtx {
+        view: &view,
+        doc: state.projected(),
+        block_modifiers: state.block_modifiers(),
+    };
+    resolve_caret_modifiers(pos, &ctx, pending)
 }
 
 fn self_path(host: &NodeView) -> Vec<(NodeType, Option<Dot>)> {
@@ -557,6 +580,22 @@ mod tests {
         let c = ctx(&pd, &view, &logs);
         let out = resolve_caret_modifiers(
             &Position::new(p, 1),
+            &c,
+            &[PendingModifier::Set {
+                modifier: Modifier::Italic,
+            }],
+        );
+        assert_eq!(out.get(&ModifierType::Italic), Some(&Modifier::Italic));
+    }
+
+    #[test]
+    fn empty_paragraph_pending_overlay_applies() {
+        let (logs, _root, p) = para(&[], Overlays::default());
+        let pd = project(&logs);
+        let view = DocView::new(&pd);
+        let c = ctx(&pd, &view, &logs);
+        let out = resolve_caret_modifiers(
+            &Position::new(p, 0),
             &c,
             &[PendingModifier::Set {
                 modifier: Modifier::Italic,

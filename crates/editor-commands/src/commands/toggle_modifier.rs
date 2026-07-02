@@ -262,6 +262,27 @@ mod tests {
     }
 
     #[test]
+    fn range_toggle_italic_off_from_style_reports_off() {
+        let (initial, ..) = state! {
+            doc {
+                styles { em: "강조" [italic] }
+                root { p1: paragraph @em { text("HelloWorld") } }
+            }
+            selection: (p1, 0) -> (p1, 10)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+
+        let view = actual.view();
+        let rs = actual
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.resolve(&view))
+            .expect("selection still resolves");
+        let ms = resolve_modifier_state_in_range(&rs);
+        assert_eq!(ms.italic, Tri::Absent);
+    }
+
+    #[test]
     fn range_toggle_italic_mixed_turns_on() {
         let (initial, ..) = state! {
             doc { root { p: paragraph {

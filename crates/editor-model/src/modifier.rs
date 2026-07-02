@@ -148,6 +148,33 @@ impl Modifier {
     }
 }
 
+pub const DEFAULT_FONT_FAMILY: &str = "";
+pub const DEFAULT_FONT_SIZE: u32 = 1200;
+pub const DEFAULT_FONT_WEIGHT: u16 = 400;
+pub const DEFAULT_LETTER_SPACING: i32 = 0;
+pub const DEFAULT_LINE_HEIGHT: u32 = 160;
+
+pub fn text_style_default_modifier(ty: ModifierType) -> Option<Modifier> {
+    match ty {
+        ModifierType::FontFamily => Some(Modifier::FontFamily {
+            value: DEFAULT_FONT_FAMILY.to_string(),
+        }),
+        ModifierType::FontSize => Some(Modifier::FontSize {
+            value: DEFAULT_FONT_SIZE,
+        }),
+        ModifierType::FontWeight => Some(Modifier::FontWeight {
+            value: DEFAULT_FONT_WEIGHT,
+        }),
+        ModifierType::LetterSpacing => Some(Modifier::LetterSpacing {
+            value: DEFAULT_LETTER_SPACING,
+        }),
+        ModifierType::LineHeight => Some(Modifier::LineHeight {
+            value: DEFAULT_LINE_HEIGHT,
+        }),
+        _ => None,
+    }
+}
+
 impl ModifierState {
     pub fn set_uniform(&mut self, m: &Modifier) {
         match m {
