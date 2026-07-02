@@ -3,6 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import XIcon from '~icons/lucide/x';
   import { pageRectsToVirtualElement } from '$lib/editor-ffi/geometry';
@@ -62,6 +63,11 @@
 
   const apply = (correction: string) => {
     if (!activeError) return;
+    if (editor.readOnly) {
+      Toast.error('잠긴 문서는 편집할 수 없어요.');
+      editor.focus();
+      return;
+    }
     editor.applySpellcheckCorrection(activeError.id, correction);
     editor.focus();
   };
