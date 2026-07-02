@@ -2,11 +2,10 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{Modifier, ModifierType, PlainStyleEntry};
-use editor_state::{Position, State};
+use editor_state::{Position, State, inline_leaf_dots_in_range};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
-use crate::helpers::inline_leaf_dots_in_range;
 
 /// Collects textblock node ids whose subtree intersects the selection.
 /// Includes textblocks that are only partially covered. For a collapsed

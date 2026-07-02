@@ -5,7 +5,6 @@ use editor_transaction::Transaction;
 use crate::CommandResult;
 use crate::helpers::{
     capture_style_entry, clear_inline_modifier_types_in_selection, collect_run_nodes_in_selection,
-    compact_textblocks_for_nodes,
 };
 
 pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> CommandResult {
@@ -37,9 +36,9 @@ pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> Comma
         changed = true;
     }
 
-    if style_modifier_types.is_empty() {
-        compact_textblocks_for_nodes(tr, &run_dots)?;
-    } else if clear_inline_modifier_types_in_selection(tr, &style_modifier_types)? {
+    if !style_modifier_types.is_empty()
+        && clear_inline_modifier_types_in_selection(tr, &style_modifier_types)?
+    {
         changed = true;
     }
 
@@ -82,6 +81,33 @@ mod tests {
                 } }
             }
             selection: (p1, 2) -> (p1, 7)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn applies_style_to_last_run_with_upstream_block_end_head() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0, >) -> (p1, 5, <)
+        };
+        let (with_style, ..) = transact!(initial, |tr| crate::commands::define_style(
+            &mut tr,
+            "h1".into(),
+            "제목".into(),
+            vec![editor_model::Modifier::Bold]
+        ));
+        let (actual, ..) = transact!(with_style, |tr| apply_style_to_selection(
+            &mut tr,
+            "h1".into()
+        ));
+
+        let (expected, ..) = state! {
+            doc {
+                styles { h1: "제목" [bold] }
+                root { p1: paragraph { text("Hello") @h1 } }
+            }
+            selection: (p1, 0, >) -> (p1, 5, <)
         };
         assert_state_eq!(&actual, &expected);
     }
