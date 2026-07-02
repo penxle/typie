@@ -2,6 +2,8 @@ editor_macros::preamble!();
 
 pub mod changeset;
 pub mod dot;
+mod dot_map;
+pub use dot_map::DotMap;
 pub mod error;
 pub mod lwwreg;
 pub mod op_graph;

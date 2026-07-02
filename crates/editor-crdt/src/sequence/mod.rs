@@ -113,8 +113,8 @@ struct Ctx {
     cur_version: Vec<usize>,
 }
 
-fn advance1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
-    match log.ops[lv] {
+fn advance1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
+    match log.entries[lv].op {
         ListOp::Del { .. } => {
             for i in 0..ctx.del_targets[lv].len() {
                 let target = ctx.del_targets[lv][i];
@@ -134,8 +134,8 @@ fn advance1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
     }
 }
 
-fn retreat1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
-    match log.ops[lv] {
+fn retreat1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
+    match log.entries[lv].op {
         ListOp::Del { .. } => {
             for i in 0..ctx.del_targets[lv].len() {
                 let target = ctx.del_targets[lv][i];
@@ -152,7 +152,12 @@ fn retreat1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
     }
 }
 
-fn integrate<P>(tree: &ContentTree<Run>, log: &OpLog<P>, new_item: &Run, cursor: &mut Cursor) {
+fn integrate<P: Clone>(
+    tree: &ContentTree<Run>,
+    log: &OpLog<P>,
+    new_item: &Run,
+    cursor: &mut Cursor,
+) {
     let len = tree.len();
     match tree.cur_run(cursor) {
         None => return,
@@ -233,8 +238,8 @@ fn batch_update_targets(tree: &mut ContentTree<Run>, targets: &[usize], f: impl 
     }
 }
 
-fn apply1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
-    match &log.ops[lv] {
+fn apply1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize, op: &ListOp<P>, dot: Dot) {
+    match op {
         ListOp::Del { pos, len } => {
             let (pos, len) = (*pos, *len);
             let visible = ctx.tree.cur_len();
@@ -286,7 +291,9 @@ fn apply1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
             let origin_left = if c.doc_idx == 0 {
                 -1
             } else {
-                let (run, off) = ctx.tree.get(c.doc_idx - 1);
+                // Local backward step from the cursor instead of a second
+                // root descend (`get(doc_idx - 1)`).
+                let (run, off) = ctx.tree.prev_slot(&c).expect("doc_idx > 0 has predecessor");
                 run.op_id_at(off) as i32
             };
             let mut right_parent = -1;
@@ -306,10 +313,12 @@ fn apply1<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
                 }
                 ctx.tree.step_run(&mut scan);
             }
-            let new_item = Run::single(lv, log.dots[lv], 0, 0, origin_left, right_parent);
+            let new_item = Run::single(lv, dot, 0, 0, origin_left, right_parent);
             let mut c = c;
             integrate(&ctx.tree, log, &new_item, &mut c);
-            ctx.tree.insert(c.doc_idx, new_item);
+            // The cursor already addresses the insertion slot — skip the
+            // third root descend the position-based `insert` would pay.
+            ctx.tree.insert_at_cursor(&c, new_item);
         }
     }
 }
@@ -321,7 +330,7 @@ enum Flag {
     Shared,
 }
 
-fn diff<P>(log: &OpLog<P>, a: &[usize], b: &[usize]) -> (Vec<usize>, Vec<usize>) {
+fn diff<P: Clone>(log: &OpLog<P>, a: &[usize], b: &[usize]) -> (Vec<usize>, Vec<usize>) {
     let mut flags: HashMap<usize, Flag> = HashMap::new();
     let mut queue: BinaryHeap<usize> = BinaryHeap::new();
     let mut num_shared = 0usize;
@@ -370,7 +379,7 @@ fn diff<P>(log: &OpLog<P>, a: &[usize], b: &[usize]) -> (Vec<usize>, Vec<usize>)
             b_only.push(v);
         }
 
-        for &p in &log.parents[v] {
+        for &p in &log.entries[v].parents {
             enq(&mut queue, &mut flags, &mut num_shared, p, flag);
         }
     }
@@ -378,20 +387,33 @@ fn diff<P>(log: &OpLog<P>, a: &[usize], b: &[usize]) -> (Vec<usize>, Vec<usize>)
     (a_only, b_only)
 }
 
-fn apply_one<P>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize) {
-    let (a_only, b_only) = diff(log, &ctx.cur_version, &log.parents[lv]);
-    let mut retreat = a_only;
-    retreat.sort_unstable_by(|x, y| y.cmp(x));
-    for r in retreat {
-        retreat1(ctx, log, r);
+fn apply_one<P: Clone>(
+    ctx: &mut Ctx,
+    log: &OpLog<P>,
+    lv: usize,
+    op: &ListOp<P>,
+    dot: Dot,
+    parents: &crate::oplog::LvParents,
+) {
+    // Sequential hot path: the op parents on exactly the current version
+    // (every op of a linear history), so the version diff is empty — skip
+    // the per-op `diff` HashMap/heap entirely.
+    if ctx.cur_version.as_slice() != parents.as_slice() {
+        let (a_only, b_only) = diff(log, &ctx.cur_version, parents);
+        let mut retreat = a_only;
+        retreat.sort_unstable_by(|x, y| y.cmp(x));
+        for r in retreat {
+            retreat1(ctx, log, r);
+        }
+        let mut advance = b_only;
+        advance.sort_unstable();
+        for a in advance {
+            advance1(ctx, log, a);
+        }
     }
-    let mut advance = b_only;
-    advance.sort_unstable();
-    for a in advance {
-        advance1(ctx, log, a);
-    }
-    apply1(ctx, log, lv);
-    ctx.cur_version = vec![lv];
+    apply1(ctx, log, lv, op, dot);
+    ctx.cur_version.clear();
+    ctx.cur_version.push(lv);
 }
 
 #[derive(Clone, Debug)]
@@ -400,7 +422,7 @@ pub struct SeqCheckout {
     // Persistent so a `ProjectedState` clone shares it in `O(1)`; a plain HashMap here
     // rehashes `O(total ops)` per copy-on-write mutation on the typing path, which on a
     // large op history dominates the per-keystroke clone.
-    lv_of: imbl::HashMap<Dot, usize>,
+    lv_of: crate::DotMap<usize>,
     applied: usize,
 }
 
@@ -412,7 +434,7 @@ impl Default for SeqCheckout {
                 del_targets: imbl::Vector::new(),
                 cur_version: Vec::new(),
             },
-            lv_of: imbl::HashMap::new(),
+            lv_of: crate::DotMap::new(),
             applied: 0,
         }
     }
@@ -427,21 +449,25 @@ impl SeqCheckout {
         self.applied
     }
 
-    pub fn apply_range<P>(&mut self, log: &OpLog<P>, range: std::ops::Range<usize>) {
+    pub fn apply_range<P: Clone>(&mut self, log: &OpLog<P>, range: std::ops::Range<usize>) {
         debug_assert_eq!(range.start, self.applied, "apply_range must be contiguous");
-        while self.ctx.del_targets.len() < log.ops.len() {
+        while self.ctx.del_targets.len() < log.entries.len() {
             self.ctx.del_targets.push_back(Vec::new());
         }
+        // Focus cursor: O(1) chunk-cached sequential access instead of an
+        // O(log n) RRB tree walk per `log.entries[lv]` index.
+        let mut entries = log.entries.focus();
         for lv in range {
-            apply_one(&mut self.ctx, log, lv);
-            self.lv_of.insert(log.dots[lv], lv);
+            let e = entries.index(lv);
+            apply_one(&mut self.ctx, log, lv, &e.op, e.dot, &e.parents);
+            self.lv_of.insert(e.dot, lv);
             self.applied = lv + 1;
         }
     }
 
-    pub fn apply_tail<P>(&mut self, log: &OpLog<P>) {
+    pub fn apply_tail<P: Clone>(&mut self, log: &OpLog<P>) {
         let from = self.applied;
-        self.apply_range(log, from..log.ops.len());
+        self.apply_range(log, from..log.entries.len());
     }
 
     pub fn visible_len(&self) -> usize {
@@ -459,14 +485,16 @@ impl SeqCheckout {
             return self.snapshot_range(log, 0..visible);
         }
         let mut out = Vec::with_capacity(visible);
+        let mut entries = log.entries.focus();
         for run in self.ctx.tree.iter_runs() {
             if run.end != 0 {
                 continue;
             }
             for off in 0..run.len {
                 let lv = run.start_lv + off;
-                if let ListOp::Ins { item, .. } = &log.ops[lv] {
-                    out.push((log.dots[lv], item.clone()));
+                let e = entries.index(lv);
+                if let ListOp::Ins { item, .. } = &e.op {
+                    out.push((e.dot, item.clone()));
                 }
             }
         }
@@ -484,15 +512,16 @@ impl SeqCheckout {
         range
             .filter_map(|pos| {
                 let lv = self.ctx.tree.end_pos_to_lv(pos)?;
-                match &log.ops[lv] {
-                    ListOp::Ins { item, .. } => Some((log.dots[lv], item.clone())),
+                let e = &log.entries[lv];
+                match &e.op {
+                    ListOp::Ins { item, .. } => Some((e.dot, item.clone())),
                     _ => None,
                 }
             })
             .collect()
     }
 
-    pub fn iter_visible<'a, P>(
+    pub fn iter_visible<'a, P: Clone>(
         &'a self,
         log: &'a OpLog<P>,
     ) -> impl Iterator<Item = (Dot, &'a P)> + 'a {
@@ -503,8 +532,9 @@ impl SeqCheckout {
             .flat_map(move |r| {
                 (0..r.len).filter_map(move |off| {
                     let lv = r.start_lv + off;
-                    match &log.ops[lv] {
-                        ListOp::Ins { item, .. } => Some((log.dots[lv], item)),
+                    let e = &log.entries[lv];
+                    match &e.op {
+                        ListOp::Ins { item, .. } => Some((e.dot, item)),
                         _ => None,
                     }
                 })
@@ -519,19 +549,19 @@ impl SeqCheckout {
         del_target_positions_in(&self.ctx.tree, &self.lv_of, &self.ctx.del_targets, del)
     }
 
-    pub fn dot_at_visible<P>(&self, log: &OpLog<P>, pos: usize) -> Option<Dot> {
+    pub fn dot_at_visible<P: Clone>(&self, log: &OpLog<P>, pos: usize) -> Option<Dot> {
         let lv = self.ctx.tree.end_pos_to_lv(pos)?;
-        Some(log.dots[lv])
+        Some(log.entries[lv].dot)
     }
 
-    pub fn del_target_dots<P>(&self, log: &OpLog<P>, del: Dot) -> Vec<Dot> {
+    pub fn del_target_dots<P: Clone>(&self, log: &OpLog<P>, del: Dot) -> Vec<Dot> {
         let Some(&del_lv) = self.lv_of.get(&del) else {
             return Vec::new();
         };
         let Some(targets) = self.ctx.del_targets.get(del_lv) else {
             return Vec::new();
         };
-        targets.iter().map(|&lv| log.dots[lv]).collect()
+        targets.iter().map(|&lv| log.entries[lv].dot).collect()
     }
 
     /// Number of targets a delete op removed, without materializing their dots. Lets a
@@ -580,13 +610,13 @@ pub(crate) fn checkout_with_index<P: Clone>(log: &OpLog<P>) -> (Vec<(Dot, P)>, R
 
 pub(crate) struct ResolveIndex {
     tree: ContentTree<Run>,
-    lv_of: imbl::HashMap<Dot, usize>,
+    lv_of: crate::DotMap<usize>,
     del_targets: imbl::Vector<Vec<usize>>,
 }
 
 fn resolve_boundary_in(
     tree: &ContentTree<Run>,
-    lv_of: &imbl::HashMap<Dot, usize>,
+    lv_of: &crate::DotMap<usize>,
     id: Dot,
     bias: Bias,
 ) -> Option<Boundary> {
@@ -604,7 +634,7 @@ fn resolve_boundary_in(
 
 fn del_target_positions_in(
     tree: &ContentTree<Run>,
-    lv_of: &imbl::HashMap<Dot, usize>,
+    lv_of: &crate::DotMap<usize>,
     del_targets: &imbl::Vector<Vec<usize>>,
     del: Dot,
 ) -> Vec<usize> {
@@ -1265,7 +1295,7 @@ mod tests {
             let (_cold_elems, cold_res) = checkout_with_resolver(&log);
 
             let mut warm = SeqCheckout::new();
-            for r in chunks(log.ops.len(), &sizes) {
+            for r in chunks(log.entries.len(), &sizes) {
                 warm.apply_range(&log, r);
             }
             prop_assert_eq!(warm.snapshot(&log), cold.clone());
@@ -1286,7 +1316,7 @@ mod tests {
             let mut one = SeqCheckout::new();
             one.apply_tail(&log);
             let mut many = SeqCheckout::new();
-            for lv in 0..log.ops.len() {
+            for lv in 0..log.entries.len() {
                 many.apply_range(&log, lv..lv + 1);
             }
             prop_assert_eq!(one.snapshot(&log), many.snapshot(&log));

@@ -32,28 +32,37 @@ pub struct InputEvent<P = char> {
     pub op: ListOp<P>,
 }
 
+/// Per-op parent list in local-version (lv) space. Inline capacity 2 keeps
+/// the overwhelmingly common 0–2 parent case off the heap — a `Vec` here
+/// costs one allocation per op across an entire history replay.
+pub type LvParents = smallvec::SmallVec<[usize; 2]>;
+
+/// One log entry, stored array-of-structs: the replay loop reads op, dot and
+/// parents together, so one packed `Vector` costs a third of the chunk
+/// allocations and cursor reads of three parallel ones.
+#[derive(Clone, Debug)]
+pub struct OpEntry<P> {
+    pub op: ListOp<P>,
+    pub dot: Dot,
+    pub parents: LvParents,
+}
+
 #[derive(Clone, Debug)]
 pub struct OpLog<P = char> {
-    // All four are persistent (`imbl`) so cloning an `OpLog` — which every
-    // copy-on-write `ProjectedState` mutation on the typing path does — shares them
-    // by pointer instead of deep-copying. On a large, heavily-edited document (a
-    // 5MB op history) the `dots` bulk memcpy and, especially, the `lv_of` HashMap
-    // rehash grow to `O(total ops)` and dominate `ProjectedState::clone` (~7ms/clone
-    // measured). `imbl::HashMap`/`Vector` clone in `O(1)`; the reads that pay the
-    // `O(log n)` structural-lookup tax are the same ones already indexing `ops`.
-    pub ops: imbl::Vector<ListOp<P>>,
-    pub dots: imbl::Vector<Dot>,
-    pub parents: imbl::Vector<Vec<usize>>,
-    pub lv_of: imbl::HashMap<Dot, usize>,
+    // Persistent (`imbl`) so cloning an `OpLog` — which every copy-on-write
+    // `ProjectedState` mutation on the typing path does — shares storage by
+    // pointer instead of deep-copying. On a large, heavily-edited document
+    // a plain `Vec`/`HashMap` here grows to `O(total ops)` per clone and
+    // dominates the per-keystroke cost.
+    pub entries: imbl::Vector<OpEntry<P>>,
+    pub lv_of: crate::DotMap<usize>,
 }
 
 impl<P: Clone> Default for OpLog<P> {
     fn default() -> Self {
         OpLog {
-            ops: imbl::Vector::new(),
-            dots: imbl::Vector::new(),
-            parents: imbl::Vector::new(),
-            lv_of: imbl::HashMap::new(),
+            entries: imbl::Vector::new(),
+            lv_of: crate::DotMap::new(),
         }
     }
 }
@@ -64,11 +73,11 @@ impl<P: Clone> OpLog<P> {
     }
 
     pub fn len(&self) -> usize {
-        self.ops.len()
+        self.entries.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ops.is_empty()
+        self.entries.is_empty()
     }
 
     pub fn contains(&self, id: Dot) -> bool {
@@ -76,16 +85,24 @@ impl<P: Clone> OpLog<P> {
     }
 
     pub fn push(&mut self, ev: InputEvent<P>) -> usize {
-        let lv = self.ops.len();
+        self.push_from(ev.id, &ev.parents, ev.op)
+    }
+
+    /// `push` without requiring an owned parent `Vec` — replay paths that
+    /// already hold the parents as a slice skip one allocation per op.
+    pub fn push_from(&mut self, id: Dot, parents: &[Dot], op: ListOp<P>) -> usize {
+        let lv = self.entries.len();
         assert!(
-            !self.lv_of.contains_key(&ev.id),
+            !self.lv_of.contains_key(&id),
             "duplicate Dot pushed to OpLog"
         );
-        let parents: Vec<usize> = ev.parents.iter().map(|p| self.lv_of[p]).collect();
-        self.ops.push_back(ev.op);
-        self.dots.push_back(ev.id);
-        self.parents.push_back(parents);
-        self.lv_of.insert(ev.id, lv);
+        let parents: LvParents = parents.iter().map(|p| self.lv_of[p]).collect();
+        self.entries.push_back(OpEntry {
+            op,
+            dot: id,
+            parents,
+        });
+        self.lv_of.insert(id, lv);
         lv
     }
 
@@ -93,11 +110,11 @@ impl<P: Clone> OpLog<P> {
         &mut self,
         evs: impl IntoIterator<Item = InputEvent<P>>,
     ) -> std::ops::Range<usize> {
-        let start = self.ops.len();
+        let start = self.entries.len();
         for ev in evs {
             self.push(ev);
         }
-        start..self.ops.len()
+        start..self.entries.len()
     }
 }
 
@@ -146,9 +163,9 @@ pub fn build_oplog<P: Clone>(events: &[InputEvent<P>]) -> OpLog<P> {
     log
 }
 
-pub(crate) fn lv_cmp<P>(log: &OpLog<P>, a: usize, b: usize) -> std::cmp::Ordering {
-    let da = &log.dots[a];
-    let db = &log.dots[b];
+pub(crate) fn lv_cmp<P: Clone>(log: &OpLog<P>, a: usize, b: usize) -> std::cmp::Ordering {
+    let da = &log.entries[a].dot;
+    let db = &log.entries[b].dot;
     da.actor.cmp(&db.actor).then(da.clock.cmp(&db.clock))
 }
 
@@ -184,8 +201,11 @@ mod tests {
         assert_eq!(lv_b, 1);
         assert_eq!(log.len(), 2);
         assert!(log.contains(a) && log.contains(b));
-        assert_eq!(log.dots.iter().copied().collect::<Vec<_>>(), vec![a, b]);
-        assert_eq!(log.parents[lv_b], vec![lv_a]);
+        assert_eq!(
+            log.entries.iter().map(|e| e.dot).collect::<Vec<_>>(),
+            vec![a, b]
+        );
+        assert_eq!(log.entries[lv_b].parents.as_slice(), &[lv_a]);
         assert_eq!(log.lv_of[&a], 0);
         assert_eq!(log.lv_of[&b], 1);
     }
@@ -202,9 +222,15 @@ mod tests {
             ins(1, 2, &[b], 'c'),
         ]);
         assert_eq!(range, 0..3);
-        assert_eq!(log.dots.iter().copied().collect::<Vec<_>>(), vec![a, b, c]);
         assert_eq!(
-            log.parents.iter().cloned().collect::<Vec<_>>(),
+            log.entries.iter().map(|e| e.dot).collect::<Vec<_>>(),
+            vec![a, b, c]
+        );
+        assert_eq!(
+            log.entries
+                .iter()
+                .map(|e| e.parents.to_vec())
+                .collect::<Vec<_>>(),
             vec![Vec::<usize>::new(), vec![0usize], vec![1usize]]
         );
     }
@@ -241,9 +267,15 @@ mod tests {
             ins(1, 2, &[b], 'c'),
         ];
         let log = build_oplog(&ev);
-        assert_eq!(log.dots.iter().copied().collect::<Vec<_>>(), vec![a, b, c]);
         assert_eq!(
-            log.parents.iter().cloned().collect::<Vec<_>>(),
+            log.entries.iter().map(|e| e.dot).collect::<Vec<_>>(),
+            vec![a, b, c]
+        );
+        assert_eq!(
+            log.entries
+                .iter()
+                .map(|e| e.parents.to_vec())
+                .collect::<Vec<_>>(),
             vec![Vec::<usize>::new(), vec![0usize], vec![1usize]]
         );
         assert_eq!(log.lv_of[&a], 0);
@@ -268,11 +300,14 @@ mod tests {
         ];
         let log = build_oplog(&ev);
         assert_eq!(
-            log.dots.iter().copied().collect::<Vec<_>>(),
+            log.entries.iter().map(|e| e.dot).collect::<Vec<_>>(),
             vec![a, c, b, d]
         );
         assert_eq!(
-            log.parents.iter().cloned().collect::<Vec<_>>(),
+            log.entries
+                .iter()
+                .map(|e| e.parents.to_vec())
+                .collect::<Vec<_>>(),
             vec![
                 Vec::<usize>::new(),
                 vec![0usize],
@@ -374,8 +409,8 @@ mod tests {
                 warm.push(e.clone());
             }
             prop_assert_eq!(checkout_text(&cold), checkout_text(&warm));
-            let cold_dots: BTreeSet<Dot> = cold.dots.iter().copied().collect();
-            let warm_dots: BTreeSet<Dot> = warm.dots.iter().copied().collect();
+            let cold_dots: BTreeSet<Dot> = cold.entries.iter().map(|e| e.dot).collect();
+            let warm_dots: BTreeSet<Dot> = warm.entries.iter().map(|e| e.dot).collect();
             prop_assert_eq!(cold_dots, warm_dots);
         }
     }

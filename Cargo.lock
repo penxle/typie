@@ -743,6 +743,7 @@ dependencies = [
  "ruzstd",
  "serde",
  "serde_json",
+ "smallvec",
  "thiserror",
  "tsify",
  "uniffi",

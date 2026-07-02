@@ -62,6 +62,10 @@ pub struct ContentTree<L> {
     nodes: imbl::Vector<Node<L>>,
     root: usize,
     lv_leaf: imbl::OrdMap<usize, usize>,
+    /// Physically last leaf. The node arena is append-only and leaves are
+    /// never merged away, so this only changes when the rightmost leaf
+    /// splits — kept for the O(1) append-cursor fast path.
+    rightmost_leaf: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -92,6 +96,7 @@ impl<L: Leaf + Clone> ContentTree<L> {
             nodes,
             root: 0,
             lv_leaf: imbl::OrdMap::new(),
+            rightmost_leaf: 0,
         }
     }
 
@@ -188,13 +193,43 @@ impl<L: Leaf + Clone> ContentTree<L> {
         self.nodes.get_mut(id).unwrap().sum = s;
     }
 
-    fn update_path(&mut self, mut id: usize) {
-        loop {
-            self.recompute_sum(id);
-            match self.nodes[id].parent {
-                Some(p) => id = p,
-                None => break,
+    /// Refresh `id`'s sum and propagate the change upward as a per-field
+    /// delta. Recomputing every ancestor from its children costs a
+    /// fanout × depth random-access walk per edit; adding the delta is one
+    /// node write per level. Callers guarantee only `id`'s own content
+    /// changed since sums were last consistent.
+    fn update_path(&mut self, id: usize) {
+        let new = match &self.nodes[id].kind {
+            Kind::Leaf(items) => {
+                let mut s = Sum::default();
+                for it in items {
+                    s += it.sum();
+                }
+                s
             }
+            Kind::Internal(children) => {
+                let mut s = Sum::default();
+                for &c in children {
+                    s += self.nodes[c].sum;
+                }
+                s
+            }
+        };
+        let old = self.nodes[id].sum;
+        if new == old {
+            return;
+        }
+        let d_count = new.count as i64 - old.count as i64;
+        let d_cur = new.cur as i64 - old.cur as i64;
+        let d_end = new.end as i64 - old.end as i64;
+        self.nodes.get_mut(id).unwrap().sum = new;
+        let mut cur = id;
+        while let Some(p) = self.nodes[cur].parent {
+            let s = &mut self.nodes.get_mut(p).unwrap().sum;
+            s.count = (s.count as i64 + d_count) as usize;
+            s.cur = (s.cur as i64 + d_cur) as usize;
+            s.end = (s.end as i64 + d_end) as usize;
+            cur = p;
         }
     }
 
@@ -233,20 +268,96 @@ impl<L: Leaf + Clone> ContentTree<L> {
     }
 
     pub fn insert(&mut self, i: usize, item: L) {
+        let (leaf, run, off) = self.descend_count(i);
+        self.insert_in_leaf(leaf, run, off, item);
+    }
+
+    /// `insert` when the caller already holds a cursor at the target
+    /// position — skips the root descend the position-based `insert` pays.
+    pub fn insert_at_cursor(&mut self, c: &Cursor, item: L) {
+        debug_assert_eq!(
+            self.rank_of_slot(c.leaf, c.run, c.off),
+            c.doc_idx,
+            "cursor out of sync with tree"
+        );
+        self.insert_in_leaf(c.leaf, c.run, c.off, item);
+    }
+
+    fn insert_in_leaf(&mut self, leaf: usize, mut run: usize, off: usize, item: L) {
         debug_assert_eq!(item.run_len(), 1, "insert expects a length-1 run");
-        let (leaf, mut run, off) = self.descend_count(i);
         if off > 0 {
             self.split_run_in_leaf(leaf, run, off);
             run += 1;
         }
+        // Register only the runs this call creates — `split_run_in_leaf`
+        // registers its right half, coalescing removes merged starts, and
+        // `maybe_split` re-homes moved runs. Re-registering every run in the
+        // leaf (`rebuild_leaf_locator`) made each insert pay
+        // O(runs-per-leaf) OrdMap writes.
+        let start = item.lv_start();
         match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => items.insert(run, item),
             Kind::Internal(_) => unreachable!(),
         }
+        self.lv_leaf.insert(start, leaf);
         self.coalesce_around(leaf, run);
-        self.rebuild_leaf_locator(leaf);
         self.update_path(leaf);
         self.maybe_split(leaf);
+    }
+
+    /// Count-dimension rank of the slot addressed by (leaf, run, off) —
+    /// the number of elements physically before it.
+    fn rank_of_slot(&self, leaf: usize, run: usize, off: usize) -> usize {
+        let mut rank = off;
+        for it in &self.leaf_items(leaf)[..run] {
+            rank += it.run_len();
+        }
+        let mut id = leaf;
+        while let Some(p) = self.nodes[id].parent {
+            for &c in self.children(p) {
+                if c == id {
+                    break;
+                }
+                rank += self.nodes[c].sum.count;
+            }
+            id = p;
+        }
+        rank
+    }
+
+    /// The element physically immediately before the cursor slot, with its
+    /// in-run offset. Local backward walk — no root descend.
+    pub fn prev_slot(&self, c: &Cursor) -> Option<(&L, usize)> {
+        if c.off > 0 {
+            let r = &self.leaf_items(c.leaf)[c.run];
+            return Some((r, c.off - 1));
+        }
+        if c.run > 0 {
+            let r = &self.leaf_items(c.leaf)[c.run - 1];
+            return Some((r, r.run_len() - 1));
+        }
+        let prev = self.prev_leaf(c.leaf)?;
+        let r = self.leaf_items(prev).last()?;
+        Some((r, r.run_len() - 1))
+    }
+
+    fn prev_leaf(&self, leaf: usize) -> Option<usize> {
+        let mut id = leaf;
+        loop {
+            let p = self.nodes[id].parent?;
+            let ch = self.children(p);
+            let pos = ch.iter().position(|&c| c == id).unwrap();
+            if pos > 0 {
+                let mut down = ch[pos - 1];
+                loop {
+                    match &self.nodes[down].kind {
+                        Kind::Leaf(_) => return Some(down),
+                        Kind::Internal(c2) => down = *c2.last().unwrap(),
+                    }
+                }
+            }
+            id = p;
+        }
     }
 
     fn split_run_in_leaf(&mut self, leaf: usize, run: usize, offset: usize) {
@@ -254,10 +365,12 @@ impl<L: Leaf + Clone> ContentTree<L> {
             Kind::Leaf(items) => items[run].split_at(offset),
             Kind::Internal(_) => unreachable!(),
         };
+        let start = right.lv_start();
         match &mut self.nodes.get_mut(leaf).unwrap().kind {
             Kind::Leaf(items) => items.insert(run + 1, right),
             Kind::Internal(_) => unreachable!(),
         }
+        self.lv_leaf.insert(start, leaf);
     }
 
     fn try_merge_pair(items: &mut Vec<L>, left: usize) -> Option<usize> {
@@ -297,17 +410,6 @@ impl<L: Leaf + Clone> ContentTree<L> {
         }
         for s in removed_starts.into_iter().flatten() {
             self.lv_leaf.remove(&s);
-        }
-    }
-
-    fn rebuild_leaf_locator(&mut self, leaf: usize) {
-        let starts: Vec<usize> = self
-            .leaf_items(leaf)
-            .iter()
-            .map(|it| it.lv_start())
-            .collect();
-        for s in starts {
-            self.lv_leaf.insert(s, leaf);
         }
     }
 
@@ -353,7 +455,6 @@ impl<L: Leaf + Clone> ContentTree<L> {
             Kind::Leaf(items) => f(&mut items[target_run]),
             Kind::Internal(_) => unreachable!(),
         }
-        self.rebuild_leaf_locator(leaf);
         self.update_path(leaf);
         self.maybe_split(leaf);
     }
@@ -392,7 +493,6 @@ impl<L: Leaf + Clone> ContentTree<L> {
                 Kind::Leaf(items) => f(&mut items[target_run]),
                 Kind::Internal(_) => unreachable!(),
             }
-            self.rebuild_leaf_locator(leaf);
             self.update_path(leaf);
             self.maybe_split(leaf);
             lv += take;
@@ -546,6 +646,23 @@ impl<L: Leaf + Clone> ContentTree<L> {
             };
             self.normalize(&mut c);
             return c;
+        }
+        // Append fast path: when the physically last run is fully visible,
+        // the cursor at cur-position `cur_len` IS the physical end — O(1)
+        // from the cached rightmost leaf and root sums, no descend. With a
+        // trailing tombstone the cur-end cursor sits before it (arbitration
+        // territory), so fall through to the exact descend.
+        if target == self.cur_len()
+            && let Some(last) = self.leaf_items(self.rightmost_leaf).last()
+            && last.sum().cur == last.run_len()
+        {
+            return Cursor {
+                leaf: self.rightmost_leaf,
+                run: self.leaf_items(self.rightmost_leaf).len(),
+                off: 0,
+                doc_idx: self.len(),
+                end_pos: self.end_len(),
+            };
         }
         let mut id = self.root;
         let mut doc_idx = 0usize;
@@ -711,6 +828,9 @@ impl<L: Leaf + Clone> ContentTree<L> {
                     .collect();
                 for s in moved {
                     self.lv_leaf.insert(s, new_id);
+                }
+                if self.rightmost_leaf == id {
+                    self.rightmost_leaf = new_id;
                 }
             }
             Kind::Internal(children) => {

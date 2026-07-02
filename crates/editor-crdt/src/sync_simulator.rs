@@ -23,7 +23,7 @@ pub struct Replica<P> {
     pub receive_errors: Vec<CrdtError>,
 }
 
-impl<P> Replica<P> {
+impl<P: Clone> Replica<P> {
     pub fn new() -> Self {
         let actor_id = random_actor();
         Self {
@@ -54,7 +54,7 @@ impl<P> Replica<P> {
     }
 }
 
-impl<P> Default for Replica<P> {
+impl<P: Clone> Default for Replica<P> {
     fn default() -> Self {
         Self::new()
     }
@@ -201,7 +201,7 @@ pub struct Server<P> {
     pub receive_errors: Vec<CrdtError>,
 }
 
-impl<P> Server<P> {
+impl<P: Clone> Server<P> {
     pub fn new() -> Self {
         Self {
             // Actor 0 reserved as a sentinel — server never calls `add` so
@@ -230,7 +230,7 @@ impl<P> Server<P> {
     }
 }
 
-impl<P> Default for Server<P> {
+impl<P: Clone> Default for Server<P> {
     fn default() -> Self {
         Self::new()
     }
@@ -442,7 +442,7 @@ pub struct Simulator<P> {
     actor_counter: u64,
 }
 
-impl<P> Simulator<P> {
+impl<P: Clone> Simulator<P> {
     pub fn new() -> Self {
         let mut sim = Self {
             client_a: Replica::with_actor(100),
@@ -475,7 +475,7 @@ impl<P> Simulator<P> {
     }
 }
 
-impl<P> Default for Simulator<P> {
+impl<P: Clone> Default for Simulator<P> {
     fn default() -> Self {
         Self::new()
     }

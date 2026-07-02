@@ -1,7 +1,7 @@
 use hashbrown::HashSet;
 
 use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire, WireChangeset, WireError, WireResult};
-use editor_crdt::{CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, build_oplog};
+use editor_crdt::{CrdtError, Dot, ListOp, Op, OpGraph, OpLog};
 
 use crate::{
     DocLogs, Marker, ModelError, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp,
@@ -59,10 +59,29 @@ pub fn seq_parents(graph: &OpGraph<EditOp>, dot: Dot) -> Vec<Dot> {
 }
 
 pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
-    let dots: HashSet<Dot> = graph.iter_all().map(|o| o.id).collect();
-    let ordered = graph.topo_sort(&dots);
+    // Iterate ops in storage order (already ancestry-first) so a full-history
+    // load never clones the whole graph through `topo_sort`; the clone-heavy
+    // sort only runs for graphs whose storage order is broken (`debug_remove`).
+    let owned: Vec<Op<EditOp>>;
+    let ordered: Vec<&Op<EditOp>> = match graph.ordered_ops() {
+        Some(ops) => ops,
+        None => {
+            let dots: HashSet<Dot> = graph.iter_all().map(|o| o.id).collect();
+            owned = graph.topo_sort(&dots);
+            owned.iter().collect()
+        }
+    };
 
-    let mut seq_events: Vec<InputEvent<SeqItem>> = Vec::new();
+    // Seq ops seen so far (both orderings above are topological, so a parent
+    // is always classified before its children). When every direct parent is
+    // a seq op — the entire typing hot path — the op's own normalized parent
+    // list IS its seq-parent list and the per-op ancestor walk is skipped.
+    let mut seq_dots: HashSet<Dot> = HashSet::with_capacity(ordered.len());
+
+    // Pushed directly in iteration order — already topological, and OpLog
+    // linearization order is free (eg-walker replay converges for any
+    // topological order; the warm path appends in arrival order the same way).
+    let mut seq: OpLog<SeqItem> = OpLog::new();
     let mut spans = SpanLog::new();
     let mut block_modifiers = ModifierAttrLog::new();
     let mut node_attrs = NodeAttrLog::new();
@@ -70,14 +89,16 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
     let mut node_markers = NodeMarkerLog::new();
     let mut styles = StyleLog::new();
 
-    for op in &ordered {
+    for op in ordered {
         match &op.payload {
             EditOp::Seq(list_op) => {
-                seq_events.push(InputEvent {
-                    id: op.id,
-                    parents: seq_parents(graph, op.id),
-                    op: list_op.clone(),
-                });
+                if op.parents.iter().all(|p| seq_dots.contains(p)) {
+                    seq.push_from(op.id, &op.parents, list_op.clone());
+                } else {
+                    let parents = seq_parents(graph, op.id);
+                    seq.push_from(op.id, &parents, list_op.clone());
+                }
+                seq_dots.insert(op.id);
             }
             EditOp::Span(o) => spans = spans.apply(op.id, o.clone()).map_err(SplitError::Crdt)?,
             EditOp::BlockModifier(o) => {
@@ -105,8 +126,6 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
             }
         }
     }
-    let seq = build_oplog(&seq_events);
-
     Ok(DocLogs {
         seq,
         spans,
@@ -189,7 +208,7 @@ mod tests {
         Anchor, AtomLeaf, Bias, HorizontalRuleVariant, Modifier, Node, NodeType, StyleOp,
         project_document,
     };
-    use editor_crdt::{Changeset, LwwRegOp, OrMapOp};
+    use editor_crdt::{Changeset, InputEvent, LwwRegOp, OrMapOp};
 
     fn round_trip<T: editor_crdt::wire::Wire>(value: &T) -> editor_crdt::wire::WireResult<T> {
         use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireError};
@@ -650,7 +669,7 @@ mod tests {
                 },
             },
         ];
-        let reference = editor_crdt::sequence::checkout(&build_oplog(&std_events));
+        let reference = editor_crdt::sequence::checkout(&editor_crdt::build_oplog(&std_events));
         assert_eq!(from_split, reference);
     }
 

@@ -16,6 +16,7 @@ hashbrown = { workspace = true }
 imbl = { workspace = true, features = ["serde"] }
 ruzstd.workspace = true
 serde.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }

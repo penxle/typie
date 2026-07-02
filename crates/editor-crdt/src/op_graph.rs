@@ -2,7 +2,26 @@ use editor_macros::ffi;
 use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
+use crate::dot_map::DotMap;
 use crate::{CrdtError, Dot};
+
+/// Sorted-ascending child list. Sorted so set semantics (dedup, equality)
+/// hold regardless of insertion order; inline capacity 2 keeps the common
+/// one-child case heap-free.
+type ChildSet = smallvec::SmallVec<[Dot; 2]>;
+
+fn child_insert(set: &mut ChildSet, dot: Dot) {
+    if let Err(i) = set.binary_search(&dot) {
+        set.insert(i, dot);
+    }
+}
+
+#[cfg(test)]
+fn child_remove(set: &mut ChildSet, dot: &Dot) {
+    if let Ok(i) = set.binary_search(dot) {
+        set.remove(i);
+    }
+}
 
 /// One node in the op-DAG. `id` is the op's unique identifier (also reused as
 /// the semantic identifier — RGA element id, OR-Set add token — by the
@@ -18,7 +37,7 @@ pub struct Op<P> {
 }
 
 /// Op-DAG storage. Immutable, structural-sharing append-only.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct OpGraph<P> {
     actor: u64,
     next_clock: u64,
@@ -37,29 +56,49 @@ pub struct OpGraph<P> {
     /// `pending` only ever holds the in-flight transaction's ops.
     pending: Vec<Op<P>>,
 
-    ops: imbl::HashMap<Dot, Op<P>>,
+    ops: DotMap<Op<P>>,
     heads: imbl::HashSet<Dot>,
     /// Reverse parent index: each dot maps to the set of ops that reference
     /// it as a parent. Drives O(1) `has_child` checks during frontier
     /// maintenance and powers the cascade walks that keep `self_contained`
-    /// accurate on data loss / restore.
-    children: imbl::HashMap<Dot, imbl::HashSet<Dot>>,
+    /// accurate on data loss / restore. Values are sorted-ascending
+    /// `SmallVec`s: almost every op has exactly one child (linear typing
+    /// history), and a per-op `imbl::HashSet` costs hundreds of heap bytes
+    /// each — on an 800k-op document this map alone dominated graph memory.
+    children: DotMap<ChildSet>,
     /// Subset of `ops` whose transitive ancestry is fully present locally.
     /// Maintained incrementally so `missing_changesets_for` can emit only
     /// replayable batches in O(walk) rather than scanning the full op set
     /// per round. Diverges from `ops` only after server-side data loss
     /// (`debug_remove`); `add` and `receive_changeset` keep
     /// parents-before-children invariants so they always preserve the set.
-    self_contained: imbl::HashSet<Dot>,
+    self_contained: DotMap<()>,
 }
 
-impl<P: PartialEq> OpGraph<P> {
+impl<P: Clone + PartialEq> OpGraph<P> {
     pub fn graph_state_eq(&self, other: &Self) -> bool {
         self.ops == other.ops && self.heads == other.heads
     }
 }
 
-impl<P> OpGraph<P> {
+// Manual impls: `derive` can't infer the `P: Clone` bound the `DotMap`
+// fields need for comparison.
+impl<P: Clone + PartialEq> PartialEq for OpGraph<P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.actor == other.actor
+            && self.next_clock == other.next_clock
+            && self.changesets == other.changesets
+            && self.pending == other.pending
+            && self.ops == other.ops
+            && self.heads == other.heads
+            && self.children == other.children
+            && self.self_contained == other.self_contained
+    }
+}
+
+impl<P: Clone + Eq> Eq for OpGraph<P> {}
+
+impl<P: Clone> OpGraph<P> {
     pub fn new() -> Self {
         let mut buf = [0u8; 8];
         getrandom::fill(&mut buf).expect("failed to generate random bytes");
@@ -72,10 +111,10 @@ impl<P> OpGraph<P> {
             next_clock: 0,
             changesets: imbl::Vector::new(),
             pending: Vec::new(),
-            ops: imbl::HashMap::new(),
+            ops: DotMap::new(),
             heads: imbl::HashSet::new(),
-            children: imbl::HashMap::new(),
-            self_contained: imbl::HashSet::new(),
+            children: DotMap::new(),
+            self_contained: DotMap::new(),
         }
     }
 
@@ -142,6 +181,35 @@ impl<P> OpGraph<P> {
         self.ops.values()
     }
 
+    /// All ops in ancestry-first order *without cloning them*: sealed
+    /// changesets in storage order, then `pending` in push order. Both
+    /// append paths (`receive_changeset_mut`, `add_mut`) only accept ops
+    /// whose parents are already present, so this concatenation is a valid
+    /// topological order for any graph they built. Returns `None` when the
+    /// invariant does not hold (e.g. after test-only `debug_remove`, or a
+    /// duplicate/missing op) — callers must fall back to [`topo_sort`].
+    ///
+    /// [`topo_sort`]: OpGraph::topo_sort
+    pub fn ordered_ops(&self) -> Option<Vec<&Op<P>>> {
+        let mut out: Vec<&Op<P>> = Vec::with_capacity(self.ops.len());
+        let mut seen: HashSet<Dot> = HashSet::with_capacity(self.ops.len());
+        let all = self
+            .changesets
+            .iter()
+            .flat_map(|cs| cs.ops.iter())
+            .chain(self.pending.iter());
+        for op in all {
+            if !op.parents.iter().all(|p| seen.contains(p)) || !seen.insert(op.id) {
+                return None;
+            }
+            out.push(op);
+        }
+        if out.len() != self.ops.len() {
+            return None;
+        }
+        Some(out)
+    }
+
     /// `true` when some op in `self.ops` has an ancestor missing locally —
     /// i.e. an ancestor was lost (storage failover, partial WAL replay, etc.)
     /// and its descendants are stranded. While this holds,
@@ -186,7 +254,7 @@ impl<P> OpGraph<P> {
         if let Some(op) = next.ops.remove(dot) {
             for parent in &op.parents {
                 if let Some(set) = next.children.get_mut(parent) {
-                    set.remove(dot);
+                    child_remove(set, dot);
                     if set.is_empty() {
                         next.children.remove(parent);
                         // Parent has no children left in `next.ops`, so by
@@ -216,7 +284,7 @@ impl<P> OpGraph<P> {
     }
 }
 
-impl<P> Default for OpGraph<P> {
+impl<P: Clone> Default for OpGraph<P> {
     fn default() -> Self {
         Self::new()
     }
@@ -260,7 +328,7 @@ impl<P: Clone> OpGraph<P> {
         self.ops.insert(id, op.clone());
         for p in &parents {
             self.heads.remove(p);
-            self.children.entry(*p).or_default().insert(id);
+            child_insert(self.children.entry_or_default(*p), id);
         }
         self.heads.insert(id);
         // After server-side data loss, `debug_remove` re-promotes a non-SC
@@ -270,8 +338,8 @@ impl<P: Clone> OpGraph<P> {
         // The op stays in `self.ops` either way; once the missing ancestor is
         // restored, `receive_changeset`'s `try_promote_self_contained` cascade
         // lifts it through `self.children` automatically.
-        if parents.iter().all(|p| self.self_contained.contains(p)) {
-            self.self_contained.insert(id);
+        if parents.iter().all(|p| self.self_contained.contains_key(p)) {
+            self.self_contained.insert(id, ());
         }
         self.pending.push(op.clone());
 
@@ -339,7 +407,7 @@ impl<P: Clone> OpGraph<P> {
             if cs
                 .ops
                 .iter()
-                .any(|op| !self.self_contained.contains(&op.id))
+                .any(|op| !self.self_contained.contains_key(&op.id))
             {
                 continue;
             }
@@ -454,21 +522,36 @@ impl<P: Clone> OpGraph<P> {
     }
 }
 
+/// Reusable per-changeset scratch buffers. A bulk replay
+/// (`from_changesets`, `receive_changesets_ordered`) processes hundreds of
+/// thousands of changesets; allocating these fresh per changeset dominated
+/// the replay under wasm's allocator.
+#[derive(Default)]
+struct ReceiveScratch {
+    local_known: HashSet<Dot>,
+    already_dots: Vec<Dot>,
+    promote_queue: Vec<Dot>,
+}
+
 impl<P: Clone + Eq> OpGraph<P> {
-    fn try_promote_self_contained_mut(&mut self, root: Dot) {
-        let mut queue: Vec<Dot> = vec![root];
+    fn try_promote_self_contained_mut(&mut self, root: Dot, queue: &mut Vec<Dot>) {
+        queue.clear();
+        queue.push(root);
         while let Some(dot) = queue.pop() {
-            if self.self_contained.contains(&dot) {
+            if self.self_contained.contains_key(&dot) {
                 continue;
             }
             let promotable = match self.ops.get(&dot) {
-                Some(op) => op.parents.iter().all(|p| self.self_contained.contains(p)),
+                Some(op) => op
+                    .parents
+                    .iter()
+                    .all(|p| self.self_contained.contains_key(p)),
                 None => continue,
             };
             if !promotable {
                 continue;
             }
-            self.self_contained.insert(dot);
+            self.self_contained.insert(dot, ());
             if let Some(children) = self.children.get(&dot) {
                 queue.extend(children.iter().copied());
             }
@@ -492,6 +575,14 @@ impl<P: Clone + Eq> OpGraph<P> {
     /// linear pass. Validation is Phase-A-before-Phase-B all-or-nothing: on any
     /// `Err` the graph is left untouched (Phase A only reads `self`).
     pub fn receive_changeset_mut(&mut self, cs: crate::Changeset<P>) -> Result<(), CrdtError> {
+        self.receive_changeset_mut_scratch(cs, &mut ReceiveScratch::default())
+    }
+
+    fn receive_changeset_mut_scratch(
+        &mut self,
+        cs: crate::Changeset<P>,
+        scratch: &mut ReceiveScratch,
+    ) -> Result<(), CrdtError> {
         if cs.ops.is_empty() {
             return Err(CrdtError::EmptyChangeset);
         }
@@ -504,8 +595,10 @@ impl<P: Clone + Eq> OpGraph<P> {
             op.parents.dedup();
         }
 
-        let mut local_known: hashbrown::HashSet<Dot> = hashbrown::HashSet::new();
-        let mut already_dots: Vec<Dot> = Vec::new();
+        let local_known = &mut scratch.local_known;
+        let already_dots = &mut scratch.already_dots;
+        local_known.clear();
+        already_dots.clear();
 
         for op in &cs.ops {
             // Intra-cs duplicate dot would silently overwrite in the Phase B
@@ -554,7 +647,9 @@ impl<P: Clone + Eq> OpGraph<P> {
             if all_known && self.changesets.iter().any(|c| c.as_ref() == &cs) {
                 return Ok(());
             }
-            return Err(CrdtError::PartialDuplicate { dots: already_dots });
+            return Err(CrdtError::PartialDuplicate {
+                dots: std::mem::take(already_dots),
+            });
         }
 
         // Phase A above leaves no rejectable state; the mutation below is
@@ -563,21 +658,17 @@ impl<P: Clone + Eq> OpGraph<P> {
             self.ops.insert(op.id, op.clone());
             for p in &op.parents {
                 self.heads.remove(p);
-                self.children.entry(*p).or_default().insert(op.id);
+                child_insert(self.children.entry_or_default(*p), op.id);
             }
             self.advance_clock_past(&op.id);
         }
         for op in &cs.ops {
-            if self
-                .children
-                .get(&op.id)
-                .is_none_or(imbl::HashSet::is_empty)
-            {
+            if self.children.get(&op.id).is_none_or(|c| c.is_empty()) {
                 self.heads.insert(op.id);
             }
         }
         for op in &cs.ops {
-            self.try_promote_self_contained_mut(op.id);
+            self.try_promote_self_contained_mut(op.id, &mut scratch.promote_queue);
         }
         self.changesets.push_back(std::sync::Arc::new(cs));
         Ok(())
@@ -589,8 +680,9 @@ impl<P: Clone + Eq> OpGraph<P> {
     /// not an `O(N)` persistent-collection clone per changeset.
     pub fn from_changesets(css: Vec<crate::Changeset<P>>) -> Result<Self, CrdtError> {
         let mut g = Self::new();
+        let mut scratch = ReceiveScratch::default();
         for cs in css {
-            g.receive_changeset_mut(cs)?;
+            g.receive_changeset_mut_scratch(cs, &mut scratch)?;
         }
         Ok(g)
     }
@@ -635,13 +727,14 @@ impl<P: Clone + Eq> OpGraph<P> {
         let mut queue: std::collections::VecDeque<usize> =
             (0..n).filter(|&i| unmet[i] == 0).collect();
         let mut applied: Vec<bool> = vec![false; n];
+        let mut scratch = ReceiveScratch::default();
         while let Some(i) = queue.pop_front() {
             if applied[i] {
                 continue;
             }
             // receive_changeset_mut은 verbatim 중복에 Ok(())를 돌려주므로 진전으로 처리됨.
             // Err 시 Phase A 전량거부라 graph는 무변경 → 안전하게 in-place 재시도/드롭.
-            match graph.receive_changeset_mut(css[i].clone()) {
+            match graph.receive_changeset_mut_scratch(css[i].clone(), &mut scratch) {
                 Ok(()) => {
                     applied[i] = true;
                     if let Some(deps) = dependents.get(&i) {
@@ -777,7 +870,7 @@ impl<P: Clone + Eq> OpGraph<P> {
                 && cs
                     .ops
                     .iter()
-                    .any(|op| !self.self_contained.contains(&op.id))
+                    .any(|op| !self.self_contained.contains_key(&op.id))
             {
                 continue;
             }
@@ -795,7 +888,7 @@ enum FrontierDelta {
     LocalUnknown(HashSet<Dot>),
 }
 
-impl<P> OpGraph<P> {
+impl<P: Clone> OpGraph<P> {
     /// Interleaved forward (remote-ancestry) and backward (our-unknown-region) walks,
     /// returning whichever completes first. The forward walk builds the remote's causal
     /// history; the backward walk builds the set of our ops the remote lacks, pruning at
@@ -2280,8 +2373,8 @@ mod proptests {
                 .collect();
             let expected_heads: HashSet<Dot> = g
                 .ops
-                .keys()
-                .copied()
+                .iter()
+                .map(|(d, _)| d)
                 .filter(|id| !referenced.contains(id))
                 .collect();
             let actual_heads: HashSet<Dot> = g.heads.iter().copied().collect();
@@ -2307,10 +2400,10 @@ mod proptests {
         ) {
             let g = apply_all(&causal_permute(&ops, seed));
             let mut seen: HashSet<Dot> = HashSet::new();
-            for (start, _) in &g.ops {
+            for (start, _) in g.ops.iter() {
                 let mut on_path: HashSet<Dot> = HashSet::new();
                 prop_assert!(
-                    dfs_acyclic(&g, *start, &mut on_path, &mut seen),
+                    dfs_acyclic(&g, start, &mut on_path, &mut seen),
                     "cycle detected starting from {:?}", start
                 );
             }
@@ -2340,7 +2433,12 @@ mod proptests {
             if cs.ops.iter().all(|op| known.contains(&op.id)) {
                 continue;
             }
-            if !all_self_contained && cs.ops.iter().any(|op| !g.self_contained.contains(&op.id)) {
+            if !all_self_contained
+                && cs
+                    .ops
+                    .iter()
+                    .any(|op| !g.self_contained.contains_key(&op.id))
+            {
                 continue;
             }
             out.insert(cs.ops.iter().map(|o| o.id).collect());
@@ -2365,7 +2463,7 @@ mod proptests {
             heads_mask in any::<u64>(),
         ) {
             let g = apply_all(&causal_permute(&ops, perm_seed));
-            let mut dots: Vec<Dot> = g.ops.keys().copied().collect();
+            let mut dots: Vec<Dot> = g.ops.iter().map(|(d, _)| d).collect();
             dots.sort();
             let remote_heads: HashSet<Dot> = dots
                 .iter()

@@ -1029,7 +1029,7 @@ impl ProjectedState {
 
     fn leaf_type_of(&self, dot: Dot) -> Option<NodeType> {
         let lv = *self.logs.seq.lv_of.get(&dot)?;
-        match &self.logs.seq.ops[lv] {
+        match &self.logs.seq.entries[lv].op {
             ListOp::Ins { item, .. } => Some(item.as_child_type()),
             _ => None,
         }
@@ -1178,7 +1178,7 @@ impl ProjectedState {
 
     fn is_inline_leaf(&self, dot: Dot) -> bool {
         self.logs.seq.lv_of.get(&dot).is_some_and(|&lv| {
-            matches!(&self.logs.seq.ops[lv], ListOp::Ins { item, .. } if is_inline_leaf_item(item))
+            matches!(&self.logs.seq.entries[lv].op, ListOp::Ins { item, .. } if is_inline_leaf_item(item))
         })
     }
 
@@ -1523,7 +1523,7 @@ impl ProjectedState {
             let Some(&lv) = self.logs.seq.lv_of.get(&t) else {
                 return false;
             };
-            let ListOp::Ins { item, .. } = &self.logs.seq.ops[lv] else {
+            let ListOp::Ins { item, .. } = &self.logs.seq.entries[lv].op else {
                 return false;
             };
             if !is_inline_leaf_item(item) {
