@@ -107,7 +107,12 @@ pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position)
                     p
                 },
             };
-            if lo_r <= start && end <= hi_r {
+            // Coverage is positional: a leaf is inside the range when its
+            // extent lies within [lo, hi] by path. Comparing full
+            // ResolvedPositions would fold in caret affinity, which drops the
+            // last leaf whenever `hi` sits at a block end with Upstream affinity
+            // (the canonical caret form there) — even though the range covers it.
+            if lo_r.path() <= start.path.as_slice() && end.path.as_slice() <= hi_r.path() {
                 out.push(l.dot());
             }
         }
@@ -502,6 +507,40 @@ mod tests {
             .unwrap();
         let before = Position::new(bq, 0).resolve(&view).unwrap();
         assert!(before < r);
+    }
+
+    #[test]
+    fn inline_leaf_dots_cover_last_leaf_with_upstream_block_end_head() {
+        // Canonical forward selections normalize to an Upstream head; at a block
+        // end that head stays Upstream. Leaf coverage is positional, so the final
+        // leaf must still be included even though the head leans upstream.
+        let (pd, para) = para_doc(&[
+            SeqItem::Char('h'),
+            SeqItem::Char('e'),
+            SeqItem::Char('l'),
+            SeqItem::Char('l'),
+            SeqItem::Char('o'),
+        ]);
+        let view = DocView::new(&pd);
+        let from = Position {
+            node: para,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        let to = Position {
+            node: para,
+            offset: 5,
+            affinity: Affinity::Upstream,
+        };
+        let dots = inline_leaf_dots_in_range(&view, &from, &to);
+        let text: String = dots
+            .iter()
+            .filter_map(|d| view.leaf(*d).and_then(|l| l.as_char()))
+            .collect();
+        assert_eq!(
+            text, "hello",
+            "Upstream block-end head must not drop the last leaf"
+        );
     }
 
     #[test]

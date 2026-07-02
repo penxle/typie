@@ -1565,6 +1565,38 @@ mod tests {
     }
 
     #[test]
+    fn ffi_spellcheck_tracked_range_text_matches_context() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("않녕하세요") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let sel = editor.prose_to_selection(0, 5).expect("ok").expect("some");
+
+        editor
+            .enqueue(editor_core::Message::TrackedRange {
+                op: editor_core::TrackedRangeOp::Add {
+                    id: "err-1".into(),
+                    group: "spellcheck".into(),
+                    selection: sel,
+                    metadata: String::new(),
+                },
+            })
+            .expect("enqueue tracked-range add");
+        let _ = editor.tick().expect("tick");
+
+        let ranges = editor.tracked_ranges(None).expect("ffi ok");
+        assert_eq!(ranges.len(), 1, "range must be present");
+        assert_eq!(
+            ranges[0].text, "않녕하세요",
+            "tracked range text must equal server context so staleness filter keeps it"
+        );
+
+        let _ = p1;
+    }
+
+    #[test]
     fn ffi_export_page_vector_returns_nonempty_bytes() {
         // export 결과가 비어있지 않은 바이너리여야 호스트가 파일로 저장할 수 있다.
         let (initial, ..) = state! {
@@ -1619,6 +1651,21 @@ mod tests {
             sel.head.affinity,
             editor_state::Affinity::Upstream
         ));
+
+        // Regardless of the canonical Upstream head at the block end, the mapped
+        // selection must cover the full prose range when its text is collected.
+        editor
+            .with_inner(|inner| {
+                let view = inner.editor.state().view();
+                let resolved = sel.resolve(&view).expect("resolve");
+                assert_eq!(
+                    resolved.collect_text(),
+                    "hello",
+                    "mapped selection must cover exactly the prose range"
+                );
+                Ok(())
+            })
+            .expect("with_inner ok");
 
         let _ = p1;
     }
