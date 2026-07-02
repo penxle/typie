@@ -731,6 +731,12 @@ declare class Editor {
     missing_changesets_tolerant(remote_heads_payload: Uint8Array): Uint8Array;
     modifier_span_selection(pos: Position, modifier_type: ModifierType): Selection | undefined;
     modifier_state(): ModifierState | undefined;
+    /**
+     * Fixed per-page backing sizes for the incremental renderer. Surfaces are
+     * allocated at this size (>= any content height) so content-height changes
+     * never resize (and clear) the canvas. See `View::page_backing_sizes`.
+     */
+    page_backing_sizes(): Size[];
     page_external_elements(page: number): ExternalElement[];
     page_link_rects(page: number): LinkRect[];
     page_sizes(): Size[];

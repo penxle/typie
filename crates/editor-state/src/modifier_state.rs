@@ -20,13 +20,6 @@ pub enum RangeNode<'a> {
 }
 
 impl<'a> RangeNode<'a> {
-    fn node_type(&self) -> NodeType {
-        match self {
-            RangeNode::Block(b) => b.node_type(),
-            RangeNode::Leaf(l) => l.node_type(),
-        }
-    }
-
     fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
         match self {
             RangeNode::Block(b) => b.effective(),
@@ -65,11 +58,48 @@ pub fn range_nodes<'a>(rs: &ResolvedSelection<'a>) -> Vec<RangeNode<'a>> {
     out
 }
 
-fn modifier_for_range_state(node: &RangeNode, ty: ModifierType) -> Option<Modifier> {
-    node.effective()
-        .get(&ty)
-        .cloned()
-        .or_else(|| text_style_default_modifier(ty))
+/// Nodes sharing a host block and node type share one `type_path`. Interning
+/// the distinct paths (a handful — blocks × leaf types) lets the per-type scans
+/// test target applicability once per distinct path instead of rebuilding the
+/// ancestor path per node per modifier type, which made a whole-document
+/// selection O(nodes · types · depth) with an allocation each.
+struct RangePathTable {
+    node_path: Vec<usize>,
+    entries: Vec<(NodeType, Vec<NodeType>)>,
+}
+
+fn build_range_path_table(nodes: &[RangeNode]) -> RangePathTable {
+    let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
+    let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
+        std::collections::HashMap::new();
+    let mut node_path = Vec::with_capacity(nodes.len());
+    for n in nodes {
+        let key = match n {
+            RangeNode::Block(b) => (b.id(), b.node_type()),
+            RangeNode::Leaf(l) => (
+                l.parent()
+                    .expect("a collected leaf has a live host block")
+                    .id(),
+                l.node_type(),
+            ),
+        };
+        let idx = *index.entry(key).or_insert_with(|| {
+            entries.push((key.1, n.type_path()));
+            entries.len() - 1
+        });
+        node_path.push(idx);
+    }
+    RangePathTable { node_path, entries }
+}
+
+fn applicability(table: &RangePathTable, ty: ModifierType) -> Vec<bool> {
+    let target = &Schema::modifier_spec(ty).target;
+    let targets = target.rightmost_node_types();
+    table
+        .entries
+        .iter()
+        .map(|(nt, path)| targets.contains(nt) && target.matches(path))
+        .collect()
 }
 
 fn modifier_for_caret_state(
@@ -111,54 +141,116 @@ fn textblock_type_path(textblock: &NodeView) -> Vec<NodeType> {
     path
 }
 
+/// Single pass over the range: most leaves carry an empty `effective()` map, so
+/// their per-type value is just the type's default. Only explicit entries need
+/// inspection; every type's verdict then follows from counts — how many
+/// applicable nodes there are, how many carried an explicit value, and whether
+/// those explicit values agreed.
 pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState {
+    struct Explicit<'a> {
+        value: &'a Modifier,
+        conflicting: bool,
+        count: usize,
+    }
+
     let mut out = ModifierState::default();
     let nodes = range_nodes(rs);
-    for ty in ModifierType::iter() {
-        let target = &Schema::modifier_spec(ty).target;
-        let targets = target.rightmost_node_types();
-        let mut canonical: Option<Modifier> = None;
-        let (mut absent_seen, mut mixed) = (false, false);
-        let sparse_absence_is_neutral = matches!(ty, ModifierType::Link);
-        for n in &nodes {
-            if !targets.contains(&n.node_type()) {
+    let table = build_range_path_table(&nodes);
+
+    let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
+        .map(|ty| (ty, applicability(&table, ty)))
+        .collect();
+
+    let mut path_count = vec![0usize; table.entries.len()];
+    for &pi in &table.node_path {
+        path_count[pi] += 1;
+    }
+
+    let bold_applicable = &apps[&ModifierType::Bold];
+    let mut explicit: BTreeMap<ModifierType, Explicit> = BTreeMap::new();
+    let (mut bold_any_applicable, mut bold_all, mut bold_any) = (false, true, false);
+    for (n, &pi) in nodes.iter().zip(&table.node_path) {
+        for (ty, m) in n.effective() {
+            if !apps.get(ty).is_some_and(|a| a[pi]) {
                 continue;
             }
-            if !target.matches(&n.type_path()) {
-                continue;
-            }
-            let value = modifier_for_range_state(n, ty);
-            match (value, &canonical) {
-                (Some(m), Some(c)) if &m == c => {}
-                (Some(_), Some(_)) => {
-                    mixed = true;
-                    break;
-                }
-                (Some(m), None) => {
-                    if absent_seen && !sparse_absence_is_neutral {
-                        mixed = true;
-                        break;
+            explicit
+                .entry(*ty)
+                .and_modify(|e| {
+                    e.count += 1;
+                    if e.value != m {
+                        e.conflicting = true;
                     }
-                    canonical = Some(m);
-                }
-                (None, Some(_)) => {
-                    if !sparse_absence_is_neutral {
-                        mixed = true;
-                        break;
-                    }
-                }
-                (None, None) => {
-                    absent_seen = true;
-                }
-            }
+                })
+                .or_insert(Explicit {
+                    value: m,
+                    conflicting: false,
+                    count: 1,
+                });
         }
-        if mixed {
-            out.set_mixed(ty);
-        } else if let Some(m) = canonical {
-            out.set_uniform(&m);
+        if bold_applicable[pi] {
+            bold_any_applicable = true;
+            let bold = match n {
+                RangeNode::Leaf(l) => leaf_is_bold(l),
+                RangeNode::Block(_) => false,
+            };
+            if bold {
+                bold_any = true;
+            } else {
+                bold_all = false;
+            }
         }
     }
-    out.effective_bold = effective_bold(&nodes);
+
+    for ty in ModifierType::iter() {
+        let applicable = &apps[&ty];
+        let applicable_count: usize = path_count
+            .iter()
+            .zip(applicable)
+            .filter(|(_, a)| **a)
+            .map(|(c, _)| c)
+            .sum();
+        if applicable_count == 0 {
+            continue;
+        }
+        let sparse_absence_is_neutral = matches!(ty, ModifierType::Link);
+        let ty_default = text_style_default_modifier(ty);
+        let ex = explicit.get(&ty);
+        if ex.is_some_and(|e| e.conflicting) {
+            out.set_mixed(ty);
+            continue;
+        }
+        let defaulted = applicable_count - ex.map_or(0, |e| e.count);
+        match (ex.map(|e| e.value), ty_default) {
+            (Some(e), _) if defaulted == 0 => out.set_uniform(e),
+            (Some(e), Some(d)) => {
+                if *e == d {
+                    out.set_uniform(e);
+                } else {
+                    out.set_mixed(ty);
+                }
+            }
+            (Some(e), None) => {
+                if sparse_absence_is_neutral {
+                    out.set_uniform(e);
+                } else {
+                    out.set_mixed(ty);
+                }
+            }
+            (None, Some(d)) => out.set_uniform(&d),
+            (None, None) => {}
+        }
+    }
+
+    out.effective_bold = if !bold_any_applicable {
+        Tri::Absent
+    } else if bold_all {
+        Tri::Uniform { value: () }
+    } else if bold_any {
+        Tri::Mixed
+    } else {
+        Tri::Absent
+    };
     out
 }
 
@@ -174,36 +266,6 @@ fn leaf_is_bold(l: &LeafView) -> bool {
             l.effective().get(&ModifierType::FontWeight),
             Some(Modifier::FontWeight { value }) if *value >= 700
         )
-}
-
-pub fn effective_bold(nodes: &[RangeNode]) -> Tri<()> {
-    let target = &Schema::modifier_spec(ModifierType::Bold).target;
-    let targets = target.rightmost_node_types();
-    let (mut any_applicable, mut all_bold, mut any_bold) = (false, true, false);
-    for n in nodes {
-        if !targets.contains(&n.node_type()) || !target.matches(&n.type_path()) {
-            continue;
-        }
-        any_applicable = true;
-        let bold = match n {
-            RangeNode::Leaf(l) => leaf_is_bold(l),
-            RangeNode::Block(_) => false,
-        };
-        if bold {
-            any_bold = true;
-        } else {
-            all_bold = false;
-        }
-    }
-    if !any_applicable {
-        Tri::Absent
-    } else if all_bold {
-        Tri::Uniform { value: () }
-    } else if any_bold {
-        Tri::Mixed
-    } else {
-        Tri::Absent
-    }
 }
 
 pub fn resolve_modifier_state(

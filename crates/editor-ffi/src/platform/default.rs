@@ -33,7 +33,7 @@ impl SurfaceHandle {
         unreachable!();
     }
 
-    pub fn resize(&mut self, _width: f64, _height: f64, _scale_factor: f64) {
-        unreachable!();
+    pub fn resize(&mut self, _width: f64, _height: f64, _scale_factor: f64) -> bool {
+        unreachable!()
     }
 }

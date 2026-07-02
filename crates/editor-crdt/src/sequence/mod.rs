@@ -554,6 +554,28 @@ impl SeqCheckout {
         Some(log.entries[lv].dot)
     }
 
+    /// Dots of the invisible (tombstone) items sitting strictly between visible
+    /// position `pos` and the next visible element. Anchors on these ghosts
+    /// resolve to boundaries inside that gap, so a caller reasoning about span
+    /// boundaries around `pos` must consider them. O(ghosts · log n).
+    pub fn invisible_dots_after_visible(&self, pos: usize) -> Vec<Dot> {
+        let Some(lv) = self.ctx.tree.end_pos_to_lv(pos) else {
+            return Vec::new();
+        };
+        let mut i = self.ctx.tree.doc_index_of_lv(lv) + 1;
+        let total = self.ctx.tree.len();
+        let mut out = Vec::new();
+        while i < total {
+            let (run, off) = self.ctx.tree.get(i);
+            if run.end == 0 {
+                break;
+            }
+            out.push(Dot::new(run.start.actor, run.start.clock + off as u64));
+            i += 1;
+        }
+        out
+    }
+
     pub fn del_target_dots<P: Clone>(&self, log: &OpLog<P>, del: Dot) -> Vec<Dot> {
         let Some(&del_lv) = self.lv_of.get(&del) else {
             return Vec::new();

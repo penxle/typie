@@ -50,7 +50,7 @@ pub use composition::*;
 pub use error::*;
 pub use flat::{
     FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPositionFlatExt, flat_chars, flat_segments,
-    flat_segments_in_range, flat_size, flat_text,
+    flat_segments_in_range, flat_segments_in_range_with_pos, flat_size, flat_text,
 };
 pub use gap_cursor::{GapCursor, as_gap_cursor, gap_cursor_at};
 pub use layout_dirty::LayoutDirty;

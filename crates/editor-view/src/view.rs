@@ -18,6 +18,7 @@ use crate::view_state::{GapPhantom, GroupDecoration, PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
 const CONTINUOUS_MARGIN_X: f32 = 20.0;
+const CONTINUOUS_CONTENT_CAP: f32 = 1024.0;
 
 pub struct View {
     resource: Arc<Mutex<Resource>>,
@@ -204,8 +205,11 @@ impl View {
                 let avail_content = (self.viewport.width - 2.0 * CONTINUOUS_MARGIN_X).max(0.0);
                 let content_width = (max_width as f32).min(avail_content);
                 let page_width = content_width + 2.0 * CONTINUOUS_MARGIN_X;
-                let paginator =
-                    Paginator::continuous(page_width, 1024.0, EdgeInsets::all(CONTINUOUS_MARGIN_X));
+                let paginator = Paginator::continuous(
+                    page_width,
+                    CONTINUOUS_CONTENT_CAP,
+                    EdgeInsets::all(CONTINUOUS_MARGIN_X),
+                );
                 (
                     paginator,
                     content_width,
@@ -538,6 +542,33 @@ impl View {
 
     pub fn pages(&self) -> &[LayoutPage] {
         self.layout.as_ref().map_or(&[], |r| &r.pages)
+    }
+
+    /// Per-page maximum ("backing") size for incremental rendering. The CPU
+    /// buffer and canvas are allocated at this fixed size so a content-height
+    /// change never resizes (and thus clears) the surface. Continuous pages cap
+    /// at the content cap plus vertical margins — but never below an oversized
+    /// page that a single unbreakable block forced taller; paginated pages have
+    /// a fixed height that already equals their backing size.
+    pub fn page_backing_sizes(&self) -> Vec<editor_common::Size> {
+        let cap = match self.fingerprint.as_ref().map(|f| &f.layout_mode) {
+            Some(LayoutMode::Continuous { .. }) => {
+                Some(CONTINUOUS_CONTENT_CAP + 2.0 * CONTINUOUS_MARGIN_X)
+            }
+            _ => None,
+        };
+        self.pages()
+            .iter()
+            .map(|p| {
+                editor_common::Size::new(
+                    p.size.width,
+                    match cap {
+                        Some(c) => p.size.height.max(c),
+                        None => p.size.height,
+                    },
+                )
+            })
+            .collect()
     }
 
     pub fn external_elements(

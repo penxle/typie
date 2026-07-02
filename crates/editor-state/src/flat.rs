@@ -140,17 +140,16 @@ fn to_flat_walk(
 
 fn from_flat_walk(container: &NodeView, start_flat: usize, target: usize) -> Option<Position> {
     let mut acc = start_flat;
-    let children: Vec<ChildView> = container.children().collect();
-    for (i, c) in children.iter().enumerate() {
+    for (i, c) in container.children().enumerate() {
         match c {
             ChildView::Block(b) => {
-                let content = block_flat_size(b) - 2;
+                let content = block_flat_size(&b) - 2;
                 if target == acc {
                     return Some(Position::new(container.id(), i));
                 }
                 acc += 1;
                 if target >= acc && target <= acc + content {
-                    return from_flat_walk(b, acc, target);
+                    return from_flat_walk(&b, acc, target);
                 }
                 acc += content;
                 if target == acc {
@@ -167,7 +166,7 @@ fn from_flat_walk(container: &NodeView, start_flat: usize, target: usize) -> Opt
         }
     }
     if target == acc {
-        return Some(Position::new(container.id(), children.len()));
+        return Some(Position::new(container.id(), container.child_count()));
     }
     None
 }
@@ -230,8 +229,18 @@ pub fn flat_text(view: &DocView, range: Range<usize>) -> String {
 
 fn collect_chars(block: &NodeView, idx: &mut usize, range: &Range<usize>, out: &mut Vec<char>) {
     for c in block.children() {
+        if *idx >= range.end {
+            return;
+        }
         match c {
             ChildView::Block(b) => {
+                // Skip whole subtrees before the window via their O(1) flat size,
+                // so a small window never walks the rest of the document.
+                let size = block_flat_size(&b);
+                if *idx + size <= range.start {
+                    *idx += size;
+                    continue;
+                }
                 push_unit(FLAT_OPEN, idx, range, out);
                 collect_chars(&b, idx, range, out);
                 push_unit(FLAT_CLOSE, idx, range, out);
@@ -256,30 +265,111 @@ fn push_unit(ch: char, idx: &mut usize, range: &Range<usize>, out: &mut Vec<char
 }
 
 pub fn flat_segments_in_range(view: &DocView, range: Range<usize>) -> Vec<FlatSegment> {
+    flat_segments_in_range_with_pos(view, range)
+        .into_iter()
+        .map(|(_, seg)| seg)
+        .collect()
+}
+
+/// Segments overlapping `range`, each with its absolute flat start position.
+/// Text segments are trimmed to the range. Skips whole subtrees outside the
+/// range via their O(1) flat size and stops at `range.end`, so the walk is
+/// O(blocks before the range + range) rather than O(document).
+pub fn flat_segments_in_range_with_pos(
+    view: &DocView,
+    range: Range<usize>,
+) -> Vec<(usize, FlatSegment)> {
     let mut out = Vec::new();
     let mut idx = 0usize;
-    for seg in flat_segments(view) {
-        let size = match &seg {
-            FlatSegment::Text { leaves, .. } => leaves.len(),
-            _ => 1,
-        };
-        let seg_range = idx..idx + size;
-        if seg_range.start < range.end && range.start < seg_range.end {
-            match seg {
-                FlatSegment::Text { block, leaves } => {
-                    let lo = range.start.saturating_sub(idx);
-                    let hi = (range.end - idx).min(leaves.len());
-                    out.push(FlatSegment::Text {
-                        block,
-                        leaves: leaves[lo..hi].to_vec(),
-                    });
-                }
-                other => out.push(other),
-            }
-        }
-        idx += size;
+    if let Some(root) = view.root() {
+        collect_segments_in_range(&root, &mut idx, &range, &mut out);
     }
     out
+}
+
+fn collect_segments_in_range(
+    block: &NodeView,
+    idx: &mut usize,
+    range: &Range<usize>,
+    out: &mut Vec<(usize, FlatSegment)>,
+) -> bool {
+    let block_id = block.id();
+    let mut run: Vec<Dot> = Vec::new();
+    let mut run_start = 0usize;
+    fn flush(
+        block: Dot,
+        run: &mut Vec<Dot>,
+        run_start: usize,
+        out: &mut Vec<(usize, FlatSegment)>,
+    ) {
+        if !run.is_empty() {
+            out.push((
+                run_start,
+                FlatSegment::Text {
+                    block,
+                    leaves: std::mem::take(run),
+                },
+            ));
+        }
+    }
+    for c in block.children() {
+        if *idx >= range.end {
+            flush(block_id, &mut run, run_start, out);
+            return false;
+        }
+        match classify(&c) {
+            ChildClass::Char(d) => {
+                if *idx >= range.start {
+                    if run.is_empty() {
+                        run_start = *idx;
+                    }
+                    run.push(d);
+                }
+                *idx += 1;
+            }
+            other => {
+                flush(block_id, &mut run, run_start, out);
+                match other {
+                    ChildClass::Break(d) => {
+                        if *idx >= range.start {
+                            out.push((*idx, FlatSegment::Break { leaf: d }));
+                        }
+                        *idx += 1;
+                    }
+                    ChildClass::Atom(d) => {
+                        if *idx >= range.start {
+                            out.push((*idx, FlatSegment::Atom { leaf: d }));
+                        }
+                        *idx += 1;
+                    }
+                    ChildClass::Block => {
+                        let ChildView::Block(b) = c else {
+                            unreachable!()
+                        };
+                        let size = block_flat_size(&b);
+                        if *idx + size <= range.start {
+                            *idx += size;
+                            continue;
+                        }
+                        if *idx >= range.start {
+                            out.push((*idx, FlatSegment::Open { block: b.id() }));
+                        }
+                        *idx += 1;
+                        if !collect_segments_in_range(&b, idx, range, out) {
+                            return false;
+                        }
+                        if *idx >= range.start && *idx < range.end {
+                            out.push((*idx, FlatSegment::Close { block: b.id() }));
+                        }
+                        *idx += 1;
+                    }
+                    ChildClass::Char(..) => unreachable!(),
+                }
+            }
+        }
+    }
+    flush(block_id, &mut run, run_start, out);
+    true
 }
 
 #[cfg(test)]

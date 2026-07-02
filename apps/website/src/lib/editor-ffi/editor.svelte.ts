@@ -280,6 +280,7 @@ export class Editor {
   #selection = $state<Selection | undefined>();
   #lastHistoryTag = $state<HistoryTag>();
   #pageSizes = $state<Size[]>([]);
+  #pageBackingSizes = $state<Size[]>([]);
   // Whole-document derived data is expensive (O(pages · N): each builds every
   // page's fragment). It is needed only by pointer/keyboard-driven consumers
   // (link tooltip), so compute it lazily and memoize per tick instead of eagerly
@@ -377,6 +378,7 @@ export class Editor {
 
     if (fields.includes('page_sizes')) {
       this.#pageSizes = this.#wasm.page_sizes();
+      this.#pageBackingSizes = this.#wasm.page_backing_sizes();
     }
 
     // external_elements / table_overlays / link_rects are intentionally NOT
@@ -768,6 +770,10 @@ export class Editor {
 
   get pageSizes() {
     return this.#pageSizes;
+  }
+
+  get pageBackingSizes() {
+    return this.#pageBackingSizes;
   }
 
   get externalElements(): ExternalElement[] {

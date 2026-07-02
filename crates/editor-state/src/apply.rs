@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use editor_crdt::{Changeset, CrdtError, Dot, Op};
+use editor_crdt::{Changeset, CrdtError, Dot, ListOp, Op};
 use editor_model::EditOp;
 use hashbrown::HashSet;
 
@@ -11,6 +11,8 @@ use crate::{Composition, PendingModifiers, PendingStyle, State, StateError};
 pub struct BatchedState<'a> {
     inner: &'a mut State,
     pub(crate) emitted: Vec<RecordedOp>,
+    defer_deletes: bool,
+    deferred: usize,
 }
 
 impl<'a> std::ops::Deref for BatchedState<'a> {
@@ -26,12 +28,39 @@ impl<'a> BatchedState<'a> {
         // then apply. Seq ops carry no prior, so this is a cheap match.
         let prior = capture_prior(&self.inner.projected, &payload);
         let pm = self.inner.projected_mut();
-        let op = pm.apply(payload)?;
+        let op = if self.defer_deletes && matches!(payload, EditOp::Seq(ListOp::Del { .. })) {
+            self.deferred += 1;
+            pm.apply_warm_only(payload)?
+        } else {
+            if self.deferred > 0 {
+                // A non-delete arrived mid-deferral; its projection pass reads the
+                // tree, so the pending deletions must land first.
+                pm.reproject_after_delete()?;
+                self.deferred = 0;
+            }
+            pm.apply(payload)?
+        };
         self.emitted.push(RecordedOp {
             op: op.clone(),
             prior,
         });
         Ok(op)
+    }
+
+    /// Defer the projection of subsequent sequence-delete ops: each applies
+    /// warm-only, leaving the projection stale until [`deferred_deletes`]
+    /// (Self::deferred_deletes) are flushed by one
+    /// [`ProjectedState::reproject_after_delete`]. Only sound for delete-only
+    /// batches (that reprojection carries the pre-delete indexes forward); a
+    /// non-delete op arriving while deferred flushes automatically before it
+    /// projects.
+    pub fn set_defer_deletes(&mut self, on: bool) {
+        self.defer_deletes = on;
+    }
+
+    /// How many deletes were applied warm-only and still await a flush.
+    pub fn deferred_deletes(&self) -> usize {
+        self.deferred
     }
 
     pub fn set_selection(&mut self, selection: Option<Selection>) {
@@ -135,6 +164,8 @@ impl State {
             let mut batched = BatchedState {
                 inner: &mut next,
                 emitted: Vec::new(),
+                defer_deletes: false,
+                deferred: 0,
             };
             f(&mut batched)?;
             std::mem::take(&mut batched.emitted)
@@ -160,6 +191,8 @@ impl State {
             let mut batched = BatchedState {
                 inner: self,
                 emitted: Vec::new(),
+                defer_deletes: false,
+                deferred: 0,
             };
             f(&mut batched)?;
             std::mem::take(&mut batched.emitted)

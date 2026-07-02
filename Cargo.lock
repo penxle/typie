@@ -676,6 +676,7 @@ dependencies = [
  "editor-transaction",
  "fancy-regex",
  "log",
+ "proptest",
  "smallvec",
  "strum",
  "thiserror",

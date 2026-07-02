@@ -157,6 +157,11 @@ pub struct Editor {
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     mode: Mode,
+    // Selection rects for the current (selection, render_epoch), shared by the
+    // per-page render signatures, the selection mark, and the endpoints query —
+    // a whole-document selection otherwise recomputes the full rect walk for
+    // each of those consumers on every frame.
+    selection_rects_cache: Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>,
 }
 
 struct ProbeGuard<'e> {
@@ -217,6 +222,7 @@ impl Editor {
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             mode: Mode::Apply,
+            selection_rects_cache: Mutex::new(None),
         }
     }
 
@@ -354,7 +360,29 @@ impl Editor {
     pub fn selection_endpoints(&self) -> Option<editor_view::SelectionEndpoints> {
         let doc = self.state.view();
         let resolved = self.state.selection.as_ref()?.resolve(&doc)?;
-        self.view.selection_endpoints(&resolved)
+        if resolved.is_collapsed() {
+            return None;
+        }
+        let rects = self.cached_selection_rects()?;
+        let first = rects.first()?;
+        let last = rects.last()?;
+        Some(editor_view::SelectionEndpoints {
+            from: PageRect::new(
+                first.page_idx,
+                editor_common::Rect::from_xywh(first.rect.x, first.rect.y, 0.0, first.rect.height),
+            ),
+            to: PageRect::new(
+                last.page_idx,
+                editor_common::Rect::from_xywh(
+                    last.rect.x + last.rect.width,
+                    last.rect.y,
+                    0.0,
+                    last.rect.height,
+                ),
+            ),
+            from_position: resolved.from().position(),
+            to_position: resolved.to().position(),
+        })
     }
 
     pub fn selection_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
@@ -578,6 +606,24 @@ impl Editor {
                     }
                     self.apply_remote_changesets(batch)?;
                 }
+                // Coalesce a consecutive run of text-input batches into one reduce +
+                // transact: an IME composition update enqueues several `TextInput`
+                // messages per frame, and each separately rebuilds the flat window
+                // and re-derives the edit. A batch containing `CommitAsIs` ends the
+                // run — the commit's text replacement must see the committed text
+                // before a following batch reopens a composition (it no-ops while
+                // one is active).
+                Message::TextInput { ops } => {
+                    let mut batch = ops;
+                    while matches!(iter.peek(), Some(Message::TextInput { .. }))
+                        && !batch.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs))
+                    {
+                        if let Some(Message::TextInput { ops }) = iter.next() {
+                            batch.extend(ops);
+                        }
+                    }
+                    self.process_message(Message::TextInput { ops: batch })?;
+                }
                 other => {
                     self.process_message(other)?;
                 }
@@ -747,14 +793,33 @@ impl Editor {
         }
     }
 
-    fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
+    fn cached_selection_rects(&self) -> Option<Arc<Vec<PageRect>>> {
+        let sel = self.state.selection?;
+        if let Some((csel, cepoch, rects)) = self.selection_rects_cache.lock().unwrap().as_ref()
+            && *csel == sel
+            && *cepoch == self.render_epoch
+        {
+            return Some(Arc::clone(rects));
+        }
         let doc = self.state.view();
-        let resolved = self.state.selection.as_ref()?.resolve(&doc)?;
+        let resolved = sel.resolve(&doc)?;
         if resolved.is_collapsed() {
             return None;
         }
-        let rects = self.view.selection_rects(&resolved);
-        Some(rects.iter().map(|r| r.without_meta()).collect())
+        let rects: Arc<Vec<PageRect>> = Arc::new(
+            self.view
+                .selection_rects(&resolved)
+                .iter()
+                .map(|r| r.without_meta())
+                .collect(),
+        );
+        *self.selection_rects_cache.lock().unwrap() =
+            Some((sel, self.render_epoch, Arc::clone(&rects)));
+        Some(rects)
+    }
+
+    fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
+        Some(self.cached_selection_rects()?.as_ref().clone())
     }
 
     #[cfg(test)]
@@ -780,7 +845,7 @@ impl Editor {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.render_epoch.hash(&mut hasher);
         self.focused.hash(&mut hasher);
-        if let Some(rects) = self.selection_mark_rects() {
+        if let Some(rects) = self.cached_selection_rects() {
             for r in rects.iter().filter(|r| r.page_idx == page_idx as usize) {
                 r.rect.x.to_bits().hash(&mut hasher);
                 r.rect.y.to_bits().hash(&mut hasher);
@@ -852,12 +917,15 @@ impl Editor {
         );
     }
 
+    /// `None` when `page_idx` is out of range: hosts render pages asynchronously
+    /// from document mutations, so a render request may still arrive for a page
+    /// an edit just removed.
     pub fn build_display_list(
         &mut self,
         page_idx: u32,
         scale_factor: f32,
-    ) -> (editor_renderer::display_list::DisplayList, IRect) {
-        let size = self.view.pages()[page_idx as usize].size;
+    ) -> Option<(editor_renderer::display_list::DisplayList, IRect)> {
+        let size = self.view.pages().get(page_idx as usize)?.size;
         let page_bounds = IRect {
             x0: 0,
             y0: 0,
@@ -876,7 +944,7 @@ impl Editor {
             scale_factor,
             &marks,
         );
-        (recorder.into_list(), page_bounds)
+        Some((recorder.into_list(), page_bounds))
     }
 
     pub fn export_page_vector(&mut self, page_idx: u32, scale_factor: f32) -> Vec<u8> {
@@ -1587,6 +1655,7 @@ impl Editor {
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             mode: Mode::Apply,
+            selection_rects_cache: Mutex::new(None),
         };
         // Lay out the view once so the first `tick()` reconciles clean (matches the
         // production `run_initialize` path); otherwise every test's first tick would
@@ -1640,6 +1709,52 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
+
+    // A frame's worth of IME composition traffic arrives as several consecutive
+    // `TextInput` messages; `tick` coalesces them into batched reduces. The
+    // coalesced drain must land on the same document, composition, and selection
+    // as ticking each message separately (the run splits after `CommitAsIs` so
+    // the commit's text replacement still sees the committed text).
+    #[test]
+    fn tick_coalesces_consecutive_text_input_messages() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 2)
+        };
+        let mut coalesced = Editor::new_test(state.clone());
+        let mut sequential = Editor::new_test(state);
+        let batches: Vec<Vec<FlatImeOp>> = vec![
+            vec![FlatImeOp::Compose { text: "ㄱ".into() }],
+            vec![FlatImeOp::Compose { text: "가".into() }],
+            vec![FlatImeOp::CommitAsIs],
+            vec![FlatImeOp::Compose { text: "ㄴ".into() }],
+        ];
+        for ops in batches.clone() {
+            coalesced.enqueue(Message::TextInput { ops });
+        }
+        coalesced.tick().unwrap();
+        for ops in batches {
+            sequential.enqueue(Message::TextInput { ops });
+            sequential.tick().unwrap();
+        }
+
+        let (a, b) = (coalesced.state(), sequential.state());
+        let (av, bv) = (a.view(), b.view());
+        let text_a = editor_state::flat_text(&av, 0..editor_state::flat_size(&av));
+        let text_b = editor_state::flat_text(&bv, 0..editor_state::flat_size(&bv));
+        assert_eq!(text_a, text_b);
+        assert!(text_a.contains("ab가ㄴ"), "unexpected text: {text_a:?}");
+        assert_eq!(a.composition, b.composition);
+        assert!(a.composition.is_some(), "trailing compose keeps composing");
+        assert_eq!(
+            a.selection
+                .and_then(|s| s.head.resolve(&av))
+                .map(|r| r.to_flat()),
+            b.selection
+                .and_then(|s| s.head.resolve(&bv))
+                .map(|r| r.to_flat()),
+        );
+    }
 
     /// Produce a remote changeset by replaying `ops` (in a single commit) onto a
     /// clone of `base`'s projected graph and extracting the resulting local
@@ -1883,6 +1998,53 @@ mod tests {
 
         editor.apply(Message::Insertion {
             op: InsertionOp::Text { text: "z".into() },
+        });
+        let after_edit = editor.state().clone();
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_edit);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    // The forward bulk-delete path (`delete_child_slots` defers per-step projection
+    // into one reproject when most root children go away) records the same sequence
+    // deletes as the eager path, so undo/redo must round-trip exactly.
+    #[test]
+    fn bulk_select_all_delete_undo_redo_round_trips() {
+        use editor_state::assert_state_eq;
+
+        let (initial, _r) = state! {
+            doc { r: root {
+                paragraph { text("p00") }
+                paragraph { text("p01") }
+                paragraph { text("p02") }
+                paragraph { text("p03") }
+                paragraph { text("p04") }
+                paragraph { text("p05") }
+                paragraph { text("p06") }
+                paragraph { text("p07") }
+                paragraph { text("p08") }
+                paragraph { text("p09") }
+                paragraph { text("p10") }
+                paragraph { text("p11") }
+            } }
+            selection: (r, 0) -> (r, 12)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Selection,
         });
         let after_edit = editor.state().clone();
 
@@ -4528,7 +4690,7 @@ mod tests {
         let mut buf_full = vec![0u8; pw as usize * ph as usize * 4];
         a.read_back_rect(&mut buf_full, pw as usize * 4, full);
 
-        let (dl, _b) = editor.build_display_list(0, sf);
+        let (dl, _b) = editor.build_display_list(0, sf).unwrap();
         let mut c = CpuSink::new(pw, ph);
         editor_renderer::diff::replay(&dl, full, &mut c);
         let mut buf_dl = vec![0u8; pw as usize * ph as usize * 4];
@@ -4564,7 +4726,7 @@ mod tests {
         let mut buf_full = vec![0u8; pw as usize * ph as usize * 4];
         a.read_back_rect(&mut buf_full, pw as usize * 4, full);
 
-        let (dl, _b) = editor.build_display_list(0, sf);
+        let (dl, _b) = editor.build_display_list(0, sf).unwrap();
         let mut c = CpuSink::new(pw, ph);
         editor_renderer::diff::replay(&dl, full, &mut c);
         let mut buf_dl = vec![0u8; pw as usize * ph as usize * 4];
@@ -4581,7 +4743,7 @@ mod tests {
         } } selection: (p1, 0) };
         let mut editor = editor_with_real_font(state);
 
-        let (dl, _b) = editor.build_display_list(0, 2.0);
+        let (dl, _b) = editor.build_display_list(0, 2.0).unwrap();
 
         assert!(
             dl.primitives.iter().any(|p| matches!(
@@ -4590,6 +4752,20 @@ mod tests {
             )),
             "build_display_list must record a text content primitive for real-font text"
         );
+    }
+
+    #[test]
+    fn build_display_list_tolerates_out_of_range_page() {
+        // Hosts render pages asynchronously from document mutations: when an
+        // edit collapses the page count (select-all + type), the host's page
+        // surfaces outlive the pages for one frame and still request a render
+        // with the old index. That must report "no page", not panic.
+        let (state, _p) =
+            state! { doc { root { p1: paragraph { text("hello") } } } selection: (p1, 0) };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+        assert_eq!(editor.view().pages().len(), 1);
+        assert!(editor.build_display_list(19, 2.0).is_none());
     }
 
     use editor_renderer::backend::cpu::CpuSink;
@@ -4682,7 +4858,7 @@ mod tests {
                 let (w, h) = page_px(&editor, i, sf);
                 let full = IRect { x0: 0, y0: 0, x1: w as i32, y1: h as i32 };
                 let mut pb = PageBuf { sink: CpuSink::new(w, h), prev: None, w, h };
-                let (dl, _b) = editor.build_display_list(i as u32, sf);
+                let (dl, _b) = editor.build_display_list(i as u32, sf).unwrap();
                 editor_renderer::diff::render_incremental(pb.prev.as_ref(), &dl, &mut pb.sink, full);
                 pb.prev = Some(dl);
                 pages.push(pb);
@@ -4706,7 +4882,7 @@ mod tests {
                         if i >= pages.len() { pages.push(pb); } else { pages[i] = pb; }
                     }
                     let full = IRect { x0: 0, y0: 0, x1: w as i32, y1: h as i32 };
-                    let (dl, _b) = editor.build_display_list(i as u32, sf);
+                    let (dl, _b) = editor.build_display_list(i as u32, sf).unwrap();
                     let pb = &mut pages[i];
                     let damage = editor_renderer::diff::render_incremental(pb.prev.as_ref(), &dl, &mut pb.sink, full);
                     pb.prev = Some(dl);
@@ -4817,6 +4993,145 @@ mod tests {
         editor_with_real_font(state)
     }
 
+    fn continuous_editor(n_paras: usize) -> Editor {
+        let sentence = "the quick brown fox jumps over the lazy dog";
+        let mut paras = Vec::with_capacity(n_paras);
+        for _ in 0..n_paras {
+            let text = PlainNodeEntry {
+                node: PlainNode::Text(PlainTextNode {
+                    text: sentence.into(),
+                }),
+                modifiers: BTreeMap::new(),
+                style: None,
+                marker: None,
+                children: vec![],
+            };
+            paras.push(PlainNodeEntry {
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+                modifiers: BTreeMap::new(),
+                style: None,
+                marker: None,
+                children: vec![text],
+            });
+        }
+        let plain = PlainDoc {
+            root: PlainNodeEntry {
+                node: PlainNode::Root(PlainRootNode {
+                    layout_mode: LayoutMode::Continuous { max_width: 600 },
+                }),
+                modifiers: root_font_modifiers(),
+                style: None,
+                marker: None,
+                children: paras,
+            },
+            styles: BTreeMap::new(),
+        };
+        let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
+        let last = n_paras - 1;
+        let end = sentence.chars().count();
+        state.selection = Some(Selection::collapsed(Position::new(
+            handles[&vec![last, 0]],
+            end,
+        )));
+        editor_with_real_font(state)
+    }
+
+    #[test]
+    fn continuous_resize_incremental_equals_full() {
+        // Continuous mode: page 0's content height changes as we edit. The surface
+        // backing is fixed at the page's max height and never recreated, so the
+        // diff + grown-strip damage must keep incremental pixels equal to a full
+        // render through grow, shrink, and re-grow (which re-reveals a strip that
+        // held stale pixels from the shrink).
+        let mut editor = continuous_editor(6);
+        let sf = 2.0f32;
+        let backing_logical = editor.view().page_backing_sizes()[0].height;
+        let page_w = editor.view().pages()[0].size.width;
+        let w = (page_w * sf).round() as u16;
+        let backing_h = (backing_logical * sf).round() as u16;
+        let mut sink = CpuSink::new(w, backing_h);
+        let mut prev: Option<DisplayList> = None;
+        let mut last_content_h: Option<i32> = None;
+
+        // One incremental render into the fixed-backing sink, mirroring
+        // `render_surface` (grown-strip damage included), then assert equality
+        // with a full render over the current content bounds.
+        macro_rules! render_and_check {
+            () => {{
+                let (dl, page_bounds) = editor.build_display_list(0, sf).unwrap();
+                let content_h = page_bounds.y1;
+                assert!(
+                    content_h as u16 <= backing_h,
+                    "content {content_h} must fit fixed backing {backing_h}"
+                );
+                editor_renderer::diff::render_incremental(
+                    prev.as_ref(),
+                    &dl,
+                    &mut sink,
+                    page_bounds,
+                );
+                if let Some(ph) = last_content_h {
+                    let strip = IRect {
+                        x0: 0,
+                        y0: ph.max(0),
+                        x1: page_bounds.x1,
+                        y1: content_h,
+                    };
+                    if !strip.is_empty() {
+                        sink.clear_rect(strip);
+                        sink.set_clip(Some(strip));
+                        editor_renderer::diff::replay(&dl, strip, &mut sink);
+                        sink.set_clip(None);
+                    }
+                }
+                prev = Some(dl);
+                last_content_h = Some(content_h);
+
+                let content = IRect {
+                    x0: 0,
+                    y0: 0,
+                    x1: w as i32,
+                    y1: content_h,
+                };
+                let mut inc = vec![0u8; w as usize * content_h as usize * 4];
+                sink.read_back_rect(&mut inc, w as usize * 4, content);
+                let full = full_page_buf(&mut editor, 0, sf, w, content_h as u16);
+                assert_eq!(inc, full, "incremental != full at content_h={content_h}");
+            }};
+        }
+
+        render_and_check!(); // initial: prev = None -> full paint
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection {
+                text: "lorem ipsum dolor sit amet ".repeat(16),
+            }],
+        });
+        editor.tick().unwrap();
+        render_and_check!(); // grow (wrapped text makes the last paragraph taller)
+
+        for _ in 0..200 {
+            editor.apply(Message::Key {
+                event: KeyEvent {
+                    key: Key::Backspace,
+                    modifiers: InputModifiers::default(),
+                },
+            });
+        }
+        editor.tick().unwrap();
+        render_and_check!(); // shrink
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection {
+                text: "consectetur adipiscing elit ".repeat(12),
+            }],
+        });
+        editor.tick().unwrap();
+        render_and_check!(); // re-grow into the previously revealed-then-hidden strip
+
+        let _ = (prev, last_content_h);
+    }
+
     #[test]
     fn localized_edit_damage_is_small_and_correct() {
         let mut editor = big_doc_editor(80);
@@ -4834,7 +5149,7 @@ mod tests {
         };
 
         let mut sink = CpuSink::new(w, h);
-        let (dl0, _b) = editor.build_display_list(0, sf);
+        let (dl0, _b) = editor.build_display_list(0, sf).unwrap();
         editor_renderer::diff::render_incremental(None, &dl0, &mut sink, full);
         let old_full = full_page_buf(&mut editor, 0, sf, w, h);
         let prev = dl0;
@@ -4843,7 +5158,7 @@ mod tests {
             ops: vec![FlatImeOp::ReplaceSelection { text: "x".into() }],
         });
         editor.tick().unwrap();
-        let (dl1, _b) = editor.build_display_list(0, sf);
+        let (dl1, _b) = editor.build_display_list(0, sf).unwrap();
         let damage = editor_renderer::diff::render_incremental(Some(&prev), &dl1, &mut sink, full);
 
         let mut inc = vec![0u8; w as usize * h as usize * 4];
@@ -4890,7 +5205,7 @@ mod tests {
                 y1: h as i32,
             };
             let mut sink = CpuSink::new(w, h);
-            let (dl, _b) = editor.build_display_list(i as u32, sf);
+            let (dl, _b) = editor.build_display_list(i as u32, sf).unwrap();
             editor_renderer::diff::render_incremental(None, &dl, &mut sink, full);
             pages.push(SeedPage {
                 sink,
@@ -4922,7 +5237,7 @@ mod tests {
                 x1: w as i32,
                 y1: h as i32,
             };
-            let (dl, _b) = editor.build_display_list(i as u32, sf);
+            let (dl, _b) = editor.build_display_list(i as u32, sf).unwrap();
             if i >= pages.len() || pages[i].w != w || pages[i].h != h {
                 let mut sink = CpuSink::new(w, h);
                 editor_renderer::diff::render_incremental(None, &dl, &mut sink, full);

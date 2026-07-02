@@ -83,9 +83,13 @@ impl SurfaceHandle {
         true
     }
 
-    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) {
+    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
         let pw = (width * scale_factor).round() as u32;
         let ph = (height * scale_factor).round() as u32;
+
+        if self.width == pw && self.height == ph && self.scale_factor == scale_factor {
+            return false;
+        }
 
         self.width = pw;
         self.height = ph;
@@ -95,5 +99,6 @@ impl SurfaceHandle {
         self.handle.set_height(ph);
 
         self.backend.resize(pw as u16, ph as u16);
+        true
     }
 }

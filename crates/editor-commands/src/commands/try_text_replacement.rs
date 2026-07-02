@@ -83,6 +83,11 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
     Ok(replaced)
 }
 
+// Only matches ending exactly at the cursor are ever accepted, so a regex only
+// needs to see a bounded tail of the paragraph text instead of the whole
+// prefix — matches longer than this window are not recognized.
+const REGEX_TAIL_WINDOW: usize = 256;
+
 fn match_rule(
     rules: &[TextReplacementRule],
     text_before: &str,
@@ -91,30 +96,32 @@ fn match_rule(
     for rule in rules {
         match &rule.pattern {
             CompiledPattern::Plain(pattern) => {
-                for (pos, _) in text_before.match_indices(pattern.as_str()) {
-                    if pos < search_start_byte {
-                        continue;
-                    }
-                    let match_end = pos + pattern.len();
-                    if match_end == text_before.len() {
-                        return Some((
-                            pos,
-                            pattern.clone(),
-                            rule.substitute.clone(),
-                            String::new(),
-                        ));
-                    }
+                let Some(pos) = text_before.len().checked_sub(pattern.len()) else {
+                    continue;
+                };
+                if pos >= search_start_byte && text_before.ends_with(pattern.as_str()) {
+                    return Some((pos, pattern.clone(), rule.substitute.clone(), String::new()));
                 }
             }
             CompiledPattern::Regex(regex) => {
-                for caps in regex.captures_iter(text_before).flatten() {
+                let mut window_start = text_before.len().saturating_sub(REGEX_TAIL_WINDOW);
+                while !text_before.is_char_boundary(window_start) {
+                    window_start += 1;
+                }
+                let window = &text_before[window_start..];
+                for caps in regex.captures_iter(window).flatten() {
                     if let Some(m) = caps.get(0)
-                        && m.end() == text_before.len()
-                        && m.start() >= search_start_byte
+                        && window_start + m.end() == text_before.len()
+                        && window_start + m.start() >= search_start_byte
                     {
                         let matched_str = m.as_str().to_string();
                         let expanded = expand_substitute(&caps, &rule.substitute);
-                        return Some((m.start(), matched_str, expanded, String::new()));
+                        return Some((
+                            window_start + m.start(),
+                            matched_str,
+                            expanded,
+                            String::new(),
+                        ));
                     }
                 }
             }

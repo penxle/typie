@@ -14,6 +14,8 @@
   const { editor } = getEditorContext();
   const viewportOverlay = getViewportOverlayContext();
 
+  let adapterEnqueued = false;
+
   const enqueueMessages = (messages: Message[]) => {
     if (!editor) return;
 
@@ -23,6 +25,7 @@
       enqueued = true;
     }
     if (enqueued) {
+      adapterEnqueued = true;
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
     }
   };
@@ -94,7 +97,11 @@
     autocorrect="off"
     onbeforeinput={(e) => {
       if (editor.readOnly) return;
+      adapterEnqueued = false;
       inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput });
+      if (adapterEnqueued) {
+        editor.flush();
+      }
     }}
     oncompositionend={() => {
       if (editor.readOnly) return;
@@ -117,9 +124,11 @@
     oninput={(e) => {
       if (editor.readOnly) return;
       inputAdapter.handleInput(e);
+      editor.flush();
     }}
     onkeydown={(e) => {
       handleKeyDown(editor, e);
+      editor.flush();
     }}
     onpaste={(e) => {
       if (editor.readOnly) return;

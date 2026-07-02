@@ -40,6 +40,12 @@ fn is_structural(view: &DocView, id: Dot) -> bool {
     view.node(id).is_some_and(|n| n.spec().structural)
 }
 
+enum PlannedSlot {
+    Text { offset: usize, text: String },
+    Subtree { index: usize, subtree: Subtree },
+    Structural(Dot),
+}
+
 /// Delete child slots `[from, to)` of `block`, high index first to avoid shifts.
 fn delete_child_slots(
     tr: &mut Transaction,
@@ -50,51 +56,105 @@ fn delete_child_slots(
     if to <= from {
         return Ok(());
     }
-    // Snapshot the slot kinds once (a single `O(range)` children walk) instead of an
-    // `O(range)` `child_at` probe per index, then delete in one reverse pass.
-    let kinds: Vec<SlotKind> = {
-        let view = tr.state().view();
+    // Plan the whole range against ONE view snapshot (a single `O(range)` children
+    // walk): coalesce a run of consecutive char slots into one `RemoveText` (so a
+    // large selection is `O(runs)` sequence ops, not one per character), capture each
+    // removed subtree for its step's inverse, and mark structural blocks (cleared in
+    // place, never removed). A sibling's removal can't change a planned slot's
+    // content or index, so the plan stays valid while the steps apply high→low.
+    let (slots, bulk) = {
+        let state = tr.state();
+        let view = state.view();
         let Some(node) = view.node(block) else {
             return Ok(());
         };
-        node.children()
-            .skip(from)
-            .take(to - from)
-            .map(|c| match c {
+        let is_root = node.parent().is_none();
+        let total = node.children().count();
+        let mut slots: Vec<PlannedSlot> = Vec::new();
+        let mut block_slots = 0usize;
+        let mut prev_char_idx = usize::MAX;
+        for (i, c) in node.children().enumerate().skip(from).take(to - from) {
+            match c {
                 ChildView::Leaf(l) => {
-                    if l.as_char().is_some() {
-                        SlotKind::Char
-                    } else {
-                        SlotKind::Atom
+                    if let Some(ch) = l.as_char() {
+                        match slots.last_mut() {
+                            Some(PlannedSlot::Text { text, .. })
+                                if prev_char_idx.wrapping_add(1) == i =>
+                            {
+                                text.push(ch)
+                            }
+                            _ => slots.push(PlannedSlot::Text {
+                                offset: i,
+                                text: ch.to_string(),
+                            }),
+                        }
+                        prev_char_idx = i;
+                    } else if let Some(atom) = l.as_atom() {
+                        slots.push(PlannedSlot::Subtree {
+                            index: i,
+                            subtree: Subtree::leaf(atom.clone().into_node().to_plain()),
+                        });
                     }
                 }
-                ChildView::Block(b) => SlotKind::Block(b.id()),
-            })
-            .collect()
-    };
-    // Delete high→low so each removal only shifts already-handled higher slots and
-    // lower indices stay valid. Coalesce a run of consecutive `Char` slots into ONE
-    // range `remove_text`: deleting a large selection is then `O(runs)` sequence ops,
-    // not one op per character (which turned a select-all delete into `O(N)` ops, each
-    // paying the full per-op projection/transaction overhead).
-    let mut i = kinds.len();
-    while i > 0 {
-        i -= 1;
-        match &kinds[i] {
-            SlotKind::Char => {
-                let end = i;
-                while i > 0 && matches!(&kinds[i - 1], SlotKind::Char) {
-                    i -= 1;
+                ChildView::Block(b) => {
+                    let id = b.id();
+                    if is_structural(&view, id) {
+                        slots.push(PlannedSlot::Structural(id));
+                    } else {
+                        block_slots += 1;
+                        let subtree =
+                            capture_subtree(state, id).ok_or(CommandError::NodeNotFound(id))?;
+                        slots.push(PlannedSlot::Subtree { index: i, subtree });
+                    }
                 }
-                tr.remove_text(block, from + i, end - i + 1)?;
-            }
-            SlotKind::Atom => {
-                remove_atom_leaf(tr, block, from + i)?;
-            }
-            SlotKind::Block(id) => {
-                remove_or_clear(tr, *id)?;
             }
         }
+        // Batch-project only a select-all shape — most of the ROOT's children going
+        // away: the deferred flush is one whole-document reprojection, which loses to
+        // per-step window reprojections for small or nested-container deletions.
+        let bulk = is_root && block_slots >= 4 && (to - from) * 2 >= total;
+        (slots, bulk)
+    };
+    // Apply high→low so each removal only shifts already-handled higher slots and
+    // lower indices stay valid. A structural block flushes the pending run first:
+    // clearing it applies its own (possibly non-delete) steps against a live
+    // projection.
+    let mut pending: Vec<Step> = Vec::new();
+    for slot in slots.into_iter().rev() {
+        match slot {
+            PlannedSlot::Text { offset, text } => pending.push(Step::RemoveText {
+                block,
+                offset,
+                text,
+            }),
+            PlannedSlot::Subtree { index, subtree } => pending.push(Step::RemoveSubtree {
+                parent: block,
+                index,
+                subtree,
+            }),
+            PlannedSlot::Structural(id) => {
+                flush_pending(tr, &mut pending, bulk)?;
+                clear_structural_subtree(tr, id)?;
+            }
+        }
+    }
+    flush_pending(tr, &mut pending, bulk)?;
+    Ok(())
+}
+
+fn flush_pending(
+    tr: &mut Transaction,
+    pending: &mut Vec<Step>,
+    bulk: bool,
+) -> Result<(), CommandError> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let steps = std::mem::take(pending);
+    if bulk {
+        tr.apply_steps_bulk_delete(steps)?;
+    } else {
+        tr.apply_steps(steps)?;
     }
     Ok(())
 }
@@ -596,19 +656,6 @@ fn ensure_selection_after_child_range_delete(
         Some(id) => Ok(Selection::collapsed(Position::new(id, 0))),
         None => Ok(Selection::collapsed(Position::new(container_id, offset))),
     }
-}
-
-fn remove_or_clear(tr: &mut Transaction, child_id: Dot) -> Result<(), CommandError> {
-    let structural = {
-        let view = tr.state().view();
-        is_structural(&view, child_id)
-    };
-    if structural {
-        clear_structural_subtree(tr, child_id)?;
-    } else {
-        remove_subtree_full(tr, child_id)?;
-    }
-    Ok(())
 }
 
 fn clear_structural_subtree(tr: &mut Transaction, node_id: Dot) -> Result<(), CommandError> {

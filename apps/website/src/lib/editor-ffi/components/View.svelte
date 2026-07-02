@@ -287,7 +287,7 @@
           tabindex={0}
         >
           {#each ctx.editor.pageSizes as { width, height }, i (i)}
-            <Page {height} page={i} {width} />
+            <Page backingHeight={ctx.editor.pageBackingSizes[i]?.height ?? height} {height} page={i} {width} />
           {/each}
 
           <Caret />

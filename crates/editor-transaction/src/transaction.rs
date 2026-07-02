@@ -367,6 +367,52 @@ impl Transaction {
         Ok(records)
     }
 
+    /// Like [`apply_steps`](Self::apply_steps), for a run of steps that lower purely
+    /// to sequence deletions (`RemoveText` / `RemoveSubtree`). Their ops apply
+    /// warm-only, leaving the projection stale across the run — safe because every
+    /// step addresses pre-delete slots and a deletion never changes a surviving
+    /// element's addressing — and ONE coverage-preserving reprojection restores it at
+    /// the end, instead of one window reprojection per step (the `O(steps · window)`
+    /// cost of deleting many blocks). A step that emits a non-delete op flushes the
+    /// deferral before that op projects, so misuse degrades to `apply_steps` cost.
+    pub fn apply_steps_bulk_delete(
+        &mut self,
+        steps: Vec<Step>,
+    ) -> Result<Vec<StepRecord>, StepError> {
+        if steps.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut deferred = 0usize;
+        let recorded = self
+            .state
+            .batch_with_recorded_mut::<_, StepError>(|batched| {
+                batched.set_defer_deletes(true);
+                for step in &steps {
+                    step.apply_to_with_effect(batched)?;
+                }
+                deferred = batched.deferred_deletes();
+                Ok(())
+            })?;
+        if deferred > 0 {
+            self.state
+                .projected_mut()
+                .reproject_after_delete()
+                .map_err(editor_state::StateError::from)?;
+        }
+        self.recorded.extend(recorded);
+        let records: Vec<StepRecord> = steps
+            .iter()
+            .cloned()
+            .map(|step| StepRecord {
+                step,
+                effect: StepEffect,
+            })
+            .collect();
+        self.step_records.extend(records.clone());
+        self.steps.extend(steps);
+        Ok(records)
+    }
+
     pub fn meta(&self) -> &TransactionMeta {
         &self.meta
     }

@@ -21,6 +21,11 @@ struct EditorInner {
     last_render_sig: HashMap<u32, u64>,
     #[cfg(not(feature = "wasm-server"))]
     prev_dl: HashMap<u32, editor_renderer::display_list::DisplayList>,
+    // Content height (device px) last painted per page. The surface backing is
+    // fixed at the page's max height, so when content grows we force-damage the
+    // newly revealed strip [prev, current) that no primitive diff would cover.
+    #[cfg(not(feature = "wasm-server"))]
+    last_content_height: HashMap<u32, i32>,
 }
 
 #[cfg(not(feature = "wasm-server"))]
@@ -28,6 +33,7 @@ impl EditorInner {
     fn clear_page_present_state(&mut self, page: u32) {
         self.last_render_sig.remove(&page);
         self.prev_dl.remove(&page);
+        self.last_content_height.remove(&page);
     }
 }
 
@@ -366,6 +372,13 @@ impl Editor {
                 .collect::<Vec<_>>()
                 .into_ffi()?)
         })
+    }
+
+    /// Fixed per-page backing sizes for the incremental renderer. Surfaces are
+    /// allocated at this size (>= any content height) so content-height changes
+    /// never resize (and clear) the canvas. See `View::page_backing_sizes`.
+    pub fn page_backing_sizes(&self) -> EditorResult<Vec<Complex<editor_common::Size>>> {
+        self.with_inner(|inner| Ok(inner.editor.view().page_backing_sizes().into_ffi()?))
     }
 
     pub fn external_elements(&self) -> EditorResult<Vec<Complex<editor_view::ExternalElement>>> {
@@ -771,11 +784,18 @@ impl Editor {
         scale_factor: f64,
     ) -> EditorResult<()> {
         self.with_inner(|inner| {
-            if let Some(surface) = inner.surfaces.get_mut(&page) {
-                surface.resize(width, height, scale_factor);
+            let changed = inner
+                .surfaces
+                .get_mut(&page)
+                .map(|surface| surface.resize(width, height, scale_factor))
+                .unwrap_or(false);
+            // Only when the backing dims actually changed was the buffer recreated
+            // (and cleared) — its old signature/display-list no longer reflects
+            // pixels. A no-op resize (same backing size) keeps the retained state so
+            // a content-height change never forces a full repaint.
+            if changed {
+                inner.clear_page_present_state(page);
             }
-            // Buffer was recreated/cleared — its old signature/display-list no longer reflects pixels.
-            inner.clear_page_present_state(page);
             Ok(())
         })
     }
@@ -798,19 +818,47 @@ impl Editor {
                 Some(surface) => surface.scale_factor() as f32,
                 None => return Ok(false),
             };
-            let (dl, page_bounds) = inner.editor.build_display_list(page, scale_factor);
+            // The page may have been removed by an edit this frame (the host's
+            // surfaces outlive a shrinking document until it re-renders), in
+            // which case no frame will arrive from this call.
+            let Some((dl, page_bounds)) = inner.editor.build_display_list(page, scale_factor)
+            else {
+                return Ok(false);
+            };
+            let prev_content_h = inner.last_content_height.get(&page).copied();
             let prev = inner.prev_dl.get(&page);
             let surface = inner.surfaces.get_mut(&page).unwrap();
-            let damage = editor_renderer::diff::render_incremental(
+            let mut damage = editor_renderer::diff::render_incremental(
                 prev,
                 &dl,
                 surface.cpu_sink(),
                 page_bounds,
             );
+            // The surface backing is fixed at the page's max height, so a taller
+            // content region reveals rows that were outside the previous page
+            // bounds (or hold stale pixels from an earlier shrink). No primitive
+            // diff covers those gaps, so paint the revealed strip explicitly.
+            if let Some(prev_h) = prev_content_h {
+                let strip = editor_renderer::damage::IRect {
+                    x0: 0,
+                    y0: prev_h.max(0),
+                    x1: page_bounds.x1,
+                    y1: page_bounds.y1,
+                };
+                if !strip.is_empty() {
+                    let sink = surface.cpu_sink();
+                    sink.clear_rect(strip);
+                    sink.set_clip(Some(strip));
+                    editor_renderer::diff::replay(&dl, strip, sink);
+                    sink.set_clip(None);
+                    damage.push(strip);
+                }
+            }
             let committed = surface.present_damage(&damage);
             if committed {
                 inner.prev_dl.insert(page, dl);
                 inner.last_render_sig.insert(page, sig);
+                inner.last_content_height.insert(page, page_bounds.y1);
                 Ok(true)
             } else {
                 inner.clear_page_present_state(page);
@@ -856,6 +904,8 @@ impl Editor {
                 last_render_sig: HashMap::new(),
                 #[cfg(not(feature = "wasm-server"))]
                 prev_dl: HashMap::new(),
+                #[cfg(not(feature = "wasm-server"))]
+                last_content_height: HashMap::new(),
             }),
         }
     }

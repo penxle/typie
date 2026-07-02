@@ -11,9 +11,10 @@
     page: number;
     width: number;
     height: number;
+    backingHeight: number;
   };
 
-  let { page, width, height }: Props = $props();
+  let { page, width, height, backingHeight }: Props = $props();
 
   const ctx = getEditorContext();
   const { editor } = ctx;
@@ -26,6 +27,7 @@
   const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
   const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
   const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
+  const cssBackingHeight = $derived(Math.round(backingHeight * scaleFactor) / scaleFactor);
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
   const displayZoom = $derived(isPaginated ? (ctx.editor?.displayZoom ?? 1) : 1);
@@ -78,76 +80,79 @@
       };
     }}
   >
-    <canvas
-      class={css({ height: 'full', width: 'full', imageRendering: 'pixelated' })}
-      {@attach (canvas) => {
-        if (!editor) return;
+    <div class={css({ position: 'absolute', inset: '0', overflow: 'hidden' })}>
+      <canvas
+        style:height={`${cssBackingHeight}px`}
+        class={css({ position: 'absolute', top: '0', left: '0', width: 'full', imageRendering: 'pixelated' })}
+        {@attach (canvas) => {
+          if (!editor) return;
 
-        let isVisible = false;
-        let dirty = false;
-        let needsResize = false;
+          let isVisible = false;
+          let dirty = false;
+          let needsResize = false;
 
-        untrack(() => {
-          editor.attachSurface(page, canvas, width, height);
-        });
+          untrack(() => {
+            editor.attachSurface(page, canvas, width, backingHeight);
+          });
 
-        const paint = () => {
-          if (isVisible) {
-            editor.renderSurface(page);
-            dirty = false;
-          } else {
-            dirty = true;
-          }
-        };
+          const paint = () => {
+            if (isVisible) {
+              editor.renderSurface(page);
+              dirty = false;
+            } else {
+              dirty = true;
+            }
+          };
 
-        const off = editor.on('render_invalidated', paint);
+          const off = editor.on('render_invalidated', paint);
 
-        $effect.pre(() => {
-          void editor.surfaceScaleFactor;
-          void width;
-          void height;
-          if (isVisible) {
-            editor.resizeSurface(page, width, height);
-            editor.renderSurface(page);
-            dirty = false;
-            needsResize = false;
-          } else {
-            needsResize = true;
-            dirty = true;
-          }
-        });
+          $effect.pre(() => {
+            void editor.surfaceScaleFactor;
+            void width;
+            void backingHeight;
+            if (isVisible) {
+              editor.resizeSurface(page, width, backingHeight);
+              editor.renderSurface(page);
+              dirty = false;
+              needsResize = false;
+            } else {
+              needsResize = true;
+              dirty = true;
+            }
+          });
 
-        $effect(() => {
-          const root = editor.scrollRootEl;
-          if (root === undefined) return;
+          $effect(() => {
+            const root = editor.scrollRootEl;
+            if (root === undefined) return;
 
-          const observer = new IntersectionObserver(
-            (entries) => {
-              isVisible = entries.at(-1)?.isIntersecting ?? isVisible;
-              overlaysVisible = isVisible;
-              if (!isVisible) return;
-              if (needsResize) {
-                editor.resizeSurface(page, width, height);
-                needsResize = false;
-              }
-              if (dirty) {
-                editor.renderSurface(page);
-                dirty = false;
-              }
-            },
-            { root, rootMargin: PAGE_RENDER_OVERSCAN_MARGIN, threshold: 0 },
-          );
-          observer.observe(canvas);
+            const observer = new IntersectionObserver(
+              (entries) => {
+                isVisible = entries.at(-1)?.isIntersecting ?? isVisible;
+                overlaysVisible = isVisible;
+                if (!isVisible) return;
+                if (needsResize) {
+                  editor.resizeSurface(page, width, backingHeight);
+                  needsResize = false;
+                }
+                if (dirty) {
+                  editor.renderSurface(page);
+                  dirty = false;
+                }
+              },
+              { root, rootMargin: PAGE_RENDER_OVERSCAN_MARGIN, threshold: 0 },
+            );
+            observer.observe(canvas);
 
-          return () => observer.disconnect();
-        });
+            return () => observer.disconnect();
+          });
 
-        return () => {
-          off();
-          untrack(() => editor.detachSurface(page));
-        };
-      }}
-    ></canvas>
+          return () => {
+            off();
+            untrack(() => editor.detachSurface(page));
+          };
+        }}
+      ></canvas>
+    </div>
 
     {#each externalElements as element (element.node)}
       <ExternalElement {element} />

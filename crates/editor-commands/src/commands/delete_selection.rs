@@ -1288,4 +1288,147 @@ mod tests {
             "full-table selection should delete the table"
         );
     }
+
+    fn assert_matches_cold_projection(state: &editor_state::State) {
+        let cold = editor_state::ProjectedState::from_graph(state.projected.graph().clone())
+            .expect("cold rebuild projects");
+        assert_eq!(state.projected.projected(), cold.projected());
+    }
+
+    // Removing most of the root's children takes the bulk path (`delete_child_slots`
+    // defers each step's projection and flushes them with one coverage-preserving
+    // reprojection). The result must equal the expected doc AND a cold rebuild of
+    // the op graph — the same equivalence the eager per-step path guarantees.
+    #[test]
+    fn bulk_select_all_delete_matches_cold_projection() {
+        let (initial, _r) = state! {
+            doc { r: root {
+                paragraph { text("p00") }
+                paragraph { text("p01") }
+                paragraph { text("p02") }
+                paragraph { text("p03") }
+                paragraph { text("p04") }
+                paragraph { text("p05") }
+                paragraph { text("p06") }
+                paragraph { text("p07") }
+                paragraph { text("p08") }
+                paragraph { text("p09") }
+                paragraph { text("p10") }
+                paragraph { text("p11") }
+            } }
+            selection: (r, 0) -> (r, 12)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_matches_cold_projection(&actual);
+    }
+
+    #[test]
+    fn bulk_cross_node_delete_matches_cold_projection() {
+        let (initial, ..) = state! {
+            doc { root {
+                p1: paragraph { text("Hello") }
+                paragraph { text("m00") }
+                paragraph { text("m01") }
+                paragraph { text("m02") }
+                paragraph { text("m03") }
+                paragraph { text("m04") }
+                paragraph { text("m05") }
+                paragraph { text("m06") }
+                paragraph { text("m07") }
+                paragraph { text("m08") }
+                paragraph { text("m09") }
+                p2: paragraph { text("World") }
+            } }
+            selection: (p1, 2) -> (p2, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Held") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_matches_cold_projection(&actual);
+    }
+
+    // Root-level atoms (image/HR) and a nested list ride the same bulk run as the
+    // paragraphs around them.
+    #[test]
+    fn bulk_select_all_delete_mixed_content_matches_cold_projection() {
+        let (initial, _r) = state! {
+            doc { r: root {
+                image
+                paragraph { text("aa") }
+                paragraph { text("bb") }
+                bullet_list {
+                    list_item { paragraph { text("cc") } }
+                    list_item { paragraph { text("dd") } }
+                }
+                horizontal_rule
+                paragraph { text("ee") }
+                paragraph { text("ff") }
+            } }
+            selection: (r, 0) -> (r, 7)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_matches_cold_projection(&actual);
+    }
+
+    // Sweep selection endpoints over a 12-paragraph doc: every shape — same-node
+    // container ranges (bulk), cross-node ranges with bulk middles, and small
+    // eager-path edges — must land on the projection a cold graph rebuild produces.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 96, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn delete_selection_multi_paragraph_matches_cold(
+            a_para in 0usize..12,
+            a_off in 0usize..=5,
+            b_para in 0usize..12,
+            b_off in 0usize..=5,
+        ) {
+            use editor_state::{Position, Selection};
+
+            let (state, p00, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11) = state! {
+                doc { root {
+                    p00: paragraph { text("abcde") }
+                    p01: paragraph { text("abcde") }
+                    p02: paragraph { text("abcde") }
+                    p03: paragraph { text("abcde") }
+                    p04: paragraph { text("abcde") }
+                    p05: paragraph { text("abcde") }
+                    p06: paragraph { text("abcde") }
+                    p07: paragraph { text("abcde") }
+                    p08: paragraph { text("abcde") }
+                    p09: paragraph { text("abcde") }
+                    p10: paragraph { text("abcde") }
+                    p11: paragraph { text("abcde") }
+                } }
+                selection: none
+            };
+            let paras = [p00, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11];
+            let anchor = Position::new(paras[a_para], a_off);
+            let head = Position::new(paras[b_para], b_off);
+            proptest::prop_assume!(anchor != head);
+            let initial = editor_state::State {
+                selection: Some(Selection::new(anchor, head)),
+                ..state
+            };
+            let mut tr = editor_transaction::Transaction::new(&initial);
+            let changed = delete_selection(&mut tr).unwrap();
+            proptest::prop_assume!(changed);
+            let (actual, ..) = tr.commit();
+            let cold = editor_state::ProjectedState::from_graph(actual.projected.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(actual.projected.projected(), cold.projected());
+        }
+    }
 }

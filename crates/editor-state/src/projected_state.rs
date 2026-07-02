@@ -269,7 +269,11 @@ impl ProjectedState {
     /// (so each survivor's coverage is copied from the old index). The projection is then
     /// rebuilt from the coverage rather than resolving every (now largely dead) span:
     /// `O(survivors)` instead of `O(#spans)`, which is what a select-all-delete costs.
-    fn reproject_after_delete(&mut self) -> Result<(), SpineError> {
+    ///
+    /// Only valid when every op since the last projection was a deletion (the carried
+    /// indexes describe the pre-delete projection) — the contract callers of
+    /// [`apply_warm_only`](Self::apply_warm_only) with delete-only batches uphold.
+    pub fn reproject_after_delete(&mut self) -> Result<(), SpineError> {
         let elements = self.seq.snapshot(&self.logs.seq);
         let spans = self.indexes.spans.clone();
         let mut coverage = LeafSpanCoverage::new();
@@ -411,9 +415,28 @@ impl ProjectedState {
             }
             EditOp::Seq(ListOp::Del { .. }) => {
                 let targets = self.seq.del_target_dots(&self.logs.seq, op.id);
+                // Collect the distinct top-level blocks via the O(depth) parent walk,
+                // then resolve every block index in ONE pass over the root's children —
+                // per-target `top_block_index` is an O(#blocks) scan, which makes a
+                // multi-block delete `O(#targets · #blocks)`. Positions can't localize
+                // a Del the way the Undel arm below does: the op is already applied, so
+                // its targets are tombstoned and their boundary positions all collapse
+                // onto the same surviving neighbour.
+                let mut tops: HashSet<Dot> = HashSet::new();
                 for t in &targets {
-                    if let Some(idx) = self.top_block_index(*t) {
-                        idxs.push(idx);
+                    if let Some(tb) = self.top_block_of(*t) {
+                        tops.insert(tb);
+                    }
+                }
+                if !tops.is_empty()
+                    && let Some(root) = self.projected.tree.root_node()
+                {
+                    for (idx, c) in root.children.iter().enumerate() {
+                        if let Child::Block(b) = c
+                            && tops.contains(b)
+                        {
+                            idxs.push(idx);
+                        }
                     }
                 }
                 // Every target was a ghost (already absent from the tree). Localize to
@@ -1061,18 +1084,35 @@ impl ProjectedState {
         if self.indexes.spans.is_empty() {
             return Vec::new();
         }
-        // Block-start insert: the neighbour is a block marker, not a leaf, so its
-        // coverage can't seed the new leaf's. Any span covering `pos` may be
-        // anchored far away (not adjacent), so derive coverage directly.
-        if self.indexes.paths.block_of(neighbor).is_none() {
-            return editor_model::spans_covering(pos, &self.logs.spans, &self.seq);
-        }
-        let base = self.indexes.coverage.covering(neighbor);
         let after = self.seq.dot_at_visible(&self.logs.seq, pos + 1);
+        // Seed from a nearby leaf's indexed coverage: the left neighbour for a
+        // mid-block insert, the right neighbour for a block-start insert into a
+        // non-empty block, else the nearest leaf a bounded walk to the left (an
+        // empty block). A span without an anchor at any element between the seed
+        // and `pos` covers the seed iff it covers `pos` — every span boundary
+        // between them must be anchored to one of the passed-over elements or
+        // gap tombstones (the new leaf cannot anchor pre-existing spans), and
+        // those are collected into `near` and re-tested below. Only when no seed
+        // is reachable does the direct whole-span-log derivation remain — that
+        // scan re-resolves every span in the document (O(spans·log) per call).
         let mut near = vec![neighbor];
         if let Some(m) = after {
             near.push(m);
         }
+        let seed = if self.indexes.paths.block_of(neighbor).is_some() {
+            Some(neighbor)
+        } else if let Some(a) = after.filter(|a| self.indexes.paths.block_of(*a).is_some()) {
+            // Right-neighbour seed: a local insert lands before any tombstones at
+            // its boundary, so ghosts pile up between the new leaf and `after`.
+            near.extend(self.seq.invisible_dots_after_visible(pos));
+            Some(a)
+        } else {
+            self.left_seed_across_markers(pos, &mut near)
+        };
+        let Some(seed) = seed else {
+            return editor_model::spans_covering(pos, &self.logs.spans, &self.seq);
+        };
+        let base = self.indexes.coverage.covering(seed);
         let boundary = self.indexes.spans.spans_near(near);
         if boundary.is_empty() {
             return base.to_vec();
@@ -1091,6 +1131,21 @@ impl ProjectedState {
             }
         }
         cov
+    }
+
+    fn left_seed_across_markers(&self, pos: usize, near: &mut Vec<Dot>) -> Option<Dot> {
+        const MAX_WALK: usize = 32;
+        let mut p = pos.checked_sub(1)?;
+        for _ in 0..MAX_WALK {
+            p = p.checked_sub(1)?;
+            near.extend(self.seq.invisible_dots_after_visible(p));
+            let d = self.seq.dot_at_visible(&self.logs.seq, p)?;
+            near.push(d);
+            if self.indexes.paths.block_of(d).is_some() {
+                return Some(d);
+            }
+        }
+        None
     }
 
     fn try_apply_span(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
@@ -1832,15 +1887,33 @@ impl ProjectedState {
     }
 
     /// `block` plus every descendant, real op dots only (synthetic scaffolds dropped).
-    /// Order is unspecified — callers take the max sequence position. O(subtree).
+    /// Order is unspecified — callers take the max sequence position. Walks the flat
+    /// tree directly — NOT `BlockPaths::descendants_of`, which rebuilds a whole-document
+    /// children index per call and turns a per-block caller (deleting N blocks) into
+    /// O(N · document). O(subtree).
     pub fn subtree_real_dots(&self, block: Dot) -> Vec<Dot> {
         let mut out = Vec::new();
         if anchor_dot(block).is_some() {
             out.push(block);
         }
-        for d in self.indexes.paths.descendants_of(block) {
-            if anchor_dot(d).is_some() {
-                out.push(d);
+        let mut stack = vec![block];
+        while let Some(b) = stack.pop() {
+            if let Some(n) = self.projected.tree.get(b) {
+                for c in &n.children {
+                    match c {
+                        Child::Block(d) => {
+                            if anchor_dot(*d).is_some() {
+                                out.push(*d);
+                            }
+                            stack.push(*d);
+                        }
+                        Child::Leaf { id, .. } => {
+                            if anchor_dot(*id).is_some() {
+                                out.push(*id);
+                            }
+                        }
+                    }
+                }
             }
         }
         out
@@ -2486,6 +2559,115 @@ mod tests {
             warm.projected(),
             cold.projected(),
             "bulk-delete reprojection diverged from cold rebuild"
+        );
+    }
+
+    // A block-start insert seeds the new leaf's span coverage from the right
+    // neighbour's indexed coverage (mirroring the mid-block left-neighbour seed)
+    // instead of re-resolving the whole span log per keystroke. The seeded
+    // coverage must match the cold rebuild for spans that cross the block start
+    // anchored far away, start exactly at the old first child, sit entirely in
+    // another block, or anchor to a ghost at the seam — and the empty-block
+    // fallback keeps deriving directly.
+    #[test]
+    fn block_start_insert_coverage_matches_cold() {
+        let mut warm = ProjectedState::empty();
+        let mut char_dots: Vec<Dot> = Vec::new();
+        let mut pos = 1usize;
+        for i in 0..40 {
+            let d = warm
+                .apply(seq_char(pos, char::from(b'a' + (i % 26) as u8)))
+                .unwrap()
+                .id;
+            char_dots.push(d);
+            pos += 1;
+        }
+        warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        pos += 1;
+        let p2_first = pos;
+        for i in 0..40 {
+            let d = warm
+                .apply(seq_char(pos, char::from(b'a' + (i % 26) as u8)))
+                .unwrap()
+                .id;
+            char_dots.push(d);
+            pos += 1;
+        }
+        warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        pos += 1;
+        let p3_first = pos;
+        warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        pos += 1;
+        for i in 0..20 {
+            let d = warm
+                .apply(seq_char(pos, char::from(b'a' + (i % 26) as u8)))
+                .unwrap()
+                .id;
+            char_dots.push(d);
+            pos += 1;
+        }
+
+        let span = |warm: &mut ProjectedState, s: Dot, e: Dot, m: Modifier| {
+            warm.apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: s,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: e,
+                    bias: Bias::After,
+                },
+                modifier: m,
+            }))
+            .unwrap();
+        };
+        // Crosses paragraph 2's start, anchored far from the seam.
+        span(&mut warm, char_dots[10], char_dots[60], Modifier::Bold);
+        // Starts exactly at paragraph 2's old first child.
+        span(&mut warm, char_dots[40], char_dots[50], Modifier::Italic);
+        // Entirely inside paragraph 1.
+        span(
+            &mut warm,
+            char_dots[0],
+            char_dots[5],
+            Modifier::FontSize { value: 1400 },
+        );
+        // Crosses the empty paragraph 3.
+        span(&mut warm, char_dots[70], char_dots[90], Modifier::Bold);
+        // Ends exactly at paragraph 2's last char — deleted below, so its end
+        // anchor becomes a ghost right before paragraph 3's marker.
+        span(&mut warm, char_dots[45], char_dots[79], Modifier::Italic);
+
+        // Ghost at the seam: delete paragraph 2's old first char (the Italic
+        // span's start anchor), leaving a span anchored to a ghost right after
+        // the block marker.
+        warm.apply(EditOp::Seq(ListOp::Del {
+            pos: p2_first,
+            len: 1,
+        }))
+        .unwrap();
+        // Ghost at the empty block's left seam: delete paragraph 2's last char.
+        warm.apply(EditOp::Seq(ListOp::Del {
+            pos: p3_first - 3,
+            len: 1,
+        }))
+        .unwrap();
+
+        // Block-start insert into non-empty paragraph 2 (right-neighbour seed).
+        warm.apply(seq_char(p2_first, 'x')).unwrap();
+        // First char of empty paragraph 3 (left-walk seed across the marker and
+        // the seam ghost); the two deletes and the insert net to one removed
+        // element, so the marker's gap sits one left of the build-time position.
+        warm.apply(seq_char(p3_first - 1, 'y')).unwrap();
+
+        let cold = ProjectedState::from_graph(warm.graph().clone()).expect("cold rebuild projects");
+        assert_eq!(
+            warm.projected(),
+            cold.projected(),
+            "block-start coverage seeding diverged from cold rebuild"
         );
     }
 

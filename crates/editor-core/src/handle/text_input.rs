@@ -6,16 +6,9 @@ use editor_common::StrExt;
 use editor_model::{DocView, Modifier};
 use editor_state::{
     Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, ResolvedPosition,
-    ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars, flat_segments,
-    flat_segments_in_range, flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
+    ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars, flat_segments_in_range,
+    flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
 };
-
-fn flat_seg_size(seg: &FlatSegment) -> usize {
-    match seg {
-        FlatSegment::Text { leaves, .. } => leaves.len(),
-        _ => 1,
-    }
-}
 use editor_transaction::Transaction;
 
 use crate::editor::Editor;
@@ -110,25 +103,9 @@ fn composition_range_valid(view: &DocView, start: usize, end: usize) -> bool {
     if start > end || end > flat_size(view) {
         return false;
     }
-    let mut idx = 0usize;
-    for seg in flat_segments(view) {
-        let size = flat_seg_size(&seg);
-        let seg_start = idx;
-        idx += size;
-        if seg_start + size <= start || seg_start >= end || seg_start < start {
-            continue;
-        }
-        if matches!(
-            seg,
-            FlatSegment::Break { .. }
-                | FlatSegment::Atom { .. }
-                | FlatSegment::Open { .. }
-                | FlatSegment::Close { .. }
-        ) {
-            return false;
-        }
-    }
-    true
+    flat_segments_in_range(view, start..end)
+        .iter()
+        .all(|seg| matches!(seg, FlatSegment::Text { .. }))
 }
 
 fn is_token(c: char) -> bool {
@@ -142,14 +119,7 @@ fn balanced_structural_body_range(
 ) -> Option<(usize, usize)> {
     let mut stack = Vec::new();
     let mut body: Option<(usize, usize)> = None;
-    let mut idx = 0usize;
-    for seg in flat_segments(view) {
-        let size = flat_seg_size(&seg);
-        let seg_start = idx;
-        idx += size;
-        if seg_start + size <= start || seg_start >= end {
-            continue;
-        }
+    for (seg_start, seg) in editor_state::flat_segments_in_range_with_pos(view, start..end) {
         match seg {
             FlatSegment::Open { block } => stack.push((block, seg_start)),
             FlatSegment::Close { block } => {
@@ -160,7 +130,7 @@ fn balanced_structural_body_range(
                     continue;
                 }
                 stack.pop();
-                let pair = (open_start, seg_start + size);
+                let pair = (open_start, seg_start + 1);
                 body = Some(match body {
                     Some((body_start, body_end)) => (body_start.min(pair.0), body_end.max(pair.1)),
                     None => pair,
