@@ -562,3 +562,59 @@ fn update_then_update_keeps_composition_intact() {
         })
     );
 }
+
+#[test]
+fn plain_rule_applies_on_flat_ime_typing() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+
+    for (i, ch) in PLAIN_PATTERN.chars().enumerate() {
+        let cursor = 1 + i;
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection {
+                    start: cursor,
+                    end: cursor,
+                },
+                FlatImeOp::ReplaceSelection {
+                    text: ch.to_string(),
+                },
+            ],
+        });
+    }
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("X") } } }
+        selection: (p1, 1)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn deletion_via_flat_ime_does_not_fire_replacement() {
+    // Deleting back to a matching tail must not replace — mirrors the key-path
+    // semantics where only insertions trigger, and keeps backspace-restore stable.
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("abcz") } } }
+        selection: (p1, 4)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::DeleteSurrounding {
+            before: 1,
+            after: 0,
+        }],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}

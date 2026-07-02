@@ -726,16 +726,16 @@ fn analyze_delta(
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
     let commit_as_is = ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs));
 
-    (|| -> Result<(), EditorError> {
+    let committed_insert = (|| -> Result<bool, EditorError> {
         let initial = match FlatImeState::from_editor(editor, &ops) {
             Some(s) => s,
-            None => return Ok(()),
+            None => return Ok(false),
         };
 
         let reduced = initial.clone().reduce_flat_ime_ops(&ops);
 
         if reduced.text_change.is_none() {
-            return Ok(());
+            return Ok(false);
         }
 
         let gap_view = editor.state.view();
@@ -755,7 +755,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             })?;
             let initial = match FlatImeState::from_editor_whole(editor) {
                 Some(s) => s,
-                None => return Ok(()),
+                None => return Ok(false),
             };
             let replay_ops: Vec<_> = ops
                 .iter()
@@ -769,7 +769,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
         let result = reduced.state;
         let Some(text_change) = reduced.text_change else {
-            return Ok(());
+            return Ok(false);
         };
         let del = text_change.deleted_from(&initial.text);
 
@@ -780,11 +780,11 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
         let tokens_increased = ins_opens > del_opens || ins_closes > del_closes;
         if tokens_increased {
-            return Ok(());
+            return Ok(false);
         }
 
         if text_change.inserts_token() {
-            return Ok(());
+            return Ok(false);
         }
 
         let delta = analyze_delta(
@@ -930,10 +930,10 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             })?;
         }
 
-        Ok(())
+        Ok(!text_change.insert.is_empty() && result.comp.is_none())
     })()?;
 
-    if commit_as_is {
+    if commit_as_is || committed_insert {
         let resource = Arc::clone(&editor.resource);
         let resource = resource.lock().unwrap();
         editor.transact(|tr| {
