@@ -6,6 +6,7 @@
   import { weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { values } from '$lib/editor-ffi/values';
+  import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel } from '$lib/font-weight';
 
   type Font = { id?: string | null; weight: number; subfamilyDisplayName?: string | null; state: string };
   type FontFamily = { familyName: string; fonts: readonly Font[] };
@@ -30,14 +31,7 @@
     if (currentFontFamilyValue) {
       const family = fontFamilies.find((f) => f.familyName === currentFontFamilyValue);
       if (family) {
-        const fonts = [
-          ...new Map(
-            family.fonts
-              .filter((f) => f.state === 'ACTIVE')
-              .toSorted((a, b) => a.weight - b.weight)
-              .map((f) => [f.weight, f]),
-          ).values(),
-        ];
+        const fonts = activeFontsByWeight(family.fonts);
         return { family: family.familyName, fonts };
       }
     }
@@ -57,16 +51,7 @@
     };
   });
 
-  const weightItems = $derived.by(() => {
-    const items = currentFontFamilyAndFonts.fonts.map((font) => ({
-      value: font.weight,
-      label:
-        values.fontWeight.find((f) => f.value === font.weight)?.label ??
-        (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
-    }));
-
-    return items;
-  });
+  const weightItems = $derived(fontWeightItemsForFonts(currentFontFamilyAndFonts.fonts, values.fontWeight));
 
   const weightFontIdMap = $derived(
     new Map(
@@ -77,13 +62,7 @@
 
 <SearchableDropdown
   style={css.raw({ width: '100px' })}
-  getLabel={(value) => {
-    const font = currentFontFamilyAndFonts.fonts.find((f) => f.weight === value);
-    return (
-      values.fontWeight.find((f) => f.value === value)?.label ??
-      (font?.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : '(알 수 없는 굵기)')
-    );
-  }}
+  getLabel={(value) => fontWeightValueLabel(currentFontFamilyAndFonts.fonts, values.fontWeight, value)}
   items={weightItems}
   label="폰트 굵기"
   onEscape={() => ctx.editor?.focus()}

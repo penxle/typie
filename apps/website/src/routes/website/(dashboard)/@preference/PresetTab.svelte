@@ -33,6 +33,7 @@
   import { THEME_COLORS } from '$lib/editor/theme';
   import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
+  import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel, resolveFontWeightForFamily } from '$lib/font-weight';
   import { graphql } from '$mearie';
   import type { ThemeVariant } from '$lib/editor/theme';
   import type { PageLayoutPreset } from '$lib/editor/utils';
@@ -125,43 +126,14 @@
   const currentFontFamilyFonts = $derived.by(() => {
     const family = documentFontFamilies.find((f) => f.familyName === fontFamily);
     if (!family) return [];
-    return [...new Map(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => [f.weight, f])).values()].toSorted(
-      (a, b) => a.weight - b.weight,
-    );
+    return activeFontsByWeight(family.fonts);
   });
 
-  const fontWeightItems = $derived(
-    currentFontFamilyFonts.map((font) => ({
-      value: font.weight,
-      label:
-        values.fontWeight.find(({ value }) => value === font.weight)?.label ||
-        (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
-    })),
-  );
+  const fontWeightItems = $derived(fontWeightItemsForFonts(currentFontFamilyFonts, values.fontWeight));
 
   const representativeFontMap = $derived(new Map(documentFontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])));
 
   const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
-
-  const getClosestWeight = (familyName: string, targetWeight: number) => {
-    const family = documentFontFamilies.find((f) => f.familyName === familyName);
-    if (!family) return targetWeight;
-
-    const weights = [...new Set(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => f.weight))].toSorted((a, b) => a - b);
-    if (weights.length === 0) return targetWeight;
-    if (weights.includes(targetWeight)) return targetWeight;
-
-    let closest = weights[0];
-    let minDiff = Math.abs(targetWeight - weights[0]);
-    for (const w of weights) {
-      const diff = Math.abs(targetWeight - w);
-      if (diff <= minDiff) {
-        minDiff = diff;
-        closest = w;
-      }
-    }
-    return closest;
-  };
 
   const textColor = $derived(template.textColor ?? defaultValues.textColor);
   const backgroundColor = $derived(template.backgroundColor ?? defaultValues.backgroundColor);
@@ -401,8 +373,8 @@
             items={fontFamilyItems}
             label=""
             onchange={(value) => {
-              const closestWeight = getClosestWeight(value, fontWeight);
-              updateTemplate({ fontFamily: value, fontWeight: closestWeight });
+              const nextFontWeight = resolveFontWeightForFamily(documentFontFamilies, value, fontWeight);
+              updateTemplate({ fontFamily: value, fontWeight: nextFontWeight });
             }}
             value={fontFamily}
           >
@@ -432,10 +404,7 @@
               height: '28px',
               '& > input': { paddingRight: '24px', textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
             })}
-            getLabel={(value) => {
-              const item = fontWeightItems.find((w) => w.value === value);
-              return item?.label ?? '(알 수 없는 굵기)';
-            }}
+            getLabel={(value) => fontWeightValueLabel(currentFontFamilyFonts, values.fontWeight, value)}
             items={fontWeightItems}
             label=""
             onchange={(value) => {

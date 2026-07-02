@@ -17,6 +17,7 @@
   import { familySpecimenFallbacks, weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { THEME_COLORS } from '$lib/editor-ffi/theme';
   import { values } from '$lib/editor-ffi/values';
+  import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel, resolveFontWeightForFamily } from '$lib/font-weight';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
   import type { Modifier } from '@typie/editor-ffi/browser';
   import type { ThemeVariant } from '$lib/editor-ffi/theme';
@@ -86,14 +87,7 @@
     if (fontFamily) {
       const family = fontFamilies.find((f) => f.familyName === fontFamily);
       if (family) {
-        const fonts = [
-          ...new Map(
-            family.fonts
-              .filter((f) => f.state === 'ACTIVE' || (fontWeight !== undefined && f.weight === fontWeight))
-              .toSorted((a, b) => a.weight - b.weight)
-              .map((f) => [f.weight, f]),
-          ).values(),
-        ];
+        const fonts = activeFontsByWeight(family.fonts);
         return { family: family.familyName, fonts };
       }
     }
@@ -145,24 +139,16 @@
     return map;
   });
 
-  const weightItems = $derived.by(() => {
-    const items = currentFontFamilyAndFonts.fonts.map((font) => ({
-      value: font.weight,
-      label:
-        values.fontWeight.find((f) => f.value === font.weight)?.label ??
-        (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
-    }));
-
-    if (fontWeight != null && items.every((w) => w.value !== fontWeight)) {
-      items.push({
-        value: fontWeight,
-        label: values.fontWeight.find((f) => f.value === fontWeight)?.label ?? String(fontWeight),
-      });
-      items.sort((a, b) => a.value - b.value);
+  $effect(() => {
+    if (open && fontFamily !== undefined) {
+      const nextWeight = resolveFontWeightForFamily(fontFamilies, fontFamily, fontWeight);
+      if (nextWeight !== fontWeight) {
+        fontWeight = nextWeight;
+      }
     }
-
-    return items;
   });
+
+  const weightItems = $derived(fontWeightItemsForFonts(currentFontFamilyAndFonts.fonts, values.fontWeight));
 
   const weightFontIdMap = $derived(
     new Map(
@@ -411,6 +397,7 @@
             label=""
             onchange={(value) => {
               fontFamily = value;
+              fontWeight = resolveFontWeightForFamily(fontFamilies, value, fontWeight);
             }}
             placeholder="글꼴 선택"
             value={fontFamily}
@@ -526,13 +513,7 @@
           </div>
           <SearchableDropdown
             style={dropdownStyle}
-            getLabel={(value) => {
-              const font = currentFontFamilyAndFonts.fonts.find((f) => f.weight === value);
-              return (
-                values.fontWeight.find((f) => f.value === value)?.label ??
-                (font?.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : '(알 수 없는 굵기)')
-              );
-            }}
+            getLabel={(value) => fontWeightValueLabel(currentFontFamilyAndFonts.fonts, values.fontWeight, value)}
             items={weightItems}
             label=""
             onchange={(value) => {
