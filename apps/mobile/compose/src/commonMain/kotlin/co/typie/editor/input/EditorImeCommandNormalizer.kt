@@ -30,6 +30,7 @@ internal object EditorImeCommandNormalizer {
 
     val messages = mutableListOf<Message>()
     val ops = mutableListOf<FlatImeOp>()
+    var hasActiveComposition = ime?.composing != null
 
     for (command in commands) {
       if (command is CommitTextCommand && command.text == "\n") {
@@ -42,8 +43,25 @@ internal object EditorImeCommandNormalizer {
         continue
       }
 
-      val op = command.toFlatImeOp() ?: continue
+      val op =
+        if (command is FinishComposingTextCommand) {
+          if (hasActiveComposition) {
+            FlatImeOp.CommitAsIs
+          } else {
+            FlatImeOp.ClearComposition
+          }
+        } else {
+          command.toFlatImeOp()
+        } ?: continue
       ops += op
+      hasActiveComposition =
+        when (op) {
+          is FlatImeOp.Compose,
+          is FlatImeOp.SetComposition -> true
+          is FlatImeOp.ClearComposition,
+          is FlatImeOp.CommitAsIs -> false
+          else -> hasActiveComposition
+        }
     }
 
     if (ops.isNotEmpty()) {
@@ -85,7 +103,6 @@ internal object EditorImeCommandNormalizer {
       is SetComposingTextCommand -> FlatImeOp.Compose(text)
       is SetSelectionCommand -> FlatImeOp.SetSelection(start, end)
       is SetComposingRegionCommand -> FlatImeOp.SetComposition(start, end)
-      is FinishComposingTextCommand -> FlatImeOp.ClearComposition
       is DeleteSurroundingTextCommand ->
         FlatImeOp.DeleteSurroundingUtf16(lengthBeforeCursor, lengthAfterCursor)
 

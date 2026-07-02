@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorState
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -230,6 +231,9 @@ internal fun EditorToolbarHost(
 
     commandScope.launch {
       editor.awaitWithBringIntoView(bringIntoViewRequests) {
+        if (editor.ime?.composing != null) {
+          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+        }
         messages.forEach { enqueue(it) }
         beforeCommit { bringIntoView(bringIntoViewTarget) }
       }

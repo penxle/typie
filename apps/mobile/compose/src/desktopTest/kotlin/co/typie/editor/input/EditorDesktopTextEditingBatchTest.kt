@@ -45,4 +45,38 @@ class EditorDesktopTextEditingBatchTest {
       batch.drainMessages(),
     )
   }
+
+  @Test
+  fun `finish composing text clears composition without active preedit`() {
+    val batch = EditorDesktopTextEditingBatch()
+
+    batch.finishComposingText()
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.ClearComposition))),
+      batch.drainMessages(),
+    )
+  }
+
+  @Test
+  fun `finish composing text commits initial active preedit as-is`() {
+    val batch = EditorDesktopTextEditingBatch(initialHasActiveComposition = true)
+
+    batch.finishComposingText()
+
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))), batch.drainMessages())
+  }
+
+  @Test
+  fun `finish composing text commits preedit started in same batch`() {
+    val batch = EditorDesktopTextEditingBatch()
+
+    batch.setComposingText("ㅎ", 1)
+    batch.finishComposingText()
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("ㅎ"), FlatImeOp.CommitAsIs))),
+      batch.drainMessages(),
+    )
+  }
 }

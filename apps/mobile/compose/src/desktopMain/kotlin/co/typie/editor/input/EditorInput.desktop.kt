@@ -83,7 +83,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
       editor.syncWithBringIntoView(bringIntoViewRequests) {
-        val batch = EditorDesktopTextEditingBatch()
+        val batch =
+          EditorDesktopTextEditingBatch(initialHasActiveComposition = editor.ime?.composing != null)
         batch.block()
         for (message in batch.drainMessages()) {
           enqueue(message)
@@ -103,9 +104,11 @@ internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(edit
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal class EditorDesktopTextEditingBatch : TextEditingScope {
+internal class EditorDesktopTextEditingBatch(initialHasActiveComposition: Boolean = false) :
+  TextEditingScope {
   private val messages = mutableListOf<Message>()
   private val ops = mutableListOf<FlatImeOp>()
+  private var hasActiveComposition = initialHasActiveComposition
 
   override fun commitText(text: CharSequence, newCursorPosition: Int) {
     if (text.toString() == "\n") {
@@ -114,15 +117,23 @@ internal class EditorDesktopTextEditingBatch : TextEditingScope {
     } else {
       ops += FlatImeOp.Compose(text.toString())
       ops += FlatImeOp.CommitAsIs
+      hasActiveComposition = false
     }
   }
 
   override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
     ops += FlatImeOp.Compose(text.toString())
+    hasActiveComposition = true
   }
 
   override fun finishComposingText() {
-    ops += FlatImeOp.ClearComposition
+    ops +=
+      if (hasActiveComposition) {
+        FlatImeOp.CommitAsIs
+      } else {
+        FlatImeOp.ClearComposition
+      }
+    hasActiveComposition = false
   }
 
   override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {

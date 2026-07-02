@@ -100,7 +100,7 @@ internal class EditorInputConnection(
   }
 
   override fun finishComposingText(): Boolean {
-    batch.enqueue(FlatImeOp.ClearComposition)
+    batch.finishComposingText(hasActiveComposition = editor.ime?.composing != null)
     return true
   }
 
@@ -153,7 +153,7 @@ internal class EditorInputConnection(
   override fun getHandler() = null
 
   override fun closeConnection() {
-    batch.closeConnection()
+    batch.closeConnection(hasActiveComposition = editor.ime?.composing != null)
   }
 
   override fun commitContent(
@@ -208,9 +208,25 @@ private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
     return batchLevel > 0
   }
 
-  fun closeConnection() {
+  fun finishComposingText(hasActiveComposition: Boolean) {
+    pendingOps.add(
+      if (hasActiveComposition || hasPendingCompositionUpdate()) {
+        FlatImeOp.CommitAsIs
+      } else {
+        FlatImeOp.ClearComposition
+      }
+    )
+    flushIfReady()
+  }
+
+  fun closeConnection(hasActiveComposition: Boolean) {
     batchLevel = 0
-    enqueue(FlatImeOp.ClearComposition)
+    if ((hasActiveComposition || hasPendingCompositionUpdate()) && !hasPendingCommitAsIs()) {
+      pendingOps.add(FlatImeOp.CommitAsIs)
+    } else if (!hasPendingCommitAsIs()) {
+      pendingOps.add(FlatImeOp.ClearComposition)
+    }
+    flush()
   }
 
   fun enqueue(op: FlatImeOp) {
@@ -242,4 +258,23 @@ private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
     pendingMessages.add(Message.TextInput(pendingOps.toList()))
     pendingOps.clear()
   }
+
+  private fun hasPendingCompositionUpdate(): Boolean =
+    pendingOps.any { it.startsOrUpdatesComposition() } ||
+      pendingMessages.any { message ->
+        message is Message.TextInput && message.ops.any { it.startsOrUpdatesComposition() }
+      }
+
+  private fun hasPendingCommitAsIs(): Boolean =
+    pendingOps.any { it == FlatImeOp.CommitAsIs } ||
+      pendingMessages.any { message ->
+        message is Message.TextInput && message.ops.any { it == FlatImeOp.CommitAsIs }
+      }
+
+  private fun FlatImeOp.startsOrUpdatesComposition(): Boolean =
+    when (this) {
+      is FlatImeOp.Compose,
+      is FlatImeOp.SetComposition -> true
+      else -> false
+    }
 }

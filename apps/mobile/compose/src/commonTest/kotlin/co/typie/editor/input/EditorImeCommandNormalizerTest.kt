@@ -1,6 +1,8 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.FinishComposingTextCommand
+import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.FlatImeOp
@@ -30,6 +32,38 @@ class EditorImeCommandNormalizerTest {
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("\n", 1)), ime = null)
 
     assertEquals(listOf(Message.Key(KeyEvent(Key.Enter))), messages)
+  }
+
+  @Test
+  fun `finish composing command clears composition without active preedit`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(listOf(FinishComposingTextCommand()), ime = null)
+
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ClearComposition))), messages)
+  }
+
+  @Test
+  fun `finish composing command commits active preedit as-is`() {
+    val ime =
+      Ime(text = "ㅎ", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
+    val messages =
+      EditorImeCommandNormalizer.normalize(listOf(FinishComposingTextCommand()), ime = ime)
+
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))), messages)
+  }
+
+  @Test
+  fun `finish composing command commits preedit started in same command batch`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetComposingTextCommand("ㅎ", 1), FinishComposingTextCommand()),
+        ime = null,
+      )
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("ㅎ"), FlatImeOp.CommitAsIs))),
+      messages,
+    )
   }
 
   @Test

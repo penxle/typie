@@ -344,6 +344,12 @@ internal class EditorInputNode(
 
   private fun syncTextInputSession() {
     val sessionEnabled = focused && textInputSessionEnabled
+    if (!sessionEnabled && editor.ime?.composing != null) {
+      dispatchSync(
+        listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
+        bringIntoViewTarget = null,
+      )
+    }
     focusedJob?.cancel()
     focusedJob = null
     platformInputBridge.reset()
