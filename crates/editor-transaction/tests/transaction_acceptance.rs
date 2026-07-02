@@ -1,8 +1,9 @@
 use editor_crdt::Dot;
 use editor_macros::state;
 use editor_model::{
-    AtomLeaf, CalloutVariant, ChildView, Modifier, ModifierType, Node, NodeType, NodeView,
-    PlainCalloutNode, PlainNode, PlainParagraphNode, PlainStyleEntry, Subtree,
+    AtomLeaf, CalloutVariant, ChildView, LayoutMode, Modifier, ModifierType, Node, NodeType,
+    NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainStyleEntry,
+    Subtree,
 };
 use editor_state::State;
 use editor_transaction::{Step, Transaction};
@@ -390,6 +391,40 @@ mod tests {
         } else {
             panic!("expected callout");
         }
+    }
+
+    #[test]
+    fn set_node_on_root_applies_layout_mode() {
+        // Layout-mode changes target the implicit root (Dot::ROOT), which is synthetic.
+        // set_node must accept it as a NodeAttr target, not narrow via as_op_dot.
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("x") } } }
+            selection: (p1, 0)
+        };
+        let root = root_id(&state);
+        let old_node = state.view().node(root).unwrap().node().to_plain();
+        let new_node = PlainNode::Root(PlainRootNode {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 400,
+                page_height: 600,
+                page_margin_top: 20,
+                page_margin_bottom: 20,
+                page_margin_left: 20,
+                page_margin_right: 20,
+            },
+        });
+        let step = Step::SetNode {
+            block: root,
+            old_node,
+            new_node,
+        };
+        let after = step.apply(&state).unwrap().state;
+        assert!(matches!(
+            after.view().node(root).unwrap().node().to_plain(),
+            PlainNode::Root(PlainRootNode {
+                layout_mode: LayoutMode::Paginated { .. }
+            })
+        ));
     }
 
     #[test]

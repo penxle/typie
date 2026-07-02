@@ -22,10 +22,12 @@ pub(crate) fn apply_to(
     if support::block_node_type(&batched.projected, block).is_none() {
         return Err(StepError::NodeNotFound(block));
     }
-    let Some(dot) = block.as_op_dot() else {
+    // Real op dots and the implicit root (Dot::ROOT, a permanent anchor) are valid
+    // NodeAttr targets; only transient synthetic scaffolds are not. `as_op_dot`
+    // rejects the synthetic root, breaking root-only attrs like layout mode.
+    let Some(dot) = editor_model::anchor_dot(block) else {
         return Err(StepError::NodeNotFound(block));
     };
-    let dot = dot.dot();
     for attr in new_node.to_attrs() {
         batched.apply(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))?;
     }

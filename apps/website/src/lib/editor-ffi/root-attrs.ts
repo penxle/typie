@@ -1,7 +1,9 @@
 import type { LayoutMode, Modifier } from '@typie/editor-ffi/browser';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
-const ROOT_ID = '0';
+// Wire form of editor_crdt Dot::ROOT ("{base62(actor)}_{base62(clock)}").
+// Pinned in crates/editor-crdt/src/dot.rs (root_string_form_is_pinned_for_web_client).
+const ROOT_ID = '0_AzL8n0Y58m8';
 const BASE_STYLE_ID = 'base';
 
 export const defaultPaginatedLayout = (): LayoutMode => ({
