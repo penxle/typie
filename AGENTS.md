@@ -35,6 +35,7 @@ Run `pnpm run bootstrap` to install hooks after fresh clone.
 - Naming: `kebab-case.ts` utilities, `PascalCase.svelte` components, `SCREAMING_SNAKE_CASE` constants
 - Svelte: `$props()`, `$state()`, `$derived()` (Svelte 5 runes)
 - Rust: stable toolchain, Edition 2024, `cargo fmt` before commits
+- Rust dependencies: after changing dependencies in any `Cargo.toml`, run `cargo hakari generate` (`crates/workspace-hack` pins third-party features so different `-p`/test selections share one artifact set; do not edit it by hand)
 
 ## Behavioral Guidelines
 

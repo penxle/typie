@@ -35,6 +35,7 @@ serde_json = { workspace = true }
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 editor-model = { path = "../editor-model", features = ["test-utils"] }

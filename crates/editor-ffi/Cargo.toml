@@ -84,6 +84,7 @@ web-sys = { workspace = true, optional = true, features = [
   "CanvasRenderingContext2d",
   "ImageData",
 ] }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 objc2.workspace = true

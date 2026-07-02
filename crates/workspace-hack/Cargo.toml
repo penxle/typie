@@ -1,0 +1,67 @@
+[package]
+name = "workspace-hack"
+version = "0.1.0"
+edition = "2024"
+description = "workspace-hack package, managed by hakari"
+publish = false
+
+### BEGIN HAKARI SECTION
+[dependencies]
+bytemuck = { version = "1", default-features = false, features = ["derive", "extern_crate_alloc", "min_const_generics", "must_cast"] }
+icu_locale_core = { version = "2", default-features = false, features = ["alloc", "serde", "zerovec"] }
+icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "deserialize_postcard_1", "sync"] }
+icu_segmenter = { version = "2", default-features = false, features = ["auto", "compiled_data", "serde"] }
+imbl = { version = "7", default-features = false, features = ["serde"] }
+js-sys = { version = "0.3" }
+litemap = { version = "0.8", default-features = false, features = ["serde"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+once_cell = { version = "1", default-features = false, features = ["alloc"] }
+phf = { version = "0.13", features = ["macros", "uncased"] }
+phf_shared = { version = "0.13", features = ["uncased"] }
+read-fonts = { version = "0.40" }
+serde = { version = "1", features = ["alloc", "derive"] }
+serde_core = { version = "1", features = ["alloc"] }
+smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
+stable_deref_trait = { version = "1" }
+thiserror = { version = "2" }
+tinystr = { version = "0.8", default-features = false, features = ["alloc", "serde", "zerovec"] }
+uncased = { version = "0.9" }
+wasm-bindgen = { version = "0.2" }
+web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "History", "HtmlCanvasElement", "HtmlHeadElement", "ImageData", "Location", "Window", "console"] }
+zerotrie = { version = "0.2", default-features = false, features = ["serde", "yoke", "zerofrom", "zerovec"] }
+
+[build-dependencies]
+bytemuck = { version = "1", default-features = false, features = ["derive", "extern_crate_alloc", "min_const_generics", "must_cast"] }
+icu_locale_core = { version = "2", default-features = false, features = ["alloc", "serde", "zerovec"] }
+icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "deserialize_postcard_1", "sync"] }
+icu_segmenter = { version = "2", default-features = false, features = ["auto", "compiled_data", "serde"] }
+imbl = { version = "7", default-features = false, features = ["serde"] }
+js-sys = { version = "0.3" }
+litemap = { version = "0.8", default-features = false, features = ["serde"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+once_cell = { version = "1", default-features = false, features = ["alloc"] }
+phf = { version = "0.13", features = ["macros", "uncased"] }
+phf_macros = { version = "0.13", default-features = false, features = ["uncased"] }
+phf_shared = { version = "0.13", features = ["uncased"] }
+read-fonts = { version = "0.40" }
+serde = { version = "1", features = ["alloc", "derive"] }
+serde_core = { version = "1", features = ["alloc"] }
+smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
+stable_deref_trait = { version = "1" }
+syn = { version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
+thiserror = { version = "2" }
+tinystr = { version = "0.8", default-features = false, features = ["alloc", "serde", "zerovec"] }
+uncased = { version = "0.9" }
+wasm-bindgen = { version = "0.2" }
+web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "History", "HtmlCanvasElement", "HtmlHeadElement", "ImageData", "Location", "Window", "console"] }
+zerotrie = { version = "0.2", default-features = false, features = ["serde", "yoke", "zerofrom", "zerovec"] }
+
+[target.aarch64-apple-darwin.dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
+libc = { version = "0.2" }
+
+[target.aarch64-apple-darwin.build-dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
+libc = { version = "0.2" }
+
+### END HAKARI SECTION

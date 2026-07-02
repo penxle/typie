@@ -1,0 +1,9 @@
+hakari-package = "workspace-hack"
+dep-format-version = "4"
+resolver = "2"
+
+platforms = ["aarch64-apple-darwin", "wasm32-unknown-unknown"]
+
+[traversal-excludes]
+workspace-members = ["editor-bindgen"]
+third-party = [{ name = "uniffi" }, { name = "proptest" }]

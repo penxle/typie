@@ -659,6 +659,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -682,6 +683,7 @@ dependencies = [
  "unicode-segmentation",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -698,6 +700,7 @@ dependencies = [
  "uniffi",
  "wasm-bindgen",
  "web-time",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -727,6 +730,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -748,6 +752,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -788,6 +793,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -802,6 +808,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -822,6 +829,7 @@ dependencies = [
  "serde_json",
  "smallvec",
  "syn",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -845,6 +853,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
  "xxhash-rust",
 ]
 
@@ -874,6 +883,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
  "zeno",
  "zune-png",
 ]
@@ -906,6 +916,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -929,6 +940,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
  "write-fonts",
 ]
 
@@ -951,6 +963,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -972,6 +985,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -996,6 +1010,7 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3740,6 +3755,38 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "bytemuck",
+ "icu_locale_core",
+ "icu_provider",
+ "icu_segmenter",
+ "imbl",
+ "js-sys",
+ "libc",
+ "litemap",
+ "log",
+ "once_cell",
+ "phf",
+ "phf_macros",
+ "phf_shared",
+ "read-fonts 0.40.2",
+ "serde",
+ "serde_core",
+ "smallvec",
+ "stable_deref_trait",
+ "syn",
+ "thiserror",
+ "tinystr",
+ "uncased",
+ "wasm-bindgen",
+ "web-sys",
+ "zerotrie",
+]
 
 [[package]]
 name = "write-fonts"
