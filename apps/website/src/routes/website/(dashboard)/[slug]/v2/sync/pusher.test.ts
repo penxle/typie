@@ -101,6 +101,81 @@ describe('Pusher (single-source-of-truth)', () => {
     expect(recs.map((r) => r.id)).toEqual(['3']);
   });
 
+  it('schedule() persists new local changesets immediately, decoupled from the push cadence', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    let pushes = 0;
+    const pusher = new Pusher(
+      baseOpts(editor, store, async () => {
+        pushes++;
+        return { heads: editor.currentHeads(), durableHeads: enc() };
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const pushesAfterInit = pushes;
+
+    editor.known.add(9);
+    pusher.schedule();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const recs = await store.load('doc1');
+    expect(recs.map((r) => r.id)).toEqual(['9']);
+    expect(pushes).toBe(pushesAfterInit); // push waits for the idle window; durability must not
+    pusher.stop();
+  });
+
+  it('REGRESSION: an op applied while a persist write is in-flight is not swallowed by capturedHeads', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    let injected = false;
+    const origPut = store.put.bind(store);
+    store.put = async (r) => {
+      await origPut(r);
+      if (!injected) {
+        injected = true;
+        editor.known.add(11); // edit lands while the previous record's write is awaited
+      }
+    };
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: editor.currentHeads(), durableHeads: enc() })));
+    await new Promise((r) => setTimeout(r, 0));
+
+    editor.known.add(10);
+    pusher.schedule();
+    await new Promise((r) => setTimeout(r, 0));
+    pusher.schedule();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const recs = await store.load('doc1');
+    expect(recs.map((r) => r.id).toSorted((a, b) => Number(a) - Number(b))).toEqual(['10', '11']);
+    pusher.stop();
+  });
+
+  it('a failing store write does not kill later persists; the failed delta is retried', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    let failOnce = true;
+    const origPut = store.put.bind(store);
+    store.put = async (r) => {
+      if (failOnce) {
+        failOnce = false;
+        throw new Error('quota');
+      }
+      await origPut(r);
+    };
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: editor.currentHeads(), durableHeads: enc() })));
+    await new Promise((r) => setTimeout(r, 0));
+
+    editor.known.add(10);
+    pusher.schedule();
+    await new Promise((r) => setTimeout(r, 0));
+    pusher.schedule();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const recs = await store.load('doc1');
+    expect(recs.map((r) => r.id)).toEqual(['10']);
+    pusher.stop();
+  });
+
   it('prune deletes only records proven server-durable-and-local', async () => {
     const editor = new FakeEditor([1, 2, 3]);
     const store = new FakeStore();

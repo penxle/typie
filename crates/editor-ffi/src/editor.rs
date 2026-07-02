@@ -1050,6 +1050,92 @@ mod tests {
         assert!(!entries.is_empty());
     }
 
+    // Regression: the website pusher captures `missing_changesets_tolerant(captured)`
+    // into IndexedDB and advances `captured = current_heads()` after every cycle. A
+    // capture landing between an undo and the next edit must not lose the undo
+    // changeset — a reload from (server graph, captured records) has to reproduce
+    // the live document instead of dropping everything after the undo as orphans.
+    #[test]
+    fn ffi_reload_with_pending_survives_capture_between_undo_and_next_edit() {
+        use editor_core::{HistoryOp, InsertionOp, Message};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let server_graph =
+            editor_crdt::wire::encode(&initial.projected.graph().changesets_as_vec()).unwrap();
+        let server_heads = editor_crdt::wire::encode_dots(
+            &initial
+                .projected
+                .graph()
+                .current_heads()
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let editor = make_ffi_editor(initial);
+
+        let mut captured = server_heads;
+        let mut records: Vec<(String, Vec<u8>)> = Vec::new();
+        let capture = |captured: &mut Vec<u8>, records: &mut Vec<(String, Vec<u8>)>| {
+            let fresh = editor
+                .missing_changesets_tolerant(captured.clone())
+                .unwrap();
+            if !fresh.is_empty() {
+                for entry in editor.split_changesets(fresh).unwrap() {
+                    let entry = entry.from_ffi().unwrap();
+                    match records.iter_mut().find(|(id, _)| *id == entry.id) {
+                        Some((_, bytes)) => *bytes = entry.bytes,
+                        None => records.push((entry.id, entry.bytes)),
+                    }
+                }
+            }
+            *captured = editor.current_heads().unwrap();
+        };
+        let step = |msg: Message| {
+            editor.enqueue(msg).unwrap();
+            let _ = editor.tick().unwrap();
+        };
+
+        step(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "keep ".into(),
+            },
+        });
+        capture(&mut captured, &mut records);
+        step(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "oops".into(),
+            },
+        });
+        capture(&mut captured, &mut records);
+        step(Message::History {
+            op: HistoryOp::Undo,
+        });
+        capture(&mut captured, &mut records);
+        step(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "final".into(),
+            },
+        });
+        capture(&mut captured, &mut records);
+
+        let reloaded_state = crate::graph::state_from_changesets_with_pending(
+            server_graph,
+            records.into_iter().map(|(_, bytes)| bytes).collect(),
+        )
+        .unwrap();
+        let reloaded = Editor::new(editor_core::Editor::new_test(reloaded_state));
+
+        assert_eq!(reloaded.prose_text().unwrap(), editor.prose_text().unwrap());
+        let mut live_ids = editor.changeset_ids().unwrap();
+        let mut reloaded_ids = reloaded.changeset_ids().unwrap();
+        live_ids.sort();
+        reloaded_ids.sort();
+        assert_eq!(reloaded_ids, live_ids);
+    }
+
     #[test]
     fn ffi_cursor_hit_test_resolves_and_forwards() {
         let (initial, ..) = state! {

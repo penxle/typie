@@ -33,6 +33,8 @@ export class Pusher {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- intentionally non-reactive bookkeeping
   private readonly dormant = new Set<string>();
   private inflight = false;
+  private persistTail: Promise<void> = Promise.resolve();
+  private persistQueued = false;
   private readonly resolveFlushWaiters: (() => void)[] = [];
   private flushAfterInflight = false;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,14 +91,39 @@ export class Pusher {
     }
     if (adopted) this.opts.editor.flush();
 
-    const fresh = this.opts.editor.missingChangesetsFor(this.capturedHeads);
-    if (fresh.length > 0) {
-      for (const { id, bytes } of this.opts.editor.splitChangesets(fresh)) {
-        await this.opts.store.put({ id, documentId: this.opts.documentId, changeset: bytes, createdAt: Date.now() });
+    await this.persistFresh();
+  }
+
+  // Crash durability is decoupled from the push cadence: `schedule()` starts a
+  // persist immediately, so a refresh right after the last edit still restores
+  // it from the delta store — only the push waits for the idle window. Runs are
+  // chained (never concurrent) and a queued run subsumes later requests.
+  private persistFresh(): Promise<void> {
+    if (this.persistQueued) return this.persistTail;
+    this.persistQueued = true;
+    const run = this.persistTail.then(async () => {
+      this.persistQueued = false;
+      if (this.stopped) return;
+      // Snapshot the frontier before computing the delta (both reads are
+      // synchronous, so they agree), and advance `capturedHeads` only to that
+      // snapshot. Reading the frontier after the awaited writes would swallow
+      // ops applied while a write was in flight — they'd be past
+      // `capturedHeads` without ever having been stored.
+      const heads = this.opts.editor.currentHeads();
+      const fresh = this.opts.editor.missingChangesetsFor(this.capturedHeads);
+      if (fresh.length > 0) {
+        for (const { id, bytes } of this.opts.editor.splitChangesets(fresh)) {
+          await this.opts.store.put({ id, documentId: this.opts.documentId, changeset: bytes, createdAt: Date.now() });
+        }
+        this.opts.broadcast?.(fresh);
       }
-      this.opts.broadcast?.(fresh);
-    }
-    this.capturedHeads = this.opts.editor.currentHeads();
+      this.capturedHeads = heads;
+    });
+    // The chain must survive a failed run; `capturedHeads` is untouched on
+    // failure, so the next persist retries the same delta.
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- failure is surfaced to the awaiting caller via `run`
+    this.persistTail = run.catch(() => {});
+    return run;
   }
 
   private async drain(): Promise<void> {
@@ -240,6 +267,11 @@ export class Pusher {
 
   schedule(): void {
     if (this.stopped) return;
+    // Before the error gate: a permanent push failure stops pushing, but local
+    // crash durability must keep running — that is when it matters most.
+    this.persistFresh().catch((err) => {
+      console.warn('Pusher: persist failed, will retry on next edit', err);
+    });
     if (this.status === 'error') return;
 
     if (this.idleTimer) clearTimeout(this.idleTimer);

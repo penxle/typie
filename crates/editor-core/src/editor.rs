@@ -629,6 +629,16 @@ impl Editor {
                 }
             }
         }
+        // Defense-in-depth: every op-applying path seals its own changeset
+        // (`Transaction::commit`, `apply_undo_result`). If a future path leaks
+        // unsealed ops past this boundary, the sync layer snapshots
+        // `current_heads` and permanently skips any changeset sealed later —
+        // so seal leftovers here and make the leak loud.
+        if !self.state.projected.graph().pending().is_empty() {
+            log::warn!("tick sealed leftover unsealed ops; an edit path failed to commit");
+            self.state.projected_mut().commit();
+        }
+
         let layout_dirty = self.state.projected_mut().take_layout_dirty();
 
         if !self.pending_ops.is_empty() {
@@ -1316,6 +1326,14 @@ impl Editor {
     fn apply_undo_result(&mut self, result: Option<(Vec<Op<EditOp>>, TransientState)>) -> bool {
         match result {
             Some((ops, transient)) => {
+                // Seal the inverse ops like `Transaction::commit` seals edits:
+                // unsealed ops are invisible to `missing_changesets_tolerant`
+                // (the sync capture/push source) while still advancing
+                // `current_heads`, so leaving them pending until the next edit
+                // lets a sync capture skip them permanently.
+                if !self.state.projected.graph().pending().is_empty() {
+                    self.state.projected_mut().commit();
+                }
                 // The inverse ops have already been applied to `self.state.projected`,
                 // so this re-resolves the recorded `StableSelection` against the
                 // post-undo doc. Concurrent remote ops may have restructured the doc
@@ -1947,6 +1965,57 @@ mod tests {
             op: HistoryOp::Undo,
         });
         assert_eq!(editor.state().selection, before);
+    }
+
+    // Inverse ops must be sealed at the message boundary: unsealed ops are
+    // invisible to `missing_changesets_tolerant` (the sync capture/push source)
+    // while still advancing `current_heads`, so a sync capture landing between
+    // an undo and the next edit permanently skips the late-sealed changeset —
+    // and every later changeset parents on it, so a reload drops them all.
+    #[test]
+    fn undo_and_redo_seal_inverse_ops_into_changesets() {
+        let (mut editor, _) = test_editor();
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "x".into() },
+        });
+        let sealed = editor.state().projected.graph().changesets().len();
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        let graph = editor.state().projected.graph();
+        assert!(graph.pending().is_empty(), "undo left unsealed pending ops");
+        assert_eq!(graph.changesets().len(), sealed + 1);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        let graph = editor.state().projected.graph();
+        assert!(graph.pending().is_empty(), "redo left unsealed pending ops");
+        assert_eq!(graph.changesets().len(), sealed + 2);
+    }
+
+    // Defense-in-depth for the same contract: if a future code path applies ops
+    // without sealing (as undo/redo once did), the tick boundary must seal the
+    // leftovers — past it the sync layer snapshots `current_heads`, and a
+    // changeset sealed after that snapshot is permanently skipped by capture.
+    #[test]
+    fn tick_seals_leftover_pending_ops_from_unsealing_paths() {
+        let (mut editor, _) = test_editor();
+        editor
+            .state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('z'),
+            }))
+            .unwrap();
+        assert!(!editor.state.projected.graph().pending().is_empty());
+
+        let _ = editor.tick().unwrap();
+
+        let graph = editor.state.projected.graph();
+        assert!(graph.pending().is_empty(), "tick left unsealed pending ops");
     }
 
     #[test]

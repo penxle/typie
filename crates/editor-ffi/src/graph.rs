@@ -56,8 +56,23 @@ pub(crate) fn state_from_changesets_with_pending(
             None,
         ));
     }
-    let (graph, _dropped) =
+    let (graph, dropped) =
         editor_crdt::OpGraph::<editor_model::EditOp>::new().receive_changesets_ordered(all);
+    if !dropped.is_empty() {
+        // Dropped changesets are unrecoverable data loss for the client that
+        // persisted them — never silent. The ids give the IndexedDB records to
+        // inspect when a report comes in.
+        let ids: Vec<String> = dropped
+            .iter()
+            .filter_map(|cs| cs.ops.first())
+            .map(|op| format!("{}:{}", op.id.actor, op.id.clock))
+            .collect();
+        log::warn!(
+            "load with pending dropped {} changeset(s) as unappliable (orphaned or partially duplicated): {}",
+            dropped.len(),
+            ids.join(", ")
+        );
+    }
     let projected =
         editor_state::ProjectedState::from_graph(graph).map_err(|e| EditorError::General {
             msg: format!("{e:?}"),
