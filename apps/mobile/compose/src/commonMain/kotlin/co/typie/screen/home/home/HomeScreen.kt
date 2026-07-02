@@ -388,7 +388,11 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
 @Composable
 private fun ContinueWritingSection(docs: List<HomeScreen_ContinueWriting_document>) {
   Column {
-    val pagerState = rememberPagerState(pageCount = { docs.size })
+    val pagerState =
+      rememberPagerState(
+        key = docs.joinToString(separator = "|", prefix = "continue-writing:") { it.entity.id },
+        pageCount = { docs.size },
+      )
 
     Row(
       modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
