@@ -365,6 +365,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.A,
       setOf(KeyModifier.Mod),
+      bringIntoViewTarget = null,
       action = { listOf(Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.All))) },
     ),
     KeyBinding(
