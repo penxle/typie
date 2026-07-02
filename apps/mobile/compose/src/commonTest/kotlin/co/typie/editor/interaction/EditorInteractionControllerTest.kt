@@ -683,6 +683,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
+      val baselineSelectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
 
       controller.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
@@ -695,7 +696,10 @@ class EditorInteractionControllerTest {
           nowMillis = 140L,
         )
       )
-      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertEquals(
+        emptyList<Message.Selection>(),
+        fake.enqueued.filterIsInstance<Message.Selection>().drop(baselineSelectionCount),
+      )
     }
 
   @Test
@@ -732,6 +736,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
+      val baselineSelectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
 
       assertTrue(
@@ -760,7 +765,10 @@ class EditorInteractionControllerTest {
           nowMillis = 140L,
         )
       )
-      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertEquals(
+        emptyList<Message.Selection>(),
+        fake.enqueued.filterIsInstance<Message.Selection>().drop(baselineSelectionCount),
+      )
     }
 
   @Test
@@ -1470,6 +1478,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
+      val baselineSelectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
 
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
       controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
@@ -1477,7 +1486,12 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       val extend =
-        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+        fake.enqueued
+          .filterIsInstance<Message.Selection>()
+          .drop(baselineSelectionCount)
+          .map { it.op }
+          .filterIsInstance<SelectionOp.ExtendTo>()
+          .single()
       assertEquals(selection, extend.baseSelection)
       assertEquals(18f, extend.headX)
       assertFalse(extend.allowCollapse)
@@ -1844,7 +1858,8 @@ class EditorInteractionControllerTest {
         )
       }
 
-      assertEquals(6, fake.enqueued.size)
+      assertEquals(0, host.launchInteractionCount)
+      assertEquals(3, fake.enqueued.size)
     }
 
   @Test
@@ -2139,6 +2154,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
+      val baselineSelectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
 
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
       controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
@@ -2147,7 +2163,14 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       assertEquals(1, host.pointerCancelCount)
-      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertEquals(
+        emptyList<SelectionOp.ExtendTo>(),
+        fake.enqueued
+          .filterIsInstance<Message.Selection>()
+          .drop(baselineSelectionCount)
+          .map { it.op }
+          .filterIsInstance<SelectionOp.ExtendTo>(),
+      )
     }
 
   private class TestHost(private val scope: TestScope) :
@@ -2156,6 +2179,7 @@ class EditorInteractionControllerTest {
     var scheduledLongPressDispatchAtMillis: Long? = null
     var cancelTapDispatchCount = 0
     var pointerCancelCount = 0
+    var launchInteractionCount = 0
     var focused = false
     val uiState = EditorUiState()
     var scrollGestureLockActive = false
@@ -2198,6 +2222,7 @@ class EditorInteractionControllerTest {
     }
 
     override fun launchInteraction(block: suspend () -> Unit) {
+      launchInteractionCount += 1
       scope.launch { block() }
     }
 
