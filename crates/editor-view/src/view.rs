@@ -150,7 +150,8 @@ impl View {
     }
 
     pub fn invalidate_measure_with_ancestors(&mut self, node: &NodeView) -> bool {
-        self.measurer.invalidate_with_ancestors(node)
+        self.measurer
+            .invalidate_measure_and_segments_with_ancestors(node)
     }
 
     pub fn clear_measure_cache(&mut self) {

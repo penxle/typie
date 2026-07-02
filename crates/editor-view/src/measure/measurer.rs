@@ -50,6 +50,21 @@ impl Measurer {
         invalidated
     }
 
+    /// Font-load invalidation: besides the measures, drop the node's cached segment
+    /// shapings. A font turning READY changes shaped output without changing any input
+    /// the segment hash covers, so a hash-matched segment would keep serving its
+    /// fallback-shaped lines through the re-measure — the paragraph would render
+    /// without the loaded font until an edit happened to change its hash. Edit-path
+    /// invalidation must NOT use this: there the hash correctly distinguishes changed
+    /// segments, and dropping them all would forfeit the per-segment reuse.
+    pub(crate) fn invalidate_measure_and_segments_with_ancestors(
+        &mut self,
+        node: &NodeView,
+    ) -> bool {
+        self.seg_cache.invalidate_para(node.id());
+        self.invalidate_with_ancestors(node)
+    }
+
     pub(crate) fn invalidate_subtree(&mut self, node: &NodeView) -> bool {
         let mut invalidated = self.cache.invalidate(node.id());
         for child in node.child_blocks() {
@@ -149,6 +164,55 @@ mod tests {
         assert!(
             Arc::ptr_eq(&a, &b),
             "second measure of an untouched block must reuse the cached Arc"
+        );
+    }
+
+    // A font finishing its load re-measures the affected paragraph, but the segment
+    // hash (text/width/styles) is unchanged — only the font-load invalidation dropping
+    // the paragraph's cached segments forces a re-shape with the now-ready font.
+    // Regression: paragraphs kept rendering fallback glyphs until edited.
+    #[test]
+    fn font_invalidation_drops_segment_cache_measure_invalidation_keeps_it() {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('H')),
+            (Dot::new(1, 4), SeqItem::Char('i')),
+        ];
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let para = view.node(p1).unwrap();
+        let mut res = Resource::new_test();
+        let ctx = MeasureContext::default();
+
+        let mut m = Measurer::new();
+        let _ = m.measure(&root_node, 400.0, &ctx, &mut res);
+        assert!(
+            m.seg_cache.contains_para(p1),
+            "measuring a paragraph populates its segment cache"
+        );
+
+        // Edit-path invalidation keeps the segments (the hash distinguishes changes).
+        m.invalidate_with_ancestors(&para);
+        assert!(
+            m.seg_cache.contains_para(p1),
+            "measure invalidation must not drop hash-guarded segments"
+        );
+
+        // Font-load invalidation must drop them (shaping changed, hash did not).
+        m.invalidate_measure_and_segments_with_ancestors(&para);
+        assert!(
+            !m.seg_cache.contains_para(p1),
+            "font-load invalidation must drop the paragraph's cached segments"
         );
     }
 }

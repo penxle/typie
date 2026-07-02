@@ -75,6 +75,19 @@ impl SegmentCache {
     pub(crate) fn prune(&mut self, para: Dot, keep: usize) {
         self.entries.retain(|(p, i), _| *p != para || *i < keep);
     }
+
+    /// Drop every cached segment of `para`. For invalidations where the shaped output
+    /// changed without any hash-covered input changing — a pending font finishing its
+    /// load — hash-matched reuse would keep serving the fallback-shaped lines until an
+    /// edit happened to change the hash.
+    pub(crate) fn invalidate_para(&mut self, para: Dot) {
+        self.entries.retain(|(p, _), _| *p != para);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contains_para(&self, para: Dot) -> bool {
+        self.entries.keys().any(|(p, _)| *p == para)
+    }
 }
 
 fn shifted(line: &MeasuredLine, delta: isize) -> MeasuredLine {
