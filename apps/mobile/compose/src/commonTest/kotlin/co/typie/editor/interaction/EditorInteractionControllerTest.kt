@@ -9,10 +9,14 @@ import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.CalloutVariant
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.Selection
@@ -20,6 +24,7 @@ import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
@@ -494,6 +499,155 @@ class EditorInteractionControllerTest {
         listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)))
       assertEquals(expectedMessages, fake.enqueued)
       assertEquals(listOf(2L), host.requestedBringIntoViewVersions)
+    }
+
+  @Test
+  fun `single tap on fold title chrome toggles fold instead of moving cursor`() =
+    runTest(StandardTestDispatcher()) {
+      val fake =
+        FakeFfiEditor(
+          interactiveHitProvider = { _, _, _ ->
+            InteractiveHit.FoldTitle(
+              id = "fold",
+              textRect = Rect(x = 20f, y = 20f, width = 100f, height = 20f),
+            )
+          }
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(listOf<Message>(Message.View(ViewOp.ToggleFold(id = "fold"))), fake.enqueued)
+      assertEquals(emptyList(), host.requestedBringIntoViewVersions)
+    }
+
+  @Test
+  fun `single tap on fold title text still moves cursor`() =
+    runTest(StandardTestDispatcher()) {
+      val fake =
+        FakeFfiEditor(
+          interactiveHitProvider = { _, _, _ ->
+            InteractiveHit.FoldTitle(
+              id = "fold",
+              textRect = Rect(x = 0f, y = 0f, width = 100f, height = 40f),
+            )
+          }
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `fold title chrome tap wins over consecutive tap history`() =
+    runTest(StandardTestDispatcher()) {
+      val fake =
+        FakeFfiEditor(
+          interactiveHitProvider = { _, _, _ ->
+            InteractiveHit.FoldTitle(
+              id = "fold",
+              textRect = Rect(x = 0f, y = 0f, width = 20f, height = 40f),
+            )
+          }
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+
+      controller.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 40L)
+      advanceUntilIdle()
+
+      controller.onPointerDown(pointerId = 2L, position = Offset(25f, 20f), nowMillis = 120L)
+      controller.onPointerUp(pointerId = 2L, position = Offset(25f, 20f), nowMillis = 160L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+          Message.View(ViewOp.ToggleFold(id = "fold")),
+        ),
+        fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `single tap on callout icon cycles variant instead of moving cursor`() =
+    runTest(StandardTestDispatcher()) {
+      val fake =
+        FakeFfiEditor(
+          interactiveHitProvider = { _, _, _ ->
+            InteractiveHit.CalloutIcon(id = "callout", nextVariant = CalloutVariant.Warning)
+          }
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(
+          Message.Node(
+            NodeOp.SetAttrs(
+              id = "callout",
+              attrs = PlainNode.Callout(variant = CalloutVariant.Warning),
+            )
+          )
+        ),
+        fake.enqueued,
+      )
+      assertEquals(emptyList(), host.requestedBringIntoViewVersions)
     }
 
   @Test

@@ -14,6 +14,7 @@ import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
+import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
@@ -346,6 +347,9 @@ internal constructor(
   fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
 
   fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = inner.cursorHitTest(page, x, y)
+
+  fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? =
+    inner.interactiveHitTest(page, x, y)
 
   fun selectionEndpoints(): SelectionEndpoints? = inner.selectionEndpoints()
 

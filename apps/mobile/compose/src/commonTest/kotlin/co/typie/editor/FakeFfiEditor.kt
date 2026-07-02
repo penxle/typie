@@ -60,6 +60,7 @@ internal class FakeFfiEditor(
   var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
+  var interactiveHitProvider: (Int, Float, Float) -> InteractiveHit? = { _, _, _ -> null },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
   var trackedRangesProvider: (String?) -> List<TrackedRange> = { emptyList() },
   var trackedRangesContainingPositionProvider: (Position, String?) -> List<TrackedRangeEndpoints> =
@@ -120,7 +121,8 @@ internal class FakeFfiEditor(
 
   override fun copySelection(): ClipboardPayload? = null
 
-  override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? = null
+  override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? =
+    interactiveHitProvider(page, x, y)
 
   override fun pageLinkRects(page: Int): List<LinkRect> = emptyList()
 

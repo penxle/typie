@@ -5,6 +5,12 @@ import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.ffi.InteractiveHit
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NodeOp
+import co.typie.editor.ffi.PlainNode
+import co.typie.editor.ffi.Rect
+import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
@@ -327,8 +333,18 @@ private fun EditorTapGesture.dispatchTap(
   if (context.mode.isViewportZooming || point.page < 0) {
     return false
   }
-  recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
   val editor = context.editor
+  if (
+    tryHandleInteractiveHit(
+      context = context,
+      pointPage = point.page,
+      pointX = point.x,
+      pointY = point.y,
+    )
+  ) {
+    return true
+  }
+  recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
   val wasFocused = context.uiState.focused
   context.semantics.cursorMove.requestFocus(editor)
   val hitExistingSelectionAtTap =
@@ -397,3 +413,36 @@ private fun CursorMetrics.isSamePosition(other: CursorMetrics): Boolean =
     caret.x == other.caret.x &&
     caret.y == other.caret.y &&
     line.y == other.line.y
+
+private fun tryHandleInteractiveHit(
+  context: EditorGestureContext,
+  pointPage: Int,
+  pointX: Float,
+  pointY: Float,
+): Boolean {
+  return when (
+    val hit = context.editor.interactiveHitTest(page = pointPage, x = pointX, y = pointY)
+  ) {
+    is InteractiveHit.FoldTitle -> {
+      val onText = hit.textRect?.contains(pointX, pointY) == true
+      if (onText) {
+        false
+      } else {
+        context.editor.enqueue(Message.View(ViewOp.ToggleFold(id = hit.id)))
+        true
+      }
+    }
+    is InteractiveHit.CalloutIcon -> {
+      context.editor.enqueue(
+        Message.Node(
+          NodeOp.SetAttrs(id = hit.id, attrs = PlainNode.Callout(variant = hit.nextVariant))
+        )
+      )
+      true
+    }
+    else -> false
+  }
+}
+
+private fun Rect.contains(x: Float, y: Float): Boolean =
+  x >= this.x && x <= this.x + width && y >= this.y && y <= this.y + height
