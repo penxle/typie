@@ -86,6 +86,11 @@ pub enum Step {
         last: Dot,
         modifier: Modifier,
     },
+    ClearSpanModifier {
+        first: Dot,
+        last: Dot,
+        modifier: Modifier,
+    },
     SetNodeStyle {
         block: Dot,
         old: Option<String>,
@@ -218,6 +223,11 @@ impl Step {
                 last,
                 modifier,
             } => steps::remove_span_modifier::apply_to(batched, *first, *last, modifier),
+            Step::ClearSpanModifier {
+                first,
+                last,
+                modifier,
+            } => steps::clear_span_modifier::apply_to(batched, *first, *last, modifier),
             Step::SetNodeStyle { block, new, .. } => {
                 steps::set_node_style::apply_to(batched, *block, new.clone())
             }
@@ -290,6 +300,11 @@ impl Step {
                 last,
                 modifier,
             } => steps::remove_span_modifier::inverse(*first, *last, modifier.clone()),
+            Step::ClearSpanModifier {
+                first,
+                last,
+                modifier,
+            } => steps::clear_span_modifier::inverse(*first, *last, modifier.clone()),
             Step::SetNodeStyle { block, old, new } => {
                 steps::set_node_style::inverse(*block, old.clone(), new.clone())
             }

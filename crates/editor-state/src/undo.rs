@@ -349,11 +349,18 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
             });
             found.map(PriorValue::StyleModifier)
         }
-        EditOp::Span(SpanOp::RemoveSpan {
-            start,
-            end,
-            modifier_type,
-        }) => {
+        EditOp::Span(
+            SpanOp::RemoveSpan {
+                start,
+                end,
+                modifier_type,
+            }
+            | SpanOp::ClearSpan {
+                start,
+                end,
+                modifier_type,
+            },
+        ) => {
             let found = state.spans().iter().find_map(|(_, span_op)| {
                 if let SpanOp::AddSpan {
                     start: s,
@@ -443,6 +450,24 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
                 modifier: modifier.clone(),
             })],
             _ => Vec::new(),
+        },
+        EditOp::Span(SpanOp::ClearSpan {
+            start,
+            end,
+            modifier_type,
+        }) => match &ro.prior {
+            Some(PriorValue::SpanModifier(modifier)) => vec![EditOp::Span(SpanOp::AddSpan {
+                start: *start,
+                end: *end,
+                modifier: modifier.clone(),
+            })],
+            // No explicit span preceded the clear: the cleared value came from a node
+            // style or inheritance. Cancel the clear so that layer shows through again.
+            _ => vec![EditOp::Span(SpanOp::RemoveSpan {
+                start: *start,
+                end: *end,
+                modifier_type: *modifier_type,
+            })],
         },
         EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier }) => {
             match &ro.prior {
@@ -1025,6 +1050,132 @@ mod tests {
                 .get(&ModifierType::Bold),
             Some(&Modifier::Bold),
             "undo of RemoveSpan must restore Bold (proves prior SpanModifier capture)"
+        );
+    }
+
+    fn style_with_color(
+        state: &mut ProjectedState,
+        style_id: &str,
+        color: &str,
+        leaf: editor_crdt::Dot,
+    ) {
+        state
+            .apply(EditOp::Style(StyleRegOp {
+                style_id: style_id.to_string(),
+                op: StyleOp::Presence(OrMapOp::Set {
+                    key: style_id.to_string(),
+                    value: (),
+                }),
+            }))
+            .unwrap();
+        state
+            .apply(EditOp::Style(StyleRegOp {
+                style_id: style_id.to_string(),
+                op: StyleOp::Modifiers(OrSetOp::Add {
+                    elem: Modifier::TextColor {
+                        value: color.to_string(),
+                    },
+                }),
+            }))
+            .unwrap();
+        state
+            .apply(EditOp::NodeStyle(NodeLwwOp {
+                target: leaf,
+                op: LwwRegOp::Set {
+                    value: Some(style_id.to_string()),
+                },
+            }))
+            .unwrap();
+    }
+
+    fn effective_color(state: &ProjectedState, leaf: editor_crdt::Dot) -> Option<Modifier> {
+        state
+            .view()
+            .leaf(leaf)
+            .unwrap()
+            .effective()
+            .get(&ModifierType::TextColor)
+            .cloned()
+    }
+
+    #[test]
+    fn span_add_undo_over_style_restores_style_value() {
+        let mut state = ProjectedState::empty();
+        let x_dot = state.apply(seq_char(1, 'x')).unwrap().id;
+        style_with_color(&mut state, "c", "#ffff00", x_dot);
+
+        let ro = record_op(
+            &mut state,
+            EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: x_dot,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: x_dot,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::TextColor {
+                    value: "#ff0000".to_string(),
+                },
+            }),
+        );
+        assert_eq!(
+            effective_color(&state, x_dot),
+            Some(Modifier::TextColor {
+                value: "#ff0000".to_string()
+            })
+        );
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            effective_color(&state, x_dot),
+            Some(Modifier::TextColor {
+                value: "#ffff00".to_string()
+            }),
+            "undo of AddSpan over a styled leaf must fall back to the style value"
+        );
+    }
+
+    #[test]
+    fn span_clear_undo_over_style_restores_style_value() {
+        let mut state = ProjectedState::empty();
+        let x_dot = state.apply(seq_char(1, 'x')).unwrap().id;
+        style_with_color(&mut state, "c", "#ffff00", x_dot);
+
+        let ro = record_op(
+            &mut state,
+            EditOp::Span(SpanOp::ClearSpan {
+                start: Anchor {
+                    id: x_dot,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: x_dot,
+                    bias: Bias::After,
+                },
+                modifier_type: ModifierType::TextColor,
+            }),
+        );
+        assert_eq!(
+            effective_color(&state, x_dot),
+            None,
+            "explicit clear must block the style value"
+        );
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            effective_color(&state, x_dot),
+            Some(Modifier::TextColor {
+                value: "#ffff00".to_string()
+            }),
+            "undo of a clear with no prior span must let the style show again"
         );
     }
 

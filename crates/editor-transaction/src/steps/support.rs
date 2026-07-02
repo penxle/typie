@@ -249,6 +249,20 @@ pub(crate) fn span_remove(first: Dot, last: Dot, modifier_type: ModifierType) ->
     })
 }
 
+pub(crate) fn span_clear(first: Dot, last: Dot, modifier_type: ModifierType) -> EditOp {
+    EditOp::Span(SpanOp::ClearSpan {
+        start: Anchor {
+            id: first,
+            bias: Bias::Before,
+        },
+        end: Anchor {
+            id: last,
+            bias: Bias::After,
+        },
+        modifier_type,
+    })
+}
+
 pub(crate) fn block_modifier_set(target: Dot, modifier: Modifier) -> EditOp {
     EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier })
 }

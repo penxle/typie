@@ -120,6 +120,21 @@ pub enum ExplicitEffect {
     Clear,
 }
 
+/// The explicit effect a span op contributes when it wins last-writer-wins for its
+/// modifier type. `RemoveSpan` cancels back to absence (`None`): it masks the older
+/// ops it beat but leaves no entry, so resolution falls through to node styles and
+/// inheritance. `ClearSpan` is the explicit off: its `Clear` entry blocks both.
+pub(crate) fn span_op_effect(op: &SpanOp) -> (ModifierType, Option<ExplicitEffect>) {
+    match op {
+        SpanOp::AddSpan { modifier, .. } => (
+            modifier.as_type(),
+            Some(ExplicitEffect::Set(modifier.clone())),
+        ),
+        SpanOp::RemoveSpan { modifier_type, .. } => (*modifier_type, None),
+        SpanOp::ClearSpan { modifier_type, .. } => (*modifier_type, Some(ExplicitEffect::Clear)),
+    }
+}
+
 pub fn derive_explicit_effect(
     elements: &[(Dot, SeqItem)],
     tree: &BlockTree,
@@ -144,7 +159,7 @@ pub fn derive_explicit_effect(
     struct Resolved {
         op_dot: Dot,
         ty: ModifierType,
-        value: Option<Modifier>,
+        effect: Option<ExplicitEffect>,
         start: usize,
         end: usize,
     }
@@ -157,14 +172,11 @@ pub fn derive_explicit_effect(
             if s >= e {
                 return None;
             }
-            let (ty, value) = match op {
-                SpanOp::AddSpan { modifier, .. } => (modifier.as_type(), Some(modifier.clone())),
-                SpanOp::RemoveSpan { modifier_type, .. } => (*modifier_type, None),
-            };
+            let (ty, effect) = span_op_effect(op);
             Some(Resolved {
                 op_dot: *op_dot,
                 ty,
-                value,
+                effect,
                 start: s,
                 end: e,
             })
@@ -175,7 +187,7 @@ pub fn derive_explicit_effect(
         .into_iter()
         .map(|(path, dot)| {
             let pos = pos_of[&dot];
-            let mut by_type: HashMap<ModifierType, (Dot, Option<Modifier>)> = HashMap::new();
+            let mut by_type: HashMap<ModifierType, (Dot, Option<ExplicitEffect>)> = HashMap::new();
             for r in &resolved {
                 if !(r.start <= pos && pos < r.end) {
                     continue;
@@ -188,20 +200,12 @@ pub fn derive_explicit_effect(
                     None => true,
                 };
                 if win {
-                    by_type.insert(r.ty, (r.op_dot, r.value.clone()));
+                    by_type.insert(r.ty, (r.op_dot, r.effect.clone()));
                 }
             }
             let ex: BTreeMap<ModifierType, ExplicitEffect> = by_type
                 .into_iter()
-                .map(|(t, (_, v))| {
-                    (
-                        t,
-                        match v {
-                            Some(m) => ExplicitEffect::Set(m),
-                            None => ExplicitEffect::Clear,
-                        },
-                    )
-                })
+                .filter_map(|(t, (_, e))| e.map(|e| (t, e)))
                 .collect();
             (dot, ex)
         })
@@ -390,7 +394,7 @@ mod tests {
             .unwrap()
             .apply(
                 Dot::new(3, 0),
-                SpanOp::RemoveSpan {
+                SpanOp::ClearSpan {
                     start: anc(a, super::super::Bias::Before),
                     end: anc(a, super::super::Bias::After),
                     modifier_type: ModifierType::Bold,
@@ -405,6 +409,41 @@ mod tests {
             Some(&ExplicitEffect::Clear)
         );
         assert!(!ex[&b].contains_key(&ModifierType::Bold));
+    }
+
+    #[test]
+    fn remove_span_cancels_winning_add_to_absent() {
+        let elems = para_chars("ab");
+        let log = oplog(&elems);
+        let (els, resolver) = checkout_with_resolver(&log);
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
+        let a = Dot::new(1, 2);
+        let spans = SpanLog::new()
+            .apply(
+                Dot::new(2, 0),
+                SpanOp::AddSpan {
+                    start: anc(a, super::super::Bias::Before),
+                    end: anc(a, super::super::Bias::After),
+                    modifier: Modifier::Bold,
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(3, 0),
+                SpanOp::RemoveSpan {
+                    start: anc(a, super::super::Bias::Before),
+                    end: anc(a, super::super::Bias::After),
+                    modifier_type: ModifierType::Bold,
+                },
+            )
+            .unwrap();
+        let ex: BTreeMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, &spans)
+            .into_iter()
+            .collect();
+        assert!(
+            !ex[&a].contains_key(&ModifierType::Bold),
+            "winning RemoveSpan cancels back to absent, not Clear"
+        );
     }
 
     #[test]
@@ -526,7 +565,7 @@ mod tests {
         let spans = SpanLog::new()
             .apply(
                 Dot::new(2, 0),
-                SpanOp::RemoveSpan {
+                SpanOp::ClearSpan {
                     start: anc(a, super::super::Bias::Before),
                     end: anc(a, super::super::Bias::After),
                     modifier_type: ModifierType::FontSize,
@@ -541,6 +580,46 @@ mod tests {
         assert_eq!(
             m[&Dot::new(1, 3)].get(&ModifierType::FontSize),
             Some(&Modifier::FontSize { value: 1600 })
+        );
+    }
+
+    #[test]
+    fn remove_span_lets_inheritance_show_through() {
+        let elems = para_chars("ab");
+        let a = Dot::new(1, 2);
+        let attrs = ModifierAttrLog::new()
+            .apply(
+                Dot::new(5, 0),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::FontSize { value: 1600 },
+                },
+            )
+            .unwrap();
+        let spans = SpanLog::new()
+            .apply(
+                Dot::new(2, 0),
+                SpanOp::AddSpan {
+                    start: anc(a, super::super::Bias::Before),
+                    end: anc(a, super::super::Bias::After),
+                    modifier: Modifier::FontSize { value: 1200 },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(3, 0),
+                SpanOp::RemoveSpan {
+                    start: anc(a, super::super::Bias::Before),
+                    end: anc(a, super::super::Bias::After),
+                    modifier_type: ModifierType::FontSize,
+                },
+            )
+            .unwrap();
+        let m = full(&elems, &spans, &attrs);
+        assert_eq!(
+            m[&a].get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 1600 }),
+            "cancelling the inline override falls back to the inherited value"
         );
     }
 
@@ -861,21 +940,16 @@ mod tests {
                 if !covered.contains(&pos) {
                     continue;
                 }
-                if !Schema::modifier_spec(match op {
-                    SpanOp::AddSpan { modifier, .. } => modifier.as_type(),
-                    SpanOp::RemoveSpan { modifier_type, .. } => *modifier_type,
-                })
-                .target
-                .matches(&path)
-                {
-                    continue;
-                }
                 let (ty, value) = match op {
                     SpanOp::AddSpan { modifier, .. } => {
                         (modifier.as_type(), Some(modifier.clone()))
                     }
-                    SpanOp::RemoveSpan { modifier_type, .. } => (*modifier_type, None),
+                    SpanOp::RemoveSpan { modifier_type, .. }
+                    | SpanOp::ClearSpan { modifier_type, .. } => (*modifier_type, None),
                 };
+                if !Schema::modifier_spec(ty).target.matches(&path) {
+                    continue;
+                }
                 bucket.entry(ty).or_default().push((*op_dot, value));
             }
             let mut eff = BTreeMap::new();
@@ -904,7 +978,7 @@ mod tests {
         fn derive_matches_reference(
             ops in proptest::collection::vec(
                 (0usize..5, 0usize..5, proptest::prop_oneof![proptest::prelude::Just(super::super::Bias::Before), proptest::prelude::Just(super::super::Bias::After)],
-                 proptest::prop_oneof![proptest::prelude::Just(super::super::Bias::Before), proptest::prelude::Just(super::super::Bias::After)], arb_modifier(), proptest::prelude::any::<bool>()),
+                 proptest::prop_oneof![proptest::prelude::Just(super::super::Bias::Before), proptest::prelude::Just(super::super::Bias::After)], arb_modifier(), 0u8..3),
                 0..16),
         ) {
             let elems = para_chars("abcde");
@@ -912,13 +986,13 @@ mod tests {
             let (els, resolver) = checkout_with_resolver(&log);
             let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
             let mut spans = SpanLog::new();
-            for (i, (si, ei, sb, eb, m, is_remove)) in ops.into_iter().enumerate() {
+            for (i, (si, ei, sb, eb, m, kind)) in ops.into_iter().enumerate() {
                 let start = anc(Dot::new(1, 2 + si as u64), sb);
                 let end = anc(Dot::new(1, 2 + ei as u64), eb);
-                let op = if is_remove {
-                    SpanOp::RemoveSpan { start, end, modifier_type: m.as_type() }
-                } else {
-                    SpanOp::AddSpan { start, end, modifier: m }
+                let op = match kind {
+                    0 => SpanOp::AddSpan { start, end, modifier: m },
+                    1 => SpanOp::RemoveSpan { start, end, modifier_type: m.as_type() },
+                    _ => SpanOp::ClearSpan { start, end, modifier_type: m.as_type() },
                 };
                 spans = spans.apply(Dot::new(9, i as u64), op).unwrap();
             }

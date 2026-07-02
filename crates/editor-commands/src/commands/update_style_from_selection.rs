@@ -355,12 +355,19 @@ mod tests {
             selection: (p1, 0) -> (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
-        // NOTE: not asserting leaf.effective() here (matches the FontSize sibling).
-        // Removing the now-redundant inline span emits a RemoveSpan whose Clear
-        // shadows the node-style in effective() — a known span-model limitation
-        // (no op to cancel an AddSpan back to "absent"). The doc tree + style are
-        // correct; effective resolution through style after a same-type clear is a
-        // substrate follow-up.
+
+        let view = actual.view();
+        let node = view.node(_p1).unwrap();
+        let Some(ChildView::Leaf(leaf)) = node.child_at(0) else {
+            panic!("expected leaf at offset 0");
+        };
+        assert_eq!(
+            leaf.effective().get(&ModifierType::FontFamily),
+            Some(&Modifier::FontFamily {
+                value: "Arial".to_string()
+            }),
+            "cancelling the merged inline span must let the style value show"
+        );
     }
 
     #[test]

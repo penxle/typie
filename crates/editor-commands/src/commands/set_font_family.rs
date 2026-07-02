@@ -224,7 +224,7 @@ fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) 
             weight_and_bold_after_family_change(old_weight, old_bold, available_weights);
 
         if old_bold && !new_bold {
-            tr.remove_span_modifier(dot, dot, Modifier::Bold)?;
+            tr.clear_span_modifier(dot, dot, Modifier::Bold)?;
         } else if !old_bold && new_bold {
             tr.add_span_modifier(dot, dot, Modifier::Bold)?;
         }

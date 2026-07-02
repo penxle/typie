@@ -127,7 +127,7 @@ fn edit_modifier_collapsed(
 
     match modifier {
         Some(m) => tr.add_span_modifier(first, last, m)?,
-        None => tr.remove_span_modifier(first, last, reference)?,
+        None => tr.clear_span_modifier(first, last, reference)?,
     }
     Ok(true)
 }
@@ -159,7 +159,7 @@ fn edit_modifier_range(
         }
         None => {
             if let Some(present) = present {
-                tr.remove_span_modifier(first, last, present)?;
+                tr.clear_span_modifier(first, last, present)?;
             }
         }
     }

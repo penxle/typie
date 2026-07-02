@@ -380,7 +380,7 @@ mod tests {
         SpanLog::new()
             .apply(
                 Dot::new(9, 0),
-                SpanOp::RemoveSpan {
+                SpanOp::ClearSpan {
                     start: Anchor {
                         id: leaf,
                         bias: Bias::Before,

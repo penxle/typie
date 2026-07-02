@@ -117,11 +117,11 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
 
     if is_bold {
         if synthetic_bold {
-            tr.remove_span_modifier(first, last, Modifier::Bold)?;
+            tr.clear_span_modifier(first, last, Modifier::Bold)?;
         }
         if weight_bold {
             let unbold = find_unbold_target(current_weight, available);
-            tr.remove_span_modifier(
+            tr.clear_span_modifier(
                 first,
                 last,
                 Modifier::FontWeight {
@@ -132,7 +132,7 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
                 tr.add_span_modifier(first, last, Modifier::FontWeight { value: unbold })?;
             }
         } else {
-            tr.remove_span_modifier(
+            tr.clear_span_modifier(
                 first,
                 last,
                 Modifier::FontWeight {

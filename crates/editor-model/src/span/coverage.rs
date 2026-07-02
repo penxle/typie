@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use editor_crdt::Dot;
 use editor_crdt::sequence::SeqResolve;
 
-use super::{ExplicitEffect, SpanLog, SpanOp};
+use super::{ExplicitEffect, SpanLog};
 use crate::seq::SeqItem;
-use crate::{Modifier, ModifierType, NodeType, Schema};
+use crate::{ModifierType, NodeType, Schema};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LeafSpanCoverage {
@@ -157,15 +157,12 @@ pub fn explicit_from_covering(
     spans: &SpanLog,
     leaf_path: &[NodeType],
 ) -> BTreeMap<ModifierType, ExplicitEffect> {
-    let mut by_type: HashMap<ModifierType, (Dot, Option<Modifier>)> = HashMap::new();
+    let mut by_type: HashMap<ModifierType, (Dot, Option<ExplicitEffect>)> = HashMap::new();
     for &op_dot in covering {
         let Some(op) = spans.get(op_dot) else {
             continue;
         };
-        let (ty, value) = match op {
-            SpanOp::AddSpan { modifier, .. } => (modifier.as_type(), Some(modifier.clone())),
-            SpanOp::RemoveSpan { modifier_type, .. } => (*modifier_type, None),
-        };
+        let (ty, effect) = super::derive::span_op_effect(op);
         if !Schema::modifier_spec(ty).target.matches(leaf_path) {
             continue;
         }
@@ -174,20 +171,12 @@ pub fn explicit_from_covering(
             None => true,
         };
         if win {
-            by_type.insert(ty, (op_dot, value));
+            by_type.insert(ty, (op_dot, effect));
         }
     }
     by_type
         .into_iter()
-        .map(|(t, (_, v))| {
-            (
-                t,
-                match v {
-                    Some(m) => ExplicitEffect::Set(m),
-                    None => ExplicitEffect::Clear,
-                },
-            )
-        })
+        .filter_map(|(t, (_, e))| e.map(|e| (t, e)))
         .collect()
 }
 
@@ -198,7 +187,8 @@ mod tests {
     use editor_crdt::sequence::{Bias as CrdtBias, Boundary};
 
     use super::*;
-    use crate::span::{Anchor, Bias};
+    use crate::Modifier;
+    use crate::span::{Anchor, Bias, SpanOp};
 
     struct Mock {
         // (anchor dot, crdt bias) -> visible position

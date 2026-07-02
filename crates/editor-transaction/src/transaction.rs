@@ -248,6 +248,22 @@ impl Transaction {
         })
     }
 
+    /// Explicitly turns `modifier` off over the range: unlike `remove_span_modifier`
+    /// (which cancels inline formatting and lets node styles / inheritance show
+    /// through), the resulting `Clear` also blocks style- and inherited values.
+    pub fn clear_span_modifier(
+        &mut self,
+        first: Dot,
+        last: Dot,
+        modifier: Modifier,
+    ) -> Result<(), StepError> {
+        self.apply_step(Step::ClearSpanModifier {
+            first,
+            last,
+            modifier,
+        })
+    }
+
     pub fn set_node_style(&mut self, block: Dot, style: Option<String>) -> Result<(), StepError> {
         let old = self.state.projected.node_styles().value_of(block);
         if old == style {

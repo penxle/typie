@@ -386,6 +386,35 @@ mod tests {
     }
 
     #[test]
+    fn range_set_same_as_inherited_shows_inherited_value() {
+        use editor_model::ChildView;
+
+        let (initial, p1) = state! {
+            doc {
+                root [font_size(1600)] {
+                    p1: paragraph { text("HelloWorld") [font_size(2400)] }
+                }
+            }
+            selection: (p1, 0) -> (p1, 10)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 1600 }
+        ));
+
+        let view = actual.view();
+        let node = view.node(p1).unwrap();
+        let Some(ChildView::Leaf(leaf)) = node.child_at(0) else {
+            panic!("expected leaf at offset 0");
+        };
+        assert_eq!(
+            leaf.effective().get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 1600 }),
+            "cancelling the override must fall back to the inherited value, not None"
+        );
+    }
+
+    #[test]
     fn range_set_replaces_existing() {
         let (initial, ..) = state! {
             doc {
