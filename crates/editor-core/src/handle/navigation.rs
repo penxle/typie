@@ -278,7 +278,11 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     } else {
                         let view_target = editor.resolve_movement(&base_position, &movement);
 
-                        view_target.unwrap_or_else(|| Selection::collapsed(base_position))
+                        view_target.unwrap_or_else(|| {
+                            let collapsed = Selection::collapsed(base_position);
+                            let view = editor.state.view();
+                            collapsed.normalize(&view).unwrap_or(collapsed)
+                        })
                     };
 
                     editor.transact(|tr| {
@@ -1539,6 +1543,66 @@ mod tests {
         assert!(s.is_collapsed());
         assert_eq!(s.head.node, p3);
         assert_eq!(s.head.offset, 6);
+    }
+
+    #[test]
+    fn arrow_up_from_select_all_collapses_to_document_start_cursor() {
+        let (state, _r, p1, _p2) = state! {
+            doc {
+                r: root {
+                    p1: paragraph { text("abcdef") }
+                    p2: paragraph { text("ghijkl") }
+                }
+            }
+            selection: (r, 0, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(Position::new(p1, 0)))
+        );
+    }
+
+    #[test]
+    fn arrow_down_from_select_all_collapses_to_document_end_cursor() {
+        let (state, _r, _p1, p2) = state! {
+            doc {
+                r: root {
+                    p1: paragraph { text("abcdef") }
+                    p2: paragraph { text("ghijkl") }
+                }
+            }
+            selection: (r, 0, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(Position {
+                node: p2,
+                offset: 6,
+                affinity: Affinity::Upstream,
+            }))
+        );
     }
 
     #[test]
