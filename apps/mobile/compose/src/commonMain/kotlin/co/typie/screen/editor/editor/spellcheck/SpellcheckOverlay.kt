@@ -4,17 +4,14 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -52,25 +49,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ext.clickable
-import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelHiddenScale
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityEnterMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryGap
-import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
 import co.typie.ui.component.bleedingScrollFog
-import co.typie.ui.component.topbar.TopBarDefaults
-import co.typie.ui.icon.Icon
-import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.absoluteValue
@@ -86,7 +76,6 @@ internal fun SpellcheckOverlay(
 ) {
   val model = session.model ?: return
   val results = model.results
-  val loading = model.check.loading
   val checked = model.check.data != null
   var displayedResults by remember { mutableStateOf<List<SpellcheckResult>>(emptyList()) }
   val resultIds = results.mapTo(mutableSetOf()) { it.id }
@@ -108,32 +97,11 @@ internal fun SpellcheckOverlay(
   LaunchedEffect(pagerTransition.currentState, pagerTransition.targetState) {
     if (!pagerTransition.currentState && !pagerTransition.targetState) {
       displayedResults = emptyList()
-      session.updateOverlayMetrics { copy(bottomOcclusion = 0f) }
+      session.setOverlayBottomOcclusion(0f)
     }
   }
 
   Box(modifier = modifier.fillMaxSize()) {
-    val capsuleTopPadding =
-      (visibleArea.visibleViewportTop.dp - SpellcheckCapsuleTopOverlap).coerceAtLeast(0.dp)
-    AnimatedVisibility(
-      visible = session.active,
-      enter = spellcheckEnter(TransformOrigin(0.5f, 0f)),
-      exit = spellcheckExit(TransformOrigin(0.5f, 0f)),
-      modifier = Modifier.align(Alignment.TopCenter).padding(top = capsuleTopPadding),
-    ) {
-      SpellcheckCapsule(
-        loading = loading,
-        count = if (checked) results.size else null,
-        onRerun = session.rerun,
-        onClose = session.close,
-        onHeightChanged = { height ->
-          session.updateOverlayMetrics {
-            copy(topOcclusion = (height - SpellcheckCapsuleTopOverlap.value).coerceAtLeast(0f))
-          }
-        },
-      )
-    }
-
     AnimatedVisibility(
       visibleState = pagerTransition,
       enter = spellcheckEnter(TransformOrigin(0.5f, 1f)),
@@ -161,123 +129,6 @@ internal fun SpellcheckOverlay(
   }
 }
 
-@Composable
-private fun SpellcheckCapsule(
-  loading: Boolean,
-  count: Int?,
-  onRerun: () -> Unit,
-  onClose: () -> Unit,
-  onHeightChanged: (Float) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  val density = LocalDensity.current
-  var displayedCount by remember { mutableStateOf(count) }
-
-  LaunchedEffect(count) {
-    if (count != null) {
-      displayedCount = count
-    }
-  }
-  val visibleCount = count ?: displayedCount
-
-  Row(
-    modifier =
-      modifier
-        .animateContentSize(animationSpec = spellcheckTween())
-        .onSizeChanged { size -> onHeightChanged(with(density) { size.height.toDp().value }) }
-        .clip(AppShapes.rounded(AppShapes.full))
-        .background(AppTheme.colors.surfaceDefault)
-        .border(1.dp, AppTheme.colors.borderDefault, AppShapes.rounded(AppShapes.full))
-        .padding(start = 14.dp, top = 8.dp, end = 6.dp, bottom = 8.dp),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
-    Text(
-      text = "맞춤법 검사",
-      style = AppTheme.typography.action,
-      color = AppTheme.colors.textDefault,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-    AnimatedVisibility(
-      visible = count != null,
-      enter =
-        fadeIn(animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis)) +
-          expandHorizontally(
-            animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis),
-            expandFrom = Alignment.Start,
-          ),
-      exit =
-        fadeOut(animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis)) +
-          shrinkHorizontally(
-            animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis),
-            shrinkTowards = Alignment.Start,
-          ),
-    ) {
-      visibleCount?.let { SpellcheckCountBadge(it) }
-    }
-    if (loading) {
-      Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-        Spinner(color = AppTheme.colors.textMuted, size = 16.dp)
-      }
-    } else {
-      SpellcheckIconButton(icon = Lucide.RefreshCw, contentDescription = "다시 검사", onClick = onRerun)
-    }
-    SpellcheckIconButton(icon = Lucide.X, contentDescription = "맞춤법 검사 닫기", onClick = onClose)
-  }
-}
-
-@Composable
-private fun SpellcheckCountBadge(count: Int) {
-  Box(
-    modifier =
-      Modifier.animateContentSize(animationSpec = spellcheckTween())
-        .clip(AppShapes.rounded(AppShapes.full))
-        .background(AppTheme.colors.dangerSubtle)
-        .padding(horizontal = 7.dp, vertical = 2.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    AnimatedContent(
-      targetState = count,
-      transitionSpec = {
-        (fadeIn(animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis)) togetherWith
-            fadeOut(animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis)))
-          .using(
-            SizeTransform(clip = false) { _, _ -> tween(ToolbarBottomPanelVisibilityEnterMillis) }
-          )
-      },
-      label = "SpellcheckCountBadge",
-    ) { value ->
-      Text(
-        text = value.toString(),
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textOnDangerSubtle,
-        maxLines = 1,
-      )
-    }
-  }
-}
-
-@Composable
-private fun SpellcheckIconButton(
-  icon: IconData,
-  contentDescription: String,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Box(
-    modifier = modifier.size(28.dp).clip(AppShapes.circle).clickable(onClick = onClick),
-    contentAlignment = Alignment.Center,
-  ) {
-    Icon(
-      icon = icon,
-      contentDescription = contentDescription,
-      modifier = Modifier.size(16.dp),
-      tint = AppTheme.colors.textMuted,
-    )
-  }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SpellcheckResultPager(
@@ -297,17 +148,11 @@ private fun SpellcheckResultPager(
   val inactive = !expanded && activeRangeId == null
   val compactOverlayHeight = spellcheckCompactOverlayHeight(activeRange = !inactive)
   val bottomPadding = visibleArea.bottomOcclusion.dp + SpellcheckOverlayBottomGap
-  val topOcclusion =
-    if (session.occlusion.top > 0f) {
-      session.occlusion.top.dp
-    } else {
-      EstimatedCapsuleHeight
-    }
-  val expandedTopReserve = visibleArea.visibleViewportTop.dp + topOcclusion + ExpandedTopGap
+  val expandedTopReserve = visibleArea.visibleViewportTop.dp + ExpandedTopGap
 
   SideEffect {
     if (results.isNotEmpty()) {
-      session.updateOverlayMetrics { copy(bottomOcclusion = compactOverlayHeight.value) }
+      session.setOverlayBottomOcclusion(compactOverlayHeight.value)
     }
   }
   LaunchedEffect(results.map { it.id }, currentCardId, interactive, exitingResultIds) {
@@ -755,14 +600,12 @@ private fun SpellcheckActionChip(text: String, danger: Boolean = false, onClick:
 internal const val SpellcheckOverlayAnimationMillis = 180
 private val CompactPagerHorizontalPadding = 24.dp
 private val ExpandedTopGap = 8.dp
-private val SpellcheckCapsuleTopOverlap = TopBarDefaults.ContentTopSpacing
 private val SpellcheckOverlayBottomGap = ToolbarSecondaryGap
 private val SpellcheckCardPadding = 14.dp
 private val SpellcheckCardGap = 8.dp
 private val ActionRowFogWidth = 16.dp
 private val CompactCardHeight = 200.dp
 private val InactiveCardOffset = 92.dp
-private val EstimatedCapsuleHeight = 44.dp
 private const val CompactDescriptionMaxLines = 2
 private const val ExpandedContentSettleTolerance = 0.5f
 private const val PagerSettledOffsetTolerance = 0.001f

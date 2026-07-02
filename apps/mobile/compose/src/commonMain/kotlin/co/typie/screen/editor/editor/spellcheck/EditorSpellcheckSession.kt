@@ -5,6 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,7 +34,7 @@ internal class EditorSpellcheckSession(
   val model: SpellcheckViewModel?,
   val active: Boolean,
   val occlusion: EditorOverlayOcclusion,
-  val updateOverlayMetrics: (SpellcheckOverlayMetrics.() -> SpellcheckOverlayMetrics) -> Unit,
+  val setOverlayBottomOcclusion: (Float) -> Unit,
   val openFromToolPanel: () -> Unit,
   val close: () -> Unit,
   val rerun: () -> Unit,
@@ -44,11 +45,6 @@ internal class EditorSpellcheckSession(
   val ignore: (String) -> Unit,
   val ignoreSame: (String) -> Unit,
   val setExpanded: (Boolean) -> Unit,
-)
-
-internal data class SpellcheckOverlayMetrics(
-  val topOcclusion: Float = 0f,
-  val bottomOcclusion: Float = 0f,
 )
 
 @Composable
@@ -64,8 +60,7 @@ internal fun rememberEditorSpellcheckSession(
 ): EditorSpellcheckSession {
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
-  var occlusionRetained by remember(documentId) { mutableStateOf(false) }
-  var overlayMetrics by remember(documentId) { mutableStateOf(SpellcheckOverlayMetrics()) }
+  var bottomOcclusion by remember(documentId) { mutableFloatStateOf(0f) }
   var lastSelectionMappedToSpellcheck by remember(documentId) { mutableStateOf<Selection?>(null) }
   var programmaticSelectionToSkip by remember(documentId) { mutableStateOf<Selection?>(null) }
   var occlusionReleaseJob by remember(documentId) { mutableStateOf<Job?>(null) }
@@ -74,8 +69,8 @@ internal fun rememberEditorSpellcheckSession(
   }
   val active = model?.active == true
 
-  fun updateOverlayMetrics(transform: SpellcheckOverlayMetrics.() -> SpellcheckOverlayMetrics) {
-    overlayMetrics = overlayMetrics.transform().coerceNonNegative()
+  fun setOverlayBottomOcclusion(value: Float) {
+    bottomOcclusion = value.coerceAtLeast(0f)
   }
 
   fun requestRangeIntoView(id: String?) {
@@ -97,9 +92,7 @@ internal fun rememberEditorSpellcheckSession(
   }
 
   fun updateCompactOverlayHeightForRange(id: String?) {
-    updateOverlayMetrics {
-      copy(bottomOcclusion = spellcheckCompactOverlayHeight(activeRange = id != null).value)
-    }
+    setOverlayBottomOcclusion(spellcheckCompactOverlayHeight(activeRange = id != null).value)
   }
 
   fun runCheck() {
@@ -132,7 +125,7 @@ internal fun rememberEditorSpellcheckSession(
           activeModel.replaceResults(results)
           lastSelectionMappedToSpellcheck = activeEditor.state.selection
           if (results.isEmpty()) {
-            updateOverlayMetrics { copy(bottomOcclusion = 0f) }
+            setOverlayBottomOcclusion(0f)
           } else {
             updateCompactOverlayHeightForRange(activeModel.activeRangeId)
           }
@@ -164,16 +157,12 @@ internal fun rememberEditorSpellcheckSession(
     activeEditor?.clearSpellcheckRanges()
     occlusionReleaseJob?.cancel()
     occlusionReleaseJob = null
-    if (overlayMetrics.topOcclusion > 0f || overlayMetrics.bottomOcclusion > 0f) {
-      occlusionRetained = true
+    if (bottomOcclusion > 0f) {
       occlusionReleaseJob = scope.launch {
         delay(SpellcheckOverlayAnimationMillis.toLong())
-        occlusionRetained = false
-        overlayMetrics = SpellcheckOverlayMetrics()
+        bottomOcclusion = 0f
         occlusionReleaseJob = null
       }
-    } else {
-      occlusionRetained = false
     }
   }
 
@@ -264,24 +253,16 @@ internal fun rememberEditorSpellcheckSession(
     model = model,
     active = active,
     occlusion =
-      if (active || occlusionRetained) {
+      if (bottomOcclusion > 0f) {
         EditorOverlayOcclusion(
-          top = overlayMetrics.topOcclusion,
-          bottom = overlayMetrics.bottomOcclusion,
+          bottom = bottomOcclusion,
           bottomScrollReserve =
-            if (overlayMetrics.bottomOcclusion > 0f) {
-              max(
-                overlayMetrics.bottomOcclusion,
-                spellcheckCompactOverlayHeight(activeRange = true).value,
-              )
-            } else {
-              0f
-            },
+            max(bottomOcclusion, spellcheckCompactOverlayHeight(activeRange = true).value),
         )
       } else {
         EditorOverlayOcclusion()
       },
-    updateOverlayMetrics = ::updateOverlayMetrics,
+    setOverlayBottomOcclusion = ::setOverlayBottomOcclusion,
     openFromToolPanel = open@{
         val activeModel = model ?: return@open
         if (activeModel.active) {
@@ -297,7 +278,6 @@ internal fun rememberEditorSpellcheckSession(
           }
           occlusionReleaseJob?.cancel()
           occlusionReleaseJob = null
-          occlusionRetained = false
           hideContextMenu()
           closeSubPane()
           activeModel.enterMode()
@@ -391,12 +371,6 @@ internal fun rememberEditorSpellcheckSession(
 
 private fun RawSpellcheckResult.toSpellcheckResult(): SpellcheckResult =
   SpellcheckResult(id = id, context = context, corrections = corrections, explanation = explanation)
-
-private fun SpellcheckOverlayMetrics.coerceNonNegative(): SpellcheckOverlayMetrics =
-  SpellcheckOverlayMetrics(
-    topOcclusion = topOcclusion.coerceAtLeast(0f),
-    bottomOcclusion = bottomOcclusion.coerceAtLeast(0f),
-  )
 
 private fun List<TrackedRange>.spellcheckScrollTarget(
   id: String?

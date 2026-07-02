@@ -101,6 +101,9 @@ import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.placeholder.EditorDocumentPlaceholder
 import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
+import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarCenter
+import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarLeading
+import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarTrailing
 import co.typie.screen.editor.editor.spellcheck.rememberEditorSpellcheckSession
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
@@ -259,44 +262,78 @@ fun EditorScreen(entityId: String) {
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
     )
+  suspend fun ensureSpellcheckSubscription(): Boolean {
+    return SubscriptionService.gate(
+      sheet = sheet,
+      nav = nav,
+      title = "맞춤법 검사로\n글을 더 자연스럽게 다듬어요.",
+      benefits = listOf(PlanUpgradeBenefit.SpellCheck),
+    )
+  }
+  val spellcheck =
+    rememberEditorSpellcheckSession(
+      documentId = document?.id,
+      documentLocked = documentLocked,
+      editor = editor,
+      editorState = editorState,
+      bringIntoViewRequests = bringIntoViewRequests,
+      hideContextMenu = { uiState.contextMenu.hide() },
+      closeSubPane = subPaneState::dismiss,
+      ensureSubscription = ::ensureSpellcheckSubscription,
+    )
 
-  if (findReplace.active) {
-    ProvideTopBar(
-      leading = { FindReplaceTopBarLeading(session = findReplace) },
-      leadingKey = FindReplaceTopBarLeadingKey,
-      center = { FindReplaceTopBarCenter(session = findReplace) },
-      centerKey = FindReplaceTopBarCenterKey,
-      trailing = { FindReplaceTopBarTrailing(session = findReplace) },
-      trailingKey = FindReplaceTopBarTrailingKey,
-      scrollOffset = null,
-    )
-  } else {
-    ProvideTopBar(
-      center = {
-        document?.let {
-          Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            EditorDocumentButton(
-              entityIcon = entity.entityIcon_entity,
-              title = model.headingTitle,
-              subtitle = model.headingSubtitle,
-              loading = loading,
-              onClick = {
-                val activeEditor = runtime.editor
-                screenState.prepareToLeaveEditorScene(
-                  runtime = runtime,
-                  uiState = uiState,
-                  flushDrafts = { model.flush(activeEditor) },
-                )
-                nav.navigate(Route.Document(entityId))
-              },
-              modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
-            )
+  when {
+    findReplace.active -> {
+      ProvideTopBar(
+        leading = { FindReplaceTopBarLeading(session = findReplace) },
+        leadingKey = FindReplaceTopBarLeadingKey,
+        center = { FindReplaceTopBarCenter(session = findReplace) },
+        centerKey = FindReplaceTopBarCenterKey,
+        trailing = { FindReplaceTopBarTrailing(session = findReplace) },
+        trailingKey = FindReplaceTopBarTrailingKey,
+        scrollOffset = null,
+      )
+    }
+    spellcheck.active -> {
+      ProvideTopBar(
+        leading = { SpellcheckTopBarLeading(session = spellcheck) },
+        leadingKey = SpellcheckTopBarLeadingKey,
+        center = { SpellcheckTopBarCenter(session = spellcheck) },
+        centerKey = SpellcheckTopBarCenterKey,
+        trailing = { SpellcheckTopBarTrailing(session = spellcheck) },
+        trailingKey = SpellcheckTopBarTrailingKey,
+        scrollOffset = null,
+      )
+    }
+    else -> {
+      ProvideTopBar(
+        center = {
+          document?.let {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+              EditorDocumentButton(
+                entityIcon = entity.entityIcon_entity,
+                title = model.headingTitle,
+                subtitle = model.headingSubtitle,
+                loading = loading,
+                onClick = {
+                  val activeEditor = runtime.editor
+                  screenState.prepareToLeaveEditorScene(
+                    runtime = runtime,
+                    uiState = uiState,
+                    flushDrafts = { model.flush(activeEditor) },
+                  )
+                  nav.navigate(Route.Document(entityId))
+                },
+                modifier =
+                  Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
+              )
+            }
           }
-        }
-      },
-      trailing = { EditorTopBarMenu(model = model) },
-      scrollOffset = null,
-    )
+        },
+        trailing = { EditorTopBarMenu(model = model) },
+        scrollOffset = null,
+      )
+    }
   }
 
   val subtitleFocusRequestVersion = remember(entityId) { mutableStateOf(0) }
@@ -395,25 +432,6 @@ fun EditorScreen(entityId: String) {
         }
       }
     }
-    suspend fun ensureSpellcheckSubscription(): Boolean {
-      return SubscriptionService.gate(
-        sheet = sheet,
-        nav = nav,
-        title = "맞춤법 검사로\n글을 더 자연스럽게 다듬어요.",
-        benefits = listOf(PlanUpgradeBenefit.SpellCheck),
-      )
-    }
-    val spellcheck =
-      rememberEditorSpellcheckSession(
-        documentId = document?.id,
-        documentLocked = documentLocked,
-        editor = editor,
-        editorState = editorState,
-        bringIntoViewRequests = bringIntoViewRequests,
-        hideContextMenu = { uiState.contextMenu.hide() },
-        closeSubPane = subPaneState::dismiss,
-        ensureSubscription = ::ensureSpellcheckSubscription,
-      )
     suspend fun openTemplateSheet() {
       val activeEditor = runtime.editor ?: return
       runtime.blur()
@@ -964,3 +982,6 @@ private fun Boolean.debugToggleLabel(label: String): String = "$label ${if (this
 private val FindReplaceTopBarLeadingKey = Any()
 private val FindReplaceTopBarCenterKey = Any()
 private val FindReplaceTopBarTrailingKey = Any()
+private val SpellcheckTopBarLeadingKey = Any()
+private val SpellcheckTopBarCenterKey = Any()
+private val SpellcheckTopBarTrailingKey = Any()
