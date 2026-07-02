@@ -30,6 +30,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
   private var viewportState: EditorViewportState? = null
   private var density: Float = 0f
   private var onSelectionHaptic: (() -> Unit)? = null
+  private var pointerInputEnabled: () -> Boolean = { true }
   private var tapDispatchJob: Job? = null
   private var longPressDispatchJob: Job? = null
   private var scrollGestureLockState: ScrollGestureLockState? = null
@@ -44,6 +45,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
       semantics = semantics,
       platformProvider = { PlatformModule.platform },
       uiStateProvider = { checkNotNull(uiState) { "Editor interaction scope has no UI state" } },
+      pointerInputEnabledProvider = { pointerInputEnabled() },
     )
 
   fun update(
@@ -55,6 +57,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     density: Float,
     scrollGestureLockState: ScrollGestureLockState,
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
+    pointerInputEnabled: () -> Boolean = { true },
     onSelectionHaptic: () -> Unit,
   ) {
     this.editor = editor
@@ -65,6 +68,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     this.density = density
     this.scrollGestureLockState = scrollGestureLockState
     this.onSelectionHaptic = onSelectionHaptic
+    this.pointerInputEnabled = pointerInputEnabled
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
 
@@ -109,6 +113,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
     viewportState = null
     density = 0f
     onSelectionHaptic = null
+    pointerInputEnabled = { true }
     scrollGestureLockState = null
   }
 

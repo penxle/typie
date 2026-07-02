@@ -143,6 +143,7 @@ import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
+import co.typie.ui.component.popover.LocalPopoverOverlayState
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -456,6 +457,7 @@ fun EditorScreen(entityId: String) {
     val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
     val toolbarRestoreInset = toolbarInputState.keyboardRestoreInset
+    val popoverOverlayState = LocalPopoverOverlayState.current
     val toolbarPresented =
       isEditorToolbarPresented(
         environment = toolbarInputEnvironment,
@@ -666,6 +668,7 @@ fun EditorScreen(entityId: String) {
         density = density,
         scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
+        pointerInputEnabled = { !popoverOverlayState.isOutsideDismissGestureActive },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
       )
       interactionScope.onEditorStateChanged(editorState)

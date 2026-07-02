@@ -18,6 +18,7 @@ internal class EditorInteractionController(
   private val semantics: EditorInteractionSemantics = EditorInteractionSemantics(effects = effects),
   private val platformProvider: () -> Platform = { Platform.Desktop },
   private val uiStateProvider: () -> EditorUiState,
+  private val pointerInputEnabledProvider: () -> Boolean = { true },
 ) {
   private var mode by mutableStateOf(EditorInteractionMode.Idle)
   private val gestureContext =
@@ -81,40 +82,59 @@ internal class EditorInteractionController(
     tapEnabled: Boolean = true,
     inputModifiers: InputModifiers = InputModifiers(),
   ): Boolean =
-    gestures.handlePointerDown(
-      pointerId = pointerId,
-      position = position,
-      nowMillis = nowMillis,
-      tapEnabled = tapEnabled,
-      inputModifiers = inputModifiers,
-      context = gestureContext,
-    )
+    if (ensurePointerInputEnabled()) {
+      gestures.handlePointerDown(
+        pointerId = pointerId,
+        position = position,
+        nowMillis = nowMillis,
+        tapEnabled = tapEnabled,
+        inputModifiers = inputModifiers,
+        context = gestureContext,
+      )
+    } else {
+      false
+    }
 
   fun onPointerMove(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
-    gestures.handlePointerMove(
-      pointerId = pointerId,
-      position = position,
-      nowMillis = nowMillis,
-      context = gestureContext,
-    )
+    if (ensurePointerInputEnabled()) {
+      gestures.handlePointerMove(
+        pointerId = pointerId,
+        position = position,
+        nowMillis = nowMillis,
+        context = gestureContext,
+      )
+    } else {
+      false
+    }
 
   fun onPointerUp(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
-    gestures.handlePointerUp(
-      pointerId = pointerId,
-      position = position,
-      nowMillis = nowMillis,
-      context = gestureContext,
-    )
+    if (ensurePointerInputEnabled()) {
+      gestures.handlePointerUp(
+        pointerId = pointerId,
+        position = position,
+        nowMillis = nowMillis,
+        context = gestureContext,
+      )
+    } else {
+      false
+    }
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
-    gestures.handleLongPressTimer(
-      pointerId = pointerId,
-      position = position,
-      nowMillis = nowMillis,
-      context = gestureContext,
-    )
+    if (ensurePointerInputEnabled()) {
+      gestures.handleLongPressTimer(
+        pointerId = pointerId,
+        position = position,
+        nowMillis = nowMillis,
+        context = gestureContext,
+      )
+    } else {
+      false
+    }
 
   fun onTapTimer(nowMillis: Long) {
+    if (!ensurePointerInputEnabled()) {
+      return
+    }
     gestures.handleTapTimer(nowMillis = nowMillis, context = gestureContext)
   }
 
@@ -150,5 +170,13 @@ internal class EditorInteractionController(
 
   private fun reduceMode(event: EditorInteractionEvent) {
     mode = mode.reduce(event)
+  }
+
+  private fun ensurePointerInputEnabled(): Boolean {
+    if (pointerInputEnabledProvider()) {
+      return true
+    }
+    cancel()
+    return false
   }
 }
