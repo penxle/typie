@@ -15,18 +15,28 @@ pub struct PlaceholderMetrics {
 
 use editor_common::Rect;
 use editor_model::{Alignment, DocView, Modifier, ModifierType, NodeType};
+use editor_state::{PendingModifier, PendingModifiers};
 
 use super::layout_index::LayoutIndex;
+use crate::view_state::PendingStyle;
+
+const DEFAULT_FONT_SIZE: u32 = 1200;
+const DEFAULT_LINE_HEIGHT: u32 = 160;
+const DEFAULT_LETTER_SPACING: i32 = 0;
 
 pub(crate) fn placeholder_metrics(
     layout_index: &LayoutIndex,
     view: &DocView,
+    pending_style: Option<&PendingStyle>,
 ) -> Option<PlaceholderMetrics> {
     if !is_single_empty_paragraph(view) {
         return None;
     }
     let nv = view.root()?.child_blocks().next()?;
     let elem_id = nv.id();
+    let pending_modifiers = pending_style
+        .filter(|style| style.node_id == elem_id)
+        .map(|style| &style.modifiers);
 
     let entry = layout_index.box_entry(&elem_id)?;
     let page_rect = layout_index.page_rect(entry.rect)?;
@@ -41,10 +51,25 @@ pub(crate) fn placeholder_metrics(
     Some(PlaceholderMetrics {
         page_idx: page_rect.page_idx,
         rect,
-        font_size: resolve_u32(&nv, ModifierType::FontSize),
-        line_height: resolve_u32(&nv, ModifierType::LineHeight),
-        letter_spacing: resolve_i32(&nv, ModifierType::LetterSpacing),
-        align: resolve_align(&nv),
+        font_size: Some(resolve_u32(
+            &nv,
+            pending_modifiers,
+            ModifierType::FontSize,
+            DEFAULT_FONT_SIZE,
+        )),
+        line_height: Some(resolve_u32(
+            &nv,
+            pending_modifiers,
+            ModifierType::LineHeight,
+            DEFAULT_LINE_HEIGHT,
+        )),
+        letter_spacing: Some(resolve_i32(
+            &nv,
+            pending_modifiers,
+            ModifierType::LetterSpacing,
+            DEFAULT_LETTER_SPACING,
+        )),
+        align: Some(resolve_align(&nv, pending_modifiers)),
     })
 }
 
@@ -65,24 +90,57 @@ pub(crate) fn is_single_empty_paragraph(view: &DocView) -> bool {
     first.children().next().is_none()
 }
 
-fn resolve_u32(nv: &editor_model::NodeView<'_>, ty: ModifierType) -> Option<u32> {
-    match nv.effective().get(&ty) {
-        Some(Modifier::FontSize { value }) | Some(Modifier::LineHeight { value }) => Some(*value),
-        _ => None,
+fn resolve_modifier(
+    nv: &editor_model::NodeView<'_>,
+    pending_modifiers: Option<&PendingModifiers>,
+    ty: ModifierType,
+) -> Option<Modifier> {
+    let mut modifier = nv.effective().get(&ty).cloned();
+    if let Some(pending_modifiers) = pending_modifiers {
+        for pending in pending_modifiers {
+            if pending.as_type() != ty {
+                continue;
+            }
+            modifier = match pending {
+                PendingModifier::Set { modifier } => Some(modifier.clone()),
+                PendingModifier::Unset { .. } => None,
+            };
+        }
+    }
+    modifier
+}
+
+fn resolve_u32(
+    nv: &editor_model::NodeView<'_>,
+    pending_modifiers: Option<&PendingModifiers>,
+    ty: ModifierType,
+    default: u32,
+) -> u32 {
+    match resolve_modifier(nv, pending_modifiers, ty) {
+        Some(Modifier::FontSize { value }) | Some(Modifier::LineHeight { value }) => value,
+        _ => default,
     }
 }
 
-fn resolve_i32(nv: &editor_model::NodeView<'_>, ty: ModifierType) -> Option<i32> {
-    match nv.effective().get(&ty) {
-        Some(Modifier::LetterSpacing { value }) => Some(*value),
-        _ => None,
+fn resolve_i32(
+    nv: &editor_model::NodeView<'_>,
+    pending_modifiers: Option<&PendingModifiers>,
+    ty: ModifierType,
+    default: i32,
+) -> i32 {
+    match resolve_modifier(nv, pending_modifiers, ty) {
+        Some(Modifier::LetterSpacing { value }) => value,
+        _ => default,
     }
 }
 
-fn resolve_align(nv: &editor_model::NodeView<'_>) -> Option<Alignment> {
-    match nv.effective().get(&ModifierType::Alignment) {
-        Some(Modifier::Alignment { value }) => Some(*value),
-        _ => None,
+fn resolve_align(
+    nv: &editor_model::NodeView<'_>,
+    pending_modifiers: Option<&PendingModifiers>,
+) -> Alignment {
+    match resolve_modifier(nv, pending_modifiers, ModifierType::Alignment) {
+        Some(Modifier::Alignment { value }) => value,
+        _ => Alignment::default(),
     }
 }
 
@@ -200,7 +258,7 @@ mod tests {
         let (index, pd) = build_index_and_pd(&doc, 400.0);
         let view = DocView::new(&pd);
 
-        let m = placeholder_metrics(&index, &view).expect("empty para must have metrics");
+        let m = placeholder_metrics(&index, &view, None).expect("empty para must have metrics");
         assert_eq!(m.page_idx, 0);
         assert!(m.rect.width > 0.0);
 
@@ -208,6 +266,71 @@ mod tests {
         let entry = index.box_entry(&para_id).unwrap();
         let page_rect = index.page_rect(entry.rect).unwrap();
         assert_eq!(m.rect.y, page_rect.rect.y);
+    }
+
+    #[test]
+    fn single_empty_paragraph_metrics_include_default_style_values() {
+        let (elems, _root, _para) = empty_para_elems();
+        let doc = logs(&elems);
+        let (index, pd) = build_index_and_pd(&doc, 400.0);
+        let view = DocView::new(&pd);
+
+        let m = placeholder_metrics(&index, &view, None).expect("empty para must have metrics");
+
+        assert_eq!(m.font_size, Some(1200));
+        assert_eq!(m.line_height, Some(160));
+        assert_eq!(m.letter_spacing, Some(0));
+        assert_eq!(m.align, Some(Alignment::Left));
+    }
+
+    #[test]
+    fn single_empty_paragraph_metrics_use_explicit_style_values() {
+        let (elems, _root, para) = empty_para_elems();
+        let mut l = logs(&elems);
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                ModifierAttrOp::SetModifier {
+                    target: para,
+                    modifier: Modifier::FontSize { value: 1800 },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(2, 1),
+                ModifierAttrOp::SetModifier {
+                    target: para,
+                    modifier: Modifier::LineHeight { value: 220 },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(2, 2),
+                ModifierAttrOp::SetModifier {
+                    target: para,
+                    modifier: Modifier::LetterSpacing { value: 5 },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(2, 3),
+                ModifierAttrOp::SetModifier {
+                    target: para,
+                    modifier: Modifier::Alignment {
+                        value: Alignment::Right,
+                    },
+                },
+            )
+            .unwrap();
+        let (index, pd) = build_index_and_pd(&l, 400.0);
+        let view = DocView::new(&pd);
+
+        let m = placeholder_metrics(&index, &view, None).expect("empty para must have metrics");
+
+        assert_eq!(m.font_size, Some(1800));
+        assert_eq!(m.line_height, Some(220));
+        assert_eq!(m.letter_spacing, Some(5));
+        assert_eq!(m.align, Some(Alignment::Right));
     }
 
     #[test]
@@ -229,7 +352,7 @@ mod tests {
         let view = DocView::new(&pd);
 
         assert!(!is_single_empty_paragraph(&view));
-        assert!(placeholder_metrics(&index, &view).is_none());
+        assert!(placeholder_metrics(&index, &view, None).is_none());
     }
 
     #[test]
@@ -282,7 +405,7 @@ mod tests {
         let (index, pd) = build_index_and_pd(&l, 400.0);
         let view = DocView::new(&pd);
 
-        let m = placeholder_metrics(&index, &view).expect("must be placeholder");
+        let m = placeholder_metrics(&index, &view, None).expect("must be placeholder");
         let entry = index.box_entry(&para).unwrap();
         let page_rect = index.page_rect(entry.rect).unwrap();
         assert!(
@@ -309,7 +432,7 @@ mod tests {
         let (index, pd) = build_index_and_pd(&l, 400.0);
         let view = DocView::new(&pd);
 
-        let m = placeholder_metrics(&index, &view).expect("must be placeholder");
+        let m = placeholder_metrics(&index, &view, None).expect("must be placeholder");
         let entry = index.box_entry(&para).unwrap();
         let page_rect = index.page_rect(entry.rect).unwrap();
         let expected_indent = 200.0f32 / 100.0 * 16.0;

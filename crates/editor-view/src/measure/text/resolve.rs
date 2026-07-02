@@ -1,4 +1,4 @@
-use editor_model::Modifier;
+use editor_model::{Modifier, ModifierType};
 use editor_state::{PendingModifier, PendingModifiers};
 
 #[derive(Clone)]
@@ -59,25 +59,56 @@ pub fn style_from_effective_modifiers(modifiers: &[Modifier]) -> ResolvedTextSty
 }
 
 pub fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingModifiers) {
+    let mut font_family = style.font_family.clone();
+    let mut font_weight = style.font_weight;
+    let mut font_size = style.font_size;
+    let mut letter_spacing_em = if style.font_size > 0.0 {
+        style.letter_spacing / style.font_size
+    } else {
+        0.0
+    };
+    let mut line_height = style.line_height;
+
     for p in pending {
-        if let PendingModifier::Set { modifier } = p {
-            match modifier {
-                Modifier::FontFamily { value } => style.font_family = value.clone(),
-                Modifier::FontWeight { value } => style.font_weight = *value,
+        match p {
+            PendingModifier::Set { modifier } => match modifier {
+                Modifier::FontFamily { value } => font_family = value.clone(),
+                Modifier::FontWeight { value } => font_weight = *value,
                 Modifier::FontSize { value } => {
                     // centipoints → pixels (resolve_text_style과 동일 변환).
-                    style.font_size = (*value as f32 / 100.0) * PT_TO_PX;
+                    font_size = (*value as f32 / 100.0) * PT_TO_PX;
+                }
+                Modifier::LetterSpacing { value } => {
+                    letter_spacing_em = *value as f32 / 100.0;
+                }
+                Modifier::LineHeight { value } => {
+                    line_height = *value as f32 / 100.0;
                 }
                 _ => {}
-            }
+            },
+            PendingModifier::Unset { ty } => match ty {
+                ModifierType::FontFamily => font_family = String::new(),
+                ModifierType::FontWeight => font_weight = DEFAULT_FONT_WEIGHT,
+                ModifierType::FontSize => font_size = DEFAULT_FONT_SIZE_PX,
+                ModifierType::LetterSpacing => letter_spacing_em = 0.0,
+                ModifierType::LineHeight => line_height = DEFAULT_LINE_HEIGHT,
+                _ => {}
+            },
         }
     }
+
+    style.font_family = font_family;
+    style.font_weight = font_weight;
+    style.font_size = font_size;
+    style.letter_spacing = letter_spacing_em * font_size;
+    style.line_height = line_height;
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
+    use editor_model::ModifierType;
 
     #[test]
     fn style_from_effective_modifiers_empty_uses_defaults() {
@@ -121,5 +152,121 @@ mod tests {
         apply_pending_to_style(&mut style, &pending);
         // 96pt * (96/72) = 128px
         assert!((style.font_size - 128.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_pending_letter_spacing_uses_current_font_size() {
+        let mut style = ResolvedTextStyle {
+            font_family: "test".into(),
+            font_weight: 400,
+            font_size: 20.0,
+            letter_spacing: 0.0,
+            line_height: 1.5,
+        };
+        let pending: PendingModifiers = vec![PendingModifier::Set {
+            modifier: Modifier::LetterSpacing { value: 40 },
+        }];
+
+        apply_pending_to_style(&mut style, &pending);
+
+        assert!((style.letter_spacing - 8.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_pending_letter_spacing_uses_final_font_size_independent_of_order() {
+        let mut style = ResolvedTextStyle {
+            font_family: "test".into(),
+            font_weight: 400,
+            font_size: 20.0,
+            letter_spacing: 0.0,
+            line_height: 1.5,
+        };
+        let pending: PendingModifiers = vec![
+            PendingModifier::Set {
+                modifier: Modifier::LetterSpacing { value: 10 },
+            },
+            PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 3000 },
+            },
+        ];
+
+        apply_pending_to_style(&mut style, &pending);
+
+        // 30pt * (96/72) = 40px, 0.1em = 4px
+        assert!((style.font_size - 40.0).abs() < 0.01);
+        assert!((style.letter_spacing - 4.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_pending_font_size_rescales_existing_letter_spacing_em() {
+        let mut style = ResolvedTextStyle {
+            font_family: "test".into(),
+            font_weight: 400,
+            font_size: 20.0,
+            letter_spacing: 2.0,
+            line_height: 1.5,
+        };
+        let pending: PendingModifiers = vec![PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 3000 },
+        }];
+
+        apply_pending_to_style(&mut style, &pending);
+
+        assert!((style.font_size - 40.0).abs() < 0.01);
+        assert!((style.letter_spacing - 4.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_pending_unset_restores_default_style_values() {
+        let mut style = ResolvedTextStyle {
+            font_family: "test".into(),
+            font_weight: 700,
+            font_size: 24.0,
+            letter_spacing: 2.4,
+            line_height: 2.0,
+        };
+        let pending: PendingModifiers = vec![
+            PendingModifier::Unset {
+                ty: ModifierType::FontFamily,
+            },
+            PendingModifier::Unset {
+                ty: ModifierType::FontWeight,
+            },
+            PendingModifier::Unset {
+                ty: ModifierType::FontSize,
+            },
+            PendingModifier::Unset {
+                ty: ModifierType::LetterSpacing,
+            },
+            PendingModifier::Unset {
+                ty: ModifierType::LineHeight,
+            },
+        ];
+
+        apply_pending_to_style(&mut style, &pending);
+
+        assert_eq!(style.font_family, "");
+        assert_eq!(style.font_weight, DEFAULT_FONT_WEIGHT);
+        assert!((style.font_size - DEFAULT_FONT_SIZE_PX).abs() < 0.01);
+        assert!((style.letter_spacing - 0.0).abs() < 0.01);
+        assert!((style.line_height - DEFAULT_LINE_HEIGHT).abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_pending_line_height_overrides_base() {
+        let mut style = ResolvedTextStyle {
+            font_family: "test".into(),
+            font_weight: 400,
+            font_size: 16.0,
+            letter_spacing: 0.0,
+            line_height: 1.5,
+        };
+        let pending: PendingModifiers = vec![PendingModifier::Set {
+            modifier: Modifier::LineHeight { value: 220 },
+        }];
+
+        apply_pending_to_style(&mut style, &pending);
+
+        assert!((style.line_height - 2.2).abs() < 0.01);
     }
 }

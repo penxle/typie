@@ -99,6 +99,7 @@ import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
+import co.typie.screen.editor.editor.placeholder.EditorDocumentPlaceholder
 import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
 import co.typie.screen.editor.editor.spellcheck.rememberEditorSpellcheckSession
 import co.typie.screen.editor.editor.state.EditorInputEffect
@@ -110,6 +111,7 @@ import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
 import co.typie.screen.editor.editor.subpane.EditorSubPaneState
 import co.typie.screen.editor.editor.subpane.comments.rememberEditorCommentsSession
 import co.typie.screen.editor.editor.subpane.resolveSubPaneBottomOcclusion
+import co.typie.screen.editor.editor.template.EditorTemplateSheet
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.toolbar.EditorToolbarToolAction
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
@@ -412,6 +414,13 @@ fun EditorScreen(entityId: String) {
         closeSubPane = subPaneState::dismiss,
         ensureSubscription = ::ensureSpellcheckSubscription,
       )
+    suspend fun openTemplateSheet() {
+      val activeEditor = runtime.editor ?: return
+      runtime.blur()
+      focusManager.clearFocus(force = true)
+      uiState.contextMenu.hide()
+      sheet.present { EditorTemplateSheet(editor = activeEditor) }
+    }
 
     LaunchedEffect(subPaneActive) {
       if (subPaneActive) {
@@ -794,6 +803,17 @@ fun EditorScreen(entityId: String) {
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
               overlay = {
+                if (!documentLocked) {
+                  EditorDocumentPlaceholder(
+                    placeholder = editorState.placeholder,
+                    geometry = bodyGeometry,
+                    layoutSpec = layoutSpec,
+                    pageSizes = pageSizes,
+                    displayZoom = displayZoom,
+                    modifier = Modifier.fillMaxSize(),
+                    onLoadTemplate = ::openTemplateSheet,
+                  )
+                }
                 if (comments.virtualThreadGuardVisible) {
                   val guardInteractionSource = remember { MutableInteractionSource() }
                   Box(

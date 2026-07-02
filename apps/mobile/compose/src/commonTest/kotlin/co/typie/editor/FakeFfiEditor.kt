@@ -46,6 +46,7 @@ internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
   var canProvider: (Message) -> Boolean = { false },
   var cursorProvider: () -> CursorMetrics? = { null },
+  var placeholderProvider: () -> PlaceholderMetrics? = { null },
   var selectionProvider: () -> Selection? = { EmptySelection },
   var rootAttrsProvider: () -> PlainRootNode = { EmptyRootAttrs },
   var rootModifiersProvider: () -> List<EditorModifier> = { emptyList() },
@@ -72,6 +73,8 @@ internal class FakeFfiEditor(
   var lastRenderedPage: Int? = null
   var trackedRangesCallCount: Int = 0
   var trackedRangesContainingPositionCallCount: Int = 0
+  var placeholderCallCount: Int = 0
+  val insertedTemplateFragments = mutableListOf<ByteArray>()
   val attached = mutableSetOf<Int>()
 
   override fun enqueue(message: Message) {
@@ -89,7 +92,10 @@ internal class FakeFfiEditor(
 
   override fun cursor(): CursorMetrics? = cursorProvider()
 
-  override fun placeholder(): PlaceholderMetrics? = null
+  override fun placeholder(): PlaceholderMetrics? {
+    placeholderCallCount += 1
+    return placeholderProvider()
+  }
 
   override fun selection(): Selection? = selectionProvider()
 
@@ -183,7 +189,9 @@ internal class FakeFfiEditor(
 
   override fun setDoc(plain: PlainDoc) = Unit
 
-  override fun insertTemplateFragment(changesets: ByteArray) = Unit
+  override fun insertTemplateFragment(changesets: ByteArray) {
+    insertedTemplateFragments += changesets.copyOf()
+  }
 
   override fun materializeAt(heads: ByteArray): PlainDoc = EmptyPlainDoc
 

@@ -4182,6 +4182,48 @@ mod tests {
     }
 
     #[test]
+    fn placeholder_metrics_follow_collapsed_input_modifiers() {
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        let events = editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: editor_model::Modifier::FontSize { value: 2400 },
+            },
+        });
+
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::Placeholder)
+        )));
+        let metrics = editor
+            .view()
+            .placeholder_metrics(editor.state())
+            .expect("empty document placeholder");
+        assert_eq!(metrics.font_size, Some(2400));
+
+        let events = editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: editor_model::Modifier::LetterSpacing { value: 8 },
+            },
+        });
+
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::Placeholder)
+        )));
+        let metrics = editor
+            .view()
+            .placeholder_metrics(editor.state())
+            .expect("empty document placeholder");
+        assert_eq!(metrics.font_size, Some(2400));
+        assert_eq!(metrics.letter_spacing, Some(8));
+    }
+
+    #[test]
     fn insert_template_fragment_preserves_named_styles() {
         use editor_transaction::Transaction;
         let (tpl_initial, p1) = state! {

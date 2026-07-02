@@ -1,9 +1,11 @@
 package co.typie.editor
 
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.SelectionExpansionUnit
@@ -15,6 +17,7 @@ import co.typie.editor.ffi.TrackedRangeEndpoints
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -209,6 +212,46 @@ class EditorAwaitTest {
     }
 
   @Test
+  fun snapshot_reads_placeholder_only_when_state_field_changes() =
+    runTest(dispatcher) {
+      val placeholder =
+        PlaceholderMetrics(
+          pageIdx = 0,
+          rect = Rect(x = 1f, y = 2f, width = 300f, height = 24f),
+          fontSize = 1200,
+          lineHeight = 160,
+          letterSpacing = 0,
+          align = Alignment.Left,
+        )
+      val laterPlaceholder = placeholder.copy(fontSize = 1800, align = Alignment.Right)
+      var currentPlaceholder = placeholder
+      val events =
+        ArrayDeque(
+          listOf(
+            listOf(EditorEvent.StateChanged(listOf(StateField.Placeholder))),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))),
+          )
+        )
+      val fake =
+        FakeFfiEditor(
+          onTick = { events.removeFirst() },
+          placeholderProvider = { currentPlaceholder },
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.await { enqueue(sampleMessage) }
+
+      assertEquals(1, fake.placeholderCallCount)
+      assertEquals(placeholder, editor.placeholder)
+
+      currentPlaceholder = laterPlaceholder
+      editor.await { enqueue(sampleMessage) }
+
+      assertEquals(1, fake.placeholderCallCount)
+      assertEquals(placeholder, editor.placeholder)
+    }
+
+  @Test
   fun await_reports_tick_exception_without_committing() =
     runTest(dispatcher) {
       val boom = RuntimeException("boom")
@@ -239,6 +282,29 @@ class EditorAwaitTest {
       editor.sync { enqueue(sampleMessage) }
 
       assertEquals(listOf(sampleMessage), fake.enqueued)
+      assertEquals(1, fake.tickCount)
+      assertEquals(fakeCursor, editor.cursor)
+      assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun insert_template_fragment_calls_inner_ticks_and_commits() =
+    runTest(dispatcher) {
+      val fakeCursor =
+        CursorMetrics(pageIdx = 0, caret = Rect(5f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
+          cursorProvider = { fakeCursor },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      val payload = byteArrayOf(1, 2, 3)
+
+      val inserted = editor.insertTemplateFragment(payload)
+
+      assertTrue(inserted)
+      assertEquals(1, fake.insertedTemplateFragments.size)
+      assertContentEquals(payload, fake.insertedTemplateFragments.single())
       assertEquals(1, fake.tickCount)
       assertEquals(fakeCursor, editor.cursor)
       assertEquals(1L, editor.state.version)

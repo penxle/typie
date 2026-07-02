@@ -17,6 +17,7 @@ import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
+import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.SearchOptions
@@ -63,6 +64,7 @@ internal constructor(
     private set
 
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
+  val placeholder: PlaceholderMetrics? by derivedStateOf { state.placeholder }
   val selection: Selection? by derivedStateOf { state.selection }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
   val externalElements: List<ExternalElement> by derivedStateOf { state.externalElements }
@@ -377,6 +379,23 @@ internal constructor(
     }
   }
 
+  suspend fun insertTemplateFragment(changesets: ByteArray): Boolean =
+    withSuspendFailureNotification(defaultValue = { false }) {
+      val events =
+        withContext(NonCancellable + dispatcher) {
+          mutex.withLock {
+            if (disposed.load()) throw CancellationException("Editor disposed")
+            inner.insertTemplateFragment(changesets)
+            val e = inner.tick()
+            val version = versionCounter.addAndFetch(1L)
+            commit(readSnapshot(version = version, events = e))
+            e
+          }
+        }
+      emit(events)
+      true
+    }
+
   internal suspend fun currentHeads(): ByteArray =
     withContext(dispatcher) {
       mutex.withLock {
@@ -410,7 +429,14 @@ internal constructor(
         null
       }
     val documentChanged = events.hasStateChangedField(StateField.Doc)
+    val placeholderChanged = events.hasStateChangedField(StateField.Placeholder)
     val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
+    val placeholder =
+      if (placeholderChanged || state.version == 0L) {
+        inner.placeholder()
+      } else {
+        state.placeholder
+      }
     val trackedRanges =
       if (trackedRangesChanged) {
         inner.trackedRanges(null)
@@ -422,6 +448,7 @@ internal constructor(
       version = version,
       documentRevision = state.documentRevision + if (documentChanged) 1L else 0L,
       cursor = inner.cursor(),
+      placeholder = placeholder,
       selection = selection,
       selectionEndpoints = selectionEndpoints,
       pageSizes = inner.pageSizes(),

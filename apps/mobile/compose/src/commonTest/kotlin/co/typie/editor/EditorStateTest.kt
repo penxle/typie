@@ -9,6 +9,7 @@ class EditorStateTest {
     val s = EditorState.Initial
     assertEquals(0L, s.version)
     assertEquals(null, s.cursor)
+    assertEquals(null, s.placeholder)
     assertEquals(null, s.selection)
     assertEquals(emptyList(), s.pageSizes)
     assertEquals(emptyList(), s.externalElements)

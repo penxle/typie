@@ -414,7 +414,11 @@ impl View {
         state: &State,
     ) -> Option<crate::query::placeholder::PlaceholderMetrics> {
         let result = self.layout.as_ref()?;
-        crate::query::placeholder::placeholder_metrics(&result.layout_index, &state.view())
+        crate::query::placeholder::placeholder_metrics(
+            &result.layout_index,
+            &state.view(),
+            self.view_state.pending_style.as_ref(),
+        )
     }
 
     pub fn selection_rects(

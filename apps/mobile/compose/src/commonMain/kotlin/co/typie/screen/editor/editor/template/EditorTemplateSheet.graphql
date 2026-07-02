@@ -1,0 +1,23 @@
+query EditorTemplateSheet_Query($siteId: ID!) {
+  site(siteId: $siteId) @catch(to: THROW) {
+    id
+    documentTemplates {
+      id
+      title
+      entity {
+        id
+        slug
+      }
+    }
+  }
+}
+
+query EditorTemplateSheet_TemplateGraph_Query($slug: String!) {
+  document(slug: $slug) @catch(to: THROW) {
+    id
+    state {
+      graph
+    }
+  }
+}
+

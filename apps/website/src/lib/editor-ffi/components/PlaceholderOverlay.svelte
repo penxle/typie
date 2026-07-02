@@ -18,6 +18,7 @@
   const left = $derived(placeholder?.rect.x ?? 0);
   const width = $derived(placeholder?.rect.width ?? 0);
 
+  // TODO(editor-placeholder): remove host fallbacks once all clients consume concrete engine metrics.
   const fontSize = $derived(placeholder?.font_size ?? defaultValues.fontSize);
   const lineHeight = $derived(placeholder?.line_height ?? defaultValues.lineHeight);
   const letterSpacing = $derived(placeholder?.letter_spacing ?? defaultValues.letterSpacing);
