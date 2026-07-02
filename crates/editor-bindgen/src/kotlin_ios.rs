@@ -3,7 +3,7 @@ use std::path::Path;
 
 use heck::ToLowerCamelCase;
 
-use crate::kotlin_iface::{param_to_kotlin, return_to_kotlin};
+use crate::kotlin_iface::{param_to_kotlin, resolve_primitive, return_to_kotlin};
 use crate::meta::{
     FfiInterface, FfiMethod, FfiParam, FfiParamType, FfiReturnType, FfiScalarParam, FfiScalarReturn,
 };
@@ -228,11 +228,15 @@ fn generate_method(
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
                 w.line("result!!.toByteArray()");
             }
-            FfiScalarReturn::Primitive(_) => {
+            FfiScalarReturn::Primitive(p) => {
                 emit_pre_call_conversions(w, &method.params);
                 w.line(&format!("val result = {}", native_call));
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-                w.line("result!!");
+                let elem = resolve_primitive(p, custom_types);
+                w.line(&format!(
+                    "@Suppress(\"UNCHECKED_CAST\") (result!! as List<{}>)",
+                    elem
+                ));
             }
             FfiScalarReturn::Complex(_) => {
                 emit_pre_call_conversions(w, &method.params);
@@ -736,6 +740,34 @@ mod tests {
         assert!(output.contains("@Suppress(\"UNCHECKED_CAST\")"));
         assert!(output.contains("result!! as List<String>"));
         assert!(output.contains(".map { json.decodeFromString(it) }"));
+    }
+
+    #[test]
+    fn vec_string_return_casts_objc_list_to_concrete_type() {
+        let iface = FfiInterface {
+            name: "Editor".into(),
+            methods: vec![make_method(
+                "changeset_ids",
+                vec![],
+                FfiReturnType::Vec(FfiScalarReturn::Primitive("String".into())),
+            )],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(
+            output.contains("override fun changesetIds(): List<String>"),
+            "Expected List<String> return signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("@Suppress(\"UNCHECKED_CAST\") (result!! as List<String>)"),
+            "Expected ObjC List<*> cast to concrete List<String>:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("            result!!\n"),
+            "Uncast result!! would not typecheck against List<String>:\n{}",
+            output
+        );
     }
 
     #[test]
