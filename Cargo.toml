@@ -97,6 +97,12 @@ panic = "unwind"
 inherits = "dev"
 panic = "abort"
 
+[profile.dev-wasm-browser]
+inherits = "dev-wasm"
+
+[profile.dev-wasm-server]
+inherits = "dev-wasm"
+
 [profile.release]
 lto = true
 strip = true
@@ -109,6 +115,12 @@ panic = "unwind"
 [profile.release-wasm]
 inherits = "release"
 panic = "abort"
+
+[profile.release-wasm-browser]
+inherits = "release-wasm"
+
+[profile.release-wasm-server]
+inherits = "release-wasm"
 
 [patch.crates-io]
 bytecount = { git = "https://github.com/devunt/bytecount.git", branch = "master" }
