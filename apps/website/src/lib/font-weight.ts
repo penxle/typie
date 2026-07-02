@@ -83,7 +83,11 @@ export const fontWeightLabel = (font: FontWeightFont, labels: readonly FontWeigh
 
 export const fontWeightValueLabel = (fonts: readonly FontWeightFont[], labels: readonly FontWeightLabel[], value: number): string => {
   const font = fonts.find((candidate) => candidate.weight === value);
-  return font ? fontWeightLabel(font, labels) : String(value);
+  if (!font) return '(알 수 없는 굵기)';
+  return (
+    labels.find((label) => label.value === value)?.label ??
+    (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : String(value))
+  );
 };
 
 export const fontWeightItemsForFonts = (fonts: readonly FontWeightFont[], labels: readonly FontWeightLabel[]): FontWeightItem[] =>

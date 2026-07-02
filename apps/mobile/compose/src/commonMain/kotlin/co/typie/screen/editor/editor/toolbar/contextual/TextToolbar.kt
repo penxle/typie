@@ -188,7 +188,7 @@ private fun EditorTextToolbar(
       subtle = true,
     )
     EditorToolbarLabelButton(
-      text = fontWeight?.let { toolbarFontWeightLabel(it) } ?: "-",
+      text = fontWeight?.let { toolbarFontWeightLabel(it, fontFamily, fontFamilies) } ?: "-",
       contentDescription = "폰트 굵기",
       onClick = { toggleMode(TextOptionMode.FontWeight) },
       selected = activeTextOptionMode == TextOptionMode.FontWeight,
@@ -438,5 +438,22 @@ private fun fontFamilyLabel(
   if (familyName == null) {
     return "-"
   }
-  return fontFamilies.firstOrNull { it.familyName == familyName }?.displayName ?: familyName
+  return fontFamilies.firstOrNull { it.familyName == familyName }?.displayName ?: "(알 수 없는 폰트)"
+}
+
+private fun toolbarFontWeightLabel(
+  weight: Int,
+  familyName: String?,
+  fontFamilies: List<EditorSettingsFontFamily_family>,
+): String {
+  val font =
+    (familyName
+        ?.let { name -> fontFamilies.firstOrNull { it.familyName == name } }
+        ?.activeToolbarFonts ?: fontFamilies.flatMap { it.activeToolbarFonts })
+      .firstOrNull { it.weight == weight }
+  return toolbarFontWeightLabel(
+    weight = weight,
+    subfamilyDisplayName = font?.subfamilyDisplayName,
+    available = font != null,
+  )
 }

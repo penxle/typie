@@ -148,7 +148,7 @@ impl Modifier {
     }
 }
 
-pub const DEFAULT_FONT_FAMILY: &str = "";
+pub const DEFAULT_FONT_FAMILY: &str = "Pretendard";
 pub const DEFAULT_FONT_SIZE: u32 = 1200;
 pub const DEFAULT_FONT_WEIGHT: u16 = 400;
 pub const DEFAULT_LETTER_SPACING: i32 = 0;

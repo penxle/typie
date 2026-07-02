@@ -80,10 +80,16 @@ internal val EditorSettingsFontFamily_family.representativeToolbarFont:
     }
   }
 
-internal fun toolbarFontWeightLabel(weight: Int, subfamilyDisplayName: String? = null): String =
-  EditorValues.fontWeight.firstOrNull { it.value == weight }?.label
-    ?: subfamilyDisplayName?.let { "$it ($weight)" }
-    ?: weight.toString()
+internal fun toolbarFontWeightLabel(
+  weight: Int,
+  subfamilyDisplayName: String? = null,
+  available: Boolean = true,
+): String =
+  if (!available) "(알 수 없는 굵기)"
+  else
+    EditorValues.fontWeight.firstOrNull { it.value == weight }?.label
+      ?: subfamilyDisplayName?.let { "$it ($weight)" }
+      ?: weight.toString()
 
 internal fun formatToolbarPointValue(value: Int): String {
   val whole = value / 100

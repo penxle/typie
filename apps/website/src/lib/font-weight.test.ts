@@ -48,12 +48,26 @@ describe('resolveFontWeightForFamily', () => {
 });
 
 describe('fontWeightValueLabel', () => {
-  it('uses numeric fallback for unavailable weights', () => {
-    expect(fontWeightValueLabel([{ weight: 300, state: 'ACTIVE' }], labels, 900)).toBe('900');
+  it('uses shared labels for registered weights', () => {
+    expect(fontWeightValueLabel([{ weight: 900, state: 'ACTIVE' }], labels, 900)).toBe('가장 굵게');
   });
 
-  it('uses configured labels only for available weights', () => {
-    expect(fontWeightValueLabel([{ weight: 900, state: 'ACTIVE' }], labels, 900)).toBe('가장 굵게');
+  it('uses subfamily fallback for registered weights without shared labels', () => {
+    expect(fontWeightValueLabel([{ weight: 450, state: 'ACTIVE', subfamilyDisplayName: 'Semi Condensed' }], labels, 450)).toBe(
+      'Semi Condensed (450)',
+    );
+  });
+
+  it('uses numeric fallback for registered weights without names', () => {
+    expect(fontWeightValueLabel([{ weight: 450, state: 'ACTIVE' }], labels, 450)).toBe('450');
+  });
+
+  it('uses unknown fallback for unavailable weights', () => {
+    expect(fontWeightValueLabel([{ weight: 450, state: 'ACTIVE' }], labels, 950)).toBe('(알 수 없는 굵기)');
+  });
+
+  it('uses unknown fallback for unavailable standard weights', () => {
+    expect(fontWeightValueLabel([{ weight: 300, state: 'ACTIVE' }], labels, 900)).toBe('(알 수 없는 굵기)');
   });
 });
 

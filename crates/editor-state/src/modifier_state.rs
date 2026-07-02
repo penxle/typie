@@ -429,6 +429,44 @@ mod tests {
     }
 
     #[test]
+    fn range_clear_inheritable_font_family_reports_pretendard_default() {
+        let (mut state, root, para) = simple_para_state(&['a']);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: root,
+                modifier: Modifier::FontFamily {
+                    value: "Pretendard".to_string(),
+                },
+            }))
+            .unwrap();
+        let leaf_a = first_leaf_dot(&state, para);
+        state
+            .apply(EditOp::Span(SpanOp::RemoveSpan {
+                start: Anchor {
+                    id: leaf_a,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: leaf_a,
+                    bias: Bias::After,
+                },
+                modifier_type: ModifierType::FontFamily,
+            }))
+            .unwrap();
+
+        let s = sel((para, 0), (para, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_family,
+            Tri::Uniform {
+                value: editor_model::FontFamilyValue {
+                    value: "Pretendard".to_string()
+                }
+            }
+        );
+    }
+
+    #[test]
     fn collapsed_pending_unset_inheritable_value_reports_inserted_resolved_value() {
         let (mut state, root, para) = simple_para_state(&['a']);
         state
