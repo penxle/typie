@@ -1091,4 +1091,61 @@ describe('ImeInputAdapter', () => {
       },
     ]);
   });
+
+  it('inserts the space redispatched right after a space-committed Korean composition (Windows IME timing)', () => {
+    const ime = createImeHarness(context(''));
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('한');
+    ime.applyNativeInput('한', 1);
+    ime.compositionEnd();
+
+    const spaceEvent = ime.beforeTextInput(' ');
+    expect(spaceEvent.preventDefault).not.toHaveBeenCalled();
+
+    ime.applyNativeInput('한 ', 2);
+
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 20, end: 20 },
+          { type: 'compose', text: '한' },
+        ],
+      },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 21, end: 21 },
+          { type: 'replace_selection', text: ' ' },
+        ],
+      },
+    ]);
+  });
+
+  it('ignores a duplicate committed preedit insertText right after compositionend', () => {
+    const ime = createImeHarness(context(''));
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('한');
+    ime.applyNativeInput('한', 1);
+    ime.compositionEnd();
+
+    const duplicateEvent = ime.beforeTextInput('한');
+    expect(duplicateEvent.preventDefault).toHaveBeenCalled();
+
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 20, end: 20 },
+          { type: 'compose', text: '한' },
+        ],
+      },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+    ]);
+  });
 });

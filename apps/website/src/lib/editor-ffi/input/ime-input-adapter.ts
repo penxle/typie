@@ -137,7 +137,7 @@ export class ImeInputAdapter {
   #pendingCompositionText: string | null = null;
   #pendingCompositionTarget: ImeRange | null = null;
   #compositionActive = false;
-  #commitPending = false;
+  #commitPendingText: string | null = null;
 
   constructor(deps: ImeInputAdapterDeps) {
     this.#deps = deps;
@@ -247,11 +247,11 @@ export class ImeInputAdapter {
   }
 
   #clearCommitPending(): void {
-    this.#commitPending = false;
+    this.#commitPendingText = null;
   }
 
-  #setCommitPending(): void {
-    this.#commitPending = true;
+  #setCommitPending(text: string): void {
+    this.#commitPendingText = text;
     setTimeout(() => this.#clearCommitPending(), 0);
   }
 
@@ -305,8 +305,12 @@ export class ImeInputAdapter {
   }
 
   handleBeforeInput(e: InputEvent & { currentTarget: ImeTextInput }): void {
-    if (this.#commitPending && (e.inputType === 'insertText' || e.inputType === 'insertCompositionText')) {
-      this.#commitPending = false;
+    if (
+      this.#commitPendingText != null &&
+      (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') &&
+      e.data === this.#commitPendingText
+    ) {
+      this.#commitPendingText = null;
       this.#pendingEditIntent = null;
       this.#pendingCompositionText = null;
       this.#pendingCompositionTarget = null;
@@ -394,7 +398,7 @@ export class ImeInputAdapter {
     this.#compositionActive = false;
     this.#pendingCompositionText = null;
     this.#pendingCompositionTarget = null;
-    const hadComposition = this.#context?.composing != null;
+    const committedText = this.#context ? readContextCompositionText(this.#context) : null;
     if (this.#context?.composing) {
       this.#context = {
         ...this.#context,
@@ -402,10 +406,10 @@ export class ImeInputAdapter {
         composing: null,
       };
     }
-    if (hadComposition) {
+    if (committedText != null) {
       const messages: Message[] = [{ type: 'text_input', ops: [{ type: 'commit_as_is' }] }];
       this.#deps.enqueue(messages);
-      this.#setCommitPending();
+      this.#setCommitPending(committedText);
       return;
     }
   }
