@@ -960,9 +960,9 @@ mod tests {
         assert_eq!(
             state
                 .view()
-                .leaf(x_dot)
+                .leaf_state_by_dot_slow(x_dot)
                 .unwrap()
-                .effective()
+                .eff
                 .get(&ModifierType::Bold),
             Some(&Modifier::Bold)
         );
@@ -974,9 +974,9 @@ mod tests {
         assert_eq!(
             state
                 .view()
-                .leaf(x_dot)
+                .leaf_state_by_dot_slow(x_dot)
                 .unwrap()
-                .effective()
+                .eff
                 .get(&ModifierType::Bold),
             None,
             "undo of AddSpan must remove Bold from the leaf"
@@ -1006,9 +1006,9 @@ mod tests {
         assert_eq!(
             state
                 .view()
-                .leaf(x_dot)
+                .leaf_state_by_dot_slow(x_dot)
                 .unwrap()
-                .effective()
+                .eff
                 .get(&ModifierType::Bold),
             Some(&Modifier::Bold)
         );
@@ -1029,9 +1029,9 @@ mod tests {
         assert_eq!(
             state
                 .view()
-                .leaf(x_dot)
+                .leaf_state_by_dot_slow(x_dot)
                 .unwrap()
-                .effective()
+                .eff
                 .get(&ModifierType::Bold),
             None,
             "RemoveSpan must have removed Bold"
@@ -1044,9 +1044,9 @@ mod tests {
         assert_eq!(
             state
                 .view()
-                .leaf(x_dot)
+                .leaf_state_by_dot_slow(x_dot)
                 .unwrap()
-                .effective()
+                .eff
                 .get(&ModifierType::Bold),
             Some(&Modifier::Bold),
             "undo of RemoveSpan must restore Bold (proves prior SpanModifier capture)"
@@ -1091,9 +1091,9 @@ mod tests {
     fn effective_color(state: &ProjectedState, leaf: editor_crdt::Dot) -> Option<Modifier> {
         state
             .view()
-            .leaf(leaf)
+            .leaf_state_by_dot_slow(leaf)
             .unwrap()
-            .effective()
+            .eff
             .get(&ModifierType::TextColor)
             .cloned()
     }

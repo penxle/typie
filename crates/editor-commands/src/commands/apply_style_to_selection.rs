@@ -1,5 +1,6 @@
+use editor_crdt::Dot;
 use editor_model::{Modifier, ModifierType};
-use editor_state::PendingStyle;
+use editor_state::{PendingStyle, leaf_groups_in_range};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -48,24 +49,27 @@ pub fn apply_style_to_selection(tr: &mut Transaction, style_id: String) -> Comma
     // With the style attached and inline Sets of its types cancelled above, the only
     // way a style-provided type can still be missing from a run's effective map is an
     // older explicit clear blocking it. Cancel those too, so the style shows through.
-    let blocked: Vec<(editor_crdt::Dot, Modifier)> = {
+    let blocked: Vec<(Dot, Dot, Modifier)> = {
         let view = tr.state().view();
-        run_dots
-            .iter()
-            .filter_map(|dot| view.leaf(*dot).map(|l| (*dot, l.effective().clone())))
-            .flat_map(|(dot, eff)| {
-                style_modifiers
-                    .iter()
-                    .filter(|m| is_text_applicable(m.as_type()) && !eff.contains_key(&m.as_type()))
-                    .map(move |m| (dot, m.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .collect()
+        match selection.resolve(&view) {
+            Some(rs) => leaf_groups_in_range(&rs)
+                .into_iter()
+                .flat_map(|g| {
+                    style_modifiers
+                        .iter()
+                        .filter(|m| {
+                            is_text_applicable(m.as_type())
+                                && !g.effective.contains_key(&m.as_type())
+                        })
+                        .map(move |m| (g.first, g.last, m.clone()))
+                        .collect::<Vec<_>>()
+                })
+                .collect(),
+            None => Vec::new(),
+        }
     };
-    for (dot, modifier) in blocked {
-        let Some(op) = dot.as_op_dot() else { continue };
-        let d = op.dot();
-        tr.remove_span_modifier(d, d, modifier)?;
+    for (first, last, modifier) in blocked {
+        tr.remove_span_modifier(first, last, modifier)?;
         changed = true;
     }
 
@@ -213,11 +217,14 @@ mod tests {
 
         let view = actual.view();
         let node = view.node(p1).unwrap();
-        let Some(ChildView::Leaf(leaf)) = node.child_at(0) else {
+        let Some(ChildView::Leaf(_leaf)) = node.child_at(0) else {
             panic!("expected leaf at offset 0");
         };
         assert_eq!(
-            leaf.effective().get(&ModifierType::TextColor),
+            node.leaf_state_at(0)
+                .unwrap()
+                .eff
+                .get(&ModifierType::TextColor),
             Some(&Modifier::TextColor {
                 value: "#ffff00".to_string()
             }),
@@ -244,11 +251,14 @@ mod tests {
 
         let view = actual.view();
         let node = view.node(p1).unwrap();
-        let Some(ChildView::Leaf(leaf)) = node.child_at(0) else {
+        let Some(ChildView::Leaf(_leaf)) = node.child_at(0) else {
             panic!("expected leaf at offset 0");
         };
         assert_eq!(
-            leaf.effective().get(&ModifierType::Italic),
+            node.leaf_state_at(0)
+                .unwrap()
+                .eff
+                .get(&ModifierType::Italic),
             Some(&editor_model::Modifier::Italic),
             "re-applying the style must cancel the earlier explicit clear"
         );

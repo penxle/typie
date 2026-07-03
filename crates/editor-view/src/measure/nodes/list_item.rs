@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use editor_common::{EdgeInsets, Rect};
-use editor_model::{ChildView, Node, NodeView};
+use editor_model::{ChildView, InlineKind, Node, NodeView};
 use editor_resource::Resource;
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, FontWeight, LineHeight, TextStyle};
@@ -25,16 +25,22 @@ const MARKER_OUTER_GAP_RATIO: f32 = 0.5;
 
 fn list_item_max_font_size(node: &NodeView, base: &ResolvedTextStyle) -> f32 {
     let mut max = base.font_size;
-    for desc in node.descendants() {
-        if let ChildView::Leaf(l) = &desc
-            && l.as_char().is_some()
-        {
-            let fs = style_from_effective_modifiers(
-                &l.effective().values().cloned().collect::<Vec<_>>(),
-            )
-            .font_size;
-            if fs > max {
-                max = fs;
+    // Every char leaf in the subtree is an inline child of `node` or one of its
+    // descendant blocks; each block serves its leaves' effective maps from segments.
+    let blocks = std::iter::once(*node).chain(node.descendants().filter_map(|d| match d {
+        ChildView::Block(b) => Some(b),
+        ChildView::Leaf(_) => None,
+    }));
+    for block in blocks {
+        for it in block.inline() {
+            if matches!(it.kind, InlineKind::Char { .. }) {
+                let fs = style_from_effective_modifiers(
+                    &it.effective.values().cloned().collect::<Vec<_>>(),
+                )
+                .font_size;
+                if fs > max {
+                    max = fs;
+                }
             }
         }
     }

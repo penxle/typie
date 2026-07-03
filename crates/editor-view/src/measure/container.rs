@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use editor_model::{Alignment, ChildView, Modifier, ModifierType, NodeType, NodeView};
 use editor_resource::Resource;
@@ -30,10 +30,19 @@ pub(crate) fn resolve_gap_after(effective: &BTreeMap<ModifierType, Modifier>) ->
     }
 }
 
-pub(crate) fn child_effective<'a>(child: &ChildView<'a>) -> &'a BTreeMap<ModifierType, Modifier> {
+static EMPTY_EFF: LazyLock<BTreeMap<ModifierType, Modifier>> = LazyLock::new(BTreeMap::new);
+
+pub(crate) fn child_effective<'a>(
+    node: &NodeView<'a>,
+    slot: usize,
+    child: &ChildView<'a>,
+) -> &'a BTreeMap<ModifierType, Modifier> {
     match child {
         ChildView::Block(nv) => nv.effective(),
-        ChildView::Leaf(lv) => lv.effective(),
+        ChildView::Leaf(_) => node
+            .leaf_state_at(slot)
+            .map(|s| s.eff)
+            .unwrap_or(&EMPTY_EFF),
     }
 }
 
@@ -92,7 +101,7 @@ pub(crate) fn layout_vertical<'a>(
         if gap_phantom_index == Some(i) {
             blocks.push(make_gap_phantom_block(node, width, i, resource));
         }
-        let gap_after = resolve_gap_after(child_effective(&child));
+        let gap_after = resolve_gap_after(child_effective(node, i, &child));
         let m = measure_child(child, width, ctx, resource);
         blocks.push((m, gap_after));
     }

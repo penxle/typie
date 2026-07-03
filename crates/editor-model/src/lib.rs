@@ -44,7 +44,7 @@ pub use span::*;
 pub use style::*;
 pub use style_log::*;
 pub use subtree::*;
-pub use view::{ChildView, DocView, InlineItem, InlineKind, LeafView, NodeView};
+pub use view::{ChildView, DocView, InlineItem, InlineKind, LeafStateRef, LeafView, NodeView};
 
 #[cfg(any(test, feature = "test-utils"))]
 pub use test_utils::*;

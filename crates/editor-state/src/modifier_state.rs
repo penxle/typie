@@ -135,9 +135,12 @@ pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState 
                 }
             }
         } else {
-            for l in traversal::leaves_in_block_range(rs, b) {
+            for (slot, l) in traversal::leaves_in_block_range(rs, b) {
+                let Some(st) = b.leaf_state_at(slot) else {
+                    continue;
+                };
                 let pi = intern_path(&mut entries, &mut index, b, l.node_type(), true);
-                groups.push((pi, l.effective(), 1, true));
+                groups.push((pi, st.eff, 1, true));
             }
         }
     }
@@ -1172,7 +1175,10 @@ mod tests {
 
     // Reference: the per-leaf implementation the run-group aggregation replaced.
     // Kept verbatim so the equivalence proptest below pins the rewrite.
-    fn reference_in_range(rs: &crate::selection::ResolvedSelection) -> editor_model::ModifierState {
+    fn reference_in_range(
+        rs: &crate::selection::ResolvedSelection,
+        leaf_map: &hashbrown::HashMap<Dot, crate::projected_state::LeafTruth>,
+    ) -> editor_model::ModifierState {
         use std::collections::BTreeMap;
 
         use editor_model::{LeafView, Modifier, ModifierState, NodeType, NodeView, Schema};
@@ -1188,13 +1194,6 @@ mod tests {
         }
 
         impl<'a> RangeNode<'a> {
-            fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
-                match self {
-                    RangeNode::Block(b) => b.effective(),
-                    RangeNode::Leaf(l) => l.effective(),
-                }
-            }
-
             fn type_path(&self) -> Vec<NodeType> {
                 match self {
                     RangeNode::Block(b) => {
@@ -1220,7 +1219,7 @@ mod tests {
                 out.extend(
                     traversal::leaves_in_block_range(rs, b)
                         .into_iter()
-                        .map(RangeNode::Leaf),
+                        .map(|(_, l)| RangeNode::Leaf(l)),
                 );
             }
             out
@@ -1275,6 +1274,22 @@ mod tests {
         let nodes = range_nodes(rs);
         let table = build_range_path_table(&nodes);
 
+        // Effective map per node: blocks from `block_effective` (authoritative),
+        // leaves from the log-derived truth — the reference must not read the old
+        // per-leaf maps, which span ops no longer maintain.
+        let effectives: Vec<&BTreeMap<ModifierType, Modifier>> = nodes
+            .iter()
+            .map(|n| match n {
+                RangeNode::Block(b) => b.effective(),
+                RangeNode::Leaf(l) => {
+                    &*leaf_map
+                        .get(&l.dot())
+                        .expect("covered leaf in log-derived map")
+                        .eff
+                }
+            })
+            .collect();
+
         let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
             .map(|ty| (ty, applicability(&table, ty)))
             .collect();
@@ -1287,8 +1302,9 @@ mod tests {
         let bold_applicable = &apps[&ModifierType::Bold];
         let mut explicit: BTreeMap<ModifierType, Explicit> = BTreeMap::new();
         let (mut bold_any_applicable, mut bold_all, mut bold_any) = (false, true, false);
-        for (n, &pi) in nodes.iter().zip(&table.node_path) {
-            for (ty, m) in n.effective() {
+        for (idx, (n, &pi)) in nodes.iter().zip(&table.node_path).enumerate() {
+            let eff = effectives[idx];
+            for (ty, m) in eff {
                 if !apps.get(ty).is_some_and(|a| a[pi]) {
                     continue;
                 }
@@ -1309,7 +1325,7 @@ mod tests {
             if bold_applicable[pi] {
                 bold_any_applicable = true;
                 let bold = match n {
-                    RangeNode::Leaf(l) => map_is_bold(l.effective()),
+                    RangeNode::Leaf(_) => map_is_bold(eff),
                     RangeNode::Block(_) => false,
                 };
                 if bold {
@@ -1522,8 +1538,9 @@ mod tests {
             if let Some(rs) = sel.resolve(&view)
                 && !rs.is_collapsed()
             {
+                let leaf_map = state.log_derived_leaf_map();
                 let got = crate::modifier_state::resolve_modifier_state_in_range(&rs);
-                let want = reference_in_range(&rs);
+                let want = reference_in_range(&rs, &leaf_map);
                 proptest::prop_assert_eq!(got, want);
 
                 // leaf_groups_in_range must expand to exactly the per-leaf
@@ -1543,9 +1560,11 @@ mod tests {
                     proptest::prop_assert_eq!(g.first, dots[i]);
                     proptest::prop_assert_eq!(g.last, dots[i + g.count - 1]);
                     for &dot in &dots[i..i + g.count] {
-                        let leaf = view.leaf(dot).expect("covered leaf resolves");
-                        proptest::prop_assert_eq!(leaf.effective(), g.effective);
-                        proptest::prop_assert_eq!(leaf.node_type(), g.leaf_type);
+                        let truth = leaf_map.get(&dot).expect("covered leaf resolves");
+                        proptest::prop_assert_eq!(&*truth.eff, g.effective);
+                        proptest::prop_assert_eq!(truth.leaf_type, g.leaf_type);
+                        proptest::prop_assert_eq!(&*truth.own, g.own);
+                        proptest::prop_assert_eq!(truth.style.as_ref(), g.style);
                     }
                     i += g.count;
                 }

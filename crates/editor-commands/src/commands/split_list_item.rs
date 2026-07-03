@@ -51,15 +51,20 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     // item with the formatting intact.
     let tail: Vec<(char, Vec<Modifier>)> = paragraph
         .children()
+        .enumerate()
         .skip(split_index)
-        .filter_map(|c| match c {
+        .filter_map(|(slot, c)| match c {
             ChildView::Leaf(l) => l.as_char().map(|ch| {
-                let mods = l
-                    .own_modifiers()
-                    .iter()
-                    .filter(|(_, o)| !o.from_style)
-                    .map(|(_, o)| o.value.clone())
-                    .collect();
+                let mods: Vec<Modifier> = paragraph
+                    .leaf_state_at(slot)
+                    .map(|s| {
+                        s.own
+                            .values()
+                            .filter(|o| !o.from_style)
+                            .map(|o| o.value.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 (ch, mods)
             }),
             ChildView::Block(_) => None,

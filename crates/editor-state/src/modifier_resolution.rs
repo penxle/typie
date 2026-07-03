@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, EffectiveSources, Expand, ExplicitEffect, LeafView, Modifier,
+    ChildView, DocView, EffectiveSources, Expand, ExplicitEffect, LeafStateRef, LeafView, Modifier,
     ModifierAttrLog, ModifierType, Node, NodeType, NodeView, ProjectedDoc, Schema,
     resolve_effective,
 };
@@ -108,12 +108,17 @@ pub(crate) fn resolve_caret_modifiers(
         return BTreeMap::new();
     };
     let children: Vec<ChildView> = host.children().collect();
-    let left = pos
-        .offset
-        .checked_sub(1)
-        .and_then(|i| children.get(i))
-        .and_then(char_leaf);
-    let right = children.get(pos.offset).and_then(char_leaf);
+    // The adjacent char leaves are identified from the child list; their derived
+    // state comes from the run segments.
+    let left = match pos.offset.checked_sub(1) {
+        Some(i) if children.get(i).and_then(char_leaf).is_some() => host.leaf_state_at(i),
+        _ => None,
+    };
+    let right = if children.get(pos.offset).and_then(char_leaf).is_some() {
+        host.leaf_state_at(pos.offset)
+    } else {
+        None
+    };
 
     let mut out = if left.is_some() || right.is_some() {
         non_empty(&host, pos, left, right, ctx)
@@ -186,19 +191,19 @@ fn empty_or_structural(
 fn non_empty(
     host: &NodeView,
     pos: &Position,
-    left: Option<LeafView>,
-    right: Option<LeafView>,
+    left: Option<LeafStateRef>,
+    right: Option<LeafStateRef>,
     ctx: &CaretCtx,
 ) -> BTreeMap<ModifierType, Modifier> {
     if let (Some(l), Some(r)) = (&left, &right)
-        && l.effective() == r.effective()
+        && l.eff == r.eff
     {
-        return r.effective().clone();
+        return r.eff.clone();
     }
 
     let inherited = inherited_over(&self_path(host), ctx);
     let downstream = pos.affinity == Affinity::Downstream;
-    let (refleaf, start, carry): (LeafView, bool, Option<LeafView>) = match (right, left) {
+    let (refleaf, start, carry): (LeafStateRef, bool, Option<LeafStateRef>) = match (right, left) {
         (Some(r), Some(l)) => {
             if downstream {
                 (r, true, Some(l))
@@ -212,7 +217,7 @@ fn non_empty(
     };
 
     let mut out: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
-    for (ty, om) in refleaf.own_modifiers() {
+    for (ty, om) in refleaf.own {
         let keep = match &Schema::modifier_spec(*ty).expand {
             Expand::Before => start,
             Expand::After => !start,
@@ -224,7 +229,7 @@ fn non_empty(
         }
     }
     if let Some(c) = &carry {
-        for (ty, om) in c.own_modifiers() {
+        for (ty, om) in c.own {
             if matches!(
                 &Schema::modifier_spec(*ty).expand,
                 Expand::After | Expand::Both
@@ -233,7 +238,7 @@ fn non_empty(
             }
         }
     }
-    let ref_eff = refleaf.effective();
+    let ref_eff = refleaf.eff;
     for (ty, m) in &inherited {
         if ref_eff.contains_key(ty) {
             out.entry(*ty).or_insert_with(|| m.clone());
@@ -1021,14 +1026,18 @@ mod tests {
                 let l = char_leaf(&kids[i - 1]);
                 let r = char_leaf(&kids[i]);
                 if let (Some(l), Some(r)) = (l, r)
-                    && l.effective() == r.effective()
+                    && let (Some(le), Some(re)) = (
+                        view.leaf_state_by_dot_slow(l.dot()).map(|s| s.eff),
+                        view.leaf_state_by_dot_slow(r.dot()).map(|s| s.eff),
+                    )
+                    && le == re
                 {
                     let out = resolve_caret_modifiers(
                         &Position { node: p, offset: i, affinity: Affinity::Downstream },
                         &c,
                         &[],
                     );
-                    proptest::prop_assert_eq!(&out, r.effective());
+                    proptest::prop_assert_eq!(&out, re);
                 }
             }
         }

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Modifier, ModifierType, NodeType, NodeView};
+use editor_model::{ChildView, DocView, Modifier, ModifierType, NodeType, NodeView, OwnModifier};
 
 use crate::{Position, selection::ResolvedSelection};
 
@@ -129,11 +129,13 @@ fn walk_blocks<'a>(node: &NodeView<'a>, rs: &ResolvedSelection<'a>, out: &mut Ve
     }
 }
 
-/// The direct leaf children of `block` covered by the selection, in order.
+/// The direct leaf children of `block` covered by the selection, in order, each
+/// paired with its child slot (so callers can read segment state positionally via
+/// [`NodeView::leaf_state_at`] instead of an `O(K)` dot lookup).
 pub fn leaves_in_block_range<'a>(
     rs: &ResolvedSelection<'a>,
     block: &NodeView<'a>,
-) -> Vec<editor_model::LeafView<'a>> {
+) -> Vec<(usize, editor_model::LeafView<'a>)> {
     let from = rs.from().path();
     let to = rs.to().path();
     let base = node_path(block);
@@ -148,7 +150,7 @@ pub fn leaves_in_block_range<'a>(
             let mut end = base.clone();
             end.push(i + 1);
             if from <= start.as_slice() && end.as_slice() <= to {
-                out.push(l);
+                out.push((i, l));
             }
         }
     }
@@ -161,6 +163,8 @@ pub struct LeafGroup<'a> {
     pub host: Dot,
     pub leaf_type: NodeType,
     pub effective: &'a BTreeMap<ModifierType, Modifier>,
+    pub own: &'a BTreeMap<ModifierType, OwnModifier>,
+    pub style: Option<&'a String>,
     pub first: Dot,
     pub last: Dot,
     pub count: usize,
@@ -179,55 +183,78 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
         }
         // The bulk path pairs run segments with leaf dots/types from the child
         // list; it is sound only when the segments cover exactly the block's
-        // leaves.
+        // leaves. Each segment is already uniform in leaf type, effective, own,
+        // and style, so it maps to one group.
         let bulk = contains_subtree(rs, &b)
-            && b.run_groups().map(|(_, n)| n).sum::<usize>() == b.leaf_child_count();
+            && b.seg_groups().map(|s| s.count).sum::<usize>() == b.leaf_child_count();
         if bulk {
-            let mut leaves = b
-                .children()
-                .filter_map(|c| match c {
-                    ChildView::Leaf(l) => Some(l),
-                    ChildView::Block(_) => None,
-                })
-                .peekable();
-            for (eff, len) in b.run_groups() {
-                let mut remaining = len;
-                while remaining > 0 {
-                    let Some(l) = leaves.next() else {
+            let mut leaves = b.children().filter_map(|c| match c {
+                ChildView::Leaf(l) => Some(l),
+                ChildView::Block(_) => None,
+            });
+            for seg in b.seg_groups() {
+                let Some(l) = leaves.next() else {
+                    break;
+                };
+                let ty = l.node_type();
+                let first = l.dot();
+                let mut last = first;
+                let mut n = 1;
+                while n < seg.count {
+                    let Some(next) = leaves.next() else {
                         break;
                     };
-                    let ty = l.node_type();
-                    let first = l.dot();
-                    let mut last = first;
-                    let mut n = 1;
-                    while n < remaining && leaves.peek().is_some_and(|p| p.node_type() == ty) {
-                        last = leaves.next().expect("peeked").dot();
-                        n += 1;
-                    }
-                    out.push(LeafGroup {
-                        host: b.id(),
-                        leaf_type: ty,
-                        effective: eff,
-                        first,
-                        last,
-                        count: n,
-                    });
-                    remaining -= n;
+                    last = next.dot();
+                    n += 1;
                 }
+                out.push(LeafGroup {
+                    host: b.id(),
+                    leaf_type: ty,
+                    effective: seg.eff.as_ref(),
+                    own: seg.own.as_ref(),
+                    style: seg.style.as_ref(),
+                    first,
+                    last,
+                    count: n,
+                });
             }
         } else {
-            for l in leaves_in_block_range(rs, &b) {
+            let from = rs.from().path();
+            let to = rs.to().path();
+            let base = node_path(&b);
+            for (i, child) in b.children().enumerate() {
+                let ChildView::Leaf(l) = child else {
+                    continue;
+                };
+                let mut start = base.clone();
+                start.push(i);
+                let mut end = base.clone();
+                end.push(i + 1);
+                if !(from <= start.as_slice() && end.as_slice() <= to) {
+                    continue;
+                }
                 let ty = l.node_type();
-                let eff = l.effective();
+                let Some(st) = b.leaf_state_at(i) else {
+                    continue;
+                };
+                let style = b.leaf_style_at(i);
                 match out.last_mut() {
-                    Some(g) if g.host == b.id() && g.leaf_type == ty && g.effective == eff => {
+                    Some(g)
+                        if g.host == b.id()
+                            && g.leaf_type == ty
+                            && g.effective == st.eff
+                            && g.own == st.own
+                            && g.style == style =>
+                    {
                         g.last = l.dot();
                         g.count += 1;
                     }
                     _ => out.push(LeafGroup {
                         host: b.id(),
                         leaf_type: ty,
-                        effective: eff,
+                        effective: st.eff,
+                        own: st.own,
+                        style,
                         first: l.dot(),
                         last: l.dot(),
                         count: 1,
@@ -320,7 +347,7 @@ mod tests {
     fn leaves_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<editor_model::LeafView<'a>> {
         let mut out = Vec::new();
         for b in blocks_in_range(rs) {
-            out.extend(leaves_in_block_range(rs, &b));
+            out.extend(leaves_in_block_range(rs, &b).into_iter().map(|(_, l)| l));
         }
         out
     }

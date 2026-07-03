@@ -65,12 +65,18 @@ fn collect_for_block(block: &NodeView, font_registry: &FontRegistry, output: &mu
             }
         }
     } else {
-        for leaf in leaves {
+        for (slot, child) in block.children().enumerate() {
+            let ChildView::Leaf(leaf) = child else {
+                continue;
+            };
             let Some(ch) = leaf.as_char() else {
                 continue;
             };
+            let Some(st) = block.leaf_state_at(slot) else {
+                continue;
+            };
             has_char = true;
-            let eff = leaf.effective();
+            let eff = st.eff;
             let (family, weight) = font_from_effective(eff);
             let cps = output
                 .entry((family, weight))

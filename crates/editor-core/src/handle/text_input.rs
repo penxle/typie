@@ -95,9 +95,9 @@ fn uniform_own_text_modifiers_in_range(
             return None;
         };
         for leaf_dot in leaves {
-            let leaf = view.leaf(leaf_dot)?;
-            let mut modifiers: Vec<Modifier> = leaf
-                .own_modifiers()
+            let st = view.leaf_state_by_dot_slow(leaf_dot)?;
+            let mut modifiers: Vec<Modifier> = st
+                .own
                 .values()
                 .filter(|o| !o.from_style)
                 .map(|o| o.value.clone())

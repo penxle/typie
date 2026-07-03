@@ -265,16 +265,15 @@ fn block_fingerprint(state: &State, block: &editor_model::NodeView, out: &mut Ve
         marker,
         mods
     ));
-    for child in block.children() {
+    for (slot, child) in block.children().enumerate() {
         match child {
             editor_model::ChildView::Block(b) => block_fingerprint(state, &b, out),
             editor_model::ChildView::Leaf(l) => {
                 let lstyle = node_style(state, l.dot());
-                let mut lmods: Vec<editor_model::Modifier> = l
-                    .own_modifiers()
-                    .values()
-                    .map(|o| o.value.clone())
-                    .collect();
+                let mut lmods: Vec<editor_model::Modifier> = block
+                    .leaf_state_at(slot)
+                    .map(|st| st.own.values().map(|o| o.value.clone()).collect())
+                    .unwrap_or_default();
                 lmods.sort_by_key(editor_model::Modifier::as_type);
                 let content = match l.as_char() {
                     Some(c) => format!("char {c:?}"),

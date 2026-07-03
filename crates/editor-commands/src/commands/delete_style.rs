@@ -1,9 +1,19 @@
+use std::collections::BTreeMap;
+
 use editor_crdt::Dot;
-use editor_model::{ChildView, ContextExpr, LeafView, Modifier, ModifierType, NodeType, NodeView};
+use editor_model::{
+    ChildView, ContextExpr, Modifier, ModifierType, NodeType, NodeView, OwnModifier,
+};
 use editor_transaction::Transaction;
 
 use crate::helpers::{capture_style_entry, is_text_applicable};
 use crate::{CommandError, CommandResult};
+
+/// Whether the leaf carries `ty` as an explicit (non-style) own modifier — the
+/// segment-map equivalent of `LeafView::own_no_style(ty).is_some()`.
+fn has_explicit_own(own: &BTreeMap<ModifierType, OwnModifier>, ty: ModifierType) -> bool {
+    own.get(&ty).is_some_and(|o| !o.from_style)
+}
 
 enum Bake {
     BlockModifier { block: Dot, modifier: Modifier },
@@ -54,22 +64,25 @@ pub fn delete_style(tr: &mut Transaction, style_id: String) -> CommandResult {
             };
             let dot = op.dot();
             if let Some(block) = view.node(*elem) {
-                let leaves: Vec<LeafView> = block
-                    .descendants()
-                    .filter_map(|c| match c {
-                        ChildView::Leaf(l) => Some(l),
-                        _ => None,
-                    })
-                    .collect();
+                // Every leaf in the subtree is a direct inline child of the block or
+                // one of its descendant blocks; each block serves own maps from segments.
+                let leaves: Vec<(Dot, &BTreeMap<ModifierType, OwnModifier>)> =
+                    std::iter::once(block)
+                        .chain(block.descendants().filter_map(|c| match c {
+                            ChildView::Block(b) => Some(b),
+                            ChildView::Leaf(_) => None,
+                        }))
+                        .flat_map(|b| b.inline().into_iter().map(|it| (it.dot, it.own_modifiers)))
+                        .collect();
                 for modifier in &style_modifiers {
                     let ty = modifier.as_type();
                     if is_text_applicable(ty) && !leaves.is_empty() {
-                        for l in &leaves {
-                            if l.own_no_style(ty).is_some() {
+                        for (dot, own) in &leaves {
+                            if has_explicit_own(own, ty) {
                                 continue;
                             }
                             out.push(Bake::LeafSpan {
-                                leaf: l.dot(),
+                                leaf: *dot,
                                 modifier: modifier.clone(),
                             });
                         }
@@ -87,13 +100,13 @@ pub fn delete_style(tr: &mut Transaction, style_id: String) -> CommandResult {
                     }
                 }
                 out.push(Bake::ClearStyle { target: *elem });
-            } else if let Some(leaf) = view.leaf(dot) {
+            } else if let Some(st) = view.leaf_state_by_dot_slow(dot) {
                 for modifier in &style_modifiers {
                     let ty = modifier.as_type();
                     if !is_text_applicable(ty) {
                         continue;
                     }
-                    if leaf.own_no_style(ty).is_some() {
+                    if has_explicit_own(st.own, ty) {
                         continue;
                     }
                     out.push(Bake::LeafSpan {

@@ -257,31 +257,6 @@ pub fn own_modifiers_for_leaf(
         .collect()
 }
 
-pub fn derive_own_modifiers(
-    tree: &BlockTree,
-    src: &EffectiveSources,
-) -> imbl::HashMap<Dot, crate::projection::LeafOwn> {
-    let mut out: imbl::HashMap<Dot, crate::projection::LeafOwn> = imbl::HashMap::new();
-    crate::span::for_each_leaf(tree, |path, leaf_type, leaf_dot| {
-        // Own modifiers come only from the leaf's own explicit spans or node style.
-        // A leaf with neither has no own modifiers, so skip building its path entirely
-        // (the common case for plain text).
-        if !src.explicit_spans.contains_key(&leaf_dot) && !src.node_styles.contains_key(&leaf_dot) {
-            return;
-        }
-        let leaf_path: Vec<NodeType> = path
-            .iter()
-            .map(|(t, _)| *t)
-            .chain(std::iter::once(leaf_type))
-            .collect();
-        let map = own_modifiers_for_leaf(leaf_dot, &leaf_path, src);
-        if !map.is_empty() {
-            out.insert(leaf_dot, crate::projection::LeafOwn::new(map));
-        }
-    });
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,6 +271,27 @@ mod tests {
                 .unwrap();
         }
         s
+    }
+
+    /// Per-leaf own-modifier maps for the whole tree (only non-empty entries),
+    /// via `own_modifiers_for_leaf`.
+    fn own_map(
+        tree: &BlockTree,
+        src: &EffectiveSources,
+    ) -> HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> {
+        let mut out = HashMap::new();
+        crate::span::for_each_leaf(tree, |path, leaf_type, leaf_dot| {
+            let leaf_path: Vec<NodeType> = path
+                .iter()
+                .map(|(t, _)| *t)
+                .chain(std::iter::once(leaf_type))
+                .collect();
+            let m = own_modifiers_for_leaf(leaf_dot, &leaf_path, src);
+            if !m.is_empty() {
+                out.insert(leaf_dot, m);
+            }
+        });
+        out
     }
 
     #[test]
@@ -1111,7 +1107,7 @@ mod tests {
             node_attrs: &node_attrs,
         };
 
-        let own = derive_own_modifiers(&tree, &src);
+        let own = own_map(&tree, &src);
         assert_eq!(
             own.get(&a).and_then(|m| m.get(&ModifierType::Bold)),
             Some(&OwnModifier {
@@ -1168,7 +1164,7 @@ mod tests {
             node_attrs: &node_attrs,
         };
 
-        let own = derive_own_modifiers(&tree, &src);
+        let own = own_map(&tree, &src);
         assert_eq!(
             own.get(&a).and_then(|m| m.get(&ModifierType::FontSize)),
             Some(&OwnModifier {
@@ -1213,7 +1209,7 @@ mod tests {
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let own = derive_own_modifiers(&tree, &src);
+        let own = own_map(&tree, &src);
         assert_eq!(
             own.get(&a).and_then(|m| m.get(&ModifierType::Bold)),
             Some(&OwnModifier {

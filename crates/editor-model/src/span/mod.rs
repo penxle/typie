@@ -3,18 +3,21 @@ pub use derive::*;
 
 mod effective;
 pub use effective::{
-    EffectiveSources, OwnEffect, OwnModifier, derive_block_effective, derive_own_modifiers,
-    own_modifiers_for_leaf, resolve_effective,
+    EffectiveSources, OwnEffect, OwnModifier, derive_block_effective, own_modifiers_for_leaf,
+    resolve_effective,
 };
-
-mod run;
-pub use run::*;
 
 mod anchor;
 pub use anchor::*;
 
 mod coverage;
 pub use coverage::*;
+
+mod covering;
+pub use covering::*;
+
+mod segs;
+pub use segs::*;
 
 use editor_crdt::{CrdtError, Dot};
 use serde::{Deserialize, Serialize};

@@ -210,6 +210,31 @@ mod tests {
     };
     use editor_crdt::{Changeset, InputEvent, LwwRegOp, OrMapOp};
 
+    /// A leaf's effective modifiers, read from the authoritative segment index.
+    fn leaf_eff(
+        pd: &crate::ProjectedDoc,
+        dot: Dot,
+    ) -> std::collections::BTreeMap<crate::ModifierType, Modifier> {
+        crate::DocView::new(pd)
+            .leaf_state_by_dot_slow(dot)
+            .map(|s| s.eff.clone())
+            .unwrap_or_default()
+    }
+
+    /// Total leaf count across the tree.
+    fn leaf_count(pd: &crate::ProjectedDoc) -> usize {
+        fn count(tree: &crate::BlockTree, n: &crate::BlockNode) -> usize {
+            n.children
+                .iter()
+                .map(|c| match c {
+                    crate::Child::Leaf { .. } => 1,
+                    crate::Child::Block(id) => tree.get(*id).map(|b| count(tree, b)).unwrap_or(0),
+                })
+                .sum()
+        }
+        pd.tree.root_node().map(|r| count(&pd.tree, r)).unwrap_or(0)
+    }
+
     fn round_trip<T: editor_crdt::wire::Wire>(value: &T) -> editor_crdt::wire::WireResult<T> {
         use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireError};
         let mut cc = CollectCtx::new();
@@ -475,7 +500,7 @@ mod tests {
         let pd = project_document(&logs).unwrap();
         assert_eq!(pd.tree.root_node().iter().count(), 1);
         assert_eq!(pd.tree.root_node().unwrap().node_type, NodeType::Root);
-        assert_eq!(pd.effective.len(), 2);
+        assert_eq!(leaf_count(&pd), 2);
     }
 
     #[test]
@@ -508,9 +533,7 @@ mod tests {
         .unwrap();
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
         assert_eq!(
-            pd.effective
-                .get(&c)
-                .and_then(|m| m.get(&crate::ModifierType::Bold)),
+            leaf_eff(&pd, c).get(&crate::ModifierType::Bold),
             Some(&crate::Modifier::Bold)
         );
     }
@@ -590,7 +613,7 @@ mod tests {
         .unwrap();
         let _b = g.add_mut(seq_ins(2, SeqItem::Char('b'))).unwrap().id;
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
-        assert_eq!(pd.effective.len(), 2);
+        assert_eq!(leaf_count(&pd), 2);
     }
 
     #[test]
@@ -678,7 +701,7 @@ mod tests {
         let g: OpGraph<EditOp> = OpGraph::new();
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
         assert_eq!(pd.tree.root_node().iter().count(), 1);
-        assert!(pd.effective.is_empty());
+        assert_eq!(leaf_count(&pd), 0);
     }
 
     #[test]

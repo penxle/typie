@@ -1,5 +1,6 @@
 use editor_model::*;
 use editor_state::{Affinity, PendingModifier, State};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use crate::labeler::Labeler;
@@ -11,13 +12,16 @@ enum Disp<'a> {
         modifiers: Vec<Modifier>,
         style: Option<String>,
     },
-    Atom(LeafView<'a>),
+    Atom {
+        leaf: LeafView<'a>,
+        modifiers: Vec<Modifier>,
+    },
 }
 
 fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>> {
     let mut out: Vec<Disp<'a>> = Vec::new();
     let mut run: Option<(String, Vec<Modifier>, Option<String>)> = None;
-    for child in node.children() {
+    for (slot, child) in node.children().enumerate() {
         match child {
             ChildView::Block(b) => {
                 if let Some((text, modifiers, style)) = run.take() {
@@ -31,7 +35,10 @@ fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>>
             }
             ChildView::Leaf(l) => match l.as_char() {
                 Some(c) => {
-                    let modifiers = explicit_leaf_mods(pd, l.dot());
+                    let modifiers = node
+                        .leaf_state_at(slot)
+                        .map(|s| explicit_leaf_mods(s.own))
+                        .unwrap_or_default();
                     let style = pd.node_styles.get(&l.dot()).and_then(|o| o.clone());
                     let extend = matches!(&run, Some((_, m, s)) if *m == modifiers && *s == style);
                     if extend {
@@ -57,7 +64,11 @@ fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>>
                             style,
                         });
                     }
-                    out.push(Disp::Atom(l));
+                    let modifiers = node
+                        .leaf_state_at(slot)
+                        .map(|s| explicit_leaf_mods(s.own))
+                        .unwrap_or_default();
+                    out.push(Disp::Atom { leaf: l, modifiers });
                 }
             },
         }
@@ -93,17 +104,12 @@ fn explicit_block_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier
 
 /// Modifiers explicitly applied to a leaf via spans (excluding style-derived and
 /// inherited modifiers).
-fn explicit_leaf_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier> {
-    let mut mods: Vec<Modifier> = pd
-        .own_modifiers
-        .get(&dot)
-        .map(|m| {
-            m.values()
-                .filter(|o| !o.from_style)
-                .map(|o| o.value.clone())
-                .collect()
-        })
-        .unwrap_or_default();
+fn explicit_leaf_mods(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
+    let mut mods: Vec<Modifier> = own
+        .values()
+        .filter(|o| !o.from_style)
+        .map(|o| o.value.clone())
+        .collect();
     mods.sort_by_key(|m| m.as_type());
     mods
 }
@@ -207,7 +213,7 @@ fn write_macro_node(
             write_modifiers_macro(modifiers, output);
             output.push('\n');
         }
-        Disp::Atom(leaf) => {
+        Disp::Atom { leaf, modifiers } => {
             if let Some(l) = labeler.label(leaf.dot()) {
                 write!(output, "{l}: ").unwrap();
             }
@@ -217,7 +223,7 @@ fn write_macro_node(
 
             write_leaf_style_macro(leaf, pd, output);
             write_node_attrs_macro(&atom_node(leaf, pd), output);
-            write_modifiers_macro(&explicit_leaf_mods(pd, leaf.dot()), output);
+            write_modifiers_macro(modifiers, output);
             output.push('\n');
         }
     }

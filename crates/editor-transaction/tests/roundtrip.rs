@@ -176,7 +176,11 @@ fn inline_span_modifier_bolds_range_and_inverts() {
     let view = state2.view();
     let bold_at = |off: usize| -> bool {
         let d = char_dot(&state2, &p1, off);
-        view.leaf(d).unwrap().effective().get(&ModifierType::Bold) == Some(&Modifier::Bold)
+        view.leaf_state_by_dot_slow(d)
+            .unwrap()
+            .eff
+            .get(&ModifierType::Bold)
+            == Some(&Modifier::Bold)
     };
     assert!(!bold_at(0), "'H' is outside the span");
     assert!(bold_at(6), "'W' is inside the span");
@@ -187,7 +191,11 @@ fn inline_span_modifier_bolds_range_and_inverts() {
     let view3 = state3.view();
     let d6 = char_dot(&state3, &p1, 6);
     assert_eq!(
-        view3.leaf(d6).unwrap().effective().get(&ModifierType::Bold),
+        view3
+            .leaf_state_by_dot_slow(d6)
+            .unwrap()
+            .eff
+            .get(&ModifierType::Bold),
         None,
         "inverse of AddSpanModifier removes the span"
     );

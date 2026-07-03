@@ -397,7 +397,7 @@ mod tests {
     fn set_node_on_root_applies_layout_mode() {
         // Layout-mode changes target the implicit root (Dot::ROOT), which is synthetic.
         // set_node must accept it as a NodeAttr target, not narrow via as_op_dot.
-        let (state, p1) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph { text("x") } } }
             selection: (p1, 0)
         };

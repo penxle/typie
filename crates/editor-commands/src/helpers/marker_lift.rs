@@ -1,5 +1,10 @@
+use std::collections::BTreeMap;
+
 use editor_crdt::Dot;
-use editor_model::{Expand, LeafView, Marker, Modifier, NodeType, Schema};
+use editor_model::{
+    ChildView, Expand, LeafView, Marker, Modifier, ModifierType, NodeType, NodeView, OwnModifier,
+    Schema,
+};
 use editor_state::State;
 use editor_transaction::Transaction;
 
@@ -23,9 +28,13 @@ pub(crate) fn capture_first_text_marker(
     }
     let first_text = first_char_leaf(&paragraph);
     let (had_text, first_text_carryable, first_text_style) = match first_text {
-        Some(leaf) => {
+        Some((slot, leaf)) => {
             let style = state.projected.node_styles().value_of(leaf.dot());
-            (true, collect_carryable(&leaf), style)
+            let carryable = paragraph
+                .leaf_state_at(slot)
+                .map(|s| collect_carryable(s.own))
+                .unwrap_or_default();
+            (true, carryable, style)
         }
         None => (false, Vec::new(), None),
     };
@@ -69,16 +78,15 @@ pub(crate) fn apply_first_text_marker_lift(
     Ok(())
 }
 
-fn first_char_leaf<'a>(paragraph: &editor_model::NodeView<'a>) -> Option<LeafView<'a>> {
-    paragraph.children().find_map(|c| match c {
-        editor_model::ChildView::Leaf(l) if l.as_char().is_some() => Some(l),
+fn first_char_leaf<'a>(paragraph: &NodeView<'a>) -> Option<(usize, LeafView<'a>)> {
+    paragraph.children().enumerate().find_map(|(i, c)| match c {
+        ChildView::Leaf(l) if l.as_char().is_some() => Some((i, l)),
         _ => None,
     })
 }
 
-fn collect_carryable(leaf: &LeafView) -> Vec<Modifier> {
-    leaf.own_modifiers()
-        .iter()
+fn collect_carryable(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
+    own.iter()
         .filter(|(_, o)| !o.from_style)
         .filter(|(t, _)| {
             matches!(

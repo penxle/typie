@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    AtomLeaf, ChildView, DocView, LeafView, Marker, Modifier, ModifierType, NodeType, NodeView,
+    AtomLeaf, ChildView, DocView, Marker, Modifier, ModifierType, NodeType, NodeView,
 };
 use editor_state::Position;
 use editor_state::State;
@@ -28,9 +28,10 @@ enum Shape {
     },
 }
 
-fn leaf_own(l: &LeafView) -> BTreeMap<ModifierType, Modifier> {
-    l.own_modifiers()
-        .iter()
+fn leaf_own_from(
+    own: &BTreeMap<ModifierType, editor_model::OwnModifier>,
+) -> BTreeMap<ModifierType, Modifier> {
+    own.iter()
         .filter(|(_, o)| !o.from_style)
         .map(|(t, o)| (*t, o.value.clone()))
         .collect()
@@ -50,11 +51,14 @@ fn block_modifiers(state: &State, id: Dot) -> BTreeMap<ModifierType, Modifier> {
 
 fn shape_of(state: &State, nv: &NodeView) -> Shape {
     let mut children = Vec::new();
-    for c in nv.children() {
+    for (slot, c) in nv.children().enumerate() {
         match c {
             ChildView::Block(b) => children.push(shape_of(state, &b)),
             ChildView::Leaf(l) => {
-                let modifiers = leaf_own(&l);
+                let modifiers = nv
+                    .leaf_state_at(slot)
+                    .map(|st| leaf_own_from(st.own))
+                    .unwrap_or_default();
                 let style = node_style(state, l.dot());
                 if let Some(ch) = l.as_char() {
                     children.push(Shape::Char {

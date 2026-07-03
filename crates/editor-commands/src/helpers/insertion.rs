@@ -151,9 +151,9 @@ fn apply_inline_modifiers(
 
     let actual: BTreeMap<ModifierType, Modifier> = {
         let view = tr.state().view();
-        match view.leaf(first) {
-            Some(l) => l
-                .own_modifiers()
+        match view.leaf_state_by_dot_slow(first) {
+            Some(st) => st
+                .own
                 .iter()
                 .filter(|(_, o)| !o.from_style)
                 .map(|(t, o)| (*t, o.value.clone()))

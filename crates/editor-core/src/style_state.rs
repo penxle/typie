@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+
 use editor_common::Tri;
 use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::{PendingStyle, Position, State, inline_leaf_dots_in_range};
+use editor_model::{ChildView, DocView, LeafStateRef, Modifier, ModifierType, OwnModifier};
+use editor_state::{PendingStyle, Position, State, leaf_groups_in_range};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -84,9 +86,14 @@ fn style_modifier_types(state: &State, style_id: &str) -> Vec<ModifierType> {
         .unwrap_or_default()
 }
 
-fn leaf_diverges(view: &DocView, dot: Dot, style_types: &[ModifierType]) -> bool {
-    view.own_modifiers_of(dot)
-        .iter()
+fn caret_leaf_state<'a>(view: &'a DocView<'a>, pos: Position) -> Option<LeafStateRef<'a>> {
+    let block = view.node(pos.node)?;
+    let idx = if pos.offset > 0 { pos.offset - 1 } else { 0 };
+    block.leaf_state_at(idx)
+}
+
+fn own_diverges(own: &BTreeMap<ModifierType, OwnModifier>, style_types: &[ModifierType]) -> bool {
+    own.iter()
         .filter(|(_, own)| !own.from_style)
         .any(|(ty, _)| style_types.contains(ty))
 }
@@ -107,17 +114,16 @@ pub fn resolve_style_divergence(state: &State) -> bool {
     let view = state.view();
 
     if sel.is_collapsed() {
-        return caret_leaf(&view, sel.head)
-            .is_some_and(|dot| leaf_diverges(&view, dot, &style_types));
+        return caret_leaf_state(&view, sel.head)
+            .is_some_and(|st| own_diverges(st.own, &style_types));
     }
 
     let Some(rs) = sel.resolve(&view) else {
         return false;
     };
-    let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position());
-    leaves
+    leaf_groups_in_range(&rs)
         .iter()
-        .any(|&dot| leaf_diverges(&view, dot, &style_types))
+        .any(|g| own_diverges(g.own, &style_types))
 }
 
 pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
@@ -144,13 +150,12 @@ pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
     let Some(rs) = sel.resolve(&view) else {
         return Tri::Absent;
     };
-    let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position());
 
     let mut canonical: Option<String> = None;
     let mut absent_seen = false;
     let mut mixed = false;
-    for dot in leaves {
-        let style = leaf_style(state, dot);
+    for g in leaf_groups_in_range(&rs) {
+        let style = g.style.cloned();
         match (style, &canonical) {
             (Some(s), Some(c)) if &s == c => {}
             (Some(_), Some(_)) => mixed = true,

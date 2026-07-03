@@ -309,6 +309,11 @@ impl ChildList {
     pub fn leaf_count(&self) -> usize {
         self.tree.total_size() as usize
     }
+    /// Number of direct leaf children in slots `[0, slot)` — the leaf ordinal a
+    /// leaf at `slot` has inside the block's segment tree. `O(log K)`.
+    pub fn leaf_ordinal_at(&self, slot: usize) -> usize {
+        self.tree.offset_before(slot) as usize
+    }
     /// Replace the child at `slot`. `O(log K)`.
     pub fn set(&mut self, slot: usize, c: Child) {
         let s = child_leaf_size(&c);
@@ -653,6 +658,26 @@ mod tests {
 
     fn valid(t: &RawTree) -> Result<(), SchemaError> {
         validate_block_tree(&BlockTree::from_raw(t))
+    }
+
+    #[test]
+    fn leaf_ordinal_at_counts_leaves_before_slot() {
+        let leaf = |c: char| Child::Leaf {
+            id: Dot::new(1, 0),
+            item: SeqItem::Char(c),
+        };
+        let children: ChildList = vec![
+            leaf('a'),
+            Child::Block(Dot::new(1, 1)),
+            leaf('b'),
+            leaf('c'),
+        ]
+        .into_iter()
+        .collect();
+        let got: Vec<usize> = (0..=children.len())
+            .map(|slot| children.leaf_ordinal_at(slot))
+            .collect();
+        assert_eq!(got, vec![0, 1, 1, 2, 3]);
     }
 
     #[test]

@@ -51,7 +51,10 @@ fn resolve_modifier_span(
     }
     let children: Vec<ChildView> = node.children().collect();
 
-    let has_value = |i: usize| matches!(children.get(i), Some(ChildView::Leaf(l)) if l.effective().get(&ty).is_some());
+    let has_value = |i: usize| {
+        node.leaf_state_at(i)
+            .is_some_and(|st| st.eff.get(&ty).is_some())
+    };
 
     let seed = if has_value(pos.offset) {
         pos.offset
@@ -60,12 +63,14 @@ fn resolve_modifier_span(
         if has_value(left) { left } else { return None }
     };
 
-    let reference = match &children[seed] {
-        ChildView::Leaf(l) => l.effective().get(&ty)?.clone(),
-        _ => return None,
-    };
+    let reference = node
+        .leaf_state_at(seed)
+        .and_then(|st| st.eff.get(&ty).cloned())?;
 
-    let same = |i: usize| matches!(children.get(i), Some(ChildView::Leaf(l)) if l.effective().get(&ty) == Some(&reference));
+    let same = |i: usize| {
+        node.leaf_state_at(i)
+            .is_some_and(|st| st.eff.get(&ty) == Some(&reference))
+    };
 
     let mut start = seed;
     while start > 0 && same(start - 1) {
@@ -128,8 +133,8 @@ fn edit_modifier_range(
             return Ok(false);
         };
         let present = view
-            .leaf(first)
-            .and_then(|l| l.effective().get(&modifier_type).cloned());
+            .leaf_state_by_dot_slow(first)
+            .and_then(|st| st.eff.get(&modifier_type).cloned());
         (first, last, present)
     };
 

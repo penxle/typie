@@ -212,31 +212,6 @@ pub fn derive_explicit_effect(
         .collect()
 }
 
-/// Like [`derive_explicit_effect`], but reads each leaf's covering span set from a
-/// precomputed [`LeafSpanCoverage`] instead of resolving every span against the
-/// checkout. A deletion never changes a surviving leaf's covering set (it can't
-/// reorder survivors relative to a span's anchors), so a bulk-delete reprojection can
-/// carry the old coverage forward and derive explicit effects in `O(leaves · covering)`
-/// — independent of the (possibly huge, now-dead) span log.
-pub fn derive_explicit_effect_from_coverage(
-    tree: &BlockTree,
-    coverage: &super::LeafSpanCoverage,
-    spans: &SpanLog,
-) -> Vec<(Dot, BTreeMap<ModifierType, ExplicitEffect>)> {
-    leaves_with_paths(tree)
-        .into_iter()
-        .map(|(leaf_path, dot)| {
-            let covering = coverage.covering(dot);
-            let ex = if covering.is_empty() {
-                BTreeMap::new()
-            } else {
-                super::explicit_from_covering(covering, spans, &leaf_path)
-            };
-            (dot, ex)
-        })
-        .collect()
-}
-
 pub fn derive_effective(
     elements: &[(Dot, SeqItem)],
     tree: &BlockTree,
@@ -256,70 +231,6 @@ pub fn derive_effective(
             (dot, eff)
         })
         .collect()
-}
-
-pub fn derive_full_effective(
-    tree: &BlockTree,
-    src: &crate::span::EffectiveSources,
-) -> Vec<(Dot, crate::projection::LeafEff)> {
-    // A leaf's effective set depends only on its block path, leaf type, and its own
-    // per-leaf style inputs (explicit spans / node style / node attr); the block- and
-    // ancestor-level inputs are shared by all leaves of a block. So consecutive leaves
-    // that agree on all of these — a plain run or a uniformly-styled span run alike —
-    // resolve identically. Compute `resolve_effective` once per such run and clone it
-    // for the rest, instead of re-running the full per-modifier resolve for every char.
-    struct CacheKey {
-        block_path: Vec<(NodeType, Option<Dot>)>,
-        leaf_type: NodeType,
-        ex: Option<BTreeMap<ModifierType, ExplicitEffect>>,
-        ns: Option<Option<String>>,
-        na: Option<crate::Node>,
-    }
-    let mut out = Vec::new();
-    let mut cache: Option<(CacheKey, crate::projection::LeafEff)> = None;
-    for_each_leaf(tree, |path, leaf_type, leaf_dot| {
-        let ex = src.explicit_spans.get(&leaf_dot);
-        let ns = src.node_styles.get(&leaf_dot);
-        let na = src.node_attrs.get(&leaf_dot);
-        let hit = match &cache {
-            Some((k, _)) => {
-                k.leaf_type == leaf_type
-                    && k.block_path.as_slice() == path
-                    && k.ex.as_ref() == ex
-                    && k.ns.as_ref() == ns
-                    && k.na.as_ref() == na
-            }
-            None => false,
-        };
-        let eff = if hit {
-            cache
-                .as_ref()
-                .expect("cache hit implies populated")
-                .1
-                .clone()
-        } else {
-            let e = crate::projection::LeafEff::new(crate::span::resolve_effective(
-                path,
-                Some(leaf_dot),
-                leaf_type,
-                true,
-                src,
-            ));
-            cache = Some((
-                CacheKey {
-                    block_path: path.to_vec(),
-                    leaf_type,
-                    ex: ex.cloned(),
-                    ns: ns.cloned(),
-                    na: na.cloned(),
-                },
-                e.clone(),
-            ));
-            e
-        };
-        out.push((leaf_dot, eff));
-    });
-    out
 }
 
 #[cfg(test)]
@@ -495,10 +406,12 @@ mod tests {
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        derive_full_effective(&tree, &src)
-            .into_iter()
-            .map(|(d, e)| (d, (*e).clone()))
-            .collect()
+        let mut out = BTreeMap::new();
+        for_each_leaf(&tree, |path, leaf_type, leaf_dot| {
+            let e = crate::span::resolve_effective(path, Some(leaf_dot), leaf_type, true, &src);
+            out.insert(leaf_dot, e);
+        });
+        out
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Modifier, ModifierType};
+use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 
@@ -46,15 +46,8 @@ fn provided_and_override(
     };
     let block_eff = node.effective().get(&ty).cloned();
     let leaf_idx = offset.saturating_sub(1);
-    let leaf = match node.child_at(leaf_idx) {
-        Some(ChildView::Leaf(l)) => Some(l),
-        _ => None,
-    };
-    let own = leaf.as_ref().and_then(|l| {
-        l.own_modifiers()
-            .get(&ty)
-            .map(|o| (o.value.clone(), o.from_style))
-    });
+    let st = node.leaf_state_at(leaf_idx);
+    let own = st.and_then(|s| s.own.get(&ty).map(|o| (o.value.clone(), o.from_style)));
     let has_explicit_override = matches!(&own, Some((_, false)));
     let provided = match &own {
         // The leaf's own style supplies the value directly.
@@ -65,10 +58,7 @@ fn provided_and_override(
         // No own modifier: the leaf inherits the value (e.g. from an ancestor's
         // node style). Text-target modifiers like FontSize don't surface on the
         // block's own effective map, so read the leaf's effective value.
-        None => leaf
-            .as_ref()
-            .and_then(|l| l.effective().get(&ty).cloned())
-            .or(block_eff),
+        None => st.and_then(|s| s.eff.get(&ty).cloned()).or(block_eff),
     };
     (provided, has_explicit_override)
 }
@@ -370,11 +360,14 @@ mod tests {
 
         let view = actual.view();
         let node = view.node(p1).unwrap();
-        let Some(ChildView::Leaf(leaf)) = node.child_at(0) else {
+        let Some(ChildView::Leaf(_leaf)) = node.child_at(0) else {
             panic!("expected leaf at offset 0");
         };
         assert_eq!(
-            leaf.effective().get(&ModifierType::FontSize),
+            node.leaf_state_at(0)
+                .unwrap()
+                .eff
+                .get(&ModifierType::FontSize),
             Some(&Modifier::FontSize { value: 1600 }),
             "cancelling the override must fall back to the inherited value, not None"
         );

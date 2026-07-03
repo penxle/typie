@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, Modifier, ModifierType};
+use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
@@ -52,15 +52,15 @@ fn caret_own_text_types(view: &DocView, pos_node: Dot, offset: usize) -> Vec<Mod
         return Vec::new();
     };
     let idx = offset.saturating_sub(1);
-    match node.child_at(idx) {
-        Some(ChildView::Leaf(l)) => l
-            .own_modifiers()
+    match node.leaf_state_at(idx) {
+        Some(st) => st
+            .own
             .iter()
             .filter(|(_, o)| !o.from_style)
             .map(|(t, _)| *t)
             .filter(|&t| is_text_applicable(t))
             .collect(),
-        _ => Vec::new(),
+        None => Vec::new(),
     }
 }
 

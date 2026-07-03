@@ -805,11 +805,17 @@ mod tests {
         );
 
         assert_eq!(
-            view.leaf(a).unwrap().effective().get(&ModifierType::Bold),
+            view.leaf_state_by_dot_slow(a)
+                .unwrap()
+                .eff
+                .get(&ModifierType::Bold),
             Some(&Modifier::Bold)
         );
         assert_eq!(
-            view.leaf(b).unwrap().effective().get(&ModifierType::Bold),
+            view.leaf_state_by_dot_slow(b)
+                .unwrap()
+                .eff
+                .get(&ModifierType::Bold),
             None
         );
     }

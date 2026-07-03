@@ -4,124 +4,12 @@ use editor_crdt::Dot;
 use editor_crdt::sequence::SeqResolve;
 
 use super::{ExplicitEffect, SpanLog};
-use crate::seq::SeqItem;
 use crate::{ModifierType, NodeType, Schema};
-
-/// A leaf's covering-span set, shared by reference: leaves of one covered
-/// stretch point at a single allocation, so a whole-range span op installs one
-/// updated vector per stretch instead of editing 50k per-leaf vectors.
-pub type LeafCovering = std::sync::Arc<Vec<Dot>>;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct LeafSpanCoverage {
-    by_leaf: imbl::HashMap<Dot, LeafCovering>,
-}
 
 struct ResolvedSpan {
     op_dot: Dot,
     start: usize,
     end: usize,
-}
-
-impl LeafSpanCoverage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn build<R: SeqResolve>(
-        elements: &[(Dot, SeqItem)],
-        spans: &SpanLog,
-        resolver: &R,
-    ) -> Self {
-        // No visible leaves ⇒ no coverage to compute. Skip resolving the whole span log
-        // (`O(all spans)`), which a reproject after a select-all-delete would otherwise
-        // pay for a now-empty document.
-        if elements.is_empty() {
-            return Self::default();
-        }
-        let resolved = resolve_spans(spans, resolver);
-        let mut by_leaf = imbl::HashMap::new();
-        // Consecutive covered positions almost always share one covering set:
-        // reuse the previous position's allocation when equal.
-        let mut last: Option<LeafCovering> = None;
-        for (pos, (dot, _)) in elements.iter().enumerate() {
-            let mut cov: Vec<Dot> = resolved
-                .iter()
-                .filter(|r| r.start <= pos && pos < r.end)
-                .map(|r| r.op_dot)
-                .collect();
-            if !cov.is_empty() {
-                cov.sort();
-                let shared = match &last {
-                    Some(l) if **l == cov => l.clone(),
-                    _ => {
-                        let a = LeafCovering::new(cov);
-                        last = Some(a.clone());
-                        a
-                    }
-                };
-                by_leaf.insert(*dot, shared);
-            }
-        }
-        Self { by_leaf }
-    }
-
-    pub fn covering(&self, leaf: Dot) -> &[Dot] {
-        self.by_leaf.get(&leaf).map(|v| v.as_slice()).unwrap_or(&[])
-    }
-
-    /// The leaf's covering set as its shared handle, for pointer-keyed reuse
-    /// across a covered stretch.
-    pub fn covering_arc(&self, leaf: Dot) -> Option<&LeafCovering> {
-        self.by_leaf.get(&leaf)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.by_leaf.is_empty()
-    }
-
-    pub fn set(&mut self, leaf: Dot, mut spans: Vec<Dot>) {
-        if spans.is_empty() {
-            self.by_leaf.remove(&leaf);
-        } else {
-            spans.sort();
-            spans.dedup();
-            self.by_leaf.insert(leaf, LeafCovering::new(spans));
-        }
-    }
-
-    pub fn remove_leaf(&mut self, leaf: Dot) {
-        self.by_leaf.remove(&leaf);
-    }
-
-    /// Install a pre-built shared covering set (empty ⇒ remove).
-    pub fn set_shared(&mut self, leaf: Dot, spans: LeafCovering) {
-        if spans.is_empty() {
-            self.by_leaf.remove(&leaf);
-        } else {
-            self.by_leaf.insert(leaf, spans);
-        }
-    }
-
-    pub fn add_span_to(&mut self, leaf: Dot, span: Dot) {
-        let v = self.by_leaf.entry(leaf).or_default();
-        let v = std::sync::Arc::make_mut(v);
-        if let Err(i) = v.binary_search(&span) {
-            v.insert(i, span);
-        }
-    }
-
-    pub fn remove_span_from(&mut self, leaf: Dot, span: Dot) {
-        if let Some(v) = self.by_leaf.get_mut(&leaf) {
-            let inner = std::sync::Arc::make_mut(v);
-            if let Ok(i) = inner.binary_search(&span) {
-                inner.remove(i);
-            }
-            if inner.is_empty() {
-                self.by_leaf.remove(&leaf);
-            }
-        }
-    }
 }
 
 fn resolve_spans<R: SeqResolve>(spans: &SpanLog, resolver: &R) -> Vec<ResolvedSpan> {
@@ -215,98 +103,9 @@ pub fn explicit_from_covering(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use editor_crdt::sequence::{Bias as CrdtBias, Boundary};
-
     use super::*;
     use crate::Modifier;
     use crate::span::{Anchor, Bias, SpanOp};
-
-    struct Mock {
-        // (anchor dot, crdt bias) -> visible position
-        at: HashMap<(Dot, CrdtBias), usize>,
-    }
-
-    impl SeqResolve for Mock {
-        fn resolve_boundary(&self, id: Dot, bias: CrdtBias) -> Option<Boundary> {
-            self.at.get(&(id, bias)).map(|&p| Boundary {
-                position: p,
-                visible: true,
-            })
-        }
-    }
-
-    fn mk(entries: &[(u64, (u64, Bias, usize), (u64, Bias, usize), Modifier)]) -> (SpanLog, Mock) {
-        let mut log = SpanLog::new();
-        let mut at = HashMap::new();
-        for (op_clock, (sa, sb, sp), (ea, eb, ep), m) in entries {
-            let op = SpanOp::AddSpan {
-                start: Anchor {
-                    id: Dot::new(1, *sa),
-                    bias: *sb,
-                },
-                end: Anchor {
-                    id: Dot::new(1, *ea),
-                    bias: *eb,
-                },
-                modifier: m.clone(),
-            };
-            log = log.apply(Dot::new(2, *op_clock), op).unwrap();
-            at.insert((Dot::new(1, *sa), CrdtBias::from(*sb)), *sp);
-            at.insert((Dot::new(1, *ea), CrdtBias::from(*eb)), *ep);
-        }
-        (log, Mock { at })
-    }
-
-    fn elements(n: usize) -> Vec<(Dot, SeqItem)> {
-        (0..n)
-            .map(|i| (Dot::new(3, i as u64), SeqItem::Char('a')))
-            .collect()
-    }
-
-    fn brute_covering(pos: usize, entries: &[(u64, usize, usize)]) -> BTreeSet<Dot> {
-        entries
-            .iter()
-            .filter(|(_, s, e)| *s <= pos && pos < *e)
-            .map(|(c, _, _)| Dot::new(2, *c))
-            .collect()
-    }
-
-    #[test]
-    fn build_matches_brute_force_positional() {
-        // span A: [1,4) bold, span B: [2,3) italic
-        let (log, mock) = mk(&[
-            (0, (0, Bias::Before, 1), (3, Bias::After, 4), Modifier::Bold),
-            (
-                1,
-                (1, Bias::Before, 2),
-                (2, Bias::After, 3),
-                Modifier::Italic,
-            ),
-        ]);
-        let cov = LeafSpanCoverage::build(&elements(6), &log, &mock);
-        let ranges = [(0u64, 1usize, 4usize), (1, 2, 3)];
-        for pos in 0..6 {
-            let leaf = Dot::new(3, pos as u64);
-            let got: BTreeSet<Dot> = cov.covering(leaf).iter().copied().collect();
-            assert_eq!(
-                got,
-                brute_covering(pos, &ranges),
-                "coverage mismatch at pos {pos}"
-            );
-        }
-    }
-
-    #[test]
-    fn degenerate_span_covers_nothing() {
-        // start resolves at 3, end at 3 -> dropped
-        let (log, mock) = mk(&[(0, (0, Bias::After, 3), (1, Bias::Before, 3), Modifier::Bold)]);
-        let cov = LeafSpanCoverage::build(&elements(5), &log, &mock);
-        for pos in 0..5 {
-            assert!(cov.covering(Dot::new(3, pos as u64)).is_empty());
-        }
-    }
 
     #[test]
     fn explicit_lww_picks_max_op_dot() {
@@ -352,20 +151,5 @@ mod tests {
             ex.get(&ModifierType::FontSize),
             Some(&ExplicitEffect::Set(Modifier::FontSize { value: 2000 }))
         );
-    }
-
-    #[test]
-    fn incremental_mutation_matches_set() {
-        let mut cov = LeafSpanCoverage::new();
-        let leaf = Dot::new(3, 0);
-        cov.add_span_to(leaf, Dot::new(2, 5));
-        cov.add_span_to(leaf, Dot::new(2, 1));
-        cov.add_span_to(leaf, Dot::new(2, 5));
-        assert_eq!(cov.covering(leaf), &[Dot::new(2, 1), Dot::new(2, 5)]);
-        cov.remove_span_from(leaf, Dot::new(2, 1));
-        assert_eq!(cov.covering(leaf), &[Dot::new(2, 5)]);
-        cov.remove_span_from(leaf, Dot::new(2, 5));
-        assert!(cov.covering(leaf).is_empty());
-        assert!(cov.is_empty());
     }
 }

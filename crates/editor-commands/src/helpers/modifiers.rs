@@ -1,6 +1,6 @@
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, Expand, LeafView, Modifier, ModifierType, NodeType, NodeView, Schema,
+    ChildView, DocView, Expand, Modifier, ModifierType, NodeType, NodeView, Schema,
 };
 use editor_state::{PendingModifier, PendingModifiers, Position, ResolvedSelection};
 use strum::IntoEnumIterator;
@@ -51,19 +51,21 @@ pub(crate) fn resolve_effective_modifiers(
     apply_pending_delta(base_modifiers, pending_modifiers)
 }
 
-fn char_leaf_at<'a>(node: &NodeView<'a>, index: usize) -> Option<LeafView<'a>> {
-    match node.child_at(index) {
-        Some(ChildView::Leaf(l)) if l.as_char().is_some() => Some(l),
-        _ => None,
+/// The non-style own modifiers of the char leaf at direct child slot `slot`,
+/// read from its run segment; `None` if the slot doesn't hold a char leaf.
+fn char_leaf_own_no_style(node: &NodeView, slot: usize) -> Option<Vec<(ModifierType, Modifier)>> {
+    let is_char = matches!(node.child_at(slot), Some(ChildView::Leaf(l)) if l.as_char().is_some());
+    if !is_char {
+        return None;
     }
-}
-
-fn own_no_style(leaf: &LeafView) -> Vec<(ModifierType, Modifier)> {
-    leaf.own_modifiers()
-        .iter()
-        .filter(|(_, o)| !o.from_style)
-        .map(|(t, o)| (*t, o.value.clone()))
-        .collect()
+    let st = node.leaf_state_at(slot)?;
+    Some(
+        st.own
+            .iter()
+            .filter(|(_, o)| !o.from_style)
+            .map(|(t, o)| (*t, o.value.clone()))
+            .collect(),
+    )
 }
 
 /// Modifiers a fresh char inserted at `offset` within `node` should carry.
@@ -72,11 +74,13 @@ fn own_no_style(leaf: &LeafView) -> Vec<(ModifierType, Modifier)> {
 /// leftward-expanding ones; strictly inside a uniform run all of the run's
 /// modifiers carry. Empty paragraphs fall back to their block modifiers.
 pub(crate) fn resolve_base_modifiers(node: &NodeView, offset: usize) -> Vec<Modifier> {
-    let left = offset.checked_sub(1).and_then(|i| char_leaf_at(node, i));
-    let right = char_leaf_at(node, offset);
+    let left = offset
+        .checked_sub(1)
+        .and_then(|i| char_leaf_own_no_style(node, i));
+    let right = char_leaf_own_no_style(node, offset);
 
     let mid = match (&left, &right) {
-        (Some(l), Some(r)) => own_no_style(l) == own_no_style(r),
+        (Some(l), Some(r)) => l == r,
         _ => false,
     };
 
@@ -88,7 +92,7 @@ pub(crate) fn resolve_base_modifiers(node: &NodeView, offset: usize) -> Vec<Modi
     };
 
     if let Some(l) = &left {
-        for (ty, value) in own_no_style(l) {
+        for (ty, value) in l.iter().cloned() {
             let keep = if mid {
                 true
             } else {
@@ -103,7 +107,7 @@ pub(crate) fn resolve_base_modifiers(node: &NodeView, offset: usize) -> Vec<Modi
         }
     }
     if !mid && let Some(r) = &right {
-        for (ty, value) in own_no_style(r) {
+        for (ty, value) in r.iter().cloned() {
             if matches!(
                 Schema::modifier_spec(ty).expand,
                 Expand::Before | Expand::Both

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{Modifier, ModifierType, PlainStyleEntry};
-use editor_state::{Position, State, inline_leaf_dots_in_range};
+use editor_state::{Position, State, inline_leaf_dots_in_range, leaf_groups_in_range};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
@@ -79,27 +79,26 @@ pub(crate) fn collect_uniform_text_modifiers_in_selection(state: &State) -> Vec<
             return Vec::new();
         };
         let idx = pos.offset.checked_sub(1);
-        let leaf = idx
-            .and_then(|i| node.child_at(i))
-            .or_else(|| node.child_at(pos.offset));
-        return match leaf {
-            Some(editor_model::ChildView::Leaf(l)) => l
-                .own_modifiers()
+        let leaf_slot = match idx {
+            Some(i) if node.child_at(i).is_some() => i,
+            _ => pos.offset,
+        };
+        return match node.leaf_state_at(leaf_slot) {
+            Some(st) => st
+                .own
                 .iter()
                 .filter(|(_, o)| !o.from_style)
                 .map(|(_, o)| o.value.clone())
                 .collect(),
-            _ => Vec::new(),
+            None => Vec::new(),
         };
     }
 
     let Some(rs) = sel.resolve(&view) else {
         return Vec::new();
     };
-    let from = rs.from().position();
-    let to = rs.to().position();
-    let dots = inline_leaf_dots_in_range(&view, &from, &to);
-    if dots.is_empty() {
+    let groups = leaf_groups_in_range(&rs);
+    if groups.is_empty() {
         return Vec::new();
     }
 
@@ -109,17 +108,14 @@ pub(crate) fn collect_uniform_text_modifiers_in_selection(state: &State) -> Vec<
     }
     let mut by_type: BTreeMap<ModifierType, Agg> = BTreeMap::new();
     let mut seen_count: BTreeMap<ModifierType, usize> = BTreeMap::new();
-    let total = dots.len();
+    let total: usize = groups.iter().map(|g| g.count).sum();
 
-    for dot in &dots {
-        let Some(leaf) = view.leaf(*dot) else {
-            continue;
-        };
-        for (ty, own) in leaf.own_modifiers() {
+    for g in &groups {
+        for (ty, own) in g.own {
             if own.from_style {
                 continue;
             }
-            *seen_count.entry(*ty).or_insert(0) += 1;
+            *seen_count.entry(*ty).or_insert(0) += g.count;
             match by_type.get(ty) {
                 None => {
                     by_type.insert(*ty, Agg::Uniform(own.value.clone()));
@@ -163,23 +159,21 @@ pub(crate) fn clear_inline_modifier_types_in_selection(
         return Ok(false);
     }
 
-    let to_remove: Vec<(Dot, Modifier)> = {
+    let to_remove: Vec<(Dot, Dot, Modifier)> = {
         let view = tr.state().view();
         let Some(resolved) = selection.resolve(&view) else {
             return Err(CommandError::Corrupted("cannot resolve selection".into()));
         };
-        let from = resolved.from().position();
-        let to = resolved.to().position();
-        let dots = inline_leaf_dots_in_range(&view, &from, &to);
         let mut acc = Vec::new();
-        for dot in dots {
-            let Some(leaf) = view.leaf(dot) else { continue };
-            for (ty, own) in leaf.own_modifiers() {
+        // Each group is uniform in its own modifiers, so a single range span op
+        // clears the type across all of the group's leaves.
+        for g in leaf_groups_in_range(&resolved) {
+            for (ty, own) in g.own {
                 if own.from_style {
                     continue;
                 }
                 if types.contains(ty) {
-                    acc.push((dot, own.value.clone()));
+                    acc.push((g.first, g.last, own.value.clone()));
                 }
             }
         }
@@ -191,10 +185,8 @@ pub(crate) fn clear_inline_modifier_types_in_selection(
     }
 
     let mut changed = false;
-    for (id, modifier) in to_remove {
-        let Some(op) = id.as_op_dot() else { continue };
-        let d = op.dot();
-        tr.remove_span_modifier(d, d, modifier)?;
+    for (first, last, modifier) in to_remove {
+        tr.remove_span_modifier(first, last, modifier)?;
         changed = true;
     }
     Ok(changed)

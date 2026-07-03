@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    AtomLeaf, ChildView, DocView, Marker, Modifier, ModifierType, NodeView, PlainDoc, PlainNode,
-    PlainNodeEntry, PlainStyleEntry, PlainTextNode, ProjectedDoc,
+    AtomLeaf, ChildView, DocView, Marker, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc,
+    PlainNode, PlainNodeEntry, PlainStyleEntry, PlainTextNode, ProjectedDoc,
 };
 
 pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {
@@ -34,20 +34,21 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
     let mut children: Vec<PlainNodeEntry> = Vec::new();
     let mut run = PendingRun::default();
 
-    for child in nv.children() {
+    for (slot, child) in nv.children().enumerate() {
         match child {
             ChildView::Block(b) => {
                 run.flush(&mut children);
                 children.push(emit_block(projected, &b));
             }
             ChildView::Leaf(l) => {
+                let own = nv.leaf_state_at(slot).map(|s| s.own);
                 if let Some(ch) = l.as_char() {
-                    let modifiers = span_modifiers(projected, l.dot());
+                    let modifiers = own.map(span_modifiers).unwrap_or_default();
                     let style = node_style(projected, l.dot());
                     run.push(ch, modifiers, style, &mut children);
                 } else if let Some(atom) = l.as_atom() {
                     run.flush(&mut children);
-                    children.push(emit_atom(projected, l.dot(), atom.clone()));
+                    children.push(emit_atom(projected, l.dot(), atom.clone(), own));
                 }
             }
         }
@@ -66,10 +67,15 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
     }
 }
 
-fn emit_atom(projected: &ProjectedDoc, dot: Dot, atom: AtomLeaf) -> PlainNodeEntry {
+fn emit_atom(
+    projected: &ProjectedDoc,
+    dot: Dot,
+    atom: AtomLeaf,
+    own: Option<&BTreeMap<ModifierType, OwnModifier>>,
+) -> PlainNodeEntry {
     PlainNodeEntry {
         node: atom.into_node().to_plain(),
-        modifiers: span_modifiers(projected, dot),
+        modifiers: own.map(span_modifiers).unwrap_or_default(),
         style: node_style(projected, dot),
         marker: None,
         children: Vec::new(),
@@ -121,17 +127,11 @@ impl PendingRun {
     }
 }
 
-fn span_modifiers(projected: &ProjectedDoc, dot: Dot) -> BTreeMap<ModifierType, Modifier> {
-    projected
-        .own_modifiers
-        .get(&dot)
-        .map(|own| {
-            own.iter()
-                .filter(|(_, o)| !o.from_style)
-                .map(|(ty, o)| (*ty, o.value.clone()))
-                .collect()
-        })
-        .unwrap_or_default()
+fn span_modifiers(own: &BTreeMap<ModifierType, OwnModifier>) -> BTreeMap<ModifierType, Modifier> {
+    own.iter()
+        .filter(|(_, o)| !o.from_style)
+        .map(|(ty, o)| (*ty, o.value.clone()))
+        .collect()
 }
 
 fn block_modifiers(projected: &ProjectedDoc, dot: Dot) -> BTreeMap<ModifierType, Modifier> {

@@ -1,7 +1,10 @@
+use std::collections::BTreeMap;
+
 use editor_crdt::Dot;
 use editor_model::{
-    AtomLeaf, ChildView, DocView, Fragment, HardBreakNode, LeafView, Modifier, Node, NodeView,
-    PageBreakNode, PlainHorizontalRuleNode, PlainNode, PlainRootNode, PlainTextNode, TabNode,
+    AtomLeaf, ChildView, DocView, Fragment, HardBreakNode, LeafView, Modifier, ModifierType, Node,
+    NodeView, OwnModifier, PageBreakNode, PlainHorizontalRuleNode, PlainNode, PlainRootNode,
+    PlainTextNode, TabNode,
 };
 use editor_resource::Resource;
 use editor_state::State;
@@ -141,9 +144,8 @@ fn block_style(state: &State, nv: &NodeView) -> Option<String> {
     }
 }
 
-fn leaf_modifiers(leaf: &LeafView) -> Vec<Modifier> {
-    leaf.own_modifiers()
-        .values()
+fn leaf_modifiers(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
+    own.values()
         .filter(|o| !o.from_style)
         .map(|o| o.value.clone())
         .collect()
@@ -181,9 +183,15 @@ fn flush_run(run: &mut Option<RunAccum>, out: &mut Vec<Fragment>) {
     }
 }
 
-fn push_leaf(state: &State, leaf: &LeafView, run: &mut Option<RunAccum>, out: &mut Vec<Fragment>) {
+fn push_leaf(
+    state: &State,
+    leaf: &LeafView,
+    own: Option<&BTreeMap<ModifierType, OwnModifier>>,
+    run: &mut Option<RunAccum>,
+    out: &mut Vec<Fragment>,
+) {
     if let Some(ch) = leaf.as_char() {
-        let modifiers = leaf_modifiers(leaf);
+        let modifiers = own.map(leaf_modifiers).unwrap_or_default();
         let style = state.projected.node_styles().value_of(leaf.dot());
         match run {
             Some(r) if r.modifiers == modifiers && r.style == style => r.text.push(ch),
@@ -200,7 +208,7 @@ fn push_leaf(state: &State, leaf: &LeafView, run: &mut Option<RunAccum>, out: &m
         flush_run(run, out);
         out.push(Fragment {
             node: atom_to_plain(atom),
-            modifiers: leaf_modifiers(leaf),
+            modifiers: own.map(leaf_modifiers).unwrap_or_default(),
             style: state.projected.node_styles().value_of(leaf.dot()),
             children: vec![],
         });
@@ -210,13 +218,16 @@ fn push_leaf(state: &State, leaf: &LeafView, run: &mut Option<RunAccum>, out: &m
 fn node_to_fragment(state: &State, nv: &NodeView) -> Fragment {
     let mut out: Vec<Fragment> = Vec::new();
     let mut run: Option<RunAccum> = None;
-    for c in nv.children() {
+    for (slot, c) in nv.children().enumerate() {
         match c {
             ChildView::Block(b) => {
                 flush_run(&mut run, &mut out);
                 out.push(node_to_fragment(state, &b));
             }
-            ChildView::Leaf(l) => push_leaf(state, &l, &mut run, &mut out),
+            ChildView::Leaf(l) => {
+                let own = nv.leaf_state_at(slot).map(|s| s.own);
+                push_leaf(state, &l, own, &mut run, &mut out);
+            }
         }
     }
     flush_run(&mut run, &mut out);
@@ -258,7 +269,8 @@ fn build_fragment(state: &State, nv: &NodeView, rs: &ResolvedSelection) -> Fragm
                     flush_run(&mut run, &mut out);
                     continue;
                 }
-                push_leaf(state, l, &mut run, &mut out);
+                let own = nv.leaf_state_at(i).map(|s| s.own);
+                push_leaf(state, l, own, &mut run, &mut out);
             }
             ChildView::Block(b) => {
                 flush_run(&mut run, &mut out);

@@ -101,14 +101,18 @@ fn clear_applied_inline(
             return Ok(false);
         };
         let idx = pos.offset.checked_sub(1);
-        let leaf = idx
-            .and_then(|i| node.child_at(i))
-            .or_else(|| node.child_at(pos.offset));
-        let Some(ChildView::Leaf(l)) = leaf else {
+        let leaf_slot = match idx {
+            Some(i) if node.child_at(i).is_some() => i,
+            _ => pos.offset,
+        };
+        let Some(ChildView::Leaf(l)) = node.child_at(leaf_slot) else {
+            return Ok(false);
+        };
+        let Some(st) = node.leaf_state_at(leaf_slot) else {
             return Ok(false);
         };
         let mut acc = Vec::new();
-        for (ty, own) in l.own_modifiers() {
+        for (ty, own) in st.own {
             if own.from_style {
                 continue;
             }
@@ -358,11 +362,14 @@ mod tests {
 
         let view = actual.view();
         let node = view.node(_p1).unwrap();
-        let Some(ChildView::Leaf(leaf)) = node.child_at(0) else {
+        let Some(ChildView::Leaf(_leaf)) = node.child_at(0) else {
             panic!("expected leaf at offset 0");
         };
         assert_eq!(
-            leaf.effective().get(&ModifierType::FontFamily),
+            node.leaf_state_at(0)
+                .unwrap()
+                .eff
+                .get(&ModifierType::FontFamily),
             Some(&Modifier::FontFamily {
                 value: "Arial".to_string()
             }),
@@ -444,11 +451,15 @@ mod tests {
         // (not the paragraph's own effective); verify the cascade there.
         let view = actual.view();
         let p2_node = view.node(p2).unwrap();
-        let ChildView::Leaf(leaf) = p2_node.child_at(0).unwrap() else {
+        let ChildView::Leaf(_leaf) = p2_node.child_at(0).unwrap() else {
             panic!("expected text leaf under the other styled paragraph");
         };
         assert_eq!(
-            leaf.effective().get(&ModifierType::FontFamily),
+            p2_node
+                .leaf_state_at(0)
+                .unwrap()
+                .eff
+                .get(&ModifierType::FontFamily),
             Some(&Modifier::FontFamily {
                 value: "Arial".to_string()
             }),

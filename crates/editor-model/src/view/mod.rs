@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::LazyLock;
 
@@ -7,12 +7,7 @@ use editor_crdt::Dot;
 use crate::projection::{BlockPaths, ProjectedDoc};
 use crate::schema::Schema;
 use crate::seq::{BlockNode, Child, anchor_dot};
-use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, Run, SeqItem};
-
-struct RunsIndex {
-    runs: Vec<Run>,
-    by_block: HashMap<Dot, Vec<usize>>,
-}
+use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, SeqItem};
 
 /// A read-only view over a `ProjectedDoc`. The flat tree gives O(1) node access by
 /// `Dot` (node type, children, leaf items read straight from it), and the
@@ -21,9 +16,6 @@ struct RunsIndex {
 pub struct DocView<'a> {
     doc: &'a ProjectedDoc,
     paths: std::borrow::Cow<'a, BlockPaths>,
-    // Materializing every run is O(n) and only `runs()` (render/measure) needs it;
-    // structural reads (node/children/parent/inline) do not. Build it on first use.
-    runs_cache: std::cell::OnceCell<RunsIndex>,
 }
 
 impl<'a> DocView<'a> {
@@ -34,7 +26,6 @@ impl<'a> DocView<'a> {
         Self {
             doc,
             paths: std::borrow::Cow::Owned(BlockPaths::from_tree(&doc.tree)),
-            runs_cache: std::cell::OnceCell::new(),
         }
     }
 
@@ -44,19 +35,7 @@ impl<'a> DocView<'a> {
         Self {
             doc,
             paths: std::borrow::Cow::Borrowed(paths),
-            runs_cache: std::cell::OnceCell::new(),
         }
-    }
-
-    fn runs_index(&self) -> &RunsIndex {
-        self.runs_cache.get_or_init(|| {
-            let runs = self.doc.runs();
-            let mut by_block: HashMap<Dot, Vec<usize>> = HashMap::new();
-            for (i, run) in runs.iter().enumerate() {
-                by_block.entry(run.block).or_default().push(i);
-            }
-            RunsIndex { runs, by_block }
-        })
     }
 }
 
@@ -119,12 +98,19 @@ impl<'a> DocView<'a> {
             block,
         })
     }
-    pub fn own_modifiers_of(&self, id: Dot) -> &'a BTreeMap<ModifierType, OwnModifier> {
-        self.doc
-            .own_modifiers
-            .get(&id)
-            .map(|m| &**m)
-            .unwrap_or(&EMPTY_OWN)
+    /// The leaf's derived state located by dot: `block_of` plus a linear child
+    /// scan for the slot. Cold paths only — hot readers hold the slot and use
+    /// [`NodeView::leaf_state_at`].
+    pub fn leaf_state_by_dot_slow(&'a self, dot: Dot) -> Option<LeafStateRef<'a>> {
+        let block = self.paths.block_of(dot)?;
+        let slot = self
+            .doc
+            .tree
+            .get(block)?
+            .children
+            .iter()
+            .position(|c| matches!(c, Child::Leaf { id, .. } if *id == dot))?;
+        self.node(block)?.leaf_state_at(slot)
     }
 }
 
@@ -290,6 +276,14 @@ pub struct InlineItem<'a> {
     pub own_modifiers: &'a BTreeMap<ModifierType, OwnModifier>,
 }
 
+/// A leaf's derived state read straight from its owning run segment: the
+/// effective and own modifier maps, shared by every leaf of the segment.
+#[derive(Clone, Copy)]
+pub struct LeafStateRef<'a> {
+    pub eff: &'a BTreeMap<ModifierType, Modifier>,
+    pub own: &'a BTreeMap<ModifierType, OwnModifier>,
+}
+
 impl<'a> NodeView<'a> {
     pub fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
         self.view
@@ -302,21 +296,18 @@ impl<'a> NodeView<'a> {
         let dot = anchor_dot(self.id)?;
         self.view.doc.block_modifiers.get(&dot)?.get(&ty)
     }
-    pub fn runs(&self) -> impl Iterator<Item = &Run> + '_ {
-        let idx = self.view.runs_index();
-        idx.by_block
-            .get(&self.id)
-            .into_iter()
-            .flatten()
-            .map(move |&i| &idx.runs[i])
-    }
     /// The node's run segments as `(effective modifiers, leaf count)` groups in
-    /// leaf order, straight from the maintained run index — no leaf-list
-    /// materialization, unlike [`NodeView::runs`].
+    /// leaf order, straight from the authoritative segment index — segments split
+    /// finer than effective runs (by style/covering), but consumers that aggregate
+    /// per leaf are unaffected.
     pub fn run_groups(
         &self,
     ) -> impl Iterator<Item = (&'a BTreeMap<ModifierType, Modifier>, usize)> + 'a {
-        self.view.doc.run_index.group_iter(self.id)
+        self.view
+            .doc
+            .seg_index
+            .group_iter(self.id)
+            .map(|s| (s.eff.as_ref(), s.count))
     }
     pub fn inline_text(&self) -> String {
         self.tree_node()
@@ -331,11 +322,51 @@ impl<'a> NodeView<'a> {
             })
             .collect()
     }
+    /// The run segment groups of this block in leaf order, straight from the
+    /// maintained segment index — the segment-key equivalent of [`run_groups`].
+    /// [`run_groups`]: NodeView::run_groups
+    pub fn seg_groups(&self) -> impl Iterator<Item = &'a crate::span::Seg> + 'a {
+        self.view.doc.seg_index.group_iter(self.id)
+    }
+    /// The derived state of the leaf at direct child slot `child_slot`, or `None`
+    /// when the slot holds a block or is out of range. `O(log K + log segs)`.
+    pub fn leaf_state_at(&self, child_slot: usize) -> Option<LeafStateRef<'a>> {
+        let node = self.tree_node()?;
+        // A block slot's leaf ordinal aliases the next leaf, so confirm the slot
+        // actually holds a leaf before trusting the ordinal.
+        match node.children.get(child_slot)? {
+            Child::Leaf { .. } => {}
+            Child::Block(_) => return None,
+        }
+        let ordinal = node.children.leaf_ordinal_at(child_slot);
+        let (seg, _) = self.view.doc.seg_index.seg_at(self.id, ordinal)?;
+        Some(LeafStateRef {
+            eff: seg.eff.as_ref(),
+            own: seg.own.as_ref(),
+        })
+    }
+    /// The node-style id of the leaf at direct child slot `child_slot`, from its
+    /// run segment. `None` for a block slot, an out-of-range slot, or an unstyled
+    /// leaf. `O(log K + log segs)`.
+    pub fn leaf_style_at(&self, child_slot: usize) -> Option<&'a String> {
+        let node = self.tree_node()?;
+        match node.children.get(child_slot)? {
+            Child::Leaf { .. } => {}
+            Child::Block(_) => return None,
+        }
+        let ordinal = node.children.leaf_ordinal_at(child_slot);
+        let (seg, _) = self.view.doc.seg_index.seg_at(self.id, ordinal)?;
+        seg.style.as_ref()
+    }
     pub fn inline(&self) -> Vec<InlineItem<'a>> {
         let doc = self.view.doc;
         let Some(node) = self.tree_node() else {
             return Vec::new();
         };
+        // Serve effective/own from the authoritative run segments, expanding each seg
+        // by its leaf count.
+        let mut segs = doc.seg_index.group_iter(self.id);
+        let mut cur = segs.next().map(|s| (s, s.count));
         let mut out = Vec::new();
         let mut byte = 0usize;
         let mut char_index = 0usize;
@@ -343,8 +374,18 @@ impl<'a> NodeView<'a> {
             let Child::Leaf { id: d, item } = c else {
                 continue;
             };
-            let effective = doc.effective.get(d).map(|m| &**m).unwrap_or(&EMPTY_EFF);
-            let own_modifiers = doc.own_modifiers.get(d).map(|m| &**m).unwrap_or(&EMPTY_OWN);
+            let (effective, own_modifiers) = {
+                while matches!(cur, Some((_, 0))) {
+                    cur = segs.next().map(|s| (s, s.count));
+                }
+                match &mut cur {
+                    Some((seg, rem)) => {
+                        *rem -= 1;
+                        (seg.eff.as_ref(), seg.own.as_ref())
+                    }
+                    None => (&*EMPTY_EFF, &*EMPTY_OWN),
+                }
+            };
             let kind = match item {
                 SeqItem::Char(ch) => {
                     let len = ch.len_utf8();
@@ -366,34 +407,6 @@ impl<'a> NodeView<'a> {
             });
         }
         out
-    }
-}
-
-impl<'a> LeafView<'a> {
-    pub fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
-        self.view
-            .doc
-            .effective
-            .get(&self.dot)
-            .map(|m| &**m)
-            .unwrap_or(&EMPTY_EFF)
-    }
-    pub fn own_modifiers(&self) -> &'a BTreeMap<ModifierType, OwnModifier> {
-        self.view
-            .doc
-            .own_modifiers
-            .get(&self.dot)
-            .map(|m| &**m)
-            .unwrap_or(&EMPTY_OWN)
-    }
-    pub fn own(&self, ty: ModifierType) -> Option<&'a Modifier> {
-        self.own_modifiers().get(&ty).map(|o| &o.value)
-    }
-    pub fn own_no_style(&self, ty: ModifierType) -> Option<&'a Modifier> {
-        self.own_modifiers()
-            .get(&ty)
-            .filter(|o| !o.from_style)
-            .map(|o| &o.value)
     }
 }
 
@@ -435,6 +448,28 @@ mod tests {
             node_markers: NodeMarkerLog::new(),
             styles: StyleLog::new(),
         }
+    }
+
+    /// A leaf's effective modifiers via the segment index (cold dot lookup).
+    fn leaf_eff<'a>(view: &'a DocView<'a>, dot: Dot) -> &'a BTreeMap<ModifierType, Modifier> {
+        view.leaf_state_by_dot_slow(dot)
+            .map(|s| s.eff)
+            .unwrap_or(&EMPTY_EFF)
+    }
+    /// A leaf's own modifiers via the segment index (cold dot lookup).
+    fn leaf_own<'a>(view: &'a DocView<'a>, dot: Dot) -> &'a BTreeMap<ModifierType, OwnModifier> {
+        view.leaf_state_by_dot_slow(dot)
+            .map(|s| s.own)
+            .unwrap_or(&EMPTY_OWN)
+    }
+    fn own_val<'a>(view: &'a DocView<'a>, dot: Dot, ty: ModifierType) -> Option<&'a Modifier> {
+        leaf_own(view, dot).get(&ty).map(|o| &o.value)
+    }
+    fn own_no_style<'a>(view: &'a DocView<'a>, dot: Dot, ty: ModifierType) -> Option<&'a Modifier> {
+        leaf_own(view, dot)
+            .get(&ty)
+            .filter(|o| !o.from_style)
+            .map(|o| &o.value)
     }
 
     fn nested_doc() -> ProjectedDoc {
@@ -758,32 +793,32 @@ mod tests {
     fn no_modifier_leaf_empty_fallback() {
         let pd = nested_doc();
         let view = DocView::new(&pd);
-        let h = view.leaf(Dot::new(1, 2)).unwrap();
-        assert_eq!(h.as_char(), Some('H'));
-        assert!(h.effective().is_empty());
-        assert!(h.own_modifiers().is_empty());
-        assert_eq!(h.own(ModifierType::Bold), None);
-        assert_eq!(h.own_no_style(ModifierType::Bold), None);
+        let h = Dot::new(1, 2);
+        assert_eq!(view.leaf(h).unwrap().as_char(), Some('H'));
+        assert!(leaf_eff(&view, h).is_empty());
+        assert!(leaf_own(&view, h).is_empty());
+        assert_eq!(own_val(&view, h, ModifierType::Bold), None);
+        assert_eq!(own_no_style(&view, h, ModifierType::Bold), None);
 
-        let i = view.leaf(Dot::new(1, 3)).unwrap();
-        assert_eq!(i.as_char(), Some('i'));
-        assert!(i.effective().is_empty());
-        assert!(i.own_modifiers().is_empty());
+        let i = Dot::new(1, 3);
+        assert_eq!(view.leaf(i).unwrap().as_char(), Some('i'));
+        assert!(leaf_eff(&view, i).is_empty());
+        assert!(leaf_own(&view, i).is_empty());
     }
 
     #[test]
     fn leaf_modifier_accessors_and_own_no_style() {
         let pd = doc_styled_xy();
         let view = DocView::new(&pd);
-        let x = view.leaf(Dot::new(1, 2)).unwrap();
-        assert_eq!(x.own(ModifierType::Bold), Some(&Modifier::Bold));
-        assert_eq!(x.own_no_style(ModifierType::Bold), None);
-        let y = view.leaf(Dot::new(1, 3)).unwrap();
+        let x = Dot::new(1, 2);
+        assert_eq!(own_val(&view, x, ModifierType::Bold), Some(&Modifier::Bold));
+        assert_eq!(own_no_style(&view, x, ModifierType::Bold), None);
+        let y = Dot::new(1, 3);
         assert_eq!(
-            y.own_no_style(ModifierType::Italic),
+            own_no_style(&view, y, ModifierType::Italic),
             Some(&Modifier::Italic)
         );
-        assert!(!x.effective().is_empty());
+        assert!(!leaf_eff(&view, x).is_empty());
     }
 
     #[test]
@@ -801,7 +836,7 @@ mod tests {
             })
             .collect();
         assert_eq!(text.chars().count(), chars.len());
-        assert!(para.runs().count() >= 1);
+        assert!(para.run_groups().count() >= 1);
 
         let mut last_char_index: Option<usize> = None;
         let mut prev_byte_end = 0usize;
@@ -826,6 +861,37 @@ mod tests {
             }
         }
         assert_eq!(text.len(), prev_byte_end);
+    }
+
+    #[test]
+    fn inline_matches_leaf_state_at() {
+        let pd = doc_styled_xy();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        let items = para.inline();
+        assert_eq!(items.len(), 2);
+        // Every child of this paragraph is a leaf, so the inline index is the
+        // child slot.
+        for (slot, it) in items.iter().enumerate() {
+            let st = para.leaf_state_at(slot).expect("leaf slot resolves");
+            assert_eq!(it.effective, st.eff);
+            assert_eq!(it.own_modifiers, st.own);
+            let by_dot = view.leaf_state_by_dot_slow(it.dot).expect("dot resolves");
+            assert_eq!(by_dot.eff, st.eff);
+            assert_eq!(by_dot.own, st.own);
+        }
+        assert!(para.leaf_state_at(items.len()).is_none());
+    }
+
+    #[test]
+    fn inline_equals_dot_keyed_state() {
+        let pd = doc_styled_xy();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        for it in para.inline() {
+            assert_eq!(it.effective, leaf_eff(&view, it.dot));
+            assert_eq!(it.own_modifiers, leaf_own(&view, it.dot));
+        }
     }
 
     fn doc_leaf_style_link() -> ProjectedDoc {
@@ -884,9 +950,9 @@ mod tests {
     fn style_link_excluded_from_own_no_style() {
         let pd = doc_leaf_style_link();
         let view = DocView::new(&pd);
-        let leaf = view.leaf(Dot::new(1, 2)).unwrap();
-        assert!(leaf.own(ModifierType::Link).is_some());
-        assert!(leaf.own_no_style(ModifierType::Link).is_none());
+        let leaf = Dot::new(1, 2);
+        assert!(own_val(&view, leaf, ModifierType::Link).is_some());
+        assert!(own_no_style(&view, leaf, ModifierType::Link).is_none());
     }
 
     #[test]
@@ -1030,7 +1096,10 @@ mod tests {
             }
             proptest::prop_assert!(unique, "duplicate block ElemId");
 
+            // Every block's run-segment groups partition its leaves, so summing the
+            // groups' leaf counts across all blocks recovers the document's leaf count.
             let mut reconstructed = 0usize;
+            let mut total_leaves = 0usize;
             for id in ids.iter() {
                 if let Some(nv) = view.node(*id) {
                     let bytes: usize = nv
@@ -1042,10 +1111,17 @@ mod tests {
                         })
                         .sum();
                     proptest::prop_assert_eq!(nv.inline_text().len(), bytes);
-                    reconstructed += nv.runs().count();
+                    reconstructed += nv.run_groups().map(|(_, n)| n).sum::<usize>();
+                }
+                if let Some(b) = doc.tree.get(*id) {
+                    total_leaves += b
+                        .children
+                        .iter()
+                        .filter(|c| matches!(c, crate::seq::Child::Leaf { .. }))
+                        .count();
                 }
             }
-            proptest::prop_assert_eq!(reconstructed, doc.runs().len());
+            proptest::prop_assert_eq!(reconstructed, total_leaves);
         }
     }
 

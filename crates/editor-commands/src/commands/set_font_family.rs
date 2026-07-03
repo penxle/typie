@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use editor_common::Tri;
 use editor_crdt::Dot;
-use editor_model::{ChildView, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
+use editor_model::{DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, match_weight};
 use editor_state::{
     PendingModifier, PendingModifiers, leaf_groups_in_range, resolve_modifier_state,
@@ -73,23 +73,13 @@ fn provided_and_override(
     };
     let block_eff = node.effective().get(&ty).cloned();
     let leaf_idx = offset.saturating_sub(1);
-    let leaf = match node.child_at(leaf_idx) {
-        Some(ChildView::Leaf(l)) => Some(l),
-        _ => None,
-    };
-    let own = leaf.as_ref().and_then(|l| {
-        l.own_modifiers()
-            .get(&ty)
-            .map(|o| (o.value.clone(), o.from_style))
-    });
+    let st = node.leaf_state_at(leaf_idx);
+    let own = st.and_then(|s| s.own.get(&ty).map(|o| (o.value.clone(), o.from_style)));
     let has_explicit_override = matches!(&own, Some((_, false)));
     let provided = match &own {
         Some((value, true)) => Some(value.clone()),
         Some((_, false)) => block_eff,
-        None => leaf
-            .as_ref()
-            .and_then(|l| l.effective().get(&ty).cloned())
-            .or(block_eff),
+        None => st.and_then(|s| s.eff.get(&ty).cloned()).or(block_eff),
     };
     (provided, has_explicit_override)
 }
