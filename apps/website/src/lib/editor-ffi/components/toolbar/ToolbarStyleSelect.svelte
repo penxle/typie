@@ -91,6 +91,7 @@
     if (!editor) return;
     const styleId = nanoid();
     editor.enqueue({ type: 'style', op: { type: 'define', style_id: styleId, name, modifiers } });
+    editor.enqueue({ type: 'style', op: { type: 'apply_to_selection', style_id: styleId } });
     editor.focus();
   };
 
