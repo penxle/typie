@@ -31,12 +31,20 @@ pub struct DocLogs {
     pub styles: StyleLog,
 }
 
+/// A leaf's effective-modifier map, shared by reference: every leaf of a
+/// uniform run (and the run segment itself) points at one allocation, so a
+/// whole-range styling clones/compares Arcs instead of BTreeMaps and dropping
+/// a superseded projection frees O(runs) maps, not O(leaves).
+pub type LeafEff = std::sync::Arc<BTreeMap<ModifierType, Modifier>>;
+/// A leaf's own-modifier map, shared like [`LeafEff`].
+pub type LeafOwn = std::sync::Arc<BTreeMap<ModifierType, OwnModifier>>;
+
 #[derive(Clone, Debug)]
 pub struct ProjectedDoc {
     pub tree: BlockTree,
-    pub effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub effective: imbl::HashMap<Dot, LeafEff>,
     pub block_effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
-    pub own_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, OwnModifier>>,
+    pub own_modifiers: imbl::HashMap<Dot, LeafOwn>,
     pub run_index: crate::span::BlockRuns,
     pub block_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub node_attrs: imbl::HashMap<Dot, Node>,
@@ -56,7 +64,7 @@ impl ProjectedDoc {
         offset: usize,
         leaf: Dot,
         item: SeqItem,
-        eff: BTreeMap<ModifierType, Modifier>,
+        eff: LeafEff,
         is_atom: bool,
     ) {
         insert_leaf_at(&mut self.tree, block, offset, leaf, &item);
@@ -74,7 +82,7 @@ impl ProjectedDoc {
         after: Option<Dot>,
         leaf: Dot,
         item: SeqItem,
-        eff: BTreeMap<ModifierType, Modifier>,
+        eff: LeafEff,
         is_atom: bool,
     ) -> bool {
         let Some(offset) = insert_leaf_after(&mut self.tree, block, after, leaf, &item) else {
@@ -99,7 +107,7 @@ impl ProjectedDoc {
         true
     }
 
-    pub fn set_leaf_effective(&mut self, leaf: Dot, eff: BTreeMap<ModifierType, Modifier>) {
+    pub fn set_leaf_effective(&mut self, leaf: Dot, eff: LeafEff) {
         self.effective.insert(leaf, eff);
     }
 
@@ -113,7 +121,7 @@ impl ProjectedDoc {
         block: Dot,
         offset: usize,
         leaf: Dot,
-        eff: BTreeMap<ModifierType, Modifier>,
+        eff: LeafEff,
         is_atom: bool,
     ) {
         self.effective.insert(leaf, eff.clone());
@@ -122,7 +130,7 @@ impl ProjectedDoc {
             .splice_insert(block, offset, leaf, eff, is_atom);
     }
 
-    pub fn set_leaf_own(&mut self, leaf: Dot, own: BTreeMap<ModifierType, OwnModifier>) {
+    pub fn set_leaf_own(&mut self, leaf: Dot, own: LeafOwn) {
         if own.is_empty() {
             self.own_modifiers.remove(&leaf);
         } else {
@@ -658,7 +666,7 @@ pub fn project_from_tree<R: SeqResolve>(
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+        let effective: imbl::HashMap<Dot, LeafEff> =
             derive_full_effective(&tree, &src).into_iter().collect();
         let block_effective = crate::span::derive_block_effective(&tree, &src);
         let own_modifiers = crate::span::derive_own_modifiers(&tree, &src);
@@ -726,7 +734,7 @@ pub fn project_core_with_coverage(
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+        let effective: imbl::HashMap<Dot, LeafEff> =
             derive_full_effective(&tree, &src).into_iter().collect();
         let block_effective = crate::span::derive_block_effective(&tree, &src);
         let own_modifiers = crate::span::derive_own_modifiers(&tree, &src);
@@ -833,7 +841,7 @@ mod tests {
     #[test]
     fn projection_indexes_rebuild_matches_derivations() {
         let tree = BlockTree::from_raw(&normalize(project_blocks(&elems_nested()).unwrap()));
-        let effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> = imbl::HashMap::new();
+        let effective: imbl::HashMap<Dot, LeafEff> = imbl::HashMap::new();
         let runs = derive_runs(&tree, &effective);
         let projected = ProjectedDoc {
             tree: tree.clone(),
@@ -1557,7 +1565,7 @@ mod tests {
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        let direct: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> =
+        let direct: imbl::HashMap<Dot, LeafEff> =
             derive_full_effective(&tree, &src).into_iter().collect();
         let pd = project_document(&l).unwrap();
         assert_eq!(pd.effective, direct);
@@ -1693,7 +1701,7 @@ mod tests {
             let mut projected = project_document(&logs_of(&base)).unwrap();
             for (i, ch) in s.chars().enumerate() {
                 let leaf = Dot::new(1, 2 + i as u64);
-                projected.splice_char(para, i, leaf, SeqItem::Char(ch), BTreeMap::new(), false);
+                projected.splice_char(para, i, leaf, SeqItem::Char(ch), LeafEff::default(), false);
             }
 
             let full_pd = project_document(&logs_of(&full)).unwrap();

@@ -1525,6 +1525,30 @@ mod tests {
                 let got = crate::modifier_state::resolve_modifier_state_in_range(&rs);
                 let want = reference_in_range(&rs);
                 proptest::prop_assert_eq!(got, want);
+
+                // leaf_groups_in_range must expand to exactly the per-leaf
+                // scan: same leaves in the same order, group bounds anchored on
+                // the right dots, and each group's effective agreeing with
+                // every covered leaf's own map.
+                let dots = crate::inline_leaf_dots_in_range(
+                    &view,
+                    &rs.from().position(),
+                    &rs.to().position(),
+                );
+                let groups = crate::traversal::leaf_groups_in_range(&rs);
+                let total: usize = groups.iter().map(|g| g.count).sum();
+                proptest::prop_assert_eq!(total, dots.len());
+                let mut i = 0;
+                for g in &groups {
+                    proptest::prop_assert_eq!(g.first, dots[i]);
+                    proptest::prop_assert_eq!(g.last, dots[i + g.count - 1]);
+                    for &dot in &dots[i..i + g.count] {
+                        let leaf = view.leaf(dot).expect("covered leaf resolves");
+                        proptest::prop_assert_eq!(leaf.effective(), g.effective);
+                        proptest::prop_assert_eq!(leaf.node_type(), g.leaf_type);
+                    }
+                    i += g.count;
+                }
             }
         }
     }

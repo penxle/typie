@@ -120,7 +120,11 @@ impl<'a> DocView<'a> {
         })
     }
     pub fn own_modifiers_of(&self, id: Dot) -> &'a BTreeMap<ModifierType, OwnModifier> {
-        self.doc.own_modifiers.get(&id).unwrap_or(&EMPTY_OWN)
+        self.doc
+            .own_modifiers
+            .get(&id)
+            .map(|m| &**m)
+            .unwrap_or(&EMPTY_OWN)
     }
 }
 
@@ -339,8 +343,8 @@ impl<'a> NodeView<'a> {
             let Child::Leaf { id: d, item } = c else {
                 continue;
             };
-            let effective = doc.effective.get(d).unwrap_or(&EMPTY_EFF);
-            let own_modifiers = doc.own_modifiers.get(d).unwrap_or(&EMPTY_OWN);
+            let effective = doc.effective.get(d).map(|m| &**m).unwrap_or(&EMPTY_EFF);
+            let own_modifiers = doc.own_modifiers.get(d).map(|m| &**m).unwrap_or(&EMPTY_OWN);
             let kind = match item {
                 SeqItem::Char(ch) => {
                     let len = ch.len_utf8();
@@ -367,13 +371,19 @@ impl<'a> NodeView<'a> {
 
 impl<'a> LeafView<'a> {
     pub fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
-        self.view.doc.effective.get(&self.dot).unwrap_or(&EMPTY_EFF)
+        self.view
+            .doc
+            .effective
+            .get(&self.dot)
+            .map(|m| &**m)
+            .unwrap_or(&EMPTY_EFF)
     }
     pub fn own_modifiers(&self) -> &'a BTreeMap<ModifierType, OwnModifier> {
         self.view
             .doc
             .own_modifiers
             .get(&self.dot)
+            .map(|m| &**m)
             .unwrap_or(&EMPTY_OWN)
     }
     pub fn own(&self, ty: ModifierType) -> Option<&'a Modifier> {

@@ -27,29 +27,61 @@ fn font_from_effective(eff: &BTreeMap<ModifierType, Modifier>) -> (String, u16) 
 fn collect_for_block(block: &NodeView, font_registry: &FontRegistry, output: &mut FontRequests) {
     let block_id = block.id();
     let mut has_char = false;
-    for child in block.children() {
-        let ChildView::Leaf(leaf) = child else {
-            continue;
-        };
-        let Some(ch) = leaf.as_char() else {
-            continue;
-        };
-        has_char = true;
-        let eff = leaf.effective();
-        let (family, weight) = font_from_effective(eff);
-        let mut codepoints: HashSet<u32> = HashSet::new();
-        codepoints.insert(ch as u32);
-        // Ruby annotations are shaped with the base leaf's (family, weight), so
-        // their codepoints belong to the same request key.
-        if let Some(Modifier::Ruby { text }) = eff.get(&ModifierType::Ruby) {
-            codepoints.extend(text.chars().map(|c| c as u32));
+    // One font-key resolution per uniform run group; per leaf only the char
+    // codepoint is read. The per-leaf effective lookup (plus a family String
+    // clone and set allocation per char) made this scan a per-tick O(N · alloc)
+    // tax on styling edits.
+    let mut leaves = block
+        .children()
+        .filter_map(|c| match c {
+            ChildView::Leaf(l) => Some(l),
+            ChildView::Block(_) => None,
+        })
+        .peekable();
+    let grouped = block.run_groups().map(|(_, n)| n).sum::<usize>() == block.leaf_child_count();
+    if grouped {
+        for (eff, len) in block.run_groups() {
+            let mut chars: Vec<u32> = Vec::new();
+            for _ in 0..len {
+                let Some(leaf) = leaves.next() else {
+                    break;
+                };
+                if let Some(ch) = leaf.as_char() {
+                    chars.push(ch as u32);
+                }
+            }
+            if chars.is_empty() {
+                continue;
+            }
+            has_char = true;
+            let cps = output
+                .entry(font_from_effective(eff))
+                .or_default()
+                .entry(block_id)
+                .or_default();
+            cps.extend(chars);
+            if let Some(Modifier::Ruby { text }) = eff.get(&ModifierType::Ruby) {
+                cps.extend(text.chars().map(|c| c as u32));
+            }
         }
-        output
-            .entry((family, weight))
-            .or_default()
-            .entry(block_id)
-            .or_default()
-            .extend(codepoints);
+    } else {
+        for leaf in leaves {
+            let Some(ch) = leaf.as_char() else {
+                continue;
+            };
+            has_char = true;
+            let eff = leaf.effective();
+            let (family, weight) = font_from_effective(eff);
+            let cps = output
+                .entry((family, weight))
+                .or_default()
+                .entry(block_id)
+                .or_default();
+            cps.insert(ch as u32);
+            if let Some(Modifier::Ruby { text }) = eff.get(&ModifierType::Ruby) {
+                cps.extend(text.chars().map(|c| c as u32));
+            }
+        }
     }
     if !has_char && block.spec().is_textblock() {
         let (family, weight) = font_from_effective(block.effective());

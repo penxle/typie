@@ -5,7 +5,7 @@ use editor_crdt::Dot;
 use editor_model::{ChildView, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, match_weight};
 use editor_state::{
-    PendingModifier, PendingModifiers, inline_leaf_dots_in_range, resolve_modifier_state,
+    PendingModifier, PendingModifiers, leaf_groups_in_range, resolve_modifier_state,
 };
 use editor_transaction::Transaction;
 
@@ -184,7 +184,10 @@ fn set_collapsed(
 
 fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) -> CommandResult {
     let selection = tr.selection().expect("entry caller guaranteed selection");
-    let (first, last, inherited_eq, leaves) = {
+    // Weight/bold normalization is uniform within a leaf group (same effective,
+    // same host), so both the scan and the emitted ops are per group — a
+    // select-all family change costs O(groups), not O(leaves).
+    let (first, last, inherited_eq, groups) = {
         let view = tr.view();
         let rs = selection
             .resolve(&view)
@@ -196,21 +199,21 @@ fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) 
         let inherited = view
             .node(from_block)
             .and_then(|n| n.effective().get(&ModifierType::FontFamily).cloned());
-        let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position())
+        let groups = leaf_groups_in_range(&rs)
             .into_iter()
-            .filter_map(|dot| {
-                let leaf = view.leaf(dot)?;
-                Some((
-                    dot,
-                    font_weight(leaf.effective()),
-                    leaf.parent()
+            .map(|g| {
+                (
+                    g.first,
+                    g.last,
+                    font_weight(g.effective),
+                    view.node(g.host)
                         .map(|node| font_weight(node.effective()))
                         .unwrap_or(DEFAULT_FONT_WEIGHT),
-                    has_bold(leaf.effective()),
-                ))
+                    has_bold(g.effective),
+                )
             })
             .collect::<Vec<_>>();
-        (first, last, inherited.as_ref() == Some(&family), leaves)
+        (first, last, inherited.as_ref() == Some(&family), groups)
     };
 
     if inherited_eq {
@@ -219,20 +222,20 @@ fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) 
         tr.add_span_modifier(first, last, family.clone())?;
     }
 
-    for (dot, old_weight, inherited_weight, old_bold) in leaves {
+    for (g_first, g_last, old_weight, inherited_weight, old_bold) in groups {
         let (new_weight, new_bold) =
             weight_and_bold_after_family_change(old_weight, old_bold, available_weights);
 
         if old_bold && !new_bold {
-            tr.clear_span_modifier(dot, dot, Modifier::Bold)?;
+            tr.clear_span_modifier(g_first, g_last, Modifier::Bold)?;
         } else if !old_bold && new_bold {
-            tr.add_span_modifier(dot, dot, Modifier::Bold)?;
+            tr.add_span_modifier(g_first, g_last, Modifier::Bold)?;
         }
 
         if new_weight != old_weight {
-            tr.remove_span_modifier(dot, dot, Modifier::FontWeight { value: old_weight })?;
+            tr.remove_span_modifier(g_first, g_last, Modifier::FontWeight { value: old_weight })?;
             if new_weight != inherited_weight {
-                tr.add_span_modifier(dot, dot, Modifier::FontWeight { value: new_weight })?;
+                tr.add_span_modifier(g_first, g_last, Modifier::FontWeight { value: new_weight })?;
             }
         }
     }

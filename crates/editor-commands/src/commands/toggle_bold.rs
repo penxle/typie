@@ -3,7 +3,7 @@ use editor_crdt::Dot;
 use editor_model::{DEFAULT_FONT_FAMILY, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
 use editor_state::{PendingModifier, PendingModifiers};
-use editor_state::{ResolvedSelection, inline_leaf_dots_in_range};
+use editor_state::{ResolvedSelection, leaf_groups_in_range};
 use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 use editor_transaction::Transaction;
 
@@ -24,20 +24,13 @@ fn block_family(view: &DocView, elem: Dot) -> Option<String> {
     }
 }
 
-fn range_has_heavy_weight(view: &DocView, rs: &ResolvedSelection) -> bool {
-    let from = rs.from().position();
-    let to = rs.to().position();
-    inline_leaf_dots_in_range(view, &from, &to)
-        .into_iter()
-        .any(|dot| {
-            let Some(leaf) = view.leaf(dot) else {
-                return false;
-            };
-            matches!(
-                leaf.effective().get(&ModifierType::FontWeight),
-                Some(Modifier::FontWeight { value }) if *value >= 700
-            )
-        })
+fn range_has_heavy_weight(rs: &ResolvedSelection) -> bool {
+    leaf_groups_in_range(rs).iter().any(|g| {
+        matches!(
+            g.effective.get(&ModifierType::FontWeight),
+            Some(Modifier::FontWeight { value }) if *value >= 700
+        )
+    })
 }
 
 pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
@@ -79,7 +72,7 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
         };
         let is_bold = matches!(ms.effective_bold, Tri::Uniform { .. });
         let synthetic_bold = !matches!(ms.bold, Tri::Absent);
-        let weight_bold = range_has_heavy_weight(&view, &rs);
+        let weight_bold = range_has_heavy_weight(&rs);
         (
             first,
             last,

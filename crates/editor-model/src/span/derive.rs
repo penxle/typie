@@ -261,7 +261,7 @@ pub fn derive_effective(
 pub fn derive_full_effective(
     tree: &BlockTree,
     src: &crate::span::EffectiveSources,
-) -> Vec<(Dot, BTreeMap<ModifierType, Modifier>)> {
+) -> Vec<(Dot, crate::projection::LeafEff)> {
     // A leaf's effective set depends only on its block path, leaf type, and its own
     // per-leaf style inputs (explicit spans / node style / node attr); the block- and
     // ancestor-level inputs are shared by all leaves of a block. So consecutive leaves
@@ -276,7 +276,7 @@ pub fn derive_full_effective(
         na: Option<crate::Node>,
     }
     let mut out = Vec::new();
-    let mut cache: Option<(CacheKey, BTreeMap<ModifierType, Modifier>)> = None;
+    let mut cache: Option<(CacheKey, crate::projection::LeafEff)> = None;
     for_each_leaf(tree, |path, leaf_type, leaf_dot| {
         let ex = src.explicit_spans.get(&leaf_dot);
         let ns = src.node_styles.get(&leaf_dot);
@@ -298,7 +298,13 @@ pub fn derive_full_effective(
                 .1
                 .clone()
         } else {
-            let e = crate::span::resolve_effective(path, Some(leaf_dot), leaf_type, true, src);
+            let e = crate::projection::LeafEff::new(crate::span::resolve_effective(
+                path,
+                Some(leaf_dot),
+                leaf_type,
+                true,
+                src,
+            ));
             cache = Some((
                 CacheKey {
                     block_path: path.to_vec(),
@@ -489,7 +495,10 @@ mod tests {
             styles: &styles,
             node_attrs: &node_attrs,
         };
-        derive_full_effective(&tree, &src).into_iter().collect()
+        derive_full_effective(&tree, &src)
+            .into_iter()
+            .map(|(d, e)| (d, (*e).clone()))
+            .collect()
     }
 
     #[test]

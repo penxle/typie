@@ -942,8 +942,10 @@ impl ProjectedState {
             leaf_type,
             &covering,
         );
-        self.projected.set_leaf_effective(leaf, eff);
-        self.projected.set_leaf_own(leaf, own);
+        self.projected
+            .set_leaf_effective(leaf, editor_model::LeafEff::new(eff));
+        self.projected
+            .set_leaf_own(leaf, editor_model::LeafOwn::new(own));
     }
 
     fn recompute_block_effective(&mut self, block: Dot) {
@@ -1149,10 +1151,6 @@ impl ProjectedState {
     }
 
     fn try_apply_span(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
-        use std::collections::BTreeMap;
-
-        use editor_model::{Modifier, OwnModifier};
-
         self.indexes.spans.add(op_dot, span_op);
         let (sa, ea) = span_op.anchors();
         let (Some(start), Some(end)) = (
@@ -1196,19 +1194,30 @@ impl ProjectedState {
         }
         // Recompute each covered leaf's effective, grouped by block in position order.
         // Leaves sharing (block, leaf type, covering set, node style) derive identical
-        // (effective, own) maps; consecutive covered leaves almost always share them,
-        // so one cached derivation per uniform stretch replaces the per-leaf
-        // re-derivation that made select-all styling O(N · derive). Leaves whose maps
+        // (effective, own) maps; consecutive covered leaves almost always share them
+        // — usually by pointer, since bulk paths and the cold build install one Arc
+        // per uniform stretch — so one cached derivation (and ONE updated covering
+        // allocation) per stretch replaces the per-leaf re-derivation and per-leaf
+        // vector edit that made select-all styling O(N · derive). Leaves whose maps
         // come out equal to what is already stored are recorded as unchanged: they
         // need no map write, no run-index update, and no layout invalidation.
+        use editor_model::{LeafCovering, LeafEff, LeafOwn};
         struct LastDerive {
             block: Dot,
             leaf_type: NodeType,
-            covering: Vec<Dot>,
+            // The PRIOR covering handle (kept alive here so pointer identity
+            // can't be recycled), and the updated one shared across the stretch.
+            prior_covering: Option<LeafCovering>,
+            new_covering: LeafCovering,
             style: Option<String>,
-            eff: BTreeMap<ModifierType, Modifier>,
-            own: BTreeMap<ModifierType, OwnModifier>,
+            eff: LeafEff,
+            own: LeafOwn,
         }
+        let covering_matches = |a: &Option<LeafCovering>, b: Option<&LeafCovering>| match (a, b) {
+            (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b) || a == b,
+            (None, None) => true,
+            _ => false,
+        };
         let mut last: Option<LastDerive> = None;
         let mut groups: Vec<(Dot, Vec<(Dot, NodeType, bool)>)> = Vec::new();
         let mut group_of: HashMap<Dot, usize> = HashMap::new();
@@ -1216,8 +1225,7 @@ impl ProjectedState {
             let Some(block) = self.indexes.paths.block_of(leaf) else {
                 continue;
             };
-            self.indexes.coverage.add_span_to(leaf, op_dot);
-            let covering = self.indexes.coverage.covering(leaf);
+            let prior = self.indexes.coverage.covering_arc(leaf);
             let style = self
                 .projected
                 .node_styles
@@ -1226,24 +1234,9 @@ impl ProjectedState {
             // Leaves carrying node attrs (atoms with implicit modifiers) derive from
             // per-leaf state the cache key doesn't capture — derive them directly.
             let (eff, own) = if self.projected.node_attrs.contains_key(&leaf) {
-                derive_leaf_from_covering(
-                    &self.indexes.paths,
-                    &self.logs,
-                    &self.projected,
-                    block,
-                    leaf,
-                    leaf_type,
-                    covering,
-                )
-            } else if let Some(l) = last.as_ref().filter(|l| {
-                l.block == block
-                    && l.leaf_type == leaf_type
-                    && l.covering == covering
-                    && l.style.as_ref() == style
-            }) {
-                (l.eff.clone(), l.own.clone())
-            } else {
-                let derived = derive_leaf_from_covering(
+                self.indexes.coverage.add_span_to(leaf, op_dot);
+                let covering = self.indexes.coverage.covering(leaf);
+                let (eff, own) = derive_leaf_from_covering(
                     &self.indexes.paths,
                     &self.logs,
                     &self.projected,
@@ -1252,17 +1245,53 @@ impl ProjectedState {
                     leaf_type,
                     covering,
                 );
+                (LeafEff::new(eff), LeafOwn::new(own))
+            } else if let Some(l) = last.as_ref().filter(|l| {
+                l.block == block
+                    && l.leaf_type == leaf_type
+                    && covering_matches(&l.prior_covering, prior)
+                    && l.style.as_ref() == style
+            }) {
+                self.indexes
+                    .coverage
+                    .set_shared(leaf, l.new_covering.clone());
+                (l.eff.clone(), l.own.clone())
+            } else {
+                let prior_covering = prior.cloned();
+                let mut cov: Vec<Dot> = prior_covering
+                    .as_ref()
+                    .map(|c| (**c).clone())
+                    .unwrap_or_default();
+                if let Err(i) = cov.binary_search(&op_dot) {
+                    cov.insert(i, op_dot);
+                }
+                let new_covering = LeafCovering::new(cov);
+                let derived = derive_leaf_from_covering(
+                    &self.indexes.paths,
+                    &self.logs,
+                    &self.projected,
+                    block,
+                    leaf,
+                    leaf_type,
+                    &new_covering,
+                );
+                let (eff, own) = (LeafEff::new(derived.0), LeafOwn::new(derived.1));
+                self.indexes.coverage.set_shared(leaf, new_covering.clone());
                 last = Some(LastDerive {
                     block,
                     leaf_type,
-                    covering: covering.to_vec(),
+                    prior_covering,
+                    new_covering,
                     style: style.cloned(),
-                    eff: derived.0.clone(),
-                    own: derived.1.clone(),
+                    eff: eff.clone(),
+                    own: own.clone(),
                 });
-                derived
+                (eff, own)
             };
-            let eff_changed = self.projected.effective.get(&leaf) != Some(&eff);
+            let eff_changed = match self.projected.effective.get(&leaf) {
+                Some(cur) => *cur != eff,
+                None => true,
+            };
             let own_changed = match self.projected.own_modifiers.get(&leaf) {
                 Some(cur) => *cur != own,
                 None => !own.is_empty(),
@@ -1387,17 +1416,18 @@ impl ProjectedState {
                 .is_none_or(|m| m.is_empty());
         let (eff, own) = if cov.is_empty() && neighbor_plain {
             // L and its leaf neighbor are both plain leaves of the same block:
-            // identical pure-inheritance effective and no own modifiers.
+            // identical pure-inheritance effective and no own modifiers. Cloning
+            // the neighbor's handle keeps the whole run on one shared map.
             (
                 self.projected
                     .effective
                     .get(&neighbor)
                     .cloned()
                     .unwrap_or_default(),
-                Default::default(),
+                editor_model::LeafOwn::default(),
             )
         } else {
-            derive_leaf_from_covering(
+            let (e, o) = derive_leaf_from_covering(
                 &self.indexes.paths,
                 &self.logs,
                 &self.projected,
@@ -1405,7 +1435,8 @@ impl ProjectedState {
                 leaf,
                 leaf_type,
                 &cov,
-            )
+            );
+            (editor_model::LeafEff::new(e), editor_model::LeafOwn::new(o))
         };
         // Place the new leaf right after its sequence neighbor among the block's
         // children. A sequential run hits the cursor (O(log K) identity check, no
@@ -1723,10 +1754,16 @@ impl ProjectedState {
                     lt,
                     &covering,
                 );
-                self.projected.set_leaf_own(*t, own);
-                let offset = self.leaf_insert_offset(block, pos);
                 self.projected
-                    .respan_leaf(block, offset, *t, eff, !is_modifier_target(lt));
+                    .set_leaf_own(*t, editor_model::LeafOwn::new(own));
+                let offset = self.leaf_insert_offset(block, pos);
+                self.projected.respan_leaf(
+                    block,
+                    offset,
+                    *t,
+                    editor_model::LeafEff::new(eff),
+                    !is_modifier_target(lt),
+                );
             }
         }
         true

@@ -7,9 +7,14 @@ use super::{ExplicitEffect, SpanLog};
 use crate::seq::SeqItem;
 use crate::{ModifierType, NodeType, Schema};
 
+/// A leaf's covering-span set, shared by reference: leaves of one covered
+/// stretch point at a single allocation, so a whole-range span op installs one
+/// updated vector per stretch instead of editing 50k per-leaf vectors.
+pub type LeafCovering = std::sync::Arc<Vec<Dot>>;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LeafSpanCoverage {
-    by_leaf: imbl::HashMap<Dot, Vec<Dot>>,
+    by_leaf: imbl::HashMap<Dot, LeafCovering>,
 }
 
 struct ResolvedSpan {
@@ -36,6 +41,9 @@ impl LeafSpanCoverage {
         }
         let resolved = resolve_spans(spans, resolver);
         let mut by_leaf = imbl::HashMap::new();
+        // Consecutive covered positions almost always share one covering set:
+        // reuse the previous position's allocation when equal.
+        let mut last: Option<LeafCovering> = None;
         for (pos, (dot, _)) in elements.iter().enumerate() {
             let mut cov: Vec<Dot> = resolved
                 .iter()
@@ -44,7 +52,15 @@ impl LeafSpanCoverage {
                 .collect();
             if !cov.is_empty() {
                 cov.sort();
-                by_leaf.insert(*dot, cov);
+                let shared = match &last {
+                    Some(l) if **l == cov => l.clone(),
+                    _ => {
+                        let a = LeafCovering::new(cov);
+                        last = Some(a.clone());
+                        a
+                    }
+                };
+                by_leaf.insert(*dot, shared);
             }
         }
         Self { by_leaf }
@@ -52,6 +68,12 @@ impl LeafSpanCoverage {
 
     pub fn covering(&self, leaf: Dot) -> &[Dot] {
         self.by_leaf.get(&leaf).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
+    /// The leaf's covering set as its shared handle, for pointer-keyed reuse
+    /// across a covered stretch.
+    pub fn covering_arc(&self, leaf: Dot) -> Option<&LeafCovering> {
+        self.by_leaf.get(&leaf)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -64,7 +86,7 @@ impl LeafSpanCoverage {
         } else {
             spans.sort();
             spans.dedup();
-            self.by_leaf.insert(leaf, spans);
+            self.by_leaf.insert(leaf, LeafCovering::new(spans));
         }
     }
 
@@ -72,8 +94,18 @@ impl LeafSpanCoverage {
         self.by_leaf.remove(&leaf);
     }
 
+    /// Install a pre-built shared covering set (empty ⇒ remove).
+    pub fn set_shared(&mut self, leaf: Dot, spans: LeafCovering) {
+        if spans.is_empty() {
+            self.by_leaf.remove(&leaf);
+        } else {
+            self.by_leaf.insert(leaf, spans);
+        }
+    }
+
     pub fn add_span_to(&mut self, leaf: Dot, span: Dot) {
         let v = self.by_leaf.entry(leaf).or_default();
+        let v = std::sync::Arc::make_mut(v);
         if let Err(i) = v.binary_search(&span) {
             v.insert(i, span);
         }
@@ -81,10 +113,11 @@ impl LeafSpanCoverage {
 
     pub fn remove_span_from(&mut self, leaf: Dot, span: Dot) {
         if let Some(v) = self.by_leaf.get_mut(&leaf) {
-            if let Ok(i) = v.binary_search(&span) {
-                v.remove(i);
+            let inner = std::sync::Arc::make_mut(v);
+            if let Ok(i) = inner.binary_search(&span) {
+                inner.remove(i);
             }
-            if v.is_empty() {
+            if inner.is_empty() {
                 self.by_leaf.remove(&leaf);
             }
         }

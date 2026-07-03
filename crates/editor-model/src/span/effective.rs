@@ -260,8 +260,8 @@ pub fn own_modifiers_for_leaf(
 pub fn derive_own_modifiers(
     tree: &BlockTree,
     src: &EffectiveSources,
-) -> imbl::HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> {
-    let mut out: imbl::HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> = imbl::HashMap::new();
+) -> imbl::HashMap<Dot, crate::projection::LeafOwn> {
+    let mut out: imbl::HashMap<Dot, crate::projection::LeafOwn> = imbl::HashMap::new();
     crate::span::for_each_leaf(tree, |path, leaf_type, leaf_dot| {
         // Own modifiers come only from the leaf's own explicit spans or node style.
         // A leaf with neither has no own modifiers, so skip building its path entirely
@@ -276,7 +276,7 @@ pub fn derive_own_modifiers(
             .collect();
         let map = own_modifiers_for_leaf(leaf_dot, &leaf_path, src);
         if !map.is_empty() {
-            out.insert(leaf_dot, map);
+            out.insert(leaf_dot, crate::projection::LeafOwn::new(map));
         }
     });
     out
