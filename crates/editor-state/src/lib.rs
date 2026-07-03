@@ -76,4 +76,4 @@ pub use stable_position::{StablePosition, StableResolveCtx};
 pub use stable_selection::StableSelection;
 pub use state::*;
 pub use to_plain::to_plain;
-pub use traversal::{first_cursor_position, last_cursor_position};
+pub use traversal::{first_cursor_position, last_cursor_position, leaves_in_range};

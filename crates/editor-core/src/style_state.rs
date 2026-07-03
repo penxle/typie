@@ -1,8 +1,8 @@
 use editor_common::Tri;
 use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::{PendingStyle, Position, State, inline_leaf_dots_in_range};
+use editor_model::{ChildView, DocView, LeafView, Modifier, ModifierType};
+use editor_state::{PendingStyle, Position, State, leaves_in_range};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -44,6 +44,19 @@ fn leaf_style(state: &State, dot: Dot) -> Option<String> {
         .flatten()
 }
 
+fn inherited_block_style(state: &State, block: editor_model::NodeView<'_>) -> Option<String> {
+    block
+        .ancestors()
+        .find_map(|node| node.dot().and_then(|dot| leaf_style(state, dot)))
+}
+
+fn effective_leaf_style(state: &State, leaf: LeafView<'_>) -> Option<String> {
+    leaf_style(state, leaf.dot()).or_else(|| {
+        leaf.parent()
+            .and_then(|block| inherited_block_style(state, block))
+    })
+}
+
 fn block_marker_style(state: &State, block: Dot) -> Option<String> {
     state
         .projected
@@ -55,22 +68,22 @@ fn block_marker_style(state: &State, block: Dot) -> Option<String> {
         .and_then(|m| m.style)
 }
 
-fn caret_leaf(view: &DocView, pos: Position) -> Option<Dot> {
+fn caret_leaf<'a>(view: &'a DocView<'a>, pos: Position) -> Option<LeafView<'a>> {
     let block = view.node(pos.node)?;
     let idx = if pos.offset > 0 { pos.offset - 1 } else { 0 };
     match block.child_at(idx) {
-        Some(ChildView::Leaf(l)) => Some(l.dot()),
+        Some(ChildView::Leaf(l)) => Some(l),
         _ => None,
     }
 }
 
 fn collapsed_base_style(state: &State, view: &DocView, pos: Position) -> Option<String> {
-    if let Some(dot) = caret_leaf(view, pos) {
-        return leaf_style(state, dot);
+    if let Some(leaf) = caret_leaf(view, pos) {
+        return effective_leaf_style(state, leaf);
     }
     let block = view.node(pos.node)?;
     if block.spec().is_textblock() {
-        return block_marker_style(state, pos.node);
+        return block_marker_style(state, pos.node).or_else(|| inherited_block_style(state, block));
     }
     None
 }
@@ -84,8 +97,8 @@ fn style_modifier_types(state: &State, style_id: &str) -> Vec<ModifierType> {
         .unwrap_or_default()
 }
 
-fn leaf_diverges(view: &DocView, dot: Dot, style_types: &[ModifierType]) -> bool {
-    view.own_modifiers_of(dot)
+fn leaf_diverges(leaf: LeafView<'_>, style_types: &[ModifierType]) -> bool {
+    leaf.own_modifiers()
         .iter()
         .filter(|(_, own)| !own.from_style)
         .any(|(ty, _)| style_types.contains(ty))
@@ -107,17 +120,16 @@ pub fn resolve_style_divergence(state: &State) -> bool {
     let view = state.view();
 
     if sel.is_collapsed() {
-        return caret_leaf(&view, sel.head)
-            .is_some_and(|dot| leaf_diverges(&view, dot, &style_types));
+        return caret_leaf(&view, sel.head).is_some_and(|leaf| leaf_diverges(leaf, &style_types));
     }
 
     let Some(rs) = sel.resolve(&view) else {
         return false;
     };
-    let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position());
+    let leaves = leaves_in_range(&rs);
     leaves
-        .iter()
-        .any(|&dot| leaf_diverges(&view, dot, &style_types))
+        .into_iter()
+        .any(|leaf| leaf_diverges(leaf, &style_types))
 }
 
 pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
@@ -144,13 +156,13 @@ pub fn resolve_applied_style(state: &State) -> Tri<StyleRefValue> {
     let Some(rs) = sel.resolve(&view) else {
         return Tri::Absent;
     };
-    let leaves = inline_leaf_dots_in_range(&view, &rs.from().position(), &rs.to().position());
+    let leaves = leaves_in_range(&rs);
 
     let mut canonical: Option<String> = None;
     let mut absent_seen = false;
     let mut mixed = false;
-    for dot in leaves {
-        let style = leaf_style(state, dot);
+    for leaf in leaves {
+        let style = effective_leaf_style(state, leaf);
         match (style, &canonical) {
             (Some(s), Some(c)) if &s == c => {}
             (Some(_), Some(_)) => mixed = true,
@@ -270,6 +282,25 @@ mod tests {
     }
 
     #[test]
+    fn applied_style_uses_inherited_root_style_over_unstyled_runs() {
+        let (state, ..) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { p1: paragraph { text("Hello") } }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_eq!(
+            resolve_applied_style(&state),
+            Tri::Uniform {
+                value: StyleRefValue {
+                    value: "base".into()
+                }
+            }
+        );
+    }
+
+    #[test]
     fn applied_style_reflects_pending_set_at_collapsed_caret() {
         let (state, _p1) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
@@ -348,6 +379,18 @@ mod tests {
             selection: (p1, 0) -> (p1, 5)
         };
         assert!(resolve_style_divergence(&with_style));
+    }
+
+    #[test]
+    fn divergence_true_when_run_overrides_inherited_root_style_modifier() {
+        let (state, ..) = state! {
+            doc {
+                styles { base: "기본" [font_size(1600)] }
+                root @base [] { p1: paragraph { text("Hello") [font_size(1200)] } }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert!(resolve_style_divergence(&state));
     }
 
     #[test]
