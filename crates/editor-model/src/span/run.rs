@@ -261,6 +261,19 @@ impl BlockRuns {
         self.blocks.remove(&block);
     }
 
+    /// The block's run segments as `(modifiers, leaf count)` groups, in leaf
+    /// order. Lets a range query aggregate per uniform segment instead of per
+    /// leaf, without materializing the segments' leaf lists.
+    pub fn group_iter(
+        &self,
+        block: Dot,
+    ) -> impl Iterator<Item = (&BTreeMap<ModifierType, Modifier>, usize)> + '_ {
+        self.blocks
+            .get(&block)
+            .into_iter()
+            .flat_map(|t| t.iter().map(|seg| (&seg.modifiers, seg.leaves.len())))
+    }
+
     pub fn iter_block(&self, block: Dot) -> Vec<RunSeg> {
         self.blocks
             .get(&block)

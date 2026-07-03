@@ -989,11 +989,36 @@ impl Editor {
         &mut self,
         f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
     ) -> Result<(), EditorError> {
+        self.transact_inner(f, false)
+    }
+
+    /// Like [`Editor::transact`], but discards the transaction when it produced
+    /// no observable state change. For commands that can legitimately no-op
+    /// (e.g. an inline toggle over a range with no applicable target): committing
+    /// their recorded ops would push a history entry `editor.can` disagrees
+    /// with, and probing with a separate throwaway transaction would run the
+    /// whole command twice.
+    pub(crate) fn transact_observable(
+        &mut self,
+        f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
+    ) -> Result<(), EditorError> {
+        self.transact_inner(f, true)
+    }
+
+    fn transact_inner(
+        &mut self,
+        f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
+        only_if_observable: bool,
+    ) -> Result<(), EditorError> {
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
         if let Mode::Probe { ref mut changed } = self.mode {
             *changed |= editor_state::state_observably_changed(&self.state, tr.state());
+            return Ok(());
+        }
+
+        if only_if_observable && !editor_state::state_observably_changed(&self.state, tr.state()) {
             return Ok(());
         }
 

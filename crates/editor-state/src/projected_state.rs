@@ -2,12 +2,12 @@ use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
     BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp, LeafSpanCoverage,
-    ModifierAttrLog, Node, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc,
-    ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
-    SpanOp, SplitError, StyleLog, anchor_dot, block_effective_one, derive_leaf_from_covering,
-    is_modifier_target, normalize_content_shallow, normalize_subtree, project_blocks,
-    project_core_with_coverage, project_from, project_from_tree, seq_parents, split_block_insert,
-    split_logs,
+    ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
+    ProjectedDoc, ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex,
+    SpanLog, SpanOp, SplitError, StyleLog, anchor_dot, block_effective_one,
+    derive_leaf_from_covering, is_modifier_target, normalize_content_shallow, normalize_subtree,
+    project_blocks, project_core_with_coverage, project_from, project_from_tree, seq_parents,
+    split_block_insert, split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -1149,6 +1149,10 @@ impl ProjectedState {
     }
 
     fn try_apply_span(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
+        use std::collections::BTreeMap;
+
+        use editor_model::{Modifier, OwnModifier};
+
         self.indexes.spans.add(op_dot, span_op);
         let (sa, ea) = span_op.anchors();
         let (Some(start), Some(end)) = (
@@ -1164,44 +1168,135 @@ impl ProjectedState {
         if start >= end {
             return true;
         }
+        // The covered leaves in position order. A short range resolves each position
+        // independently (`O(count · log)` — a styled keystroke's span touches one
+        // leaf); a long one streams the visible sequence once (`O(start + count)`),
+        // skipping the per-position tree descent that dominated select-all styling.
+        let count = end - start;
+        let mut covered: Vec<(Dot, NodeType)> = Vec::with_capacity(count);
+        if count >= 64 {
+            for (dot, item) in self
+                .seq
+                .iter_visible(&self.logs.seq)
+                .skip(start)
+                .take(count)
+            {
+                covered.push((dot, item.as_child_type()));
+            }
+        } else {
+            for pos in start..end {
+                let Some(leaf) = self.seq.dot_at_visible(&self.logs.seq, pos) else {
+                    continue;
+                };
+                let Some(leaf_type) = self.leaf_type_of(leaf) else {
+                    continue;
+                };
+                covered.push((leaf, leaf_type));
+            }
+        }
         // Recompute each covered leaf's effective, grouped by block in position order.
-        let mut groups: Vec<(Dot, Vec<(Dot, NodeType)>)> = Vec::new();
+        // Leaves sharing (block, leaf type, covering set, node style) derive identical
+        // (effective, own) maps; consecutive covered leaves almost always share them,
+        // so one cached derivation per uniform stretch replaces the per-leaf
+        // re-derivation that made select-all styling O(N · derive). Leaves whose maps
+        // come out equal to what is already stored are recorded as unchanged: they
+        // need no map write, no run-index update, and no layout invalidation.
+        struct LastDerive {
+            block: Dot,
+            leaf_type: NodeType,
+            covering: Vec<Dot>,
+            style: Option<String>,
+            eff: BTreeMap<ModifierType, Modifier>,
+            own: BTreeMap<ModifierType, OwnModifier>,
+        }
+        let mut last: Option<LastDerive> = None;
+        let mut groups: Vec<(Dot, Vec<(Dot, NodeType, bool)>)> = Vec::new();
         let mut group_of: HashMap<Dot, usize> = HashMap::new();
-        for pos in start..end {
-            let Some(leaf) = self.seq.dot_at_visible(&self.logs.seq, pos) else {
-                continue;
-            };
+        for (leaf, leaf_type) in covered {
             let Some(block) = self.indexes.paths.block_of(leaf) else {
                 continue;
             };
-            let Some(leaf_type) = self.leaf_type_of(leaf) else {
-                continue;
-            };
             self.indexes.coverage.add_span_to(leaf, op_dot);
-            let covering = self.indexes.coverage.covering(leaf).to_vec();
-            let (eff, own) = derive_leaf_from_covering(
-                &self.indexes.paths,
-                &self.logs,
-                &self.projected,
-                block,
-                leaf,
-                leaf_type,
-                &covering,
-            );
-            self.projected.set_leaf_effective(leaf, eff);
-            self.projected.set_leaf_own(leaf, own);
+            let covering = self.indexes.coverage.covering(leaf);
+            let style = self
+                .projected
+                .node_styles
+                .get(&leaf)
+                .and_then(|s| s.as_ref());
+            // Leaves carrying node attrs (atoms with implicit modifiers) derive from
+            // per-leaf state the cache key doesn't capture — derive them directly.
+            let (eff, own) = if self.projected.node_attrs.contains_key(&leaf) {
+                derive_leaf_from_covering(
+                    &self.indexes.paths,
+                    &self.logs,
+                    &self.projected,
+                    block,
+                    leaf,
+                    leaf_type,
+                    covering,
+                )
+            } else if let Some(l) = last.as_ref().filter(|l| {
+                l.block == block
+                    && l.leaf_type == leaf_type
+                    && l.covering == covering
+                    && l.style.as_ref() == style
+            }) {
+                (l.eff.clone(), l.own.clone())
+            } else {
+                let derived = derive_leaf_from_covering(
+                    &self.indexes.paths,
+                    &self.logs,
+                    &self.projected,
+                    block,
+                    leaf,
+                    leaf_type,
+                    covering,
+                );
+                last = Some(LastDerive {
+                    block,
+                    leaf_type,
+                    covering: covering.to_vec(),
+                    style: style.cloned(),
+                    eff: derived.0.clone(),
+                    own: derived.1.clone(),
+                });
+                derived
+            };
+            let eff_changed = self.projected.effective.get(&leaf) != Some(&eff);
+            let own_changed = match self.projected.own_modifiers.get(&leaf) {
+                Some(cur) => *cur != own,
+                None => !own.is_empty(),
+            };
+            if eff_changed {
+                self.projected.set_leaf_effective(leaf, eff);
+            }
+            if own_changed {
+                self.projected.set_leaf_own(leaf, own);
+            }
             let gi = *group_of.entry(block).or_insert_with(|| {
                 groups.push((block, Vec::new()));
                 groups.len() - 1
             });
-            groups[gi].1.push((leaf, leaf_type));
+            groups[gi].1.push((leaf, leaf_type, eff_changed));
         }
-        // Update only the covered leaves' run-index entries (the affected leaves are a
-        // contiguous offset range per block), instead of re-segmenting the whole block
-        // per span — `O(covered · log)` vs the `O(block)` that made styled pastes O(N²).
+        // Update the changed leaves' run-index entries (the covered leaves are a
+        // contiguous offset range per block). A handful of changes splice per leaf
+        // (`O(changed · log)` — keeps a styled keystroke cheap); past that, one
+        // whole-block re-segmentation (`O(block)`) replaces per-leaf persistent-vector
+        // edits, whose constants dominate a select-all styling. Blocks where no leaf's
+        // effective changed keep their runs and stay layout-clean.
+        const BULK_RESPAN_THRESHOLD: usize = 16;
         for (block, leaves) in &groups {
+            let changed = leaves.iter().filter(|(_, _, c)| *c).count();
+            if changed == 0 {
+                continue;
+            }
             self.mark_dirty_block(*block);
-            let Some(&(first_leaf, _)) = leaves.first() else {
+            if changed > BULK_RESPAN_THRESHOLD {
+                self.projected.resegment_block(*block);
+                continue;
+            }
+            let Some(&(first_leaf, _, _)) = leaves.first() else {
                 continue;
             };
             let Some(first_pos) = self
@@ -1212,7 +1307,10 @@ impl ProjectedState {
                 continue;
             };
             let o_first = self.leaf_insert_offset(*block, first_pos);
-            for (i, (leaf, lt)) in leaves.iter().enumerate() {
+            for (i, (leaf, lt, eff_changed)) in leaves.iter().enumerate() {
+                if !eff_changed {
+                    continue;
+                }
                 let eff = self
                     .projected
                     .effective
@@ -1783,6 +1881,49 @@ impl ProjectedState {
 
     pub fn spans(&self) -> &SpanLog {
         &self.logs.spans
+    }
+
+    /// Whether any logged span op of `ty` overlaps the inclusive leaf range
+    /// `[first, last]`. When none does, a whole-range cancel of that type is a
+    /// provable no-op the command layer can skip emitting — sparing the
+    /// O(covered leaves) projection walk the op would cost. Conservative: an
+    /// unresolvable range reports `true` so the caller keeps the cancel.
+    pub fn span_of_type_overlaps(&self, first: Dot, last: Dot, ty: ModifierType) -> bool {
+        let (Some(s), Some(e)) = (
+            self.seq
+                .resolve_boundary(first, Bias::Before)
+                .map(|b| b.position),
+            self.seq
+                .resolve_boundary(last, Bias::After)
+                .map(|b| b.position),
+        ) else {
+            return true;
+        };
+        if s >= e {
+            return false;
+        }
+        self.logs.spans.iter().any(|(_, op)| {
+            let op_ty = match op {
+                SpanOp::AddSpan { modifier, .. } => modifier.as_type(),
+                SpanOp::RemoveSpan { modifier_type, .. }
+                | SpanOp::ClearSpan { modifier_type, .. } => *modifier_type,
+            };
+            if op_ty != ty {
+                return false;
+            }
+            let (sa, ea) = op.anchors();
+            let (Some(os), Some(oe)) = (
+                self.seq
+                    .resolve_boundary(sa.id, sa.bias.into())
+                    .map(|b| b.position),
+                self.seq
+                    .resolve_boundary(ea.id, ea.bias.into())
+                    .map(|b| b.position),
+            ) else {
+                return false;
+            };
+            os < e && s < oe
+        })
     }
 
     pub fn seq_flat_pos(&self, dot: Dot) -> Option<usize> {
@@ -2456,6 +2597,276 @@ mod tests {
                             modifier_type: ModifierType::Bold,
                         }))
                         .unwrap();
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
+    // Whole-range span ops over a document mixing styled leaves, an inline atom,
+    // and two paragraphs must converge to the cold rebuild after EVERY op. Pins
+    // the bulk span-apply path (shared derivation per uniform leaf group, bulk
+    // re-segmentation) against per-leaf divergence: styled leaves must not share
+    // a plain leaf's derivation, and an op that changes nothing must not corrupt
+    // the projection.
+    #[test]
+    fn whole_range_span_ops_styled_atoms_match_cold() {
+        use editor_model::AtomLeaf;
+
+        let mut warm = ProjectedState::empty();
+        let mut leaves: Vec<Dot> = Vec::new();
+        let mut pos = 1;
+        for i in 0..30 {
+            let ch = char::from(b'a' + (i % 26) as u8);
+            leaves.push(warm.apply(seq_char(pos, ch)).unwrap().id);
+            pos += 1;
+        }
+        warm.apply(EditOp::Seq(ListOp::Ins {
+            pos,
+            item: SeqItem::Atom(AtomLeaf::HardBreak),
+        }))
+        .unwrap();
+        pos += 1;
+        warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        pos += 1;
+        for i in 0..30 {
+            let ch = char::from(b'a' + (i % 26) as u8);
+            leaves.push(warm.apply(seq_char(pos, ch)).unwrap().id);
+            pos += 1;
+        }
+
+        // A registered style on a slice of leaves inside the covered range: those
+        // leaves derive differently from their plain neighbors.
+        warm.apply(EditOp::Style(StyleRegOp {
+            style_id: "s".to_string(),
+            op: StyleOp::Presence(OrMapOp::Set {
+                key: "s".to_string(),
+                value: (),
+            }),
+        }))
+        .unwrap();
+        warm.apply(EditOp::Style(StyleRegOp {
+            style_id: "s".to_string(),
+            op: StyleOp::Modifiers(OrSetOp::Add {
+                elem: Modifier::FontSize { value: 1600 },
+            }),
+        }))
+        .unwrap();
+        for &leaf in &leaves[5..10] {
+            warm.apply(EditOp::NodeStyle(NodeLwwOp {
+                target: leaf,
+                op: LwwRegOp::Set {
+                    value: Some("s".to_string()),
+                },
+            }))
+            .unwrap();
+        }
+        warm.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+            target: Dot::ROOT,
+            modifier: Modifier::FontWeight { value: 400 },
+        }))
+        .unwrap();
+
+        let first = *leaves.first().unwrap();
+        let last = *leaves.last().unwrap();
+        let whole = |m: SpanOp| EditOp::Span(m);
+        let anchors = (
+            Anchor {
+                id: first,
+                bias: Bias::Before,
+            },
+            Anchor {
+                id: last,
+                bias: Bias::After,
+            },
+        );
+        let ops = [
+            whole(SpanOp::AddSpan {
+                start: anchors.0,
+                end: anchors.1,
+                modifier: Modifier::Italic,
+            }),
+            // Effective-neutral: no leaf carries an own FontWeight span; the block
+            // modifier keeps providing 400, so effectives must not change.
+            whole(SpanOp::RemoveSpan {
+                start: anchors.0,
+                end: anchors.1,
+                modifier_type: ModifierType::FontWeight,
+            }),
+            whole(SpanOp::AddSpan {
+                start: anchors.0,
+                end: anchors.1,
+                modifier: Modifier::FontWeight { value: 700 },
+            }),
+            whole(SpanOp::ClearSpan {
+                start: anchors.0,
+                end: anchors.1,
+                modifier_type: ModifierType::Italic,
+            }),
+            whole(SpanOp::ClearSpan {
+                start: anchors.0,
+                end: anchors.1,
+                modifier_type: ModifierType::FontWeight,
+            }),
+        ];
+        for (i, op) in ops.into_iter().enumerate() {
+            warm.apply(op).unwrap();
+            let cold =
+                ProjectedState::from_graph(warm.graph().clone()).expect("cold rebuild projects");
+            assert_eq!(
+                warm.projected(),
+                cold.projected(),
+                "diverged from cold rebuild after whole-range op #{i}"
+            );
+        }
+    }
+
+    // A span op that changes no leaf's effective (removing a FontWeight span no
+    // leaf carries while the block modifier keeps providing the same value) must
+    // not mark any block layout-dirty — nothing observable changed.
+    #[test]
+    fn effective_neutral_span_op_skips_layout_dirty() {
+        let mut warm = ProjectedState::empty();
+        let mut leaves: Vec<Dot> = Vec::new();
+        for i in 0..20 {
+            let ch = char::from(b'a' + (i % 26) as u8);
+            leaves.push(warm.apply(seq_char(1 + i, ch)).unwrap().id);
+        }
+        warm.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+            target: Dot::ROOT,
+            modifier: Modifier::FontWeight { value: 400 },
+        }))
+        .unwrap();
+        let _ = warm.take_layout_dirty();
+
+        warm.apply(EditOp::Span(SpanOp::RemoveSpan {
+            start: Anchor {
+                id: *leaves.first().unwrap(),
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: *leaves.last().unwrap(),
+                bias: Bias::After,
+            },
+            modifier_type: ModifierType::FontWeight,
+        }))
+        .unwrap();
+
+        match warm.take_layout_dirty() {
+            LayoutDirty::Incremental {
+                content,
+                structural,
+            } => {
+                assert!(
+                    content.is_empty() && structural.is_empty(),
+                    "effective-neutral span op must not dirty layout, got content={content:?} structural={structural:?}"
+                );
+            }
+            LayoutDirty::Full => panic!("effective-neutral span op must not force Full"),
+        }
+    }
+
+    fn arb_bulk_span_action() -> impl proptest::strategy::Strategy<Value = (u8, u8, u8, u8)> {
+        use proptest::prelude::*;
+        (0u8..14, any::<u8>(), any::<u8>(), any::<u8>())
+    }
+
+    // Bulk-path variant of `warm_apply_with_spans_matches_cold`: larger leaf
+    // counts (crossing the bulk re-segmentation threshold), ClearSpan, per-leaf
+    // node styles, inline atoms, and a second paragraph. The incremental spine
+    // must converge to the cold rebuild.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 128, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_bulk_span_matches_cold(
+            actions in proptest::collection::vec(arb_bulk_span_action(), 0..24),
+        ) {
+            use editor_model::AtomLeaf;
+
+            let mut warm = ProjectedState::empty();
+            warm.apply(EditOp::Style(StyleRegOp {
+                style_id: "s".to_string(),
+                op: StyleOp::Presence(OrMapOp::Set { key: "s".to_string(), value: () }),
+            })).unwrap();
+            warm.apply(EditOp::Style(StyleRegOp {
+                style_id: "s".to_string(),
+                op: StyleOp::Modifiers(OrSetOp::Add { elem: Modifier::FontSize { value: 1600 } }),
+            })).unwrap();
+            let mut live: Vec<Dot> = Vec::new();
+            // Seed enough chars that whole-range spans take the bulk path.
+            let mut count = 1usize;
+            for i in 0..40usize {
+                let d = warm.apply(seq_char(count, char::from(b'a' + (i % 26) as u8))).unwrap().id;
+                live.push(d);
+                count += 1;
+            }
+            for (kind, a, b, bias) in actions {
+                let pick = |i: u8, v: &[Dot]| v[(i as usize) % v.len()];
+                let bias_s = if bias & 1 == 0 { Bias::Before } else { Bias::After };
+                let bias_e = if bias & 2 == 0 { Bias::Before } else { Bias::After };
+                let ty = match bias % 4 {
+                    0 => ModifierType::Bold,
+                    1 => ModifierType::Italic,
+                    2 => ModifierType::FontWeight,
+                    _ => ModifierType::FontSize,
+                };
+                let m = match bias % 4 {
+                    0 => Modifier::Bold,
+                    1 => Modifier::Italic,
+                    2 => Modifier::FontWeight { value: 700 },
+                    _ => Modifier::FontSize { value: 1400 },
+                };
+                match kind {
+                    0..=2 => {
+                        let pos = 1 + (a as usize) % count;
+                        let d = warm.apply(seq_char(pos, 'z')).unwrap().id;
+                        live.push(d);
+                        count += 1;
+                    }
+                    3 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(EditOp::Seq(ListOp::Ins {
+                            pos,
+                            item: SeqItem::Atom(AtomLeaf::HardBreak),
+                        })).unwrap();
+                        count += 1;
+                    }
+                    4 => {
+                        let pos = 1 + (a as usize) % count;
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT])).unwrap();
+                        count += 1;
+                    }
+                    5 if !live.is_empty() => {
+                        warm.apply(EditOp::NodeStyle(NodeLwwOp {
+                            target: pick(a, &live),
+                            op: LwwRegOp::Set { value: Some("s".to_string()) },
+                        })).unwrap();
+                    }
+                    6..=9 if !live.is_empty() => {
+                        warm.apply(EditOp::Span(SpanOp::AddSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier: m,
+                        })).unwrap();
+                    }
+                    10..=11 if !live.is_empty() => {
+                        warm.apply(EditOp::Span(SpanOp::RemoveSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier_type: ty,
+                        })).unwrap();
+                    }
+                    12..=13 if !live.is_empty() => {
+                        warm.apply(EditOp::Span(SpanOp::ClearSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier_type: ty,
+                        })).unwrap();
                     }
                     _ => {}
                 }

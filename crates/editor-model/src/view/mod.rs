@@ -306,6 +306,14 @@ impl<'a> NodeView<'a> {
             .flatten()
             .map(move |&i| &idx.runs[i])
     }
+    /// The node's run segments as `(effective modifiers, leaf count)` groups in
+    /// leaf order, straight from the maintained run index — no leaf-list
+    /// materialization, unlike [`NodeView::runs`].
+    pub fn run_groups(
+        &self,
+    ) -> impl Iterator<Item = (&'a BTreeMap<ModifierType, Modifier>, usize)> + 'a {
+        self.view.doc.run_index.group_iter(self.id)
+    }
     pub fn inline_text(&self) -> String {
         self.tree_node()
             .into_iter()

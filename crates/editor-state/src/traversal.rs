@@ -127,24 +127,26 @@ fn walk_blocks<'a>(node: &NodeView<'a>, rs: &ResolvedSelection<'a>, out: &mut Ve
     }
 }
 
-pub fn leaves_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<editor_model::LeafView<'a>> {
+/// The direct leaf children of `block` covered by the selection, in order.
+pub fn leaves_in_block_range<'a>(
+    rs: &ResolvedSelection<'a>,
+    block: &NodeView<'a>,
+) -> Vec<editor_model::LeafView<'a>> {
     let from = rs.from().path();
     let to = rs.to().path();
+    let base = node_path(block);
     let mut out = Vec::new();
-    for b in blocks_in_range(rs) {
-        let base = node_path(&b);
-        for (i, child) in b.children().enumerate() {
-            if let ChildView::Leaf(l) = child {
-                // A leaf fills the half-open content slot [i, i+1). It is inside the
-                // selection iff its start path >= from and its end path <= to, so the
-                // leaf at the exclusive `to` boundary is not over-collected.
-                let mut start = base.clone();
-                start.push(i);
-                let mut end = base.clone();
-                end.push(i + 1);
-                if from <= start.as_slice() && end.as_slice() <= to {
-                    out.push(l);
-                }
+    for (i, child) in block.children().enumerate() {
+        if let ChildView::Leaf(l) = child {
+            // A leaf fills the half-open content slot [i, i+1). It is inside the
+            // selection iff its start path >= from and its end path <= to, so the
+            // leaf at the exclusive `to` boundary is not over-collected.
+            let mut start = base.clone();
+            start.push(i);
+            let mut end = base.clone();
+            end.push(i + 1);
+            if from <= start.as_slice() && end.as_slice() <= to {
+                out.push(l);
             }
         }
     }
@@ -228,6 +230,14 @@ mod tests {
     };
 
     use crate::{Position, selection::Selection};
+
+    fn leaves_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<editor_model::LeafView<'a>> {
+        let mut out = Vec::new();
+        for b in blocks_in_range(rs) {
+            out.extend(leaves_in_block_range(rs, &b));
+        }
+        out
+    }
 
     fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
         let mut ev = Vec::new();

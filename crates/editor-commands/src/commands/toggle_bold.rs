@@ -122,13 +122,22 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     } else {
         match find_bold_target(current_weight, available) {
             Some(target) => {
-                tr.remove_span_modifier(
-                    first,
-                    last,
-                    Modifier::FontWeight {
-                        value: current_weight,
-                    },
-                )?;
+                // The cancel-to-absent pass only matters when some FontWeight
+                // span actually overlaps the range; on a pristine range it is a
+                // whole-range no-op, and skipping it halves the styling cost.
+                if tr
+                    .state()
+                    .projected
+                    .span_of_type_overlaps(first, last, ModifierType::FontWeight)
+                {
+                    tr.remove_span_modifier(
+                        first,
+                        last,
+                        Modifier::FontWeight {
+                            value: current_weight,
+                        },
+                    )?;
+                }
                 if target != inherited_weight {
                     tr.add_span_modifier(first, last, Modifier::FontWeight { value: target })?;
                 }
@@ -484,6 +493,58 @@ mod tests {
                 modifier: Modifier::FontWeight { .. }
             }
         )));
+    }
+
+    // On a document whose range carries no FontWeight span at all, the
+    // cancel-to-absent RemoveSpan is a provable no-op — bolding must emit only
+    // the AddSpan, not a second whole-range op.
+    #[test]
+    fn range_toggle_on_pristine_emits_single_span_op() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph { text("Hello") }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(toggle_bold(&mut tr, &resource).unwrap());
+        let (_state, _steps, recorded, ..) = tr.commit();
+        let span_ops = recorded
+            .iter()
+            .filter(|r| matches!(r.op.payload, editor_model::EditOp::Span(_)))
+            .count();
+        assert_eq!(
+            span_ops, 1,
+            "pristine bold-on must emit only AddSpan(FontWeight)"
+        );
+    }
+
+    // With an explicit FontWeight span in range, the cancel must still be
+    // emitted — and a full toggle round-trip must restore the original state.
+    #[test]
+    fn range_toggle_on_with_existing_weight_span_still_cancels() {
+        let resource = make_resource([("Pretendard", vec![300, 400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph { text("Hello") [font_weight(300)] }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph { text("Hello") [font_weight(700)] }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]

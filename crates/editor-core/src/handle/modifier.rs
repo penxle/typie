@@ -23,14 +23,9 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
             // no applicable target (e.g. a fold title that suppresses the
             // modifier). That op produces no observable change but still pushes a
             // history entry, which would make editor.can (observable-state based)
-            // disagree with apply. Skip the transaction when there is nothing to
-            // observe.
-            let mut probe = editor_transaction::Transaction::new(&editor.state);
-            commands::toggle_modifier(&mut probe, modifier_type)?;
-            if !editor_state::state_observably_changed(&editor.state, probe.state()) {
-                return Ok(());
-            }
-            editor.transact(|tr| {
+            // disagree with apply. Discard the transaction when there is nothing
+            // to observe.
+            editor.transact_observable(|tr| {
                 commands::toggle_modifier(tr, modifier_type)?;
                 Ok(())
             })
@@ -115,6 +110,29 @@ mod tests {
                     modifier_type: ModifierType::Bold,
                 },
             },
+        );
+    }
+
+    // The Toggle path must not record a history entry (nor undoable state) when
+    // the command produces no observable change — e.g. a selection entirely
+    // inside a fold title, which suppresses inline modifiers. `editor.can`
+    // (observable-state probe) must keep agreeing with apply.
+    #[test]
+    fn toggle_with_no_applicable_target_records_no_history() {
+        let (state, ..) = state! {
+            doc { root { fold { ft1: fold_title { text("title") } fold_content { paragraph { text("body") } } } } }
+            selection: (ft1, 0) -> (ft1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Italic,
+            },
+        });
+        assert_eq!(
+            editor.history_undos_len(),
+            0,
+            "no-op toggle must not push an undo entry"
         );
     }
 

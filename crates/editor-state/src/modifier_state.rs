@@ -2,8 +2,7 @@ use std::collections::BTreeMap;
 
 use editor_common::Tri;
 use editor_model::{
-    LeafView, Modifier, ModifierState, ModifierType, NodeType, NodeView, Schema,
-    text_style_default_modifier,
+    Modifier, ModifierState, ModifierType, NodeType, NodeView, Schema, text_style_default_modifier,
 };
 use strum::IntoEnumIterator;
 
@@ -13,94 +12,6 @@ use crate::projected_state::ProjectedState;
 use crate::selection::ResolvedSelection;
 use crate::selection::Selection;
 use crate::traversal;
-
-pub enum RangeNode<'a> {
-    Block(NodeView<'a>),
-    Leaf(LeafView<'a>),
-}
-
-impl<'a> RangeNode<'a> {
-    fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
-        match self {
-            RangeNode::Block(b) => b.effective(),
-            RangeNode::Leaf(l) => l.effective(),
-        }
-    }
-
-    fn type_path(&self) -> Vec<NodeType> {
-        match self {
-            RangeNode::Block(b) => {
-                let mut p: Vec<_> = b.ancestors().map(|n| n.node_type()).collect();
-                p.reverse();
-                p
-            }
-            RangeNode::Leaf(l) => {
-                let host = l.parent().expect("a collected leaf has a live host block");
-                let mut p: Vec<_> = host.ancestors().map(|n| n.node_type()).collect();
-                p.reverse();
-                p.push(l.node_type());
-                p
-            }
-        }
-    }
-}
-
-pub fn range_nodes<'a>(rs: &ResolvedSelection<'a>) -> Vec<RangeNode<'a>> {
-    let mut out: Vec<RangeNode> = traversal::blocks_in_range(rs)
-        .into_iter()
-        .map(RangeNode::Block)
-        .collect();
-    out.extend(
-        traversal::leaves_in_range(rs)
-            .into_iter()
-            .map(RangeNode::Leaf),
-    );
-    out
-}
-
-/// Nodes sharing a host block and node type share one `type_path`. Interning
-/// the distinct paths (a handful — blocks × leaf types) lets the per-type scans
-/// test target applicability once per distinct path instead of rebuilding the
-/// ancestor path per node per modifier type, which made a whole-document
-/// selection O(nodes · types · depth) with an allocation each.
-struct RangePathTable {
-    node_path: Vec<usize>,
-    entries: Vec<(NodeType, Vec<NodeType>)>,
-}
-
-fn build_range_path_table(nodes: &[RangeNode]) -> RangePathTable {
-    let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
-    let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
-        std::collections::HashMap::new();
-    let mut node_path = Vec::with_capacity(nodes.len());
-    for n in nodes {
-        let key = match n {
-            RangeNode::Block(b) => (b.id(), b.node_type()),
-            RangeNode::Leaf(l) => (
-                l.parent()
-                    .expect("a collected leaf has a live host block")
-                    .id(),
-                l.node_type(),
-            ),
-        };
-        let idx = *index.entry(key).or_insert_with(|| {
-            entries.push((key.1, n.type_path()));
-            entries.len() - 1
-        });
-        node_path.push(idx);
-    }
-    RangePathTable { node_path, entries }
-}
-
-fn applicability(table: &RangePathTable, ty: ModifierType) -> Vec<bool> {
-    let target = &Schema::modifier_spec(ty).target;
-    let targets = target.rightmost_node_types();
-    table
-        .entries
-        .iter()
-        .map(|(nt, path)| targets.contains(nt) && target.matches(path))
-        .collect()
-}
 
 fn modifier_for_caret_state(
     caret: &BTreeMap<ModifierType, Modifier>,
@@ -141,11 +52,34 @@ fn textblock_type_path(textblock: &NodeView) -> Vec<NodeType> {
     path
 }
 
-/// Single pass over the range: most leaves carry an empty `effective()` map, so
-/// their per-type value is just the type's default. Only explicit entries need
-/// inspection; every type's verdict then follows from counts — how many
-/// applicable nodes there are, how many carried an explicit value, and whether
-/// those explicit values agreed.
+/// Interns one type-path entry per distinct `(host, node type)` — a handful
+/// (blocks × leaf types) — so per-type target applicability is tested once per
+/// distinct path, not per node.
+fn intern_path(
+    entries: &mut Vec<(NodeType, Vec<NodeType>)>,
+    index: &mut std::collections::HashMap<(editor_crdt::Dot, NodeType), usize>,
+    host: &NodeView,
+    ty: NodeType,
+    is_leaf: bool,
+) -> usize {
+    *index.entry((host.id(), ty)).or_insert_with(|| {
+        let mut p: Vec<NodeType> = host.ancestors().map(|n| n.node_type()).collect();
+        p.reverse();
+        if is_leaf {
+            p.push(ty);
+        }
+        entries.push((ty, p));
+        entries.len() - 1
+    })
+}
+
+/// Single pass over the range, aggregating uniform groups: a block fully inside
+/// the selection contributes its run segments — one `(effective, leaf count)`
+/// group per uniform stretch — instead of one entry per leaf, so a whole-document
+/// selection aggregates O(segments), not O(leaves). Boundary blocks keep the
+/// exact per-leaf slot filter. Every type's verdict then follows from counts —
+/// how many applicable nodes there are, how many carried an explicit value, and
+/// whether those explicit values agreed.
 pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState {
     struct Explicit<'a> {
         value: &'a Modifier,
@@ -154,30 +88,86 @@ pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState 
     }
 
     let mut out = ModifierState::default();
-    let nodes = range_nodes(rs);
-    let table = build_range_path_table(&nodes);
+    let blocks = traversal::blocks_in_range(rs);
 
-    let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
-        .map(|ty| (ty, applicability(&table, ty)))
-        .collect();
+    let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
+    let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
+        std::collections::HashMap::new();
+    // (path idx, effective, node count, is_leaf) — blocks count 1, leaf groups
+    // count a whole uniform stretch.
+    let mut groups: Vec<(usize, &BTreeMap<ModifierType, Modifier>, usize, bool)> = Vec::new();
 
-    let mut path_count = vec![0usize; table.entries.len()];
-    for &pi in &table.node_path {
-        path_count[pi] += 1;
+    for b in &blocks {
+        let pi = intern_path(&mut entries, &mut index, b, b.node_type(), false);
+        groups.push((pi, b.effective(), 1, false));
     }
 
+    for b in &blocks {
+        if b.leaf_child_count() == 0 {
+            continue;
+        }
+        // The bulk path pairs run segments with leaf types from the child list;
+        // it is sound only when the segments cover exactly the block's leaves.
+        let bulk = traversal::contains_subtree(rs, b)
+            && b.run_groups().map(|(_, n)| n).sum::<usize>() == b.leaf_child_count();
+        if bulk {
+            let mut types = b
+                .children()
+                .filter_map(|c| match c {
+                    editor_model::ChildView::Leaf(l) => Some(l.node_type()),
+                    editor_model::ChildView::Block(_) => None,
+                })
+                .peekable();
+            for (eff, len) in b.run_groups() {
+                let mut remaining = len;
+                while remaining > 0 {
+                    let Some(ty) = types.next() else {
+                        break;
+                    };
+                    let mut n = 1;
+                    while n < remaining && types.peek() == Some(&ty) {
+                        types.next();
+                        n += 1;
+                    }
+                    let pi = intern_path(&mut entries, &mut index, b, ty, true);
+                    groups.push((pi, eff, n, true));
+                    remaining -= n;
+                }
+            }
+        } else {
+            for l in traversal::leaves_in_block_range(rs, b) {
+                let pi = intern_path(&mut entries, &mut index, b, l.node_type(), true);
+                groups.push((pi, l.effective(), 1, true));
+            }
+        }
+    }
+
+    let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
+        .map(|ty| {
+            let target = &Schema::modifier_spec(ty).target;
+            let targets = target.rightmost_node_types();
+            let app: Vec<bool> = entries
+                .iter()
+                .map(|(nt, path)| targets.contains(nt) && target.matches(path))
+                .collect();
+            (ty, app)
+        })
+        .collect();
+
+    let mut path_count = vec![0usize; entries.len()];
     let bold_applicable = &apps[&ModifierType::Bold];
     let mut explicit: BTreeMap<ModifierType, Explicit> = BTreeMap::new();
     let (mut bold_any_applicable, mut bold_all, mut bold_any) = (false, true, false);
-    for (n, &pi) in nodes.iter().zip(&table.node_path) {
-        for (ty, m) in n.effective() {
+    for &(pi, eff, n, is_leaf) in &groups {
+        path_count[pi] += n;
+        for (ty, m) in eff {
             if !apps.get(ty).is_some_and(|a| a[pi]) {
                 continue;
             }
             explicit
                 .entry(*ty)
                 .and_modify(|e| {
-                    e.count += 1;
+                    e.count += n;
                     if e.value != m {
                         e.conflicting = true;
                     }
@@ -185,15 +175,12 @@ pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState 
                 .or_insert(Explicit {
                     value: m,
                     conflicting: false,
-                    count: 1,
+                    count: n,
                 });
         }
         if bold_applicable[pi] {
             bold_any_applicable = true;
-            let bold = match n {
-                RangeNode::Leaf(l) => leaf_is_bold(l),
-                RangeNode::Block(_) => false,
-            };
+            let bold = is_leaf && map_is_bold(eff);
             if bold {
                 bold_any = true;
             } else {
@@ -260,10 +247,10 @@ fn is_bold_set<'a>(mut mods: impl Iterator<Item = &'a Modifier>) -> bool {
     })
 }
 
-fn leaf_is_bold(l: &LeafView) -> bool {
-    matches!(l.effective().get(&ModifierType::Bold), Some(Modifier::Bold))
+fn map_is_bold(eff: &BTreeMap<ModifierType, Modifier>) -> bool {
+    matches!(eff.get(&ModifierType::Bold), Some(Modifier::Bold))
         || matches!(
-            l.effective().get(&ModifierType::FontWeight),
+            eff.get(&ModifierType::FontWeight),
             Some(Modifier::FontWeight { value }) if *value >= 700
         )
 }
@@ -1180,6 +1167,365 @@ mod tests {
             );
             // must not panic
             let _ = resolve_modifier_state(&state, &s, &[]);
+        }
+    }
+
+    // Reference: the per-leaf implementation the run-group aggregation replaced.
+    // Kept verbatim so the equivalence proptest below pins the rewrite.
+    fn reference_in_range(rs: &crate::selection::ResolvedSelection) -> editor_model::ModifierState {
+        use std::collections::BTreeMap;
+
+        use editor_model::{LeafView, Modifier, ModifierState, NodeType, NodeView, Schema};
+        use strum::IntoEnumIterator;
+
+        use crate::modifier_state::map_is_bold;
+        use crate::selection::ResolvedSelection;
+        use crate::traversal;
+
+        enum RangeNode<'a> {
+            Block(NodeView<'a>),
+            Leaf(LeafView<'a>),
+        }
+
+        impl<'a> RangeNode<'a> {
+            fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
+                match self {
+                    RangeNode::Block(b) => b.effective(),
+                    RangeNode::Leaf(l) => l.effective(),
+                }
+            }
+
+            fn type_path(&self) -> Vec<NodeType> {
+                match self {
+                    RangeNode::Block(b) => {
+                        let mut p: Vec<_> = b.ancestors().map(|n| n.node_type()).collect();
+                        p.reverse();
+                        p
+                    }
+                    RangeNode::Leaf(l) => {
+                        let host = l.parent().expect("a collected leaf has a live host block");
+                        let mut p: Vec<_> = host.ancestors().map(|n| n.node_type()).collect();
+                        p.reverse();
+                        p.push(l.node_type());
+                        p
+                    }
+                }
+            }
+        }
+
+        fn range_nodes<'a>(rs: &ResolvedSelection<'a>) -> Vec<RangeNode<'a>> {
+            let blocks = traversal::blocks_in_range(rs);
+            let mut out: Vec<RangeNode> = blocks.iter().copied().map(RangeNode::Block).collect();
+            for b in &blocks {
+                out.extend(
+                    traversal::leaves_in_block_range(rs, b)
+                        .into_iter()
+                        .map(RangeNode::Leaf),
+                );
+            }
+            out
+        }
+
+        struct RangePathTable {
+            node_path: Vec<usize>,
+            entries: Vec<(NodeType, Vec<NodeType>)>,
+        }
+
+        fn build_range_path_table(nodes: &[RangeNode]) -> RangePathTable {
+            let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
+            let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
+                std::collections::HashMap::new();
+            let mut node_path = Vec::with_capacity(nodes.len());
+            for n in nodes {
+                let key = match n {
+                    RangeNode::Block(b) => (b.id(), b.node_type()),
+                    RangeNode::Leaf(l) => (
+                        l.parent()
+                            .expect("a collected leaf has a live host block")
+                            .id(),
+                        l.node_type(),
+                    ),
+                };
+                let idx = *index.entry(key).or_insert_with(|| {
+                    entries.push((key.1, n.type_path()));
+                    entries.len() - 1
+                });
+                node_path.push(idx);
+            }
+            RangePathTable { node_path, entries }
+        }
+
+        fn applicability(table: &RangePathTable, ty: ModifierType) -> Vec<bool> {
+            let target = &Schema::modifier_spec(ty).target;
+            let targets = target.rightmost_node_types();
+            table
+                .entries
+                .iter()
+                .map(|(nt, path)| targets.contains(nt) && target.matches(path))
+                .collect()
+        }
+
+        struct Explicit<'a> {
+            value: &'a Modifier,
+            conflicting: bool,
+            count: usize,
+        }
+
+        let mut out = ModifierState::default();
+        let nodes = range_nodes(rs);
+        let table = build_range_path_table(&nodes);
+
+        let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
+            .map(|ty| (ty, applicability(&table, ty)))
+            .collect();
+
+        let mut path_count = vec![0usize; table.entries.len()];
+        for &pi in &table.node_path {
+            path_count[pi] += 1;
+        }
+
+        let bold_applicable = &apps[&ModifierType::Bold];
+        let mut explicit: BTreeMap<ModifierType, Explicit> = BTreeMap::new();
+        let (mut bold_any_applicable, mut bold_all, mut bold_any) = (false, true, false);
+        for (n, &pi) in nodes.iter().zip(&table.node_path) {
+            for (ty, m) in n.effective() {
+                if !apps.get(ty).is_some_and(|a| a[pi]) {
+                    continue;
+                }
+                explicit
+                    .entry(*ty)
+                    .and_modify(|e| {
+                        e.count += 1;
+                        if e.value != m {
+                            e.conflicting = true;
+                        }
+                    })
+                    .or_insert(Explicit {
+                        value: m,
+                        conflicting: false,
+                        count: 1,
+                    });
+            }
+            if bold_applicable[pi] {
+                bold_any_applicable = true;
+                let bold = match n {
+                    RangeNode::Leaf(l) => map_is_bold(l.effective()),
+                    RangeNode::Block(_) => false,
+                };
+                if bold {
+                    bold_any = true;
+                } else {
+                    bold_all = false;
+                }
+            }
+        }
+
+        for ty in ModifierType::iter() {
+            let applicable = &apps[&ty];
+            let applicable_count: usize = path_count
+                .iter()
+                .zip(applicable)
+                .filter(|(_, a)| **a)
+                .map(|(c, _)| c)
+                .sum();
+            if applicable_count == 0 {
+                continue;
+            }
+            let sparse_absence_is_neutral = matches!(ty, ModifierType::Link);
+            let ty_default = editor_model::text_style_default_modifier(ty);
+            let ex = explicit.get(&ty);
+            if ex.is_some_and(|e| e.conflicting) {
+                out.set_mixed(ty);
+                continue;
+            }
+            let defaulted = applicable_count - ex.map_or(0, |e| e.count);
+            match (ex.map(|e| e.value), ty_default) {
+                (Some(e), _) if defaulted == 0 => out.set_uniform(e),
+                (Some(e), Some(d)) => {
+                    if *e == d {
+                        out.set_uniform(e);
+                    } else {
+                        out.set_mixed(ty);
+                    }
+                }
+                (Some(e), None) => {
+                    if sparse_absence_is_neutral {
+                        out.set_uniform(e);
+                    } else {
+                        out.set_mixed(ty);
+                    }
+                }
+                (None, Some(d)) => out.set_uniform(&d),
+                (None, None) => {}
+            }
+        }
+
+        out.effective_bold = if !bold_any_applicable {
+            Tri::Absent
+        } else if bold_all {
+            Tri::Uniform { value: () }
+        } else if bold_any {
+            Tri::Mixed
+        } else {
+            Tri::Absent
+        };
+        out
+    }
+
+    fn arb_ms_action() -> impl proptest::strategy::Strategy<Value = (u8, u8, u8, u8)> {
+        use proptest::prelude::*;
+        (0u8..12, any::<u8>(), any::<u8>(), any::<u8>())
+    }
+
+    // The run-group aggregation must agree with the per-leaf reference on
+    // arbitrary docs (multiple paragraphs, atoms, block atoms, styles, spans of
+    // every family, block modifiers) and arbitrary selections (char-level,
+    // block-level, cross-paragraph, whole-doc).
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn in_range_matches_per_leaf_reference(
+            actions in proptest::collection::vec(arb_ms_action(), 0..20),
+            sel_pick in (proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>()),
+        ) {
+            use editor_model::{AtomLeaf, EditOp, SeqItem, SpanOp, Anchor, Bias};
+            use editor_crdt::{ListOp, LwwRegOp, OrMapOp, OrSetOp};
+
+            let mut state = crate::projected_state::ProjectedState::empty();
+            state.apply(EditOp::Style(editor_model::StyleRegOp {
+                style_id: "s".to_string(),
+                op: editor_model::StyleOp::Presence(OrMapOp::Set { key: "s".to_string(), value: () }),
+            })).unwrap();
+            state.apply(EditOp::Style(editor_model::StyleRegOp {
+                style_id: "s".to_string(),
+                op: editor_model::StyleOp::Modifiers(OrSetOp::Add { elem: Modifier::FontSize { value: 1600 } }),
+            })).unwrap();
+            let mut live: Vec<Dot> = Vec::new();
+            let mut count = 1usize;
+            for i in 0..24usize {
+                let d = state.apply(EditOp::Seq(ListOp::Ins {
+                    pos: count,
+                    item: SeqItem::Char(char::from(b'a' + (i % 26) as u8)),
+                })).unwrap().id;
+                live.push(d);
+                count += 1;
+            }
+            for (kind, a, b, bias) in actions {
+                let pick = |i: u8, v: &[Dot]| v[(i as usize) % v.len()];
+                let bias_s = if bias & 1 == 0 { Bias::Before } else { Bias::After };
+                let bias_e = if bias & 2 == 0 { Bias::Before } else { Bias::After };
+                let m = match bias % 6 {
+                    0 => Modifier::Bold,
+                    1 => Modifier::Italic,
+                    2 => Modifier::FontWeight { value: 700 },
+                    3 => Modifier::FontSize { value: 1400 },
+                    4 => Modifier::Link { href: "https://a.example".to_string() },
+                    _ => Modifier::Link { href: "https://b.example".to_string() },
+                };
+                match kind {
+                    0..=1 => {
+                        let pos = 1 + (a as usize) % count;
+                        let d = state.apply(EditOp::Seq(ListOp::Ins {
+                            pos,
+                            item: SeqItem::Char('z'),
+                        })).unwrap().id;
+                        live.push(d);
+                        count += 1;
+                    }
+                    2 => {
+                        let pos = 1 + (a as usize) % count;
+                        state.apply(EditOp::Seq(ListOp::Ins {
+                            pos,
+                            item: SeqItem::Atom(AtomLeaf::HardBreak),
+                        })).unwrap();
+                        count += 1;
+                    }
+                    3 => {
+                        let pos = 1 + (a as usize) % count;
+                        state.apply(EditOp::Seq(ListOp::Ins {
+                            pos,
+                            item: SeqItem::Block { node_type: NodeType::Paragraph, parents: vec![Dot::ROOT] },
+                        })).unwrap();
+                        count += 1;
+                    }
+                    4 => {
+                        let pos = 1 + (a as usize) % count;
+                        let img = match NodeType::Image.into_node() {
+                            editor_model::Node::Image(n) => n,
+                            _ => unreachable!(),
+                        };
+                        state.apply(EditOp::Seq(ListOp::Ins {
+                            pos,
+                            item: SeqItem::BlockAtom { leaf: AtomLeaf::Image { node: img }, parents: vec![Dot::ROOT] },
+                        })).unwrap();
+                        count += 1;
+                    }
+                    5 if !live.is_empty() => {
+                        state.apply(EditOp::NodeStyle(editor_model::NodeLwwOp {
+                            target: pick(a, &live),
+                            op: LwwRegOp::Set { value: Some("s".to_string()) },
+                        })).unwrap();
+                    }
+                    6 => {
+                        state.apply(EditOp::BlockModifier(editor_model::ModifierAttrOp::SetModifier {
+                            target: Dot::ROOT,
+                            modifier: match bias % 3 {
+                                0 => Modifier::FontWeight { value: 700 },
+                                1 => Modifier::FontSize { value: 1200 },
+                                _ => Modifier::BlockGap { value: 8 },
+                            },
+                        })).unwrap();
+                    }
+                    7..=9 if !live.is_empty() => {
+                        state.apply(EditOp::Span(SpanOp::AddSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier: m,
+                        })).unwrap();
+                    }
+                    10 if !live.is_empty() => {
+                        state.apply(EditOp::Span(SpanOp::RemoveSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier_type: m.as_type(),
+                        })).unwrap();
+                    }
+                    11 if !live.is_empty() => {
+                        state.apply(EditOp::Span(SpanOp::ClearSpan {
+                            start: Anchor { id: pick(a, &live), bias: bias_s },
+                            end: Anchor { id: pick(b, &live), bias: bias_e },
+                            modifier_type: m.as_type(),
+                        })).unwrap();
+                    }
+                    _ => {}
+                }
+            }
+
+            let view = state.view();
+            let mut blocks: Vec<(Dot, usize)> = Vec::new();
+            if let Some(root) = view.root() {
+                blocks.push((root.id(), root.child_count()));
+                for c in root.descendants() {
+                    if let editor_model::ChildView::Block(bl) = c {
+                        blocks.push((bl.id(), bl.child_count()));
+                    }
+                }
+            }
+            proptest::prop_assume!(!blocks.is_empty());
+            let (s0, s1, s2, s3) = sel_pick;
+            let (b1, c1) = blocks[(s0 as usize) % blocks.len()];
+            let (b2, c2) = blocks[(s1 as usize) % blocks.len()];
+            let sel = Selection::new(
+                Position::new(b1, (s2 as usize) % (c1 + 1)),
+                Position::new(b2, (s3 as usize) % (c2 + 1)),
+            );
+            if let Some(rs) = sel.resolve(&view)
+                && !rs.is_collapsed()
+            {
+                let got = crate::modifier_state::resolve_modifier_state_in_range(&rs);
+                let want = reference_in_range(&rs);
+                proptest::prop_assert_eq!(got, want);
+            }
         }
     }
 }
