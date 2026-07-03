@@ -5,9 +5,9 @@ use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
 use editor_model::{DocView, Modifier};
 use editor_state::{
-    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, ResolvedPosition,
-    ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars, flat_segments_in_range,
-    flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
+    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, PendingStyle,
+    ResolvedPosition, ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars,
+    flat_segments_in_range, flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
 };
 use editor_transaction::Transaction;
 
@@ -16,8 +16,9 @@ use crate::error::EditorError;
 use crate::message::*;
 
 fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
+    let replacement_style = uniform_text_style_in_range(tr.state(), start, end);
     let doc = tr.view();
-    let replacement_modifiers = uniform_text_modifiers_in_range(&doc, start, end);
+    let replacement_modifiers = uniform_own_text_modifiers_in_range(&doc, start, end);
     let resolve_selection_from_flat = || -> Result<Selection, CommandError> {
         let start_pos = ResolvedPosition::from_flat(&doc, start)
             .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
@@ -40,33 +41,46 @@ fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str
         commands::set_selection(selection),
         commands::optional!(commands::ensure_paragraph()),
         commands::optional!(commands::delete_selection()),
-        |tr| apply_replacement_modifiers(tr, text, replacement_modifiers.as_deref()),
+        |tr| apply_replacement_format(
+            tr,
+            text,
+            replacement_modifiers.as_deref(),
+            replacement_style.clone()
+        ),
         commands::when!(!text.is_empty(), commands::insert_text(text)),
     )
 }
 
-fn apply_replacement_modifiers(
+fn apply_replacement_format(
     tr: &mut Transaction,
     text: &str,
     target_modifiers: Option<&[Modifier]>,
+    target_style: Option<Option<String>>,
 ) -> CommandResult {
     if text.is_empty() {
         return Ok(true);
     }
-    let Some(target_modifiers) = target_modifiers else {
-        return Ok(true);
+
+    if let Some(style) = target_style {
+        tr.set_pending_style(Some(match style {
+            Some(style_id) => PendingStyle::Set { style_id },
+            None => PendingStyle::Unset,
+        }))?;
     };
 
-    let Some(selection) = tr.selection() else {
-        return Ok(true);
-    };
-    let base_modifiers = resolve_effective_modifiers_at(tr.state(), &selection.head);
-    let pending = PendingModifier::diff(&base_modifiers, target_modifiers);
-    tr.set_pending_modifiers(pending)?;
+    if let Some(target_modifiers) = target_modifiers {
+        let Some(selection) = tr.selection() else {
+            return Ok(true);
+        };
+        let base_modifiers = resolve_effective_modifiers_at(tr.state(), &selection.head);
+        let pending = PendingModifier::diff(&base_modifiers, target_modifiers);
+        tr.set_pending_modifiers(pending)?;
+    }
+
     Ok(true)
 }
 
-fn uniform_text_modifiers_in_range(
+fn uniform_own_text_modifiers_in_range(
     view: &DocView,
     start: usize,
     end: usize,
@@ -85,6 +99,7 @@ fn uniform_text_modifiers_in_range(
             let mut modifiers: Vec<Modifier> = leaf
                 .own_modifiers()
                 .values()
+                .filter(|o| !o.from_style)
                 .map(|o| o.value.clone())
                 .collect();
             modifiers.sort_by_key(|m| m.as_type());
@@ -97,6 +112,34 @@ fn uniform_text_modifiers_in_range(
     }
 
     range_modifiers
+}
+
+fn uniform_text_style_in_range(
+    state: &editor_state::State,
+    start: usize,
+    end: usize,
+) -> Option<Option<String>> {
+    if start >= end {
+        return None;
+    }
+
+    let view = state.view();
+    let mut range_style: Option<Option<String>> = None;
+    for seg in flat_segments_in_range(&view, start..end) {
+        let FlatSegment::Text { leaves, .. } = seg else {
+            return None;
+        };
+        for leaf_dot in leaves {
+            let style = state.projected.node_styles().value_of(leaf_dot);
+            match &range_style {
+                Some(existing) if existing != &style => return None,
+                Some(_) => {}
+                None => range_style = Some(style),
+            }
+        }
+    }
+
+    range_style
 }
 
 fn composition_range_valid(view: &DocView, start: usize, end: usize) -> bool {
@@ -829,16 +872,25 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                             )?;
                         } else {
                             let deletes_body = delta.replace_start != delta.replace_end;
-                            let replacement_modifiers = if !delta.ins_text.is_empty() {
-                                let doc = tr.view();
-                                uniform_text_modifiers_in_range(
-                                    &doc,
-                                    delta.replace_start,
-                                    delta.replace_end,
-                                )
-                            } else {
-                                None
-                            };
+                            let (replacement_style, replacement_modifiers) =
+                                if !delta.ins_text.is_empty() {
+                                    let style = uniform_text_style_in_range(
+                                        tr.state(),
+                                        delta.replace_start,
+                                        delta.replace_end,
+                                    );
+                                    let doc = tr.view();
+                                    (
+                                        style,
+                                        uniform_own_text_modifiers_in_range(
+                                            &doc,
+                                            delta.replace_start,
+                                            delta.replace_end,
+                                        ),
+                                    )
+                                } else {
+                                    (None, None)
+                                };
 
                             if deletes_body {
                                 replace_text_range(tr, delta.replace_start, delta.replace_end, "")?;
@@ -872,10 +924,11 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                             }
 
                             if !delta.ins_text.is_empty() {
-                                apply_replacement_modifiers(
+                                apply_replacement_format(
                                     tr,
                                     &delta.ins_text,
                                     replacement_modifiers.as_deref(),
+                                    replacement_style,
                                 )?;
                                 commands::insert_text(tr, &delta.ins_text)?;
                             }
@@ -1989,6 +2042,66 @@ mod tests {
                 ("c".into(), None),
             ]
         );
+    }
+
+    #[test]
+    fn flat_ime_repeated_composition_preserves_replacement_style_ref() {
+        let (s, ..) = state! {
+            doc {
+                styles {
+                    old: "Old" [text_color("#ff0000".to_string())]
+                    new: "New" [text_color("#00ff00".to_string())]
+                }
+                root { p1: paragraph { text("a") @old } }
+            }
+            selection: (p1, 1)
+        };
+        let mut editor = editor_with_resource(s);
+        let view = editor.state().view();
+        let current_flat = editor
+            .state()
+            .selection
+            .and_then(|selection| selection.head.resolve(&view))
+            .map(|pos| pos.to_flat())
+            .expect("selection head resolves to flat");
+        drop(view);
+
+        editor.apply(Message::Style {
+            op: StyleOp::ApplyToSelection {
+                style_id: "new".into(),
+            },
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition {
+                    start: current_flat,
+                    end: current_flat,
+                },
+                FlatImeOp::Compose { text: "b".into() },
+            ],
+        });
+        let composition = editor.state().composition.expect("composition exists");
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition {
+                    start: composition.start,
+                    end: composition.end,
+                },
+                FlatImeOp::Compose { text: "c".into() },
+            ],
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                styles {
+                    old: "Old" [text_color("#ff0000".to_string())]
+                    new: "New" [text_color("#00ff00".to_string())]
+                }
+                root { p1: paragraph { text("a") @old text("c") @new } }
+            }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
