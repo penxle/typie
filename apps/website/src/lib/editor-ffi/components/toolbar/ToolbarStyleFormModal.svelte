@@ -10,6 +10,7 @@
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import PaletteIcon from '~icons/lucide/palette';
+  import RefreshCwIcon from '~icons/lucide/refresh-cw';
   import Trash2Icon from '~icons/lucide/trash-2';
   import TypeIcon from '~icons/lucide/type';
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
@@ -31,6 +32,8 @@
     styleId?: string;
     initialName?: string;
     initialModifiers?: readonly Modifier[];
+    selectionModifiers?: readonly Modifier[];
+    canLoadSelectionModifiers?: boolean;
     fontFamilies?: readonly FontFamily[];
     onSubmit: (name: string, modifiers: Modifier[]) => void;
     onDelete?: () => void;
@@ -42,6 +45,8 @@
     styleId,
     initialName = '',
     initialModifiers = [],
+    selectionModifiers = [],
+    canLoadSelectionModifiers = false,
     fontFamilies = [],
     onSubmit,
     onDelete,
@@ -69,16 +74,20 @@
   const findMod = <T extends Modifier['type']>(mods: readonly Modifier[], type: T) =>
     mods.find((m): m is Extract<Modifier, { type: T }> => m.type === type);
 
+  const applyModifiers = (mods: readonly Modifier[]) => {
+    fontFamily = findMod(mods, 'font_family')?.value;
+    fontSize = findMod(mods, 'font_size')?.value;
+    fontWeight = findMod(mods, 'font_weight')?.value;
+    letterSpacing = findMod(mods, 'letter_spacing')?.value;
+    textColor = findMod(mods, 'text_color')?.value;
+    backgroundColor = findMod(mods, 'background_color')?.value;
+  };
+
   $effect(() => {
     if (open) {
       untrack(() => {
         name = initialName;
-        fontFamily = findMod(initialModifiers, 'font_family')?.value;
-        fontSize = findMod(initialModifiers, 'font_size')?.value;
-        fontWeight = findMod(initialModifiers, 'font_weight')?.value;
-        letterSpacing = findMod(initialModifiers, 'letter_spacing')?.value;
-        textColor = findMod(initialModifiers, 'text_color')?.value;
-        backgroundColor = findMod(initialModifiers, 'background_color')?.value;
+        applyModifiers(initialModifiers);
       });
     }
   });
@@ -295,6 +304,14 @@
     open = false;
   };
 
+  const loadSelectionModifiers = () => {
+    applyModifiers(selectionModifiers);
+    fontSizeOpened = false;
+    letterSpacingOpened = false;
+    textColorOpened = false;
+    bgColorOpened = false;
+  };
+
   const title = $derived(mode === 'create' ? '새 스타일 만들기' : '스타일 수정');
   const description = $derived(mode === 'create' ? '현재 서식을 기반으로 새 스타일을 만들어요.' : '스타일의 이름과 서식을 수정해요.');
   const submitLabel = $derived(mode === 'create' ? '생성' : '저장');
@@ -383,7 +400,21 @@
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-      <div class={css(groupLabel)}>서식</div>
+      <div class={flex({ alignItems: 'center', justifyContent: 'space-between', gap: '12px' })}>
+        <div class={css(groupLabel)}>서식</div>
+        {#if canLoadSelectionModifiers}
+          <Button
+            style={css.raw({ gap: '4px', height: '24px', paddingX: '8px', whiteSpace: 'nowrap' })}
+            onclick={loadSelectionModifiers}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <Icon icon={RefreshCwIcon} size={12} />
+            <span>선택 영역의 서식 불러오기</span>
+          </Button>
+        {/if}
+      </div>
       <div class={css(trayClass)}>
         <div class={css(rowClass)}>
           <div class={css(rowLabelClass)}>
@@ -451,7 +482,7 @@
               onblur={handleFontSizeBlur}
               onfocus={handleFontSizeFocus}
               onkeydown={handleFontSizeKeydown}
-              placeholder={fontSize === undefined ? '16' : String(fontSize / 100)}
+              placeholder={fontSize === undefined ? '선택 안 함' : String(fontSize / 100)}
               type="text"
               bind:value={fontSizeInputValue}
             />

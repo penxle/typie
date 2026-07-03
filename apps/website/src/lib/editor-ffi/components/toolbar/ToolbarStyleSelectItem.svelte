@@ -8,11 +8,12 @@
   type Props = {
     entry: StyleInfo;
     isActive: boolean;
+    isDiverged?: boolean;
     onapply: () => void;
     onedit: () => void;
   };
 
-  let { entry, isActive, onapply, onedit }: Props = $props();
+  let { entry, isActive, isDiverged = false, onapply, onedit }: Props = $props();
 </script>
 
 <button
@@ -35,7 +36,7 @@
   onclick={onapply}
   type="button"
 >
-  <span class={css({ flexGrow: '1', truncate: true })}>{entry.name}</span>
+  <span class={css({ flexGrow: '1', truncate: true })}>{isDiverged ? `${entry.name} *` : entry.name}</span>
   <span
     class={center({ flexShrink: '0', color: 'text.faint', width: '20px', height: '20px', _hover: { color: 'text.default' } })}
     onclick={(e) => {

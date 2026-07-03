@@ -115,6 +115,8 @@
     inputElement?.blur();
   };
 
+  const canLoadSelectionModifiers = $derived(editingEntry?.id === currentStyleId && styleDivergence);
+
   const updateStyle = (name: string, modifiers: Modifier[]) => {
     const editor = ctx.editor;
     if (!editor || !editingEntry) return;
@@ -255,7 +257,13 @@
       <DropdownMenu autoFocus={false} onclose={() => (opened = false)} {opened}>
         {#each filteredEntries as entry (entry.id)}
           {@const isActive = entry.id === currentStyleId}
-          <ToolbarStyleSelectItem {entry} {isActive} onapply={() => apply(entry.id)} onedit={() => startEdit(entry)} />
+          <ToolbarStyleSelectItem
+            {entry}
+            {isActive}
+            isDiverged={isActive && styleDivergence}
+            onapply={() => apply(entry.id)}
+            onedit={() => startEdit(entry)}
+          />
         {/each}
         {#if filteredEntries.length > 0}
           <HorizontalDivider color="secondary" />
@@ -288,6 +296,7 @@
 />
 
 <ToolbarStyleFormModal
+  {canLoadSelectionModifiers}
   {fontFamilies}
   initialModifiers={editingEntry?.modifiers ?? []}
   initialName={editingEntry?.name ?? ''}
@@ -296,6 +305,7 @@
     if (editingEntry) deleteStyle(editingEntry.id);
   }}
   onSubmit={updateStyle}
+  {selectionModifiers}
   styleId={editingEntry?.id}
   bind:open={editStyleModalOpen}
 />
