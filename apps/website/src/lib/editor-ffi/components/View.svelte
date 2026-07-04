@@ -149,12 +149,13 @@
     const editor = ctx.editor;
     const width = clientWidth;
     const height = useWindowScroll ? windowViewportHeight : clientHeight;
+    const viewportScaleFactor = scaleFactor;
     const isContinuous = !isPaginated;
     if (!editor || !width || !height) return;
     const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
 
     untrack(() => {
-      editor.resizeViewport(effectiveWidth, height, scaleFactor);
+      editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);
 
       if (!readyFired && editor.viewportResized) {
         readyFired = true;

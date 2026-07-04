@@ -97,7 +97,7 @@
 
           const paint = () => {
             if (isVisible) {
-              editor.renderSurface(page);
+              editor.requestSurfaceRender(page);
               dirty = false;
             } else {
               dirty = true;
@@ -111,8 +111,7 @@
             void width;
             void backingHeight;
             if (isVisible) {
-              editor.resizeSurface(page, width, backingHeight);
-              editor.renderSurface(page);
+              editor.requestSurfaceResize(page, width, backingHeight);
               dirty = false;
               needsResize = false;
             } else {
@@ -131,11 +130,12 @@
                 overlaysVisible = isVisible;
                 if (!isVisible) return;
                 if (needsResize) {
-                  editor.resizeSurface(page, width, backingHeight);
+                  editor.requestSurfaceResize(page, width, backingHeight);
                   needsResize = false;
+                  dirty = false;
                 }
                 if (dirty) {
-                  editor.renderSurface(page);
+                  editor.requestSurfaceRender(page);
                   dirty = false;
                 }
               },

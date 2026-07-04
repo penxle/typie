@@ -78,6 +78,8 @@ export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head'>;
 let wasmInitPromise: Promise<void> | null = null;
 const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
 
+type SurfaceRenderWork = { type: 'render' } | { type: 'resize'; width: number; height: number };
+
 /**
  * 검색 결과의 active(현재) 매치에 적용할 selection을 결정한다.
  *
@@ -260,8 +262,9 @@ export class Editor {
   #wasm!: WasmEditor;
   #destroyed = false;
 
-  #queued = false;
-  #rafId: number | null = null;
+  #frameId: number | null = null;
+  #wasmQueued = false;
+  #surfaceWork = new SvelteMap<number, SurfaceRenderWork>();
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
@@ -331,17 +334,26 @@ export class Editor {
 
   #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  #tick = (): void => {
-    this.#rafId = null;
+  #runFrame = (): void => {
+    try {
+      if (this.#wasmQueued) {
+        this.#wasmQueued = false;
 
-    if (this.#queued) {
-      this.#queued = false;
-
-      const events = this.#wasm.tick();
-      for (const event of events) {
-        this.#emit(event);
+        const events = this.#wasm.tick();
+        for (const event of events) {
+          this.#emit(event);
+        }
+        this.tickRevision += 1;
       }
-      this.tickRevision += 1;
+
+      this.#flushSurfaceWork();
+    } finally {
+      // Keep frameId non-null while running so work queued by emitted events joins this frame.
+      this.#frameId = null;
+
+      if (!this.#destroyed && (this.#wasmQueued || this.#surfaceWork.size > 0)) {
+        this.#requestFrame();
+      }
     }
   };
 
@@ -539,16 +551,38 @@ export class Editor {
     return null;
   }
 
-  #scheduleTick(): void {
-    if (this.#queued) {
-      return;
+  #requestFrame(): void {
+    if (this.#frameId === null) {
+      this.#frameId = requestAnimationFrame(this.#runFrame);
     }
+  }
 
-    this.#queued = true;
+  #requestWasmTick(): void {
+    this.#wasmQueued = true;
+    this.#requestFrame();
+  }
 
-    if (this.#rafId === null) {
-      this.#rafId = requestAnimationFrame(this.#tick);
+  #flushSurfaceWork(): void {
+    const work = [...this.#surfaceWork].toSorted(([a], [b]) => a - b);
+    this.#surfaceWork.clear();
+
+    for (const [page, surfaceWork] of work) {
+      if (this.#destroyed) return;
+      if (surfaceWork.type === 'resize') {
+        this.#resizeSurface(page, surfaceWork.width, surfaceWork.height);
+      }
+      this.#renderSurface(page);
     }
+  }
+
+  #renderSurface(page: number): void {
+    if (this.#destroyed) return;
+    this.#wasm.render_surface(page);
+  }
+
+  #resizeSurface(page: number, width: number, height: number): void {
+    if (this.#destroyed) return;
+    this.#wasm.resize_surface(page, width, height, this.surfaceScaleFactor);
   }
 
   #moveActive(delta: number): void {
@@ -735,7 +769,7 @@ export class Editor {
   setDoc(plain: PlainDoc): void {
     if (this.#destroyed) return;
     this.#wasm.set_doc(plain);
-    this.#scheduleTick();
+    this.#requestWasmTick();
   }
 
   materializeAt(heads: Uint8Array): PlainDoc {
@@ -987,7 +1021,7 @@ export class Editor {
   insertTemplateFragment(changesets: Uint8Array): void {
     if (this.readOnly) return;
     this.#wasm.insert_template_fragment(changesets);
-    this.#scheduleTick();
+    this.#requestWasmTick();
   }
 
   handleRepasteAsText(): void {
@@ -1005,7 +1039,7 @@ export class Editor {
   }
 
   get hasQueuedTick() {
-    return this.#queued;
+    return this.#wasmQueued;
   }
 
   get destroyed() {
@@ -1194,23 +1228,18 @@ export class Editor {
       return;
     }
     this.#wasm.enqueue(message);
-    this.#scheduleTick();
+    this.#requestWasmTick();
   }
 
   flush(): void {
-    if (this.#rafId !== null) {
-      cancelAnimationFrame(this.#rafId);
-      this.#rafId = null;
+    if (this.#frameId !== null) {
+      cancelAnimationFrame(this.#frameId);
     }
-    if (!this.#queued) {
+    if (!this.#wasmQueued && this.#surfaceWork.size === 0) {
+      this.#frameId = null;
       return;
     }
-    this.#queued = false;
-    const events = this.#wasm.tick();
-    for (const event of events) {
-      this.#emit(event);
-    }
-    this.tickRevision += 1;
+    this.#runFrame();
   }
 
   suspendToolbarSync(): void {
@@ -1236,17 +1265,22 @@ export class Editor {
 
   detachSurface(page: number): void {
     if (this.#destroyed) return;
+    this.#surfaceWork.delete(page);
     this.#wasm.detach_surface(page);
   }
 
-  renderSurface(page: number): void {
+  requestSurfaceRender(page: number): void {
     if (this.#destroyed) return;
-    this.#wasm.render_surface(page);
+    if (this.#surfaceWork.get(page)?.type !== 'resize') {
+      this.#surfaceWork.set(page, { type: 'render' });
+    }
+    this.#requestFrame();
   }
 
-  resizeSurface(page: number, width: number, height: number): void {
+  requestSurfaceResize(page: number, width: number, height: number): void {
     if (this.#destroyed) return;
-    this.#wasm.resize_surface(page, width, height, this.surfaceScaleFactor);
+    this.#surfaceWork.set(page, { type: 'resize', width, height });
+    this.#requestFrame();
   }
 
   setExternalElementHeight(nodeId: string, height: number): void {
@@ -1284,7 +1318,7 @@ export class Editor {
 
   receiveRemoteChangeset(payload: Uint8Array): void {
     this.#wasm.receive_remote_changeset(payload);
-    this.#scheduleTick();
+    this.#requestWasmTick();
   }
 
   copySelection(): ClipboardPayload | undefined {
@@ -1769,9 +1803,9 @@ export class Editor {
     this.#effectCleanup?.();
     this.#effectCleanup = null;
 
-    if (this.#rafId !== null) {
-      cancelAnimationFrame(this.#rafId);
-      this.#rafId = null;
+    if (this.#frameId !== null) {
+      cancelAnimationFrame(this.#frameId);
+      this.#frameId = null;
     }
 
     if (this.#characterCountsDebounceTimer) {
