@@ -2,12 +2,11 @@ use editor_common::Tri;
 use editor_crdt::Dot;
 use editor_model::{DEFAULT_FONT_FAMILY, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
 use editor_state::{ResolvedSelection, leaf_groups_in_range};
 use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 use editor_transaction::Transaction;
 
-use crate::helpers::span_dots;
 use crate::{CommandError, CommandResult};
 
 fn block_weight(view: &DocView, elem: Dot) -> Option<u16> {
@@ -56,7 +55,7 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = span_dots(&view, &rs) else {
+        let Some((first, last)) = leaf_span_in_range(&rs) else {
             return Ok(false);
         };
         let ms = resolve_modifier_state_in_range(&rs);

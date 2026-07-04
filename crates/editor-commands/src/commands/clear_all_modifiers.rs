@@ -2,11 +2,11 @@ use std::collections::BTreeSet;
 
 use editor_crdt::Dot;
 use editor_model::{DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
 use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
 
-use crate::helpers::{is_text_applicable, span_dots};
+use crate::helpers::is_text_applicable;
 use crate::{CommandError, CommandResult};
 
 pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
@@ -115,7 +115,7 @@ fn clear_all_modifiers_range(tr: &mut Transaction) -> CommandResult {
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        match span_dots(&view, &rs) {
+        match leaf_span_in_range(&rs) {
             Some((first, last)) => (first, last),
             _ => return Ok(false),
         }

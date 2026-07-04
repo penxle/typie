@@ -1,11 +1,11 @@
 use editor_crdt::Dot;
 use editor_model::{DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
     apply_modifier_to_node, collect_applicable_targets_in_range, is_text_applicable,
-    is_unit_variant, resolve_applicable_target_collapsed, span_dots,
+    is_unit_variant, resolve_applicable_target_collapsed,
 };
 use crate::{CommandError, CommandResult};
 
@@ -125,7 +125,7 @@ fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> Command
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = span_dots(&view, &rs) else {
+        let Some((first, last)) = leaf_span_in_range(&rs) else {
             return Ok(false);
         };
         let from_block = rs.from().node();
@@ -423,6 +423,36 @@ mod tests {
                 }
             }
             selection: (p, 2) -> (p, 7)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_set_font_size_ending_at_empty_paragraph_start_applies_to_selected_text() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("12") }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 1, >) -> (p2, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("1")
+                        text("2") [font_size(2400)]
+                    }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 1, >) -> (p2, 0, <)
         };
         assert_state_eq!(&actual, &expected);
     }

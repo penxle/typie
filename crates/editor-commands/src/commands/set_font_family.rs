@@ -9,7 +9,6 @@ use editor_state::{
 };
 use editor_transaction::Transaction;
 
-use crate::helpers::span_dots;
 use crate::{CommandError, CommandResult};
 
 pub fn set_font_family(tr: &mut Transaction, value: String, resource: &Resource) -> CommandResult {
@@ -182,14 +181,16 @@ fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) 
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = span_dots(&view, &rs) else {
+        let raw_groups = leaf_groups_in_range(&rs);
+        let Some(first) = raw_groups.first().map(|g| g.first) else {
             return Ok(false);
         };
+        let last = raw_groups.last().expect("first group exists").last;
         let from_block = rs.from().node();
         let inherited = view
             .node(from_block)
             .and_then(|n| n.effective().get(&ModifierType::FontFamily).cloned());
-        let groups = leaf_groups_in_range(&rs)
+        let groups = raw_groups
             .into_iter()
             .map(|g| {
                 (

@@ -1,9 +1,9 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::Position;
+use editor_state::{Position, leaf_span_in_range};
 use editor_transaction::Transaction;
 
-use crate::helpers::{is_text_applicable, span_dots};
+use crate::helpers::is_text_applicable;
 use crate::{CommandError, CommandResult};
 
 pub fn edit_modifier(
@@ -129,7 +129,7 @@ fn edit_modifier_range(
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = span_dots(&view, &rs) else {
+        let Some((first, last)) = leaf_span_in_range(&rs) else {
             return Ok(false);
         };
         let present = view

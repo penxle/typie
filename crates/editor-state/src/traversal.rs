@@ -157,6 +157,99 @@ pub fn leaves_in_block_range<'a>(
     out
 }
 
+fn leaf_slot_is_covered(slot: usize, base: &[usize], from: &[usize], to: &[usize]) -> bool {
+    let mut start = base.to_vec();
+    start.push(slot);
+    let mut end = base.to_vec();
+    end.push(slot + 1);
+    from <= start.as_slice() && end.as_slice() <= to
+}
+
+fn first_child_slot(base: &[usize], from: &[usize]) -> usize {
+    if from.starts_with(base) && from.len() > base.len() {
+        from[base.len()]
+    } else {
+        0
+    }
+}
+
+fn last_child_slot(block: &NodeView, base: &[usize], to: &[usize]) -> Option<usize> {
+    let count = block.child_count();
+    if count == 0 {
+        return None;
+    }
+    if !to.starts_with(base) {
+        return Some(count - 1);
+    }
+    if to.len() == base.len() {
+        return None;
+    }
+
+    let slot = to[base.len()];
+    if to.len() == base.len() + 1 {
+        slot.checked_sub(1).map(|slot| slot.min(count - 1))
+    } else {
+        Some(slot.min(count - 1))
+    }
+}
+
+fn first_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Option<Dot> {
+    let base = node_path(block);
+    if !path_intersects_range(&base, from, to) {
+        return None;
+    }
+
+    for slot in first_child_slot(&base, from)..block.child_count() {
+        match block.child_at(slot)? {
+            ChildView::Leaf(l) => {
+                if leaf_slot_is_covered(slot, &base, from, to) {
+                    return Some(l.dot());
+                }
+            }
+            ChildView::Block(b) => {
+                if let Some(dot) = first_covered_leaf_dot(&b, from, to) {
+                    return Some(dot);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn last_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Option<Dot> {
+    let base = node_path(block);
+    if !path_intersects_range(&base, from, to) {
+        return None;
+    }
+
+    for slot in (0..=last_child_slot(block, &base, to)?).rev() {
+        match block.child_at(slot)? {
+            ChildView::Leaf(l) => {
+                if leaf_slot_is_covered(slot, &base, from, to) {
+                    return Some(l.dot());
+                }
+            }
+            ChildView::Block(b) => {
+                if let Some(dot) = last_covered_leaf_dot(&b, from, to) {
+                    return Some(dot);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The first and last leaf dots fully covered by the selection.
+pub fn leaf_span_in_range(rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
+    let from = rs.from().path();
+    let to = rs.to().path();
+    let root = rs.view().root()?;
+    let first = first_covered_leaf_dot(&root, from, to)?;
+    let last = last_covered_leaf_dot(&root, from, to)?;
+
+    Some((first, last))
+}
+
 /// A maximal stretch of covered leaves sharing one host block, leaf type, and
 /// effective-modifier map. `first`/`last` bound the stretch for range span ops.
 pub struct LeafGroup<'a> {
@@ -404,6 +497,31 @@ mod tests {
         (project_document(&logs(&items)).unwrap(), root, p1, p2)
     }
 
+    fn text_para_then_empty_para() -> (ProjectedDoc, Dot, Dot) {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 4);
+        let items = vec![
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('1')),
+            (Dot::new(1, 3), SeqItem::Char('2')),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        (project_document(&logs(&items)).unwrap(), p1, p2)
+    }
+
     fn sel<'a>(
         view: &'a DocView<'a>,
         a: (Dot, usize),
@@ -621,6 +739,30 @@ mod tests {
             "image leaf IS collected when selection spans p1 to p2"
         );
         let _ = root;
+    }
+
+    #[test]
+    fn test_5_leaf_span_in_range_ends_at_empty_paragraph_start() {
+        let (pd, p1, p2) = text_para_then_empty_para();
+        let view = DocView::new(&pd);
+        let rs = sel(&view, (p1, 1), (p2, 0));
+
+        let (first, last) = leaf_span_in_range(&rs).expect("selection covers one leaf");
+
+        assert_eq!(view.leaf(first).and_then(|l| l.as_char()), Some('2'));
+        assert_eq!(view.leaf(last).and_then(|l| l.as_char()), Some('2'));
+    }
+
+    #[test]
+    fn test_5_leaf_span_in_range_uses_document_order_across_root_leaf() {
+        let (pd, _root, p1, _image_dot, p2) = p1_image_p2_doc();
+        let view = DocView::new(&pd);
+        let rs = sel(&view, (p1, 0), (p2, 1));
+
+        let (first, last) = leaf_span_in_range(&rs).expect("selection covers leaves");
+
+        assert_eq!(view.leaf(first).and_then(|l| l.as_char()), Some('a'));
+        assert_eq!(view.leaf(last).and_then(|l| l.as_char()), Some('x'));
     }
 
     // §4.7: text_run_around

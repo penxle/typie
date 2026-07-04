@@ -7,41 +7,6 @@ use strum::IntoEnumIterator;
 
 use crate::CommandError;
 
-fn last_leaf_dot(block: &NodeView) -> Option<Dot> {
-    block
-        .descendants()
-        .filter_map(|c| match c {
-            ChildView::Leaf(l) => Some(l.dot()),
-            ChildView::Block(_) => None,
-        })
-        .last()
-}
-
-/// The `(first, last)` leaf dots bounding the inline span for a resolved
-/// selection. When an endpoint lands on a whole block, the block token precedes
-/// its content in the flat sequence, so an `After` anchor on it stops short of
-/// the block's text; the `to` side descends to the block's last leaf so the
-/// span covers the whole block.
-pub(crate) fn span_dots(view: &DocView, rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
-    let from = rs.from();
-    let to = rs.to();
-
-    let from_child = view.node(from.node())?.child_at(from.offset())?;
-    let first = match from_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.dot()?,
-    };
-
-    let to_off = to.offset().checked_sub(1)?;
-    let to_child = view.node(to.node())?.child_at(to_off)?;
-    let last = match to_child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => last_leaf_dot(&b).or_else(|| b.dot())?,
-    };
-
-    Some((first, last))
-}
-
 pub(crate) fn resolve_effective_modifiers(
     node: &NodeView,
     offset: usize,
