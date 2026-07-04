@@ -1,7 +1,9 @@
 use editor_macros::state;
+use editor_model::Modifier;
 use editor_resource::RawTextReplacementRule;
 use editor_state::{
-    Composition, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, assert_state_eq,
+    Composition, PendingModifier, PendingStyle, Position, ResolvedPosition,
+    ResolvedPositionFlatExt, Selection, assert_state_eq,
 };
 use editor_transaction::HistoryMeta;
 
@@ -199,6 +201,52 @@ fn backspace_immediately_after_replacement_restores_original() {
         selection: (p1, 3)
     };
     assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn backspace_restore_clears_pending_format_restored_by_auto_replacement_undo() {
+    let (s, ..) = state! {
+        doc {
+            styles { s1: "s" [] }
+            root { p1: paragraph { text("") } }
+        }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    editor
+        .transact(|tr| {
+            tr.set_pending_modifiers(vec![PendingModifier::Set {
+                modifier: Modifier::Bold,
+            }])?;
+            tr.set_pending_style(Some(PendingStyle::Set {
+                style_id: "s1".to_string(),
+            }))?;
+            Ok(())
+        })
+        .unwrap();
+
+    type_text(&mut editor, PLAIN_PATTERN);
+    key(&mut editor, Key::Backspace);
+
+    let flat = flat_text(&editor);
+    assert!(
+        flat.contains(PLAIN_PATTERN),
+        "original text must be restored by shortcut: {flat:?}"
+    );
+    assert!(
+        !flat.contains(PLAIN_SUBSTITUTE),
+        "substitute must be gone: {flat:?}"
+    );
+    assert!(
+        editor.state().pending_modifiers.is_empty(),
+        "pending modifiers cleared"
+    );
+    assert!(
+        editor.state().pending_style.is_none(),
+        "pending style cleared"
+    );
+    assert!(editor.undo_history.can_redo(), "redo stack must be intact");
 }
 
 #[test]

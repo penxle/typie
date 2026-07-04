@@ -21,6 +21,9 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
                 // content (cf. handle/selection.rs).
                 editor.transact(|tr| {
                     tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                    if tr.selection() != Some(remapped) {
+                        tr.clear_pending_format()?;
+                    }
                     tr.set_selection(Some(remapped))?;
                     Ok(())
                 })?;
@@ -77,11 +80,38 @@ fn remap_selection_out_of_fold_content(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::Modifier;
+    use editor_state::{PendingModifier, PendingStyle};
 
     use super::*;
     use crate::event::EditorEvent;
     use crate::state_field::StateField;
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn set_pending_format(editor: &mut Editor) {
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                tr.set_pending_style(Some(PendingStyle::Set {
+                    style_id: "s1".to_string(),
+                }))?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn assert_pending_format_cleared(editor: &Editor) {
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending modifiers cleared"
+        );
+        assert!(
+            editor.state().pending_style.is_none(),
+            "pending style cleared"
+        );
+    }
 
     #[test]
     fn probe_toggle_fold_existing() {
@@ -163,6 +193,30 @@ mod tests {
             p1,
             "selection inside fold-content must be remapped out on collapse"
         );
+    }
+
+    #[test]
+    fn collapse_remap_clears_pending_format() {
+        let (initial, f1, _p1) = state! {
+            doc { root {
+                f1: fold {
+                    fold_title { text("Title") }
+                    fold_content { p1: paragraph { text("Body") } }
+                }
+            } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        set_pending_format(&mut editor);
+
+        editor.apply(Message::View {
+            op: ViewOp::ToggleFold { id: f1 },
+        });
+
+        assert_pending_format_cleared(&editor);
     }
 
     #[test]

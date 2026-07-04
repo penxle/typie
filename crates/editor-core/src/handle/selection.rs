@@ -2,8 +2,8 @@ use editor_commands::{self as commands};
 use editor_crdt::Dot;
 use editor_model::DocView;
 use editor_state::{
-    PendingModifiers, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    StableResolveCtx, cell_rect_selection, enclosing_table, enclosing_table_cell,
+    Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
+    cell_rect_selection, enclosing_table, enclosing_table_cell,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion, table_cell_ids,
 };
@@ -18,8 +18,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         editor.clear_preferred_x();
         return editor.transact(|tr| {
             tr.set_composition(None)?;
-            tr.set_pending_modifiers(PendingModifiers::new())?;
-            tr.set_pending_style(None)?;
+            tr.clear_pending_format()?;
             tr.set_selection(None)?;
             Ok(())
         });
@@ -30,7 +29,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         SelectionOp::Set { selection } => editor.transact(|tr| {
             tr.update_meta(|m| m.history = HistoryMeta::Skip);
             if selection.resolve(&tr.view()).is_some() {
-                commands::set_selection(tr, selection)?;
+                if tr.selection() != Some(selection) {
+                    tr.clear_pending_format()?;
+                }
+                tr.set_selection(Some(selection))?;
             }
             Ok(())
         }),
@@ -42,7 +44,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                 selection.resolve(&ctx)
             };
             if let Some(live) = live {
-                commands::set_selection(tr, live)?;
+                if tr.selection() != Some(live) {
+                    tr.clear_pending_format()?;
+                }
+                tr.set_selection(Some(live))?;
             }
             Ok(())
         }),
@@ -51,7 +56,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             editor.transact(|tr| {
                 tr.update_meta(|m| m.history = HistoryMeta::Skip);
                 if let Some(selection) = selection {
-                    commands::set_selection(tr, selection)?;
+                    if tr.selection() != Some(selection) {
+                        tr.clear_pending_format()?;
+                    }
+                    tr.set_selection(Some(selection))?;
                 }
                 Ok(())
             })
@@ -70,7 +78,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                 };
                 Selection::new(Position::from(&start_pos), Position::from(&end_pos))
             };
-            commands::set_selection(tr, selection)?;
+            if tr.selection() != Some(selection) {
+                tr.clear_pending_format()?;
+            }
+            tr.set_selection(Some(selection))?;
             Ok(())
         }),
         SelectionOp::ExtendTo {
@@ -95,7 +106,8 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                 if let Some(selection) = selection
                     && tr.selection() != Some(selection)
                 {
-                    commands::set_selection(tr, selection)?;
+                    tr.clear_pending_format()?;
+                    tr.set_selection(Some(selection))?;
                 }
                 Ok(())
             })
@@ -105,7 +117,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             editor.transact(|tr| {
                 tr.update_meta(|m| m.history = HistoryMeta::Skip);
                 if let Some(selection) = selection {
-                    commands::set_selection(tr, selection)?;
+                    if tr.selection() != Some(selection) {
+                        tr.clear_pending_format()?;
+                    }
+                    tr.set_selection(Some(selection))?;
                 }
                 Ok(())
             })
@@ -114,6 +129,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             let resource = editor.resource.clone();
             editor.transact(|tr| {
                 tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                let before = tr.selection();
                 match (unit, tr.selection()) {
                     (SelectionExpansionUnit::Word, Some(selection)) => {
                         let resource = resource.lock().unwrap();
@@ -130,6 +146,9 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                         commands::select_all(tr)?;
                     }
                     (_, None) => {}
+                }
+                if tr.selection() != before {
+                    tr.clear_pending_format()?;
                 }
                 Ok(())
             })
@@ -1484,6 +1503,74 @@ mod tests {
             editor.state().pending_style.is_none(),
             "pending_style cleared"
         );
+    }
+
+    #[test]
+    fn selection_op_set_to_different_position_clears_pending_format() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                tr.set_pending_style(Some(editor_state::PendingStyle::Set {
+                    style_id: "s1".to_string(),
+                }))?;
+                Ok(())
+            })
+            .unwrap();
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p1, 4)),
+            },
+        });
+
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending modifiers cleared"
+        );
+        assert!(
+            editor.state().pending_style.is_none(),
+            "pending style cleared"
+        );
+    }
+
+    #[test]
+    fn selection_op_set_to_same_position_preserves_pending_format() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(initial);
+        let pending_modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::Bold,
+        }];
+        let pending_style = Some(editor_state::PendingStyle::Set {
+            style_id: "s1".to_string(),
+        });
+
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(pending_modifiers.clone())?;
+                tr.set_pending_style(pending_style.clone())?;
+                Ok(())
+            })
+            .unwrap();
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p1, 3)),
+            },
+        });
+
+        assert_eq!(editor.state().pending_modifiers, pending_modifiers);
+        assert_eq!(editor.state().pending_style, pending_style);
     }
 
     #[test]

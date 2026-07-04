@@ -2,53 +2,63 @@ use std::sync::Arc;
 
 use editor_commands::{self as commands};
 use editor_state::Selection;
+use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
 pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
-    let resource = Arc::clone(&editor.resource);
-    let resource = resource.lock().unwrap();
-
-    if matches!(event.key, Key::Backspace) && editor.try_undo_auto_replacement() {
-        return Ok(());
-    }
-
-    editor.transact(|tr| {
-        match (event.key, event.modifiers) {
-            (Key::Enter, m) if m.shift => {
-                commands::first!(
+    match (event.key, event.modifiers) {
+        (Key::Enter, m) if m.shift => editor.transact(|tr| {
+            commands::first!(
+                tr,
+                commands::materialize_gap_paragraph(),
+                commands::insert_paragraph_before_unit_selection(),
+                |tr| commands::chain!(
                     tr,
-                    commands::materialize_gap_paragraph(),
-                    commands::insert_paragraph_before_unit_selection(),
-                    |tr| commands::chain!(
-                        tr,
-                        commands::optional!(commands::ensure_paragraph()),
-                        commands::optional!(commands::delete_selection()),
-                        commands::insert_hard_break(),
-                    ),
-                )?;
-            }
-            (Key::Enter, _) => {
-                commands::first!(
+                    commands::optional!(commands::ensure_paragraph()),
+                    commands::optional!(commands::delete_selection()),
+                    commands::insert_hard_break(),
+                ),
+            )?;
+            Ok(())
+        }),
+        (Key::Enter, _) => editor.transact(|tr| {
+            commands::first!(
+                tr,
+                commands::materialize_gap_paragraph(),
+                commands::insert_paragraph_after_unit_selection(),
+                |tr| commands::chain!(
                     tr,
-                    commands::materialize_gap_paragraph(),
-                    commands::insert_paragraph_after_unit_selection(),
-                    |tr| commands::chain!(
+                    commands::optional!(commands::delete_selection()),
+                    |tr| commands::first!(
                         tr,
-                        commands::optional!(commands::delete_selection()),
-                        |tr| commands::first!(
-                            tr,
-                            commands::lift_empty_list_item(),
-                            commands::split_list_item(),
-                            commands::lift_last_paragraph(),
-                            commands::split_paragraph(),
-                        ),
+                        commands::lift_empty_list_item(),
+                        commands::split_list_item(),
+                        commands::lift_last_paragraph(),
+                        commands::split_paragraph(),
                     ),
-                )?;
+                ),
+            )?;
+            Ok(())
+        }),
+        (Key::Backspace, _) if editor.try_undo_auto_replacement() => {
+            if !editor.state().pending_modifiers.is_empty()
+                || editor.state().pending_style.is_some()
+            {
+                editor.transact(|tr| {
+                    tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                    tr.clear_pending_format()?;
+                    Ok(())
+                })?;
             }
-            (Key::Backspace, _) => {
+            Ok(())
+        }
+        (Key::Backspace, _) => {
+            let resource = Arc::clone(&editor.resource);
+            let resource = resource.lock().unwrap();
+            editor.transact(|tr| {
                 commands::first!(
                     tr,
                     commands::delete_selection(),
@@ -65,8 +75,14 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::lift_first_paragraph(),
                     commands::delete_empty_paragraph_backward(),
                 )?;
-            }
-            (Key::Delete, _) => {
+                tr.clear_pending_format()?;
+                Ok(())
+            })
+        }
+        (Key::Delete, _) => {
+            let resource = Arc::clone(&editor.resource);
+            let resource = resource.lock().unwrap();
+            editor.transact(|tr| {
                 commands::first!(
                     tr,
                     commands::delete_selection(),
@@ -80,48 +96,79 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::lift_paragraph_forward(),
                     commands::delete_empty_paragraph_forward(),
                 )?;
-            }
-            (Key::Tab, m) if m.shift => {
-                commands::first!(
-                    tr,
-                    commands::lift_list_item_at_start(),
-                    commands::delete_preceding_tab(),
-                )?;
-            }
-            (Key::Tab, _) => {
-                commands::first!(
-                    tr,
-                    commands::sink_list_item_at_start(),
-                    commands::insert_tab(),
-                )?;
-            }
-            (Key::Escape, _) => {
-                if let Some(current) = tr.selection() {
-                    let collapsed = Selection::collapsed(current.head);
-                    let normalized = collapsed.normalize(&tr.view()).unwrap_or(collapsed);
-                    // Unit selections re-normalize to the direction-flipped form;
-                    // an anchor/head swap brackets the same content.
-                    let unchanged = normalized == current
-                        || (normalized.anchor == current.head && normalized.head == current.anchor);
-                    if unchanged {
-                        tr.set_selection(None)?;
-                    } else {
-                        tr.set_selection(Some(collapsed))?;
-                    }
-                }
-            }
+                tr.clear_pending_format()?;
+                Ok(())
+            })
         }
-        Ok(())
-    })
+        (Key::Tab, m) if m.shift => editor.transact(|tr| {
+            commands::first!(
+                tr,
+                commands::lift_list_item_at_start(),
+                commands::delete_preceding_tab(),
+            )?;
+            Ok(())
+        }),
+        (Key::Tab, _) => editor.transact(|tr| {
+            commands::first!(
+                tr,
+                commands::sink_list_item_at_start(),
+                commands::insert_tab(),
+            )?;
+            Ok(())
+        }),
+        (Key::Escape, _) => editor.transact(|tr| {
+            if let Some(current) = tr.selection() {
+                let collapsed = Selection::collapsed(current.head);
+                let normalized = collapsed.normalize(&tr.view()).unwrap_or(collapsed);
+                // Unit selections re-normalize to the direction-flipped form;
+                // an anchor/head swap brackets the same content.
+                let unchanged = normalized == current
+                    || (normalized.anchor == current.head && normalized.head == current.anchor);
+                if unchanged {
+                    tr.set_selection(None)?;
+                } else {
+                    tr.set_selection(Some(collapsed))?;
+                }
+                tr.clear_pending_format()?;
+            }
+            Ok(())
+        }),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::{assert_doc_eq, assert_state_eq};
+    use editor_model::Modifier;
+    use editor_state::{PendingModifier, PendingStyle, assert_doc_eq, assert_state_eq};
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
+
+    fn set_pending_format(editor: &mut Editor) {
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                tr.set_pending_style(Some(PendingStyle::Set {
+                    style_id: "s1".to_string(),
+                }))?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn assert_pending_format_cleared(editor: &Editor) {
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending modifiers cleared"
+        );
+        assert!(
+            editor.state().pending_style.is_none(),
+            "pending style cleared"
+        );
+    }
 
     #[test]
     fn probe_backspace_at_boundary() {
@@ -1211,6 +1258,24 @@ mod tests {
     }
 
     #[test]
+    fn backspace_selection_only_clears_pending_format() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        set_pending_format(&mut editor);
+
+        editor.apply(key(Key::Backspace));
+
+        assert_pending_format_cleared(&editor);
+    }
+
+    #[test]
     fn second_backspace_at_between_monolithic_gap_deletes_prev_monolithic() {
         let (state, ..) = state! {
             doc { r: root {
@@ -1254,6 +1319,25 @@ mod tests {
             selection: (r, 1, >) -> (r, 2, <)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_text_clears_pending_format_when_cursor_stays_put() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        set_pending_format(&mut editor);
+
+        editor.apply(key(Key::Delete));
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("helo") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_pending_format_cleared(&editor);
     }
 
     #[test]
@@ -1354,6 +1438,20 @@ mod tests {
             selection: (p1, 4)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn escape_clears_pending_format() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+        let mut editor = Editor::new_test(state);
+        set_pending_format(&mut editor);
+
+        editor.apply(key(Key::Escape));
+
+        assert_pending_format_cleared(&editor);
     }
 
     #[test]

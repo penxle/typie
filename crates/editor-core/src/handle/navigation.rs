@@ -25,6 +25,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if let Some(target) = editor.resolve_movement(&probe_pos, &movement) {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                            if tr.selection() != Some(target) {
+                                tr.clear_pending_format()?;
+                            }
                             tr.set_selection(Some(target))?;
                             Ok(())
                         })?;
@@ -95,6 +98,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 if at_document_start {
                     editor.transact(|tr| {
                         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                        if tr.selection().is_some() {
+                            tr.clear_pending_format()?;
+                        }
                         tr.set_selection(None)?;
                         Ok(())
                     })?;
@@ -161,6 +167,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if let Some(sel) = exit {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                            if tr.selection() != Some(sel) {
+                                tr.clear_pending_format()?;
+                            }
                             tr.set_selection(Some(sel))?;
                             Ok(())
                         })?;
@@ -188,6 +197,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if let Some(sel) = entry {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                            if tr.selection() != Some(sel) {
+                                tr.clear_pending_format()?;
+                            }
                             tr.set_selection(Some(sel))?;
                             Ok(())
                         })?;
@@ -287,6 +299,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 
                     editor.transact(|tr| {
                         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                        if tr.selection() != Some(target) {
+                            tr.clear_pending_format()?;
+                        }
                         tr.set_selection(Some(target))?;
                         Ok(())
                     })?;
@@ -316,6 +331,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     }
                     editor.transact(|tr| {
                         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                        if tr.selection() != Some(sel) {
+                            tr.clear_pending_format()?;
+                        }
                         tr.set_selection(Some(sel))?;
                         Ok(())
                     })?;
@@ -351,6 +369,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if let Some(new_sel) = new_sel {
                         editor.transact(|tr| {
                             tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                            if tr.selection() != Some(new_sel) {
+                                tr.clear_pending_format()?;
+                            }
                             tr.set_selection(Some(new_sel))?;
                             Ok(())
                         })?;
@@ -394,6 +415,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                             if let Some(cell_sel) = cell_sel {
                                 editor.transact(|tr| {
                                     tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                                    if tr.selection() != Some(cell_sel) {
+                                        tr.clear_pending_format()?;
+                                    }
                                     tr.set_selection(Some(cell_sel))?;
                                     Ok(())
                                 })?;
@@ -405,6 +429,9 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 
                 editor.transact(|tr| {
                     tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                    if tr.selection() != Some(new_selection) {
+                        tr.clear_pending_format()?;
+                    }
                     tr.set_selection(Some(new_selection))?;
                     Ok(())
                 })?;
@@ -547,9 +574,10 @@ fn step_cell<'a>(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::Modifier;
     use editor_state::{
-        Affinity, Position, Selection, as_gap_cursor, gap_cursor_selection_between,
-        gap_cursor_selection_leading, is_unit_node_selection,
+        Affinity, PendingModifier, Position, Selection, as_gap_cursor,
+        gap_cursor_selection_between, gap_cursor_selection_leading, is_unit_node_selection,
     };
 
     use crate::editor::Editor;
@@ -591,6 +619,48 @@ mod tests {
                     extend: false,
                 },
             },
+        );
+    }
+
+    #[test]
+    fn navigation_move_clears_pending_format() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                tr.set_pending_style(Some(editor_state::PendingStyle::Set {
+                    style_id: "s1".to_string(),
+                }))?;
+                Ok(())
+            })
+            .unwrap();
+
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: false,
+            },
+        });
+
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(Position::new(p1, 3)))
+        );
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending modifiers cleared"
+        );
+        assert!(
+            editor.state().pending_style.is_none(),
+            "pending style cleared"
         );
     }
 

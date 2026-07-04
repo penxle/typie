@@ -334,6 +334,11 @@ impl Transaction {
         self.apply_step(Step::SetPendingStyle { old, new: pending })
     }
 
+    pub fn clear_pending_format(&mut self) -> Result<(), StepError> {
+        self.set_pending_modifiers(PendingModifiers::new())?;
+        self.set_pending_style(None)
+    }
+
     pub fn set_composition(&mut self, composition: Option<Composition>) -> Result<(), StepError> {
         let old = self.state.composition;
         if old == composition {
