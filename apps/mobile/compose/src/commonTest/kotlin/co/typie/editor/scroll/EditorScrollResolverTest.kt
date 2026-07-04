@@ -194,6 +194,37 @@ class EditorScrollResolverTest {
   }
 
   @Test
+  fun `page rects target reveals the vertical union across pages`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor = null,
+            selection = null,
+            pageSizes =
+              listOf(PageSize(width = 300f, height = 620f), PageSize(width = 300f, height = 620f)),
+          ),
+        layoutSpec = paginatedLayout(),
+      )
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target =
+          EditorBringIntoViewTarget.PageRects(
+            listOf(
+              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 20f)),
+              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 580f, width = 40f, height = 20f)),
+              PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
+            )
+          ),
+        currentScroll = 0f,
+      )
+
+    assertScrollTo(intent, 440f)
+  }
+
+  @Test
   fun `selection head target height resolves from endpoint when range selection has no cursor`() {
     val anchor = position(offset = 1)
     val head = position(offset = 8)
@@ -212,11 +243,38 @@ class EditorScrollResolverTest {
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 620f)),
           ),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 300f),
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         displayZoom = 1.5f,
       )
 
     assertEquals(30f, requireNotNull(height), 0.0001f)
+  }
+
+  @Test
+  fun `page rects target height resolves from the vertical union across pages`() {
+    val height =
+      resolveBringIntoViewTargetHeight(
+        state =
+          state(
+            cursor = null,
+            selection = null,
+            pageSizes =
+              listOf(PageSize(width = 300f, height = 620f), PageSize(width = 300f, height = 620f)),
+          ),
+        layoutSpec = paginatedLayout(),
+        target =
+          EditorBringIntoViewTarget.PageRects(
+            listOf(
+              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 20f)),
+              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 580f, width = 40f, height = 20f)),
+              PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
+            )
+          ),
+        displayZoom = 1f,
+      )
+
+    assertEquals(184f, requireNotNull(height), 0.0001f)
   }
 
   @Test

@@ -66,6 +66,19 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
+  fun `keep-visible policy aligns oversized target top to the guarded visible area`() {
+    val offset =
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 1000f,
+        targetBottomInContent = 1700f,
+        visibleArea = testVisibleArea(),
+      )
+
+    assertEquals(860f, offset)
+  }
+
+  @Test
   fun `resolved policy keeps keep-visible mode active when typewriter is disabled`() {
     val policy =
       resolveEditorAutoScrollPolicy(

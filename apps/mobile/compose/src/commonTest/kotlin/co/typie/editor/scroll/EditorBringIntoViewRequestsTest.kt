@@ -1,5 +1,7 @@
 package co.typie.editor.scroll
 
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Rect as FfiRect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -7,13 +9,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorBringIntoViewRequestsTest {
-  private val overlayTarget =
-    EditorBringIntoViewTarget.OverlayRect(
-      pageIdx = 0,
-      left = 0f,
-      top = 10f,
-      width = 20f,
-      height = 30f,
+  private val pageRectsTarget =
+    EditorBringIntoViewTarget.PageRects(
+      listOf(PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 10f, width = 20f, height = 30f)))
     )
 
   @Test
@@ -63,7 +61,7 @@ class EditorBringIntoViewRequestsTest {
       requests.activateForVersion(version = 2L),
     )
 
-    requests.requestForVersion(target = overlayTarget, version = 3L)
+    requests.requestForVersion(target = pageRectsTarget, version = 3L)
 
     assertEquals(
       request(EditorBringIntoViewTarget.CurrentSelectionHead),
@@ -76,7 +74,7 @@ class EditorBringIntoViewRequestsTest {
       )
     )
     assertNull(requests.activateForVersion(version = 2L))
-    assertEquals(request(overlayTarget), requests.activateForVersion(version = 3L))
+    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 3L))
   }
 
   @Test
@@ -89,7 +87,7 @@ class EditorBringIntoViewRequestsTest {
     )
     assertNull(requests.activateForVersion(version = 258L))
 
-    requests.requestForVersion(target = overlayTarget, version = 260L)
+    requests.requestForVersion(target = pageRectsTarget, version = 260L)
 
     assertEquals(
       request(EditorBringIntoViewTarget.CurrentSelectionHead),
@@ -102,7 +100,7 @@ class EditorBringIntoViewRequestsTest {
       )
     )
 
-    assertEquals(request(overlayTarget), requests.activateForVersion(version = 260L))
+    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 260L))
   }
 
   @Test
@@ -113,7 +111,7 @@ class EditorBringIntoViewRequestsTest {
       target = EditorBringIntoViewTarget.CurrentSelectionHead,
       version = 291L,
     )
-    requests.requestForVersion(target = overlayTarget, version = 292L)
+    requests.requestForVersion(target = pageRectsTarget, version = 292L)
 
     assertEquals(
       request(EditorBringIntoViewTarget.CurrentSelectionHead),
@@ -126,7 +124,7 @@ class EditorBringIntoViewRequestsTest {
       )
     )
 
-    assertEquals(request(overlayTarget), requests.activateForVersion(version = 292L))
+    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 292L))
   }
 
   @Test
@@ -137,9 +135,9 @@ class EditorBringIntoViewRequestsTest {
       target = EditorBringIntoViewTarget.CurrentSelectionHead,
       version = 291L,
     )
-    requests.requestForVersion(target = overlayTarget, version = 292L)
+    requests.requestForVersion(target = pageRectsTarget, version = 292L)
 
-    assertEquals(request(overlayTarget), requests.activateForVersion(version = 292L))
+    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 292L))
   }
 
   @Test
@@ -155,7 +153,7 @@ class EditorBringIntoViewRequestsTest {
       requests.activateForVersion(version = 1L),
     )
 
-    requests.requestForVersion(target = overlayTarget, version = 2L)
+    requests.requestForVersion(target = pageRectsTarget, version = 2L)
     requests.cancel()
 
     assertFalse(

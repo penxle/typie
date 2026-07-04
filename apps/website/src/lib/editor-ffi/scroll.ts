@@ -65,7 +65,11 @@ export function resolveNearestScrollTop({
   }
 
   let nextTop: number | null = null;
-  if (targetBottom - safeScrollTop > rangeBottom) {
+  const targetHeight = Math.max(0, finiteOrZero(targetBottom) - finiteOrZero(targetTop));
+  const rangeHeight = rangeBottom - rangeTop;
+  if (targetHeight > rangeHeight) {
+    nextTop = finiteOrZero(targetTop) - rangeTop;
+  } else if (targetBottom - safeScrollTop > rangeBottom) {
     nextTop = finiteOrZero(targetBottom) - rangeBottom;
   } else if (targetTop - safeScrollTop < rangeTop) {
     nextTop = finiteOrZero(targetTop) - rangeTop;

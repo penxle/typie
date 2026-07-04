@@ -1087,10 +1087,6 @@ export class Editor {
     return samePosition(selection.head, endpoints.to_position) ? endpoints.to : endpoints.from;
   }
 
-  trackedItemFirstRect(id: string): PageRect | null {
-    return this.trackedItemRects(id)?.[0] ?? null;
-  }
-
   trackedItemRects(id: string): PageRect[] | null {
     const range = this.trackedRanges.find((r) => r.id === id);
     if (!range) return null;

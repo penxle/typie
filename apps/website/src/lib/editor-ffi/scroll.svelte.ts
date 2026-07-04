@@ -1,6 +1,7 @@
 import { getAppContext } from '@typie/ui/context';
 import { tick, untrack } from 'svelte';
 import { CONTINUOUS_VIEW_PADDING } from './constants';
+import { pageRectsToClientRect } from './geometry';
 import {
   resolveKeepVisibleBottomPadding,
   resolveNearestScrollTop,
@@ -9,7 +10,7 @@ import {
 } from './scroll';
 import type { PageRect } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext } from './editor.svelte';
-import type { EditorVisibleArea, RevealTargetSpan } from './scroll';
+import type { EditorVisibleArea } from './scroll';
 
 export type EditorScrollRevealMode = 'nearest' | 'typewriter';
 
@@ -133,15 +134,15 @@ export class EditorScrollScope {
       this.#pendingRequest = null;
       if (!request) return;
 
-      const rect = this.#resolveTargetRect(request.target);
-      if (!rect) return;
+      const rects = this.#resolveTargetRects(request.target);
+      if (!rects) return;
 
       const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
       void this.bottomPadding;
       await tick();
 
       this.#applyCommit({
-        rect,
+        rects,
         mode,
         behavior: request.behavior,
       });
@@ -153,30 +154,33 @@ export class EditorScrollScope {
     }
   }
 
-  #resolveTargetRect(target: EditorScrollIntoViewTarget): PageRect | null {
+  #resolveTargetRects(target: EditorScrollIntoViewTarget): PageRect[] | null {
     switch (target.type) {
       case 'current_selection_head': {
-        return this.#editor.selectionHeadRect();
+        const rect = this.#editor.selectionHeadRect();
+        return rect ? [rect] : null;
       }
       case 'tracked_item': {
-        return this.#editor.trackedItemFirstRect(target.id);
+        return this.#editor.trackedItemRects(target.id);
       }
     }
   }
 
-  #applyCommit({ rect, mode, behavior }: { rect: PageRect; mode: EditorScrollRevealMode; behavior: ScrollBehavior }): void {
+  #applyCommit({ rects, mode, behavior }: { rects: PageRect[]; mode: EditorScrollRevealMode; behavior: ScrollBehavior }): void {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) return;
 
-    const span = this.#pageRectToScrollSpan(rect);
-    if (!span) return;
-
     const viewportRect = viewport.getRect();
+    const targetRect = pageRectsToClientRect(this.#editor, rects);
+    if (!targetRect) return;
+
+    const scrollTop = viewport.getScrollTop();
     const metrics = {
-      scrollTop: viewport.getScrollTop(),
+      scrollTop,
       clientHeight: viewportRect.bottom - viewportRect.top,
       scrollHeight: viewport.getScrollHeight(),
-      ...span,
+      targetTop: targetRect.top - viewportRect.top + scrollTop,
+      targetBottom: targetRect.bottom - viewportRect.top + scrollTop,
       visibleArea: this.visibleArea,
     };
     const nextTop =
@@ -189,27 +193,14 @@ export class EditorScrollScope {
     }
   }
 
-  #pageRectToScrollSpan({ page_idx, rect }: PageRect): RevealTargetSpan | null {
-    const pageEl = this.#editor.pageEls[page_idx];
-    const viewport = this.#editor.scrollViewport;
-    if (!pageEl || !viewport) return null;
-
-    const zoom = this.#editor.safeDisplayZoom();
-    const pageRect = pageEl.getBoundingClientRect();
-    const viewportRect = viewport.getRect();
-    const targetTop = pageRect.top - viewportRect.top + viewport.getScrollTop() + rect.y * zoom;
-    const targetBottom = targetTop + rect.height * zoom;
-    return { targetTop, targetBottom };
-  }
-
   #keepVisibleBottomPadding(): number {
     const target = this.#keepVisibleTarget;
     if (!target) {
       return 0;
     }
 
-    const rect = this.#resolveTargetRect(target);
-    if (!rect) {
+    const rects = this.#resolveTargetRects(target);
+    if (!rects) {
       return 0;
     }
 

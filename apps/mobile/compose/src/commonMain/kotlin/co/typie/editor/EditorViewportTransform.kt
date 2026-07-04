@@ -5,14 +5,6 @@ import co.typie.editor.ffi.Size
 
 data class PagePoint(val page: Int, val x: Float, val y: Float)
 
-data class VerticalSpan(val top: Float = 0f, val bottom: Float = 0f) {
-  val isValid: Boolean
-    get() = bottom > top
-
-  val height: Float
-    get() = (bottom - top).coerceAtLeast(0f)
-}
-
 data class EditorViewportAnchor(val page: Int, val x: Float, val y: Float)
 
 data class EditorViewportTransform(

@@ -527,8 +527,10 @@ fun EditorScreen(entityId: String) {
     val typewriterTargetLineHeight =
       resolveBringIntoViewTargetHeight(
         state = editorState,
+        layoutSpec = layoutSpec,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         displayZoom = displayZoom,
+        density = density,
       ) ?: 0f
     val subPaneLayoutInfo = subPaneState.layoutInfo
     val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneLayoutInfo)

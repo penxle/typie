@@ -7,6 +7,7 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.toPageRectsTarget
 
 internal const val SEARCH_MATCH_RANGE_GROUP = "search-match"
 internal const val ACTIVE_SEARCH_MATCH_RANGE_GROUP = "search-match-active"
@@ -153,16 +154,7 @@ internal fun Editor.replaceAllFindReplaceRanges(
   }
 }
 
-internal fun List<TrackedRange>.searchMatchScrollTarget(
-  id: String?
-): EditorBringIntoViewTarget.OverlayRect? {
+internal fun List<TrackedRange>.searchMatchScrollTarget(id: String?): EditorBringIntoViewTarget? {
   if (id == null) return null
-  val rect = searchMatchRanges().firstOrNull { it.id == id }?.rects?.firstOrNull() ?: return null
-  return EditorBringIntoViewTarget.OverlayRect(
-    pageIdx = rect.pageIdx,
-    left = rect.rect.x,
-    top = rect.rect.y,
-    width = rect.rect.width,
-    height = rect.rect.height,
-  )
+  return searchMatchRanges().firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
 }

@@ -11,7 +11,7 @@ export function pageRectToClientRect(editor: Editor, { page_idx, rect }: PageRec
   return new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom);
 }
 
-function pageRectsToClientRects(editor: Editor, rects: PageRect[]): DOMRect[] {
+export function pageRectsToClientRects(editor: Editor, rects: PageRect[]): DOMRect[] {
   const out: DOMRect[] = [];
 
   for (const rect of rects) {
@@ -22,27 +22,38 @@ function pageRectsToClientRects(editor: Editor, rects: PageRect[]): DOMRect[] {
   return out;
 }
 
-function boundingClientRect(rects: DOMRect[]): DOMRect {
-  if (rects.length === 0) return new DOMRect();
-
+export function boundingClientRect(rects: Iterable<DOMRect | null | undefined>): DOMRect | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
 
   for (const rect of rects) {
+    if (
+      !rect ||
+      !Number.isFinite(rect.left) ||
+      !Number.isFinite(rect.top) ||
+      !Number.isFinite(rect.right) ||
+      !Number.isFinite(rect.bottom)
+    ) {
+      continue;
+    }
     minX = Math.min(minX, rect.left);
     minY = Math.min(minY, rect.top);
     maxX = Math.max(maxX, rect.right);
     maxY = Math.max(maxY, rect.bottom);
   }
 
-  return new DOMRect(minX, minY, maxX - minX, maxY - minY);
+  return minX === Infinity ? null : new DOMRect(minX, minY, maxX - minX, maxY - minY);
+}
+
+export function pageRectsToClientRect(editor: Editor, rects: PageRect[]): DOMRect | null {
+  return boundingClientRect(pageRectsToClientRects(editor, rects));
 }
 
 export function pageRectsToVirtualElement(editor: Editor, rects: PageRect[]): ReferenceElement {
   return {
-    getBoundingClientRect: () => boundingClientRect(pageRectsToClientRects(editor, rects)),
+    getBoundingClientRect: () => pageRectsToClientRect(editor, rects) ?? new DOMRect(),
     getClientRects: () => pageRectsToClientRects(editor, rects),
   };
 }

@@ -86,8 +86,10 @@ internal fun resolveEditorScrollOffset(
 
   val targetTopInViewport = targetTopInContent - currentScroll
   val targetBottomInViewport = targetBottomInContent - currentScroll
+  val targetHeight = (targetBottomInContent - targetTopInContent).coerceAtLeast(0f)
 
   return when {
+    targetHeight > range.height -> targetTopInContent - range.top
     targetBottomInViewport > range.bottom -> targetBottomInContent - range.bottom
     targetTopInViewport < range.top -> targetTopInContent - range.top
     else -> null

@@ -1,6 +1,10 @@
 package co.typie.editor
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Size
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,6 +27,52 @@ class GeometryTest {
   private val offsetsCentered = mapOf(0 to Offset(50f, 0f), 1 to Offset(50f, 600f))
   private val sizesCentered =
     listOf(Size(width = 300f, height = 600f), Size(width = 300f, height = 400f))
+
+  @Test
+  fun unionRects_returns_the_union_of_all_valid_rects() {
+    val rect =
+      unionRects(
+        listOf(
+          Rect(left = 40f, top = 420f, right = 70f, bottom = 450f),
+          Rect(left = 30f, top = 380f, right = 60f, bottom = 410f),
+          Rect(left = 80f, top = 460f, right = 20f, bottom = 500f),
+        )
+      )
+
+    assertEquals(Rect(left = 20f, top = 380f, right = 80f, bottom = 500f), rect)
+  }
+
+  @Test
+  fun unionRects_returns_null_when_no_valid_rects_are_present() {
+    assertNull(unionRects(emptyList()))
+    assertNull(unionRects(listOf(Rect(left = Float.NaN, top = 0f, right = 10f, bottom = 20f))))
+  }
+
+  @Test
+  fun pageRectsToContentRect_returns_the_content_union_across_pages() {
+    val rect =
+      pageRectsToContentRect(
+        rects =
+          listOf(
+            PageRect(pageIdx = 0, rect = FfiRect(x = 20f, y = 50f, width = 10f, height = 10f)),
+            PageRect(pageIdx = 1, rect = FfiRect(x = 3f, y = 20f, width = 5f, height = 5f)),
+          ),
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 100f,
+            pageHeight = 100f,
+            pageMarginTop = 0f,
+            pageMarginBottom = 0f,
+            pageMarginLeft = 0f,
+            pageMarginRight = 0f,
+          ),
+        pageSizes = listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f)),
+        contentOriginX = 5f,
+        contentOriginY = 10f,
+      )
+
+    assertEquals(Rect(left = 8f, top = 60f, right = 35f, bottom = 159f), rect)
+  }
 
   @Test
   fun localToGlobal_adds_page_offset() {

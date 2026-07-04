@@ -42,6 +42,19 @@ describe('resolveNearestScrollTop', () => {
       }),
     ).toBeNull();
   });
+
+  it('aligns an oversized target top to the guarded visible area', () => {
+    expect(
+      resolveNearestScrollTop({
+        scrollTop: 300,
+        clientHeight: 400,
+        scrollHeight: 2000,
+        targetTop: 1000,
+        targetBottom: 1500,
+        visibleArea: { topInset: 10, bottomInset: 20 },
+      }),
+    ).toBe(930);
+  });
 });
 
 describe('resolveTypewriterScrollTop', () => {

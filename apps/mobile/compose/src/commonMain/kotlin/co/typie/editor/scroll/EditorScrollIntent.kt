@@ -3,8 +3,8 @@ package co.typie.editor.scroll
 import co.typie.editor.EditorState
 import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorDocumentLayoutSpec
-import co.typie.editor.body.resolvePageContentTop
-import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.pageRectsToContentRect
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.runtime.EditorUiState
 
@@ -22,13 +22,7 @@ internal data class EditorScrollFrame(
 internal sealed interface EditorBringIntoViewTarget {
   data object CurrentSelectionHead : EditorBringIntoViewTarget
 
-  data class OverlayRect(
-    val pageIdx: Int,
-    val left: Float,
-    val top: Float,
-    val width: Float,
-    val height: Float,
-  ) : EditorBringIntoViewTarget
+  data class PageRects(val rects: List<PageRect>) : EditorBringIntoViewTarget
 }
 
 internal sealed interface EditorScrollIntentResult {
@@ -133,11 +127,21 @@ internal fun isEditorScrollTargetVisible(
 
 internal fun resolveBringIntoViewTargetHeight(
   state: EditorState,
+  layoutSpec: EditorDocumentLayoutSpec,
   target: EditorBringIntoViewTarget,
   displayZoom: Float,
+  density: Float = 0f,
 ): Float? {
-  val targetRect = resolveBringIntoViewTargetPageRect(state = state, target = target) ?: return null
-  return targetRect.height * displayZoom
+  val targetRects =
+    resolveBringIntoViewTargetPageRects(state = state, target = target) ?: return null
+  return pageRectsToContentRect(
+      rects = targetRects,
+      layoutSpec = layoutSpec,
+      pageSizes = state.pageSizes,
+      displayZoom = displayZoom,
+      density = density,
+    )
+    ?.height
 }
 
 private fun resolveBringIntoViewTargetRect(
@@ -149,44 +153,39 @@ private fun resolveBringIntoViewTargetRect(
   density: Float,
   target: EditorBringIntoViewTarget,
 ): VerticalSpan? {
-  val targetRect = resolveBringIntoViewTargetPageRect(state = state, target = target) ?: return null
-  val offsetY =
-    resolveTargetOffsetY(
+  val targetRects =
+    resolveBringIntoViewTargetPageRects(state = state, target = target) ?: return null
+  val contentRect =
+    pageRectsToContentRect(
+      rects = targetRects,
       layoutSpec = layoutSpec,
       pageSizes = state.pageSizes,
-      page = targetRect.pageIdx,
-      y = targetRect.y,
       displayZoom = displayZoom,
       density = density,
+      contentOriginY = headerHeight + editorTopInContainer,
     ) ?: return null
-  val contentTop = headerHeight + editorTopInContainer + offsetY
-  return VerticalSpan(top = contentTop, bottom = contentTop + targetRect.height * displayZoom)
+  return VerticalSpan(top = contentRect.top, bottom = contentRect.bottom)
 }
 
-private data class BringIntoViewTargetPageRect(val pageIdx: Int, val y: Float, val height: Float)
-
-private fun resolveBringIntoViewTargetPageRect(
+private fun resolveBringIntoViewTargetPageRects(
   state: EditorState,
   target: EditorBringIntoViewTarget,
-): BringIntoViewTargetPageRect? =
+): List<PageRect>? =
   when (target) {
-    EditorBringIntoViewTarget.CurrentSelectionHead -> resolveCurrentSelectionHeadPageRect(state)
-    is EditorBringIntoViewTarget.OverlayRect ->
-      BringIntoViewTargetPageRect(pageIdx = target.pageIdx, y = target.top, height = target.height)
+    EditorBringIntoViewTarget.CurrentSelectionHead ->
+      resolveCurrentSelectionHeadPageRect(state)?.let(::listOf)
+    is EditorBringIntoViewTarget.PageRects -> target.rects.takeIf { it.isNotEmpty() }
   }
 
-private fun resolveCollapsedSelectionHeadPageRect(
-  state: EditorState
-): BringIntoViewTargetPageRect? {
+internal fun List<PageRect>.toPageRectsTarget(): EditorBringIntoViewTarget.PageRects? =
+  takeIf { it.isNotEmpty() }?.let(EditorBringIntoViewTarget::PageRects)
+
+private fun resolveCollapsedSelectionHeadPageRect(state: EditorState): PageRect? {
   val cursor = state.cursor ?: return null
-  return BringIntoViewTargetPageRect(
-    pageIdx = cursor.pageIdx,
-    y = cursor.line.y,
-    height = cursor.line.height,
-  )
+  return PageRect(pageIdx = cursor.pageIdx, rect = cursor.line)
 }
 
-private fun resolveCurrentSelectionHeadPageRect(state: EditorState): BringIntoViewTargetPageRect? {
+private fun resolveCurrentSelectionHeadPageRect(state: EditorState): PageRect? {
   val selection = state.selection ?: return null
   if (selection.anchor == selection.head) {
     return resolveCollapsedSelectionHeadPageRect(state)
@@ -198,37 +197,8 @@ private fun resolveCurrentSelectionHeadPageRect(state: EditorState): BringIntoVi
       endpoints.fromPosition -> endpoints.from
       else -> return null
     }
-  return BringIntoViewTargetPageRect(
-    pageIdx = headRect.pageIdx,
-    y = headRect.rect.y,
-    height = headRect.rect.height,
-  )
+  return headRect
 }
-
-private fun resolveTargetOffsetY(
-  layoutSpec: EditorDocumentLayoutSpec,
-  pageSizes: List<PageSize>,
-  page: Int,
-  y: Float,
-  displayZoom: Float,
-  density: Float,
-): Float? {
-  val pageTop =
-    layoutSpec.resolvePageContentTop(
-      pageSizes = pageSizes,
-      page = page,
-      displayZoom = displayZoom,
-      density = density,
-    ) ?: return null
-  return pageTop + y * normalizeDisplayZoom(displayZoom)
-}
-
-private fun normalizeDisplayZoom(displayZoom: Float): Float =
-  if (displayZoom.isFinite() && displayZoom > 0f) {
-    displayZoom
-  } else {
-    1f
-  }
 
 private fun resolveBringIntoViewTargetOffset(
   mode: EditorAutoScrollMode,

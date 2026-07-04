@@ -21,6 +21,7 @@ import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.syncWithBringIntoView
+import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -372,16 +373,7 @@ internal fun rememberEditorSpellcheckSession(
 private fun RawSpellcheckResult.toSpellcheckResult(): SpellcheckResult =
   SpellcheckResult(id = id, context = context, corrections = corrections, explanation = explanation)
 
-private fun List<TrackedRange>.spellcheckScrollTarget(
-  id: String?
-): EditorBringIntoViewTarget.OverlayRect? {
+private fun List<TrackedRange>.spellcheckScrollTarget(id: String?): EditorBringIntoViewTarget? {
   if (id == null) return null
-  val rect = spellcheckRanges().firstOrNull { it.id == id }?.rects?.firstOrNull() ?: return null
-  return EditorBringIntoViewTarget.OverlayRect(
-    pageIdx = rect.pageIdx,
-    left = rect.rect.x,
-    top = rect.rect.y,
-    width = rect.rect.width,
-    height = rect.rect.height,
-  )
+  return spellcheckRanges().firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
 }

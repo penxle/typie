@@ -16,6 +16,7 @@ import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 
@@ -274,16 +275,9 @@ internal fun rememberEditorCommentsSession(
 
 private fun List<TrackedRange>.commentThreadScrollTarget(
   threadId: String?
-): EditorBringIntoViewTarget.OverlayRect? {
+): EditorBringIntoViewTarget? {
   if (threadId == null) {
     return null
   }
-  val rect = commentRanges().firstOrNull { it.id == threadId }?.rects?.firstOrNull() ?: return null
-  return EditorBringIntoViewTarget.OverlayRect(
-    pageIdx = rect.pageIdx,
-    left = rect.rect.x,
-    top = rect.rect.y,
-    width = rect.rect.width,
-    height = rect.rect.height,
-  )
+  return commentRanges().firstOrNull { it.id == threadId }?.rects?.toPageRectsTarget()
 }

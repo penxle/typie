@@ -142,6 +142,8 @@ internal class FakeFfiEditor(
 
   override fun pageSizes(): List<Size> = pageSizesProvider()
 
+  override fun pageBackingSizes(): List<Size> = pageSizesProvider()
+
   override fun externalElements(): List<ExternalElement> = externalElementsProvider()
 
   override fun pageExternalElements(page: Int): List<ExternalElement> = emptyList()
