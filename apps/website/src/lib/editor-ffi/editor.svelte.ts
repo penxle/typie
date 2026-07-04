@@ -1495,7 +1495,7 @@ export class Editor {
       op: {
         type: 'set_group_decoration',
         group: 'ai-feedback-active',
-        style: { background: 'bg.blue', background_radius: 2, background_inset: 0, underline: undefined },
+        style: { background: 'bg.blue', background_radius: 2, background_inset: 2, underline: undefined },
         enabled: true,
         z_index: 1,
       },
