@@ -170,6 +170,9 @@ pub(crate) fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize
                 if pos.node == line.node && pos.offset == gap.offset_index {
                     return Some(char_count);
                 }
+                if pos.node == line.node && pos.offset == gap.offset_index + 1 {
+                    return Some(char_count + 1);
+                }
                 char_count += 1;
             }
         }
@@ -189,8 +192,8 @@ pub(crate) fn position_at_char_index(line: &LayoutLine, char_index: usize) -> Op
                 remaining -= run_chars;
             }
             LineItem::Tab(gap) => {
-                if remaining == 0 {
-                    return Some(Position::new(line.node, gap.offset_index));
+                if remaining <= 1 {
+                    return Some(Position::new(line.node, gap.offset_index + remaining));
                 }
                 remaining -= 1;
             }
@@ -311,8 +314,8 @@ mod tests {
     use editor_common::Size;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog,
-        project_document,
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem,
+        SpanLog, project_document,
     };
     use editor_resource::Resource;
     use editor_state::Position;
@@ -391,6 +394,25 @@ mod tests {
         (para_id, index)
     }
 
+    fn para_doc_items(children: Vec<SeqItem>, width: f32) -> (Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(15, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, child) in children.into_iter().enumerate() {
+            items.push((Dot::new(15, 2 + i as u64), child));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let (_, index) = build_index(&doc, width);
+        (para_id, index)
+    }
+
     fn gs(advance: f32, codepoints: u8) -> GraphemeSpan {
         GraphemeSpan {
             advance,
@@ -430,6 +452,15 @@ mod tests {
         offset_range: Option<std::ops::Range<usize>>,
         runs: Vec<GlyphRun>,
     ) -> LayoutLine {
+        vline_with_tabs(node, offset_range, runs, vec![])
+    }
+
+    fn vline_with_tabs(
+        node: Dot,
+        offset_range: Option<std::ops::Range<usize>>,
+        runs: Vec<GlyphRun>,
+        tab_gaps: Vec<TabGap>,
+    ) -> LayoutLine {
         LayoutLine {
             measured: std::sync::Arc::new(crate::measure::text::measure::MeasuredLine {
                 height: 0.0,
@@ -443,7 +474,7 @@ mod tests {
                 ruby_annotations: vec![],
                 empty_caret_x: 0.0,
                 offset_range,
-                tab_gaps: vec![],
+                tab_gaps,
                 is_phantom: false,
                 content_edge_x: None,
             }),
@@ -560,6 +591,62 @@ mod tests {
         assert_eq!(
             sel.head.offset, 11,
             "word_forward from offset 5 must cross run boundary to offset 11 (end of 'world' in run1)"
+        );
+    }
+
+    #[test]
+    fn word_backward_from_end_of_tab_only_line_resolves() {
+        let (para_id, index) = para_doc_items(
+            vec![SeqItem::Atom(AtomLeaf::Tab), SeqItem::Atom(AtomLeaf::Tab)],
+            400.0,
+        );
+        let res = Resource::new_test();
+
+        let sel = move_word_backward(&index, &Position::new(para_id, 2), &res.segmenters)
+            .expect("word backward from after trailing tab must resolve");
+
+        assert_eq!(sel.head.node, para_id);
+        assert_eq!(sel.head.offset, 0);
+    }
+
+    #[test]
+    fn char_index_round_trips_after_trailing_tab() {
+        let para_id = Dot::new(1, 1);
+        let line = vline_with_tabs(
+            para_id,
+            Some(0..2),
+            vec![],
+            vec![
+                TabGap {
+                    offset_index: 0,
+                    x: 0.0,
+                    width: 40.0,
+                    link: None,
+                },
+                TabGap {
+                    offset_index: 1,
+                    x: 40.0,
+                    width: 40.0,
+                    link: None,
+                },
+            ],
+        );
+
+        assert_eq!(line_char_index(&line, &Position::new(para_id, 0)), Some(0));
+        assert_eq!(line_char_index(&line, &Position::new(para_id, 1)), Some(1));
+        assert_eq!(line_char_index(&line, &Position::new(para_id, 2)), Some(2));
+
+        assert_eq!(
+            position_at_char_index(&line, 0),
+            Some(Position::new(para_id, 0))
+        );
+        assert_eq!(
+            position_at_char_index(&line, 1),
+            Some(Position::new(para_id, 1))
+        );
+        assert_eq!(
+            position_at_char_index(&line, 2),
+            Some(Position::new(para_id, 2))
         );
     }
 }

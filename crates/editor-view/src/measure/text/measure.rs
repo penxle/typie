@@ -16,7 +16,7 @@ use editor_resource::Resource;
 use crate::glyph_run::RubyAnnotation;
 
 use super::extract::LineHeightConfig;
-use super::extract::{ExtractedLine, extract_lines};
+use super::extract::{ExtractedLine, extract_lines, resolve_link};
 use super::inline::{
     RubyGroup, Segment, TabMark, TextRun, collect_text_runs, identify_ruby_groups, split_segments,
 };
@@ -35,6 +35,7 @@ pub struct TabGap {
     pub offset_index: usize,
     pub x: f32,
     pub width: f32,
+    pub link: Option<String>,
 }
 
 /// The new (eg-walker) measured-line output. Mirrors `MeasuredLine` with the
@@ -255,6 +256,7 @@ fn measure_segment<'a>(
                     offset_index: tab_boxes[*id as usize].0.offset_index,
                     x: *x,
                     width: *pad,
+                    link: resolve_link(tab_boxes[*id as usize].0.own_modifiers),
                 })
                 .collect();
 
@@ -324,6 +326,7 @@ pub(crate) fn measure_paragraph(
                 &text[byte_range.clone()],
                 offset_range,
                 &runs,
+                &tabs,
                 width,
                 align,
                 seg_indent,
@@ -549,6 +552,62 @@ mod tests {
         }
         // Uncached and first-cached pass must also agree.
         assert_eq!(uncached.len(), first.len());
+    }
+
+    #[test]
+    fn seg_cache_reuse_distinguishes_tab_count_changes() {
+        use super::seg_cache::SegmentCache;
+
+        let one_tab = build_logs(vec![tab()]);
+        let two_tabs = build_logs(vec![tab(), tab()]);
+        let mut cache = SegmentCache::default();
+        let mut res = Resource::new_test();
+
+        let one_tab_pd = project_document(&one_tab).unwrap();
+        let one_tab_view = DocView::new(&one_tab_pd);
+        let one_tab_para = one_tab_view.root().unwrap().child_blocks().next().unwrap();
+        measure_paragraph(
+            &one_tab_para,
+            200.0,
+            Alignment::Left,
+            0.0,
+            None,
+            Some(&mut cache),
+            &mut res,
+        );
+
+        let two_tabs_pd = project_document(&two_tabs).unwrap();
+        let two_tabs_view = DocView::new(&two_tabs_pd);
+        let two_tabs_para = two_tabs_view.root().unwrap().child_blocks().next().unwrap();
+        let uncached = measure_paragraph(
+            &two_tabs_para,
+            200.0,
+            Alignment::Left,
+            0.0,
+            None,
+            None,
+            &mut res,
+        )
+        .0;
+        let reused = measure_paragraph(
+            &two_tabs_para,
+            200.0,
+            Alignment::Left,
+            0.0,
+            None,
+            Some(&mut cache),
+            &mut res,
+        )
+        .0;
+
+        let tab_offsets = |lines: &[MeasuredLine]| -> Vec<usize> {
+            lines
+                .iter()
+                .flat_map(|line| line.tab_gaps.iter().map(|gap| gap.offset_index))
+                .collect()
+        };
+        assert_eq!(tab_offsets(&uncached), vec![0, 1]);
+        assert_eq!(tab_offsets(&reused), tab_offsets(&uncached));
     }
 
     #[test]

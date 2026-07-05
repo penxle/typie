@@ -89,10 +89,10 @@ fn delete_child_slots(
                             }),
                         }
                         prev_char_idx = i;
-                    } else if let Some(atom) = l.as_atom() {
+                    } else if l.as_atom().is_some() {
                         slots.push(PlannedSlot::Subtree {
                             index: i,
-                            subtree: Subtree::leaf(atom.clone().into_node().to_plain()),
+                            subtree: capture_atom_leaf_subtree_at(&node, i)?,
                         });
                     }
                 }
@@ -170,9 +170,9 @@ fn text_subtree(text: String) -> Subtree {
     Subtree::leaf(PlainNode::Text(PlainTextNode { text }))
 }
 
-/// Snapshot of a projected block's subtree (block overlays + char/atom/block
-/// children), mirroring the substrate's capture so the removal step carries the
-/// data needed for its inverse. Char runs collapse into `Text` subtrees.
+/// Snapshot of a projected block's subtree, mirroring the substrate's capture so
+/// the removal step carries the data needed for its inverse. Char runs collapse
+/// into plain `Text` subtrees; atom leaves keep their own modifiers.
 fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
     let view = state.view();
     let nv = view.node(block)?;
@@ -192,16 +192,16 @@ fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
 
     let mut children: Vec<Subtree> = Vec::new();
     let mut pending = String::new();
-    for c in nv.children() {
+    for (slot, c) in nv.children().enumerate() {
         match c {
             ChildView::Leaf(l) => {
                 if let Some(ch) = l.as_char() {
                     pending.push(ch);
-                } else if let Some(atom) = l.as_atom() {
+                } else if l.as_atom().is_some() {
                     if !pending.is_empty() {
                         children.push(text_subtree(std::mem::take(&mut pending)));
                     }
-                    children.push(Subtree::leaf(atom.clone().into_node().to_plain()));
+                    children.push(capture_atom_leaf_subtree_at(&nv, slot).ok()?);
                 }
             }
             ChildView::Block(b) => {
@@ -226,6 +226,25 @@ fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
     })
 }
 
+pub(crate) fn capture_atom_leaf_subtree_at(
+    node: &NodeView<'_>,
+    index: usize,
+) -> Result<Subtree, CommandError> {
+    let atom = match node.child_at(index) {
+        Some(ChildView::Leaf(l)) => l
+            .as_atom()
+            .ok_or_else(|| CommandError::Corrupted("expected atom leaf".into()))?
+            .clone(),
+        _ => return Err(CommandError::Corrupted("expected leaf at slot".into())),
+    };
+    Ok(Subtree {
+        node: atom.into_node().to_plain(),
+        modifiers: node.leaf_own_modifiers_at(index),
+        marker: None,
+        children: Vec::new(),
+    })
+}
+
 /// Remove a leaf atom (image/HR/tab/break) child at full-child `index`.
 /// The convenience `Transaction::remove_subtree` cannot address leaf atoms
 /// (it resolves index via `child_blocks()` and parent via the node map), so
@@ -240,14 +259,7 @@ pub(crate) fn remove_atom_leaf(
         let node = view
             .node(parent)
             .ok_or(CommandError::NodeNotFound(parent))?;
-        let atom = match node.child_at(index) {
-            Some(ChildView::Leaf(l)) => l
-                .as_atom()
-                .ok_or_else(|| CommandError::Corrupted("expected atom leaf".into()))?
-                .clone(),
-            _ => return Err(CommandError::Corrupted("expected leaf at slot".into())),
-        };
-        Subtree::leaf(atom.into_node().to_plain())
+        capture_atom_leaf_subtree_at(&node, index)?
     };
     tr.apply_steps(vec![Step::RemoveSubtree {
         parent,
@@ -286,21 +298,22 @@ pub(crate) fn remove_subtree_full(tr: &mut Transaction, child_id: Dot) -> Result
                 let leaf = view.leaf(dot).ok_or(CommandError::NodeNotFound(child_id))?;
                 let parent = leaf.parent().ok_or(CommandError::NoParent(child_id))?;
                 let parent_id = parent.id();
-                let (index, subtree) = parent
-                    .children()
-                    .enumerate()
-                    .find_map(|(i, c)| match &c {
-                        ChildView::Leaf(l) if l.dot() == dot => {
-                            let subtree = if let Some(ch) = l.as_char() {
-                                text_subtree(ch.to_string())
-                            } else {
-                                Subtree::leaf(l.as_atom()?.clone().into_node().to_plain())
-                            };
-                            Some((i, subtree))
-                        }
-                        _ => None,
-                    })
-                    .ok_or_else(|| CommandError::orphan_child(child_id, parent_id))?;
+                let mut found = None;
+                for (i, c) in parent.children().enumerate() {
+                    if let ChildView::Leaf(l) = &c
+                        && l.dot() == dot
+                    {
+                        let subtree = if let Some(ch) = l.as_char() {
+                            text_subtree(ch.to_string())
+                        } else {
+                            capture_atom_leaf_subtree_at(&parent, i)?
+                        };
+                        found = Some((i, subtree));
+                        break;
+                    }
+                }
+                let (index, subtree) =
+                    found.ok_or_else(|| CommandError::orphan_child(child_id, parent_id))?;
                 (parent_id, index, subtree)
             }
         }
@@ -1213,4 +1226,41 @@ fn fulfill_ancestors(tr: &mut Transaction, start_id: Dot, lca_id: Dot) -> Result
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use editor_macros::state;
+    use editor_model::{ChildView, Modifier};
+
+    #[test]
+    fn remove_subtree_full_captures_atom_leaf_modifiers() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { tab [font_size(2400)] } } }
+            selection: (p1, 0)
+        };
+        let tab = {
+            let view = state.view();
+            let paragraph = view.node(p1).expect("paragraph exists");
+            match paragraph.child_at(0).expect("tab exists") {
+                ChildView::Leaf(leaf) => leaf.dot(),
+                ChildView::Block(_) => panic!("expected tab leaf"),
+            }
+        };
+
+        let mut tr = Transaction::new(&state);
+        remove_subtree_full(&mut tr, tab).unwrap();
+
+        let (_, steps, ..) = tr.commit();
+        let subtree = steps
+            .iter()
+            .find_map(|record| match &record.step {
+                Step::RemoveSubtree { subtree, .. } => Some(subtree),
+                _ => None,
+            })
+            .expect("tab deletion must record RemoveSubtree");
+
+        assert_eq!(subtree.modifiers, vec![Modifier::FontSize { value: 2400 }]);
+    }
 }

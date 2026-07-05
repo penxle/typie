@@ -16,8 +16,8 @@ pub(crate) fn resolve_effective_modifiers(
     apply_pending_delta(base_modifiers, pending_modifiers)
 }
 
-/// The own modifiers of the char leaf at direct child slot `slot`,
-/// read from its run segment; `None` if the slot doesn't hold a char leaf.
+/// Own modifiers of the char leaf at direct child slot `slot`; `None` if the slot
+/// doesn't hold a char leaf.
 fn char_leaf_own_values(node: &NodeView, slot: usize) -> Option<Vec<(ModifierType, Modifier)>> {
     let is_char = matches!(node.child_at(slot), Some(ChildView::Leaf(l)) if l.as_char().is_some());
     if !is_char {

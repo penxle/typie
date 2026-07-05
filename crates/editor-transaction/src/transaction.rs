@@ -119,13 +119,29 @@ impl Transaction {
         })
     }
 
+    /// Removes a contiguous run of text chars addressed by child-slot offset.
+    /// Every slot in the range must be a `Char`; inline atoms belong to
+    /// `remove_child_slots`.
     pub fn remove_text(&mut self, block: Dot, offset: usize, len: usize) -> Result<(), StepError> {
-        let text = support::read_text(&self.state.projected, block, offset, len);
+        let text = support::read_text(&self.state.projected, block, offset, len)?;
         self.apply_step(Step::RemoveText {
             block,
             offset,
             text,
         })
+    }
+
+    /// Removes direct child slots `[from, to)`, lowering char runs to
+    /// `RemoveText` and atom/block slots to `RemoveSubtree`.
+    pub fn remove_child_slots(
+        &mut self,
+        parent: Dot,
+        from: usize,
+        to: usize,
+    ) -> Result<(), StepError> {
+        let steps = support::remove_child_slots_steps(&self.state.projected, parent, from, to)?;
+        self.apply_steps(steps)?;
+        Ok(())
     }
 
     pub fn insert_subtree(
@@ -472,6 +488,127 @@ mod tests {
             Step::RemoveText { text, .. } => assert_eq!(text, " World"),
             _ => panic!("expected RemoveText"),
         }
+    }
+
+    #[test]
+    fn remove_text_after_atom_derives_content_from_child_slots() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.remove_text(p1, 2, 1).unwrap();
+        assert_eq!(block_text(tr.state(), &p1), "a");
+        let (_, steps, _, _, _) = tr.commit();
+        match &steps[0].step {
+            Step::RemoveText { text, .. } => assert_eq!(text, "b"),
+            _ => panic!("expected RemoveText"),
+        }
+    }
+
+    #[test]
+    fn remove_text_rejects_range_containing_atom() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        let result = tr.remove_text(p1, 1, 2);
+        assert!(matches!(
+            result,
+            Err(StepError::ExpectedText {
+                block,
+                offset: 1,
+            }) if block == p1
+        ));
+        assert_eq!(block_text(tr.state(), &p1), "ab");
+    }
+
+    #[test]
+    fn remove_text_step_rejects_atom_slot() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let result = Step::RemoveText {
+            block: p1,
+            offset: 1,
+            text: "b".into(),
+        }
+        .apply(&state);
+        assert!(matches!(
+            result,
+            Err(StepError::ExpectedText {
+                block,
+                offset: 1,
+            }) if block == p1
+        ));
+    }
+
+    #[test]
+    fn remove_text_step_rejects_text_mismatch() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") } } }
+            selection: (p1, 0)
+        };
+        let result = Step::RemoveText {
+            block: p1,
+            offset: 0,
+            text: "x".into(),
+        }
+        .apply(&state);
+        assert!(matches!(
+            result,
+            Err(StepError::TextMismatch {
+                block,
+                offset: 0,
+                expected: 'x',
+                actual: 'a',
+            }) if block == p1
+        ));
+    }
+
+    #[test]
+    fn remove_child_slots_deletes_mixed_inline_range() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.remove_child_slots(p1, 1, 3).unwrap();
+        assert_eq!(block_text(tr.state(), &p1), "a");
+        let (_, steps, _, _, _) = tr.commit();
+        assert_eq!(steps.len(), 2);
+        assert!(steps.iter().any(|r| matches!(
+            &r.step,
+            Step::RemoveText { offset: 2, text, .. } if text == "b"
+        )));
+        assert!(
+            steps
+                .iter()
+                .any(|r| matches!(&r.step, Step::RemoveSubtree { index: 1, .. }))
+        );
+    }
+
+    #[test]
+    fn remove_child_slots_captures_atom_leaf_modifiers() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab [font_size(2400)] } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        tr.remove_child_slots(p1, 1, 2).unwrap();
+
+        let (_, steps, _, _, _) = tr.commit();
+        let subtree = steps
+            .iter()
+            .find_map(|r| match &r.step {
+                Step::RemoveSubtree { subtree, .. } => Some(subtree),
+                _ => None,
+            })
+            .expect("tab deletion must record RemoveSubtree");
+
+        assert_eq!(subtree.modifiers, vec![Modifier::FontSize { value: 2400 }]);
     }
 
     #[test]

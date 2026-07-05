@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use editor_crdt::Dot;
-use editor_model::Modifier;
+use editor_model::{ChildView, Modifier, NodeView, PlainNode, Subtree};
 use editor_state::State;
 
 use crate::steps::support;
@@ -29,7 +29,7 @@ fn reconcile_node(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), S
     reconcile_attrs(tr, target, id)?;
     reconcile_modifiers(tr, target, id)?;
     reconcile_node_marker(tr, target, id)?;
-    reconcile_text(tr, target, id)?;
+    reconcile_inline_children(tr, target, id)?;
     reconcile_children(tr, target, id)?;
     Ok(())
 }
@@ -122,41 +122,162 @@ fn reconcile_modifiers(tr: &mut Transaction, target: &State, id: Dot) -> Result<
     Ok(())
 }
 
-fn reconcile_text(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
-    let (Some(cur), tgt) = (
-        tr.view().node(id).map(|n| n.inline_text()),
-        target.view().node(id).map(|n| n.inline_text()),
-    ) else {
-        return Ok(());
-    };
-    let Some(tgt) = tgt else {
-        return Ok(());
-    };
-    if cur == tgt {
-        return Ok(());
-    }
-    let cur_chars: Vec<char> = cur.chars().collect();
-    let tgt_chars: Vec<char> = tgt.chars().collect();
+#[derive(Clone, Debug, PartialEq)]
+enum InlineLeafToken {
+    Char(char),
+    Atom {
+        node: PlainNode,
+        modifiers: Vec<Modifier>,
+    },
+}
 
-    let mut p = 0;
-    while p < cur_chars.len() && p < tgt_chars.len() && cur_chars[p] == tgt_chars[p] {
-        p += 1;
+#[derive(Clone, Debug)]
+struct InlineLeafUnit {
+    slot: usize,
+    token: InlineLeafToken,
+}
+
+fn inline_leaf_units(node: &NodeView<'_>) -> Vec<InlineLeafUnit> {
+    let mut units = Vec::new();
+    for (slot, child) in node.children().enumerate() {
+        let ChildView::Leaf(leaf) = child else {
+            continue;
+        };
+        if let Some(ch) = leaf.as_char() {
+            units.push(InlineLeafUnit {
+                slot,
+                token: InlineLeafToken::Char(ch),
+            });
+        } else if let Some(atom) = leaf.as_atom() {
+            let atom_node = atom.clone().into_node().to_plain();
+            let modifiers = node.leaf_own_modifiers_at(slot);
+            units.push(InlineLeafUnit {
+                slot,
+                token: InlineLeafToken::Atom {
+                    node: atom_node,
+                    modifiers,
+                },
+            });
+        }
     }
-    let mut s = 0;
-    while s < (cur_chars.len() - p)
-        && s < (tgt_chars.len() - p)
-        && cur_chars[cur_chars.len() - 1 - s] == tgt_chars[tgt_chars.len() - 1 - s]
+    units
+}
+
+fn remove_inline_leaf_units(
+    tr: &mut Transaction,
+    id: Dot,
+    units: &[InlineLeafUnit],
+) -> Result<(), StepError> {
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    for unit in units {
+        match ranges.last_mut() {
+            Some((_, end)) if *end == unit.slot => *end = unit.slot + 1,
+            _ => ranges.push((unit.slot, unit.slot + 1)),
+        }
+    }
+
+    for (from, to) in ranges.into_iter().rev() {
+        tr.remove_child_slots(id, from, to)?;
+    }
+    Ok(())
+}
+
+fn flush_insert_text(
+    tr: &mut Transaction,
+    id: Dot,
+    start: &mut Option<usize>,
+    text: &mut String,
+) -> Result<(), StepError> {
+    if let Some(offset) = start.take()
+        && !text.is_empty()
     {
-        s += 1;
+        tr.insert_text(id, offset, text)?;
+        text.clear();
     }
-    let remove_len = cur_chars.len() - s - p;
-    if remove_len > 0 {
-        tr.remove_text(id, p, remove_len)?;
+    Ok(())
+}
+
+fn insert_inline_leaf_units(
+    tr: &mut Transaction,
+    id: Dot,
+    units: &[InlineLeafUnit],
+) -> Result<(), StepError> {
+    let mut text_start = None;
+    let mut next_text_slot = 0;
+    let mut text = String::new();
+
+    for unit in units {
+        match &unit.token {
+            InlineLeafToken::Char(ch) => {
+                if text_start.is_none() || next_text_slot != unit.slot {
+                    flush_insert_text(tr, id, &mut text_start, &mut text)?;
+                    text_start = Some(unit.slot);
+                }
+                text.push(*ch);
+                next_text_slot = unit.slot + 1;
+            }
+            InlineLeafToken::Atom { node, modifiers } => {
+                flush_insert_text(tr, id, &mut text_start, &mut text)?;
+                tr.insert_subtree(
+                    id,
+                    unit.slot,
+                    Subtree {
+                        node: node.clone(),
+                        modifiers: modifiers.clone(),
+                        marker: None,
+                        children: Vec::new(),
+                    },
+                )?;
+                next_text_slot = unit.slot + 1;
+            }
+        }
     }
-    let insert: String = tgt_chars[p..tgt_chars.len() - s].iter().collect();
-    if !insert.is_empty() {
-        tr.insert_text(id, p, &insert)?;
+    flush_insert_text(tr, id, &mut text_start, &mut text)?;
+    Ok(())
+}
+
+fn reconcile_inline_children(
+    tr: &mut Transaction,
+    target: &State,
+    id: Dot,
+) -> Result<(), StepError> {
+    let (cur_units, tgt_units) = {
+        let cur_view = tr.view();
+        let Some(cur_node) = cur_view.node(id) else {
+            return Ok(());
+        };
+        let target_view = target.view();
+        let Some(tgt_node) = target_view.node(id) else {
+            return Ok(());
+        };
+        (inline_leaf_units(&cur_node), inline_leaf_units(&tgt_node))
+    };
+
+    let mut prefix = 0;
+    while prefix < cur_units.len()
+        && prefix < tgt_units.len()
+        && cur_units[prefix].token == tgt_units[prefix].token
+    {
+        prefix += 1;
     }
+
+    let mut suffix = 0;
+    while suffix < (cur_units.len() - prefix)
+        && suffix < (tgt_units.len() - prefix)
+        && cur_units[cur_units.len() - 1 - suffix].token
+            == tgt_units[tgt_units.len() - 1 - suffix].token
+    {
+        suffix += 1;
+    }
+
+    let cur_end = cur_units.len() - suffix;
+    let tgt_end = tgt_units.len() - suffix;
+    if prefix == cur_end && prefix == tgt_end {
+        return Ok(());
+    }
+
+    remove_inline_leaf_units(tr, id, &cur_units[prefix..cur_end])?;
+    insert_inline_leaf_units(tr, id, &tgt_units[prefix..tgt_end])?;
     Ok(())
 }
 
@@ -197,6 +318,7 @@ mod tests {
         CalloutVariant, ModifierType, Node, NodeType, NodeView, PlainCalloutNode, PlainNode,
         PlainParagraphNode, Subtree,
     };
+    use editor_state::assert_state_eq;
 
     fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
         fn walk(nv: &NodeView, depth: usize, out: &mut Vec<(usize, NodeType, String)>) {
@@ -256,6 +378,110 @@ mod tests {
             reverted.view().node(p1).unwrap().inline_text(),
             "hello world"
         );
+    }
+
+    #[test]
+    fn reverts_text_change_after_tab() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.remove_text(p1, 2, 1).unwrap();
+        pre.insert_text(p1, 2, "c").unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+    }
+
+    #[test]
+    fn reverts_text_change_after_hard_break() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("a") hard_break text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.remove_text(p1, 2, 1).unwrap();
+        pre.insert_text(p1, 2, "c").unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+    }
+
+    #[test]
+    fn reverts_inserted_tab() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.insert_subtree(p1, 1, Subtree::leaf(PlainNode::Tab(Default::default())))
+            .unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+    }
+
+    #[test]
+    fn reverts_deleted_tab() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.remove_child_slots(p1, 1, 2).unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+    }
+
+    #[test]
+    fn reverts_inserted_hard_break() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.insert_subtree(
+            p1,
+            1,
+            Subtree::leaf(PlainNode::HardBreak(Default::default())),
+        )
+        .unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+    }
+
+    #[test]
+    fn reverts_deleted_hard_break() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("a") hard_break text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.remove_child_slots(p1, 1, 2).unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
     }
 
     #[test]

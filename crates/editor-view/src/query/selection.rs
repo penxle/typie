@@ -657,6 +657,22 @@ mod tests {
         (logs(&items), root, para)
     }
 
+    fn para_doc_items(children: Vec<SeqItem>) -> (DocLogs, Dot, Dot) {
+        let root = Dot::ROOT;
+        let para = Dot::new(12, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, child) in children.into_iter().enumerate() {
+            items.push((Dot::new(12, 2 + i as u64), child));
+        }
+        (logs(&items), root, para)
+    }
+
     fn first_line_for_para<'a>(
         index: &'a LayoutIndex,
         para_id: &Dot,
@@ -734,6 +750,44 @@ mod tests {
         assert!(
             (rects[0].rect.x + rects[0].rect.width - expected_right).abs() < 0.1,
             "rect right edge must equal entry.rect.x + x_at_offset(to)"
+        );
+    }
+
+    #[test]
+    fn tab_only_selection_has_visible_text_rect() {
+        let (doc, _root, para) = para_doc_items(vec![
+            SeqItem::Atom(AtomLeaf::Tab),
+            SeqItem::Atom(AtomLeaf::Tab),
+        ]);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let para_id = para;
+
+        let sel = Selection::new(
+            Position {
+                node: para_id,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: para_id,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let rsel = sel.resolve(&view).expect("must resolve");
+
+        let rects = selection_text_rects(&index, &rsel);
+        assert_eq!(rects.len(), 1, "tab-only selection must produce one rect");
+        assert!(
+            rects[0].rect.width > 0.0,
+            "tab-only selection rect must span tab width, got {:?}",
+            rects
+        );
+        assert!(
+            rects[0].rect.height > 0.0,
+            "tab-only selection text rect must be visible, got {:?}",
+            rects
         );
     }
 

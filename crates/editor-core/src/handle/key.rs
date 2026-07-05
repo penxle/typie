@@ -1226,6 +1226,36 @@ mod tests {
     }
 
     #[test]
+    fn backspace_after_text_following_tab_removes_text() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_before_text_following_tab_removes_text() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn backspace_at_between_monolithic_gap_selects_prev_monolithic() {
         let (state, ..) = state! {
             doc { r: root {

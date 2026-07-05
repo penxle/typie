@@ -118,6 +118,23 @@ mod tests {
     }
 
     #[test]
+    fn delete_text_after_tab() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_text_backward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn delete_at_start_of_text_returns_false() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }

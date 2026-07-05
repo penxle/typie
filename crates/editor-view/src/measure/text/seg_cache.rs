@@ -6,7 +6,7 @@ use editor_crdt::Dot;
 use editor_model::Alignment;
 use hashbrown::HashMap;
 
-use super::inline::TextRun;
+use super::inline::{TabMark, TextRun};
 use super::measure::MeasuredLine;
 use super::resolve::ResolvedTextStyle;
 
@@ -114,9 +114,10 @@ fn hash_style<H: Hasher>(s: &ResolvedTextStyle, h: &mut H) {
 }
 
 /// Content hash capturing everything a segment's measured output depends on: its
-/// text, the width/alignment/indent, the paragraph base style, and every inline
-/// run's byte range (relative), font style, effective modifiers, and own modifiers
-/// (so a color or decoration change — same glyphs, different output — still misses).
+/// text, width/alignment/indent, paragraph base style, inline text runs, and tab
+/// marks. Text runs hash relative byte/offset ranges and style/modifier state;
+/// tabs hash relative offset and style/modifier state because their measured gap
+/// and link rectangles are part of the cached `MeasuredLine`.
 ///
 /// `own_modifiers` is hashed alongside `effective` because the rendered
 /// link/color/decoration in the cached `MeasuredLine` are resolved from
@@ -126,6 +127,7 @@ pub(crate) fn segment_hash(
     seg_text: &str,
     seg_off: &Range<usize>,
     runs: &[TextRun],
+    tabs: &[TabMark],
     width: f32,
     align: Alignment,
     indent: f32,
@@ -154,6 +156,24 @@ pub(crate) fn segment_hash(
             o.value.hash(&mut h);
         }
         h.write_u8(0xff);
+    }
+    h.write_u8(0xfd);
+    for t in tabs
+        .iter()
+        .filter(|t| seg_off.start <= t.offset_index && t.offset_index < seg_off.end)
+    {
+        (t.offset_index - seg_off.start).hash(&mut h);
+        hash_style(&t.style, &mut h);
+        for (k, v) in t.effective.iter() {
+            k.hash(&mut h);
+            v.hash(&mut h);
+        }
+        h.write_u8(0xfb);
+        for (k, o) in t.own_modifiers.iter() {
+            k.hash(&mut h);
+            o.value.hash(&mut h);
+        }
+        h.write_u8(0xfc);
     }
     h.finish()
 }
@@ -208,13 +228,73 @@ mod tests {
                 effective: &effective,
                 style: style(),
             }];
-            segment_hash("a", &(0..1), &runs, 100.0, Alignment::Left, 0.0, &style())
+            segment_hash(
+                "a",
+                &(0..1),
+                &runs,
+                &[],
+                100.0,
+                Alignment::Left,
+                0.0,
+                &style(),
+            )
         };
 
         assert_ne!(
             hash_for(&mk_own(true)),
             hash_for(&mk_own(false)),
             "runs differing in an own modifier must hash differently"
+        );
+    }
+
+    #[test]
+    fn segment_hash_distinguishes_tab_own_modifier_value() {
+        let effective: BTreeMap<ModifierType, Modifier> = [(
+            ModifierType::Link,
+            Modifier::Link {
+                href: "https://example.com".to_string(),
+            },
+        )]
+        .into_iter()
+        .collect();
+
+        let mk_own = |href: &str| -> BTreeMap<ModifierType, OwnModifier> {
+            [(
+                ModifierType::Link,
+                OwnModifier {
+                    value: Modifier::Link {
+                        href: href.to_string(),
+                    },
+                },
+            )]
+            .into_iter()
+            .collect()
+        };
+
+        let hash_for = |own: &BTreeMap<ModifierType, OwnModifier>| {
+            let tabs = vec![TabMark {
+                offset_index: 0,
+                byte_offset: 0,
+                own_modifiers: own,
+                effective: &effective,
+                style: style(),
+            }];
+            segment_hash(
+                "",
+                &(0..1),
+                &[],
+                &tabs,
+                100.0,
+                Alignment::Left,
+                0.0,
+                &style(),
+            )
+        };
+
+        assert_ne!(
+            hash_for(&mk_own("https://example.com/a")),
+            hash_for(&mk_own("https://example.com/b")),
+            "tabs differing in an own modifier must hash differently"
         );
     }
 }

@@ -33,6 +33,18 @@ pub(crate) fn page_link_rects(layout_index: &LayoutIndex, page_idx: usize) -> Ve
                 );
                 push_rect(&mut out, page_idx, href.clone(), rect);
             }
+            for gap in &line.tab_gaps {
+                let Some(ref href) = gap.link else {
+                    continue;
+                };
+                let rect = Rect::from_xywh(
+                    entry.rect.x + gap.x,
+                    entry.rect.y - page.y_start,
+                    gap.width,
+                    entry.rect.height,
+                );
+                push_rect(&mut out, page_idx, href.clone(), rect);
+            }
         }
     }
     out
@@ -116,6 +128,7 @@ mod tests {
         w: f32,
         h: f32,
         glyph_runs: Vec<GlyphRun>,
+        tab_gaps: Vec<crate::measure::text::measure::TabGap>,
     ) -> LayoutNode {
         LayoutNode {
             rect: Rect::from_xywh(x, y, w, h),
@@ -132,7 +145,7 @@ mod tests {
                     ruby_annotations: vec![],
                     empty_caret_x: 0.0,
                     offset_range: None,
-                    tab_gaps: vec![],
+                    tab_gaps,
                     is_phantom: false,
                     content_edge_x: None,
                 }),
@@ -196,6 +209,7 @@ mod tests {
             180.0,
             20.0,
             vec![run_a, run_b, run_c, run_d],
+            vec![],
         );
         let root = box_node(root_id, 0.0, 0.0, 200.0, 40.0, vec![ln]);
         let index = build_index(root, vec![page(0.0, 100.0)]);
@@ -244,7 +258,7 @@ mod tests {
         let run_a = run(0..5, 0.0, vec![gs(10.0, 1); 5], Some("https://a.example"));
         let run_b = run(5..10, 50.0, vec![gs(10.0, 1); 5], None);
 
-        let ln = line_node(para_id, 20.0, 10.0, 180.0, 20.0, vec![run_a, run_b]);
+        let ln = line_node(para_id, 20.0, 10.0, 180.0, 20.0, vec![run_a, run_b], vec![]);
         let root = box_node(root_id, 0.0, 0.0, 200.0, 40.0, vec![ln]);
         let index = build_index(root, vec![page(0.0, 100.0)]);
 
@@ -260,5 +274,36 @@ mod tests {
 
         let miss_outside = link_hit_test(&index, 0, 200.0, 15.0);
         assert!(miss_outside.is_none(), "x=200 (outside any run) must miss");
+    }
+
+    #[test]
+    fn link_rects_include_tab_gaps() {
+        let root_id = elem(1, 0);
+        let para_id = elem(1, 1);
+
+        let ln = line_node(
+            para_id,
+            20.0,
+            10.0,
+            180.0,
+            20.0,
+            vec![],
+            vec![crate::measure::text::measure::TabGap {
+                offset_index: 0,
+                x: 40.0,
+                width: 32.0,
+                link: Some("https://tab.example".to_string()),
+            }],
+        );
+        let root = box_node(root_id, 0.0, 0.0, 200.0, 40.0, vec![ln]);
+        let index = build_index(root, vec![page(0.0, 100.0)]);
+
+        let links = page_link_rects(&index, 0);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].href, "https://tab.example");
+        assert_eq!(links[0].rects[0], Rect::from_xywh(60.0, 10.0, 32.0, 20.0));
+
+        let hit = link_hit_test(&index, 0, 70.0, 15.0).expect("tab gap must hit");
+        assert_eq!(hit.href, "https://tab.example");
     }
 }

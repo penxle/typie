@@ -7,7 +7,7 @@ use editor_model::{
 };
 use editor_state::{BatchedState, ProjectedState};
 
-use crate::StepError;
+use crate::{Step, StepError};
 
 pub(crate) fn block_node_type(ps: &ProjectedState, block: Dot) -> Option<NodeType> {
     ps.block_node_type(block)
@@ -149,30 +149,41 @@ pub(crate) fn insert_text_ops(
     Ok(ops)
 }
 
-pub(crate) fn leaf_dots_in_range(
+pub(crate) fn char_leaf_dots_for_text(
     ps: &ProjectedState,
     block: Dot,
     offset: usize,
-    len: usize,
+    text: &str,
 ) -> Result<Vec<Dot>, StepError> {
     let children = ps
         .block_children(block)
         .ok_or(StepError::NodeNotFound(block))?;
-    let mut dots = Vec::with_capacity(len);
-    for i in 0..len {
+    let mut dots = Vec::with_capacity(text.chars().count());
+    for (i, expected) in text.chars().enumerate() {
         let idx = offset + i;
         let child = children.get(idx).ok_or(StepError::OffsetOutOfBounds {
             block,
             offset: idx,
             len: children.len(),
         })?;
-        let dot = match child {
-            Child::Leaf { id, .. } => *id,
-            Child::Block(d) => {
-                editor_model::anchor_dot(*d).ok_or(StepError::NodeNotFound(block))?
+        match child {
+            Child::Leaf {
+                id,
+                item: SeqItem::Char(actual),
+            } if *actual == expected => dots.push(*id),
+            Child::Leaf {
+                item: SeqItem::Char(actual),
+                ..
+            } => {
+                return Err(StepError::TextMismatch {
+                    block,
+                    offset: idx,
+                    expected,
+                    actual: *actual,
+                });
             }
-        };
-        dots.push(dot);
+            _ => return Err(StepError::ExpectedText { block, offset: idx }),
+        }
     }
     Ok(dots)
 }
@@ -203,22 +214,132 @@ pub(crate) fn delete_dots_ops(ps: &ProjectedState, dots: &[Dot]) -> Vec<EditOp> 
     ops
 }
 
-pub(crate) fn read_text(ps: &ProjectedState, block: Dot, offset: usize, len: usize) -> String {
-    let Some(children) = ps.block_children(block) else {
-        return String::new();
-    };
-    children
-        .iter()
-        .filter_map(|c| match c {
+pub(crate) fn read_text(
+    ps: &ProjectedState,
+    block: Dot,
+    offset: usize,
+    len: usize,
+) -> Result<String, StepError> {
+    let children = ps
+        .block_children(block)
+        .ok_or(StepError::NodeNotFound(block))?;
+    if offset > children.len() {
+        return Err(StepError::OffsetOutOfBounds {
+            block,
+            offset,
+            len: children.len(),
+        });
+    }
+    let mut text = String::new();
+    for i in 0..len {
+        let idx = offset + i;
+        let child = children.get(idx).ok_or(StepError::OffsetOutOfBounds {
+            block,
+            offset: idx,
+            len: children.len(),
+        })?;
+        match child {
             Child::Leaf {
                 item: SeqItem::Char(ch),
                 ..
-            } => Some(*ch),
-            _ => None,
-        })
-        .skip(offset)
-        .take(len)
-        .collect()
+            } => text.push(*ch),
+            _ => return Err(StepError::ExpectedText { block, offset: idx }),
+        }
+    }
+    Ok(text)
+}
+
+pub(crate) fn remove_child_slots_steps(
+    ps: &ProjectedState,
+    parent: Dot,
+    from: usize,
+    to: usize,
+) -> Result<Vec<Step>, StepError> {
+    let children = ps
+        .block_children(parent)
+        .ok_or(StepError::NodeNotFound(parent))?;
+    if from > to {
+        return Err(StepError::InvalidChildRange { parent, from, to });
+    }
+    if from > children.len() {
+        return Err(StepError::IndexOutOfBounds {
+            parent,
+            index: from,
+            len: children.len(),
+        });
+    }
+    if to > children.len() {
+        return Err(StepError::IndexOutOfBounds {
+            parent,
+            index: to,
+            len: children.len(),
+        });
+    }
+    if to <= from {
+        return Ok(Vec::new());
+    }
+
+    let mut steps = Vec::new();
+    let mut text_offset = None;
+    let mut text = String::new();
+
+    for (idx, child) in children.iter().enumerate().skip(from).take(to - from) {
+        match child {
+            Child::Leaf {
+                item: SeqItem::Char(ch),
+                ..
+            } => {
+                if text_offset.is_none() {
+                    text_offset = Some(idx);
+                }
+                text.push(*ch);
+            }
+            Child::Leaf { id, item } => {
+                flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+                let atom = match item {
+                    SeqItem::Atom(atom) => atom,
+                    SeqItem::BlockAtom { leaf, .. } => leaf,
+                    SeqItem::Char(_) | SeqItem::Block { .. } => {
+                        return Err(StepError::InvalidChildSlot { parent, index: idx });
+                    }
+                };
+                steps.push(Step::RemoveSubtree {
+                    parent,
+                    index: idx,
+                    subtree: atom_leaf_subtree(ps, *id, atom.clone()),
+                });
+            }
+            Child::Block(block) => {
+                flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+                let subtree = capture_subtree(ps, *block).ok_or(StepError::NodeNotFound(*block))?;
+                steps.push(Step::RemoveSubtree {
+                    parent,
+                    index: idx,
+                    subtree,
+                });
+            }
+        }
+    }
+    flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+    steps.reverse();
+    Ok(steps)
+}
+
+fn flush_remove_text_step(
+    steps: &mut Vec<Step>,
+    block: Dot,
+    offset: &mut Option<usize>,
+    text: &mut String,
+) {
+    if let Some(offset) = offset.take()
+        && !text.is_empty()
+    {
+        steps.push(Step::RemoveText {
+            block,
+            offset,
+            text: std::mem::take(text),
+        });
+    }
 }
 
 pub(crate) fn span_add(first: Dot, last: Dot, modifier: Modifier) -> EditOp {
@@ -278,9 +399,10 @@ pub(crate) fn node_marker_set(target: Dot, value: Option<Marker>) -> EditOp {
     })
 }
 
-/// Builds a `Subtree` snapshot of the projected block at `block`. Char/atom
-/// leaves are grouped into `Text` subtrees (per-char span styling is dropped —
-/// the M1 move/subtree path is structural). Nested blocks recurse.
+/// Builds a `Subtree` snapshot of the projected block at `block`. Char leaves
+/// are grouped into plain `Text` subtrees (per-char span styling is dropped —
+/// the M1 move/subtree path is structural). Atom leaves keep their own
+/// modifiers. Nested blocks recurse.
 pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
     let node = ps.block_node(block)?.to_plain();
     let dot = editor_model::anchor_dot(block);
@@ -299,13 +421,19 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
     let mut pending_text = String::new();
     for c in ps.block_children(block)? {
         match c {
-            Child::Leaf { item, .. } => match item {
+            Child::Leaf { id, item } => match item {
                 SeqItem::Char(ch) => pending_text.push(ch),
                 SeqItem::Atom(atom) => {
                     if !pending_text.is_empty() {
                         children.push(text_subtree(std::mem::take(&mut pending_text)));
                     }
-                    children.push(Subtree::leaf(atom.into_node().to_plain()));
+                    children.push(atom_leaf_subtree(ps, id, atom));
+                }
+                SeqItem::BlockAtom { leaf, .. } => {
+                    if !pending_text.is_empty() {
+                        children.push(text_subtree(std::mem::take(&mut pending_text)));
+                    }
+                    children.push(atom_leaf_subtree(ps, id, leaf));
                 }
                 _ => {}
             },
@@ -333,6 +461,15 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
 
 fn text_subtree(text: String) -> Subtree {
     Subtree::leaf(PlainNode::Text(PlainTextNode { text }))
+}
+
+fn atom_leaf_subtree(ps: &ProjectedState, dot: Dot, atom: AtomLeaf) -> Subtree {
+    Subtree {
+        node: atom.into_node().to_plain(),
+        modifiers: ps.view().leaf_own_modifiers_by_dot_slow(dot),
+        marker: None,
+        children: Vec::new(),
+    }
 }
 
 /// Emits a captured/described subtree into the working state starting at

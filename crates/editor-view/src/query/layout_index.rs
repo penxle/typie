@@ -511,6 +511,10 @@ fn position_matches_line(line: &LayoutLine, pos: &Position) -> bool {
     line.glyph_runs
         .iter()
         .any(|run| pos.offset >= run.offset_range.start && pos.offset <= run.offset_range.end)
+        || line
+            .tab_gaps
+            .iter()
+            .any(|gap| pos.offset >= gap.offset_index && pos.offset <= gap.offset_index + 1)
 }
 
 fn position_attaches_to_child(pos: &Position, parent: &Dot, index: usize) -> bool {
@@ -553,7 +557,9 @@ fn rect_area(rect: &Rect) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::EdgeInsets;
+    use std::sync::Arc;
+
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog,
@@ -564,8 +570,11 @@ mod tests {
 
     use crate::measure::context::MeasureContext;
     use crate::measure::nodes::dispatch::measure_node;
+    use crate::measure::text::measure::{MeasuredLine, TabGap};
     use crate::measure::types::MeasuredTree;
     use crate::paginate::paginator::Paginator;
+    use crate::paginate::types::{LayoutBox, LayoutLine};
+    use crate::style::BoxStyle;
 
     use super::*;
 
@@ -671,6 +680,60 @@ mod tests {
         let entry = index.entry_for_position(&pos).expect("entry must exist");
         let node = entry.node(&index).expect("entry node must exist");
         assert!(matches!(&node.content, LayoutContent::Line(l) if l.node == para_id));
+    }
+
+    #[test]
+    fn entry_for_position_line_matches_tab_gap_offsets_without_line_offset_range() {
+        let para = Dot::new(30, 1);
+        let line = LayoutLine {
+            measured: Arc::new(MeasuredLine {
+                node: para,
+                height: 20.0,
+                baseline: 14.0,
+                ascent: 14.0,
+                descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
+                glyph_runs: vec![],
+                ruby_annotations: vec![],
+                empty_caret_x: 0.0,
+                offset_range: None,
+                tab_gaps: vec![TabGap {
+                    offset_index: 5,
+                    x: 10.0,
+                    width: 40.0,
+                    link: None,
+                }],
+                is_phantom: false,
+                content_edge_x: None,
+            }),
+        };
+        let rect = Rect::from_xywh(0.0, 0.0, 200.0, 20.0);
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect,
+                content: LayoutContent::Box(LayoutBox {
+                    node: Dot::ROOT,
+                    style: BoxStyle::default(),
+                    children: vec![LayoutNode {
+                        rect,
+                        content: LayoutContent::Line(line),
+                    }],
+                    attachment: None,
+                }),
+            },
+        };
+        let page = LayoutPage::new(0.0, 100.0, Size::new(200.0, 100.0));
+        let index = LayoutIndex::new(tree, &[page]);
+
+        for offset in [5, 6] {
+            let pos = Position::new(para, offset);
+            let entry = index
+                .entry_for_position(&pos)
+                .expect("tab boundary position must resolve to its line");
+            let node = entry.node(&index).expect("entry node must exist");
+            assert!(matches!(&node.content, LayoutContent::Line(l) if l.node == para));
+        }
     }
 
     #[test]

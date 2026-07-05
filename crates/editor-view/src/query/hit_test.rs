@@ -334,6 +334,25 @@ mod tests {
         (pd, para_id, index)
     }
 
+    fn para_items_doc(children: Vec<SeqItem>, width: f32) -> (ProjectedDoc, Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(14, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, child) in children.into_iter().enumerate() {
+            items.push((Dot::new(14, 2 + i as u64), child));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let (pd, index) = build_index(&doc, width);
+        (pd, para_id, index)
+    }
+
     fn hr_doc(width: f32) -> (ProjectedDoc, Dot, LayoutIndex) {
         let root = Dot::ROOT;
         let hr = Dot::new(11, 1);
@@ -469,6 +488,26 @@ mod tests {
             sel.anchor.offset, expected_pos.offset,
             "anchor offset must match position_at_x for local_x"
         );
+    }
+
+    #[test]
+    fn hit_test_after_tab_only_line_lands_after_last_tab() {
+        let (_pd, para_id, index) = para_items_doc(
+            vec![SeqItem::Atom(AtomLeaf::Tab), SeqItem::Atom(AtomLeaf::Tab)],
+            400.0,
+        );
+        let (entry, line) = first_line_for_para(&index, &para_id).expect("must find tab line");
+        let last_gap = line.tab_gaps.last().expect("tab line must expose tab gap");
+        let local_x = last_gap.x + last_gap.width + 10.0;
+        let abs_x = entry.rect.x + local_x;
+        let page_y = entry.rect.y - index.pages()[0].y_start + entry.rect.height / 2.0;
+
+        let sel = hit_test(&index, 0, abs_x, page_y).expect("click must hit tab line");
+
+        assert_eq!(sel.anchor, sel.head);
+        assert_eq!(sel.anchor.node, para_id);
+        assert_eq!(sel.anchor.offset, 2);
+        assert_eq!(sel.anchor.affinity, Affinity::Upstream);
     }
 
     #[test]

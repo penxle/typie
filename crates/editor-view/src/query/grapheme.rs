@@ -3,25 +3,41 @@ use editor_state::Position;
 
 use crate::paginate::types::LayoutLine;
 
-pub(crate) fn last_position_in_line(line: &LayoutLine) -> Position {
-    if let Some(last_gap) = line.tab_gaps.last() {
-        let after_glyphs = line
-            .glyph_runs
-            .last()
-            .map(|r| last_gap.x + last_gap.width >= r.x + r.width)
-            .unwrap_or(true);
-        if after_glyphs {
-            return Position {
-                node: line.node,
-                offset: last_gap.offset_index + 1,
-                affinity: Affinity::Upstream,
-            };
+fn visual_bounds(line: &LayoutLine) -> (Option<(f32, usize)>, Option<(f32, usize)>) {
+    let mut first: Option<(f32, usize)> = None;
+    let mut last: Option<(f32, usize)> = None;
+
+    for run in &line.glyph_runs {
+        if first.is_none_or(|(x, _)| run.x < x) {
+            first = Some((run.x, run.offset_range.start));
+        }
+
+        let end_x = run.x + run.width;
+        if last.is_none_or(|(x, _)| end_x > x) {
+            last = Some((end_x, run.offset_range.end));
         }
     }
-    if let Some(run) = line.glyph_runs.last() {
+
+    for gap in &line.tab_gaps {
+        if first.is_none_or(|(x, _)| gap.x < x) {
+            first = Some((gap.x, gap.offset_index));
+        }
+
+        let end_x = gap.x + gap.width;
+        if last.is_none_or(|(x, _)| end_x > x) {
+            last = Some((end_x, gap.offset_index + 1));
+        }
+    }
+
+    (first, last)
+}
+
+pub(crate) fn last_position_in_line(line: &LayoutLine) -> Position {
+    let (_, last) = visual_bounds(line);
+    if let Some((_, offset)) = last {
         return Position {
             node: line.node,
-            offset: run.offset_range.end,
+            offset,
             affinity: Affinity::Upstream,
         };
     }
@@ -38,6 +54,19 @@ pub(crate) fn last_position_in_line(line: &LayoutLine) -> Position {
         };
     }
     Position::new(line.node, 0)
+}
+
+pub(crate) fn first_position_in_line(line: &LayoutLine) -> Position {
+    let (first, _) = visual_bounds(line);
+    if let Some((_, offset)) = first {
+        return Position::new(line.node, offset);
+    }
+    let offset = line.offset_range.as_ref().map(|r| r.start).unwrap_or(0);
+    Position {
+        node: line.node,
+        offset,
+        affinity: Affinity::Downstream,
+    }
 }
 
 pub(crate) fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
@@ -129,6 +158,10 @@ pub(crate) fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
             } else {
                 gap.offset_index + 1
             };
+            let last_position = last_position_in_line(line);
+            if offset == last_position.offset {
+                return last_position;
+            }
             return Position {
                 node: line.node,
                 offset,
@@ -137,21 +170,19 @@ pub(crate) fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
         }
     }
 
-    if line.glyph_runs.is_empty() {
+    if line.glyph_runs.is_empty() && line.tab_gaps.is_empty() {
         let offset = line.offset_range.as_ref().map(|r| r.start).unwrap_or(0);
         return Position::new(line.node, offset);
     }
 
-    let first = &line.glyph_runs[0];
-    let last = &line.glyph_runs[line.glyph_runs.len() - 1];
-    let last_offset = last.offset_range.end;
-
-    if local_x <= first.x {
-        return Position::new(line.node, first.offset_range.start);
+    if local_x <= line_content_start_x(line) {
+        return first_position_in_line(line);
     }
 
-    if local_x >= last.x + last.width {
-        return last_position_in_line(line);
+    let last_position = last_position_in_line(line);
+
+    if local_x >= line_content_end_x(line) {
+        return last_position;
     }
 
     for run in &line.glyph_runs {
@@ -168,13 +199,13 @@ pub(crate) fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
             cp_offset += g.codepoints as usize;
         }
         let offset = run.offset_range.start + cp_offset;
-        if offset == last_offset {
-            return last_position_in_line(line);
+        if offset == last_position.offset {
+            return last_position;
         }
         return Position::new(line.node, offset);
     }
 
-    Position::new(line.node, last_offset)
+    last_position
 }
 
 #[cfg(test)]
@@ -327,6 +358,76 @@ mod tests {
     }
 
     #[test]
+    fn position_at_x_handles_tab_only_line_edges() {
+        let n = node();
+        let l = line(
+            n,
+            Some(0..2),
+            vec![],
+            vec![
+                TabGap {
+                    offset_index: 0,
+                    x: 0.0,
+                    width: 40.0,
+                    link: None,
+                },
+                TabGap {
+                    offset_index: 1,
+                    x: 40.0,
+                    width: 40.0,
+                    link: None,
+                },
+            ],
+            0.0,
+            None,
+        );
+
+        let before = position_at_x(&l, -10.0);
+        assert_eq!(before.node, n);
+        assert_eq!(before.offset, 0);
+
+        let after = position_at_x(&l, 100.0);
+        assert_eq!(after.node, n);
+        assert_eq!(after.offset, 2);
+        assert_eq!(after.affinity, Affinity::Upstream);
+
+        let inside_last_gap_right_half = position_at_x(&l, 70.0);
+        assert_eq!(inside_last_gap_right_half.node, n);
+        assert_eq!(inside_last_gap_right_half.offset, 2);
+        assert_eq!(inside_last_gap_right_half.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn position_before_leading_tab_with_following_text_lands_at_line_start() {
+        let n = node();
+        let l = line(
+            n,
+            Some(0..3),
+            vec![run(2..3, 100.0, vec![gs(10.0, 1)])],
+            vec![
+                TabGap {
+                    offset_index: 0,
+                    x: 20.0,
+                    width: 40.0,
+                    link: None,
+                },
+                TabGap {
+                    offset_index: 1,
+                    x: 60.0,
+                    width: 40.0,
+                    link: None,
+                },
+            ],
+            20.0,
+            None,
+        );
+
+        let before = position_at_x(&l, 10.0);
+        assert_eq!(before.node, n);
+        assert_eq!(before.offset, 0);
+    }
+
+    #[test]
     fn last_position_in_line_cases() {
         let n = node();
 
@@ -347,6 +448,7 @@ mod tests {
             offset_index: 2,
             x: 20.0,
             width: 30.0,
+            link: None,
         };
         let l_tab = line(
             n,

@@ -3,8 +3,15 @@ use editor_model::{ChildView, Modifier, NodeType, Subtree};
 use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::{carryable_modifiers_at, find_enclosing_list_item_id};
+use crate::helpers::{
+    capture_atom_leaf_subtree_at, carryable_modifiers_at, find_enclosing_list_item_id,
+};
 use crate::{CommandError, CommandResult};
+
+enum TailSlot {
+    Char { ch: char, modifiers: Vec<Modifier> },
+    Atom { subtree: Subtree },
+}
 
 pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
@@ -45,25 +52,28 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     let split_index = pos.offset;
     let para_len = paragraph.children().count();
 
-    // The leaves after the cursor cannot be reparented (move/split re-emit drops
-    // identity, and a list_item rejects a second paragraph), so capture their
-    // char + explicit (non-style) span modifiers and re-create them in the new
-    // item with the formatting intact.
-    let tail: Vec<(char, Vec<Modifier>)> = paragraph
-        .children()
-        .enumerate()
-        .skip(split_index)
-        .filter_map(|(slot, c)| match c {
-            ChildView::Leaf(l) => l.as_char().map(|ch| {
-                let mods: Vec<Modifier> = paragraph
-                    .leaf_state_at(slot)
-                    .map(|s| s.own.values().map(|o| o.value.clone()).collect())
-                    .unwrap_or_default();
-                (ch, mods)
-            }),
-            ChildView::Block(_) => None,
-        })
-        .collect();
+    // The inline slots after the cursor cannot be reparented (move/split re-emit
+    // drops identity, and a list_item rejects a second paragraph), so capture
+    // visible content plus leaf-owned formatting and re-create them in the new
+    // item's paragraph.
+    let mut tail: Vec<TailSlot> = Vec::new();
+    for (slot, c) in paragraph.children().enumerate().skip(split_index) {
+        match c {
+            ChildView::Leaf(l) => {
+                if let Some(ch) = l.as_char() {
+                    tail.push(TailSlot::Char {
+                        ch,
+                        modifiers: paragraph.leaf_own_modifiers_at(slot),
+                    });
+                } else if l.as_atom().is_some() {
+                    tail.push(TailSlot::Atom {
+                        subtree: capture_atom_leaf_subtree_at(&paragraph, slot)?,
+                    });
+                }
+            }
+            ChildView::Block(_) => {}
+        }
+    }
     let tail_len = para_len - split_index;
 
     let sublist_id: Option<Dot> = list_item
@@ -86,7 +96,7 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     drop(view);
 
     if tail_len > 0 {
-        tr.remove_text(paragraph_id, split_index, tail_len)?;
+        tr.remove_child_slots(paragraph_id, split_index, para_len)?;
     }
 
     let new_li = Subtree::leaf(NodeType::ListItem.into_node().to_plain()).with_children(vec![
@@ -125,28 +135,23 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         tr.move_node(*sublist, new_list_item_id, at)?;
     }
 
-    if !tail.is_empty() {
-        let text: String = tail.iter().map(|(ch, _)| *ch).collect();
-        tr.insert_text(new_paragraph_id, 0, &text)?;
-        let char_dots: Vec<_> = {
-            let view = tr.view();
-            view.node(new_paragraph_id)
-                .map(|p| {
-                    p.children()
-                        .filter_map(|c| match c {
-                            ChildView::Leaf(l) => l.as_char().map(|_| l.dot()),
-                            ChildView::Block(_) => None,
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-        for (dot, (_, mods)) in char_dots.iter().zip(tail.iter()) {
-            for m in mods {
-                tr.add_span_modifier(*dot, *dot, m.clone())?;
+    let mut offset = 0usize;
+    let mut text = String::new();
+    let mut modifiers = Vec::new();
+    for slot in &tail {
+        match slot {
+            TailSlot::Char { ch, modifiers: m } => {
+                text.push(*ch);
+                modifiers.push(m.clone());
+            }
+            TailSlot::Atom { subtree } => {
+                flush_tail_text(tr, new_paragraph_id, &mut offset, &mut text, &mut modifiers)?;
+                tr.insert_subtree(new_paragraph_id, offset, subtree.clone())?;
+                offset += 1;
             }
         }
     }
+    flush_tail_text(tr, new_paragraph_id, &mut offset, &mut text, &mut modifiers)?;
 
     let marker = editor_model::Marker {
         modifiers: carryable,
@@ -161,6 +166,49 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     ))))?;
 
     Ok(true)
+}
+
+fn flush_tail_text(
+    tr: &mut Transaction,
+    paragraph_id: Dot,
+    offset: &mut usize,
+    text: &mut String,
+    modifiers: &mut Vec<Vec<Modifier>>,
+) -> Result<(), CommandError> {
+    if text.is_empty() {
+        return Ok(());
+    }
+    let start = *offset;
+    tr.insert_text(paragraph_id, start, text.as_str())?;
+    let char_dots: Vec<_> = {
+        let view = tr.view();
+        view.node(paragraph_id)
+            .map(|p| {
+                p.children()
+                    .skip(start)
+                    .take(modifiers.len())
+                    .filter_map(|c| match c {
+                        ChildView::Leaf(l) => l.as_char().map(|_| l.dot()),
+                        ChildView::Block(_) => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    if char_dots.len() != modifiers.len() {
+        return Err(CommandError::Corrupted(
+            "inserted tail text dots missing".into(),
+        ));
+    }
+    for (dot, mods) in char_dots.iter().zip(modifiers.iter()) {
+        for m in mods {
+            tr.add_span_modifier(*dot, *dot, m.clone())?;
+        }
+    }
+    *offset += modifiers.len();
+    text.clear();
+    modifiers.clear();
+    Ok(())
 }
 
 #[cfg(test)]
@@ -246,6 +294,64 @@ mod tests {
                     bullet_list {
                         list_item { p1: paragraph { text("He") } }
                         list_item { p2: paragraph { text("llo") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_before_tab_preserves_tail_inline_atom() {
+        let (initial, _p1) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("a") tab text("b") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, _p1, _p2) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("a") } }
+                        list_item { p2: paragraph { tab text("b") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_before_tab_preserves_tail_atom_modifiers() {
+        let (initial, _p1) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("a") tab [font_size(2400)] text("b") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, _p1, _p2) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("a") } }
+                        list_item { p2: paragraph { tab [font_size(2400)] text("b") } }
                     }
                     paragraph {}
                 }

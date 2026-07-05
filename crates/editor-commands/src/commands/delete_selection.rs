@@ -541,6 +541,20 @@ mod tests {
     }
 
     #[test]
+    fn delete_text_after_tab_from_tab_boundary_selection() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 2, >) -> (p1, 3, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn delete_image_and_full_text() {
         let (initial, ..) = state! {
             doc { r: root { image p1: paragraph { text("hello") } } }

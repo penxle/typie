@@ -8,6 +8,7 @@ use crate::paginate::types::{ChildAttachment, LayoutBox, LayoutContent, LayoutLi
 use crate::viewport::Viewport;
 
 use super::cursor::x_at_offset;
+use super::grapheme::{first_position_in_line, last_position_in_line};
 use super::layout_index::{LayoutEntry, LayoutIndex};
 use super::segmentation;
 
@@ -87,6 +88,18 @@ fn move_grapheme_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<S
 
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => {
+            if pos.node == line.node
+                && let Some(gap) = line
+                    .tab_gaps
+                    .iter()
+                    .find(|gap| pos.offset == gap.offset_index)
+            {
+                return Some(Selection::collapsed(Position {
+                    node: line.node,
+                    offset: gap.offset_index + 1,
+                    affinity: Affinity::Upstream,
+                }));
+            }
             if line.glyph_runs.is_empty()
                 && let Some(range) = &line.offset_range
                 && pos.node == line.node
@@ -121,16 +134,6 @@ fn move_grapheme_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<S
                 if local == cp_acc
                     && let Some(next) = line.glyph_runs.get(i + 1)
                 {
-                    let separated_by_tab = line
-                        .tab_gaps
-                        .iter()
-                        .any(|gap| gap.x >= run.x - 0.5 && gap.x + gap.width <= next.x + 0.5);
-                    if separated_by_tab {
-                        return Some(Selection::collapsed(Position::new(
-                            line.node,
-                            next.offset_range.start,
-                        )));
-                    }
                     if let Some(g) = next.graphemes.first() {
                         return Some(Selection::collapsed(Position::new(
                             line.node,
@@ -183,6 +186,19 @@ fn move_grapheme_backward(layout_index: &LayoutIndex, pos: &Position) -> Option<
 
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => {
+            if pos.node == line.node
+                && let Some(gap) = line
+                    .tab_gaps
+                    .iter()
+                    .rev()
+                    .find(|gap| pos.offset == gap.offset_index + 1)
+            {
+                return Some(Selection::collapsed(Position {
+                    node: line.node,
+                    offset: gap.offset_index,
+                    affinity: Affinity::Downstream,
+                }));
+            }
             if line.glyph_runs.is_empty()
                 && let Some(range) = &line.offset_range
                 && pos.node == line.node
@@ -221,16 +237,6 @@ fn move_grapheme_backward(layout_index: &LayoutIndex, pos: &Position) -> Option<
                 if pos.offset == run.offset_range.start && i > 0 {
                     let prev = &line.glyph_runs[i - 1];
                     let total = prev.offset_range.len();
-                    let separated_by_tab = line
-                        .tab_gaps
-                        .iter()
-                        .any(|gap| gap.x >= prev.x - 0.5 && gap.x + gap.width <= run.x + 0.5);
-                    if separated_by_tab {
-                        return Some(Selection::collapsed(Position::new(
-                            line.node,
-                            prev.offset_range.start + total,
-                        )));
-                    }
                     if let Some(g) = prev.graphemes.last() {
                         return Some(Selection::collapsed(Position::new(
                             line.node,
@@ -482,31 +488,6 @@ fn move_document_backward(layout_index: &LayoutIndex) -> Option<Selection> {
     Some(landed_entry(layout_index, nav, false, false))
 }
 
-fn first_position_in_line(line: &LayoutLine) -> Position {
-    let run_first = line.glyph_runs.first();
-    let leading_gap = line
-        .tab_gaps
-        .iter()
-        .filter(|g| run_first.is_none_or(|r| g.x < r.x))
-        .min_by(|a, b| a.x.total_cmp(&b.x));
-    if let Some(gap) = leading_gap {
-        return Position::new(line.node, gap.offset_index);
-    }
-    if let Some(run) = run_first {
-        return Position::new(line.node, run.offset_range.start);
-    }
-    let offset = line.offset_range.as_ref().map(|r| r.start).unwrap_or(0);
-    Position {
-        node: line.node,
-        offset,
-        affinity: Affinity::Upstream,
-    }
-}
-
-fn last_position_in_line(line: &LayoutLine) -> Position {
-    super::grapheme::last_position_in_line(line)
-}
-
 fn first_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
     match entry.content(layout_index) {
         Some(LayoutContent::Line(line)) => first_position_in_line(line),
@@ -521,6 +502,19 @@ fn first_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> P
             unreachable!("first_position_in_entry called on non-navigable entry")
         }
     }
+}
+
+fn first_position_for_entry_landing(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
+    let mut pos = first_position_in_entry(layout_index, entry);
+    // Landing from another entry treats a glyphless line start as the upstream
+    // structural boundary. Direct line-start movement uses `first_position_in_line`.
+    if let Some(LayoutContent::Line(line)) = entry.content(layout_index)
+        && line.glyph_runs.is_empty()
+        && line.tab_gaps.is_empty()
+    {
+        pos.affinity = Affinity::Upstream;
+    }
+    pos
 }
 
 fn last_position_in_entry(layout_index: &LayoutIndex, entry: &LayoutEntry) -> Position {
@@ -857,7 +851,7 @@ pub(crate) fn landed_entry(
     let pos = if at_end {
         last_position_in_entry(layout_index, entry)
     } else {
-        first_position_in_entry(layout_index, entry)
+        first_position_for_entry_landing(layout_index, entry)
     };
     Selection::collapsed(pos)
 }
@@ -896,8 +890,8 @@ mod tests {
     use editor_common::{Axis, Direction, EdgeInsets, Movement};
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog,
-        project_document,
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem,
+        SpanLog, project_document,
     };
     use editor_resource::Resource;
     use editor_state::Position;
@@ -973,6 +967,25 @@ mod tests {
         )];
         for (i, ch) in text.chars().enumerate() {
             items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let (root_id, index) = build_index(&doc, width);
+        (root_id, para_id, index)
+    }
+
+    fn para_doc_items(children: Vec<SeqItem>, width: f32) -> (Dot, Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(14, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, child) in children.into_iter().enumerate() {
+            items.push((Dot::new(14, 2 + i as u64), child));
         }
         let doc = logs(&items);
         let para_id = para;
@@ -1136,6 +1149,138 @@ mod tests {
     }
 
     #[test]
+    fn grapheme_navigation_visits_each_consecutive_tab() {
+        let (_root_id, para_id, index) = para_doc_items(
+            vec![SeqItem::Atom(AtomLeaf::Tab), SeqItem::Atom(AtomLeaf::Tab)],
+            400.0,
+        );
+        let vp = viewport();
+        let res = Resource::new_test();
+
+        let (forward_first, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 0),
+            &Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+            &vp,
+            &res,
+            None,
+        );
+        assert_eq!(
+            forward_first
+                .expect("forward over first tab must resolve")
+                .head
+                .offset,
+            1
+        );
+
+        let (forward_second, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 1),
+            &Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+            &vp,
+            &res,
+            None,
+        );
+        assert_eq!(
+            forward_second
+                .expect("forward over second tab must resolve")
+                .head
+                .offset,
+            2
+        );
+
+        let (backward_second, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 2),
+            &Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+            &vp,
+            &res,
+            None,
+        );
+        assert_eq!(
+            backward_second
+                .expect("backward over second tab must resolve")
+                .head
+                .offset,
+            1
+        );
+
+        let (backward_first, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 1),
+            &Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+            &vp,
+            &res,
+            None,
+        );
+        assert_eq!(
+            backward_first
+                .expect("backward over first tab must resolve")
+                .head
+                .offset,
+            0
+        );
+    }
+
+    #[test]
+    fn grapheme_navigation_crosses_text_around_tab() {
+        let (_root_id, para_id, index) = para_doc_items(
+            vec![
+                SeqItem::Char('a'),
+                SeqItem::Atom(AtomLeaf::Tab),
+                SeqItem::Char('b'),
+            ],
+            400.0,
+        );
+        let vp = viewport();
+        let res = Resource::new_test();
+
+        let (forward, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 2),
+            &Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+            &vp,
+            &res,
+            None,
+        );
+        assert_eq!(
+            forward
+                .expect("forward from after tab must reach following text")
+                .head
+                .offset,
+            3
+        );
+
+        let (backward, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 1),
+            &Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+            &vp,
+            &res,
+            None,
+        );
+        assert_eq!(
+            backward
+                .expect("backward from before tab must reach preceding text")
+                .head
+                .offset,
+            0
+        );
+    }
+
+    #[test]
     fn line_horizontal() {
         let (_root_id, para_id, index) = para_doc("Hello", 400.0);
         let vp = viewport();
@@ -1175,6 +1320,32 @@ mod tests {
         let start_sel = start_sel.expect("line-start must resolve");
         assert_eq!(start_sel.head.node, para_id);
         assert_eq!(start_sel.head.offset, 0, "line-start must be at offset 0");
+    }
+
+    #[test]
+    fn line_horizontal_backward_empty_line_uses_start_affinity() {
+        let para_id = Dot::new(21, 1);
+        let line = vline(para_id, Some(3..3), vec![]);
+        let index = make_single_line_index(para_id, line, 20.0);
+        let vp = viewport();
+        let res = Resource::new_test();
+
+        let (sel, _) = resolve_movement(
+            &index,
+            &Position::new(para_id, 3),
+            &Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Horizontal,
+            },
+            &vp,
+            &res,
+            None,
+        );
+
+        let sel = sel.expect("line-start on empty line must resolve");
+        assert_eq!(sel.head.node, para_id);
+        assert_eq!(sel.head.offset, 3);
+        assert_eq!(sel.head.affinity, Affinity::Downstream);
     }
 
     #[test]

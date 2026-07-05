@@ -71,8 +71,8 @@ mod tests {
     use editor_common::EdgeInsets;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog,
-        project_document,
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem,
+        SpanLog, project_document,
     };
     use editor_resource::Resource;
     use editor_state::Affinity;
@@ -147,6 +147,25 @@ mod tests {
         (para_id, index)
     }
 
+    fn para_items_doc(children: Vec<SeqItem>, width: f32) -> (editor_crdt::Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let para = Dot::new(10, 1);
+        let mut items = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, child) in children.into_iter().enumerate() {
+            items.push((Dot::new(10, 2 + i as u64), child));
+        }
+        let doc = logs(&items);
+        let para_id = para;
+        let (_, index) = build_index(&doc, width);
+        (para_id, index)
+    }
+
     #[test]
     fn cursor_metrics_line_returns_some() {
         let (para_id, index) = para_doc("Hi", 400.0);
@@ -182,6 +201,30 @@ mod tests {
         );
         assert_eq!(cm.caret.width, 1.0, "caret.width must be 1.0");
         assert_eq!(cm.page_idx, 0, "page_idx must be 0");
+    }
+
+    #[test]
+    fn cursor_metrics_after_tab_only_line_returns_visible_caret() {
+        let (para_id, index) = para_items_doc(
+            vec![SeqItem::Atom(AtomLeaf::Tab), SeqItem::Atom(AtomLeaf::Tab)],
+            400.0,
+        );
+        let pos = Position {
+            node: para_id,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        };
+
+        let cm =
+            cursor_metrics(&index, &pos, None).expect("cursor after tab-only line must resolve");
+
+        let entry = index.entry_for_position(&pos).unwrap();
+        let node = entry.node(&index).unwrap();
+        let LayoutContent::Line(line) = &node.content else {
+            panic!("entry must be a line");
+        };
+        assert_eq!(cm.caret.x, entry.rect.x + grapheme::x_at_offset(line, &pos));
+        assert!(cm.caret.height > 0.0, "caret must be visible");
     }
 
     #[test]

@@ -5,8 +5,8 @@ use editor_resource::{CompiledPattern, Resource, TextReplacementRule};
 use editor_state::{Position, Selection};
 use editor_transaction::{HistoryMeta, Transaction};
 
-use crate::CommandResult;
 use crate::helpers::insert_hard_break_at_caret;
+use crate::{CommandError, CommandResult};
 
 pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let rules = &resource.text_replacement_rules;
@@ -234,8 +234,11 @@ fn get_text_before_cursor(tr: &Transaction) -> Option<(Dot, String)> {
             ChildView::Leaf(l) => {
                 if let Some(ch) = l.as_char() {
                     text.push(ch);
-                } else if matches!(l.as_atom(), Some(AtomLeaf::HardBreak)) {
-                    text.push('\n');
+                } else {
+                    match l.as_atom() {
+                        Some(AtomLeaf::HardBreak) => text.push('\n'),
+                        _ => text.clear(),
+                    }
                 }
             }
             ChildView::Block(_) => {}
@@ -251,7 +254,26 @@ fn delete_one_backward(tr: &mut Transaction) -> CommandResult {
     if head.offset == 0 {
         return Ok(false);
     }
-    tr.remove_text(head.node, head.offset - 1, 1)?;
+    let remove_text = {
+        let view = tr.view();
+        let block = view
+            .node(head.node)
+            .ok_or(CommandError::NodeNotFound(head.node))?;
+        match block.child_at(head.offset - 1) {
+            Some(ChildView::Leaf(l)) if l.as_char().is_some() => true,
+            Some(ChildView::Leaf(l)) if matches!(l.as_atom(), Some(AtomLeaf::HardBreak)) => false,
+            _ => {
+                return Err(CommandError::Corrupted(
+                    "expected text replacement unit before cursor".into(),
+                ));
+            }
+        }
+    };
+    if remove_text {
+        tr.remove_text(head.node, head.offset - 1, 1)?;
+    } else {
+        tr.remove_child_slots(head.node, head.offset - 1, head.offset)?;
+    }
     tr.set_selection(Some(Selection::collapsed(Position::new(
         head.node,
         head.offset - 1,

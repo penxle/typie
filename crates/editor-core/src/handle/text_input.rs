@@ -1339,6 +1339,66 @@ mod tests {
     }
 
     #[test]
+    fn delete_surrounding_backward_deletes_text_after_tab() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 0,
+            }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_surrounding_forward_deletes_text_after_tab() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurrounding {
+                before: 0,
+                after: 1,
+            }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn replace_selection_empty_deletes_text_after_tab() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 3, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn update_with_composition_replaces_region() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }

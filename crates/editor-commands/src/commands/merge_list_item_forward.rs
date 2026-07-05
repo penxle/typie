@@ -133,7 +133,7 @@ pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
 
     tr.batch::<_, CommandError>(|tr| {
         if let Some(pb_offset) = trailing_page_break_offset {
-            tr.remove_text(next_block_id, pb_offset, 1)?;
+            tr.remove_child_slots(next_block_id, pb_offset, pb_offset + 1)?;
         }
         merge_element_cross_parent(tr, next_block_id, paragraph_id)?;
         let view = tr.view();

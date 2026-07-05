@@ -18,8 +18,7 @@ pub(crate) fn apply_to(
     offset: usize,
     text: &str,
 ) -> Result<(), StepError> {
-    let len = text.chars().count();
-    let dots = support::leaf_dots_in_range(&batched.projected, block, offset, len)?;
+    let dots = support::char_leaf_dots_for_text(&batched.projected, block, offset, text)?;
     let ops = support::delete_dots_ops(&batched.projected, &dots);
     for op in ops {
         batched.apply(op)?;

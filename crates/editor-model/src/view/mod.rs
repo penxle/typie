@@ -112,6 +112,11 @@ impl<'a> DocView<'a> {
             .position(|c| matches!(c, Child::Leaf { id, .. } if *id == dot))?;
         self.node(block)?.leaf_state_at(slot)
     }
+    pub fn leaf_own_modifiers_by_dot_slow(&'a self, dot: Dot) -> Vec<Modifier> {
+        self.leaf_state_by_dot_slow(dot)
+            .map(|s| s.own_modifiers())
+            .unwrap_or_default()
+    }
 }
 
 impl<'a> NodeView<'a> {
@@ -284,6 +289,12 @@ pub struct LeafStateRef<'a> {
     pub own: &'a BTreeMap<ModifierType, OwnModifier>,
 }
 
+impl LeafStateRef<'_> {
+    pub fn own_modifiers(&self) -> Vec<Modifier> {
+        self.own.values().map(|o| o.value.clone()).collect()
+    }
+}
+
 impl<'a> NodeView<'a> {
     pub fn effective(&self) -> &'a BTreeMap<ModifierType, Modifier> {
         self.view
@@ -344,6 +355,11 @@ impl<'a> NodeView<'a> {
             eff: seg.eff.as_ref(),
             own: seg.own.as_ref(),
         })
+    }
+    pub fn leaf_own_modifiers_at(&self, child_slot: usize) -> Vec<Modifier> {
+        self.leaf_state_at(child_slot)
+            .map(|s| s.own_modifiers())
+            .unwrap_or_default()
     }
     pub fn inline(&self) -> Vec<InlineItem<'a>> {
         let doc = self.view.doc;

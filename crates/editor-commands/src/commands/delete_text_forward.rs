@@ -113,6 +113,23 @@ mod tests {
     }
 
     #[test]
+    fn delete_text_after_tab() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") tab } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn delete_at_end_of_text_returns_false() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }

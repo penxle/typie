@@ -185,6 +185,40 @@ fn multiline_pattern_matches_across_hard_break() {
 }
 
 #[test]
+fn pattern_does_not_match_across_tab_atom() {
+    let (s, ..) = state! {
+        doc {
+            root {
+                p1: paragraph {
+                    text("a")
+                    tab
+                    text("b")
+                }
+            }
+        }
+        selection: (p1, 3)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule("abz", "X", false)]);
+
+    type_text(&mut editor, "z");
+
+    let (expected, ..) = state! {
+        doc {
+            root {
+                p1: paragraph {
+                    text("a")
+                    tab
+                    text("bz")
+                }
+            }
+        }
+        selection: (p1, 4)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
 fn backspace_immediately_after_replacement_restores_original() {
     let (s, ..) = state! {
         doc { root { p1: paragraph { text("") } } }
