@@ -215,8 +215,13 @@ const bindings: KeyBinding[] = [
   },
   {
     key: 'u',
-    modifiers: ['mod', 'shift'],
+    modifiers: ['mod'],
     action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'underline' } }),
+  },
+  {
+    key: '\\',
+    modifiers: ['mod'],
+    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'clear_all' } }),
   },
 
   { key: 'z', modifiers: ['mod'], action: (ed) => ed.enqueue({ type: 'history', op: { type: 'undo' } }) },
@@ -242,8 +247,12 @@ const del = (movement: Movement): Message => ({
   op: { type: 'move', movement },
 });
 
+const normalizeShortcutKey = (key: string): string => (/^[a-z]$/i.test(key) ? key.toLowerCase() : key);
+
 const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
-  if (Array.isArray(binding.key) ? !binding.key.includes(e.key) : binding.key !== e.key) return false;
+  const key = normalizeShortcutKey(e.key);
+  const bindingKeys = Array.isArray(binding.key) ? binding.key : [binding.key];
+  if (bindingKeys.every((bindingKey) => normalizeShortcutKey(bindingKey) !== key)) return false;
 
   const mods = binding.modifiers ?? [];
   const expectShift = mods.includes('shift');
