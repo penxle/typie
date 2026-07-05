@@ -99,7 +99,7 @@ pub fn walk<'a>(
             }
         }
         ScraperNode::Text(text) => {
-            let s = text.to_string();
+            let s = text.to_string().replace(['\n', '\r'], "");
             if !s.is_empty() {
                 let mut first = true;
                 for segment in s.split('\t') {

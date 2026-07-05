@@ -128,6 +128,44 @@ mod tests {
     }
 
     #[test]
+    fn from_html_text_newline_is_ignored() {
+        let html = "<p style=\"white-space:break-spaces\"><span>a\nb</span></p>";
+        let slice = Slice::from_html(html, &Resource::new_test());
+        let p = &slice.fragment.children[0];
+        assert_eq!(p.children.len(), 1);
+        assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "ab"));
+    }
+
+    #[test]
+    fn from_html_trailing_text_newline_is_ignored() {
+        let html = "<p style=\"white-space:break-spaces\"><span>a\n</span></p>";
+        let slice = Slice::from_html(html, &Resource::new_test());
+        let p = &slice.fragment.children[0];
+        assert_eq!(p.children.len(), 1);
+        assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "a"));
+    }
+
+    #[test]
+    fn from_html_text_crlf_is_ignored() {
+        let html = "<p><span>a\r\nb\rc</span></p>";
+        let slice = Slice::from_html(html, &Resource::new_test());
+        let p = &slice.fragment.children[0];
+        assert_eq!(p.children.len(), 1);
+        assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "abc"));
+    }
+
+    #[test]
+    fn from_html_br_still_becomes_hard_break() {
+        let html = "<p>a<br>b</p>";
+        let slice = Slice::from_html(html, &Resource::new_test());
+        let p = &slice.fragment.children[0];
+        assert_eq!(p.children.len(), 3);
+        assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "a"));
+        assert!(matches!(p.children[1].node, PlainNode::HardBreak(_)));
+        assert!(matches!(&p.children[2].node, PlainNode::Text(t) if t.text == "b"));
+    }
+
+    #[test]
     fn from_html_bold_italic_modifiers() {
         let html = "<p><strong><em>hi</em></strong></p>";
         let slice = Slice::from_html(html, &Resource::new_test());
