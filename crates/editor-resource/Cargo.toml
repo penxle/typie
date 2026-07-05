@@ -3,6 +3,9 @@ name = "editor-resource"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 test-utils = [
   "icu_properties/compiled_data",

@@ -3,6 +3,9 @@ name = "editor-bindgen"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 default = []
 bin = ["dep:object", "dep:heck", "dep:syn", "dep:quote", "dep:uniffi", "dep:wasm-bindgen-cli", "dep:env_logger"]

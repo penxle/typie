@@ -3,6 +3,9 @@ name = "editor-crdt"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 uniffi = ["dep:uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen"]

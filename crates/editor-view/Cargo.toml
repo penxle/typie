@@ -3,6 +3,9 @@ name = "editor-view"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 test-utils = [
   "dep:fontique",

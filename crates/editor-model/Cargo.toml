@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 autobenches = false
 
+[lib]
+doctest = false
+
 [features]
 elemid_serde = []
 test-utils = []

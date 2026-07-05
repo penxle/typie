@@ -3,6 +3,9 @@ name = "editor-state"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 test-utils = ["editor-model/test-utils", "editor-resource/test-utils"]
 uniffi = ["dep:uniffi", "editor-model/uniffi"]

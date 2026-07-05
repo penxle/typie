@@ -3,6 +3,9 @@ name = "editor-introspection"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-state/uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm", "editor-state/wasm"]

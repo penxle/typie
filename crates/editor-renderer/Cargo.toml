@@ -3,6 +3,9 @@ name = "editor-renderer"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 uniffi = [
   "dep:uniffi",

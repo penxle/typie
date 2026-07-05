@@ -3,6 +3,9 @@ name = "editor-core"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 test-utils = ["editor-view/test-utils", "editor-resource/test-utils"]
 uniffi = [

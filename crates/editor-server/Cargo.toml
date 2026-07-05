@@ -3,6 +3,9 @@ name = "editor-server"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+doctest = false
+
 [features]
 test-utils = ["icu_segmenter/compiled_data", "icu_segmenter/auto"]
 uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-resource/uniffi"]
