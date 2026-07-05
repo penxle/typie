@@ -4,6 +4,7 @@ import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.Position
@@ -101,6 +102,23 @@ class EditorAwaitTest {
 
       assertEquals(fakeCursor, editor.cursor)
       assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun await_updates_last_history_tag_from_state_change() =
+    runTest(dispatcher) {
+      val tag = HistoryTag.PasteHtml(plainText = "hello", start = 3)
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.LastHistoryTag))) },
+          lastHistoryTagProvider = { tag },
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.await { enqueue(sampleMessage) }
+
+      assertEquals(tag, editor.state.lastHistoryTag)
+      assertEquals(tag, editor.lastHistoryTag)
     }
 
   @Test

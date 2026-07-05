@@ -58,6 +58,7 @@ internal class FakeFfiEditor(
   var pageSizesProvider: () -> List<Size> = { emptyList() },
   var externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
+  var lastHistoryTagProvider: () -> HistoryTag? = { null },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var interactiveHitProvider: (Int, Float, Float) -> InteractiveHit? = { _, _, _ -> null },
@@ -85,7 +86,7 @@ internal class FakeFfiEditor(
 
   override fun can(message: Message): Boolean = canProvider(message)
 
-  override fun lastHistoryTag(): HistoryTag? = null
+  override fun lastHistoryTag(): HistoryTag? = lastHistoryTagProvider()
 
   override fun tick(): List<EditorEvent> {
     tickCount += 1

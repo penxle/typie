@@ -60,6 +60,7 @@ import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
@@ -103,8 +104,10 @@ import co.typie.screen.editor.editor.findreplace.rememberEditorFindReplaceSessio
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
+import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
+import co.typie.screen.editor.editor.overlay.RepasteAsTextOverlayHeight
 import co.typie.screen.editor.editor.placeholder.EditorDocumentPlaceholder
 import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
 import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarCenter
@@ -651,6 +654,13 @@ fun EditorScreen(entityId: String) {
       } else {
         maxOf(toolbarBottomOcclusion.value, findReplaceToolbarOcclusion).value.coerceAtLeast(0f)
       }
+    val repasteAsTextVisible = !documentLocked && editorState.lastHistoryTag is HistoryTag.PasteHtml
+    val repasteAsTextOcclusion =
+      if (repasteAsTextVisible) {
+        RepasteAsTextOverlayHeight.value
+      } else {
+        0f
+      }
     val visibleAreas =
       screenState.resolveEditorVisibleAreas(
         topInset = topInset.value,
@@ -660,11 +670,17 @@ fun EditorScreen(entityId: String) {
         overlayOcclusion =
           EditorOverlayOcclusion(
             top = maxOf(spellcheck.occlusion.top, aiFeedback.occlusion.top),
-            bottom = maxOf(spellcheck.occlusion.bottom, aiFeedback.occlusion.bottom),
+            bottom =
+              maxOf(
+                spellcheck.occlusion.bottom,
+                aiFeedback.occlusion.bottom,
+                repasteAsTextOcclusion,
+              ),
             bottomScrollReserve =
               maxOf(
                 spellcheck.occlusion.bottomScrollReserve,
                 aiFeedback.occlusion.bottomScrollReserve,
+                repasteAsTextOcclusion,
               ),
           ),
       )
@@ -935,6 +951,16 @@ fun EditorScreen(entityId: String) {
               visibleArea = visibleAreas.base,
               modifier = Modifier.fillMaxSize(),
             )
+            val activeEditor = runtime.editor
+            if (activeEditor != null) {
+              EditorRepasteAsTextOverlay(
+                editor = activeEditor,
+                visibleArea = visibleAreas.base,
+                visible = repasteAsTextVisible,
+                bringIntoViewRequests = bringIntoViewRequests,
+                modifier = Modifier.fillMaxSize(),
+              )
+            }
           }
         },
         body = {

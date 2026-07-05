@@ -7,7 +7,13 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import co.typie.editor.Editor
+import co.typie.editor.FakeFfiEditor
+import co.typie.editor.ffi.ClipboardOp
+import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionExpansionUnit
+import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ui.theme.LightAppShadows
 import co.typie.ui.theme.LightColors
@@ -17,6 +23,10 @@ import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 @OptIn(ExperimentalTestApi::class)
 class EditorContextMenuOverlayDesktopTest {
@@ -88,6 +98,26 @@ class EditorContextMenuOverlayDesktopTest {
     assertEquals(1, dismissCount)
   }
 
+  @Test
+  fun repasteOverlayInvokesRepasteAsText() = runComposeUiTest {
+    val fake = FakeFfiEditor(onTick = { listOf(EditorEvent.StateChanged(emptyList())) })
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    try {
+      setRepasteContent(editor)
+
+      waitForIdle()
+      onNodeWithText("서식 없이 다시 붙여넣기").performClick()
+
+      waitUntil {
+        fake.enqueued.any { message -> message == Message.Clipboard(ClipboardOp.RepasteAsText) }
+      }
+    } finally {
+      scope.cancel()
+      editor.dispose()
+    }
+  }
+
   private fun androidx.compose.ui.test.ComposeUiTest.setMenuContent(
     showCopyCutActions: Boolean = true,
     onCopy: () -> Unit = {},
@@ -120,6 +150,23 @@ class EditorContextMenuOverlayDesktopTest {
           onExpandParagraph = onExpandParagraph,
           onSelectAll = onSelectAll,
           onDismiss = onDismiss,
+        )
+      }
+    }
+  }
+
+  private fun androidx.compose.ui.test.ComposeUiTest.setRepasteContent(editor: Editor) {
+    setContent {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalAppShadows provides LightAppShadows,
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorRepasteAsTextOverlay(
+          editor = editor,
+          visibleArea = EditorVisibleArea(viewport = Size(width = 400f, height = 700f)),
+          visible = true,
+          bringIntoViewRequests = EditorBringIntoViewRequests(),
         )
       }
     }

@@ -3,6 +3,7 @@ package co.typie.editor
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.ExternalElement
+import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
@@ -28,6 +29,7 @@ data class EditorState(
   val modifierState: ModifierState? = null,
   val blockState: BlockState? = null,
   val ime: Ime?,
+  val lastHistoryTag: HistoryTag? = null,
   val trackedRanges: List<TrackedRange> = emptyList(),
   val trackedRangesContainingSelectionHead: List<TrackedRangeEndpoints> = emptyList(),
 ) {

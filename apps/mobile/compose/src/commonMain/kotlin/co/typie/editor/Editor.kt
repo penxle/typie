@@ -74,6 +74,7 @@ internal constructor(
   val modifierState: ModifierState? by derivedStateOf { state.modifierState }
   val blockState: BlockState? by derivedStateOf { state.blockState }
   val ime: Ime? by derivedStateOf { state.ime }
+  val lastHistoryTag by derivedStateOf { state.lastHistoryTag }
 
   private val mutex: Mutex = Mutex()
   private val versionCounter: AtomicLong = AtomicLong(0L)
@@ -439,6 +440,7 @@ internal constructor(
     val documentChanged = events.hasStateChangedField(StateField.Doc)
     val placeholderChanged = events.hasStateChangedField(StateField.Placeholder)
     val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
+    val lastHistoryTagChanged = events.hasStateChangedField(StateField.LastHistoryTag)
     val placeholder =
       if (placeholderChanged || state.version == 0L) {
         inner.placeholder()
@@ -466,6 +468,12 @@ internal constructor(
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),
       ime = selection?.let { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) },
+      lastHistoryTag =
+        if (lastHistoryTagChanged || state.version == 0L) {
+          inner.lastHistoryTag()
+        } else {
+          state.lastHistoryTag
+        },
       trackedRanges = trackedRanges,
       trackedRangesContainingSelectionHead =
         if (selection != null && selection.anchor == selection.head) {
