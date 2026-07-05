@@ -151,6 +151,7 @@
 
   const cancelAnalysis = () => {
     analysisText = null;
+    hasChecked = (editor?.aiFeedbacks.length ?? 0) > 0;
     inflight = false;
     progress = null;
   };
