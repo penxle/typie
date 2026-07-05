@@ -20,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -30,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.rememberTextInputState
 import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
+import co.typie.platform.PlatformModule
+import co.typie.screen.editor.editor.EditorScreenShortcutModifier
+import co.typie.screen.editor.editor.matchesEditorShortcut
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.topbar.TopBarButton
@@ -53,7 +59,7 @@ internal fun FindReplaceTopBarLeading(session: EditorFindReplaceSession) {
 }
 
 @Composable
-internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession) {
+internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession, onEscape: () -> Unit = {}) {
   val inputState =
     rememberTextInputState(
       value = session.findText,
@@ -94,7 +100,10 @@ internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession) {
       cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
       keyboardActions = KeyboardActions(onSearch = { session.findNext() }),
-      modifier = Modifier.weight(1f).textInputFocusable(inputState),
+      modifier =
+        Modifier.weight(1f).textInputFocusable(inputState).onPreviewKeyEvent { event ->
+          handleFindInputShortcut(event, session, onEscape)
+        },
       decorationBox = { innerTextField ->
         Box(contentAlignment = Alignment.CenterStart) {
           if (session.findText.isEmpty()) {
@@ -114,6 +123,32 @@ internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession) {
     FindReplaceResultLabel(session = session)
   }
 }
+
+private fun handleFindInputShortcut(
+  event: KeyEvent,
+  session: EditorFindReplaceSession,
+  onEscape: () -> Unit,
+): Boolean =
+  when {
+    matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Escape) -> {
+      onEscape()
+      true
+    }
+    matchesEditorShortcut(
+      event = event,
+      platform = PlatformModule.platform,
+      key = Key.Enter,
+      modifiers = setOf(EditorScreenShortcutModifier.Shift),
+    ) -> {
+      session.findPrevious()
+      true
+    }
+    matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Enter) -> {
+      session.findNext()
+      true
+    }
+    else -> false
+  }
 
 @Composable
 internal fun FindReplaceTopBarTrailing(session: EditorFindReplaceSession) {

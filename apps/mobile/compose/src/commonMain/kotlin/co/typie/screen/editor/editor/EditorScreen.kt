@@ -273,6 +273,15 @@ fun EditorScreen(entityId: String) {
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
     )
+  fun requestEditorFocusIfSelectionActive() {
+    if (editorState.selection != null) {
+      requestEditorFocus()
+    }
+  }
+  fun closeFindReplaceFromShortcut() {
+    findReplace.close()
+    requestEditorFocusIfSelectionActive()
+  }
   suspend fun ensureSpellcheckSubscription(): Boolean {
     return SubscriptionService.gate(
       sheet = sheet,
@@ -336,7 +345,9 @@ fun EditorScreen(entityId: String) {
       ProvideTopBar(
         leading = { FindReplaceTopBarLeading(session = findReplace) },
         leadingKey = FindReplaceTopBarLeadingKey,
-        center = { FindReplaceTopBarCenter(session = findReplace) },
+        center = {
+          FindReplaceTopBarCenter(session = findReplace, onEscape = ::closeFindReplaceFromShortcut)
+        },
         centerKey = FindReplaceTopBarCenterKey,
         trailing = { FindReplaceTopBarTrailing(session = findReplace) },
         trailingKey = FindReplaceTopBarTrailingKey,
@@ -463,6 +474,7 @@ fun EditorScreen(entityId: String) {
     val panelTransitionRunning =
       bottomPanelTransition.currentState != bottomPanelTransition.targetState
     val subPaneActive = subPaneState.activeKey != null
+    val screenShortcutModeActive = findReplace.active || spellcheck.active || aiFeedback.active
     val editorToolbarVisible =
       screenState.sceneInForeground && !subPaneActive && !findReplace.active
     val findReplaceToolbarVisible =
@@ -492,6 +504,38 @@ fun EditorScreen(entityId: String) {
         }
       }
     }
+    fun openFindReplace() {
+      aiFeedback.close()
+      spellcheck.close()
+      uiState.contextMenu.hide()
+      performInputEffects(toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment))
+      findReplace.open()
+    }
+    val screenShortcutContext =
+      EditorScreenShortcutContext(
+        platform = PlatformModule.platform,
+        sceneInForeground = screenState.sceneInForeground,
+        subPaneActive = subPaneActive,
+        editorFocused = uiState.focused,
+        findReplaceActive = findReplace.active,
+        spellcheckActive = spellcheck.active,
+        aiFeedbackActive = aiFeedback.active,
+      )
+    fun closeSpellcheckFromShortcut() {
+      spellcheck.close()
+      requestEditorFocusIfSelectionActive()
+    }
+    fun closeAiFeedbackFromShortcut() {
+      aiFeedback.close()
+      requestEditorFocusIfSelectionActive()
+    }
+    val screenShortcutActions =
+      EditorScreenShortcutActions(
+        openFindReplace = ::openFindReplace,
+        closeFindReplace = ::closeFindReplaceFromShortcut,
+        closeSpellcheck = ::closeSpellcheckFromShortcut,
+        closeAiFeedback = ::closeAiFeedbackFromShortcut,
+      )
     suspend fun openTemplateSheet() {
       val activeEditor = runtime.editor ?: return
       runtime.blur()
@@ -940,6 +984,7 @@ fun EditorScreen(entityId: String) {
             visibleState = findReplaceToolbarTransition,
             bottomInset = findReplaceToolbarBottomInset,
             modifier = Modifier,
+            onEscape = ::closeFindReplaceFromShortcut,
           )
           EditorToolbarHost(
             editorState = editorState,
@@ -955,15 +1000,7 @@ fun EditorScreen(entityId: String) {
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
               when (action) {
-                EditorToolbarToolAction.Search -> {
-                  aiFeedback.close()
-                  spellcheck.close()
-                  uiState.contextMenu.hide()
-                  performInputEffects(
-                    toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment)
-                  )
-                  findReplace.open()
-                }
+                EditorToolbarToolAction.Search -> openFindReplace()
                 EditorToolbarToolAction.RelatedNotes -> {
                   findReplace.close()
                   aiFeedback.close()
@@ -1014,7 +1051,19 @@ fun EditorScreen(entityId: String) {
             modifier = Modifier.fillMaxSize(),
           )
         },
-        modifier = Modifier.padding(start = startInset, end = endInset),
+        modifier =
+          Modifier.padding(start = startInset, end = endInset).editorScreenShortcutFocusTarget(
+            active = screenShortcutModeActive,
+            enabled = screenState.sceneInForeground && !subPaneActive,
+            editorFocused = uiState.focused,
+            selection = editorState.selection,
+          ) { event ->
+            handleEditorScreenShortcut(
+              event = event,
+              context = screenShortcutContext,
+              actions = screenShortcutActions,
+            )
+          },
       )
     }
   }

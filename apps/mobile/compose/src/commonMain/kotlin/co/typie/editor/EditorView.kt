@@ -9,7 +9,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -17,7 +21,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
-import co.typie.editor.EditorRegistry
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.external.EditorExternalElementOverlay
@@ -95,12 +98,21 @@ internal fun EditorView(
   Box(modifier) {
     val editor = runtime.editor ?: return@Box
     val focusManager = LocalFocusManager.current
+    var previousSelection by remember(editor) { mutableStateOf(editor.selection) }
     LaunchedEffect(editor, themeVariant) {
       val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
       if (changed) {
         for (e in EditorRegistry.snapshot()) {
           e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
         }
+      }
+    }
+    LaunchedEffect(editor, editor.selection, uiState.focused) {
+      val currentSelection = editor.selection
+      val selectionCleared = previousSelection != null && currentSelection == null
+      previousSelection = currentSelection
+      if (selectionCleared && uiState.focused) {
+        focusManager.clearFocus()
       }
     }
     SideEffect { editor.focusManager = focusManager }

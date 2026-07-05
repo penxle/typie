@@ -24,6 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -32,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.rememberTextInputState
 import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
+import co.typie.platform.PlatformModule
+import co.typie.screen.editor.editor.EditorScreenShortcutModifier
+import co.typie.screen.editor.editor.matchesEditorShortcut
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSurfaceBackground
 import co.typie.screen.editor.editor.toolbar.ToolbarBorderWidth
@@ -59,6 +65,7 @@ internal fun FindReplaceToolbar(
   visibleState: MutableTransitionState<Boolean>,
   bottomInset: Dp,
   modifier: Modifier = Modifier,
+  onEscape: () -> Unit = {},
 ) {
   AnimatedVisibility(
     visibleState = visibleState,
@@ -97,7 +104,7 @@ internal fun FindReplaceToolbar(
               ),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          ReplaceTextField(session = session, modifier = Modifier.weight(1f))
+          ReplaceTextField(session = session, modifier = Modifier.weight(1f), onEscape = onEscape)
           Spacer(Modifier.width(ToolbarItemGap))
           EditorToolbarButton(
             icon = Lucide.Replace,
@@ -133,7 +140,11 @@ internal fun FindReplaceToolbar(
 }
 
 @Composable
-private fun ReplaceTextField(session: EditorFindReplaceSession, modifier: Modifier = Modifier) {
+private fun ReplaceTextField(
+  session: EditorFindReplaceSession,
+  modifier: Modifier = Modifier,
+  onEscape: () -> Unit = {},
+) {
   val inputState =
     rememberTextInputState(
       value = session.replaceText,
@@ -156,7 +167,8 @@ private fun ReplaceTextField(session: EditorFindReplaceSession, modifier: Modifi
         .clip(shape)
         .background(AppTheme.colors.surfaceInset, shape)
         .padding(horizontal = 10.dp)
-        .textInputFocusable(inputState),
+        .textInputFocusable(inputState)
+        .onPreviewKeyEvent { event -> handleReplaceInputShortcut(event, session, onEscape) },
     decorationBox = { innerTextField ->
       Box(contentAlignment = Alignment.CenterStart) {
         if (session.replaceText.isEmpty()) {
@@ -173,3 +185,29 @@ private fun ReplaceTextField(session: EditorFindReplaceSession, modifier: Modifi
     },
   )
 }
+
+private fun handleReplaceInputShortcut(
+  event: KeyEvent,
+  session: EditorFindReplaceSession,
+  onEscape: () -> Unit,
+): Boolean =
+  when {
+    matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Escape) -> {
+      onEscape()
+      true
+    }
+    matchesEditorShortcut(
+      event = event,
+      platform = PlatformModule.platform,
+      key = Key.Enter,
+      modifiers = setOf(EditorScreenShortcutModifier.Mod),
+    ) -> {
+      session.replaceAll()
+      true
+    }
+    matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Enter) -> {
+      session.replace()
+      true
+    }
+    else -> false
+  }
