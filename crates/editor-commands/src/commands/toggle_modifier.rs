@@ -52,7 +52,7 @@ pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> Com
     };
 
     if all_have {
-        tr.clear_span_modifier(first, last, modifier)?;
+        tr.remove_span_modifier(first, last, modifier)?;
     } else {
         tr.add_span_modifier(first, last, modifier)?;
     }
@@ -237,52 +237,6 @@ mod tests {
             selection: (p1, 0) -> (p1, 10)
         };
         assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn range_toggle_italic_off_from_style_reports_off() {
-        let (initial, ..) = state! {
-            doc {
-                styles { em: "강조" [italic] }
-                root { p1: paragraph @em { text("HelloWorld") } }
-            }
-            selection: (p1, 0) -> (p1, 10)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
-
-        let view = actual.view();
-        let rs = actual
-            .selection
-            .as_ref()
-            .and_then(|selection| selection.resolve(&view))
-            .expect("selection still resolves");
-        let ms = resolve_modifier_state_in_range(&rs);
-        assert_eq!(ms.italic, Tri::Absent);
-    }
-
-    #[test]
-    fn range_toggle_italic_off_from_run_style_reports_off() {
-        let (initial, ..) = state! {
-            doc {
-                styles { em: "강조" [italic] }
-                root { p1: paragraph { text("HelloWorld") @em } }
-            }
-            selection: (p1, 0) -> (p1, 10)
-        };
-        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
-
-        let view = actual.view();
-        let rs = actual
-            .selection
-            .as_ref()
-            .and_then(|selection| selection.resolve(&view))
-            .expect("selection still resolves");
-        let ms = resolve_modifier_state_in_range(&rs);
-        assert_eq!(
-            ms.italic,
-            Tri::Absent,
-            "clear must beat the run's own style"
-        );
     }
 
     #[test]

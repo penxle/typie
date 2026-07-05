@@ -5,11 +5,6 @@ pub enum ModelError {
     #[error("attr applied to wrong node kind")]
     AttrNodeKindMismatch,
 
-    #[error(
-        "style presence outer style_id {style_id:?} disagrees with inner OrMapOp::Set key {key:?}"
-    )]
-    StylePresenceKeyMismatch { style_id: String, key: String },
-
     #[error(transparent)]
     Crdt(#[from] CrdtError),
 

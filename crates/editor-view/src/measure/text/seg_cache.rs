@@ -118,11 +118,10 @@ fn hash_style<H: Hasher>(s: &ResolvedTextStyle, h: &mut H) {
 /// run's byte range (relative), font style, effective modifiers, and own modifiers
 /// (so a color or decoration change — same glyphs, different output — still misses).
 ///
-/// `own_modifiers` (value + `from_style` provenance) is hashed alongside `effective`
-/// because the rendered link/color/decoration in the cached `MeasuredLine` are
-/// resolved from `own_modifiers` via `resolve_link`/`resolve_colors`/`resolve_decoration`
-/// (which branch on `from_style`), a distinction `effective` merges away — so two
-/// runs with identical `effective` but different provenance must still miss.
+/// `own_modifiers` is hashed alongside `effective` because the rendered
+/// link/color/decoration in the cached `MeasuredLine` are resolved from
+/// `own_modifiers` via `resolve_link`/`resolve_colors`/`resolve_decoration`, a
+/// distinction `effective` merges away.
 pub(crate) fn segment_hash(
     seg_text: &str,
     seg_off: &Range<usize>,
@@ -153,7 +152,6 @@ pub(crate) fn segment_hash(
         for (k, o) in r.own_modifiers.iter() {
             k.hash(&mut h);
             o.value.hash(&mut h);
-            o.from_style.hash(&mut h);
         }
         h.write_u8(0xff);
     }
@@ -178,35 +176,28 @@ mod tests {
         }
     }
 
-    // Two runs identical in every input the pre-fix hash covered (text, offsets,
-    // font style, effective) but differing only in own-modifier provenance: a Link
-    // supplied via a named style (from_style: true) resolves to no link/underline
-    // and default color, while the same href set directly (from_style: false)
-    // resolves to a clickable, underlined LINK_COLOR run. The cached MeasuredLine
-    // carries that resolved output, so their segment hashes must differ.
+    // Two runs identical in every input except one own modifier's value (a Link
+    // href set directly resolves to a clickable, underlined LINK_COLOR run). The
+    // cached MeasuredLine carries that resolved output, so their hashes must differ.
     #[test]
-    fn segment_hash_distinguishes_own_modifier_provenance() {
-        let effective: BTreeMap<ModifierType, Modifier> = [(
-            ModifierType::Link,
-            Modifier::Link {
-                href: "https://example.com".to_string(),
-            },
-        )]
-        .into_iter()
-        .collect();
+    fn segment_hash_distinguishes_own_modifier_value() {
+        let effective: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
 
-        let mk_own = |from_style: bool| -> BTreeMap<ModifierType, OwnModifier> {
-            [(
-                ModifierType::Link,
-                OwnModifier {
-                    value: Modifier::Link {
-                        href: "https://example.com".to_string(),
+        let mk_own = |present: bool| -> BTreeMap<ModifierType, OwnModifier> {
+            if present {
+                [(
+                    ModifierType::Link,
+                    OwnModifier {
+                        value: Modifier::Link {
+                            href: "https://example.com".to_string(),
+                        },
                     },
-                    from_style,
-                },
-            )]
-            .into_iter()
-            .collect()
+                )]
+                .into_iter()
+                .collect()
+            } else {
+                BTreeMap::new()
+            }
         };
 
         let hash_for = |own: &BTreeMap<ModifierType, OwnModifier>| {
@@ -223,7 +214,7 @@ mod tests {
         assert_ne!(
             hash_for(&mk_own(true)),
             hash_for(&mk_own(false)),
-            "runs differing only in own-modifier from_style must hash differently"
+            "runs differing in an own modifier must hash differently"
         );
     }
 }

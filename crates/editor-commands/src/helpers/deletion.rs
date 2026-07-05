@@ -188,7 +188,6 @@ fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
                 .collect()
         })
         .unwrap_or_default();
-    let style = dot.and_then(|d| state.projected.node_styles().value_of(d));
     let marker = dot.and_then(|d| state.projected.node_markers().value_of(d));
 
     let mut children: Vec<Subtree> = Vec::new();
@@ -222,7 +221,6 @@ fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
     Some(Subtree {
         node,
         modifiers,
-        style,
         marker,
         children,
     })

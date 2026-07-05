@@ -6,7 +6,7 @@ use hashbrown::HashSet;
 
 use crate::Selection;
 use crate::undo::{RecordedOp, capture_prior};
-use crate::{Composition, PendingModifiers, PendingStyle, State, StateError};
+use crate::{Composition, PendingModifiers, State, StateError};
 
 pub struct BatchedState<'a> {
     inner: &'a mut State,
@@ -69,10 +69,6 @@ impl<'a> BatchedState<'a> {
 
     pub fn set_pending_modifiers(&mut self, pending: PendingModifiers) {
         self.inner.pending_modifiers = pending;
-    }
-
-    pub fn set_pending_style(&mut self, pending: Option<PendingStyle>) {
-        self.inner.pending_style = pending;
     }
 
     pub fn set_composition(&mut self, composition: Option<Composition>) {

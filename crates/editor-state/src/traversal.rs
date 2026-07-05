@@ -257,7 +257,6 @@ pub struct LeafGroup<'a> {
     pub leaf_type: NodeType,
     pub effective: &'a BTreeMap<ModifierType, Modifier>,
     pub own: &'a BTreeMap<ModifierType, OwnModifier>,
-    pub style: Option<&'a String>,
     pub first: Dot,
     pub last: Dot,
     pub count: usize,
@@ -305,7 +304,6 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
                     leaf_type: ty,
                     effective: seg.eff.as_ref(),
                     own: seg.own.as_ref(),
-                    style: seg.style.as_ref(),
                     first,
                     last,
                     count: n,
@@ -330,14 +328,12 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
                 let Some(st) = b.leaf_state_at(i) else {
                     continue;
                 };
-                let style = b.leaf_style_at(i);
                 match out.last_mut() {
                     Some(g)
                         if g.host == b.id()
                             && g.leaf_type == ty
                             && g.effective == st.eff
-                            && g.own == st.own
-                            && g.style == style =>
+                            && g.own == st.own =>
                     {
                         g.last = l.dot();
                         g.count += 1;
@@ -347,7 +343,6 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
                         leaf_type: ty,
                         effective: st.eff,
                         own: st.own,
-                        style,
                         first: l.dot(),
                         last: l.dot(),
                         count: 1,
@@ -431,8 +426,8 @@ mod tests {
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog,
-        NodeType, ProjectedDoc, SeqItem, SpanLog, StyleLog, project_document,
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType,
+        ProjectedDoc, SeqItem, SpanLog, project_document,
     };
 
     use crate::{Position, selection::Selection};
@@ -464,9 +459,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 

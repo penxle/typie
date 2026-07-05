@@ -19,7 +19,7 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 editor-common = { path = "../editor-common" }
 editor-crdt = { path = "../editor-crdt" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
-editor-state = { path = "../editor-state" }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
 imbl.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -197,7 +197,6 @@ fn message_variants_are_enumerated() {
         | Message::Deletion { .. }
         | Message::Selection { .. }
         | Message::Modifier { .. }
-        | Message::Style { .. }
         | Message::Node { .. }
         | Message::View { .. }
         | Message::Clipboard { .. }

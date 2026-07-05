@@ -10,7 +10,6 @@ use crate::projection::{LeafEff, LeafOwn};
 pub struct Seg {
     pub count: usize,
     pub leaf_type: NodeType,
-    pub style: Option<String>,
     pub covering: Option<SegCovering>,
     /// Per-leaf-input singleton (`node_attrs` carrier or non-inline leaf):
     /// derivation reads per-leaf inputs the key can't capture, so it never merges.
@@ -24,7 +23,6 @@ impl Seg {
         !self.attrs_singleton
             && !o.attrs_singleton
             && self.leaf_type == o.leaf_type
-            && self.style == o.style
             && covering_eq(&self.covering, &o.covering)
     }
 }
@@ -37,7 +35,7 @@ fn covering_eq(a: &Option<SegCovering>, b: &Option<SegCovering>) -> bool {
     }
 }
 
-/// Run segments of a block: leaves with equal `(leaf_type, style, covering)`
+/// Run segments of a block: leaves with equal `(leaf_type, covering)`
 /// coalesced into one entry, backed by a `SumTree` summed on `count` (the
 /// segment's leaf span) so a leaf ordinal locates its owning segment in
 /// `O(log segs)` via `find_by_offset` instead of an `O(segs)` walk.
@@ -277,7 +275,7 @@ impl BlockSegs {
 
 impl PartialEq for BlockSegs {
     /// Observable per-leaf equality over the union of block keys: each block's
-    /// segments are expanded to their per-leaf `(leaf_type, style, eff, own)` tuples
+    /// segments are expanded to their per-leaf `(leaf_type, eff, own)` tuples
     /// and the sequences compared. `covering` keys and the coalescing structure are
     /// excluded — a covering key is an internal derivation input, not observable, so a
     /// target-filtered span (which rewrites coverings but changes no `eff`) leaves the
@@ -289,10 +287,9 @@ impl PartialEq for BlockSegs {
         fn per_leaf(
             segs: &BlockSegs,
             block: Dot,
-        ) -> impl Iterator<Item = (NodeType, &Option<String>, &LeafEff, &LeafOwn)> + '_ {
-            segs.group_iter(block).flat_map(|s| {
-                std::iter::repeat((s.leaf_type, &s.style, &s.eff, &s.own)).take(s.count)
-            })
+        ) -> impl Iterator<Item = (NodeType, &LeafEff, &LeafOwn)> + '_ {
+            segs.group_iter(block)
+                .flat_map(|s| std::iter::repeat((s.leaf_type, &s.eff, &s.own)).take(s.count))
         }
         self.blocks
             .keys()
@@ -315,7 +312,6 @@ mod tests {
         Seg {
             count,
             leaf_type: NodeType::Text,
-            style: None,
             covering: None,
             attrs_singleton: false,
             eff: Default::default(),

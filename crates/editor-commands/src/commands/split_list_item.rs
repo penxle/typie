@@ -57,13 +57,7 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
             ChildView::Leaf(l) => l.as_char().map(|ch| {
                 let mods: Vec<Modifier> = paragraph
                     .leaf_state_at(slot)
-                    .map(|s| {
-                        s.own
-                            .values()
-                            .filter(|o| !o.from_style)
-                            .map(|o| o.value.clone())
-                            .collect()
-                    })
+                    .map(|s| s.own.values().map(|o| o.value.clone()).collect())
                     .unwrap_or_default();
                 (ch, mods)
             }),
@@ -156,7 +150,6 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
 
     let marker = editor_model::Marker {
         modifiers: carryable,
-        style: None,
     };
     if !marker.is_empty() {
         tr.set_marker(new_paragraph_id, Some(marker))?;

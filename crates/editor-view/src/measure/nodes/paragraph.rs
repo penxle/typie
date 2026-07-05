@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use editor_common::EdgeInsets;
-use editor_model::{Alignment, ChildView, Modifier, ModifierType, NodeType, NodeView};
+use editor_model::{
+    Alignment, ChildView, DEFAULT_ALIGNMENT, DEFAULT_PARAGRAPH_INDENT, Modifier, ModifierType,
+    NodeType, NodeView,
+};
 use editor_resource::Resource;
 
 use crate::measure::PageBreakPolicy;
@@ -22,10 +25,11 @@ pub(crate) fn paragraph_indent(node: &NodeView) -> f32 {
     if !parent_is_root {
         return 0.0;
     }
-    match node.effective().get(&ModifierType::ParagraphIndent) {
-        Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * DEFAULT_FONT_SIZE_PX,
-        _ => 0.0,
-    }
+    let value = match node.effective().get(&ModifierType::ParagraphIndent) {
+        Some(Modifier::ParagraphIndent { value }) => *value,
+        _ => DEFAULT_PARAGRAPH_INDENT,
+    };
+    value as f32 / 100.0 * DEFAULT_FONT_SIZE_PX
 }
 
 pub(crate) fn align_to_layout(align: Alignment) -> crate::style::Alignment {
@@ -45,7 +49,7 @@ pub(crate) fn measure_paragraph_block(
 ) -> MeasuredNode {
     let align = match node.effective().get(&ModifierType::Alignment) {
         Some(Modifier::Alignment { value }) => *value,
-        _ => Alignment::default(),
+        _ => DEFAULT_ALIGNMENT,
     };
     let indent = match align {
         Alignment::Left | Alignment::Justify => paragraph_indent(node),
@@ -104,8 +108,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         AtomLeaf, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp::SetModifier,
-        NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog,
-        project_document,
+        NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog, project_document,
     };
     use editor_resource::Resource;
 
@@ -132,9 +135,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -436,7 +437,7 @@ mod tests {
             modifier: Modifier::FontSize { value: 9600 },
         }];
         let ctx_pending = MeasureContext {
-            pending_style: Some((para_id, big)),
+            pending_overlay: Some((para_id, big)),
             ..Default::default()
         };
         let r_pending =
@@ -471,7 +472,7 @@ mod tests {
             modifier: Modifier::FontSize { value: 9600 },
         }];
         let ctx_pending = MeasureContext {
-            pending_style: Some((para_id, big)),
+            pending_overlay: Some((para_id, big)),
             ..Default::default()
         };
         let r_pending =

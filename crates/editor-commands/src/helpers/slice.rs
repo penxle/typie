@@ -131,17 +131,6 @@ fn inline_content_fragments_for_textblock_insert<'a>(
     }
 }
 
-fn textblock_is_empty(tr: &Transaction, textblock_id: Dot) -> bool {
-    let view = tr.state().view();
-    let Some(node) = view.node(textblock_id) else {
-        return false;
-    };
-    if !node.spec().is_textblock() {
-        return false;
-    }
-    node.children().next().is_none()
-}
-
 fn insert_content_as_inline_at_position(
     tr: &mut Transaction,
     position: Position,
@@ -182,13 +171,12 @@ fn insert_blocks_in_textblock_at_position(
 fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> CommandResult {
     let mut any_change = false;
     for f in fragments {
-        set_pending_style_for_run(tr, &f.style)?;
         match f.node {
             PlainNode::Text(t) if !t.text.is_empty() => {
                 if f.modifiers.is_empty() {
                     insert_text_at_caret(tr, &t.text)?;
                 } else {
-                    insert_modifier_text(tr, &t.text, f.modifiers, f.style.clone())?;
+                    insert_modifier_text(tr, &t.text, f.modifiers)?;
                 }
                 any_change = true;
             }
@@ -203,31 +191,13 @@ fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> Co
             _ => {}
         }
     }
-    if tr.pending_style().is_some() {
-        tr.set_pending_style(None)?;
-    }
     Ok(any_change)
-}
-
-fn set_pending_style_for_run(
-    tr: &mut Transaction,
-    style: &Option<String>,
-) -> Result<(), CommandError> {
-    let pending = match style {
-        Some(style_id) => Some(editor_state::PendingStyle::Set {
-            style_id: style_id.clone(),
-        }),
-        None => Some(editor_state::PendingStyle::Unset),
-    };
-    tr.set_pending_style(pending)?;
-    Ok(())
 }
 
 fn insert_modifier_text(
     tr: &mut Transaction,
     text: &str,
     modifiers: Vec<Modifier>,
-    style: Option<String>,
 ) -> CommandResult {
     let pos = tr
         .selection()
@@ -254,11 +224,6 @@ fn insert_modifier_text(
         let (first, last) = (*first, *last);
         for modifier in modifiers {
             tr.add_span_modifier(first, last, modifier)?;
-        }
-    }
-    if let Some(style_id) = style {
-        for dot in &new_dots {
-            tr.set_node_style(*dot, Some(style_id.clone()))?;
         }
     }
 
@@ -340,8 +305,6 @@ fn insert_blocks_in_textblock(
         (parent.id(), textblock_index)
     };
 
-    let textblock_was_empty = textblock_is_empty(tr, textblock_id);
-
     // Split the textblock at the resolved child index. The right half becomes
     // the next sibling block.
     tr.split_node(textblock_id, split_index_in_textblock)?;
@@ -376,9 +339,6 @@ fn insert_blocks_in_textblock(
 
     if merge_start {
         let first = blocks[0];
-        if textblock_was_empty && let Some(style) = first.style.clone() {
-            tr.set_node_style(textblock_id, Some(style))?;
-        }
         let inline = first.children.to_vec();
         tr.set_selection(Some(Selection::collapsed(position_at_end_of_block(
             tr,
@@ -587,7 +547,6 @@ fn block_boundary_fragments(slice: &Slice, container_type: NodeType) -> Vec<Frag
         return vec![Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
-            style: None,
             children: top_level.into_iter().cloned().collect(),
         }];
     }

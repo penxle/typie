@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use editor_crdt::{CrdtError, Dot, ListOp, LwwRegOp, Op, OpGraph};
-use editor_model::{EditOp, Modifier, ModifierType, NodeLwwOp, SeqItem};
+use editor_crdt::{CrdtError, Dot, ListOp, Op, OpGraph};
+use editor_model::{EditOp, Modifier, ModifierType, SeqItem};
 
 use crate::edit_commands::add_modifier_span;
 
@@ -30,7 +30,6 @@ pub(crate) fn emit_text_run(
     seq_pos: &mut usize,
     text: &str,
     modifiers: &BTreeMap<ModifierType, Modifier>,
-    style: Option<&str>,
 ) -> Result<(), CrdtError> {
     let mut char_dots: Vec<Dot> = Vec::new();
     for ch in text.chars() {
@@ -44,16 +43,6 @@ pub(crate) fn emit_text_run(
     if let (Some(&first), Some(&last)) = (char_dots.first(), char_dots.last()) {
         for modifier in modifiers.values() {
             sink.emit(add_modifier_span(first, last, modifier.clone()))?;
-        }
-        if let Some(style_id) = style {
-            for &dot in &char_dots {
-                sink.emit(EditOp::NodeStyle(NodeLwwOp {
-                    target: dot,
-                    op: LwwRegOp::Set {
-                        value: Some(style_id.to_string()),
-                    },
-                }))?;
-            }
         }
     }
     Ok(())

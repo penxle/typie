@@ -43,7 +43,6 @@ fn capture_block_subtree(ps: &ProjectedState, block: &NodeView) -> Subtree {
     let modifiers: Vec<Modifier> = dot
         .map(|d| ps.block_modifiers().modifiers_of(d).into_values().collect())
         .unwrap_or_default();
-    let style = dot.and_then(|d| ps.node_styles().value_of(d));
     let marker = dot.and_then(|d| ps.node_markers().value_of(d));
     let children = block
         .children()
@@ -52,7 +51,6 @@ fn capture_block_subtree(ps: &ProjectedState, block: &NodeView) -> Subtree {
     Subtree {
         node,
         modifiers,
-        style,
         marker,
         children,
     }
@@ -152,12 +150,7 @@ fn apply_inline_modifiers(
     let actual: BTreeMap<ModifierType, Modifier> = {
         let view = tr.state().view();
         match view.leaf_state_by_dot_slow(first) {
-            Some(st) => st
-                .own
-                .iter()
-                .filter(|(_, o)| !o.from_style)
-                .map(|(t, o)| (*t, o.value.clone()))
-                .collect(),
+            Some(st) => st.own.iter().map(|(t, o)| (*t, o.value.clone())).collect(),
             None => BTreeMap::new(),
         }
     };
@@ -170,19 +163,6 @@ fn apply_inline_modifiers(
     for (ty, m) in &actual {
         if !desired_map.contains_key(ty) && is_text_applicable(*ty) {
             tr.remove_span_modifier(first, last, m.clone())?;
-        }
-    }
-    Ok(())
-}
-
-fn apply_node_style(
-    tr: &mut Transaction,
-    dots: &[Dot],
-    style_id: &Option<String>,
-) -> Result<(), CommandError> {
-    if let Some(style_id) = style_id {
-        for dot in dots {
-            tr.set_node_style(*dot, Some(style_id.clone()))?;
         }
     }
     Ok(())
@@ -286,43 +266,15 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
     let pos = selection.head;
     let block = pos.node;
 
-    let pending_style_explicit = tr.pending_style().is_some();
     let pending_modifiers = tr.pending_modifiers().clone();
 
-    let (mut effective_mods, pending_style, host_paragraph_id, host_has_marker) = {
+    let (mut effective_mods, host_paragraph_id, host_has_marker) = {
         let view = tr.state().view();
         let node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
 
         let host_paragraph_id = find_enclosing_paragraph_id(&view, block);
         let host_marker =
             host_paragraph_id.and_then(|id| tr.state().projected.node_markers().value_of(id));
-        let host_is_empty = host_paragraph_id
-            .and_then(|id| view.node(id))
-            .map(|p| {
-                !p.children()
-                    .any(|c| matches!(c, ChildView::Leaf(l) if l.as_char().is_some()))
-            })
-            .unwrap_or(false);
-        let marker_style = if host_is_empty {
-            host_marker.as_ref().and_then(|m| m.style.clone())
-        } else {
-            None
-        };
-
-        let left_style = pos
-            .offset
-            .checked_sub(1)
-            .and_then(|i| match node.child_at(i) {
-                Some(ChildView::Leaf(l)) => Some(l.dot()),
-                _ => None,
-            })
-            .and_then(|d| tr.state().projected.node_styles().value_of(d));
-
-        let pending_style: Option<String> = match tr.pending_style() {
-            Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
-            Some(editor_state::PendingStyle::Unset) => None,
-            None => left_style.or(marker_style.clone()),
-        };
 
         let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, &pending_modifiers);
         effective_mods.retain(|m| is_text_applicable(m.as_type()));
@@ -338,12 +290,7 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
             }
         }
 
-        (
-            effective_mods,
-            pending_style,
-            host_paragraph_id,
-            host_marker.is_some(),
-        )
+        (effective_mods, host_paragraph_id, host_marker.is_some())
     };
     effective_mods.retain(|m| is_text_applicable(m.as_type()));
 
@@ -352,7 +299,6 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
 
     let new_dots = child_leaf_dots(tr, block, pos.offset, insert_len);
     apply_inline_modifiers(tr, &new_dots, &effective_mods)?;
-    apply_node_style(tr, &new_dots, &pending_style)?;
 
     tr.set_selection(Some(Selection::collapsed(Position {
         node: block,
@@ -362,9 +308,6 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
 
     if !tr.pending_modifiers().is_empty() {
         tr.set_pending_modifiers(PendingModifiers::new())?;
-    }
-    if pending_style_explicit {
-        tr.set_pending_style(None)?;
     }
     if let Some(p_id) = host_paragraph_id
         && host_has_marker
@@ -392,7 +335,7 @@ fn insert_atom_at_caret(
     let block = pos.node;
     let pending_modifiers = tr.pending_modifiers().clone();
 
-    let (metric_mods, pending_style, carryable, host_paragraph_id, host_has_marker) = {
+    let (metric_mods, carryable, host_paragraph_id, host_has_marker) = {
         let view = tr.state().view();
         let node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
 
@@ -407,22 +350,6 @@ fn insert_atom_at_caret(
                     .unwrap_or(false)
             })
             .and_then(|id| tr.state().projected.node_markers().value_of(id));
-        let marker_style = host_marker.as_ref().and_then(|m| m.style.clone());
-
-        let left_style = pos
-            .offset
-            .checked_sub(1)
-            .and_then(|i| match node.child_at(i) {
-                Some(ChildView::Leaf(l)) => Some(l.dot()),
-                _ => None,
-            })
-            .and_then(|d| tr.state().projected.node_styles().value_of(d));
-
-        let pending_style: Option<String> = match tr.pending_style() {
-            Some(editor_state::PendingStyle::Set { style_id }) => Some(style_id.clone()),
-            Some(editor_state::PendingStyle::Unset) => None,
-            None => left_style.or(marker_style.clone()),
-        };
 
         let mut metric_mods = resolve_effective_modifiers(&node, pos.offset, &pending_modifiers);
         if metric_only {
@@ -444,7 +371,6 @@ fn insert_atom_at_caret(
 
         (
             metric_mods,
-            pending_style,
             carryable,
             host_paragraph_id,
             host_marker.is_some(),
@@ -455,7 +381,6 @@ fn insert_atom_at_caret(
 
     let new_dots = child_leaf_dots(tr, block, pos.offset, 1);
     apply_inline_modifiers(tr, &new_dots, &metric_mods)?;
-    apply_node_style(tr, &new_dots, &pending_style)?;
 
     tr.set_selection(Some(Selection::collapsed(Position {
         node: block,
@@ -463,17 +388,12 @@ fn insert_atom_at_caret(
         affinity: Affinity::Downstream,
     })))?;
 
-    if tr.pending_style().is_some() {
-        tr.set_pending_style(None)?;
-    }
-
     if let Some(p_id) = host_paragraph_id {
         if host_has_marker {
             tr.set_marker(p_id, None)?;
         } else {
             let marker = editor_model::Marker {
                 modifiers: carryable,
-                style: None,
             };
             if !marker.is_empty() {
                 tr.set_marker(p_id, Some(marker))?;

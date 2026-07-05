@@ -1,18 +1,17 @@
 use editor_clipboard::Slice;
 use editor_common::{HistoryTag, Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
-use editor_model::{EditOp, ModifierState, ModifierType, NodeType, Schema};
+use editor_model::{EditOp, ModifierState, ModifierType};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, damage::IRect};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
-    LayoutDirty, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    StableSelection, State, closest_empty_paragraph_break_end_between, farther_endpoint,
-    is_unit_node_selection,
+    LayoutDirty, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
+    State, closest_empty_paragraph_break_end_between, farther_endpoint, is_unit_node_selection,
 };
 use editor_transaction::{Effect, HistoryMeta, StepError, Transaction};
-use editor_view::{GapPhantom, PageRect, PendingStyle, View, Viewport};
+use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
@@ -35,32 +34,8 @@ enum Mode {
     Probe { changed: bool },
 }
 
-fn is_inline_modifier_type(ty: ModifierType) -> bool {
-    Schema::modifier_spec(ty)
-        .target
-        .rightmost_node_types()
-        .contains(&NodeType::Text)
-}
-
-fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
-    let mut modifiers = state.pending_modifiers.clone();
-
-    if let Some(editor_state::PendingStyle::Set { style_id }) = &state.pending_style
-        && let Some(entry) = state.projected.styles().style_entry(style_id)
-    {
-        for modifier in entry.modifiers.iter() {
-            let ty = modifier.as_type();
-            if !is_inline_modifier_type(ty) {
-                continue;
-            }
-            if modifiers.iter().any(|m| m.as_type() == ty) {
-                continue;
-            }
-            modifiers.push(PendingModifier::Set {
-                modifier: modifier.clone(),
-            });
-        }
-    }
+fn normalize_pending_overlay(state: &State) -> Option<PendingOverlay> {
+    let modifiers = state.pending_modifiers.clone();
 
     if modifiers.is_empty() {
         return None;
@@ -75,7 +50,7 @@ fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
     if !is_empty {
         return None;
     }
-    Some(PendingStyle {
+    Some(PendingOverlay {
         node_id: textblock.id(),
         modifiers,
     })
@@ -119,7 +94,6 @@ fn capture_transient(state: &State) -> TransientState {
         selection,
         composition: state.composition,
         pending_modifiers: state.pending_modifiers.clone(),
-        pending_style: state.pending_style.clone(),
     }
 }
 
@@ -130,7 +104,6 @@ fn transient_fields_changed(before: &State, after: &State) -> bool {
     before.selection != after.selection
         || before.composition != after.composition
         || before.pending_modifiers != after.pending_modifiers
-        || before.pending_style != after.pending_style
 }
 
 pub struct Editor {
@@ -309,18 +282,6 @@ impl Editor {
 
     pub fn block_state(&self) -> Option<BlockState> {
         crate::block_state::resolve_block_state(&self.state)
-    }
-
-    pub fn style_entries(&self) -> Vec<crate::style_state::StyleInfo> {
-        crate::style_state::resolve_style_entries(&self.state)
-    }
-
-    pub fn applied_style(&self) -> editor_common::Tri<crate::style_state::StyleRefValue> {
-        crate::style_state::resolve_applied_style(&self.state)
-    }
-
-    pub fn style_divergence(&self) -> bool {
-        crate::style_state::resolve_style_divergence(&self.state)
     }
 
     pub fn character_counts(&self) -> (CharacterCount, CharacterCount) {
@@ -586,7 +547,6 @@ impl Editor {
     pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
         let old_selection = self.state.selection;
         let old_pending_modifiers = self.state.pending_modifiers.clone();
-        let old_pending_style = self.state.pending_style.clone();
         let old_composition = self.state.composition;
         let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
@@ -651,13 +611,13 @@ impl Editor {
         }
 
         let ops = std::mem::take(&mut self.pending_ops);
-        let pending_style = normalize_pending_style(&self.state);
+        let pending_overlay = normalize_pending_overlay(&self.state);
         let gap_phantom = normalize_gap_phantom(&self.state);
-        // `reconcile` reports view-level change sources (pending style, gap phantom,
+        // `reconcile` reports view-level change sources (pending overlay, gap phantom,
         // layout fingerprint); applied doc ops also dirty the rendered layout.
         let dirty = self
             .view
-            .reconcile(&self.state, layout_dirty, pending_style, gap_phantom)
+            .reconcile(&self.state, layout_dirty, pending_overlay, gap_phantom)
             || !ops.is_empty();
 
         let mut fields: HashSet<StateField> = HashSet::new();
@@ -685,15 +645,6 @@ impl Editor {
             }
         }
 
-        if ops.iter().any(|op| {
-            matches!(
-                &op.payload,
-                EditOp::Style(..) | EditOp::NodeStyle(..) | EditOp::NodeMarker(..)
-            )
-        }) {
-            fields.insert(StateField::Styles);
-        }
-
         if ops
             .iter()
             .any(|op| matches!(&op.payload, EditOp::NodeAttr(attr) if attr.target == Dot::ROOT))
@@ -710,7 +661,6 @@ impl Editor {
             fields.insert(StateField::Selection);
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
-            fields.insert(StateField::Styles);
             // Selection-only invalidation: deliberately a bare push (NOT
             // `invalidate_render`), so `render_epoch` stays put and pages whose
             // selection rects are unchanged keep a stable signature and get
@@ -720,10 +670,6 @@ impl Editor {
 
         if old_pending_modifiers != self.state.pending_modifiers {
             fields.insert(StateField::Modifiers);
-        }
-
-        if old_pending_style != self.state.pending_style {
-            fields.insert(StateField::Styles);
         }
 
         if old_composition != self.state.composition {
@@ -969,7 +915,6 @@ impl Editor {
             Message::Insertion { op } => handle::handle_insertion_op(self, op)?,
             Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
-            Message::Style { op } => handle::handle_style_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
             Message::View { op } => handle::handle_view_op(self, op)?,
@@ -1376,7 +1321,6 @@ impl Editor {
                 });
                 self.state.composition = transient.composition;
                 self.state.pending_modifiers = transient.pending_modifiers;
-                self.state.pending_style = transient.pending_style;
                 self.pending_ops.extend(ops);
                 true
             }
@@ -1487,8 +1431,6 @@ impl Editor {
         let root_entry = &template.root;
         let root_modifiers: Vec<editor_model::Modifier> =
             root_entry.modifiers.values().cloned().collect();
-        let root_style: Option<String> = root_entry.style.clone();
-        let styles = template.styles.clone();
 
         // Build the template as a projected state and capture each root child as a
         // subtree (subtrees carry their own modifiers/style/marker recursively, so
@@ -1546,10 +1488,6 @@ impl Editor {
                     editor_commands::set_node_modifier(tr, Dot::ROOT, modifier)?;
                 }
 
-                for (name, entry) in styles {
-                    tr.set_style(name, Some(entry))?;
-                }
-                tr.set_node_style(Dot::ROOT, root_style)?;
                 Ok(())
             })?;
 
@@ -1848,7 +1786,7 @@ mod tests {
             selection: (p1, 0)
         };
         let s = with_pending(state, PendingModifiers::new());
-        assert!(normalize_pending_style(&s).is_none());
+        assert!(normalize_pending_overlay(&s).is_none());
     }
 
     #[test]
@@ -1861,7 +1799,7 @@ mod tests {
             modifier: Modifier::Bold,
         }];
         let s = with_pending(state, pending);
-        assert!(normalize_pending_style(&s).is_none());
+        assert!(normalize_pending_overlay(&s).is_none());
     }
 
     #[test]
@@ -1874,7 +1812,7 @@ mod tests {
             modifier: Modifier::FontSize { value: 9600 },
         }];
         let s = with_pending(state, pending.clone());
-        let ps = normalize_pending_style(&s).expect("Some");
+        let ps = normalize_pending_overlay(&s).expect("Some");
         assert_eq!(ps.node_id, p1);
         assert_eq!(ps.modifiers, pending);
     }
@@ -1889,77 +1827,7 @@ mod tests {
             modifier: Modifier::Bold,
         }];
         let s = with_pending(state, pending);
-        assert!(normalize_pending_style(&s).is_none());
-    }
-
-    fn state_with_inline_block_style(pending: PendingModifiers) -> State {
-        let (state, _p1) = state! {
-            doc { root { p1: paragraph } }
-            selection: (p1, 0)
-        };
-        let mut tr = Transaction::new(&state);
-        tr.set_style(
-            "s1".into(),
-            Some(editor_model::PlainStyleEntry {
-                name: "s1".into(),
-                modifiers: [Modifier::Bold, Modifier::LineHeight { value: 200 }]
-                    .into_iter()
-                    .collect(),
-            }),
-        )
-        .unwrap();
-        tr.set_pending_style(Some(editor_state::PendingStyle::Set {
-            style_id: "s1".into(),
-        }))
-        .unwrap();
-        tr.set_pending_modifiers(pending).unwrap();
-        let (next, ..) = tr.commit();
-        next
-    }
-
-    #[test]
-    fn normalize_reflects_pending_style_inline_modifiers_only() {
-        let s = state_with_inline_block_style(PendingModifiers::new());
-        let ps = normalize_pending_style(&s).expect("Some");
-        assert!(
-            ps.modifiers.iter().any(|m| matches!(
-                m,
-                PendingModifier::Set {
-                    modifier: Modifier::Bold
-                }
-            )),
-            "inline Bold from style should be reflected"
-        );
-        assert!(
-            !ps.modifiers
-                .iter()
-                .any(|m| m.as_type() == ModifierType::LineHeight),
-            "block LineHeight from style should NOT be reflected"
-        );
-    }
-
-    #[test]
-    fn normalize_explicit_pending_overrides_style_modifier() {
-        let explicit = vec![PendingModifier::Unset {
-            ty: ModifierType::Bold,
-        }];
-        let s = state_with_inline_block_style(explicit);
-        let ps = normalize_pending_style(&s).expect("Some");
-        let bold_entries: Vec<_> = ps
-            .modifiers
-            .iter()
-            .filter(|m| m.as_type() == ModifierType::Bold)
-            .collect();
-        assert_eq!(bold_entries.len(), 1, "single Bold entry, no duplicate");
-        assert!(
-            matches!(
-                bold_entries[0],
-                PendingModifier::Unset {
-                    ty: ModifierType::Bold
-                }
-            ),
-            "explicit pending Unset must win over the style's Set"
-        );
+        assert!(normalize_pending_overlay(&s).is_none());
     }
 
     fn test_editor() -> (Editor, editor_crdt::Dot) {
@@ -4523,57 +4391,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_template_fragment_preserves_named_styles() {
-        use editor_transaction::Transaction;
-        let (tpl_initial, p1) = state! {
-            doc { root { p1: paragraph { text("Styled") } } }
-            selection: (p1, 0)
-        };
-        let mut tr = Transaction::new(&tpl_initial);
-        tr.set_style(
-            "h1".into(),
-            Some(editor_model::PlainStyleEntry {
-                name: "Heading".into(),
-                modifiers: vec![editor_model::Modifier::FontSize { value: 1800 }]
-                    .into_iter()
-                    .collect(),
-            }),
-        )
-        .unwrap();
-        tr.set_node_style(p1, Some("h1".into())).unwrap();
-        let (tpl_state, ..) = tr.commit();
-
-        let (initial, _p2) = state! {
-            doc { root { p2: paragraph { text("") } } }
-            selection: (p2, 0)
-        };
-        let mut editor = Editor::new_test(initial);
-        editor
-            .insert_template_fragment(tpl_state.to_plain())
-            .expect("ok");
-
-        assert!(
-            editor.state().projected.styles().registered("h1"),
-            "named style entry must transfer"
-        );
-        let para_dot = {
-            let view = editor.state().view();
-            view.root().unwrap().child_blocks().next().unwrap().id()
-        };
-        assert_eq!(
-            editor
-                .state()
-                .projected
-                .node_styles()
-                .value_of(para_dot)
-                .as_deref(),
-            Some("h1"),
-            "node style ref must be reapplied"
-        );
-    }
-
-    #[test]
-    fn insert_template_fragment_carries_root_base_style() {
+    fn insert_template_fragment_reseeds_root_modifiers() {
         // destination root has macro-default root.modifiers populated.
         let (state, _p1) = state! {
             doc { root { p1: paragraph { text("orig") } } }
@@ -4583,8 +4401,7 @@ mod tests {
 
         let (tstate, ..) = state! {
             doc {
-                styles { base: "기본" [font_size(1600)] }
-                root @base [] { tp: paragraph { text("tpl") } }
+                root [] { tp: paragraph { text("tpl") } }
             }
             selection: (tp, 0)
         };
@@ -4592,17 +4409,8 @@ mod tests {
 
         editor.insert_template_fragment(template).unwrap();
 
-        assert_eq!(
-            editor
-                .state()
-                .projected
-                .node_styles()
-                .value_of(Dot::ROOT)
-                .as_deref(),
-            Some("base")
-        );
-        assert!(editor.state().projected.styles().registered("base"));
-        // ★ destination's stale root.modifiers must be cleared (no coexistence with base).
+        // destination's stale root.modifiers must be cleared and replaced by the
+        // template's root modifiers (here: none).
         assert_eq!(
             editor
                 .state()
@@ -5051,14 +4859,12 @@ mod tests {
                     text: "the quick brown fox jumps over the lazy dog".into(),
                 }),
                 modifiers: BTreeMap::new(),
-                style: None,
                 marker: None,
                 children: vec![],
             };
             paras.push(PlainNodeEntry {
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
                 modifiers: BTreeMap::new(),
-                style: None,
                 marker: None,
                 children: vec![text],
             });
@@ -5076,11 +4882,9 @@ mod tests {
                     },
                 }),
                 modifiers: root_font_modifiers(),
-                style: None,
                 marker: None,
                 children: paras,
             },
-            styles: BTreeMap::new(),
         };
         let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
         state.selection = Some(Selection::collapsed(Position::new(handles[&vec![0, 0]], 0)));
@@ -5096,14 +4900,12 @@ mod tests {
                     text: sentence.into(),
                 }),
                 modifiers: BTreeMap::new(),
-                style: None,
                 marker: None,
                 children: vec![],
             };
             paras.push(PlainNodeEntry {
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
                 modifiers: BTreeMap::new(),
-                style: None,
                 marker: None,
                 children: vec![text],
             });
@@ -5114,11 +4916,9 @@ mod tests {
                     layout_mode: LayoutMode::Continuous { max_width: 600 },
                 }),
                 modifiers: root_font_modifiers(),
-                style: None,
                 marker: None,
                 children: paras,
             },
-            styles: BTreeMap::new(),
         };
         let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
         let last = n_paras - 1;

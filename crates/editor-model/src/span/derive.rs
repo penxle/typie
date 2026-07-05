@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use editor_crdt::Dot;
-use editor_crdt::sequence::{BoundaryResolver, SeqResolve};
+use editor_crdt::sequence::SeqResolve;
 
 use super::{SpanLog, SpanOp};
 use crate::seq::{BlockNode, BlockTree, Child, SeqItem, anchor_dot};
@@ -114,24 +114,14 @@ pub fn for_each_leaf(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ExplicitEffect {
-    Set(Modifier),
-    Clear,
-}
-
-/// The explicit effect a span op contributes when it wins last-writer-wins for its
+/// The explicit modifier a span op contributes when it wins last-writer-wins for its
 /// modifier type. `RemoveSpan` cancels back to absence (`None`): it masks the older
 /// ops it beat but leaves no entry, so resolution falls through to node styles and
-/// inheritance. `ClearSpan` is the explicit off: its `Clear` entry blocks both.
-pub(crate) fn span_op_effect(op: &SpanOp) -> (ModifierType, Option<ExplicitEffect>) {
+/// inheritance.
+pub(crate) fn span_op_effect(op: &SpanOp) -> (ModifierType, Option<Modifier>) {
     match op {
-        SpanOp::AddSpan { modifier, .. } => (
-            modifier.as_type(),
-            Some(ExplicitEffect::Set(modifier.clone())),
-        ),
+        SpanOp::AddSpan { modifier, .. } => (modifier.as_type(), Some(modifier.clone())),
         SpanOp::RemoveSpan { modifier_type, .. } => (*modifier_type, None),
-        SpanOp::ClearSpan { modifier_type, .. } => (*modifier_type, Some(ExplicitEffect::Clear)),
     }
 }
 
@@ -140,7 +130,7 @@ pub fn derive_explicit_effect(
     tree: &BlockTree,
     resolver: &impl SeqResolve,
     spans: &SpanLog,
-) -> Vec<(Dot, BTreeMap<ModifierType, ExplicitEffect>)> {
+) -> Vec<(Dot, BTreeMap<ModifierType, Modifier>)> {
     // No spans, or no visible leaves → every leaf's explicit effect is empty. Emit the
     // empty entries directly, skipping the `O(all spans)` resolution (which a reproject
     // over a select-all-deleted document would otherwise pay for nothing).
@@ -159,7 +149,7 @@ pub fn derive_explicit_effect(
     struct Resolved {
         op_dot: Dot,
         ty: ModifierType,
-        effect: Option<ExplicitEffect>,
+        effect: Option<Modifier>,
         start: usize,
         end: usize,
     }
@@ -187,7 +177,7 @@ pub fn derive_explicit_effect(
         .into_iter()
         .map(|(path, dot)| {
             let pos = pos_of[&dot];
-            let mut by_type: HashMap<ModifierType, (Dot, Option<ExplicitEffect>)> = HashMap::new();
+            let mut by_type: HashMap<ModifierType, (Dot, Option<Modifier>)> = HashMap::new();
             for r in &resolved {
                 if !(r.start <= pos && pos < r.end) {
                     continue;
@@ -203,32 +193,11 @@ pub fn derive_explicit_effect(
                     by_type.insert(r.ty, (r.op_dot, r.effect.clone()));
                 }
             }
-            let ex: BTreeMap<ModifierType, ExplicitEffect> = by_type
+            let ex: BTreeMap<ModifierType, Modifier> = by_type
                 .into_iter()
                 .filter_map(|(t, (_, e))| e.map(|e| (t, e)))
                 .collect();
             (dot, ex)
-        })
-        .collect()
-}
-
-pub fn derive_effective(
-    elements: &[(Dot, SeqItem)],
-    tree: &BlockTree,
-    resolver: &BoundaryResolver,
-    spans: &SpanLog,
-) -> Vec<(Dot, BTreeMap<ModifierType, Modifier>)> {
-    derive_explicit_effect(elements, tree, resolver, spans)
-        .into_iter()
-        .map(|(dot, ex)| {
-            let eff = ex
-                .into_iter()
-                .filter_map(|(t, e)| match e {
-                    ExplicitEffect::Set(m) => Some((t, m)),
-                    ExplicitEffect::Clear => None,
-                })
-                .collect();
-            (dot, eff)
         })
         .collect()
 }
@@ -289,43 +258,6 @@ mod tests {
 
     fn anc(id: Dot, bias: super::super::Bias) -> super::super::Anchor {
         super::super::Anchor { id, bias }
-    }
-
-    #[test]
-    fn explicit_effect_distinguishes_clear_from_absent() {
-        let elems = para_chars("ab");
-        let log = oplog(&elems);
-        let (els, resolver) = checkout_with_resolver(&log);
-        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
-        let a = Dot::new(1, 2);
-        let b = Dot::new(1, 3);
-        let spans = SpanLog::new()
-            .apply(
-                Dot::new(2, 0),
-                SpanOp::AddSpan {
-                    start: anc(a, super::super::Bias::Before),
-                    end: anc(a, super::super::Bias::After),
-                    modifier: Modifier::Bold,
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(3, 0),
-                SpanOp::ClearSpan {
-                    start: anc(a, super::super::Bias::Before),
-                    end: anc(a, super::super::Bias::After),
-                    modifier_type: ModifierType::Bold,
-                },
-            )
-            .unwrap();
-        let ex: BTreeMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, &spans)
-            .into_iter()
-            .collect();
-        assert_eq!(
-            ex[&a].get(&ModifierType::Bold),
-            Some(&ExplicitEffect::Clear)
-        );
-        assert!(!ex[&b].contains_key(&ModifierType::Bold));
     }
 
     #[test]
@@ -396,14 +328,10 @@ mod tests {
         let explicit: HashMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, spans)
             .into_iter()
             .collect();
-        let node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        let styles: imbl::HashMap<String, crate::StyleEntry> = imbl::HashMap::new();
         let node_attrs: imbl::HashMap<Dot, crate::nodes::Node> = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: attrs,
             explicit_spans: &explicit,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let mut out = BTreeMap::new();
@@ -412,6 +340,28 @@ mod tests {
             out.insert(leaf_dot, e);
         });
         out
+    }
+
+    fn full_blocks(
+        elems: &[(Dot, SeqItem)],
+        spans: &SpanLog,
+        attrs: &ModifierAttrLog,
+    ) -> BTreeMap<Dot, BTreeMap<ModifierType, Modifier>> {
+        use crate::span::{EffectiveSources, derive_block_effective, derive_explicit_effect};
+        use std::collections::HashMap;
+        let log = oplog(elems);
+        let (els, resolver) = checkout_with_resolver(&log);
+        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
+        let explicit: HashMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, spans)
+            .into_iter()
+            .collect();
+        let node_attrs: imbl::HashMap<Dot, crate::nodes::Node> = imbl::HashMap::new();
+        let src = EffectiveSources {
+            block_modifiers: attrs,
+            explicit_spans: &explicit,
+            node_attrs: &node_attrs,
+        };
+        derive_block_effective(&tree, &src).into_iter().collect()
     }
 
     #[test]
@@ -464,40 +414,6 @@ mod tests {
         assert_eq!(
             m[&a].get(&ModifierType::FontSize),
             Some(&Modifier::FontSize { value: 1200 })
-        );
-        assert_eq!(
-            m[&Dot::new(1, 3)].get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 })
-        );
-    }
-
-    #[test]
-    fn explicit_clear_is_barrier_over_inheritance() {
-        let elems = para_chars("ab");
-        let a = Dot::new(1, 2);
-        let attrs = ModifierAttrLog::new()
-            .apply(
-                Dot::new(5, 0),
-                ModifierAttrOp::SetModifier {
-                    target: Dot::ROOT,
-                    modifier: Modifier::FontSize { value: 1600 },
-                },
-            )
-            .unwrap();
-        let spans = SpanLog::new()
-            .apply(
-                Dot::new(2, 0),
-                SpanOp::ClearSpan {
-                    start: anc(a, super::super::Bias::Before),
-                    end: anc(a, super::super::Bias::After),
-                    modifier_type: ModifierType::FontSize,
-                },
-            )
-            .unwrap();
-        let m = full(&elems, &spans, &attrs);
-        assert!(
-            !m[&a].contains_key(&ModifierType::FontSize),
-            "explicit clear가 상속 덮음"
         );
         assert_eq!(
             m[&Dot::new(1, 3)].get(&ModifierType::FontSize),
@@ -565,6 +481,91 @@ mod tests {
     }
 
     #[test]
+    fn root_text_color_record_not_inherited() {
+        let elems = para_chars("a");
+        let attrs = ModifierAttrLog::new()
+            .apply(
+                Dot::new(5, 0),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::TextColor {
+                        value: "red".to_string(),
+                    },
+                },
+            )
+            .unwrap();
+        let m = full(&elems, &SpanLog::new(), &attrs);
+        assert!(
+            !m[&Dot::new(1, 2)].contains_key(&ModifierType::TextColor),
+            "TextColor-on-Root는 out-of-context source(비상속·Root context 아님)"
+        );
+    }
+
+    #[test]
+    fn alignment_inherits_from_root_record() {
+        let elems = para_chars("a");
+        let attrs = ModifierAttrLog::new()
+            .apply(
+                Dot::new(5, 0),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::Alignment {
+                        value: crate::Alignment::Center,
+                    },
+                },
+            )
+            .unwrap();
+        let m = full_blocks(&elems, &SpanLog::new(), &attrs);
+        assert_eq!(
+            m[&Dot::new(1, 1)].get(&ModifierType::Alignment),
+            Some(&Modifier::Alignment {
+                value: crate::Alignment::Center
+            }),
+            "the paragraph block inherits the Root's alignment; there is no consumer between the paragraph and the root"
+        );
+    }
+
+    #[test]
+    fn paragraph_indent_terminates_at_paragraph_consumer() {
+        let elems = vec![
+            (
+                Dot::new(1, 1),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('가')),
+            (
+                Dot::new(2, 1),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                },
+            ),
+            (Dot::new(2, 2), SeqItem::Char('나')),
+        ];
+        let attrs = ModifierAttrLog::new()
+            .apply(
+                Dot::new(5, 0),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::new(1, 1),
+                    modifier: Modifier::ParagraphIndent { value: 200 },
+                },
+            )
+            .unwrap();
+        let m = full(&elems, &SpanLog::new(), &attrs);
+        assert!(
+            !m[&Dot::new(1, 2)].contains_key(&ModifierType::ParagraphIndent),
+            "ParagraphIndent's consumer is a root-direct Paragraph, so the paragraph's own record does not pass down to its text carrier"
+        );
+        assert!(
+            !m[&Dot::new(2, 2)].contains_key(&ModifierType::ParagraphIndent),
+            "기록·상속 없는 형제 문단은 sparse map에서 None"
+        );
+    }
+
+    #[test]
     fn attr_clear_falls_back_to_ancestor() {
         let elems = para_chars("a");
         let attrs = ModifierAttrLog::new()
@@ -600,7 +601,7 @@ mod tests {
                 Dot::new(5, 0),
                 ModifierAttrOp::SetModifier {
                     target: Dot::ROOT,
-                    modifier: Modifier::FontSize { value: 1600 },
+                    modifier: Modifier::LineHeight { value: 200 },
                 },
             )
             .unwrap()
@@ -608,19 +609,20 @@ mod tests {
                 Dot::new(5, 1),
                 ModifierAttrOp::SetModifier {
                     target: Dot::new(1, 1),
-                    modifier: Modifier::FontSize { value: 1400 },
+                    modifier: Modifier::LineHeight { value: 240 },
                 },
             )
             .unwrap();
-        let m = full(&elems, &SpanLog::new(), &attrs);
+        let m = full_blocks(&elems, &SpanLog::new(), &attrs);
         assert_eq!(
-            m[&Dot::new(1, 2)].get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1400 })
+            m[&Dot::new(1, 1)].get(&ModifierType::LineHeight),
+            Some(&Modifier::LineHeight { value: 240 }),
+            "the paragraph's own LineHeight wins over the Root's on the paragraph block (nearest ancestor)"
         );
     }
 
     #[test]
-    fn inherited_font_size_and_bold_reach_tab() {
+    fn inherited_font_size_reaches_tab_but_block_bold_record_does_not() {
         use crate::seq::AtomLeaf;
         let elems = vec![
             (
@@ -656,14 +658,13 @@ mod tests {
             m[&tab].get(&ModifierType::FontSize),
             Some(&Modifier::FontSize { value: 1600 })
         );
-        assert_eq!(
-            m[&tab].get(&ModifierType::Bold),
-            Some(&Modifier::Bold),
-            "node_ref inheritable inheritance is not target-filtered on the receiver; Bold (invisible on a tab) reaches it"
+        assert!(
+            !m[&tab].contains_key(&ModifierType::Bold),
+            "Bold is non-inheritable; a Paragraph block Bold record does not reach carriers"
         );
-        assert_eq!(
-            m[&Dot::new(1, 2)].get(&ModifierType::Bold),
-            Some(&Modifier::Bold)
+        assert!(
+            !m[&Dot::new(1, 2)].contains_key(&ModifierType::Bold),
+            "Bold is non-inheritable; a Paragraph block Bold record does not reach its text"
         );
     }
 
@@ -684,14 +685,14 @@ mod tests {
                 Dot::new(5, 0),
                 ModifierAttrOp::SetModifier {
                     target: Dot::new(1, 0),
-                    modifier: Modifier::FontSize { value: 1600 },
+                    modifier: Modifier::LineHeight { value: 200 },
                 },
             )
             .unwrap();
-        let m = full(&elems, &SpanLog::new(), &attrs);
+        let m = full_blocks(&elems, &SpanLog::new(), &attrs);
         assert_eq!(
-            m[&Dot::new(1, 1)].get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 }),
+            m[&Dot::new(1, 0)].get(&ModifierType::LineHeight),
+            Some(&Modifier::LineHeight { value: 200 }),
             "real Paragraph 상속(Derived Root skip, panic 없음)"
         );
     }
@@ -714,7 +715,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let eff = derive_effective(&els, &tree, &resolver, &spans);
+        let eff = derive_explicit_effect(&els, &tree, &resolver, &spans);
         let by_dot: BTreeMap<Dot, BTreeMap<ModifierType, Modifier>> = eff.into_iter().collect();
         assert!(by_dot[&Dot::new(1, 2)].is_empty(), "'a' bold 아님");
         assert_eq!(by_dot[&b].get(&ModifierType::Bold), Some(&Modifier::Bold));
@@ -747,7 +748,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let eff = derive_effective(&els, &tree, &resolver, &spans);
+        let eff = derive_explicit_effect(&els, &tree, &resolver, &spans);
         let by_dot: BTreeMap<Dot, _> = eff.into_iter().collect();
         assert!(by_dot[&a].is_empty(), "higher-Dot Remove가 Bold 제거");
     }
@@ -769,13 +770,13 @@ mod tests {
                 },
             )
             .unwrap();
-        for (_, eff) in derive_effective(&els, &tree, &resolver, &spans) {
+        for (_, eff) in derive_explicit_effect(&els, &tree, &resolver, &spans) {
             assert!(eff.is_empty(), "degenerate span은 아무 modifier도 안 입힘");
         }
     }
 
     #[test]
-    fn font_size_targets_tab_but_bold_does_not() {
+    fn font_size_and_bold_both_target_tab() {
         use crate::seq::AtomLeaf;
         let elems = vec![
             (
@@ -812,7 +813,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let by_dot: BTreeMap<Dot, _> = derive_effective(&els, &tree, &resolver, &spans)
+        let by_dot: BTreeMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, &spans)
             .into_iter()
             .collect();
         assert_eq!(
@@ -821,8 +822,8 @@ mod tests {
         );
         assert_eq!(
             by_dot[&tab].get(&ModifierType::Bold),
-            None,
-            "Bold.target=Paragraph>Text라 Tab엔 미적용"
+            Some(&Modifier::Bold),
+            "tabs carry the 10 non-link/ruby kinds, Bold included"
         );
         assert_eq!(
             by_dot[&a].get(&ModifierType::FontSize),
@@ -834,7 +835,7 @@ mod tests {
     fn reference_effective(
         elements: &[(Dot, SeqItem)],
         tree: &BlockTree,
-        resolver: &BoundaryResolver,
+        resolver: &editor_crdt::sequence::BoundaryResolver,
         spans: &SpanLog,
     ) -> BTreeMap<Dot, BTreeMap<ModifierType, Modifier>> {
         let pos_of: BTreeMap<Dot, usize> = elements
@@ -866,8 +867,7 @@ mod tests {
                     SpanOp::AddSpan { modifier, .. } => {
                         (modifier.as_type(), Some(modifier.clone()))
                     }
-                    SpanOp::RemoveSpan { modifier_type, .. }
-                    | SpanOp::ClearSpan { modifier_type, .. } => (*modifier_type, None),
+                    SpanOp::RemoveSpan { modifier_type, .. } => (*modifier_type, None),
                 };
                 if !Schema::modifier_spec(ty).target.matches(&path) {
                     continue;
@@ -900,7 +900,7 @@ mod tests {
         fn derive_matches_reference(
             ops in proptest::collection::vec(
                 (0usize..5, 0usize..5, proptest::prop_oneof![proptest::prelude::Just(super::super::Bias::Before), proptest::prelude::Just(super::super::Bias::After)],
-                 proptest::prop_oneof![proptest::prelude::Just(super::super::Bias::Before), proptest::prelude::Just(super::super::Bias::After)], arb_modifier(), 0u8..3),
+                 proptest::prop_oneof![proptest::prelude::Just(super::super::Bias::Before), proptest::prelude::Just(super::super::Bias::After)], arb_modifier(), 0u8..2),
                 0..16),
         ) {
             let elems = para_chars("abcde");
@@ -913,12 +913,11 @@ mod tests {
                 let end = anc(Dot::new(1, 2 + ei as u64), eb);
                 let op = match kind {
                     0 => SpanOp::AddSpan { start, end, modifier: m },
-                    1 => SpanOp::RemoveSpan { start, end, modifier_type: m.as_type() },
-                    _ => SpanOp::ClearSpan { start, end, modifier_type: m.as_type() },
+                    _ => SpanOp::RemoveSpan { start, end, modifier_type: m.as_type() },
                 };
                 spans = spans.apply(Dot::new(9, i as u64), op).unwrap();
             }
-            let got: BTreeMap<Dot, _> = derive_effective(&els, &tree, &resolver, &spans).into_iter().collect();
+            let got: BTreeMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, &spans).into_iter().collect();
             let want = reference_effective(&els, &tree, &resolver, &spans);
             proptest::prop_assert_eq!(got, want);
         }
@@ -933,8 +932,8 @@ mod tests {
             let spans = SpanLog::new().apply(Dot::new(2, 0), SpanOp::AddSpan {
                 start: anc(Dot::new(1, 2), super::super::Bias::Before),
                 end: anc(Dot::new(1, 4), super::super::Bias::After), modifier: Modifier::Italic }).unwrap();
-            proptest::prop_assert_eq!(derive_effective(&els, &tree, &resolver, &spans),
-                            derive_effective(&els, &tree, &resolver, &spans));
+            proptest::prop_assert_eq!(derive_explicit_effect(&els, &tree, &resolver, &spans),
+                            derive_explicit_effect(&els, &tree, &resolver, &spans));
         }
     }
 }

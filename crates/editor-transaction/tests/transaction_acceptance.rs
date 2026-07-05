@@ -2,8 +2,7 @@ use editor_crdt::Dot;
 use editor_macros::state;
 use editor_model::{
     AtomLeaf, CalloutVariant, ChildView, LayoutMode, Modifier, ModifierType, Node, NodeType,
-    NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode, PlainStyleEntry,
-    Subtree,
+    NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode, Subtree,
 };
 use editor_state::State;
 use editor_transaction::{Step, Transaction};
@@ -208,27 +207,6 @@ mod proptests {
 
 mod tests {
     use super::*;
-    use editor_state::PendingStyle;
-
-    #[test]
-    fn set_pending_style_roundtrip_and_inverse() {
-        let (initial, _p1) = state! {
-            doc { root { p1: paragraph { text("hi") } } }
-            selection: (p1, 0)
-        };
-        let mut tr = Transaction::new(&initial);
-        tr.set_pending_style(Some(PendingStyle::Set {
-            style_id: "s1".into(),
-        }))
-        .unwrap();
-        let (next, ..) = tr.commit();
-        assert_eq!(
-            next.pending_style,
-            Some(PendingStyle::Set {
-                style_id: "s1".into()
-            })
-        );
-    }
 
     #[test]
     fn add_modifier_twice_dispatches_once() {
@@ -524,34 +502,6 @@ mod tests {
                 text: nv.inline_text(),
             },
         ))])
-    }
-
-    #[test]
-    fn node_style_draws_modifier_on_text_leaves() {
-        let (initial, p1) = state! {
-            doc { root { p1: paragraph { text("Hi") } } }
-            selection: (p1, 0)
-        };
-        let mut tr = Transaction::new(&initial);
-        tr.set_style(
-            "s1".into(),
-            Some(PlainStyleEntry {
-                name: "s".into(),
-                modifiers: [Modifier::Bold].into_iter().collect(),
-            }),
-        )
-        .unwrap();
-        tr.set_node_style(p1, Some("s1".into())).unwrap();
-        let (next, ..) = tr.commit();
-
-        let view = next.view();
-        let para = view.node(p1).unwrap();
-        let inline = para.inline();
-        assert!(!inline.is_empty());
-        assert_eq!(
-            inline[0].effective.get(&ModifierType::Bold),
-            Some(&Modifier::Bold)
-        );
     }
 
     fn tab_count(state: &State, block: &Dot) -> usize {

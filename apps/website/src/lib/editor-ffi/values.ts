@@ -36,8 +36,8 @@ export const values = {
     { label: '96', value: 9600 },
   ],
 
-  minFontSize: 100,
-  maxFontSize: 20_000,
+  minFontSize: 400,
+  maxFontSize: 12_800,
 
   textColor: [
     { label: '블랙', value: 'black', themeKey: 'text.black' },

@@ -56,7 +56,6 @@ fn caret_own_text_types(view: &DocView, pos_node: Dot, offset: usize) -> Vec<Mod
         Some(st) => st
             .own
             .iter()
-            .filter(|(_, o)| !o.from_style)
             .map(|(t, _)| *t)
             .filter(|&t| is_text_applicable(t))
             .collect(),

@@ -8,7 +8,7 @@ pub fn to_html(slice: &Slice) -> String {
     let meta_json = serde_json::to_string(slice).expect("Slice serde");
     let meta_b64 = STANDARD.encode(meta_json.as_bytes());
     out.push_str(&format!(
-        r#"<meta data-slice="{meta_b64}" data-version="1">"#,
+        r#"<meta data-slice-v2="{meta_b64}" data-version="1">"#,
     ));
     out.push_str("<div data-root>");
     for child in &slice.fragment.children {
@@ -220,7 +220,7 @@ mod tests {
             open_end: 0,
         };
         let html = to_html(&slice);
-        assert!(html.contains("data-slice="));
+        assert!(html.contains("data-slice-v2="));
         assert!(html.contains("data-version=\"1\""));
         assert!(html.contains("<div data-root>"));
         assert!(html.contains("</div>"));
@@ -243,11 +243,9 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
-                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
-                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode {
                             text: "bold italic".into(),
@@ -269,11 +267,9 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
-                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
-                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode {
                             text: "styled".into(),
@@ -303,11 +299,9 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
-                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
-                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode {
                             text: "click".into(),

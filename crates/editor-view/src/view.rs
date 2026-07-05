@@ -14,7 +14,7 @@ use crate::page_fragment::{PageFragmentTree, build_page_fragment_tree};
 use crate::paginate::paginator::Paginator;
 use crate::query::cursor::CursorMetrics;
 use crate::query::layout_index::LayoutIndex;
-use crate::view_state::{GapPhantom, GroupDecoration, PendingStyle, ViewState};
+use crate::view_state::{GapPhantom, GroupDecoration, PendingOverlay, ViewState};
 use crate::viewport::Viewport;
 
 const CONTINUOUS_MARGIN_X: f32 = 20.0;
@@ -55,7 +55,7 @@ impl View {
     }
 
     pub fn layout(&mut self, state: &State) {
-        self.view_state.pending_style = None;
+        self.view_state.pending_overlay = None;
         self.view_state.gap_phantom = None;
         self.measurer.clear();
         self.compute(state);
@@ -66,17 +66,17 @@ impl View {
         &mut self,
         state: &State,
         dirty: LayoutDirty,
-        new_pending_style: Option<PendingStyle>,
+        new_pending_overlay: Option<PendingOverlay>,
         new_gap_phantom: Option<GapPhantom>,
     ) -> bool {
-        let pending_changed = self.view_state.pending_style != new_pending_style;
+        let pending_changed = self.view_state.pending_overlay != new_pending_overlay;
         let gap_changed = self.view_state.gap_phantom != new_gap_phantom;
 
         let mut dirty = dirty;
         if pending_changed {
             for id in [
-                self.view_state.pending_style.as_ref().map(|p| p.node_id),
-                new_pending_style.as_ref().map(|p| p.node_id),
+                self.view_state.pending_overlay.as_ref().map(|p| p.node_id),
+                new_pending_overlay.as_ref().map(|p| p.node_id),
             ]
             .into_iter()
             .flatten()
@@ -93,7 +93,7 @@ impl View {
             }
         }
 
-        self.view_state.pending_style = new_pending_style;
+        self.view_state.pending_overlay = new_pending_overlay;
         self.view_state.gap_phantom = new_gap_phantom;
 
         let dirty_empty = matches!(
@@ -461,7 +461,7 @@ impl View {
         crate::query::placeholder::placeholder_metrics(
             &result.layout_index,
             &state.view(),
-            self.view_state.pending_style.as_ref(),
+            self.view_state.pending_overlay.as_ref(),
         )
     }
 
@@ -797,10 +797,10 @@ impl View {
 mod invalidation_tests {
     use std::sync::{Arc, Mutex};
 
-    use editor_crdt::{Dot, ListOp, LwwRegOp, OrMapOp, OrSetOp};
+    use editor_crdt::{Dot, ListOp};
     use editor_model::{
         CalloutNodeAttr, CalloutVariant, EditOp, Modifier, ModifierAttrOp, NodeAttr, NodeAttrOp,
-        NodeLwwOp, NodeType, SeqItem, StyleOp, StyleRegOp, TableNodeAttr,
+        NodeType, SeqItem, TableNodeAttr,
     };
     use editor_resource::Resource;
     use editor_state::{LayoutDirty, ProjectedState, State};
@@ -896,54 +896,6 @@ mod invalidation_tests {
                 assert!(content.contains(&callout));
             }
             LayoutDirty::Full => panic!("NodeAttr must not force Full"),
-        }
-    }
-
-    #[test]
-    fn style_change_invalidates_styled_node() {
-        let mut ps = ProjectedState::empty();
-        let root = Dot::ROOT;
-        let p = ps
-            .apply(seq_block(1, NodeType::Paragraph, vec![root]))
-            .unwrap()
-            .id;
-        ps.apply(seq_char(2, 'h')).unwrap();
-        ps.apply(EditOp::Style(StyleRegOp {
-            style_id: "h1".into(),
-            op: StyleOp::Presence(OrMapOp::Set {
-                key: "h1".into(),
-                value: (),
-            }),
-        }))
-        .unwrap();
-        ps.apply(EditOp::NodeStyle(NodeLwwOp {
-            target: p,
-            op: LwwRegOp::Set {
-                value: Some("h1".into()),
-            },
-        }))
-        .unwrap();
-        ps.commit();
-        let _ = ps.take_layout_dirty();
-
-        ps.apply(EditOp::Style(StyleRegOp {
-            style_id: "h1".into(),
-            op: StyleOp::Modifiers(OrSetOp::Add {
-                elem: Modifier::FontFamily {
-                    value: "Arial".into(),
-                },
-            }),
-        }))
-        .unwrap();
-
-        match ps.take_layout_dirty() {
-            LayoutDirty::Incremental { content, .. } => {
-                assert!(
-                    content.contains(&p),
-                    "styled paragraph must be content-dirty after style modifier change"
-                );
-            }
-            LayoutDirty::Full => panic!("Style op must not force Full"),
         }
     }
 

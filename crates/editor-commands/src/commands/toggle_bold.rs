@@ -88,11 +88,11 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
 
     if is_bold {
         if synthetic_bold {
-            tr.clear_span_modifier(first, last, Modifier::Bold)?;
+            tr.remove_span_modifier(first, last, Modifier::Bold)?;
         }
         if weight_bold {
             let unbold = find_unbold_target(current_weight, available);
-            tr.clear_span_modifier(
+            tr.remove_span_modifier(
                 first,
                 last,
                 Modifier::FontWeight {
@@ -103,7 +103,7 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
                 tr.add_span_modifier(first, last, Modifier::FontWeight { value: unbold })?;
             }
         } else {
-            tr.clear_span_modifier(
+            tr.remove_span_modifier(
                 first,
                 last,
                 Modifier::FontWeight {
@@ -676,6 +676,36 @@ mod tests {
         assert_state_eq!(&actual, &expected);
     }
 
+    // SC-FMT-3: toggling bold off leaves no effective Bold on any covered leaf,
+    // and that absence is achieved purely by removing the record (Task 1 made
+    // Bold non-inheritable, so removal and blocking are observationally identical).
+    #[test]
+    fn range_toggle_off_effective_bold_absent_by_record_removal() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("가나") [bold, font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let view = actual.view();
+        let para = view.roots().next().unwrap().child_blocks().next().unwrap();
+        let count = para.children().count();
+        assert!(count > 0, "paragraph must have char leaves");
+        for i in 0..count {
+            let st = para.leaf_state_at(i).expect("char leaf has state");
+            assert!(
+                st.eff.get(&ModifierType::Bold).is_none(),
+                "toggle-off leaves no effective Bold at leaf {i}"
+            );
+        }
+    }
+
     #[test]
     fn range_toggle_off_removes_bold_and_resets_weight() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
@@ -736,8 +766,8 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph [bold] {
-                        text("Hello")
+                    p1: paragraph {
+                        text("Hello") [bold]
                     }
                 }
             }
@@ -764,9 +794,9 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph [bold] {
-                        text("A") [font_weight(300)]
-                        text("B") [font_weight(400)]
+                    p1: paragraph {
+                        text("A") [bold, font_weight(300)]
+                        text("B") [bold, font_weight(400)]
                     }
                 }
             }
@@ -934,14 +964,11 @@ mod tests {
     }
 
     #[test]
-    fn range_double_toggle_under_root_style_reports_rendered_weight() {
+    fn range_double_toggle_reports_rendered_weight() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(100), paragraph_indent(100)]
-                }
-                root @base {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
                     p1: paragraph {
                         text("Hello World")
                     }
@@ -996,14 +1023,11 @@ mod tests {
     }
 
     #[test]
-    fn block_level_selection_with_root_style_does_not_corrupt() {
+    fn block_level_selection_does_not_corrupt() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
         let (initial, ..) = state! {
             doc {
-                styles {
-                    base: "기본" [font_size(1200), font_family("Pretendard".to_string()), font_weight(400), text_color("black".to_string()), background_color("none".to_string()), letter_spacing(0), line_height(160), block_gap(100), paragraph_indent(100)]
-                }
-                r1: root @base {
+                r1: root [font_weight(400), font_family("Pretendard".to_string())] {
                     paragraph {
                         text("hello")
                     }

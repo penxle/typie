@@ -7,7 +7,6 @@ use crate::Selection;
 use crate::composition::Composition;
 use crate::error::StateError;
 use crate::pending_modifier::PendingModifiers;
-use crate::pending_style::PendingStyle;
 use crate::projected_state::ProjectedState;
 
 #[derive(Clone, Debug)]
@@ -19,7 +18,6 @@ pub struct State {
     pub projected: Arc<ProjectedState>,
     pub selection: Option<Selection>,
     pub pending_modifiers: PendingModifiers,
-    pub pending_style: Option<PendingStyle>,
     pub composition: Option<Composition>,
 }
 
@@ -29,7 +27,6 @@ impl State {
             projected: Arc::new(projected),
             selection,
             pending_modifiers: PendingModifiers::new(),
-            pending_style: None,
             composition: None,
         }
     }
@@ -77,7 +74,6 @@ pub fn state_observably_changed(a: &State, b: &State) -> bool {
     a.projected.projected() != b.projected.projected()
         || a.selection != b.selection
         || a.pending_modifiers != b.pending_modifiers
-        || a.pending_style != b.pending_style
         || a.composition != b.composition
 }
 

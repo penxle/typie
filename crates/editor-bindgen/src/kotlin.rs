@@ -756,9 +756,9 @@ mod tests {
         let ctx = test_context(&[]);
         let fields = vec![
             FfiField {
-                name: "styles".into(),
+                name: "attrs".into(),
                 serde_rename: None,
-                ty: "BTreeMap<String, PlainStyleEntry>".into(),
+                ty: "BTreeMap<String, Modifier>".into(),
                 has_serde_default: true,
                 ffi_default_override: None,
             },
@@ -772,7 +772,7 @@ mod tests {
         ];
 
         assert_eq!(
-            resolve_default(&fields[0], "Map<String, PlainStyleEntry>", &ctx),
+            resolve_default(&fields[0], "Map<String, Modifier>", &ctx),
             "emptyMap()"
         );
         assert_eq!(

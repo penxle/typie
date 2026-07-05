@@ -28,7 +28,6 @@
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarLink from './ToolbarLink.svelte';
   import ToolbarRuby from './ToolbarRuby.svelte';
-  import ToolbarStyleSelect from './ToolbarStyleSelect.svelte';
   import type { Message, ModifierType, Tri } from '@typie/editor-ffi/browser';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ThemeVariant } from '$lib/editor-ffi/theme';
@@ -74,7 +73,11 @@
   );
 
   const currentTextBackgroundColor = $derived(
-    ctx.editor?.modifierState?.background_color?.type === 'uniform' ? ctx.editor.modifierState.background_color.value.value : undefined,
+    ctx.editor?.modifierState?.background_color?.type === 'uniform'
+      ? ctx.editor.modifierState.background_color.value.value
+      : ctx.editor?.modifierState?.background_color?.type === 'absent'
+        ? 'none'
+        : undefined,
   );
 
   const currentLineHeight = $derived(
@@ -178,9 +181,6 @@
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarStyleSelect {fontFamilies} />
-  </div>
-  <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton chevron label="글씨 색" onEscape={() => ctx.editor?.focus()} placement="bottom-start" size="small">
       {#snippet anchor()}
         <div class={center({ size: '20px' })}>
@@ -243,7 +243,11 @@
           items={textBackgroundColors}
           onClose={close}
           onSelect={(value) => {
-            enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'background_color', value } } });
+            if (value === 'none') {
+              enqueue({ type: 'modifier', op: { type: 'edit', modifier_type: 'background_color', modifier: undefined } });
+            } else {
+              enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'background_color', value } } });
+            }
           }}
           {opened}
           shape="square"

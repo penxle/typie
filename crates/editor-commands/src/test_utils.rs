@@ -12,33 +12,23 @@ enum Shape {
     Block {
         ty: NodeType,
         modifiers: BTreeMap<ModifierType, Modifier>,
-        style: Option<String>,
         marker: Option<Marker>,
         children: Vec<Shape>,
     },
     Char {
         ch: char,
         modifiers: BTreeMap<ModifierType, Modifier>,
-        style: Option<String>,
     },
     Atom {
         leaf: AtomLeaf,
         modifiers: BTreeMap<ModifierType, Modifier>,
-        style: Option<String>,
     },
 }
 
 fn leaf_own_from(
     own: &BTreeMap<ModifierType, editor_model::OwnModifier>,
 ) -> BTreeMap<ModifierType, Modifier> {
-    own.iter()
-        .filter(|(_, o)| !o.from_style)
-        .map(|(t, o)| (*t, o.value.clone()))
-        .collect()
-}
-
-fn node_style(state: &State, id: Dot) -> Option<String> {
-    state.projected.node_styles().value_of(id)
+    own.iter().map(|(t, o)| (*t, o.value.clone())).collect()
 }
 
 fn node_marker(state: &State, id: Dot) -> Option<Marker> {
@@ -59,18 +49,12 @@ fn shape_of(state: &State, nv: &NodeView) -> Shape {
                     .leaf_state_at(slot)
                     .map(|st| leaf_own_from(st.own))
                     .unwrap_or_default();
-                let style = node_style(state, l.dot());
                 if let Some(ch) = l.as_char() {
-                    children.push(Shape::Char {
-                        ch,
-                        modifiers,
-                        style,
-                    });
+                    children.push(Shape::Char { ch, modifiers });
                 } else if let Some(atom) = l.as_atom() {
                     children.push(Shape::Atom {
                         leaf: atom.clone(),
                         modifiers,
-                        style,
                     });
                 }
             }
@@ -79,7 +63,6 @@ fn shape_of(state: &State, nv: &NodeView) -> Shape {
     Shape::Block {
         ty: nv.node_type(),
         modifiers: block_modifiers(state, nv.id()),
-        style: node_style(state, nv.id()),
         marker: node_marker(state, nv.id()),
         children,
     }
@@ -122,10 +105,6 @@ pub(crate) fn assert_state_eq_impl(actual: &State, expected: &State) {
     assert_eq!(
         actual.pending_modifiers, expected.pending_modifiers,
         "pending_modifiers differ"
-    );
-    assert_eq!(
-        actual.pending_style, expected.pending_style,
-        "pending_style differs"
     );
 }
 

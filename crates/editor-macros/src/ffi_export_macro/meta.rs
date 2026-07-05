@@ -292,9 +292,9 @@ mod tests {
     #[test]
     fn complex_return_preserves_generic_type_arguments() {
         let method: syn::ImplItemFn = syn::parse_quote! {
-            pub fn applied_style(
+            pub fn sample_value(
                 &self,
-            ) -> EditorResult<Complex<editor_common::Tri<editor_core::StyleRefValue>>> {
+            ) -> EditorResult<Complex<editor_common::Tri<editor_core::SampleRefValue>>> {
                 todo!()
             }
         };
@@ -303,19 +303,19 @@ mod tests {
 
         assert_eq!(
             extracted.return_type,
-            FfiReturnType::Complex("Tri<StyleRefValue>".into())
+            FfiReturnType::Complex("Tri<SampleRefValue>".into())
         );
     }
 
     #[test]
     fn complex_param_preserves_generic_type_arguments() {
         let ty: syn::Type = syn::parse_quote! {
-            Complex<editor_common::Tri<editor_core::StyleRefValue>>
+            Complex<editor_common::Tri<editor_core::SampleRefValue>>
         };
 
         assert_eq!(
             parse_param_type(&ty),
-            FfiParamType::Complex("Tri<StyleRefValue>".into())
+            FfiParamType::Complex("Tri<SampleRefValue>".into())
         );
     }
 }

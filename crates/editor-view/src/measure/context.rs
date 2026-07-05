@@ -7,7 +7,7 @@ pub(crate) struct MeasureContext {
     pub fold_states: HashMap<Dot, bool>,
     pub external_heights: HashMap<Dot, f32>,
     pub gap_phantom: Option<GapPhantom>,
-    pub pending_style: Option<(Dot, editor_state::PendingModifiers)>,
+    pub pending_overlay: Option<(Dot, editor_state::PendingModifiers)>,
 }
 
 impl MeasureContext {
@@ -27,7 +27,7 @@ impl MeasureContext {
     }
 
     pub fn pending_for(&self, node: &Dot) -> Option<&editor_state::PendingModifiers> {
-        self.pending_style
+        self.pending_overlay
             .as_ref()
             .filter(|(id, _)| id == node)
             .map(|(_, m)| m)
@@ -42,8 +42,8 @@ pub(crate) fn measure_context(vs: &crate::view_state::ViewState) -> MeasureConte
             parent: gp.parent,
             index: gp.index,
         }),
-        pending_style: vs
-            .pending_style
+        pending_overlay: vs
+            .pending_overlay
             .as_ref()
             .map(|ps| (ps.node_id, ps.modifiers.clone())),
     }
@@ -56,7 +56,7 @@ mod tests {
     use editor_state::PendingModifier;
     use hashbrown::HashMap;
 
-    use crate::view_state::{GapPhantom, PendingStyle, ViewState};
+    use crate::view_state::{GapPhantom, PendingOverlay, ViewState};
 
     use super::{MeasureContext, measure_context};
 
@@ -109,7 +109,7 @@ mod tests {
             modifier: Modifier::Bold,
         }];
         let ctx = MeasureContext {
-            pending_style: Some((a, modifiers.clone())),
+            pending_overlay: Some((a, modifiers.clone())),
             ..Default::default()
         };
         assert_eq!(ctx.pending_for(&a), Some(&modifiers));
@@ -130,7 +130,7 @@ mod tests {
             parent: p1,
             index: 1,
         });
-        vs.pending_style = Some(PendingStyle {
+        vs.pending_overlay = Some(PendingOverlay {
             node_id: p1,
             modifiers: modifiers.clone(),
         });
@@ -146,6 +146,6 @@ mod tests {
                 index: 1
             })
         );
-        assert_eq!(ctx.pending_style, Some((p1, modifiers)));
+        assert_eq!(ctx.pending_overlay, Some((p1, modifiers)));
     }
 }

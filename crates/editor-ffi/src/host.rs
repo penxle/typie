@@ -142,7 +142,7 @@ impl EditorHost {
         changesets: Vec<u8>,
     ) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
         let state = crate::graph::state_from_changesets(changesets)?;
-        Ok(crate::root::base_style_modifiers(&state).into_ffi()?)
+        Ok(crate::root::root_default_modifiers(&state).into_ffi()?)
     }
 
     pub fn set_fonts(
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn root_modifiers_from_graph_returns_root_base_style_modifiers() {
+    fn root_modifiers_from_graph_returns_root_default_modifiers() {
         let host = make_host();
         let plain = crate::doc_builder::build_default_doc(
             editor_model::PlainRootNode::default(),

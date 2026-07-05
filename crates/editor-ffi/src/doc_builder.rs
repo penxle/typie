@@ -1,41 +1,26 @@
-pub(crate) const BASE_STYLE_ID: &str = "base";
-pub(crate) const BASE_STYLE_NAME: &str = "기본";
-
 pub(crate) fn build_default_doc(
     root: editor_model::PlainRootNode,
     modifiers: Vec<editor_model::Modifier>,
 ) -> editor_model::PlainDoc {
-    // type당 1개로 정규화. BTreeSet은 완전 동일 값만 dedupe하고 같은 type 다른 값은 둘 다 남기므로 ModifierType 기준으로 정규화.
     let mut by_type = std::collections::BTreeMap::new();
     for m in modifiers {
         by_type.insert(m.as_type(), m);
     }
 
-    let mut styles = std::collections::BTreeMap::new();
-    styles.insert(
-        BASE_STYLE_ID.to_string(),
-        editor_model::PlainStyleEntry {
-            name: BASE_STYLE_NAME.to_string(),
-            modifiers: by_type.into_values().collect(),
-        },
-    );
-
     let paragraph = editor_model::PlainNodeEntry {
         node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
         modifiers: Default::default(),
-        style: None,
         marker: None,
         children: vec![],
     };
     let root = editor_model::PlainNodeEntry {
         node: editor_model::PlainNode::Root(root),
-        modifiers: Default::default(),
-        style: Some(BASE_STYLE_ID.to_string()),
+        modifiers: by_type,
         marker: None,
         children: vec![paragraph],
     };
 
-    editor_model::PlainDoc { root, styles }
+    editor_model::PlainDoc { root }
 }
 
 #[cfg(test)]
@@ -43,7 +28,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_default_doc_seeds_base_style() {
+    fn build_default_doc_seeds_root_modifiers() {
         let root = editor_model::PlainRootNode::default();
         let modifiers = vec![
             editor_model::Modifier::FontSize { value: 1200 },
@@ -52,22 +37,39 @@ mod tests {
 
         let plain = build_default_doc(root, modifiers);
 
-        let base = plain.styles.get("base").expect("base style must exist");
-        assert!(
-            base.modifiers
-                .contains(&editor_model::Modifier::FontSize { value: 1200 })
+        assert_eq!(
+            plain
+                .root
+                .modifiers
+                .get(&editor_model::ModifierType::FontSize),
+            Some(&editor_model::Modifier::FontSize { value: 1200 })
         );
-        assert!(
-            base.modifiers
-                .contains(&editor_model::Modifier::BlockGap { value: 100 })
+        assert_eq!(
+            plain
+                .root
+                .modifiers
+                .get(&editor_model::ModifierType::BlockGap),
+            Some(&editor_model::Modifier::BlockGap { value: 100 })
         );
+    }
 
-        let root_entry = &plain.root;
-        assert!(
-            root_entry.modifiers.is_empty(),
-            "root must not carry modifiers"
+    #[test]
+    fn default_doc_resolves_root_defaults_at_block_level() {
+        let plain = build_default_doc(
+            editor_model::PlainRootNode::default(),
+            vec![editor_model::Modifier::FontSize { value: 1400 }],
         );
-        assert_eq!(root_entry.style.as_deref(), Some("base"));
-        assert_eq!(root_entry.children.len(), 1);
+        let state = editor_state::State::from_plain(&plain).unwrap();
+        let view = state.view();
+        let para = view
+            .node(editor_crdt::Dot::ROOT)
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap();
+        assert_eq!(
+            para.effective().get(&editor_model::ModifierType::FontSize),
+            Some(&editor_model::Modifier::FontSize { value: 1400 })
+        );
     }
 }

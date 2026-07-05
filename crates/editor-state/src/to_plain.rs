@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use editor_crdt::Dot;
 use editor_model::{
     AtomLeaf, ChildView, DocView, Marker, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc,
-    PlainNode, PlainNodeEntry, PlainStyleEntry, PlainTextNode, ProjectedDoc,
+    PlainNode, PlainNodeEntry, PlainTextNode, ProjectedDoc,
 };
 
 pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {
@@ -13,21 +13,7 @@ pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {
         None => PlainDoc::default().root,
     };
 
-    let styles = projected
-        .styles
-        .iter()
-        .map(|(id, entry)| {
-            (
-                id.clone(),
-                PlainStyleEntry {
-                    name: entry.name.get().clone(),
-                    modifiers: entry.modifiers.iter().cloned().collect(),
-                },
-            )
-        })
-        .collect();
-
-    PlainDoc { root, styles }
+    PlainDoc { root }
 }
 
 fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
@@ -44,11 +30,10 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
                 let own = nv.leaf_state_at(slot).map(|s| s.own);
                 if let Some(ch) = l.as_char() {
                     let modifiers = own.map(span_modifiers).unwrap_or_default();
-                    let style = node_style(projected, l.dot());
-                    run.push(ch, modifiers, style, &mut children);
+                    run.push(ch, modifiers, &mut children);
                 } else if let Some(atom) = l.as_atom() {
                     run.flush(&mut children);
-                    children.push(emit_atom(projected, l.dot(), atom.clone(), own));
+                    children.push(emit_atom(atom.clone(), own));
                 }
             }
         }
@@ -61,22 +46,15 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
         modifiers: dot
             .map(|d| block_modifiers(projected, d))
             .unwrap_or_default(),
-        style: dot.and_then(|d| node_style(projected, d)),
         marker: dot.and_then(|d| node_marker(projected, d)),
         children,
     }
 }
 
-fn emit_atom(
-    projected: &ProjectedDoc,
-    dot: Dot,
-    atom: AtomLeaf,
-    own: Option<&BTreeMap<ModifierType, OwnModifier>>,
-) -> PlainNodeEntry {
+fn emit_atom(atom: AtomLeaf, own: Option<&BTreeMap<ModifierType, OwnModifier>>) -> PlainNodeEntry {
     PlainNodeEntry {
         node: atom.into_node().to_plain(),
         modifiers: own.map(span_modifiers).unwrap_or_default(),
-        style: node_style(projected, dot),
         marker: None,
         children: Vec::new(),
     }
@@ -87,7 +65,6 @@ struct PendingRun {
     active: bool,
     text: String,
     modifiers: BTreeMap<ModifierType, Modifier>,
-    style: Option<String>,
 }
 
 impl PendingRun {
@@ -95,16 +72,14 @@ impl PendingRun {
         &mut self,
         ch: char,
         modifiers: BTreeMap<ModifierType, Modifier>,
-        style: Option<String>,
         children: &mut Vec<PlainNodeEntry>,
     ) {
-        if self.active && (self.modifiers != modifiers || self.style != style) {
+        if self.active && self.modifiers != modifiers {
             self.flush(children);
         }
         if !self.active {
             self.active = true;
             self.modifiers = modifiers;
-            self.style = style;
             self.text.clear();
         }
         self.text.push(ch);
@@ -119,7 +94,6 @@ impl PendingRun {
                 text: std::mem::take(&mut self.text),
             }),
             modifiers: std::mem::take(&mut self.modifiers),
-            style: self.style.take(),
             marker: None,
             children: Vec::new(),
         });
@@ -128,10 +102,7 @@ impl PendingRun {
 }
 
 fn span_modifiers(own: &BTreeMap<ModifierType, OwnModifier>) -> BTreeMap<ModifierType, Modifier> {
-    own.iter()
-        .filter(|(_, o)| !o.from_style)
-        .map(|(ty, o)| (*ty, o.value.clone()))
-        .collect()
+    own.iter().map(|(ty, o)| (*ty, o.value.clone())).collect()
 }
 
 fn block_modifiers(projected: &ProjectedDoc, dot: Dot) -> BTreeMap<ModifierType, Modifier> {
@@ -142,21 +113,17 @@ fn block_modifiers(projected: &ProjectedDoc, dot: Dot) -> BTreeMap<ModifierType,
         .unwrap_or_default()
 }
 
-fn node_style(projected: &ProjectedDoc, dot: Dot) -> Option<String> {
-    projected.node_styles.get(&dot).cloned().flatten()
-}
-
 fn node_marker(projected: &ProjectedDoc, dot: Dot) -> Option<Marker> {
     projected.node_markers.get(&dot).cloned().flatten()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
 
     use editor_model::{
         AtomLeaf, Modifier, ModifierType, PlainBlockquoteNode, PlainDoc, PlainNode, PlainNodeEntry,
-        PlainParagraphNode, PlainRootNode, PlainStyleEntry, PlainTextNode,
+        PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
 
     use crate::state::State;
@@ -165,7 +132,6 @@ mod tests {
         PlainNodeEntry {
             node,
             modifiers: BTreeMap::new(),
-            style: None,
             marker: None,
             children,
         }
@@ -179,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_nested_blocks_span_style_and_block_modifier() {
+    fn round_trip_nested_blocks_span_and_block_modifier() {
         let mut text_entry = entry(
             vec![],
             PlainNode::Text(PlainTextNode {
@@ -210,25 +176,12 @@ mod tests {
             PlainNode::Blockquote(PlainBlockquoteNode::default()),
         );
 
-        let mut root_entry = entry(
+        let root_entry = entry(
             vec![para_entry, bq],
             PlainNode::Root(PlainRootNode::default()),
         );
-        root_entry.style = Some("base".to_string());
 
-        let mut styles = BTreeMap::new();
-        styles.insert(
-            "base".to_string(),
-            PlainStyleEntry {
-                name: "기본".to_string(),
-                modifiers: BTreeSet::from([Modifier::FontWeight { value: 400 }]),
-            },
-        );
-
-        round_trip(&PlainDoc {
-            root: root_entry,
-            styles,
-        });
+        round_trip(&PlainDoc { root: root_entry });
     }
 
     #[test]
@@ -256,9 +209,6 @@ mod tests {
         );
         let root = entry(vec![para], PlainNode::Root(PlainRootNode::default()));
 
-        round_trip(&PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        });
+        round_trip(&PlainDoc { root });
     }
 }

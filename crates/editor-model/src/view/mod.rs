@@ -345,19 +345,6 @@ impl<'a> NodeView<'a> {
             own: seg.own.as_ref(),
         })
     }
-    /// The node-style id of the leaf at direct child slot `child_slot`, from its
-    /// run segment. `None` for a block slot, an out-of-range slot, or an unstyled
-    /// leaf. `O(log K + log segs)`.
-    pub fn leaf_style_at(&self, child_slot: usize) -> Option<&'a String> {
-        let node = self.tree_node()?;
-        match node.children.get(child_slot)? {
-            Child::Leaf { .. } => {}
-            Child::Block(_) => return None,
-        }
-        let ordinal = node.children.leaf_ordinal_at(child_slot);
-        let (seg, _) = self.view.doc.seg_index.seg_at(self.id, ordinal)?;
-        seg.style.as_ref()
-    }
     pub fn inline(&self) -> Vec<InlineItem<'a>> {
         let doc = self.view.doc;
         let Some(node) = self.tree_node() else {
@@ -416,10 +403,9 @@ mod tests {
     use crate::projection::{DocLogs, project_document};
     use crate::{
         Anchor, Bias, Modifier, ModifierAttrLog, ModifierAttrOp, ModifierType, NodeAttr,
-        NodeAttrLog, NodeAttrOp, NodeLwwOp, NodeMarkerLog, NodeStyleLog, SpanLog, SpanOp, StyleLog,
-        StyleOp, StyleRegOp, TableNodeAttr,
+        NodeAttrLog, NodeAttrOp, NodeMarkerLog, SpanLog, SpanOp, TableNodeAttr,
     };
-    use editor_crdt::{InputEvent, ListOp, LwwRegOp, build_oplog};
+    use editor_crdt::{InputEvent, ListOp, build_oplog};
 
     fn events(items: &[(Dot, SeqItem)]) -> Vec<InputEvent<SeqItem>> {
         let mut ev = Vec::new();
@@ -444,9 +430,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -464,12 +448,6 @@ mod tests {
     }
     fn own_val<'a>(view: &'a DocView<'a>, dot: Dot, ty: ModifierType) -> Option<&'a Modifier> {
         leaf_own(view, dot).get(&ty).map(|o| &o.value)
-    }
-    fn own_no_style<'a>(view: &'a DocView<'a>, dot: Dot, ty: ModifierType) -> Option<&'a Modifier> {
-        leaf_own(view, dot)
-            .get(&ty)
-            .filter(|o| !o.from_style)
-            .map(|o| &o.value)
     }
 
     fn nested_doc() -> ProjectedDoc {
@@ -679,7 +657,7 @@ mod tests {
         assert_eq!(bq.index(), Some(1));
     }
 
-    fn doc_styled_xy() -> ProjectedDoc {
+    fn doc_spanned_xy() -> ProjectedDoc {
         let para = Dot::new(1, 1);
         let x = Dot::new(1, 2);
         let y = Dot::new(1, 3);
@@ -695,40 +673,22 @@ mod tests {
             (y, SeqItem::Char('y')),
         ];
         let mut l = logs_of(&elems);
-        l.node_styles = NodeStyleLog::new()
+        l.spans = SpanLog::new()
             .apply(
                 Dot::new(2, 0),
-                NodeLwwOp {
-                    target: x,
-                    op: LwwRegOp::Set {
-                        value: Some("s".to_string()),
+                SpanOp::AddSpan {
+                    start: Anchor {
+                        id: x,
+                        bias: Bias::Before,
                     },
-                },
-            )
-            .unwrap();
-        l.styles = StyleLog::new()
-            .apply(
-                Dot::new(2, 1),
-                StyleRegOp {
-                    style_id: "s".to_string(),
-                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                        key: "s".to_string(),
-                        value: (),
-                    }),
+                    end: Anchor {
+                        id: x,
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Bold,
                 },
             )
             .unwrap()
-            .apply(
-                Dot::new(2, 2),
-                StyleRegOp {
-                    style_id: "s".to_string(),
-                    op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
-                        elem: Modifier::Bold,
-                    }),
-                },
-            )
-            .unwrap();
-        l.spans = SpanLog::new()
             .apply(
                 Dot::new(3, 0),
                 SpanOp::AddSpan {
@@ -798,7 +758,6 @@ mod tests {
         assert!(leaf_eff(&view, h).is_empty());
         assert!(leaf_own(&view, h).is_empty());
         assert_eq!(own_val(&view, h, ModifierType::Bold), None);
-        assert_eq!(own_no_style(&view, h, ModifierType::Bold), None);
 
         let i = Dot::new(1, 3);
         assert_eq!(view.leaf(i).unwrap().as_char(), Some('i'));
@@ -807,15 +766,14 @@ mod tests {
     }
 
     #[test]
-    fn leaf_modifier_accessors_and_own_no_style() {
-        let pd = doc_styled_xy();
+    fn leaf_modifier_accessors() {
+        let pd = doc_spanned_xy();
         let view = DocView::new(&pd);
         let x = Dot::new(1, 2);
         assert_eq!(own_val(&view, x, ModifierType::Bold), Some(&Modifier::Bold));
-        assert_eq!(own_no_style(&view, x, ModifierType::Bold), None);
         let y = Dot::new(1, 3);
         assert_eq!(
-            own_no_style(&view, y, ModifierType::Italic),
+            own_val(&view, y, ModifierType::Italic),
             Some(&Modifier::Italic)
         );
         assert!(!leaf_eff(&view, x).is_empty());
@@ -865,7 +823,7 @@ mod tests {
 
     #[test]
     fn inline_matches_leaf_state_at() {
-        let pd = doc_styled_xy();
+        let pd = doc_spanned_xy();
         let view = DocView::new(&pd);
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let items = para.inline();
@@ -885,74 +843,13 @@ mod tests {
 
     #[test]
     fn inline_equals_dot_keyed_state() {
-        let pd = doc_styled_xy();
+        let pd = doc_spanned_xy();
         let view = DocView::new(&pd);
         let para = view.root().unwrap().child_blocks().next().unwrap();
         for it in para.inline() {
             assert_eq!(it.effective, leaf_eff(&view, it.dot));
             assert_eq!(it.own_modifiers, leaf_own(&view, it.dot));
         }
-    }
-
-    fn doc_leaf_style_link() -> ProjectedDoc {
-        let para = Dot::new(1, 1);
-        let x = Dot::new(1, 2);
-        let elems = vec![
-            (
-                para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                },
-            ),
-            (x, SeqItem::Char('x')),
-        ];
-        let mut l = logs_of(&elems);
-        l.node_styles = NodeStyleLog::new()
-            .apply(
-                Dot::new(2, 0),
-                NodeLwwOp {
-                    target: x,
-                    op: LwwRegOp::Set {
-                        value: Some("s".to_string()),
-                    },
-                },
-            )
-            .unwrap();
-        l.styles = StyleLog::new()
-            .apply(
-                Dot::new(2, 1),
-                StyleRegOp {
-                    style_id: "s".to_string(),
-                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                        key: "s".to_string(),
-                        value: (),
-                    }),
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(2, 2),
-                StyleRegOp {
-                    style_id: "s".to_string(),
-                    op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
-                        elem: Modifier::Link {
-                            href: "https://example.com".to_string(),
-                        },
-                    }),
-                },
-            )
-            .unwrap();
-        project_document(&l).unwrap()
-    }
-
-    #[test]
-    fn style_link_excluded_from_own_no_style() {
-        let pd = doc_leaf_style_link();
-        let view = DocView::new(&pd);
-        let leaf = Dot::new(1, 2);
-        assert!(own_val(&view, leaf, ModifierType::Link).is_some());
-        assert!(own_no_style(&view, leaf, ModifierType::Link).is_none());
     }
 
     #[test]
@@ -981,13 +878,12 @@ mod tests {
 
     fn arb_projected_doc() -> impl proptest::strategy::Strategy<Value = ProjectedDoc> {
         use proptest::prelude::*;
-        let para_strat = ("[a-c]{0,4}", proptest::bool::ANY, proptest::bool::ANY);
+        let para_strat = ("[a-c]{0,4}", proptest::bool::ANY);
         proptest::collection::vec(para_strat, 1..=2).prop_map(|paras| {
             let mut elems: Vec<(Dot, SeqItem)> = vec![];
             let mut next: u64 = 1;
             let mut bold_leaf: Option<Dot> = None;
-            let mut style_leaf: Option<Dot> = None;
-            for (s, want_bold, want_style) in &paras {
+            for (s, want_bold) in &paras {
                 let para = Dot::new(1, next);
                 next += 1;
                 elems.push((
@@ -1003,9 +899,6 @@ mod tests {
                     elems.push((leaf, SeqItem::Char(ch)));
                     if *want_bold && bold_leaf.is_none() {
                         bold_leaf = Some(leaf);
-                    }
-                    if *want_style && style_leaf.is_none() {
-                        style_leaf = Some(leaf);
                     }
                 }
             }
@@ -1025,42 +918,6 @@ mod tests {
                                 bias: Bias::After,
                             },
                             modifier: Modifier::Bold,
-                        },
-                    )
-                    .unwrap();
-            }
-            if let Some(d) = style_leaf {
-                l.node_styles = l
-                    .node_styles
-                    .apply(
-                        Dot::new(2, 0),
-                        NodeLwwOp {
-                            target: d,
-                            op: LwwRegOp::Set {
-                                value: Some("s".to_string()),
-                            },
-                        },
-                    )
-                    .unwrap();
-                l.styles = StyleLog::new()
-                    .apply(
-                        Dot::new(2, 1),
-                        StyleRegOp {
-                            style_id: "s".to_string(),
-                            op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                                key: "s".to_string(),
-                                value: (),
-                            }),
-                        },
-                    )
-                    .unwrap()
-                    .apply(
-                        Dot::new(2, 2),
-                        StyleRegOp {
-                            style_id: "s".to_string(),
-                            op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
-                                elem: Modifier::Italic,
-                            }),
                         },
                     )
                     .unwrap();

@@ -138,41 +138,6 @@ pub enum ModifierOp {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StyleOp {
-    ApplyToSelection {
-        style_id: String,
-    },
-    UnsetInSelection,
-    CreateFromSelection {
-        style_id: String,
-        name: String,
-    },
-    UpdateFromSelection,
-    Define {
-        style_id: String,
-        name: String,
-        modifiers: Vec<Modifier>,
-    },
-    Delete {
-        style_id: String,
-    },
-    Rename {
-        style_id: String,
-        name: String,
-    },
-    SetModifier {
-        style_id: String,
-        modifier: Modifier,
-    },
-    UnsetModifier {
-        style_id: String,
-        modifier_type: ModifierType,
-    },
-}
-
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionOp {
     Set {
         selection: Selection,
@@ -430,9 +395,6 @@ pub enum Message {
     },
     Modifier {
         op: ModifierOp,
-    },
-    Style {
-        op: StyleOp,
     },
     Node {
         op: NodeOp,

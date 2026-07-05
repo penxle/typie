@@ -20,7 +20,6 @@ fn plain_text(text: String) -> PlainNodeEntry {
     PlainNodeEntry {
         node: PlainNode::Text(PlainTextNode { text }),
         modifiers: BTreeMap::new(),
-        style: None,
         marker: None,
         children: vec![],
     }
@@ -30,7 +29,6 @@ fn plain_para(text: String) -> PlainNodeEntry {
     PlainNodeEntry {
         node: PlainNode::Paragraph(PlainParagraphNode::default()),
         modifiers: BTreeMap::new(),
-        style: None,
         marker: None,
         children: vec![plain_text(text)],
     }
@@ -57,11 +55,9 @@ fn build_large_state(paras: usize, chars_per_para: usize) -> State {
         root: PlainNodeEntry {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: root_modifiers,
-            style: None,
             marker: None,
             children: (0..paras).map(|_| plain_para(text.clone())).collect(),
         },
-        styles: BTreeMap::new(),
     };
     let (state, _handles) = build_state_from_plain(plain);
     state

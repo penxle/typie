@@ -22,7 +22,6 @@ enum EditAction {
     SetInlineModifier { at: usize, len: usize, which: u8 },
     SetBlockModifier { at: usize, value: u32 },
     SetRootModifier { value: u32 },
-    ApplyStyle { at: usize, len: usize, value: u32 },
     SetTableColumnWidths { w0: f32, w1: f32 },
     Undo,
     Redo,
@@ -59,13 +58,6 @@ fn edit_action() -> impl Strategy<Value = EditAction> {
             value,
         }),
         (800u32..4000).prop_map(|value| EditAction::SetRootModifier { value }),
-        (any::<u16>(), 0usize..8, 800u32..4000).prop_map(|(at, len, value)| {
-            EditAction::ApplyStyle {
-                at: at as usize,
-                len,
-                value,
-            }
-        }),
         (20.0f32..400.0, 20.0f32..400.0)
             .prop_map(|(w0, w1)| EditAction::SetTableColumnWidths { w0, w1 }),
         Just(EditAction::Undo),
@@ -125,11 +117,9 @@ fn message_blockquote_fragment() -> Fragment {
             variant: BlockquoteVariant::MessageSent,
         }),
         modifiers: vec![],
-        style: None,
         children: vec![Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
-            style: None,
             children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: "msg".into(),
             }))],
@@ -247,23 +237,6 @@ fn apply_op(editor: &mut Editor, op: &EditAction, table: Dot) {
                 op: ModifierOp::SetOnNode {
                     id: Dot::ROOT,
                     modifier: Modifier::FontSize { value: *value },
-                },
-            });
-        }
-        EditAction::ApplyStyle { at, len, value } => {
-            let s = at % (n + 1);
-            let e = (s + len).min(n);
-            editor.enqueue(sel_flat(s, e));
-            editor.enqueue(Message::Style {
-                op: StyleOp::Define {
-                    style_id: "fuzz".into(),
-                    name: "fuzz".into(),
-                    modifiers: vec![Modifier::FontSize { value: *value }],
-                },
-            });
-            editor.enqueue(Message::Style {
-                op: StyleOp::ApplyToSelection {
-                    style_id: "fuzz".into(),
                 },
             });
         }

@@ -4,7 +4,6 @@ import type { Editor } from '$lib/editor-ffi/editor.svelte';
 // Wire form of editor_crdt Dot::ROOT ("{base62(actor)}_{base62(clock)}").
 // Pinned in crates/editor-crdt/src/dot.rs (root_string_form_is_pinned_for_web_client).
 const ROOT_ID = '0_AzL8n0Y58m8';
-const BASE_STYLE_ID = 'base';
 
 export const defaultPaginatedLayout = (): LayoutMode => ({
   type: 'paginated',
@@ -23,5 +22,5 @@ export const setRootLayoutMode = (editor: Editor | undefined, layout_mode: Layou
 };
 
 export const setRootModifier = (editor: Editor | undefined, modifier: Modifier) => {
-  editor?.enqueue({ type: 'style', op: { type: 'set_modifier', style_id: BASE_STYLE_ID, modifier } });
+  editor?.enqueue({ type: 'modifier', op: { type: 'set_on_node', id: ROOT_ID, modifier } });
 };

@@ -4,7 +4,7 @@ use editor_crdt::Dot;
 use editor_model::Modifier;
 use editor_state::State;
 
-use crate::steps::{set_style, support};
+use crate::steps::support;
 use crate::{HistoryMeta, StepError, Transaction};
 
 /// Builds a transaction that transforms `state` back into `target`. Both states
@@ -14,7 +14,6 @@ pub fn build_revert_transaction(state: &State, target: &State) -> Result<Transac
     let mut tr = Transaction::new(state);
     tr.update_meta(|m| m.history = HistoryMeta::Skip);
     tr.batch::<_, StepError>(|tr| {
-        reconcile_styles(tr, target)?;
         let root = tr
             .view()
             .root()
@@ -29,7 +28,6 @@ pub fn build_revert_transaction(state: &State, target: &State) -> Result<Transac
 fn reconcile_node(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
     reconcile_attrs(tr, target, id)?;
     reconcile_modifiers(tr, target, id)?;
-    reconcile_node_style(tr, target, id)?;
     reconcile_node_marker(tr, target, id)?;
     reconcile_text(tr, target, id)?;
     reconcile_children(tr, target, id)?;
@@ -175,54 +173,6 @@ fn reconcile_attrs(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), 
     Ok(())
 }
 
-fn reconcile_styles(tr: &mut Transaction, target: &State) -> Result<(), StepError> {
-    let target_ids: Vec<String> = target
-        .projected
-        .styles()
-        .registered_entries()
-        .keys()
-        .cloned()
-        .collect();
-    for id in &target_ids {
-        let Some(target_plain) = set_style::capture_style_entry(&target.projected, id) else {
-            continue;
-        };
-        let current_plain = set_style::capture_style_entry(&tr.state().projected, id);
-        if current_plain.as_ref() != Some(&target_plain) {
-            tr.set_style(id.clone(), Some(target_plain))?;
-        }
-    }
-    let current_ids: Vec<String> = tr
-        .state()
-        .projected
-        .styles()
-        .registered_entries()
-        .keys()
-        .cloned()
-        .collect();
-    for id in current_ids {
-        if !target.projected.styles().registered(&id) {
-            tr.set_style(id, None)?;
-        }
-    }
-    Ok(())
-}
-
-fn reconcile_node_style(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
-    let Some(dot) = block_dot(id) else {
-        return Ok(());
-    };
-    if tr.view().node(id).is_none() {
-        return Ok(());
-    }
-    let target_style = target.projected.node_styles().value_of(dot);
-    let current_style = tr.state().projected.node_styles().value_of(dot);
-    if current_style != target_style {
-        tr.set_node_style(id, target_style)?;
-    }
-    Ok(())
-}
-
 fn reconcile_node_marker(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
     let Some(dot) = block_dot(id) else {
         return Ok(());
@@ -245,7 +195,7 @@ mod tests {
     use editor_macros::state;
     use editor_model::{
         CalloutVariant, ModifierType, Node, NodeType, NodeView, PlainCalloutNode, PlainNode,
-        PlainParagraphNode, PlainStyleEntry, Subtree,
+        PlainParagraphNode, Subtree,
     };
 
     fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
@@ -388,75 +338,5 @@ mod tests {
         } else {
             panic!("expected callout");
         }
-    }
-
-    #[test]
-    fn reverts_style_creation() {
-        let (target, ..) = state! {
-            doc { root { p1: paragraph { text("hi") } } }
-            selection: (p1, 0)
-        };
-        let mut pre = Transaction::new(&target);
-        pre.set_style(
-            "s2".into(),
-            Some(PlainStyleEntry {
-                name: "s2".into(),
-                modifiers: std::iter::once(Modifier::Bold).collect(),
-            }),
-        )
-        .unwrap();
-        let (changed, ..) = pre.commit();
-        assert!(changed.projected.styles().registered("s2"));
-
-        let tr = build_revert_transaction(&changed, &target).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert!(!reverted.projected.styles().registered("s2"));
-    }
-
-    #[test]
-    fn reverts_style_deletion() {
-        let (target, ..) = state! {
-            doc {
-                styles { s: "s" [bold] }
-                root { p1: paragraph { text("hi") } }
-            }
-            selection: (p1, 0)
-        };
-        let mut pre = Transaction::new(&target);
-        pre.set_style("s".into(), None).unwrap();
-        let (changed, ..) = pre.commit();
-        assert!(!changed.projected.styles().registered("s"));
-
-        let tr = build_revert_transaction(&changed, &target).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert!(reverted.projected.styles().registered("s"));
-        let mods: Vec<Modifier> = reverted
-            .projected
-            .styles()
-            .style_entry("s")
-            .unwrap()
-            .modifiers
-            .iter()
-            .cloned()
-            .collect();
-        assert_eq!(mods, vec![Modifier::Bold]);
-    }
-
-    #[test]
-    fn reverts_node_style_ref_change() {
-        let (target, p1) = state! {
-            doc {
-                styles { s: "s" [bold] }
-                root { p1: paragraph { text("hi") } }
-            }
-            selection: (p1, 0)
-        };
-        let mut pre = Transaction::new(&target);
-        pre.set_node_style(p1, Some("s".into())).unwrap();
-        let (changed, ..) = pre.commit();
-
-        let tr = build_revert_transaction(&changed, &target).unwrap();
-        let (reverted, ..) = tr.commit();
-        assert_eq!(reverted.projected.node_styles().value_of(p1), None);
     }
 }

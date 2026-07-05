@@ -9,7 +9,6 @@ use crate::doc_macro::codegen::build_modifier_expr;
 pub fn generate(input: &StateInput) -> TokenStream {
     let parts = doc_macro::codegen::generate_parts(&input.doc_tree);
     let root_entry = &parts.root_entry;
-    let style_entries = &parts.style_entries;
 
     let binding_idents: Vec<&Ident> = parts.bindings.iter().map(|(ident, _)| ident).collect();
     let binding_resolves: Vec<TokenStream> = parts
@@ -37,11 +36,6 @@ pub fn generate(input: &StateInput) -> TokenStream {
 
             let __plain = PlainDoc {
                 root: #root_entry,
-                styles: {
-                    let mut __s: BTreeMap<String, PlainStyleEntry> = BTreeMap::new();
-                    #(#style_entries)*
-                    __s
-                },
             };
 
             let (mut state, __handles) =

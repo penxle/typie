@@ -1,6 +1,6 @@
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, Expand, Modifier, ModifierType, NodeType, NodeView, Schema,
+    Alignment, ChildView, DocView, Expand, Modifier, ModifierType, NodeType, NodeView, Schema,
 };
 use editor_state::{PendingModifier, PendingModifiers, Position, ResolvedSelection};
 use strum::IntoEnumIterator;
@@ -16,21 +16,15 @@ pub(crate) fn resolve_effective_modifiers(
     apply_pending_delta(base_modifiers, pending_modifiers)
 }
 
-/// The non-style own modifiers of the char leaf at direct child slot `slot`,
+/// The own modifiers of the char leaf at direct child slot `slot`,
 /// read from its run segment; `None` if the slot doesn't hold a char leaf.
-fn char_leaf_own_no_style(node: &NodeView, slot: usize) -> Option<Vec<(ModifierType, Modifier)>> {
+fn char_leaf_own_values(node: &NodeView, slot: usize) -> Option<Vec<(ModifierType, Modifier)>> {
     let is_char = matches!(node.child_at(slot), Some(ChildView::Leaf(l)) if l.as_char().is_some());
     if !is_char {
         return None;
     }
     let st = node.leaf_state_at(slot)?;
-    Some(
-        st.own
-            .iter()
-            .filter(|(_, o)| !o.from_style)
-            .map(|(t, o)| (*t, o.value.clone()))
-            .collect(),
-    )
+    Some(st.own.iter().map(|(t, o)| (*t, o.value.clone())).collect())
 }
 
 /// Modifiers a fresh char inserted at `offset` within `node` should carry.
@@ -41,8 +35,8 @@ fn char_leaf_own_no_style(node: &NodeView, slot: usize) -> Option<Vec<(ModifierT
 pub(crate) fn resolve_base_modifiers(node: &NodeView, offset: usize) -> Vec<Modifier> {
     let left = offset
         .checked_sub(1)
-        .and_then(|i| char_leaf_own_no_style(node, i));
-    let right = char_leaf_own_no_style(node, offset);
+        .and_then(|i| char_leaf_own_values(node, i));
+    let right = char_leaf_own_values(node, offset);
 
     let mid = match (&left, &right) {
         (Some(l), Some(r)) => l == r,
@@ -206,6 +200,30 @@ pub(crate) fn is_unit_variant(modifier: &Modifier) -> bool {
         modifier,
         Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough
     )
+}
+
+pub(crate) fn is_table_justify(view: &DocView, id: Dot, modifier: &Modifier) -> bool {
+    matches!(
+        modifier,
+        Modifier::Alignment {
+            value: Alignment::Justify
+        }
+    ) && view
+        .node(id)
+        .is_some_and(|n| n.node_type() == NodeType::Table)
+}
+
+pub(crate) fn matches_modifier_context(
+    view: &DocView,
+    id: Dot,
+    modifier_type: ModifierType,
+) -> bool {
+    let Some(node) = view.node(id) else {
+        return true;
+    };
+    let mut path: Vec<NodeType> = node.ancestors().map(|a| a.node_type()).collect();
+    path.reverse();
+    Schema::modifier_spec(modifier_type).context.matches(&path)
 }
 
 pub(crate) fn apply_modifier_to_node(

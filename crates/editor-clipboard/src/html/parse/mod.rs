@@ -23,7 +23,7 @@ fn body_selector() -> &'static Selector {
 
 fn meta_data_slice_selector() -> &'static Selector {
     static S: OnceLock<Selector> = OnceLock::new();
-    S.get_or_init(|| Selector::parse("meta[data-slice]").expect("meta selector"))
+    S.get_or_init(|| Selector::parse("meta[data-slice-v2]").expect("meta selector"))
 }
 
 pub fn from_html(html: &str, resource: &Resource) -> Slice {
@@ -50,7 +50,7 @@ pub fn from_html(html: &str, resource: &Resource) -> Slice {
 
 fn extract_meta_slice(doc: &Html) -> Option<Slice> {
     let meta = doc.select(meta_data_slice_selector()).next()?;
-    let b64 = meta.value().attr("data-slice")?;
+    let b64 = meta.value().attr("data-slice-v2")?;
     let bytes = STANDARD.decode(b64.as_bytes()).ok()?;
     let s = std::str::from_utf8(&bytes).ok()?;
     serde_json::from_str(s).ok()
@@ -70,7 +70,6 @@ fn fallback_body_parse(doc: &Html, resource: &Resource) -> Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
-            style: None,
             children: crate::html::parse::schema_normalize::normalize(children),
         },
         open_start: 0,
@@ -210,8 +209,30 @@ mod tests {
 
     #[test]
     fn from_html_invalid_meta_falls_back_to_body() {
-        let html = r#"<meta data-slice="!!!notbase64!!!" data-version="1"><div data-root><p>hello</p></div>"#;
+        let html = r#"<meta data-slice-v2="!!!notbase64!!!" data-version="1"><div data-root><p>hello</p></div>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
+        assert_eq!(slice.fragment.children.len(), 1);
+        assert!(matches!(
+            slice.fragment.children[0].node,
+            PlainNode::Paragraph(_)
+        ));
+    }
+
+    #[test]
+    fn from_html_legacy_v1_meta_attribute_is_unrecognized_and_falls_back() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let original = Slice::extract(&s).unwrap();
+        let html = original.to_html();
+        let legacy_html = html.replacen("data-slice-v2=", "data-slice=", 1);
+
+        let slice = Slice::from_html(&legacy_html, &Resource::new_test());
+        assert_ne!(
+            slice, original,
+            "a v1-named meta payload must not be decoded as the current schema"
+        );
         assert_eq!(slice.fragment.children.len(), 1);
         assert!(matches!(
             slice.fragment.children[0].node,
@@ -401,11 +422,9 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
-                style: None,
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
-                    style: None,
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode { text: "x".into() }))
                             .with_modifiers(vec![

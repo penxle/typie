@@ -23,6 +23,7 @@ import type {
   InteractiveHit,
   LinkRect,
   Message,
+  Modifier,
   ModifierState,
   ModifierType,
   PageRect,
@@ -35,12 +36,9 @@ import type {
   SelectionEndpoints,
   Size,
   StableSelection,
-  StyleInfo,
-  StyleRefValue,
   TableOverlay,
   ThemeVariant,
   TrackedRange,
-  Tri,
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
@@ -292,15 +290,13 @@ export class Editor {
   #tableOverlaysCache: { rev: number; value: TableOverlay[] } | undefined;
   #linkRectsCache: { rev: number; value: LinkRect[] } | undefined;
   #rootAttrs = $state<PlainRootNode>();
+  #rootModifiers = $state<Modifier[]>();
   #modifierState = $state<ModifierState | undefined>();
   #blockState = $state<BlockState | undefined>();
-  #styleEntries = $state<StyleInfo[]>([]);
-  #appliedStyle = $state<Tri<StyleRefValue>>({ type: 'absent' });
-  #styleDivergence = $state(false);
   // While a pointer selection drag is active, the toolbar-state queries
-  // (applied_style/style_divergence/modifier_state/block_state — expensive on
-  // range selections) are deferred: the toolbar only needs the final selection,
-  // so we pull once on release instead of every drag frame.
+  // (modifier_state/block_state — expensive on range selections) are
+  // deferred: the toolbar only needs the final selection, so we pull once on
+  // release instead of every drag frame.
   #toolbarSyncSuspended = false;
   #toolbarSyncPending = false;
   #focused = $state(false);
@@ -402,8 +398,12 @@ export class Editor {
       this.#rootAttrs = this.#wasm.root_attrs();
     }
 
+    if (fields.includes('block') || fields.includes('modifiers')) {
+      this.#rootModifiers = this.#wasm.root_modifiers();
+    }
+
     if (this.#toolbarSyncSuspended) {
-      if (fields.includes('modifiers') || fields.includes('block') || fields.includes('styles')) {
+      if (fields.includes('modifiers') || fields.includes('block')) {
         this.#toolbarSyncPending = true;
       }
     } else {
@@ -413,15 +413,6 @@ export class Editor {
 
       if (fields.includes('block')) {
         this.#blockState = this.#wasm.block_state();
-      }
-
-      if (fields.includes('styles')) {
-        this.#styleEntries = this.#wasm.style_entries();
-        this.#appliedStyle = this.#wasm.applied_style();
-      }
-
-      if (fields.includes('styles') || fields.includes('modifiers')) {
-        this.#styleDivergence = this.#wasm.style_divergence();
       }
     }
 
@@ -853,7 +844,7 @@ export class Editor {
   }
 
   get rootModifiers() {
-    return this.#styleEntries.find((s) => s.id === 'base')?.modifiers;
+    return this.#rootModifiers;
   }
 
   get modifierState() {
@@ -866,18 +857,6 @@ export class Editor {
 
   get lastHistoryTag() {
     return this.#lastHistoryTag;
-  }
-
-  get styleEntries() {
-    return this.#styleEntries;
-  }
-
-  get appliedStyle() {
-    return this.#appliedStyle;
-  }
-
-  get styleDivergence() {
-    return this.#styleDivergence;
   }
 
   get scaleFactor() {
@@ -1249,9 +1228,6 @@ export class Editor {
     if (this.#destroyed) return;
     this.#modifierState = this.#wasm.modifier_state();
     this.#blockState = this.#wasm.block_state();
-    this.#styleEntries = this.#wasm.style_entries();
-    this.#appliedStyle = this.#wasm.applied_style();
-    this.#styleDivergence = this.#wasm.style_divergence();
   }
 
   attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {

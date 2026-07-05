@@ -16,8 +16,6 @@ mod projection;
 mod schema;
 mod seq;
 mod span;
-mod style;
-mod style_log;
 mod subtree;
 mod view;
 
@@ -41,8 +39,6 @@ pub use projection::*;
 pub use schema::*;
 pub use seq::*;
 pub use span::*;
-pub use style::*;
-pub use style_log::*;
 pub use subtree::*;
 pub use view::{ChildView, DocView, InlineItem, InlineKind, LeafStateRef, LeafView, NodeView};
 

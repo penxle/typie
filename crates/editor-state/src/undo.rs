@@ -3,14 +3,13 @@ use std::time::Duration;
 use editor_common::HistoryTag;
 use editor_common::time::Instant;
 
-use editor_crdt::{ListOp, LwwRegOp, Op, OrMapOp, OrSetOp};
+use editor_crdt::{ListOp, LwwRegOp, Op};
 use editor_model::{
     EditOp, Marker, Modifier, ModifierAttrOp, NodeAttr, NodeAttrOp, NodeLwwOp, NodeType, SpanOp,
-    StyleOp, StyleRegOp,
 };
 
 use crate::projected_state::ProjectedState;
-use crate::{Composition, PendingModifiers, PendingStyle, StableSelection};
+use crate::{Composition, PendingModifiers, StableSelection};
 
 /// Editor state restored alongside a doc undo/redo: the caret/selection and the
 /// transient IME/pending overlays that the op-level history does not encode as
@@ -28,16 +27,12 @@ pub struct TransientState {
     pub selection: Option<StableSelection>,
     pub composition: Option<Composition>,
     pub pending_modifiers: PendingModifiers,
-    pub pending_style: Option<PendingStyle>,
 }
 
 pub enum PriorValue {
     BlockModifier(Option<Modifier>),
     NodeAttr(NodeAttr),
-    NodeStyle(Option<String>),
     NodeMarker(Option<Marker>),
-    StyleName(String),
-    StyleModifier(Modifier),
     SpanModifier(Modifier),
 }
 
@@ -297,9 +292,6 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
                 .cloned();
             Some(PriorValue::BlockModifier(prior))
         }
-        EditOp::NodeStyle(NodeLwwOp { target, .. }) => {
-            Some(PriorValue::NodeStyle(state.node_styles().value_of(*target)))
-        }
         EditOp::NodeMarker(NodeLwwOp { target, .. }) => Some(PriorValue::NodeMarker(
             state.node_markers().value_of(*target),
         )),
@@ -318,49 +310,11 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
                 .find(|a| std::mem::discriminant(a) == target_disc)?;
             Some(PriorValue::NodeAttr(prior_attr))
         }
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Name(_),
+        EditOp::Span(SpanOp::RemoveSpan {
+            start,
+            end,
+            modifier_type,
         }) => {
-            let prior = state
-                .styles()
-                .style_entry(style_id)
-                .map(|e| e.name.get().clone())
-                .unwrap_or_default();
-            Some(PriorValue::StyleName(prior))
-        }
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Modifiers(OrSetOp::Remove { observed }),
-        }) => {
-            let observed_dot = *observed;
-            let found = state.styles().iter().find_map(|(dot, reg)| {
-                if reg.style_id != *style_id {
-                    return None;
-                }
-                if *dot != observed_dot {
-                    return None;
-                }
-                if let StyleOp::Modifiers(OrSetOp::Add { elem }) = &reg.op {
-                    Some(elem.clone())
-                } else {
-                    None
-                }
-            });
-            found.map(PriorValue::StyleModifier)
-        }
-        EditOp::Span(
-            SpanOp::RemoveSpan {
-                start,
-                end,
-                modifier_type,
-            }
-            | SpanOp::ClearSpan {
-                start,
-                end,
-                modifier_type,
-            },
-        ) => {
             let found = state.spans().iter().find_map(|(_, span_op)| {
                 if let SpanOp::AddSpan {
                     start: s,
@@ -451,24 +405,6 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
             })],
             _ => Vec::new(),
         },
-        EditOp::Span(SpanOp::ClearSpan {
-            start,
-            end,
-            modifier_type,
-        }) => match &ro.prior {
-            Some(PriorValue::SpanModifier(modifier)) => vec![EditOp::Span(SpanOp::AddSpan {
-                start: *start,
-                end: *end,
-                modifier: modifier.clone(),
-            })],
-            // No explicit span preceded the clear: the cleared value came from a node
-            // style or inheritance. Cancel the clear so that layer shows through again.
-            _ => vec![EditOp::Span(SpanOp::RemoveSpan {
-                start: *start,
-                end: *end,
-                modifier_type: *modifier_type,
-            })],
-        },
         EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier }) => {
             match &ro.prior {
                 Some(PriorValue::BlockModifier(Some(prior_m))) => {
@@ -497,15 +433,6 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
                 _ => Vec::new(),
             }
         }
-        EditOp::NodeStyle(NodeLwwOp { target, .. }) => match &ro.prior {
-            Some(PriorValue::NodeStyle(prior)) => vec![EditOp::NodeStyle(NodeLwwOp {
-                target: *target,
-                op: LwwRegOp::Set {
-                    value: prior.clone(),
-                },
-            })],
-            _ => Vec::new(),
-        },
         EditOp::NodeMarker(NodeLwwOp { target, .. }) => match &ro.prior {
             Some(PriorValue::NodeMarker(prior)) => vec![EditOp::NodeMarker(NodeLwwOp {
                 target: *target,
@@ -522,56 +449,6 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
             })],
             _ => Vec::new(),
         },
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Name(_),
-        }) => match &ro.prior {
-            Some(PriorValue::StyleName(prior_name)) => vec![EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Name(LwwRegOp::Set {
-                    value: prior_name.clone(),
-                }),
-            })],
-            _ => Vec::new(),
-        },
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Modifiers(OrSetOp::Add { .. }),
-        }) => vec![EditOp::Style(StyleRegOp {
-            style_id: style_id.clone(),
-            op: StyleOp::Modifiers(OrSetOp::Remove { observed: dot }),
-        })],
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Modifiers(OrSetOp::Remove { .. }),
-        }) => match &ro.prior {
-            Some(PriorValue::StyleModifier(prior_mod)) => vec![EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Modifiers(OrSetOp::Add {
-                    elem: prior_mod.clone(),
-                }),
-            })],
-            _ => Vec::new(),
-        },
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Presence(OrMapOp::Set { key: _, .. }),
-        }) => vec![EditOp::Style(StyleRegOp {
-            style_id: style_id.clone(),
-            op: StyleOp::Presence(OrMapOp::Unset {
-                observed: vec![dot],
-            }),
-        })],
-        EditOp::Style(StyleRegOp {
-            style_id,
-            op: StyleOp::Presence(OrMapOp::Unset { .. }),
-        }) => vec![EditOp::Style(StyleRegOp {
-            style_id: style_id.clone(),
-            op: StyleOp::Presence(OrMapOp::Set {
-                key: style_id.clone(),
-                value: (),
-            }),
-        })],
     }
 }
 
@@ -581,11 +458,10 @@ mod tests {
 
     use editor_common::time::Instant;
 
-    use editor_crdt::{ListOp, LwwRegOp, OrMapOp, OrSetOp};
+    use editor_crdt::ListOp;
     use editor_model::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, EditOp, Modifier, ModifierAttrOp,
-        ModifierType, NodeAttr, NodeAttrOp, NodeLwwOp, NodeType, SeqItem, SpanOp, StyleOp,
-        StyleRegOp,
+        ModifierType, NodeAttr, NodeAttrOp, NodeType, SeqItem, SpanOp,
     };
 
     use super::{
@@ -1053,132 +929,6 @@ mod tests {
         );
     }
 
-    fn style_with_color(
-        state: &mut ProjectedState,
-        style_id: &str,
-        color: &str,
-        leaf: editor_crdt::Dot,
-    ) {
-        state
-            .apply(EditOp::Style(StyleRegOp {
-                style_id: style_id.to_string(),
-                op: StyleOp::Presence(OrMapOp::Set {
-                    key: style_id.to_string(),
-                    value: (),
-                }),
-            }))
-            .unwrap();
-        state
-            .apply(EditOp::Style(StyleRegOp {
-                style_id: style_id.to_string(),
-                op: StyleOp::Modifiers(OrSetOp::Add {
-                    elem: Modifier::TextColor {
-                        value: color.to_string(),
-                    },
-                }),
-            }))
-            .unwrap();
-        state
-            .apply(EditOp::NodeStyle(NodeLwwOp {
-                target: leaf,
-                op: LwwRegOp::Set {
-                    value: Some(style_id.to_string()),
-                },
-            }))
-            .unwrap();
-    }
-
-    fn effective_color(state: &ProjectedState, leaf: editor_crdt::Dot) -> Option<Modifier> {
-        state
-            .view()
-            .leaf_state_by_dot_slow(leaf)
-            .unwrap()
-            .eff
-            .get(&ModifierType::TextColor)
-            .cloned()
-    }
-
-    #[test]
-    fn span_add_undo_over_style_restores_style_value() {
-        let mut state = ProjectedState::empty();
-        let x_dot = state.apply(seq_char(1, 'x')).unwrap().id;
-        style_with_color(&mut state, "c", "#ffff00", x_dot);
-
-        let ro = record_op(
-            &mut state,
-            EditOp::Span(SpanOp::AddSpan {
-                start: Anchor {
-                    id: x_dot,
-                    bias: Bias::Before,
-                },
-                end: Anchor {
-                    id: x_dot,
-                    bias: Bias::After,
-                },
-                modifier: Modifier::TextColor {
-                    value: "#ff0000".to_string(),
-                },
-            }),
-        );
-        assert_eq!(
-            effective_color(&state, x_dot),
-            Some(Modifier::TextColor {
-                value: "#ff0000".to_string()
-            })
-        );
-
-        let mut history = UndoHistory::new(Duration::from_secs(1));
-        history.record(single_entry(ro), Instant::now());
-        history.undo(&mut state, TransientState::default());
-
-        assert_eq!(
-            effective_color(&state, x_dot),
-            Some(Modifier::TextColor {
-                value: "#ffff00".to_string()
-            }),
-            "undo of AddSpan over a styled leaf must fall back to the style value"
-        );
-    }
-
-    #[test]
-    fn span_clear_undo_over_style_restores_style_value() {
-        let mut state = ProjectedState::empty();
-        let x_dot = state.apply(seq_char(1, 'x')).unwrap().id;
-        style_with_color(&mut state, "c", "#ffff00", x_dot);
-
-        let ro = record_op(
-            &mut state,
-            EditOp::Span(SpanOp::ClearSpan {
-                start: Anchor {
-                    id: x_dot,
-                    bias: Bias::Before,
-                },
-                end: Anchor {
-                    id: x_dot,
-                    bias: Bias::After,
-                },
-                modifier_type: ModifierType::TextColor,
-            }),
-        );
-        assert_eq!(
-            effective_color(&state, x_dot),
-            None,
-            "explicit clear must block the style value"
-        );
-
-        let mut history = UndoHistory::new(Duration::from_secs(1));
-        history.record(single_entry(ro), Instant::now());
-        history.undo(&mut state, TransientState::default());
-
-        assert_eq!(
-            effective_color(&state, x_dot),
-            Some(Modifier::TextColor {
-                value: "#ffff00".to_string()
-            }),
-            "undo of a clear with no prior span must let the style show again"
-        );
-    }
-
     #[test]
     fn block_modifier_set_undo_restores_to_none() {
         let mut state = ProjectedState::empty();
@@ -1228,40 +978,6 @@ mod tests {
                 .get(&ModifierType::Alignment),
             None,
             "undo of SetModifier(Alignment) must clear it back to None"
-        );
-    }
-
-    #[test]
-    fn node_style_set_undo_restores_to_prior() {
-        let mut state = ProjectedState::empty();
-
-        let x_dot = state.apply(seq_char(1, 'x')).unwrap().id;
-
-        assert_eq!(state.node_styles().value_of(x_dot), None);
-
-        let ro = record_op(
-            &mut state,
-            EditOp::NodeStyle(NodeLwwOp {
-                target: x_dot,
-                op: LwwRegOp::Set {
-                    value: Some("my-style".to_string()),
-                },
-            }),
-        );
-
-        assert_eq!(
-            state.node_styles().value_of(x_dot),
-            Some("my-style".to_string())
-        );
-
-        let mut history = UndoHistory::new(Duration::from_secs(1));
-        history.record(single_entry(ro), Instant::now());
-        history.undo(&mut state, TransientState::default());
-
-        assert_eq!(
-            state.node_styles().value_of(x_dot),
-            None,
-            "undo of NodeStyle Set must restore prior None"
         );
     }
 
@@ -1325,113 +1041,6 @@ mod tests {
             get_variant(&state),
             Some(CalloutVariant::Info),
             "undo of NodeAttr must restore prior variant (Info)"
-        );
-    }
-
-    #[test]
-    fn style_name_set_undo_restores_prior_name() {
-        let mut state = ProjectedState::empty();
-        let style_id = "s1".to_string();
-
-        state
-            .apply(EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Presence(OrMapOp::Set {
-                    key: style_id.clone(),
-                    value: (),
-                }),
-            }))
-            .unwrap();
-
-        let name_op_first = EditOp::Style(StyleRegOp {
-            style_id: style_id.clone(),
-            op: StyleOp::Name(LwwRegOp::Set {
-                value: "first-name".to_string(),
-            }),
-        });
-        state.apply(name_op_first).unwrap();
-
-        assert_eq!(
-            state
-                .styles()
-                .style_entry(&style_id)
-                .map(|e| e.name.get().clone()),
-            Some("first-name".to_string())
-        );
-
-        let ro = record_op(
-            &mut state,
-            EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Name(LwwRegOp::Set {
-                    value: "second-name".to_string(),
-                }),
-            }),
-        );
-
-        assert_eq!(
-            state
-                .styles()
-                .style_entry(&style_id)
-                .map(|e| e.name.get().clone()),
-            Some("second-name".to_string())
-        );
-
-        let mut history = UndoHistory::new(Duration::from_secs(1));
-        history.record(single_entry(ro), Instant::now());
-        history.undo(&mut state, TransientState::default());
-
-        assert_eq!(
-            state
-                .styles()
-                .style_entry(&style_id)
-                .map(|e| e.name.get().clone()),
-            Some("first-name".to_string()),
-            "undo of Style Name Set must restore the prior name"
-        );
-    }
-
-    #[test]
-    fn style_modifiers_add_undo_removes_modifier() {
-        let mut state = ProjectedState::empty();
-        let style_id = "s2".to_string();
-
-        state
-            .apply(EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Presence(OrMapOp::Set {
-                    key: style_id.clone(),
-                    value: (),
-                }),
-            }))
-            .unwrap();
-
-        let ro = record_op(
-            &mut state,
-            EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Modifiers(OrSetOp::Add {
-                    elem: Modifier::Italic,
-                }),
-            }),
-        );
-
-        let has_italic = |s: &ProjectedState| {
-            s.styles()
-                .style_entry(&style_id)
-                .map(|e| e.modifiers.contains(&Modifier::Italic))
-                .unwrap_or(false)
-        };
-
-        assert!(has_italic(&state), "Italic must be present after Add");
-
-        let mut history = UndoHistory::new(Duration::from_secs(1));
-        history.record(single_entry(ro), Instant::now());
-        history.undo(&mut state, TransientState::default());
-
-        assert!(
-            !has_italic(&state),
-            "undo of Style Modifiers Add must remove Italic"
         );
     }
 

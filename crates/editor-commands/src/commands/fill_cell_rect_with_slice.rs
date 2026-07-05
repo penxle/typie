@@ -60,7 +60,6 @@ fn slice_to_cell_blocks(slice: &Slice) -> Vec<Fragment> {
             out.push(Fragment {
                 node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
-                style: None,
                 children: std::mem::take(run),
             });
         }

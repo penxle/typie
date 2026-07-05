@@ -1,6 +1,6 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::{Position, leaf_span_in_range};
+use editor_state::{PendingModifier, PendingModifiers, Position, leaf_span_in_range};
 use editor_transaction::Transaction;
 
 use crate::helpers::is_text_applicable;
@@ -19,6 +19,11 @@ pub fn edit_modifier(
             modifier_type,
             m.as_type()
         )));
+    }
+    if let Some(m) = &modifier
+        && !m.is_valid()
+    {
+        return Ok(false);
     }
     if !is_text_applicable(modifier_type) {
         return Err(CommandError::InvalidArgument(format!(
@@ -97,6 +102,21 @@ fn edit_modifier_collapsed(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
+    if !matches!(modifier_type, ModifierType::Link | ModifierType::Ruby) {
+        let mut pending: PendingModifiers = tr
+            .pending_modifiers()
+            .iter()
+            .filter(|pm| pm.as_type() != modifier_type)
+            .cloned()
+            .collect();
+        pending.push(match modifier {
+            Some(m) => PendingModifier::Set { modifier: m },
+            None => PendingModifier::Unset { ty: modifier_type },
+        });
+        tr.set_pending_modifiers(pending)?;
+        return Ok(true);
+    }
+
     let pos: Position = tr
         .selection()
         .expect("entry caller guaranteed selection")
@@ -112,7 +132,7 @@ fn edit_modifier_collapsed(
 
     match modifier {
         Some(m) => tr.add_span_modifier(first, last, m)?,
-        None => tr.clear_span_modifier(first, last, reference)?,
+        None => tr.remove_span_modifier(first, last, reference)?,
     }
     Ok(true)
 }
@@ -144,7 +164,7 @@ fn edit_modifier_range(
         }
         None => {
             if let Some(present) = present {
-                tr.clear_span_modifier(first, last, present)?;
+                tr.remove_span_modifier(first, last, present)?;
             }
         }
     }
@@ -311,6 +331,104 @@ mod tests {
             })
         ));
         assert!(matches!(err, CommandError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn collapsed_background_color_none_updates_pending_not_document() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            None,
+        ));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+            pending_modifiers: [!background_color]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_background_color_set_updates_pending_not_document() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            Some(Modifier::BackgroundColor {
+                value: "red".to_string()
+            }),
+        ));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+            pending_modifiers: [background_color("red".to_string())]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_background_none_adjacent_to_painted_run_leaves_run_intact() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph {
+                text("Hello") [background_color("red".to_string())]
+            } } }
+            selection: (p1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            None,
+        ));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {
+                text("Hello") [background_color("red".to_string())]
+            } } }
+            selection: (p1, 3)
+            pending_modifiers: [!background_color]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_pending_edit_preserves_other_pending() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+            pending_modifiers: [italic]
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            None,
+        ));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 3)
+            pending_modifiers: [italic, !background_color]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn empty_href_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        transact_fail!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::Link,
+            Some(Modifier::Link {
+                href: String::new()
+            })
+        ));
     }
 
     #[test]

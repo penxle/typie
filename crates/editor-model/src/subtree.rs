@@ -6,7 +6,6 @@ use crate::nodes::PlainNode;
 pub struct Subtree {
     pub node: PlainNode,
     pub modifiers: Vec<Modifier>,
-    pub style: Option<String>,
     pub marker: Option<Marker>,
     pub children: Vec<Subtree>,
 }
@@ -16,7 +15,6 @@ impl Subtree {
         Self {
             node,
             modifiers: vec![],
-            style: None,
             marker: None,
             children: vec![],
         }

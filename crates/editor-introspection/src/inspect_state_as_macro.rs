@@ -10,7 +10,6 @@ enum Disp<'a> {
     Text {
         text: String,
         modifiers: Vec<Modifier>,
-        style: Option<String>,
     },
     Atom {
         leaf: LeafView<'a>,
@@ -18,18 +17,14 @@ enum Disp<'a> {
     },
 }
 
-fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>> {
+fn display_children<'a>(node: &NodeView<'a>) -> Vec<Disp<'a>> {
     let mut out: Vec<Disp<'a>> = Vec::new();
-    let mut run: Option<(String, Vec<Modifier>, Option<String>)> = None;
+    let mut run: Option<(String, Vec<Modifier>)> = None;
     for (slot, child) in node.children().enumerate() {
         match child {
             ChildView::Block(b) => {
-                if let Some((text, modifiers, style)) = run.take() {
-                    out.push(Disp::Text {
-                        text,
-                        modifiers,
-                        style,
-                    });
+                if let Some((text, modifiers)) = run.take() {
+                    out.push(Disp::Text { text, modifiers });
                 }
                 out.push(Disp::Block(b));
             }
@@ -39,30 +34,21 @@ fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>>
                         .leaf_state_at(slot)
                         .map(|s| explicit_leaf_mods(s.own))
                         .unwrap_or_default();
-                    let style = pd.node_styles.get(&l.dot()).and_then(|o| o.clone());
-                    let extend = matches!(&run, Some((_, m, s)) if *m == modifiers && *s == style);
+                    let extend = matches!(&run, Some((_, m)) if *m == modifiers);
                     if extend {
-                        if let Some((text, _, _)) = run.as_mut() {
+                        if let Some((text, _)) = run.as_mut() {
                             text.push(c);
                         }
                     } else {
-                        if let Some((text, modifiers, style)) = run.take() {
-                            out.push(Disp::Text {
-                                text,
-                                modifiers,
-                                style,
-                            });
+                        if let Some((text, modifiers)) = run.take() {
+                            out.push(Disp::Text { text, modifiers });
                         }
-                        run = Some((c.to_string(), modifiers, style));
+                        run = Some((c.to_string(), modifiers));
                     }
                 }
                 None => {
-                    if let Some((text, modifiers, style)) = run.take() {
-                        out.push(Disp::Text {
-                            text,
-                            modifiers,
-                            style,
-                        });
+                    if let Some((text, modifiers)) = run.take() {
+                        out.push(Disp::Text { text, modifiers });
                     }
                     let modifiers = node
                         .leaf_state_at(slot)
@@ -73,12 +59,8 @@ fn display_children<'a>(node: &NodeView<'a>, pd: &ProjectedDoc) -> Vec<Disp<'a>>
             },
         }
     }
-    if let Some((text, modifiers, style)) = run.take() {
-        out.push(Disp::Text {
-            text,
-            modifiers,
-            style,
-        });
+    if let Some((text, modifiers)) = run.take() {
+        out.push(Disp::Text { text, modifiers });
     }
     out
 }
@@ -102,14 +84,10 @@ fn explicit_block_mods(pd: &ProjectedDoc, dot: editor_crdt::Dot) -> Vec<Modifier
     mods
 }
 
-/// Modifiers explicitly applied to a leaf via spans (excluding style-derived and
-/// inherited modifiers).
+/// Modifiers explicitly applied to a leaf via spans (excluding inherited
+/// modifiers).
 fn explicit_leaf_mods(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
-    let mut mods: Vec<Modifier> = own
-        .values()
-        .filter(|o| !o.from_style)
-        .map(|o| o.value.clone())
-        .collect();
+    let mut mods: Vec<Modifier> = own.values().map(|o| o.value.clone()).collect();
     mods.sort_by_key(|m| m.as_type());
     mods
 }
@@ -124,17 +102,14 @@ pub fn inspect_state_as_macro(state: &State) -> String {
     write_indent(&mut output, 1);
     output.push_str("doc {\n");
 
-    write_styles_macro(pd, &mut output);
-
     let root = view.root().unwrap();
-    let children = display_children(&root, pd);
+    let children = display_children(&root);
 
     write_indent(&mut output, 2);
     if let Some(l) = labeler.label(root.id()) {
         write!(output, "{l}: ").unwrap();
     }
     output.push_str("root");
-    write_node_style(&root, pd, &mut output);
     write_modifiers_macro(
         &non_default_root_modifiers(&explicit_block_mods(pd, root.id())),
         &mut output,
@@ -183,12 +158,11 @@ fn write_macro_node(
             let type_name: &str = node.node_type().into();
             write!(output, "{type_name}").unwrap();
 
-            write_node_style(node, pd, output);
             write_node_attrs_macro(&node.node(), output);
             write_modifiers_macro(&explicit_block_mods(pd, node.id()), output);
             write_node_marker_macro(node, pd, output);
 
-            let children = display_children(node, pd);
+            let children = display_children(node);
             if children.is_empty() {
                 output.push_str(" {}\n");
             } else {
@@ -200,16 +174,9 @@ fn write_macro_node(
                 output.push_str("}\n");
             }
         }
-        Disp::Text {
-            text,
-            modifiers,
-            style,
-        } => {
+        Disp::Text { text, modifiers } => {
             output.push_str("text");
             write!(output, "(\"{}\")", escape_str(text)).unwrap();
-            if let Some(style_id) = style {
-                write!(output, " @{style_id}").unwrap();
-            }
             write_modifiers_macro(modifiers, output);
             output.push('\n');
         }
@@ -221,50 +188,10 @@ fn write_macro_node(
             let type_name: &str = leaf.node_type().into();
             write!(output, "{type_name}").unwrap();
 
-            write_leaf_style_macro(leaf, pd, output);
             write_node_attrs_macro(&atom_node(leaf, pd), output);
             write_modifiers_macro(modifiers, output);
             output.push('\n');
         }
-    }
-}
-
-fn write_styles_macro(pd: &ProjectedDoc, output: &mut String) {
-    let mut styles: Vec<(&String, &StyleEntry)> = pd.styles.iter().collect();
-    if styles.is_empty() {
-        return;
-    }
-    styles.sort_by(|a, b| a.0.cmp(b.0));
-
-    write_indent(output, 2);
-    output.push_str("styles {\n");
-    for (id, entry) in styles {
-        write_indent(output, 3);
-        let name = entry.name.get();
-        let mut mods: Vec<Modifier> = entry.modifiers.iter().cloned().collect();
-        mods.sort_by_key(|m| m.as_type());
-
-        if name == id && !mods.is_empty() {
-            write!(output, "{id}:").unwrap();
-        } else {
-            write!(output, "{id}: \"{}\"", escape_str(name)).unwrap();
-        }
-        write_modifiers_macro(&mods, output);
-        output.push('\n');
-    }
-    write_indent(output, 2);
-    output.push_str("}\n");
-}
-
-fn write_node_style(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
-    if let Some(style_id) = pd.node_styles.get(&node.id()).and_then(|o| o.as_ref()) {
-        write!(output, " @{style_id}").unwrap();
-    }
-}
-
-fn write_leaf_style_macro(leaf: &LeafView, pd: &ProjectedDoc, output: &mut String) {
-    if let Some(style_id) = pd.node_styles.get(&leaf.dot()).and_then(|o| o.as_ref()) {
-        write!(output, " @{style_id}").unwrap();
     }
 }
 
@@ -278,27 +205,16 @@ fn write_node_marker_macro(node: &NodeView, pd: &ProjectedDoc, output: &mut Stri
         return;
     };
     output.push_str(" marker(");
-    let has_style = if let Some(style_id) = &marker.style {
-        write!(output, "@{style_id}").unwrap();
-        true
-    } else {
-        false
-    };
-    if !marker.modifiers.is_empty() {
-        if has_style {
-            output.push(' ');
+    let mut mods: Vec<Modifier> = marker.modifiers.clone();
+    mods.sort_by_key(|m| m.as_type());
+    output.push('[');
+    for (i, m) in mods.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
         }
-        let mut mods: Vec<Modifier> = marker.modifiers.clone();
-        mods.sort_by_key(|m| m.as_type());
-        output.push('[');
-        for (i, m) in mods.iter().enumerate() {
-            if i > 0 {
-                output.push_str(", ");
-            }
-            write_modifier_macro(m, output);
-        }
-        output.push(']');
+        write_modifier_macro(m, output);
     }
+    output.push(']');
     output.push(')');
 }
 
@@ -718,52 +634,6 @@ state! {
     }
 
     #[test]
-    fn styles_block_and_node_reference() {
-        let (state, ..) = state! {
-            doc {
-                styles {
-                    heading: "제목 1" [bold, font_size(2400)]
-                    body: [italic]
-                }
-                root {
-                    p1: paragraph @heading {
-                        text("Hello")
-                    }
-                }
-            }
-            selection: (p1, 0)
-        };
-        let output = inspect_state_as_macro(&state);
-        assert!(
-            output.contains(
-                "        styles {\n            body: [italic]\n            heading: \"제목 1\" [bold, font_size(2400)]\n        }\n"
-            ),
-            "got:\n{output}"
-        );
-        assert!(output.contains("paragraph @heading {"), "got:\n{output}");
-    }
-
-    #[test]
-    fn marker_with_style_and_modifiers() {
-        let (state, ..) = state! {
-            doc {
-                styles {
-                    s1: [italic]
-                }
-                root {
-                    p1: paragraph marker(@s1 [bold]) {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        let output = inspect_state_as_macro(&state);
-        assert!(
-            output.contains("paragraph marker(@s1 [bold]) {}"),
-            "got:\n{output}"
-        );
-    }
-
-    #[test]
     fn marker_with_modifiers_only() {
         let (state, ..) = state! {
             doc {
@@ -781,26 +651,6 @@ state! {
     }
 
     #[test]
-    fn marker_with_style_only() {
-        let (state, ..) = state! {
-            doc {
-                styles {
-                    s1: [italic]
-                }
-                root {
-                    p1: paragraph marker(@s1) {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        let output = inspect_state_as_macro(&state);
-        assert!(
-            output.contains("paragraph marker(@s1) {}"),
-            "got:\n{output}"
-        );
-    }
-
-    #[test]
     fn marker_omitted_when_absent() {
         let (state, ..) = state! {
             doc { root { p1: paragraph {} } }
@@ -808,26 +658,5 @@ state! {
         };
         let output = inspect_state_as_macro(&state);
         assert!(!output.contains("marker("), "got:\n{output}");
-    }
-
-    #[test]
-    fn style_reference_on_text_and_leaf() {
-        let (state, ..) = state! {
-            doc {
-                styles {
-                    emph: [italic]
-                }
-                root {
-                    p1: paragraph {
-                        text("hi") @emph
-                    }
-                    horizontal_rule @emph
-                }
-            }
-            selection: (p1, 0)
-        };
-        let output = inspect_state_as_macro(&state);
-        assert!(output.contains("text(\"hi\") @emph"), "got:\n{output}");
-        assert!(output.contains("horizontal_rule @emph\n"), "got:\n{output}");
     }
 }

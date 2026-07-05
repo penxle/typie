@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use editor_crdt::Dot;
 
-use super::{ExplicitEffect, SpanLog, SpanOp};
-use crate::{ModifierType, NodeType, Schema};
+use super::{SpanLog, SpanOp};
+use crate::{Modifier, ModifierType, NodeType, Schema};
 
 /// Per-type LWW winner of the span ops covering a stretch. Per-type max is a
 /// semilattice, so keeping only the winner is lossless for every future op
@@ -16,9 +16,7 @@ pub type SegCovering = Arc<Covering>;
 pub fn covering_of_op(op: &SpanOp) -> ModifierType {
     match op {
         SpanOp::AddSpan { modifier, .. } => modifier.as_type(),
-        SpanOp::RemoveSpan { modifier_type, .. } | SpanOp::ClearSpan { modifier_type, .. } => {
-            *modifier_type
-        }
+        SpanOp::RemoveSpan { modifier_type, .. } => *modifier_type,
     }
 }
 
@@ -45,7 +43,7 @@ pub fn explicit_from_winners(
     cov: &Covering,
     spans: &SpanLog,
     leaf_path: &[NodeType],
-) -> BTreeMap<ModifierType, ExplicitEffect> {
+) -> BTreeMap<ModifierType, Modifier> {
     cov.iter()
         .filter_map(|(ty, dot)| {
             if !Schema::modifier_spec(*ty).target.matches(leaf_path) {
@@ -111,9 +109,7 @@ mod tests {
         let ex = explicit_from_winners(&winners, &log, &path);
         assert_eq!(
             ex.get(&ModifierType::FontSize),
-            Some(&crate::span::ExplicitEffect::Set(Modifier::FontSize {
-                value: 2000
-            }))
+            Some(&Modifier::FontSize { value: 2000 })
         );
         // full covering list must agree with the winners-only resolution
         let full = crate::span::explicit_from_covering(&[lo_dot, hi_dot], &log, &path);
@@ -135,7 +131,7 @@ mod tests {
                     1 => SpanOp::AddSpan { start: Anchor { id: Dot::new(1,0), bias: Bias::Before }, end: Anchor { id: Dot::new(1,9), bias: Bias::After }, modifier: Modifier::Italic },
                     2 => SpanOp::AddSpan { start: Anchor { id: Dot::new(1,0), bias: Bias::Before }, end: Anchor { id: Dot::new(1,9), bias: Bias::After }, modifier: Modifier::FontWeight { value: 700 } },
                     3 => SpanOp::RemoveSpan { start: Anchor { id: Dot::new(1,0), bias: Bias::Before }, end: Anchor { id: Dot::new(1,9), bias: Bias::After }, modifier_type: ModifierType::Bold },
-                    4 => SpanOp::ClearSpan { start: Anchor { id: Dot::new(1,0), bias: Bias::Before }, end: Anchor { id: Dot::new(1,9), bias: Bias::After }, modifier_type: ModifierType::Italic },
+                    4 => SpanOp::RemoveSpan { start: Anchor { id: Dot::new(1,0), bias: Bias::Before }, end: Anchor { id: Dot::new(1,9), bias: Bias::After }, modifier_type: ModifierType::Italic },
                     _ => SpanOp::RemoveSpan { start: Anchor { id: Dot::new(1,0), bias: Bias::Before }, end: Anchor { id: Dot::new(1,9), bias: Bias::After }, modifier_type: ModifierType::FontWeight },
                 };
                 log = log.apply(dot, op.clone()).unwrap();

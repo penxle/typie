@@ -49,7 +49,6 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
 
     let marker = Marker {
         modifiers: carryable,
-        style: None,
     };
     if !marker.is_empty() {
         tr.set_marker(new_paragraph_id, Some(marker))?;

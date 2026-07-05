@@ -81,7 +81,7 @@ fn remap_selection_out_of_fold_content(
 mod tests {
     use editor_macros::state;
     use editor_model::Modifier;
-    use editor_state::{PendingModifier, PendingStyle};
+    use editor_state::PendingModifier;
 
     use super::*;
     use crate::event::EditorEvent;
@@ -94,9 +94,6 @@ mod tests {
                 tr.set_pending_modifiers(vec![PendingModifier::Set {
                     modifier: Modifier::Bold,
                 }])?;
-                tr.set_pending_style(Some(PendingStyle::Set {
-                    style_id: "s1".to_string(),
-                }))?;
                 Ok(())
             })
             .unwrap();
@@ -106,10 +103,6 @@ mod tests {
         assert!(
             editor.state().pending_modifiers.is_empty(),
             "pending modifiers cleared"
-        );
-        assert!(
-            editor.state().pending_style.is_none(),
-            "pending style cleared"
         );
     }
 

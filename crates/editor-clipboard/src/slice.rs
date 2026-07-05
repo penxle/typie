@@ -137,18 +137,8 @@ fn block_modifiers(state: &State, nv: &NodeView) -> Vec<Modifier> {
     }
 }
 
-fn block_style(state: &State, nv: &NodeView) -> Option<String> {
-    match nv.dot() {
-        Some(dot) => state.projected.node_styles().value_of(dot),
-        None => None,
-    }
-}
-
 fn leaf_modifiers(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
-    own.values()
-        .filter(|o| !o.from_style)
-        .map(|o| o.value.clone())
-        .collect()
+    own.values().map(|o| o.value.clone()).collect()
 }
 
 fn atom_to_plain(leaf: &AtomLeaf) -> PlainNode {
@@ -168,7 +158,6 @@ fn atom_to_plain(leaf: &AtomLeaf) -> PlainNode {
 
 struct RunAccum {
     modifiers: Vec<Modifier>,
-    style: Option<String>,
     text: String,
 }
 
@@ -177,14 +166,12 @@ fn flush_run(run: &mut Option<RunAccum>, out: &mut Vec<Fragment>) {
         out.push(Fragment {
             node: PlainNode::Text(PlainTextNode { text: r.text }),
             modifiers: r.modifiers,
-            style: r.style,
             children: vec![],
         });
     }
 }
 
 fn push_leaf(
-    state: &State,
     leaf: &LeafView,
     own: Option<&BTreeMap<ModifierType, OwnModifier>>,
     run: &mut Option<RunAccum>,
@@ -192,14 +179,12 @@ fn push_leaf(
 ) {
     if let Some(ch) = leaf.as_char() {
         let modifiers = own.map(leaf_modifiers).unwrap_or_default();
-        let style = state.projected.node_styles().value_of(leaf.dot());
         match run {
-            Some(r) if r.modifiers == modifiers && r.style == style => r.text.push(ch),
+            Some(r) if r.modifiers == modifiers => r.text.push(ch),
             _ => {
                 flush_run(run, out);
                 *run = Some(RunAccum {
                     modifiers,
-                    style,
                     text: ch.to_string(),
                 });
             }
@@ -209,7 +194,6 @@ fn push_leaf(
         out.push(Fragment {
             node: atom_to_plain(atom),
             modifiers: own.map(leaf_modifiers).unwrap_or_default(),
-            style: state.projected.node_styles().value_of(leaf.dot()),
             children: vec![],
         });
     }
@@ -226,7 +210,7 @@ fn node_to_fragment(state: &State, nv: &NodeView) -> Fragment {
             }
             ChildView::Leaf(l) => {
                 let own = nv.leaf_state_at(slot).map(|s| s.own);
-                push_leaf(state, &l, own, &mut run, &mut out);
+                push_leaf(&l, own, &mut run, &mut out);
             }
         }
     }
@@ -234,7 +218,6 @@ fn node_to_fragment(state: &State, nv: &NodeView) -> Fragment {
     Fragment {
         node: nv.node().to_plain(),
         modifiers: block_modifiers(state, nv),
-        style: block_style(state, nv),
         children: out,
     }
 }
@@ -270,7 +253,7 @@ fn build_fragment(state: &State, nv: &NodeView, rs: &ResolvedSelection) -> Fragm
                     continue;
                 }
                 let own = nv.leaf_state_at(i).map(|s| s.own);
-                push_leaf(state, l, own, &mut run, &mut out);
+                push_leaf(l, own, &mut run, &mut out);
             }
             ChildView::Block(b) => {
                 flush_run(&mut run, &mut out);
@@ -287,7 +270,6 @@ fn build_fragment(state: &State, nv: &NodeView, rs: &ResolvedSelection) -> Fragm
     Fragment {
         node: nv.node().to_plain(),
         modifiers: block_modifiers(state, nv),
-        style: block_style(state, nv),
         children: out,
     }
 }
@@ -317,21 +299,18 @@ fn extract_cell_rect(state: &State, view: &DocView, rect: &CellRect) -> Slice {
         rows.push(Fragment {
             node: row.node().to_plain(),
             modifiers: block_modifiers(state, &row),
-            style: block_style(state, &row),
             children: cells,
         });
     }
     let table_frag = Fragment {
         node: table.node().to_plain(),
         modifiers: block_modifiers(state, &table),
-        style: block_style(state, &table),
         children: rows,
     };
     Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
-            style: None,
             children: vec![table_frag],
         },
         open_start: 0,
@@ -347,45 +326,6 @@ mod tests {
     use editor_model::{AtomLeaf, Modifier, NodeType};
     use editor_resource::Resource;
     use editor_state::{Position, Selection};
-
-    fn set_char_style(
-        mut state: State,
-        block: Dot,
-        range: std::ops::Range<usize>,
-        style_id: &str,
-    ) -> State {
-        use editor_crdt::LwwRegOp;
-        use editor_model::{ChildView, EditOp, NodeLwwOp};
-        let dots: Vec<editor_crdt::Dot> = {
-            let view = state.view();
-            view.node(block)
-                .unwrap()
-                .children()
-                .enumerate()
-                .filter(|(i, _)| range.contains(i))
-                .filter_map(|(_, c)| match c {
-                    ChildView::Leaf(l) => Some(l.dot()),
-                    ChildView::Block(_) => None,
-                })
-                .collect()
-        };
-        for dot in dots {
-            state
-                .projected_mut()
-                .apply(EditOp::NodeStyle(NodeLwwOp {
-                    target: dot,
-                    op: LwwRegOp::Set {
-                        value: Some(style_id.into()),
-                    },
-                }))
-                .expect("apply NodeStyle");
-        }
-        state
-    }
-
-    fn set_run_style(state: State, block: Dot, style_id: &str) -> State {
-        set_char_style(state, block, 0..usize::MAX, style_id)
-    }
 
     fn cell_rect_sel(state: &State, anchor_cell: Dot, head_cell: Dot) -> editor_state::Selection {
         use editor_state::{Position, Selection};
@@ -652,31 +592,6 @@ mod tests {
     }
 
     #[test]
-    fn extract_multi_style_runs_in_one_paragraph_split_by_style() {
-        // Replaces the old multi-text-node test: distinct char-leaf styles within
-        // one paragraph split into separate text runs in the slice.
-        let (s, p1) = state! {
-            doc { root { p1: paragraph { text("HelloWorld") } } }
-            selection: (p1, 0) -> (p1, 10)
-        };
-        let s = set_char_style(s, p1, 0..5, "first");
-        let s = set_char_style(s, p1, 5..10, "second");
-        let slice = Slice::extract(&s).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        assert_eq!(slice.fragment.children.len(), 2);
-        if let PlainNode::Text(t) = &slice.fragment.children[0].node {
-            assert_eq!(t.text, "Hello");
-        } else {
-            panic!("expected text run children[0]");
-        }
-        if let PlainNode::Text(t) = &slice.fragment.children[1].node {
-            assert_eq!(t.text, "World");
-        } else {
-            panic!("expected text run children[1]");
-        }
-    }
-
-    #[test]
     fn payload_round_trip() {
         let (s, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
@@ -808,55 +723,21 @@ mod tests {
     }
 
     #[test]
-    fn extract_full_run_carries_run_style() {
-        let (s, p1) = state! {
-            doc { root { p1: paragraph { text("Hello") } } }
-            selection: (p1, 0) -> (p1, 5)
-        };
-        let s = set_run_style(s, p1, "emphasis");
+    fn extract_slice_json_excludes_style_key() {
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let para = b.block(NodeType::Paragraph, &[root]);
+        let chars = b.text("ab");
+        b.span(chars[0], chars[1], Modifier::Bold);
+        let s = b.finish(Some(Selection::new(
+            Position::new(para, 0),
+            Position::new(para, 2),
+        )));
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        let run = &slice.fragment.children[0];
-        if let PlainNode::Text(t) = &run.node {
-            assert_eq!(t.text, "Hello");
-        } else {
-            panic!("expected text run");
-        }
-        assert_eq!(run.style.as_deref(), Some("emphasis"));
-    }
-
-    #[test]
-    fn extract_partial_run_carries_run_style() {
-        let (s, p1) = state! {
-            doc { root { p1: paragraph { text("Hello World") } } }
-            selection: (p1, 1) -> (p1, 4)
-        };
-        let s = set_run_style(s, p1, "emphasis");
-        let slice = Slice::extract(&s).expect("non-collapsed");
-        // Mid-run selection carves a partial Text run; it must still carry the
-        // source run's style ref.
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        let run = &slice.fragment.children[0];
-        if let PlainNode::Text(t) = &run.node {
-            assert_eq!(t.text, "ell");
-        } else {
-            panic!("expected text run");
-        }
-        assert_eq!(run.style.as_deref(), Some("emphasis"));
-    }
-
-    #[test]
-    fn extract_multi_run_carries_each_run_style() {
-        let (s, p1) = state! {
-            doc { root { p1: paragraph { text("HelloWorld") } } }
-            selection: (p1, 0) -> (p1, 10)
-        };
-        let s = set_char_style(s, p1, 0..5, "first");
-        let s = set_char_style(s, p1, 5..10, "second");
-        let slice = Slice::extract(&s).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        assert_eq!(slice.fragment.children.len(), 2);
-        assert_eq!(slice.fragment.children[0].style.as_deref(), Some("first"));
-        assert_eq!(slice.fragment.children[1].style.as_deref(), Some("second"));
+        let json = serde_json::to_string(&slice).unwrap();
+        assert!(
+            !json.contains("\"style\""),
+            "slice schema must not carry style refs: {json}"
+        );
     }
 }

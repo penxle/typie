@@ -296,11 +296,11 @@ pub(crate) fn extract_lines(
     lines
 }
 
-pub(crate) fn own_no_style(
+pub(crate) fn own_values(
     own: &BTreeMap<ModifierType, OwnModifier>,
     ty: ModifierType,
 ) -> Option<&Modifier> {
-    own.get(&ty).filter(|o| !o.from_style).map(|o| &o.value)
+    own.get(&ty).map(|o| &o.value)
 }
 
 pub(crate) fn resolve_synthesis(eff: &BTreeMap<ModifierType, Modifier>) -> Synthesis {
@@ -317,7 +317,7 @@ pub(crate) fn resolve_decoration(
     eff: &BTreeMap<ModifierType, Modifier>,
 ) -> TextDecoration {
     TextDecoration {
-        underline: own_no_style(own, ModifierType::Link).is_some()
+        underline: own_values(own, ModifierType::Link).is_some()
             || eff.contains_key(&ModifierType::Underline),
         strikethrough: eff.contains_key(&ModifierType::Strikethrough),
     }
@@ -331,7 +331,7 @@ pub(crate) fn resolve_colors(
         own.get(&ModifierType::TextColor).map(|o| &o.value)
     {
         format!("text.{value}")
-    } else if own_no_style(own, ModifierType::Link).is_some() {
+    } else if own_values(own, ModifierType::Link).is_some() {
         LINK_COLOR.to_string()
     } else if let Some(Modifier::TextColor { value }) = eff.get(&ModifierType::TextColor) {
         format!("text.{value}")
@@ -339,14 +339,14 @@ pub(crate) fn resolve_colors(
         "text.black".to_string()
     };
     let background = match eff.get(&ModifierType::BackgroundColor) {
-        Some(Modifier::BackgroundColor { value }) if value != "none" => Some(format!("bg.{value}")),
+        Some(Modifier::BackgroundColor { value }) => Some(format!("bg.{value}")),
         _ => None,
     };
     (color, background)
 }
 
 pub(crate) fn resolve_link(own: &BTreeMap<ModifierType, OwnModifier>) -> Option<String> {
-    match own_no_style(own, ModifierType::Link) {
+    match own_values(own, ModifierType::Link) {
         Some(Modifier::Link { href }) => Some(href.clone()),
         _ => None,
     }
@@ -358,9 +358,8 @@ mod tests {
 
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        Anchor, AtomLeaf, Bias, DocLogs, DocView, ModifierAttrLog, ModifierAttrOp, NodeAttrLog,
-        NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, SpanOp, StyleLog,
-        project_document,
+        Anchor, AtomLeaf, Bias, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog,
+        NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::Resource;
 
@@ -374,18 +373,10 @@ mod tests {
 
     use super::*;
 
-    fn own(pairs: Vec<(ModifierType, Modifier, bool)>) -> BTreeMap<ModifierType, OwnModifier> {
+    fn own(pairs: Vec<(ModifierType, Modifier)>) -> BTreeMap<ModifierType, OwnModifier> {
         pairs
             .into_iter()
-            .map(|(t, m, fs)| {
-                (
-                    t,
-                    OwnModifier {
-                        value: m,
-                        from_style: fs,
-                    },
-                )
-            })
+            .map(|(t, m)| (t, OwnModifier { value: m }))
             .collect()
     }
     fn eff(pairs: Vec<(ModifierType, Modifier)>) -> BTreeMap<ModifierType, Modifier> {
@@ -409,15 +400,8 @@ mod tests {
 
     #[test]
     fn color_own_text_color_wins() {
-        let o = own(vec![(ModifierType::TextColor, tc("red"), false)]);
+        let o = own(vec![(ModifierType::TextColor, tc("red"))]);
         let e = eff(vec![(ModifierType::TextColor, tc("red"))]);
-        assert_eq!(resolve_colors(&o, &e).0, "text.red");
-    }
-
-    #[test]
-    fn color_own_style_text_color_still_wins() {
-        let o = own(vec![(ModifierType::TextColor, tc("red"), true)]); // from_style
-        let e = eff(vec![(ModifierType::TextColor, tc("green"))]);
         assert_eq!(resolve_colors(&o, &e).0, "text.red");
     }
 
@@ -427,8 +411,8 @@ mod tests {
         // branch 2). The link is still resolved separately (resolve_link), and decoration
         // still underlines. Guards against a reordered color cascade.
         let o = own(vec![
-            (ModifierType::TextColor, tc("red"), false),
-            (ModifierType::Link, link("h"), false),
+            (ModifierType::TextColor, tc("red")),
+            (ModifierType::Link, link("h")),
         ]);
         let e = eff(vec![
             (ModifierType::TextColor, tc("red")),
@@ -440,8 +424,8 @@ mod tests {
     }
 
     #[test]
-    fn color_own_no_style_link_uses_link_color() {
-        let o = own(vec![(ModifierType::Link, link("h"), false)]);
+    fn color_own_values_link_uses_link_color() {
+        let o = own(vec![(ModifierType::Link, link("h"))]);
         let e = eff(vec![(ModifierType::TextColor, tc("blue"))]); // inherited, but link beats it
         assert_eq!(resolve_colors(&o, &e).0, LINK_COLOR);
     }
@@ -459,13 +443,6 @@ mod tests {
     }
 
     #[test]
-    fn color_style_link_does_not_trigger_link_color() {
-        let o = own(vec![(ModifierType::Link, link("h"), true)]); // style-derived link
-        let e = eff(vec![(ModifierType::Link, link("h"))]); // present in effective too
-        assert_eq!(resolve_colors(&o, &e).0, "text.black"); // own_no_style filters it out
-    }
-
-    #[test]
     fn background_effective_none_suppress_prefix() {
         assert_eq!(
             resolve_colors(
@@ -475,24 +452,13 @@ mod tests {
             .1,
             Some("bg.yellow".to_string())
         );
-        assert_eq!(
-            resolve_colors(
-                &own(vec![]),
-                &eff(vec![(ModifierType::BackgroundColor, bg("none"))])
-            )
-            .1,
-            None
-        );
         assert_eq!(resolve_colors(&own(vec![]), &eff(vec![])).1, None);
     }
 
     #[test]
     fn decoration_underline_via_link_or_effective() {
         // own-no-style Link → underline
-        let d = resolve_decoration(
-            &own(vec![(ModifierType::Link, link("h"), false)]),
-            &eff(vec![]),
-        );
+        let d = resolve_decoration(&own(vec![(ModifierType::Link, link("h"))]), &eff(vec![]));
         assert!(d.underline);
         // effective Underline → underline
         let d = resolve_decoration(
@@ -502,12 +468,6 @@ mod tests {
         assert!(d.underline);
         // neither → no underline
         assert!(!resolve_decoration(&own(vec![]), &eff(vec![])).underline);
-        // style-derived Link does NOT underline
-        let d = resolve_decoration(
-            &own(vec![(ModifierType::Link, link("h"), true)]),
-            &eff(vec![]),
-        );
-        assert!(!d.underline);
     }
 
     #[test]
@@ -536,14 +496,10 @@ mod tests {
     }
 
     #[test]
-    fn link_own_no_style_href() {
+    fn link_own_href() {
         assert_eq!(
-            resolve_link(&own(vec![(ModifierType::Link, link("u"), false)])),
+            resolve_link(&own(vec![(ModifierType::Link, link("u"))])),
             Some("u".to_string())
-        );
-        assert_eq!(
-            resolve_link(&own(vec![(ModifierType::Link, link("u"), true)])),
-            None
         );
         assert_eq!(resolve_link(&own(vec![])), None);
     }
@@ -567,9 +523,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
     fn build_logs(children: Vec<SeqItem>) -> DocLogs {
@@ -652,18 +606,18 @@ mod tests {
     #[test]
     fn render_fields_from_effective() {
         let mut l = build_logs(vec![ch('a')]);
-        l.block_modifiers = ModifierAttrLog::new()
+        l.spans = SpanLog::new()
             .apply(
                 Dot::new(50, 1),
-                ModifierAttrOp::SetModifier {
-                    target: Dot::ROOT,
+                SpanOp::AddSpan {
+                    start: anc(leaf(0), Bias::Before),
+                    end: anc(leaf(0), Bias::After),
                     modifier: editor_model::Modifier::TextColor {
                         value: "red".to_string(),
                     },
                 },
             )
-            .unwrap();
-        l.spans = SpanLog::new()
+            .unwrap()
             .apply(
                 Dot::new(51, 1),
                 SpanOp::AddSpan {

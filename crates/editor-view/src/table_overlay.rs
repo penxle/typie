@@ -412,8 +412,8 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         Alignment, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp, NodeAttr,
-        NodeAttrLog, NodeAttrOp, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc, SeqItem,
-        SpanLog, StyleLog, TableNodeAttr, project_document,
+        NodeAttrLog, NodeAttrOp, NodeMarkerLog, NodeType, ProjectedDoc, SeqItem, SpanLog,
+        TableNodeAttr, project_document,
     };
     use editor_state::Affinity;
     use editor_state::{Position, ResolvedSelection, Selection};
@@ -511,9 +511,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 

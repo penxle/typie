@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use editor_common::EdgeInsets;
-use editor_model::{Alignment, Modifier, ModifierType, Node, NodeView};
+use editor_model::{Alignment, DEFAULT_ALIGNMENT, Modifier, ModifierType, Node, NodeView};
 use editor_resource::Resource;
 
 use crate::style::{BorderMode, BoxStyle, Direction};
@@ -265,12 +265,12 @@ pub(crate) fn measure_table(
 
     let align = match node.effective().get(&ModifierType::Alignment) {
         Some(Modifier::Alignment { value }) => *value,
-        _ => Alignment::default(),
+        _ => DEFAULT_ALIGNMENT,
     };
     let alignment = match align {
-        Alignment::Left => crate::style::Alignment::Start,
+        Alignment::Left | Alignment::Justify => crate::style::Alignment::Start,
         Alignment::Center => crate::style::Alignment::Center,
-        Alignment::Right | Alignment::Justify => crate::style::Alignment::End,
+        Alignment::Right => crate::style::Alignment::End,
     };
 
     MeasuredNode {
@@ -297,8 +297,8 @@ pub(crate) fn measure_table(
 mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType,
-        SeqItem, SpanLog, StyleLog, project_document,
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog,
+        project_document,
     };
     use editor_resource::Resource;
 
@@ -327,9 +327,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -588,6 +586,51 @@ mod tests {
             "row border_mode must be Collapse"
         );
         assert_eq!(row_box.children.len(), 2, "row must have 2 cell children");
+    }
+
+    #[test]
+    fn table_justify_alignment_resolves_to_start() {
+        use editor_model::ModifierAttrOp::SetModifier;
+
+        use crate::measure::nodes::dispatch::measure_node;
+
+        let (mut doc, table) = two_cell_table_doc();
+        doc.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                SetModifier {
+                    target: table,
+                    modifier: Modifier::Alignment {
+                        value: Alignment::Justify,
+                    },
+                },
+            )
+            .unwrap();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        let mut res = Resource::new_test();
+
+        let result = measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
+        let MeasuredContent::Box(ref root_box) = result.content else {
+            panic!("expected root Box");
+        };
+        let table_child = root_box.children.iter().next().unwrap();
+        let MeasuredContent::Box(ref table_box) = table_child.content else {
+            panic!("expected table Box");
+        };
+
+        assert_eq!(
+            table_box.style.alignment,
+            crate::style::Alignment::Start,
+            "a table's justify record is not a legal value; it must not disguise as right"
+        );
     }
 
     #[test]

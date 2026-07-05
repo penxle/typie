@@ -5,9 +5,9 @@ use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
 use editor_model::{DocView, Modifier};
 use editor_state::{
-    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, PendingStyle,
-    ResolvedPosition, ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars,
-    flat_segments_in_range, flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
+    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, ResolvedPosition,
+    ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars, flat_segments_in_range,
+    flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
 };
 use editor_transaction::Transaction;
 
@@ -16,7 +16,6 @@ use crate::error::EditorError;
 use crate::message::*;
 
 fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
-    let replacement_style = uniform_text_style_in_range(tr.state(), start, end);
     let doc = tr.view();
     let replacement_modifiers = uniform_own_text_modifiers_in_range(&doc, start, end);
     let resolve_selection_from_flat = || -> Result<Selection, CommandError> {
@@ -41,12 +40,7 @@ fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str
         commands::set_selection(selection),
         commands::optional!(commands::ensure_paragraph()),
         commands::optional!(commands::delete_selection()),
-        |tr| apply_replacement_format(
-            tr,
-            text,
-            replacement_modifiers.as_deref(),
-            replacement_style.clone()
-        ),
+        |tr| apply_replacement_format(tr, text, replacement_modifiers.as_deref()),
         commands::when!(!text.is_empty(), commands::insert_text(text)),
     )
 }
@@ -55,18 +49,10 @@ fn apply_replacement_format(
     tr: &mut Transaction,
     text: &str,
     target_modifiers: Option<&[Modifier]>,
-    target_style: Option<Option<String>>,
 ) -> CommandResult {
     if text.is_empty() {
         return Ok(true);
     }
-
-    if let Some(style) = target_style {
-        tr.set_pending_style(Some(match style {
-            Some(style_id) => PendingStyle::Set { style_id },
-            None => PendingStyle::Unset,
-        }))?;
-    };
 
     if let Some(target_modifiers) = target_modifiers {
         let Some(selection) = tr.selection() else {
@@ -96,12 +82,7 @@ fn uniform_own_text_modifiers_in_range(
         };
         for leaf_dot in leaves {
             let st = view.leaf_state_by_dot_slow(leaf_dot)?;
-            let mut modifiers: Vec<Modifier> = st
-                .own
-                .values()
-                .filter(|o| !o.from_style)
-                .map(|o| o.value.clone())
-                .collect();
+            let mut modifiers: Vec<Modifier> = st.own.values().map(|o| o.value.clone()).collect();
             modifiers.sort_by_key(|m| m.as_type());
             match &range_modifiers {
                 Some(existing) if existing != &modifiers => return None,
@@ -112,34 +93,6 @@ fn uniform_own_text_modifiers_in_range(
     }
 
     range_modifiers
-}
-
-fn uniform_text_style_in_range(
-    state: &editor_state::State,
-    start: usize,
-    end: usize,
-) -> Option<Option<String>> {
-    if start >= end {
-        return None;
-    }
-
-    let view = state.view();
-    let mut range_style: Option<Option<String>> = None;
-    for seg in flat_segments_in_range(&view, start..end) {
-        let FlatSegment::Text { leaves, .. } = seg else {
-            return None;
-        };
-        for leaf_dot in leaves {
-            let style = state.projected.node_styles().value_of(leaf_dot);
-            match &range_style {
-                Some(existing) if existing != &style => return None,
-                Some(_) => {}
-                None => range_style = Some(style),
-            }
-        }
-    }
-
-    range_style
 }
 
 fn composition_range_valid(view: &DocView, start: usize, end: usize) -> bool {
@@ -872,25 +825,16 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                             )?;
                         } else {
                             let deletes_body = delta.replace_start != delta.replace_end;
-                            let (replacement_style, replacement_modifiers) =
-                                if !delta.ins_text.is_empty() {
-                                    let style = uniform_text_style_in_range(
-                                        tr.state(),
-                                        delta.replace_start,
-                                        delta.replace_end,
-                                    );
-                                    let doc = tr.view();
-                                    (
-                                        style,
-                                        uniform_own_text_modifiers_in_range(
-                                            &doc,
-                                            delta.replace_start,
-                                            delta.replace_end,
-                                        ),
-                                    )
-                                } else {
-                                    (None, None)
-                                };
+                            let replacement_modifiers = if !delta.ins_text.is_empty() {
+                                let doc = tr.view();
+                                uniform_own_text_modifiers_in_range(
+                                    &doc,
+                                    delta.replace_start,
+                                    delta.replace_end,
+                                )
+                            } else {
+                                None
+                            };
 
                             if deletes_body {
                                 replace_text_range(tr, delta.replace_start, delta.replace_end, "")?;
@@ -928,7 +872,6 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                                     tr,
                                     &delta.ins_text,
                                     replacement_modifiers.as_deref(),
-                                    replacement_style,
                                 )?;
                                 commands::insert_text(tr, &delta.ins_text)?;
                             }
@@ -1001,7 +944,6 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
     use editor_state::assert_state_eq;
 
     use super::*;
@@ -1928,33 +1870,6 @@ mod tests {
         editor
     }
 
-    fn paragraph_run_texts_and_styles(editor: &Editor) -> Vec<(String, Option<String>)> {
-        let state = editor.state();
-        let view = state.view();
-        let node_styles = &state.projected.projected().node_styles;
-        let paragraph = view
-            .root()
-            .expect("root exists")
-            .child_blocks()
-            .next()
-            .expect("paragraph exists");
-        let mut runs: Vec<(String, Option<String>)> = Vec::new();
-        for child in paragraph.children() {
-            let editor_model::ChildView::Leaf(leaf) = child else {
-                continue;
-            };
-            let Some(ch) = leaf.as_char() else {
-                continue;
-            };
-            let style = node_styles.get(&leaf.dot()).cloned().flatten();
-            match runs.last_mut() {
-                Some((text, last_style)) if *last_style == style => text.push(ch),
-                _ => runs.push((ch.to_string(), style)),
-            }
-        }
-        runs
-    }
-
     #[test]
     fn flat_ime_text_replacement() {
         let (s, ..) = state! {
@@ -1979,127 +1894,6 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("aaaaa") } } }
             selection: (p1, 1)
-        };
-        assert_state_eq!(editor.state(), &expected);
-    }
-
-    #[test]
-    fn flat_ime_repeated_insert_preserves_style_run_affinity() {
-        let (s, ..) = state! {
-            doc { root { p1: paragraph { text("ac") } } }
-            selection: (p1, 1)
-        };
-        let mut editor = editor_with_resource(s);
-        editor.apply(Message::Style {
-            op: StyleOp::Define {
-                style_id: "green".into(),
-                name: "Green".into(),
-                modifiers: vec![Modifier::TextColor {
-                    value: "#00ff00".into(),
-                }],
-            },
-        });
-        editor.apply(Message::Style {
-            op: StyleOp::ApplyToSelection {
-                style_id: "green".into(),
-            },
-        });
-
-        editor.apply(Message::TextInput {
-            ops: vec![FlatImeOp::ReplaceSelection { text: "f".into() }],
-        });
-        assert_eq!(
-            paragraph_run_texts_and_styles(&editor),
-            vec![
-                ("a".into(), None),
-                ("f".into(), Some("green".into())),
-                ("c".into(), None),
-            ]
-        );
-        let view = editor.state().view();
-        let current_flat = editor
-            .state()
-            .selection
-            .and_then(|selection| selection.head.resolve(&view))
-            .map(|pos| pos.to_flat())
-            .expect("selection head resolves to flat");
-        drop(view);
-        editor.apply(Message::TextInput {
-            ops: vec![
-                FlatImeOp::SetSelection {
-                    start: current_flat,
-                    end: current_flat,
-                },
-                FlatImeOp::ReplaceSelection { text: "f".into() },
-            ],
-        });
-
-        assert_eq!(
-            paragraph_run_texts_and_styles(&editor),
-            vec![
-                ("a".into(), None),
-                ("ff".into(), Some("green".into())),
-                ("c".into(), None),
-            ]
-        );
-    }
-
-    #[test]
-    fn flat_ime_repeated_composition_preserves_replacement_style_ref() {
-        let (s, ..) = state! {
-            doc {
-                styles {
-                    old: "Old" [text_color("#ff0000".to_string())]
-                    new: "New" [text_color("#00ff00".to_string())]
-                }
-                root { p1: paragraph { text("a") @old } }
-            }
-            selection: (p1, 1)
-        };
-        let mut editor = editor_with_resource(s);
-        let view = editor.state().view();
-        let current_flat = editor
-            .state()
-            .selection
-            .and_then(|selection| selection.head.resolve(&view))
-            .map(|pos| pos.to_flat())
-            .expect("selection head resolves to flat");
-        drop(view);
-
-        editor.apply(Message::Style {
-            op: StyleOp::ApplyToSelection {
-                style_id: "new".into(),
-            },
-        });
-        editor.apply(Message::TextInput {
-            ops: vec![
-                FlatImeOp::SetComposition {
-                    start: current_flat,
-                    end: current_flat,
-                },
-                FlatImeOp::Compose { text: "b".into() },
-            ],
-        });
-        let composition = editor.state().composition.expect("composition exists");
-        editor.apply(Message::TextInput {
-            ops: vec![
-                FlatImeOp::SetComposition {
-                    start: composition.start,
-                    end: composition.end,
-                },
-                FlatImeOp::Compose { text: "c".into() },
-            ],
-        });
-
-        let (expected, ..) = state! {
-            doc {
-                styles {
-                    old: "Old" [text_color("#ff0000".to_string())]
-                    new: "New" [text_color("#00ff00".to_string())]
-                }
-                root { p1: paragraph { text("a") @old text("c") @new } }
-            }
-            selection: (p1, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }

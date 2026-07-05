@@ -1,4 +1,4 @@
-use crate::Modifier;
+use crate::{Alignment, Modifier};
 
 pub fn default_modifiers() -> Vec<Modifier> {
     vec![
@@ -7,14 +7,11 @@ pub fn default_modifiers() -> Vec<Modifier> {
         },
         Modifier::FontSize { value: 1200 },
         Modifier::FontWeight { value: 400 },
-        Modifier::TextColor {
-            value: "black".to_string(),
-        },
-        Modifier::BackgroundColor {
-            value: "none".to_string(),
-        },
         Modifier::LetterSpacing { value: 0 },
         Modifier::LineHeight { value: 160 },
+        Modifier::Alignment {
+            value: Alignment::Left,
+        },
         Modifier::ParagraphIndent { value: 100 },
         Modifier::BlockGap { value: 100 },
     ]

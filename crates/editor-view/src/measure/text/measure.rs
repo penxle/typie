@@ -381,9 +381,8 @@ pub(crate) fn measure_paragraph(
 mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp,
-        NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, SpanOp, StyleLog,
-        project_document,
+        Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog,
+        NodeMarkerLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::Resource;
 
@@ -433,9 +432,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -666,20 +663,20 @@ mod tests {
     #[test]
     fn render_fields_flow_end_to_end() {
         let mut l = build_logs(vec![ch('a')]);
-        l.block_modifiers = ModifierAttrLog::new()
+        l.spans = SpanLog::new()
             .apply(
-                Dot::ROOT,
-                ModifierAttrOp::SetModifier {
-                    target: Dot::ROOT,
+                Dot::new(50, 1),
+                SpanOp::AddSpan {
+                    start: anc(leaf(0), Bias::Before),
+                    end: anc(leaf(0), Bias::After),
                     modifier: Modifier::TextColor {
                         value: "red".to_string(),
                     },
                 },
             )
-            .unwrap();
-        l.spans = SpanLog::new()
+            .unwrap()
             .apply(
-                Dot::ROOT,
+                Dot::new(51, 1),
                 SpanOp::AddSpan {
                     start: anc(leaf(0), Bias::Before),
                     end: anc(leaf(0), Bias::After),

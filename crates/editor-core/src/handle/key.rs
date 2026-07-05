@@ -44,9 +44,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             Ok(())
         }),
         (Key::Backspace, _) if editor.try_undo_auto_replacement() => {
-            if !editor.state().pending_modifiers.is_empty()
-                || editor.state().pending_style.is_some()
-            {
+            if !editor.state().pending_modifiers.is_empty() {
                 editor.transact(|tr| {
                     tr.update_meta(|m| m.history = HistoryMeta::Skip);
                     tr.clear_pending_format()?;
@@ -140,7 +138,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
 mod tests {
     use editor_macros::state;
     use editor_model::Modifier;
-    use editor_state::{PendingModifier, PendingStyle, assert_doc_eq, assert_state_eq};
+    use editor_state::{PendingModifier, assert_doc_eq, assert_state_eq};
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
@@ -151,9 +149,6 @@ mod tests {
                 tr.set_pending_modifiers(vec![PendingModifier::Set {
                     modifier: Modifier::Bold,
                 }])?;
-                tr.set_pending_style(Some(PendingStyle::Set {
-                    style_id: "s1".to_string(),
-                }))?;
                 Ok(())
             })
             .unwrap();
@@ -163,10 +158,6 @@ mod tests {
         assert!(
             editor.state().pending_modifiers.is_empty(),
             "pending modifiers cleared"
-        );
-        assert!(
-            editor.state().pending_style.is_none(),
-            "pending style cleared"
         );
     }
 

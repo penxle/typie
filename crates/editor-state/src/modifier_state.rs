@@ -433,55 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn range_clear_inheritable_value_reports_resolved_default_not_parent() {
-        let (mut state, root, para) = simple_para_state(&['a']);
-        state
-            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
-                target: root,
-                modifier: Modifier::FontWeight { value: 500 },
-            }))
-            .unwrap();
-        let leaf_a = first_leaf_dot(&state, para);
-        state
-            .apply(EditOp::Span(SpanOp::AddSpan {
-                start: Anchor {
-                    id: leaf_a,
-                    bias: Bias::Before,
-                },
-                end: Anchor {
-                    id: leaf_a,
-                    bias: Bias::After,
-                },
-                modifier: Modifier::FontWeight { value: 700 },
-            }))
-            .unwrap();
-        state
-            .apply(EditOp::Span(SpanOp::ClearSpan {
-                start: Anchor {
-                    id: leaf_a,
-                    bias: Bias::Before,
-                },
-                end: Anchor {
-                    id: leaf_a,
-                    bias: Bias::After,
-                },
-                modifier_type: ModifierType::FontWeight,
-            }))
-            .unwrap();
-
-        let s = sel((para, 0), (para, 1));
-        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
-        assert_eq!(
-            ms.font_weight,
-            Tri::Uniform {
-                value: editor_model::FontWeightValue { value: 400 }
-            }
-        );
-        assert_eq!(ms.effective_bold, Tri::Absent);
-    }
-
-    #[test]
-    fn range_clear_inheritable_font_family_reports_pretendard_default() {
+    fn range_remove_inheritable_font_family_reports_pretendard_default() {
         let (mut state, root, para) = simple_para_state(&['a']);
         state
             .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
@@ -844,9 +796,135 @@ mod tests {
         assert_eq!(ms.link, Tri::Mixed);
     }
 
-    // §4.7: block-context modifier — selection inside one paragraph aggregates Root-context BlockGap
+    fn char_leaf_dots(state: &ProjectedState, para: Dot, n: usize) -> Vec<Dot> {
+        let view = state.view();
+        let p = view.node(para).unwrap();
+        p.children()
+            .filter_map(|c| {
+                if let editor_model::ChildView::Leaf(l) = c {
+                    Some(l.dot())
+                } else {
+                    None
+                }
+            })
+            .take(n)
+            .collect()
+    }
+
+    fn add_bold_span(state: &mut ProjectedState, id: Dot) {
+        state
+            .apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+    }
+
+    // Tabs participate in toggle aggregation (paint absence is a value),
+    // but never in link/ruby aggregation.
     #[test]
-    fn test_7_block_context_modifier_root() {
+    fn bold_aggregation_counts_unpainted_tab_as_mixed_but_link_skips_tab() {
+        use editor_model::AtomLeaf;
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Atom(AtomLeaf::Tab),
+            }))
+            .unwrap();
+        let chars = char_leaf_dots(&state, para, 2);
+        for &id in &chars {
+            add_bold_span(&mut state, id);
+            state
+                .apply(EditOp::Span(SpanOp::AddSpan {
+                    start: Anchor {
+                        id,
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id,
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Link {
+                        href: "https://a.example".to_string(),
+                    },
+                }))
+                .unwrap();
+        }
+        let s = sel((para, 0), (para, 3));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.bold,
+            Tri::Mixed,
+            "unpainted tab participates: its absent bold is one value against the chars' on"
+        );
+        assert_eq!(
+            ms.link,
+            Tri::Uniform {
+                value: editor_model::LinkValue {
+                    href: "https://a.example".to_string()
+                }
+            },
+            "the tab does not participate in link aggregation"
+        );
+    }
+
+    #[test]
+    fn bold_aggregation_uniform_once_tab_is_painted() {
+        use editor_model::AtomLeaf;
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        let tab = state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Atom(AtomLeaf::Tab),
+            }))
+            .unwrap()
+            .id;
+        let chars = char_leaf_dots(&state, para, 2);
+        for &id in &chars {
+            add_bold_span(&mut state, id);
+        }
+        add_bold_span(&mut state, tab);
+        let s = sel((para, 0), (para, 3));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(ms.bold, Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn bold_aggregation_counts_unpainted_hard_break_as_mixed() {
+        use editor_model::AtomLeaf;
+        let (mut state, _root, para) = simple_para_state(&['a', 'b']);
+        state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Atom(AtomLeaf::HardBreak),
+            }))
+            .unwrap();
+        let chars = char_leaf_dots(&state, para, 2);
+        for &id in &chars {
+            add_bold_span(&mut state, id);
+        }
+        let s = sel((para, 0), (para, 3));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.bold,
+            Tri::Mixed,
+            "unpainted hard break participates in toggle aggregation"
+        );
+    }
+
+    // §4.7: BlockGap has no selection target (root-only; consumers = target = ∅),
+    // so it does not surface in range aggregation — it is edited via the document-settings
+    // (SetOnNode(ROOT)) path, not the inline toolbar.
+    #[test]
+    fn test_7_block_gap_has_no_selection_target() {
         let (mut state, root, para) = simple_para_state(&['x']);
         state
             .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
@@ -858,9 +936,8 @@ mod tests {
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
         assert_eq!(
             ms.block_gap,
-            Tri::Uniform {
-                value: editor_model::BlockGapValue { value: 8 }
-            }
+            Tri::Absent,
+            "BlockGap is root-only with no block consumer; range aggregation does not surface it"
         );
     }
 
@@ -905,7 +982,7 @@ mod tests {
     }
 
     #[test]
-    fn effective_bold_counts_inherited_bold() {
+    fn paragraph_block_bold_record_does_not_reach_carriers() {
         let (mut state, _root, para) = simple_para_state(&['a']);
         state
             .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
@@ -916,8 +993,8 @@ mod tests {
 
         let s = sel((para, 0), (para, 1));
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
-        assert_eq!(ms.bold, Tri::Uniform { value: () });
-        assert_eq!(ms.effective_bold, Tri::Uniform { value: () });
+        assert_eq!(ms.bold, Tri::Absent);
+        assert_eq!(ms.effective_bold, Tri::Absent);
     }
 
     // §4.8b: some-bold → Mixed effective_bold
@@ -971,7 +1048,6 @@ mod tests {
                 op: LwwRegOp::Set {
                     value: Some(Marker {
                         modifiers: vec![Modifier::Bold],
-                        style: None,
                     }),
                 },
             }))
@@ -992,7 +1068,6 @@ mod tests {
                 op: LwwRegOp::Set {
                     value: Some(Marker {
                         modifiers: vec![Modifier::Bold],
-                        style: None,
                     }),
                 },
             }))
@@ -1054,11 +1129,14 @@ mod tests {
         // Selection wholly inside p1 — image must NOT pollute alignment
         let s = sel((p1, 0), (p1, 3));
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
-        // alignment should be Absent (image not collected)
         assert_eq!(
             ms.alignment,
-            Tri::Absent,
-            "image alignment must not appear in a selection inside p1 only"
+            Tri::Uniform {
+                value: editor_model::AlignmentValue {
+                    value: editor_model::Alignment::Left
+                }
+            },
+            "p1 resolves to default Left; image Center must not appear"
         );
         let _ = (p2, image_dot);
     }
@@ -1405,17 +1483,9 @@ mod tests {
             sel_pick in (proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>(), proptest::prelude::any::<u8>()),
         ) {
             use editor_model::{AtomLeaf, EditOp, SeqItem, SpanOp, Anchor, Bias};
-            use editor_crdt::{ListOp, LwwRegOp, OrMapOp, OrSetOp};
+            use editor_crdt::ListOp;
 
             let mut state = crate::projected_state::ProjectedState::empty();
-            state.apply(EditOp::Style(editor_model::StyleRegOp {
-                style_id: "s".to_string(),
-                op: editor_model::StyleOp::Presence(OrMapOp::Set { key: "s".to_string(), value: () }),
-            })).unwrap();
-            state.apply(EditOp::Style(editor_model::StyleRegOp {
-                style_id: "s".to_string(),
-                op: editor_model::StyleOp::Modifiers(OrSetOp::Add { elem: Modifier::FontSize { value: 1600 } }),
-            })).unwrap();
             let mut live: Vec<Dot> = Vec::new();
             let mut count = 1usize;
             for i in 0..24usize {
@@ -1476,12 +1546,6 @@ mod tests {
                         })).unwrap();
                         count += 1;
                     }
-                    5 if !live.is_empty() => {
-                        state.apply(EditOp::NodeStyle(editor_model::NodeLwwOp {
-                            target: pick(a, &live),
-                            op: LwwRegOp::Set { value: Some("s".to_string()) },
-                        })).unwrap();
-                    }
                     6 => {
                         state.apply(EditOp::BlockModifier(editor_model::ModifierAttrOp::SetModifier {
                             target: Dot::ROOT,
@@ -1499,15 +1563,8 @@ mod tests {
                             modifier: m,
                         })).unwrap();
                     }
-                    10 if !live.is_empty() => {
+                    10..=11 if !live.is_empty() => {
                         state.apply(EditOp::Span(SpanOp::RemoveSpan {
-                            start: Anchor { id: pick(a, &live), bias: bias_s },
-                            end: Anchor { id: pick(b, &live), bias: bias_e },
-                            modifier_type: m.as_type(),
-                        })).unwrap();
-                    }
-                    11 if !live.is_empty() => {
-                        state.apply(EditOp::Span(SpanOp::ClearSpan {
                             start: Anchor { id: pick(a, &live), bias: bias_s },
                             end: Anchor { id: pick(b, &live), bias: bias_e },
                             modifier_type: m.as_type(),
@@ -1564,7 +1621,6 @@ mod tests {
                         proptest::prop_assert_eq!(&*truth.eff, g.effective);
                         proptest::prop_assert_eq!(truth.leaf_type, g.leaf_type);
                         proptest::prop_assert_eq!(&*truth.own, g.own);
-                        proptest::prop_assert_eq!(truth.style.as_ref(), g.style);
                     }
                     i += g.count;
                 }

@@ -73,11 +73,10 @@ fn provided_and_override(
     let block_eff = node.effective().get(&ty).cloned();
     let leaf_idx = offset.saturating_sub(1);
     let st = node.leaf_state_at(leaf_idx);
-    let own = st.and_then(|s| s.own.get(&ty).map(|o| (o.value.clone(), o.from_style)));
-    let has_explicit_override = matches!(&own, Some((_, false)));
+    let own = st.and_then(|s| s.own.get(&ty).map(|o| o.value.clone()));
+    let has_explicit_override = own.is_some();
     let provided = match &own {
-        Some((value, true)) => Some(value.clone()),
-        Some((_, false)) => block_eff,
+        Some(_) => block_eff,
         None => st.and_then(|s| s.eff.get(&ty).cloned()).or(block_eff),
     };
     (provided, has_explicit_override)
@@ -218,7 +217,7 @@ fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) 
             weight_and_bold_after_family_change(old_weight, old_bold, available_weights);
 
         if old_bold && !new_bold {
-            tr.clear_span_modifier(g_first, g_last, Modifier::Bold)?;
+            tr.remove_span_modifier(g_first, g_last, Modifier::Bold)?;
         } else if !old_bold && new_bold {
             tr.add_span_modifier(g_first, g_last, Modifier::Bold)?;
         }

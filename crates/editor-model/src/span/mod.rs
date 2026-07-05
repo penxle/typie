@@ -3,7 +3,7 @@ pub use derive::*;
 
 mod effective;
 pub use effective::{
-    EffectiveSources, OwnEffect, OwnModifier, derive_block_effective, own_modifiers_for_leaf,
+    EffectiveSources, OwnModifier, derive_block_effective, own_modifiers_for_leaf,
     resolve_effective,
 };
 
@@ -62,15 +62,6 @@ pub enum SpanOp {
         #[wire(n(2))]
         modifier_type: ModifierType,
     },
-    #[wire(n(2))]
-    ClearSpan {
-        #[wire(n(0))]
-        start: Anchor,
-        #[wire(n(1))]
-        end: Anchor,
-        #[wire(n(2))]
-        modifier_type: ModifierType,
-    },
 }
 
 impl From<Bias> for editor_crdt::sequence::Bias {
@@ -85,9 +76,9 @@ impl From<Bias> for editor_crdt::sequence::Bias {
 impl SpanOp {
     pub fn anchors(&self) -> (Anchor, Anchor) {
         match self {
-            SpanOp::AddSpan { start, end, .. }
-            | SpanOp::RemoveSpan { start, end, .. }
-            | SpanOp::ClearSpan { start, end, .. } => (*start, *end),
+            SpanOp::AddSpan { start, end, .. } | SpanOp::RemoveSpan { start, end, .. } => {
+                (*start, *end)
+            }
         }
     }
 }
@@ -198,14 +189,8 @@ mod tests {
             end: anc(2, 9, Bias::Before),
             modifier_type: ModifierType::Bold,
         };
-        let clr = SpanOp::ClearSpan {
-            start: anc(3, 1, Bias::Before),
-            end: anc(3, 4, Bias::After),
-            modifier_type: ModifierType::Italic,
-        };
         assert_eq!(round_trip(&add).unwrap(), add);
         assert_eq!(round_trip(&rem).unwrap(), rem);
-        assert_eq!(round_trip(&clr).unwrap(), clr);
     }
 
     fn add(a: u64, c: u64, m: Modifier) -> SpanOp {
@@ -284,17 +269,12 @@ mod tests {
                     modifier: m,
                 }
             }),
-            (anchor.clone(), anchor.clone(), arb_modifier()).prop_map(|(s, e, m)| {
+            (anchor.clone(), anchor, arb_modifier()).prop_map(|(s, e, m)| {
                 SpanOp::RemoveSpan {
                     start: s,
                     end: e,
                     modifier_type: m.as_type(),
                 }
-            }),
-            (anchor.clone(), anchor, arb_modifier()).prop_map(|(s, e, m)| SpanOp::ClearSpan {
-                start: s,
-                end: e,
-                modifier_type: m.as_type()
             }),
         ]
     }

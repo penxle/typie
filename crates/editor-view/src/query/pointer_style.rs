@@ -117,7 +117,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog,
-        NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog, project_document,
+        NodeMarkerLog, NodeType, SeqItem, SpanLog, project_document,
     };
     use editor_resource::Resource;
 
@@ -146,9 +146,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 

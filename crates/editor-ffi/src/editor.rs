@@ -219,7 +219,7 @@ impl Editor {
 
     pub fn root_modifiers(&self) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
         self.with_inner(|inner| {
-            Ok(crate::root::base_style_modifiers(inner.editor.state()).into_ffi()?)
+            Ok(crate::root::root_default_modifiers(inner.editor.state()).into_ffi()?)
         })
     }
 
@@ -244,20 +244,6 @@ impl Editor {
 
     pub fn block_state(&self) -> EditorResult<Option<Complex<editor_core::BlockState>>> {
         self.with_inner(|inner| Ok(inner.editor.block_state().into_ffi()?))
-    }
-
-    pub fn style_entries(&self) -> EditorResult<Vec<Complex<editor_core::StyleInfo>>> {
-        self.with_inner(|inner| Ok(inner.editor.style_entries().into_ffi()?))
-    }
-
-    pub fn applied_style(
-        &self,
-    ) -> EditorResult<Complex<editor_common::Tri<editor_core::StyleRefValue>>> {
-        self.with_inner(|inner| Ok(inner.editor.applied_style().into_ffi()?))
-    }
-
-    pub fn style_divergence(&self) -> EditorResult<bool> {
-        self.with_inner(|inner| Ok(inner.editor.style_divergence()))
     }
 
     pub fn character_counts(&self) -> EditorResult<Complex<CharacterCounts>> {
@@ -1220,11 +1206,10 @@ mod tests {
     }
 
     #[test]
-    fn ffi_root_modifiers_returns_root_base_style_modifiers() {
+    fn ffi_root_modifiers_returns_root_default_modifiers() {
         let (initial, ..) = state! {
             doc {
-                styles { base: "기본" [font_size(1600), block_gap(120)] }
-                root @base [] { p: paragraph { text("hello") } }
+                root [font_size(1600), block_gap(120)] { p: paragraph { text("hello") } }
             }
             selection: (p, 0)
         };

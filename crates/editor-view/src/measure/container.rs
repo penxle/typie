@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
 
-use editor_model::{Alignment, ChildView, Modifier, ModifierType, NodeType, NodeView};
+use editor_model::{
+    Alignment, ChildView, DEFAULT_BLOCK_GAP, DEFAULT_PARAGRAPH_INDENT, Modifier, ModifierType,
+    NodeType, NodeView,
+};
 use editor_resource::Resource;
 
 use crate::measure::PageBreakPolicy;
@@ -24,10 +27,11 @@ const BLOCK_GAP_BASE_PX: f32 = 16.0;
 const PHANTOM_INDENT_BASE_PX: f32 = 16.0;
 
 pub(crate) fn resolve_gap_after(effective: &BTreeMap<ModifierType, Modifier>) -> f32 {
-    match effective.get(&ModifierType::BlockGap) {
-        Some(Modifier::BlockGap { value }) => *value as f32 / 100.0 * BLOCK_GAP_BASE_PX,
-        _ => 0.0,
-    }
+    let value = match effective.get(&ModifierType::BlockGap) {
+        Some(Modifier::BlockGap { value }) => *value,
+        _ => DEFAULT_BLOCK_GAP,
+    };
+    value as f32 / 100.0 * BLOCK_GAP_BASE_PX
 }
 
 static EMPTY_EFF: LazyLock<BTreeMap<ModifierType, Modifier>> = LazyLock::new(BTreeMap::new);
@@ -50,10 +54,11 @@ fn phantom_indent(node: &NodeView) -> f32 {
     if node.node_type() != NodeType::Root {
         return 0.0;
     }
-    match node.effective().get(&ModifierType::ParagraphIndent) {
-        Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * PHANTOM_INDENT_BASE_PX,
-        _ => 0.0,
-    }
+    let value = match node.effective().get(&ModifierType::ParagraphIndent) {
+        Some(Modifier::ParagraphIndent { value }) => *value,
+        _ => DEFAULT_PARAGRAPH_INDENT,
+    };
+    value as f32 / 100.0 * PHANTOM_INDENT_BASE_PX
 }
 
 fn make_gap_phantom_block(
@@ -180,8 +185,8 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         AtomLeaf, ChildView, DocLogs, DocView, HorizontalRuleVariant, Modifier, ModifierAttrLog,
-        ModifierAttrOp::SetModifier, ModifierType, NodeAttrLog, NodeMarkerLog, NodeStyleLog,
-        NodeType, SeqItem, SpanLog, StyleLog, project_document,
+        ModifierAttrOp::SetModifier, ModifierType, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem,
+        SpanLog, project_document,
     };
     use editor_resource::Resource;
 
@@ -225,9 +230,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 

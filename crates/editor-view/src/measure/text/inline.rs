@@ -169,14 +169,13 @@ pub(crate) fn identify_ruby_groups(node: &NodeView) -> Vec<RubyGroup> {
     for (offset, item) in node.inline().into_iter().enumerate() {
         match &item.kind {
             InlineKind::Char { .. } => {
-                let ruby_text: Option<&str> = item
-                    .own_modifiers
-                    .get(&ModifierType::Ruby)
-                    .filter(|o| !o.from_style)
-                    .and_then(|o| match &o.value {
-                        Modifier::Ruby { text } => Some(text.as_str()),
-                        _ => None,
-                    });
+                let ruby_text: Option<&str> =
+                    item.own_modifiers
+                        .get(&ModifierType::Ruby)
+                        .and_then(|o| match &o.value {
+                            Modifier::Ruby { text } => Some(text.as_str()),
+                            _ => None,
+                        });
                 match ruby_text {
                     Some(t) if !t.is_empty() => match current.as_mut() {
                         Some(g) if g.text == t => {
@@ -205,11 +204,11 @@ pub(crate) fn identify_ruby_groups(node: &NodeView) -> Vec<RubyGroup> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::{Dot, InputEvent, ListOp, LwwRegOp, build_oplog};
+    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp,
-        ModifierType, NodeAttrLog, NodeLwwOp, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem,
-        SpanLog, SpanOp, StyleLog, StyleOp, StyleRegOp, project_document,
+        ModifierType, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog, SpanOp,
+        project_document,
     };
 
     fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
@@ -231,9 +230,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -367,18 +364,16 @@ mod tests {
     }
 
     #[test]
-    fn provenance_own_vs_inherited_text_color() {
-        // root block TextColor("red") -> char b inherits; char a ALSO owns the same red via span.
-        // Same effective, different own -> 2 runs; only run[0] carries own TextColor.
+    fn provenance_own_vs_inherited_font_size() {
+        // root block FontSize(1600) -> char b inherits; char a ALSO owns the same size via span.
+        // Same effective, different own -> 2 runs; only run[0] carries own FontSize.
         let mut l = build_logs(vec![ch('a'), ch('b')]);
         l.block_modifiers = ModifierAttrLog::new()
             .apply(
                 Dot::new(52, 1),
                 ModifierAttrOp::SetModifier {
                     target: Dot::ROOT,
-                    modifier: Modifier::TextColor {
-                        value: "red".to_string(),
-                    },
+                    modifier: Modifier::FontSize { value: 1600 },
                 },
             )
             .unwrap();
@@ -388,9 +383,7 @@ mod tests {
                 SpanOp::AddSpan {
                     start: anc(leaf(0), Bias::Before),
                     end: anc(leaf(0), Bias::After),
-                    modifier: Modifier::TextColor {
-                        value: "red".to_string(),
-                    },
+                    modifier: Modifier::FontSize { value: 1600 },
                 },
             )
             .unwrap();
@@ -399,22 +392,23 @@ mod tests {
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let (_t, runs, _tabs) = collect_text_runs(&para);
         assert_eq!(runs.len(), 2);
-        assert!(runs[0].own_modifiers.contains_key(&ModifierType::TextColor)); // own
-        assert!(!runs[1].own_modifiers.contains_key(&ModifierType::TextColor)); // inherited only
-        assert!(runs[0].effective.contains_key(&ModifierType::TextColor));
-        assert!(runs[1].effective.contains_key(&ModifierType::TextColor));
+        assert!(runs[0].own_modifiers.contains_key(&ModifierType::FontSize)); // own
+        assert!(!runs[1].own_modifiers.contains_key(&ModifierType::FontSize)); // inherited only
+        assert!(runs[0].effective.contains_key(&ModifierType::FontSize));
+        assert!(runs[1].effective.contains_key(&ModifierType::FontSize));
     }
 
     #[test]
     fn decoration_underline_exposed_via_effective() {
-        // paragraph block Underline (inherited by both chars); char a also owns it via span.
-        // The d-3-2 decoration contract reads effective[Underline] directly -> both expose it.
+        // char a owns Underline via span; char b has none (non-inheritable, and a
+        // paragraph block Underline record no longer reaches carriers).
+        // The d-3-2 decoration contract reads effective[Underline] directly.
         let mut l = build_logs(vec![ch('a'), ch('b')]);
         l.block_modifiers = ModifierAttrLog::new()
             .apply(
                 Dot::new(54, 1),
                 ModifierAttrOp::SetModifier {
-                    target: Dot::new(1, 1), // the paragraph (Underline context is Paragraph | Paragraph>Text)
+                    target: Dot::new(1, 1),
                     modifier: Modifier::Underline,
                 },
             )
@@ -435,7 +429,7 @@ mod tests {
         let (_t, runs, _tabs) = collect_text_runs(&para);
         assert_eq!(runs.len(), 2);
         assert!(runs[0].effective.get(&ModifierType::Underline).is_some());
-        assert!(runs[1].effective.get(&ModifierType::Underline).is_some());
+        assert!(runs[1].effective.get(&ModifierType::Underline).is_none());
         assert!(runs[0].own_modifiers.contains_key(&ModifierType::Underline));
         assert!(!runs[1].own_modifiers.contains_key(&ModifierType::Underline));
     }
@@ -469,51 +463,6 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert!((runs[0].style.font_size - 16.0 * 96.0 / 72.0).abs() < 0.01);
         assert_eq!(runs[0].style.font_weight, 700);
-    }
-
-    #[test]
-    fn clear_splits_run_despite_equal_empty_own() {
-        // root block FontSize(1600): char a inherits it; char b CLEARS it (Add then Clear span).
-        // Both have empty own_modifiers, but a.effective has FontSize and b.effective does not
-        // (the Clear barrier). An own-only key would merge them -> must be TWO runs.
-        let mut l = build_logs(vec![ch('a'), ch('b')]);
-        l.block_modifiers = ModifierAttrLog::new()
-            .apply(
-                Dot::new(57, 1),
-                ModifierAttrOp::SetModifier {
-                    target: Dot::ROOT,
-                    modifier: Modifier::FontSize { value: 1600 },
-                },
-            )
-            .unwrap();
-        l.spans = SpanLog::new()
-            .apply(
-                Dot::new(58, 1),
-                SpanOp::AddSpan {
-                    start: anc(leaf(1), Bias::Before),
-                    end: anc(leaf(1), Bias::After),
-                    modifier: Modifier::FontSize { value: 1600 },
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(59, 1),
-                SpanOp::ClearSpan {
-                    start: anc(leaf(1), Bias::Before),
-                    end: anc(leaf(1), Bias::After),
-                    modifier_type: ModifierType::FontSize,
-                },
-            )
-            .unwrap();
-        let pd = project_document(&l).unwrap();
-        let view = DocView::new(&pd);
-        let para = view.root().unwrap().child_blocks().next().unwrap();
-        let (_t, runs, _tabs) = collect_text_runs(&para);
-        assert_eq!(runs.len(), 2);
-        assert!(runs[0].own_modifiers.is_empty());
-        assert!(runs[1].own_modifiers.is_empty());
-        assert!(runs[0].effective.get(&ModifierType::FontSize).is_some());
-        assert!(runs[1].effective.get(&ModifierType::FontSize).is_none());
     }
 
     #[test]
@@ -623,48 +572,6 @@ mod tests {
         );
         let (_t, _runs, tabs) = collect_text_runs(&para);
         assert!(tabs.is_empty());
-    }
-
-    #[test]
-    fn clear_tab_blocks_inherited_font_and_defaults_style() {
-        // root block FontSize(1600); the Tab CLEARS it -> effective has no FontSize (barrier),
-        // and style.font_size falls back to the 16px default.
-        let mut l = build_logs(vec![ch('a'), tab(), ch('b')]);
-        l.block_modifiers = ModifierAttrLog::new()
-            .apply(
-                Dot::new(61, 1),
-                ModifierAttrOp::SetModifier {
-                    target: Dot::ROOT,
-                    modifier: Modifier::FontSize { value: 1600 },
-                },
-            )
-            .unwrap();
-        l.spans = SpanLog::new()
-            .apply(
-                Dot::new(62, 1),
-                SpanOp::AddSpan {
-                    start: anc(leaf(1), Bias::Before),
-                    end: anc(leaf(1), Bias::After),
-                    modifier: Modifier::FontSize { value: 1600 },
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(63, 1),
-                SpanOp::ClearSpan {
-                    start: anc(leaf(1), Bias::Before),
-                    end: anc(leaf(1), Bias::After),
-                    modifier_type: ModifierType::FontSize,
-                },
-            )
-            .unwrap();
-        let pd = project_document(&l).unwrap();
-        let view = DocView::new(&pd);
-        let para = view.root().unwrap().child_blocks().next().unwrap();
-        let (_t, _runs, tabs) = collect_text_runs(&para);
-        assert_eq!(tabs.len(), 1);
-        assert!(tabs[0].effective.get(&ModifierType::FontSize).is_none());
-        assert!((tabs[0].style.font_size - 16.0).abs() < 0.01); // DEFAULT_FONT_SIZE_PX
     }
 
     // Helper: chain N ruby AddSpans, each over a single leaf index, onto a fresh SpanLog.
@@ -810,57 +717,5 @@ mod tests {
                 byte_range: 1..2
             }
         );
-    }
-
-    #[test]
-    fn style_derived_ruby_is_ignored() {
-        // char a gets ruby ONLY via a style (from_style == true) -> identify must NOT group it,
-        // matching the old child.modifiers() behavior (style excluded).
-        let mut l = build_logs(vec![ch('a')]);
-        l.node_styles = NodeStyleLog::new()
-            .apply(
-                Dot::new(66, 1),
-                NodeLwwOp {
-                    target: leaf(0),
-                    op: LwwRegOp::Set {
-                        value: Some("s".to_string()),
-                    },
-                },
-            )
-            .unwrap();
-        l.styles = StyleLog::new()
-            .apply(
-                Dot::new(2, 1),
-                StyleRegOp {
-                    style_id: "s".to_string(),
-                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                        key: "s".to_string(),
-                        value: (),
-                    }),
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(2, 2),
-                StyleRegOp {
-                    style_id: "s".to_string(),
-                    op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
-                        elem: Modifier::Ruby {
-                            text: "x".to_string(),
-                        },
-                    }),
-                },
-            )
-            .unwrap();
-        let pd = project_document(&l).unwrap();
-        let view = DocView::new(&pd);
-        let para = view.root().unwrap().child_blocks().next().unwrap();
-        // sanity: the style DID land as a from_style==true own ruby
-        let items = para.inline();
-        let own = items[0].own_modifiers.get(&ModifierType::Ruby).unwrap();
-        assert!(own.from_style, "precondition: ruby came from the style");
-        // and identify ignores it
-        let groups = identify_ruby_groups(&para);
-        assert!(groups.is_empty());
     }
 }

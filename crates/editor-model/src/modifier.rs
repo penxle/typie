@@ -146,6 +146,27 @@ impl Modifier {
     pub fn as_type(&self) -> ModifierType {
         ModifierType::from(self)
     }
+
+    pub fn is_valid(&self) -> bool {
+        match self {
+            Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough => {
+                true
+            }
+            Modifier::FontSize { value } => (400..=12800).contains(value),
+            Modifier::FontFamily { value } => !value.is_empty(),
+            Modifier::FontWeight { value } => (100..=900).contains(value) && value % 100 == 0,
+            Modifier::TextColor { value } | Modifier::BackgroundColor { value } => {
+                !value.is_empty() && value != "none"
+            }
+            Modifier::LetterSpacing { value } => (-50..=200).contains(value),
+            Modifier::Link { href } => !href.is_empty(),
+            Modifier::Ruby { text } => !text.is_empty(),
+            Modifier::LineHeight { value } => (50..=400).contains(value),
+            Modifier::BlockGap { value } => (0..=400).contains(value),
+            Modifier::ParagraphIndent { value } => (0..=400).contains(value),
+            Modifier::Alignment { .. } => true,
+        }
+    }
 }
 
 pub const DEFAULT_FONT_FAMILY: &str = "Pretendard";
@@ -153,6 +174,9 @@ pub const DEFAULT_FONT_SIZE: u32 = 1200;
 pub const DEFAULT_FONT_WEIGHT: u16 = 400;
 pub const DEFAULT_LETTER_SPACING: i32 = 0;
 pub const DEFAULT_LINE_HEIGHT: u32 = 160;
+pub const DEFAULT_ALIGNMENT: Alignment = Alignment::Left;
+pub const DEFAULT_BLOCK_GAP: u32 = 0;
+pub const DEFAULT_PARAGRAPH_INDENT: u32 = 0;
 
 pub fn text_style_default_modifier(ty: ModifierType) -> Option<Modifier> {
     match ty {
@@ -170,6 +194,15 @@ pub fn text_style_default_modifier(ty: ModifierType) -> Option<Modifier> {
         }),
         ModifierType::LineHeight => Some(Modifier::LineHeight {
             value: DEFAULT_LINE_HEIGHT,
+        }),
+        ModifierType::Alignment => Some(Modifier::Alignment {
+            value: DEFAULT_ALIGNMENT,
+        }),
+        ModifierType::BlockGap => Some(Modifier::BlockGap {
+            value: DEFAULT_BLOCK_GAP,
+        }),
+        ModifierType::ParagraphIndent => Some(Modifier::ParagraphIndent {
+            value: DEFAULT_PARAGRAPH_INDENT,
         }),
         _ => None,
     }
@@ -281,6 +314,80 @@ mod tests {
     fn modifier_state_default_has_absent_effective_bold() {
         let s = ModifierState::default();
         assert_eq!(s.effective_bold, editor_common::Tri::Absent);
+    }
+
+    #[test]
+    fn modifier_value_spaces_match_catalog() {
+        assert!(Modifier::FontSize { value: 400 }.is_valid());
+        assert!(Modifier::FontSize { value: 12800 }.is_valid());
+        assert!(!Modifier::FontSize { value: 399 }.is_valid());
+        assert!(!Modifier::FontSize { value: 12801 }.is_valid());
+        assert!(Modifier::FontWeight { value: 900 }.is_valid());
+        assert!(!Modifier::FontWeight { value: 950 }.is_valid());
+        assert!(!Modifier::FontWeight { value: 0 }.is_valid());
+        assert!(Modifier::LetterSpacing { value: -50 }.is_valid());
+        assert!(Modifier::LetterSpacing { value: 200 }.is_valid());
+        assert!(!Modifier::LetterSpacing { value: -51 }.is_valid());
+        assert!(Modifier::LineHeight { value: 50 }.is_valid());
+        assert!(Modifier::LineHeight { value: 400 }.is_valid());
+        assert!(!Modifier::LineHeight { value: 401 }.is_valid());
+        assert!(Modifier::BlockGap { value: 400 }.is_valid());
+        assert!(!Modifier::BlockGap { value: 401 }.is_valid());
+        assert!(
+            !Modifier::Link {
+                href: String::new()
+            }
+            .is_valid()
+        );
+        assert!(
+            !Modifier::Ruby {
+                text: String::new()
+            }
+            .is_valid()
+        );
+        assert!(
+            !Modifier::TextColor {
+                value: String::new()
+            }
+            .is_valid()
+        );
+    }
+
+    #[test]
+    fn modifier_value_spaces_additional_boundaries() {
+        assert!(Modifier::ParagraphIndent { value: 400 }.is_valid());
+        assert!(!Modifier::ParagraphIndent { value: 401 }.is_valid());
+        assert!(
+            !Modifier::FontFamily {
+                value: String::new()
+            }
+            .is_valid()
+        );
+        assert!(
+            !Modifier::BackgroundColor {
+                value: "none".to_string()
+            }
+            .is_valid()
+        );
+        assert!(
+            !Modifier::TextColor {
+                value: "none".to_string()
+            }
+            .is_valid()
+        );
+        assert!(
+            Modifier::BackgroundColor {
+                value: "red".to_string()
+            }
+            .is_valid()
+        );
+        assert!(Modifier::Bold.is_valid());
+        assert!(
+            Modifier::Alignment {
+                value: Alignment::Justify
+            }
+            .is_valid()
+        );
     }
 
     #[test]

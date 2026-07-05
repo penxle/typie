@@ -16,7 +16,6 @@ pub struct NodeLwwLog<T> {
     ops: imbl::HashMap<Dot, NodeLwwOp<T>>,
 }
 
-pub type NodeStyleLog = NodeLwwLog<Option<String>>;
 pub type NodeMarkerLog = NodeLwwLog<Option<Marker>>;
 
 impl<T: Clone + PartialEq> NodeLwwLog<T> {
@@ -114,7 +113,7 @@ mod tests {
         Ok(out)
     }
 
-    fn style_op(target: u64, value: Option<&str>) -> NodeLwwOp<Option<String>> {
+    fn lww_op(target: u64, value: Option<&str>) -> NodeLwwOp<Option<String>> {
         NodeLwwOp {
             target: Dot::new(1, target),
             op: LwwRegOp::Set {
@@ -125,8 +124,8 @@ mod tests {
 
     #[test]
     fn apply_stores_op() {
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap();
         assert_eq!(log.len(), 1);
         assert!(!log.is_empty());
@@ -134,8 +133,9 @@ mod tests {
 
     #[test]
     fn apply_same_dot_same_op_idempotent() {
-        let o = style_op(1, Some("a"));
-        let a: NodeStyleLog = NodeLwwLog::new().apply(Dot::new(2, 0), o.clone()).unwrap();
+        let o = lww_op(1, Some("a"));
+        let a: NodeLwwLog<Option<String>> =
+            NodeLwwLog::new().apply(Dot::new(2, 0), o.clone()).unwrap();
         let b = a.apply(Dot::new(2, 0), o).unwrap();
         assert_eq!(a, b);
     }
@@ -143,13 +143,14 @@ mod tests {
     #[test]
     fn apply_same_dot_diff_op_conflicts() {
         let d = Dot::new(2, 0);
-        let a: NodeStyleLog = NodeLwwLog::new().apply(d, style_op(1, Some("a"))).unwrap();
-        let err = a.apply(d, style_op(1, Some("b"))).unwrap_err();
+        let a: NodeLwwLog<Option<String>> =
+            NodeLwwLog::new().apply(d, lww_op(1, Some("a"))).unwrap();
+        let err = a.apply(d, lww_op(1, Some("b"))).unwrap_err();
         assert_eq!(err, CrdtError::DotConflict { dot: d });
     }
 
     #[test]
-    fn style_op_wire_round_trips() {
+    fn lww_op_wire_round_trips() {
         let op: NodeLwwOp<Option<String>> = NodeLwwOp {
             target: Dot::new(1, 0),
             op: LwwRegOp::Set {
@@ -164,10 +165,7 @@ mod tests {
         let op: NodeLwwOp<Option<Marker>> = NodeLwwOp {
             target: Dot::new(2, 3),
             op: LwwRegOp::Set {
-                value: Some(Marker {
-                    modifiers: vec![],
-                    style: Some("m".to_string()),
-                }),
+                value: Some(Marker { modifiers: vec![] }),
             },
         };
         assert_eq!(round_trip(&op).unwrap(), op);
@@ -176,35 +174,35 @@ mod tests {
     #[test]
     fn value_of_applies_single_set() {
         let target = Dot::new(1, 1);
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap();
         assert_eq!(log.value_of(target), Some("a".to_string()));
     }
 
     #[test]
     fn value_of_no_ops_is_none() {
-        let log: NodeStyleLog = NodeLwwLog::new();
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new();
         assert_eq!(log.value_of(Dot::new(1, 9)), None);
     }
 
     #[test]
     fn value_of_lww_higher_dot_wins() {
         let target = Dot::new(1, 1);
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap()
-            .apply(Dot::new(3, 0), style_op(1, Some("b")))
+            .apply(Dot::new(3, 0), lww_op(1, Some("b")))
             .unwrap();
         assert_eq!(log.value_of(target), Some("b".to_string()));
     }
 
     #[test]
     fn value_of_isolates_target() {
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap()
-            .apply(Dot::new(2, 1), style_op(2, Some("b")))
+            .apply(Dot::new(2, 1), lww_op(2, Some("b")))
             .unwrap();
         assert_eq!(log.value_of(Dot::new(1, 1)), Some("a".to_string()));
     }
@@ -212,10 +210,7 @@ mod tests {
     #[test]
     fn value_of_supports_marker_alias() {
         let target = Dot::new(1, 1);
-        let m = Marker {
-            modifiers: vec![],
-            style: Some("m".to_string()),
-        };
+        let m = Marker { modifiers: vec![] };
         let log: NodeMarkerLog = NodeLwwLog::new()
             .apply(
                 Dot::new(2, 0),
@@ -232,10 +227,10 @@ mod tests {
 
     #[test]
     fn project_accumulates_per_node() {
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap()
-            .apply(Dot::new(2, 1), style_op(2, Some("b")))
+            .apply(Dot::new(2, 1), lww_op(2, Some("b")))
             .unwrap();
         let projected = log.project();
         assert_eq!(projected.len(), 2);
@@ -245,8 +240,8 @@ mod tests {
 
     #[test]
     fn project_omits_no_op_nodes() {
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap();
         let projected = log.project();
         assert!(projected.get(&Dot::new(1, 1)).is_some());
@@ -256,10 +251,10 @@ mod tests {
     #[test]
     fn project_retains_explicit_set_none() {
         let a = Dot::new(1, 1);
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap()
-            .apply(Dot::new(3, 0), style_op(1, None))
+            .apply(Dot::new(3, 0), lww_op(1, None))
             .unwrap();
         let projected = log.project();
         assert_eq!(projected.get(&a), Some(&None));
@@ -269,10 +264,10 @@ mod tests {
     #[test]
     fn project_matches_value_of() {
         let target = Dot::new(1, 1);
-        let log: NodeStyleLog = NodeLwwLog::new()
-            .apply(Dot::new(2, 0), style_op(1, Some("a")))
+        let log: NodeLwwLog<Option<String>> = NodeLwwLog::new()
+            .apply(Dot::new(2, 0), lww_op(1, Some("a")))
             .unwrap()
-            .apply(Dot::new(3, 0), style_op(1, Some("b")))
+            .apply(Dot::new(3, 0), lww_op(1, Some("b")))
             .unwrap();
         let projected = log.project();
         assert_eq!(projected.get(&target), Some(&log.value_of(target)));
@@ -281,10 +276,7 @@ mod tests {
     #[test]
     fn project_supports_marker_alias() {
         let target = Dot::new(1, 1);
-        let m = Marker {
-            modifiers: vec![],
-            style: Some("m".to_string()),
-        };
+        let m = Marker { modifiers: vec![] };
         let log: NodeMarkerLog = NodeLwwLog::new()
             .apply(
                 Dot::new(2, 0),
@@ -336,7 +328,7 @@ mod proptests {
             })
     }
 
-    fn build(pairs: &[(Dot, Option<String>)]) -> NodeStyleLog {
+    fn build(pairs: &[(Dot, Option<String>)]) -> NodeLwwLog<Option<String>> {
         let mut log = NodeLwwLog::new();
         for (dot, value) in pairs {
             let op = NodeLwwOp {
@@ -357,7 +349,7 @@ mod proptests {
         })
     }
 
-    fn apply_all(pairs: &[(Dot, NodeLwwOp<Option<String>>)]) -> NodeStyleLog {
+    fn apply_all(pairs: &[(Dot, NodeLwwOp<Option<String>>)]) -> NodeLwwLog<Option<String>> {
         let mut log = NodeLwwLog::new();
         for (d, op) in pairs {
             log = log

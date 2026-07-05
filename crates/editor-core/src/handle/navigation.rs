@@ -634,9 +634,6 @@ mod tests {
                 tr.set_pending_modifiers(vec![PendingModifier::Set {
                     modifier: Modifier::Bold,
                 }])?;
-                tr.set_pending_style(Some(editor_state::PendingStyle::Set {
-                    style_id: "s1".to_string(),
-                }))?;
                 Ok(())
             })
             .unwrap();
@@ -657,10 +654,6 @@ mod tests {
         assert!(
             editor.state().pending_modifiers.is_empty(),
             "pending modifiers cleared"
-        );
-        assert!(
-            editor.state().pending_style.is_none(),
-            "pending style cleared"
         );
     }
 

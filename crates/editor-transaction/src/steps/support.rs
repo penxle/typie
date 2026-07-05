@@ -249,34 +249,17 @@ pub(crate) fn span_remove(first: Dot, last: Dot, modifier_type: ModifierType) ->
     })
 }
 
-pub(crate) fn span_clear(first: Dot, last: Dot, modifier_type: ModifierType) -> EditOp {
-    EditOp::Span(SpanOp::ClearSpan {
-        start: Anchor {
-            id: first,
-            bias: Bias::Before,
-        },
-        end: Anchor {
-            id: last,
-            bias: Bias::After,
-        },
-        modifier_type,
-    })
-}
-
 pub(crate) fn block_modifier_set(target: Dot, modifier: Modifier) -> EditOp {
     EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier })
 }
 
-/// Ops that copy a source block's overlays (block modifiers, node style, node
-/// marker) onto `target`. Used when a structural step mints a new block dot
-/// that should inherit the source's block-level formatting (e.g. SplitNode).
+/// Ops that copy a source block's overlays (block modifiers, node marker) onto
+/// `target`. Used when a structural step mints a new block dot that should
+/// inherit the source's block-level formatting (e.g. SplitNode).
 pub(crate) fn block_overlay_ops(ps: &ProjectedState, src: Dot, target: Dot) -> Vec<EditOp> {
     let mut ops = Vec::new();
     for (_ty, m) in ps.block_modifiers().modifiers_of(src) {
         ops.push(block_modifier_set(target, m));
-    }
-    if let Some(style) = ps.node_styles().value_of(src) {
-        ops.push(node_style_set(target, Some(style)));
     }
     if let Some(marker) = ps.node_markers().value_of(src) {
         ops.push(node_marker_set(target, Some(marker)));
@@ -286,13 +269,6 @@ pub(crate) fn block_overlay_ops(ps: &ProjectedState, src: Dot, target: Dot) -> V
 
 pub(crate) fn block_modifier_clear(target: Dot, key: ModifierType) -> EditOp {
     EditOp::BlockModifier(ModifierAttrOp::ClearModifier { target, key })
-}
-
-pub(crate) fn node_style_set(target: Dot, value: Option<String>) -> EditOp {
-    EditOp::NodeStyle(NodeLwwOp {
-        target,
-        op: LwwRegOp::Set { value },
-    })
 }
 
 pub(crate) fn node_marker_set(target: Dot, value: Option<Marker>) -> EditOp {
@@ -317,7 +293,6 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
                 .collect()
         })
         .unwrap_or_default();
-    let style = dot.and_then(|d| ps.node_styles().value_of(d));
     let marker = dot.and_then(|d| ps.node_markers().value_of(d));
 
     let mut children: Vec<Subtree> = Vec::new();
@@ -351,7 +326,6 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
     Some(Subtree {
         node,
         modifiers,
-        style,
         marker,
         children,
     })
@@ -386,9 +360,6 @@ pub(crate) fn emit_subtree(
             for modifier in &subtree.modifiers {
                 batched.apply(block_modifier_set(dot, modifier.clone()))?;
             }
-            if let Some(style_id) = &subtree.style {
-                batched.apply(node_style_set(dot, Some(style_id.clone())))?;
-            }
             if let Some(marker) = &subtree.marker {
                 batched.apply(node_marker_set(dot, Some(marker.clone())))?;
             }
@@ -419,11 +390,6 @@ pub(crate) fn emit_subtree(
                     for modifier in &subtree.modifiers {
                         batched.apply(span_add(first, last, modifier.clone()))?;
                     }
-                    if let Some(style_id) = &subtree.style {
-                        for &d in &char_dots {
-                            batched.apply(node_style_set(d, Some(style_id.clone())))?;
-                        }
-                    }
                 }
             }
             Ok(None)
@@ -448,9 +414,6 @@ pub(crate) fn emit_subtree(
             *seq_pos += 1;
             for modifier in &subtree.modifiers {
                 batched.apply(span_add(dot, dot, modifier.clone()))?;
-            }
-            if let Some(style_id) = &subtree.style {
-                batched.apply(node_style_set(dot, Some(style_id.clone())))?;
             }
             Ok(Some(dot))
         }

@@ -9,8 +9,8 @@ use crate::{
     OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
 use crate::{
-    Marker, Node, NodeAttrLog, NodeMarkerLog, NodeStyleLog, SeqItem, SpanLog, StyleEntry, StyleLog,
-    normalize, project_blocks, validate_block_tree,
+    Marker, Node, NodeAttrLog, NodeMarkerLog, SeqItem, SpanLog, normalize, project_blocks,
+    validate_block_tree,
 };
 
 #[derive(Debug)]
@@ -26,9 +26,7 @@ pub struct DocLogs {
     pub spans: SpanLog,
     pub block_modifiers: ModifierAttrLog,
     pub node_attrs: NodeAttrLog,
-    pub node_styles: NodeStyleLog,
     pub node_markers: NodeMarkerLog,
-    pub styles: StyleLog,
 }
 
 /// A leaf's effective-modifier map, shared by reference: every leaf of a
@@ -44,13 +42,11 @@ pub struct ProjectedDoc {
     pub tree: BlockTree,
     pub block_effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     /// Run segments per block: the sole store of per-leaf derived
-    /// `effective` / `own` modifier state, coalesced by `(leaf_type, style, covering)`.
+    /// `effective` / `own` modifier state, coalesced by `(leaf_type, covering)`.
     pub seg_index: crate::span::BlockSegs,
     pub block_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub node_attrs: imbl::HashMap<Dot, Node>,
-    pub node_styles: imbl::HashMap<Dot, Option<String>>,
     pub node_markers: imbl::HashMap<Dot, Option<Marker>>,
-    pub styles: imbl::HashMap<String, StyleEntry>,
 }
 
 impl ProjectedDoc {
@@ -64,7 +60,6 @@ impl ProjectedDoc {
         if remove_leaf_from_block(&mut self.tree, block, leaf).is_none() {
             return false;
         }
-        self.node_styles.remove(&leaf);
         self.node_attrs.remove(&leaf);
         self.node_markers.remove(&leaf);
         true
@@ -92,9 +87,7 @@ impl PartialEq for ProjectedDoc {
             && self.block_effective == o.block_effective
             && self.block_modifiers == o.block_modifiers
             && self.node_attrs == o.node_attrs
-            && self.node_styles == o.node_styles
             && self.node_markers == o.node_markers
-            && self.styles == o.styles
             && self.seg_index == o.seg_index
     }
 }
@@ -319,7 +312,6 @@ pub fn derive_seg_state(
     projected: &ProjectedDoc,
     block: Dot,
     leaf_type: NodeType,
-    style: Option<&String>,
     covering: Option<&crate::span::Covering>,
     attr_leaf: Option<Dot>,
 ) -> (LeafEff, LeafOwn) {
@@ -330,22 +322,15 @@ pub fn derive_seg_state(
         .map(|c| crate::span::explicit_from_winners(c, &logs.spans, &leaf_path))
         .unwrap_or_default();
     let sentinel = attr_leaf.unwrap_or(Dot::new(u64::MAX, u64::MAX));
-    let mut ex_map: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> =
-        HashMap::new();
+    let mut ex_map: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
     ex_map.insert(sentinel, explicit);
-    let mut node_styles = projected.node_styles.clone();
-    if let Some(s) = style {
-        node_styles.insert(sentinel, Some(s.clone()));
-    }
     let src = crate::span::EffectiveSources {
         block_modifiers: &logs.block_modifiers,
         explicit_spans: &ex_map,
-        node_styles: &node_styles,
-        styles: &projected.styles,
         node_attrs: &projected.node_attrs,
     };
     let eff = crate::span::resolve_effective(&block_path, Some(sentinel), leaf_type, true, &src);
-    let own = crate::span::own_modifiers_for_leaf(sentinel, &leaf_path, &src);
+    let own = crate::span::own_modifiers_for_leaf(sentinel, &src);
     (LeafEff::new(eff), LeafOwn::new(own))
 }
 
@@ -365,7 +350,7 @@ fn canonical_covering(dots: &[Dot], spans: &SpanLog) -> Option<crate::span::SegC
 }
 
 /// Cold segmentation of one block: walk its child leaves in document order and
-/// coalesce consecutive leaves that agree on `(leaf_type, style, covering)` and are
+/// coalesce consecutive leaves that agree on `(leaf_type, covering)` and are
 /// not attrs-singletons. `covering_for` yields the span op dots stabbing a leaf's
 /// visible position (from `ResolvedSpans`). `derive_seg_state` runs once per
 /// distinct key via an LRU-1 memo.
@@ -378,7 +363,6 @@ pub fn segment_block(
 ) -> Vec<crate::span::Seg> {
     struct SegCache {
         leaf_type: NodeType,
-        style: Option<String>,
         covering: Option<crate::span::SegCovering>,
         eff: LeafEff,
         own: LeafOwn,
@@ -391,7 +375,6 @@ pub fn segment_block(
         };
         let dot = *id;
         let leaf_type = item.as_child_type();
-        let style: Option<String> = projected.node_styles.get(&dot).and_then(|o| o.clone());
         let covering = canonical_covering(&covering_for(dot), &logs.spans);
         // Per-leaf-input singleton: attrs carriers, plus every non-inline leaf —
         // `own_effect` reads `block_modifiers` through the REAL dot for those, which
@@ -406,15 +389,12 @@ pub fn segment_block(
                 projected,
                 block.id,
                 leaf_type,
-                style.as_ref(),
                 covering.as_deref(),
                 Some(dot),
             )
         } else {
             let reuse = match &cache {
-                Some(k)
-                    if k.leaf_type == leaf_type && k.style == style && k.covering == covering =>
-                {
+                Some(k) if k.leaf_type == leaf_type && k.covering == covering => {
                     Some((k.eff.clone(), k.own.clone()))
                 }
                 _ => None,
@@ -428,13 +408,11 @@ pub fn segment_block(
                         projected,
                         block.id,
                         leaf_type,
-                        style.as_ref(),
                         covering.as_deref(),
                         None,
                     );
                     cache = Some(SegCache {
                         leaf_type,
-                        style: style.clone(),
                         covering: covering.clone(),
                         eff: d.0.clone(),
                         own: d.1.clone(),
@@ -447,7 +425,6 @@ pub fn segment_block(
         let seg = crate::span::Seg {
             count: 1,
             leaf_type,
-            style,
             covering,
             attrs_singleton,
             eff,
@@ -500,12 +477,10 @@ pub fn block_effective_one(
         return BTreeMap::new();
     };
     let ancestors = &full_path[..full_path.len() - 1];
-    let empty: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> = HashMap::new();
+    let empty: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
     let src = crate::span::EffectiveSources {
         block_modifiers: &logs.block_modifiers,
         explicit_spans: &empty,
-        node_styles: &projected.node_styles,
-        styles: &projected.styles,
         node_attrs: &projected.node_attrs,
     };
     crate::span::resolve_effective(ancestors, self_dot, self_type, false, &src)
@@ -669,17 +644,9 @@ pub fn project_from_tree<R: SeqResolve>(
     let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
     let node_attrs = logs.node_attrs.project(|d| node_type_of.get(&d).copied());
-    let node_styles = filter_live(logs.node_styles.project(), &live);
     let node_markers = filter_live(logs.node_markers.project(), &live);
-    let styles = logs.styles.registered_entries();
 
-    let block_effective = block_effective_all(
-        &tree,
-        &logs.block_modifiers,
-        &node_styles,
-        &styles,
-        &node_attrs,
-    );
+    let block_effective = block_effective_all(&tree, &logs.block_modifiers, &node_attrs);
 
     let mut pd = ProjectedDoc {
         tree,
@@ -687,9 +654,7 @@ pub fn project_from_tree<R: SeqResolve>(
         seg_index: crate::span::BlockSegs::new(),
         block_modifiers,
         node_attrs,
-        node_styles,
         node_markers,
-        styles,
     };
 
     let paths = BlockPaths::from_tree(&pd.tree);
@@ -713,17 +678,12 @@ pub fn project_from_tree<R: SeqResolve>(
 fn block_effective_all(
     tree: &BlockTree,
     block_modifiers: &ModifierAttrLog,
-    node_styles: &imbl::HashMap<Dot, Option<String>>,
-    styles: &imbl::HashMap<String, StyleEntry>,
     node_attrs: &imbl::HashMap<Dot, Node>,
 ) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
-    let empty_ex: HashMap<Dot, BTreeMap<ModifierType, crate::span::ExplicitEffect>> =
-        HashMap::new();
+    let empty_ex: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
     let src = crate::span::EffectiveSources {
         block_modifiers,
         explicit_spans: &empty_ex,
-        node_styles,
-        styles,
         node_attrs,
     };
     crate::span::derive_block_effective(tree, &src)
@@ -819,9 +779,7 @@ mod tests {
             seg_index: crate::span::BlockSegs::new(),
             block_modifiers: imbl::HashMap::new(),
             node_attrs: imbl::HashMap::new(),
-            node_styles: imbl::HashMap::new(),
             node_markers: imbl::HashMap::new(),
-            styles: imbl::HashMap::new(),
         };
         let idx = ProjectionIndexes::rebuild_from(&projected, &SpanLog::new());
         assert_eq!(idx.paths, BlockPaths::from_tree(&tree));
@@ -851,7 +809,7 @@ mod tests {
 
     use crate::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Modifier, ModifierAttrOp,
-        ModifierType, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp, StyleOp, StyleRegOp,
+        ModifierType, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp,
     };
     use editor_crdt::{InputEvent, ListOp, LwwRegOp, build_oplog};
 
@@ -878,9 +836,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -1024,59 +980,7 @@ mod tests {
     }
 
     #[test]
-    fn runs_split_under_style_enriched_effective() {
-        let (elems, _root, para) = para_abc();
-        let mut l = logs_of(&elems);
-        let styled = Dot::new(1, 2);
-        l.node_styles = NodeStyleLog::new()
-            .apply(
-                Dot::new(2, 0),
-                NodeLwwOp {
-                    target: styled,
-                    op: LwwRegOp::Set {
-                        value: Some("s1".to_string()),
-                    },
-                },
-            )
-            .unwrap();
-        l.styles = StyleLog::new()
-            .apply(
-                Dot::new(2, 1),
-                StyleRegOp {
-                    style_id: "s1".to_string(),
-                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                        key: "s1".to_string(),
-                        value: (),
-                    }),
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(2, 2),
-                StyleRegOp {
-                    style_id: "s1".to_string(),
-                    op: StyleOp::Modifiers(editor_crdt::OrSetOp::Add {
-                        elem: Modifier::Bold,
-                    }),
-                },
-            )
-            .unwrap();
-        let pd = project_document(&l).unwrap();
-        assert_eq!(
-            eff_of(&pd, styled).get(&ModifierType::Bold),
-            Some(&Modifier::Bold)
-        );
-        // The styled 'a' (Bold) splits off from the plain 'b','c' into two segments.
-        let groups: Vec<(usize, bool)> = pd
-            .seg_index
-            .group_iter(para)
-            .map(|s| (s.count, s.eff.contains_key(&ModifierType::Bold)))
-            .collect();
-        assert_eq!(groups, vec![(1, true), (2, false)]);
-    }
-
-    #[test]
-    fn overlays_attr_style_marker() {
+    fn overlays_attr_marker() {
         let callout = Dot::new(1, 1);
         let elems = vec![
             (
@@ -1107,17 +1011,6 @@ mod tests {
                 },
             )
             .unwrap();
-        l.node_styles = NodeStyleLog::new()
-            .apply(
-                Dot::new(2, 1),
-                NodeLwwOp {
-                    target: callout,
-                    op: LwwRegOp::Set {
-                        value: Some("s1".to_string()),
-                    },
-                },
-            )
-            .unwrap();
         l.node_markers = NodeMarkerLog::new()
             .apply(
                 Dot::new(2, 2),
@@ -1125,34 +1018,19 @@ mod tests {
                     target: callout,
                     op: LwwRegOp::Set {
                         value: Some(Marker {
-                            modifiers: vec![],
-                            style: Some("s1".to_string()),
+                            modifiers: vec![Modifier::Bold],
                         }),
                     },
                 },
             )
             .unwrap();
-        l.styles = StyleLog::new()
-            .apply(
-                Dot::new(2, 3),
-                StyleRegOp {
-                    style_id: "s1".to_string(),
-                    op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                        key: "s1".to_string(),
-                        value: (),
-                    }),
-                },
-            )
-            .unwrap();
         let pd = project_document(&l).unwrap();
         assert!(pd.node_attrs.contains_key(&callout));
-        assert_eq!(pd.node_styles.get(&callout), Some(&Some("s1".to_string())));
         assert!(pd.node_markers.get(&callout).is_some());
-        assert!(pd.styles.contains_key("s1"));
     }
 
     #[test]
-    fn font_size_inheritable_double_source() {
+    fn line_height_inheritable_double_source() {
         let (elems, _root, para) = para_abc();
         let mut l = logs_of(&elems);
         l.block_modifiers = ModifierAttrLog::new()
@@ -1160,7 +1038,7 @@ mod tests {
                 Dot::new(2, 0),
                 ModifierAttrOp::SetModifier {
                     target: para,
-                    modifier: Modifier::FontSize { value: 1600 },
+                    modifier: Modifier::LineHeight { value: 200 },
                 },
             )
             .unwrap();
@@ -1168,17 +1046,24 @@ mod tests {
         assert_eq!(
             pd.block_modifiers
                 .get(&para)
-                .and_then(|m| m.get(&ModifierType::FontSize)),
-            Some(&Modifier::FontSize { value: 1600 })
+                .and_then(|m| m.get(&ModifierType::LineHeight)),
+            Some(&Modifier::LineHeight { value: 200 })
         );
         assert_eq!(
-            eff_of(&pd, Dot::new(1, 2)).get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 })
+            pd.block_effective
+                .get(&para)
+                .and_then(|m| m.get(&ModifierType::LineHeight)),
+            Some(&Modifier::LineHeight { value: 200 }),
+            "LineHeight's consumer is the Paragraph itself, so it resolves on the paragraph block"
+        );
+        assert!(
+            !eff_of(&pd, Dot::new(1, 2)).contains_key(&ModifierType::LineHeight),
+            "the paragraph's LineHeight record is its own; it does not pass down to its text carriers"
         );
     }
 
     #[test]
-    fn alignment_block_resolves_onto_descendant_text() {
+    fn alignment_block_resolves_on_paragraph_not_descendant_text() {
         use crate::Alignment;
         let (elems, _root, para) = para_abc();
         let mut l = logs_of(&elems);
@@ -1200,10 +1085,17 @@ mod tests {
                 .is_some_and(|m| m.contains_key(&ModifierType::Alignment))
         );
         assert_eq!(
-            eff_of(&pd, Dot::new(1, 2)).get(&ModifierType::Alignment),
+            pd.block_effective
+                .get(&para)
+                .and_then(|m| m.get(&ModifierType::Alignment)),
             Some(&Modifier::Alignment {
                 value: Alignment::Center
-            })
+            }),
+            "the Paragraph consumes Alignment: it resolves on the paragraph block"
+        );
+        assert!(
+            !eff_of(&pd, Dot::new(1, 2)).contains_key(&ModifierType::Alignment),
+            "a Paragraph's Alignment record does not pass down to its text carriers"
         );
     }
 
@@ -1483,19 +1375,21 @@ mod tests {
     fn stale_overlay_does_not_leak() {
         let (elems, _root, _para) = para_abc();
         let mut l = logs_of(&elems);
-        l.node_styles = NodeStyleLog::new()
+        l.node_markers = NodeMarkerLog::new()
             .apply(
                 Dot::new(2, 0),
                 NodeLwwOp {
                     target: Dot::new(9, 9),
                     op: LwwRegOp::Set {
-                        value: Some("ghost".to_string()),
+                        value: Some(Marker {
+                            modifiers: vec![Modifier::Bold],
+                        }),
                     },
                 },
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
-        assert!(!pd.node_styles.contains_key(&Dot::new(9, 9)));
+        assert!(!pd.node_markers.contains_key(&Dot::new(9, 9)));
     }
 
     #[test]
@@ -1535,19 +1429,21 @@ mod tests {
             ),
         ];
         let mut l = logs_of(&elems);
-        l.node_styles = NodeStyleLog::new()
+        l.node_markers = NodeMarkerLog::new()
             .apply(
                 Dot::new(2, 0),
                 NodeLwwOp {
                     target: loser,
                     op: LwwRegOp::Set {
-                        value: Some("x".to_string()),
+                        value: Some(Marker {
+                            modifiers: vec![Modifier::Bold],
+                        }),
                     },
                 },
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
-        assert!(!pd.node_styles.contains_key(&loser));
+        assert!(!pd.node_markers.contains_key(&loser));
     }
 
     #[test]
@@ -1573,10 +1469,7 @@ mod tests {
         let (els, resolver) = checkout_with_resolver(&l.seq);
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let node_type_of = collect_real_ids(&tree);
-        let live: HashSet<Dot> = node_type_of.keys().copied().collect();
         let node_attrs = l.node_attrs.project(|d| node_type_of.get(&d).copied());
-        let node_styles = filter_live(l.node_styles.project(), &live);
-        let styles = l.styles.registered_entries();
         let explicit: HashMap<Dot, _> =
             crate::span::derive_explicit_effect(&els, &tree, &resolver, &l.spans)
                 .into_iter()
@@ -1584,8 +1477,6 @@ mod tests {
         let src = crate::span::EffectiveSources {
             block_modifiers: &l.block_modifiers,
             explicit_spans: &explicit,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let pd = project_document(&l).unwrap();
@@ -1625,8 +1516,7 @@ mod tests {
         assert_eq!(
             own_of(&pd, Dot::new(1, 2)).get(&ModifierType::Bold),
             Some(&crate::OwnModifier {
-                value: Modifier::Bold,
-                from_style: false
+                value: Modifier::Bold
             })
         );
     }
@@ -1673,7 +1563,6 @@ mod tests {
 
             let all_ids: HashSet<Dot> = live.keys().copied().collect();
             for d in pd.node_attrs.keys() { prop_assert!(all_ids.contains(d)); }
-            for d in pd.node_styles.keys() { prop_assert!(all_ids.contains(d)); }
             for d in pd.node_markers.keys() { prop_assert!(all_ids.contains(d)); }
             for d in pd.block_modifiers.keys() { prop_assert!(all_ids.contains(d)); }
 

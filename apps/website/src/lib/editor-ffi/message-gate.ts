@@ -17,7 +17,6 @@ export const isMutatingMessage = (message: Message): boolean => {
     case 'insertion':
     case 'deletion':
     case 'modifier':
-    case 'style':
     case 'node':
     case 'text_input':
     case 'dnd':

@@ -1,8 +1,7 @@
-use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph, OrMapOp, OrSetOp};
+use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph};
 use editor_model::{
     Anchor, AtomLeaf, Bias, EditOp, ModifierAttrOp, NodeAttrOp, NodeLwwOp, NodeType, PlainDoc,
-    PlainNode, PlainNodeEntry, PlainTextNode, SeqClass, SeqItem, SpanOp, StyleOp, StyleRegOp,
-    classify,
+    PlainNode, PlainNodeEntry, PlainTextNode, SeqClass, SeqItem, SpanOp, classify,
 };
 
 use crate::Selection;
@@ -58,16 +57,6 @@ fn emit_node(
                     }))
                     .expect("local block modifier never conflicts");
             }
-            if let Some(style_id) = &entry.style {
-                graph
-                    .add_mut(EditOp::NodeStyle(NodeLwwOp {
-                        target: dot,
-                        op: LwwRegOp::Set {
-                            value: Some(style_id.clone()),
-                        },
-                    }))
-                    .expect("local node style never conflicts");
-            }
             if let Some(marker) = &entry.marker {
                 graph
                     .add_mut(EditOp::NodeMarker(NodeLwwOp {
@@ -94,14 +83,8 @@ fn emit_node(
         SeqClass::Text => {
             if let PlainNode::Text(PlainTextNode { text }) = &entry.node {
                 let mut sink = GraphSink::new(graph);
-                emit_text_run(
-                    &mut sink,
-                    seq_pos,
-                    text,
-                    &entry.modifiers,
-                    entry.style.as_deref(),
-                )
-                .expect("local text run never conflicts");
+                emit_text_run(&mut sink, seq_pos, text, &entry.modifiers)
+                    .expect("local text run never conflicts");
             }
             Ok(())
         }
@@ -138,16 +121,6 @@ fn emit_node(
                     }))
                     .expect("local atom span never conflicts");
             }
-            if let Some(style_id) = &entry.style {
-                graph
-                    .add_mut(EditOp::NodeStyle(NodeLwwOp {
-                        target: dot,
-                        op: LwwRegOp::Set {
-                            value: Some(style_id.clone()),
-                        },
-                    }))
-                    .expect("local atom style never conflicts");
-            }
             Ok(())
         }
     }
@@ -163,36 +136,6 @@ fn build_graph_from_plain(template: &PlainDoc) -> Result<OpGraph<EditOp>, BuildE
 
     emit_node(&template.root, &[], &mut graph, &mut seq_pos)?;
 
-    for (style_id, entry) in template.styles.iter() {
-        graph
-            .add_mut(EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Presence(OrMapOp::Set {
-                    key: style_id.clone(),
-                    value: (),
-                }),
-            }))
-            .expect("local style presence never conflicts");
-        graph
-            .add_mut(EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Name(LwwRegOp::Set {
-                    value: entry.name.clone(),
-                }),
-            }))
-            .expect("local style name never conflicts");
-        for modifier in entry.modifiers.iter() {
-            graph
-                .add_mut(EditOp::Style(StyleRegOp {
-                    style_id: style_id.clone(),
-                    op: StyleOp::Modifiers(OrSetOp::Add {
-                        elem: modifier.clone(),
-                    }),
-                }))
-                .expect("local style modifier never conflicts");
-        }
-    }
-
     Ok(graph)
 }
 
@@ -207,12 +150,12 @@ pub(crate) fn load_from_plain(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
 
     use editor_model::{
         Alignment, BlockquoteVariant, Marker, Modifier, ModifierType, NodeType,
         PlainBlockquoteNode, PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode,
-        PlainRootNode, PlainStyleEntry, PlainTextNode,
+        PlainRootNode, PlainTextNode,
     };
 
     use crate::projected_state::ProjectedState;
@@ -223,7 +166,6 @@ mod tests {
         PlainNodeEntry {
             node,
             modifiers: BTreeMap::new(),
-            style: None,
             marker: None,
             children,
         }
@@ -239,10 +181,7 @@ mod tests {
         let para = block_entry(vec![text], PlainNode::Paragraph(PlainParagraphNode {}));
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
 
-        PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        }
+        PlainDoc { root }
     }
 
     #[test]
@@ -275,10 +214,7 @@ mod tests {
             }),
         );
         let root = block_entry(vec![bq], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        };
+        let template = PlainDoc { root };
 
         let (state, _sel) = load_from_plain(&template).expect("loads");
         let view = state.view();
@@ -301,21 +237,16 @@ mod tests {
         );
         let marker = Marker {
             modifiers: vec![Modifier::Bold],
-            style: None,
         };
 
         let para = PlainNodeEntry {
             node: PlainNode::Paragraph(PlainParagraphNode {}),
             modifiers,
-            style: Some("s1".to_string()),
             marker: Some(marker.clone()),
             children: vec![],
         };
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        };
+        let template = PlainDoc { root };
 
         let (state, _sel) = load_from_plain(&template).expect("loads");
         let view = state.view();
@@ -336,59 +267,7 @@ mod tests {
                 value: Alignment::Center
             })
         );
-        assert_eq!(
-            state.node_styles().value_of(para_dot),
-            Some("s1".to_string())
-        );
         assert_eq!(state.node_markers().value_of(para_dot), Some(marker));
-    }
-
-    #[test]
-    fn load_style_registry_draws_on_leaf() {
-        let mut style_mods = BTreeSet::new();
-        style_mods.insert(Modifier::FontSize { value: 1800 });
-        let mut styles = BTreeMap::new();
-        styles.insert(
-            "s1".to_string(),
-            PlainStyleEntry {
-                name: "Heading".to_string(),
-                modifiers: style_mods,
-            },
-        );
-
-        let text = block_entry(
-            vec![],
-            PlainNode::Text(PlainTextNode {
-                text: "x".to_string(),
-            }),
-        );
-        let para = PlainNodeEntry {
-            node: PlainNode::Paragraph(PlainParagraphNode {}),
-            modifiers: BTreeMap::new(),
-            style: Some("s1".to_string()),
-            marker: None,
-            children: vec![text],
-        };
-        let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc { root, styles };
-
-        let (state, _sel) = load_from_plain(&template).expect("loads");
-        assert!(state.styles().registered("s1"), "style registered");
-
-        let view = state.view();
-        let para = view
-            .root()
-            .unwrap()
-            .child_blocks()
-            .next()
-            .expect("paragraph");
-        let inline = para.inline();
-        assert_eq!(inline.len(), 1, "one inline char");
-        assert_eq!(
-            inline[0].effective.get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1800 }),
-            "leaf effective draws the style modifier"
-        );
     }
 
     #[test]
@@ -401,16 +280,12 @@ mod tests {
                 text: "ab".to_string(),
             }),
             modifiers: text_mods,
-            style: None,
             marker: None,
             children: vec![],
         };
         let para = block_entry(vec![text], PlainNode::Paragraph(PlainParagraphNode {}));
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        };
+        let template = PlainDoc { root };
 
         let (state, _sel) = load_from_plain(&template).expect("loads");
         let view = state.view();
@@ -432,50 +307,6 @@ mod tests {
     }
 
     #[test]
-    fn load_text_style_draws_on_leaf() {
-        let mut style_mods = BTreeSet::new();
-        style_mods.insert(Modifier::Bold);
-        let mut styles = BTreeMap::new();
-        styles.insert(
-            "s1".to_string(),
-            PlainStyleEntry {
-                name: "Strong".to_string(),
-                modifiers: style_mods,
-            },
-        );
-
-        let text = PlainNodeEntry {
-            node: PlainNode::Text(PlainTextNode {
-                text: "x".to_string(),
-            }),
-            modifiers: BTreeMap::new(),
-            style: Some("s1".to_string()),
-            marker: None,
-            children: vec![],
-        };
-        let para = block_entry(vec![text], PlainNode::Paragraph(PlainParagraphNode {}));
-        let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc { root, styles };
-
-        let (state, _sel) = load_from_plain(&template).expect("loads");
-        assert!(state.styles().registered("s1"), "style registered");
-        let view = state.view();
-        let para = view
-            .root()
-            .unwrap()
-            .child_blocks()
-            .next()
-            .expect("paragraph");
-        let inline = para.inline();
-        assert_eq!(inline.len(), 1, "one inline char");
-        assert_eq!(
-            inline[0].effective.get(&ModifierType::Bold),
-            Some(&Modifier::Bold),
-            "leaf draws the text-node style's modifier"
-        );
-    }
-
-    #[test]
     fn load_plain_text_still_char_only() {
         let text = block_entry(
             vec![],
@@ -485,10 +316,7 @@ mod tests {
         );
         let para = block_entry(vec![text], PlainNode::Paragraph(PlainParagraphNode {}));
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        };
+        let template = PlainDoc { root };
 
         let (state, _sel) = load_from_plain(&template).expect("loads");
         let view = state.view();
@@ -521,10 +349,7 @@ mod tests {
     fn load_empty_paragraph_returns_no_initial_selection() {
         let para = block_entry(vec![], PlainNode::Paragraph(PlainParagraphNode {}));
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
-        let template = PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        };
+        let template = PlainDoc { root };
 
         let (state, sel) = load_from_plain(&template).expect("loads");
         assert!(sel.is_none());
@@ -557,10 +382,7 @@ mod tests {
         );
         let root = block_entry(vec![img, para], PlainNode::Root(PlainRootNode::default()));
 
-        let template = PlainDoc {
-            root,
-            styles: BTreeMap::new(),
-        };
+        let template = PlainDoc { root };
         let graph = build_graph_from_plain(&template).expect("builds graph with atoms");
         let state = ProjectedState::from_graph(graph).expect("projects");
         let view = state.view();

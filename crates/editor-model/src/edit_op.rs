@@ -4,8 +4,8 @@ use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire, WireChangeset, WireErr
 use editor_crdt::{CrdtError, Dot, ListOp, Op, OpGraph, OpLog};
 
 use crate::{
-    DocLogs, Marker, ModelError, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp,
-    NodeLwwOp, NodeMarkerLog, NodeStyleLog, SeqItem, SpanLog, SpanOp, StyleLog, StyleRegOp,
+    DocLogs, Marker, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp, NodeLwwOp,
+    NodeMarkerLog, SeqItem, SpanLog, SpanOp,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
@@ -18,12 +18,8 @@ pub enum EditOp {
     BlockModifier(ModifierAttrOp),
     #[wire(n(3))]
     NodeAttr(NodeAttrOp),
-    #[wire(n(4))]
-    NodeStyle(NodeLwwOp<Option<String>>),
     #[wire(n(5))]
     NodeMarker(NodeLwwOp<Option<Marker>>),
-    #[wire(n(6))]
-    Style(StyleRegOp),
 }
 
 impl EditOp {
@@ -35,7 +31,6 @@ impl EditOp {
 #[derive(Debug)]
 pub enum SplitError {
     Crdt(CrdtError),
-    Style(ModelError),
 }
 
 pub fn seq_parents(graph: &OpGraph<EditOp>, dot: Dot) -> Vec<Dot> {
@@ -85,9 +80,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
     let mut spans = SpanLog::new();
     let mut block_modifiers = ModifierAttrLog::new();
     let mut node_attrs = NodeAttrLog::new();
-    let mut node_styles = NodeStyleLog::new();
     let mut node_markers = NodeMarkerLog::new();
-    let mut styles = StyleLog::new();
 
     for op in ordered {
         match &op.payload {
@@ -111,18 +104,10 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
-            EditOp::NodeStyle(o) => {
-                node_styles = node_styles
-                    .apply(op.id, o.clone())
-                    .map_err(SplitError::Crdt)?
-            }
             EditOp::NodeMarker(o) => {
                 node_markers = node_markers
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
-            }
-            EditOp::Style(o) => {
-                styles = styles.apply(op.id, o.clone()).map_err(SplitError::Style)?
             }
         }
     }
@@ -131,9 +116,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
         spans,
         block_modifiers,
         node_attrs,
-        node_styles,
         node_markers,
-        styles,
     })
 }
 
@@ -205,10 +188,9 @@ impl WireChangeset for EditOp {
 mod tests {
     use super::*;
     use crate::{
-        Anchor, AtomLeaf, Bias, HorizontalRuleVariant, Modifier, Node, NodeType, StyleOp,
-        project_document,
+        Anchor, AtomLeaf, Bias, HorizontalRuleVariant, Modifier, Node, NodeType, project_document,
     };
-    use editor_crdt::{Changeset, InputEvent, LwwRegOp, OrMapOp};
+    use editor_crdt::{Changeset, InputEvent, LwwRegOp};
 
     /// A leaf's effective modifiers, read from the authoritative segment index.
     fn leaf_eff(
@@ -329,27 +311,13 @@ mod tests {
                     attr: crate::CalloutNodeAttr::Variant(crate::CalloutVariant::Warning),
                 },
             }),
-            EditOp::NodeStyle(crate::NodeLwwOp {
-                target: Dot::new(1, 1),
-                op: LwwRegOp::Set {
-                    value: Some("s1".to_string()),
-                },
-            }),
             EditOp::NodeMarker(crate::NodeLwwOp {
                 target: Dot::new(1, 1),
                 op: LwwRegOp::Set {
                     value: Some(Marker {
-                        modifiers: vec![],
-                        style: Some("s1".to_string()),
+                        modifiers: vec![Modifier::Bold],
                     }),
                 },
-            }),
-            EditOp::Style(StyleRegOp {
-                style_id: "s1".to_string(),
-                op: StyleOp::Presence(editor_crdt::OrMapOp::Set {
-                    key: "s1".to_string(),
-                    value: (),
-                }),
             }),
         ];
         for op in &ops {
@@ -417,10 +385,12 @@ mod tests {
         .unwrap();
         g.commit_mut();
         g.add_mut(seq_ins(3, SeqItem::Char('b'))).unwrap();
-        g.add_mut(EditOp::NodeStyle(crate::NodeLwwOp {
+        g.add_mut(EditOp::NodeMarker(crate::NodeLwwOp {
             target: para,
             op: LwwRegOp::Set {
-                value: Some("s".to_string()),
+                value: Some(Marker {
+                    modifiers: vec![Modifier::Bold],
+                }),
             },
         }))
         .unwrap();
@@ -539,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn split_routes_node_attr_and_style() {
+    fn split_routes_node_attr() {
         let mut g: OpGraph<EditOp> = OpGraph::new();
         let callout = g
             .add_mut(seq_ins(
@@ -569,25 +539,8 @@ mod tests {
             },
         }))
         .unwrap();
-        g.add_mut(EditOp::NodeStyle(crate::NodeLwwOp {
-            target: callout,
-            op: LwwRegOp::Set {
-                value: Some("s1".to_string()),
-            },
-        }))
-        .unwrap();
-        g.add_mut(EditOp::Style(crate::StyleRegOp {
-            style_id: "s1".to_string(),
-            op: crate::StyleOp::Presence(OrMapOp::Set {
-                key: "s1".to_string(),
-                value: (),
-            }),
-        }))
-        .unwrap();
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
         assert!(pd.node_attrs.contains_key(&callout));
-        assert_eq!(pd.node_styles.get(&callout), Some(&Some("s1".to_string())));
-        assert!(pd.styles.contains_key("s1"));
     }
 
     #[test]
@@ -604,10 +557,12 @@ mod tests {
             .unwrap()
             .id;
         let a = g.add_mut(seq_ins(1, SeqItem::Char('a'))).unwrap().id;
-        g.add_mut(EditOp::NodeStyle(crate::NodeLwwOp {
+        g.add_mut(EditOp::NodeMarker(crate::NodeLwwOp {
             target: a,
             op: LwwRegOp::Set {
-                value: Some("s".to_string()),
+                value: Some(Marker {
+                    modifiers: vec![Modifier::Bold],
+                }),
             },
         }))
         .unwrap();
@@ -640,10 +595,12 @@ mod tests {
             .unwrap()
             .id;
         let a = g.add_mut(seq_ins(2, SeqItem::Char('a'))).unwrap().id;
-        g.add_mut(EditOp::NodeStyle(crate::NodeLwwOp {
+        g.add_mut(EditOp::NodeMarker(crate::NodeLwwOp {
             target: a,
             op: LwwRegOp::Set {
-                value: Some("s".to_string()),
+                value: Some(Marker {
+                    modifiers: vec![Modifier::Bold],
+                }),
             },
         }))
         .unwrap();
@@ -707,16 +664,13 @@ mod tests {
     #[test]
     fn split_overlay_only_ok() {
         let mut g: OpGraph<EditOp> = OpGraph::new();
-        g.add_mut(EditOp::Style(crate::StyleRegOp {
-            style_id: "s1".to_string(),
-            op: crate::StyleOp::Presence(OrMapOp::Set {
-                key: "s1".to_string(),
-                value: (),
-            }),
+        g.add_mut(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+            target: Dot::ROOT,
+            modifier: Modifier::FontSize { value: 1600 },
         }))
         .unwrap();
         let pd = project_document(&split_logs(&g).unwrap()).unwrap();
-        assert!(pd.styles.contains_key("s1"));
+        assert_eq!(leaf_count(&pd), 0);
     }
 
     #[test]
@@ -752,14 +706,18 @@ mod tests {
             payload: seq_ins(pos, item),
         }
     }
-    fn op_style(a: u64, c: u64, parents: &[Dot], target: Dot, v: &str) -> Op<EditOp> {
+    fn op_marker(a: u64, c: u64, parents: &[Dot], target: Dot, v: &str) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
             parents: parents.to_vec(),
-            payload: EditOp::NodeStyle(NodeLwwOp {
+            payload: EditOp::NodeMarker(NodeLwwOp {
                 target,
                 op: LwwRegOp::Set {
-                    value: Some(v.to_string()),
+                    value: Some(Marker {
+                        modifiers: vec![Modifier::TextColor {
+                            value: v.to_string(),
+                        }],
+                    }),
                 },
             }),
         }
@@ -789,7 +747,7 @@ mod tests {
             op_seq(1, 0, &[], 0, blk(NodeType::Root, vec![])),
             op_seq(1, 1, &[root], 1, blk(NodeType::Paragraph, vec![root])),
             op_seq(1, 2, &[para], 2, SeqItem::Char('a')),
-            op_style(2, 0, &[a], a, "s"),
+            op_marker(2, 0, &[a], a, "s"),
             op_seq(1, 3, &[ov], 3, SeqItem::Char('b')),
         ]);
         let g_pure = graph(vec![
@@ -815,7 +773,7 @@ mod tests {
             op_seq(1, 0, &[], 0, blk(NodeType::Root, vec![])),
             op_seq(1, 1, &[root], 1, blk(NodeType::Paragraph, vec![root])),
             op_seq(1, 2, &[para], 2, SeqItem::Char('a')),
-            op_style(2, 0, &[a], a, "s"),
+            op_marker(2, 0, &[a], a, "s"),
             op_seq(1, 3, &[ov], 3, SeqItem::Char('x')),
             op_seq(3, 0, &[a], 3, SeqItem::Char('y')),
         ]);
@@ -854,14 +812,14 @@ mod tests {
             op_seq(1, 1, &[], 0, blk(NodeType::Paragraph, vec![Dot::ROOT])),
             op_seq(1, 2, &[para], 1, SeqItem::Char('a')),
         ];
-        let cs1 = vec![op_style(1, 3, &[para], para, "s1")];
-        let cs2 = vec![op_style(2, 0, &[para], para, "s2")];
+        let cs1 = vec![op_marker(1, 3, &[para], para, "s1")];
+        let cs2 = vec![op_marker(2, 0, &[para], para, "s2")];
         let g_ab = graphs(vec![cs0.clone(), cs1.clone(), cs2.clone()]);
         let g_ba = graphs(vec![cs0, cs2, cs1]);
         let pd_ab = project_document(&split_logs(&g_ab).unwrap()).unwrap();
         let pd_ba = project_document(&split_logs(&g_ba).unwrap()).unwrap();
         assert_eq!(pd_ab, pd_ba);
-        assert!(pd_ab.node_styles.get(&para).is_some());
+        assert!(pd_ab.node_markers.get(&para).is_some());
     }
 
     #[test]
@@ -872,9 +830,9 @@ mod tests {
             op_seq(1, 1, &[], 0, blk(NodeType::Paragraph, vec![Dot::ROOT])),
             op_seq(1, 2, &[para], 1, SeqItem::Char('a')),
         ];
-        let o1 = vec![op_style(1, 3, &[a], para, "s1")];
-        let o2 = vec![op_style(2, 0, &[a], Dot::ROOT, "s2")];
-        let o3 = vec![op_style(3, 0, &[a], para, "s3")];
+        let o1 = vec![op_marker(1, 3, &[a], para, "s1")];
+        let o2 = vec![op_marker(2, 0, &[a], Dot::ROOT, "s2")];
+        let o3 = vec![op_marker(3, 0, &[a], para, "s3")];
         let g1 = graphs(vec![cs0.clone(), o1.clone(), o2.clone(), o3.clone()]);
         let g2 = graphs(vec![cs0.clone(), o3.clone(), o1.clone(), o2.clone()]);
         let g3 = graphs(vec![cs0, o2, o3, o1]);

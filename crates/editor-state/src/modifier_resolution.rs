@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, EffectiveSources, Expand, ExplicitEffect, LeafStateRef, LeafView, Modifier,
+    ChildView, DocView, EffectiveSources, Expand, LeafStateRef, LeafView, Modifier,
     ModifierAttrLog, ModifierType, Node, NodeType, NodeView, ProjectedDoc, Schema,
     resolve_effective,
 };
@@ -40,12 +40,10 @@ fn inherited_over(
     ancestors: &[(NodeType, Option<Dot>)],
     ctx: &CaretCtx,
 ) -> BTreeMap<ModifierType, Modifier> {
-    let empty: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
+    let empty: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
     let src = EffectiveSources {
         block_modifiers: ctx.block_modifiers,
         explicit_spans: &empty,
-        node_styles: &ctx.doc.node_styles,
-        styles: &ctx.doc.styles,
         node_attrs: &ctx.doc.node_attrs,
     };
     resolve_effective(ancestors, None, NodeType::Text, true, &src)
@@ -152,33 +150,12 @@ fn empty_or_structural(
     }
     if children.is_empty()
         && let Some(d) = host.dot()
+        && let Some(Some(marker)) = ctx.doc.node_markers.get(&d)
     {
-        if let Some(Some(sid)) = ctx.doc.node_styles.get(&d)
-            && let Some(style) = ctx.doc.styles.get(sid)
-        {
-            for m in style.modifiers.iter() {
-                let ty = m.as_type();
-                if is_inline(ty) {
-                    out.entry(ty).or_insert_with(|| m.clone());
-                }
-            }
-        }
-        if let Some(Some(marker)) = ctx.doc.node_markers.get(&d) {
-            for m in &marker.modifiers {
-                let ty = m.as_type();
-                if is_inline(ty) {
-                    out.entry(ty).or_insert_with(|| m.clone());
-                }
-            }
-            if let Some(sid) = &marker.style
-                && let Some(style) = ctx.doc.styles.get(sid)
-            {
-                for m in style.modifiers.iter() {
-                    let ty = m.as_type();
-                    if is_inline(ty) {
-                        out.entry(ty).or_insert_with(|| m.clone());
-                    }
-                }
+        for m in &marker.modifiers {
+            let ty = m.as_type();
+            if is_inline(ty) {
+                out.entry(ty).or_insert_with(|| m.clone());
             }
         }
     }
@@ -250,11 +227,10 @@ fn non_empty(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::{InputEvent, ListOp, LwwRegOp, OrMapOp, OrSetOp, build_oplog};
+    use editor_crdt::{InputEvent, ListOp, LwwRegOp, build_oplog};
     use editor_model::{
         Alignment, Anchor, AtomLeaf, Bias, DocLogs, Marker, ModifierAttrLog, ModifierAttrOp,
-        NodeAttrLog, NodeLwwOp, NodeMarkerLog, NodeStyleLog, SeqItem, SpanLog, SpanOp, StyleLog,
-        StyleOp, StyleRegOp, project_document,
+        NodeAttrLog, NodeLwwOp, NodeMarkerLog, SeqItem, SpanLog, SpanOp, project_document,
     };
 
     fn block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
@@ -282,9 +258,7 @@ mod tests {
     struct Overlays {
         spans: SpanLog,
         block_modifiers: ModifierAttrLog,
-        node_styles: NodeStyleLog,
         node_markers: NodeMarkerLog,
-        styles: StyleLog,
     }
 
     fn doclogs(items: &[(Dot, SeqItem)], o: Overlays) -> DocLogs {
@@ -293,47 +267,8 @@ mod tests {
             spans: o.spans,
             block_modifiers: o.block_modifiers,
             node_attrs: NodeAttrLog::new(),
-            node_styles: o.node_styles,
             node_markers: o.node_markers,
-            styles: o.styles,
         }
-    }
-
-    fn style_log(id: &str, m: Modifier) -> StyleLog {
-        StyleLog::new()
-            .apply(
-                Dot::new(5, 0),
-                StyleRegOp {
-                    style_id: id.to_string(),
-                    op: StyleOp::Presence(OrMapOp::Set {
-                        key: id.to_string(),
-                        value: (),
-                    }),
-                },
-            )
-            .unwrap()
-            .apply(
-                Dot::new(5, 1),
-                StyleRegOp {
-                    style_id: id.to_string(),
-                    op: StyleOp::Modifiers(OrSetOp::Add { elem: m }),
-                },
-            )
-            .unwrap()
-    }
-
-    fn node_style(target: Dot, id: &str) -> NodeStyleLog {
-        NodeStyleLog::new()
-            .apply(
-                Dot::new(6, 0),
-                NodeLwwOp {
-                    target,
-                    op: LwwRegOp::Set {
-                        value: Some(id.to_string()),
-                    },
-                },
-            )
-            .unwrap()
     }
 
     fn node_marker(target: Dot, marker: Marker) -> NodeMarkerLog {
@@ -376,25 +311,6 @@ mod tests {
                         bias: Bias::After,
                     },
                     modifier: m,
-                },
-            )
-            .unwrap()
-    }
-
-    fn span_clear(leaf: Dot, ty: ModifierType) -> SpanLog {
-        SpanLog::new()
-            .apply(
-                Dot::new(9, 0),
-                SpanOp::ClearSpan {
-                    start: Anchor {
-                        id: leaf,
-                        bias: Bias::Before,
-                    },
-                    end: Anchor {
-                        id: leaf,
-                        bias: Bias::After,
-                    },
-                    modifier_type: ty,
                 },
             )
             .unwrap()
@@ -503,7 +419,6 @@ mod tests {
                     Dot::new(1, 1),
                     Marker {
                         modifiers: vec![Modifier::Bold],
-                        style: None,
                     },
                 ),
                 ..Default::default()
@@ -677,32 +592,6 @@ mod tests {
     }
 
     #[test]
-    fn clear_blocks_reinheritance_at_boundary() {
-        let a = Dot::new(1, 2);
-        let (logs, _root, p) = para(
-            &[SeqItem::Char('a'), SeqItem::Char('b')],
-            Overlays {
-                spans: span_clear(a, ModifierType::FontSize),
-                block_modifiers: block_mod(Dot::ROOT, Modifier::FontSize { value: 1600 }),
-                ..Default::default()
-            },
-        );
-        let pd = project(&logs);
-        let view = DocView::new(&pd);
-        let c = ctx(&pd, &view, &logs);
-        let out = resolve_caret_modifiers(
-            &Position {
-                node: p,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-            &c,
-            &[],
-        );
-        assert!(!out.contains_key(&ModifierType::FontSize));
-    }
-
-    #[test]
     fn boundary_expand_excluded_own_falls_back_to_inherited() {
         let a = Dot::new(1, 2);
         let (logs, _root, p) = para(
@@ -765,7 +654,6 @@ mod tests {
                     Dot::new(1, 1),
                     Marker {
                         modifiers: vec![Modifier::Bold],
-                        style: None,
                     },
                 ),
                 ..Default::default()
@@ -779,44 +667,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_marker_style_inline_only() {
-        let mut styles = style_log("ms", Modifier::Bold);
-        styles = styles
-            .apply(
-                Dot::new(5, 2),
-                StyleRegOp {
-                    style_id: "ms".to_string(),
-                    op: StyleOp::Modifiers(OrSetOp::Add {
-                        elem: Modifier::Alignment {
-                            value: Alignment::Center,
-                        },
-                    }),
-                },
-            )
-            .unwrap();
-        let (logs, _root, p) = para(
-            &[],
-            Overlays {
-                node_markers: node_marker(
-                    Dot::new(1, 1),
-                    Marker {
-                        modifiers: vec![],
-                        style: Some("ms".to_string()),
-                    },
-                ),
-                styles,
-                ..Default::default()
-            },
-        );
-        let pd = project(&logs);
-        let view = DocView::new(&pd);
-        let c = ctx(&pd, &view, &logs);
-        let out = caret(&Position::new(p, 0), &c);
-        assert_eq!(out.get(&ModifierType::Bold), Some(&Modifier::Bold));
-        assert!(!out.contains_key(&ModifierType::Alignment));
-    }
-
-    #[test]
     fn empty_marker_beats_inherited() {
         let (logs, _root, p) = para(
             &[],
@@ -826,7 +676,6 @@ mod tests {
                     Dot::new(1, 1),
                     Marker {
                         modifiers: vec![Modifier::FontSize { value: 1200 }],
-                        style: None,
                     },
                 ),
                 ..Default::default()
@@ -919,47 +768,6 @@ mod tests {
     }
 
     #[test]
-    fn interior_same_effective_different_source() {
-        let a = Dot::new(1, 2);
-        let b = Dot::new(1, 3);
-        let (logs, _root, p) = para(
-            &[SeqItem::Char('a'), SeqItem::Char('b')],
-            Overlays {
-                spans: span_set(a, Modifier::Bold),
-                node_styles: node_style(b, "s"),
-                styles: style_log("s", Modifier::Bold),
-                ..Default::default()
-            },
-        );
-        let pd = project(&logs);
-        let view = DocView::new(&pd);
-        let c = ctx(&pd, &view, &logs);
-        let out = caret(&Position::new(p, 1), &c);
-        assert_eq!(out.get(&ModifierType::Bold), Some(&Modifier::Bold));
-    }
-
-    #[test]
-    fn empty_block_own_beats_style() {
-        let (logs, _root, p) = para(
-            &[],
-            Overlays {
-                block_modifiers: block_mod(Dot::new(1, 1), Modifier::FontSize { value: 1600 }),
-                node_styles: node_style(Dot::new(1, 1), "s"),
-                styles: style_log("s", Modifier::FontSize { value: 1200 }),
-                ..Default::default()
-            },
-        );
-        let pd = project(&logs);
-        let view = DocView::new(&pd);
-        let c = ctx(&pd, &view, &logs);
-        let out = caret(&Position::new(p, 0), &c);
-        assert_eq!(
-            out.get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 })
-        );
-    }
-
-    #[test]
     fn empty_foldtitle_marker_surfaces() {
         let root = Dot::ROOT;
         let fold = Dot::new(1, 1);
@@ -982,7 +790,6 @@ mod tests {
                     ftitle,
                     Marker {
                         modifiers: vec![Modifier::Bold],
-                        style: None,
                     },
                 ),
                 ..Default::default()

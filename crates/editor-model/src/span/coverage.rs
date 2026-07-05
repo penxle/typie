@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, HashMap};
 use editor_crdt::Dot;
 use editor_crdt::sequence::SeqResolve;
 
-use super::{ExplicitEffect, SpanLog};
-use crate::{ModifierType, NodeType, Schema};
+use super::SpanLog;
+use crate::{Modifier, ModifierType, NodeType, Schema};
 
 struct ResolvedSpan {
     op_dot: Dot,
@@ -77,8 +77,8 @@ pub fn explicit_from_covering(
     covering: &[Dot],
     spans: &SpanLog,
     leaf_path: &[NodeType],
-) -> BTreeMap<ModifierType, ExplicitEffect> {
-    let mut by_type: HashMap<ModifierType, (Dot, Option<ExplicitEffect>)> = HashMap::new();
+) -> BTreeMap<ModifierType, Modifier> {
+    let mut by_type: HashMap<ModifierType, (Dot, Option<Modifier>)> = HashMap::new();
     for &op_dot in covering {
         let Some(op) = spans.get(op_dot) else {
             continue;
@@ -149,7 +149,7 @@ mod tests {
         let ex = explicit_from_covering(&[lo, hi], &log, &path);
         assert_eq!(
             ex.get(&ModifierType::FontSize),
-            Some(&ExplicitEffect::Set(Modifier::FontSize { value: 2000 }))
+            Some(&Modifier::FontSize { value: 2000 })
         );
     }
 }

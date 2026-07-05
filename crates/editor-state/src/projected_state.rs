@@ -2,11 +2,10 @@ use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
     BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp, ModifierAttrLog,
-    ModifierType, Node, NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, ProjectedDoc,
-    ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
-    SpanOp, SplitError, StyleLog, anchor_dot, block_effective_one, normalize_content_shallow,
-    normalize_subtree, project_blocks, project_from, project_from_tree, seq_parents,
-    split_block_insert, split_logs,
+    ModifierType, Node, NodeAttrLog, NodeMarkerLog, NodeType, ProjectedDoc, ProjectionError,
+    ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog, SpanOp, SplitError,
+    anchor_dot, block_effective_one, normalize_content_shallow, normalize_subtree, project_blocks,
+    project_from, project_from_tree, seq_parents, split_block_insert, split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -189,26 +188,12 @@ impl ProjectedState {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
-            EditOp::NodeStyle(o) => {
-                self.logs.node_styles = self
-                    .logs
-                    .node_styles
-                    .apply(op.id, o.clone())
-                    .map_err(SplitError::Crdt)?
-            }
             EditOp::NodeMarker(o) => {
                 self.logs.node_markers = self
                     .logs
                     .node_markers
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
-            }
-            EditOp::Style(o) => {
-                self.logs.styles = self
-                    .logs
-                    .styles
-                    .apply(op.id, o.clone())
-                    .map_err(SplitError::Style)?
             }
         }
         Ok(())
@@ -728,7 +713,6 @@ impl ProjectedState {
         self.projected.block_effective.remove(&n);
         self.projected.block_modifiers.remove(&n);
         self.projected.node_attrs.remove(&n);
-        self.projected.node_styles.remove(&n);
         self.projected.node_markers.remove(&n);
         self.projected.seg_index.remove_block(n);
         self.indexes.paths.remove_block(n);
@@ -842,11 +826,9 @@ impl ProjectedState {
             EditOp::Seq(ListOp::Del { .. }) => self.try_delete_chars(op.id),
             EditOp::Seq(ListOp::Undel { del }) => self.try_undelete(*del),
             EditOp::Span(span_op) => self.try_apply_span(op.id, span_op),
-            EditOp::BlockModifier(_)
-            | EditOp::NodeStyle(_)
-            | EditOp::NodeAttr(_)
-            | EditOp::NodeMarker(_)
-            | EditOp::Style(_) => self.try_apply_node_op(op),
+            EditOp::BlockModifier(_) | EditOp::NodeAttr(_) | EditOp::NodeMarker(_) => {
+                self.try_apply_node_op(op)
+            }
             _ => false,
         }
     }
@@ -888,7 +870,6 @@ impl ProjectedState {
     fn resync_block_segs(&mut self, block: Dot, source: &CoveringSource) {
         struct Memo {
             leaf_type: NodeType,
-            style: Option<String>,
             covering: Option<editor_model::SegCovering>,
             eff: editor_model::LeafEff,
             own: editor_model::LeafOwn,
@@ -907,7 +888,6 @@ impl ProjectedState {
                 };
                 let dot = *id;
                 let leaf_type = item.as_child_type();
-                let style = self.projected.node_styles.get(&dot).and_then(|o| o.clone());
                 let covering = match source {
                     CoveringSource::Resolved(rs) => self
                         .seq
@@ -932,17 +912,12 @@ impl ProjectedState {
                         &self.projected,
                         block,
                         leaf_type,
-                        style.as_ref(),
                         covering.as_deref(),
                         Some(dot),
                     )
                 } else {
                     match &memo {
-                        Some(m)
-                            if m.leaf_type == leaf_type
-                                && m.style == style
-                                && m.covering == covering =>
-                        {
+                        Some(m) if m.leaf_type == leaf_type && m.covering == covering => {
                             (m.eff.clone(), m.own.clone())
                         }
                         _ => {
@@ -952,13 +927,11 @@ impl ProjectedState {
                                 &self.projected,
                                 block,
                                 leaf_type,
-                                style.as_ref(),
                                 covering.as_deref(),
                                 None,
                             );
                             memo = Some(Memo {
                                 leaf_type,
-                                style: style.clone(),
                                 covering: covering.clone(),
                                 eff: d.0.clone(),
                                 own: d.1.clone(),
@@ -970,7 +943,6 @@ impl ProjectedState {
                 let seg = editor_model::Seg {
                     count: 1,
                     leaf_type,
-                    style,
                     covering,
                     attrs_singleton,
                     eff,
@@ -1028,15 +1000,6 @@ impl ProjectedState {
                 self.projected.set_block_own_modifiers(target, m);
                 self.recompute_subtree(target);
             }
-            EditOp::NodeStyle(o) => {
-                let target = o.target;
-                if !self.indexes.paths.contains(target) {
-                    return true;
-                }
-                let v = self.logs.node_styles.value_of(target);
-                self.projected.node_styles.insert(target, v);
-                self.recompute_subtree(target);
-            }
             EditOp::NodeAttr(o) => {
                 let target = o.target;
                 if !self.indexes.paths.contains(target) {
@@ -1064,19 +1027,6 @@ impl ProjectedState {
                 let v = self.logs.node_markers.value_of(target);
                 self.projected.node_markers.insert(target, v);
                 self.mark_dirty_block(target);
-            }
-            EditOp::Style(_) => {
-                self.projected.styles = self.logs.styles.registered_entries();
-                let styled: Vec<Dot> = self
-                    .projected
-                    .node_styles
-                    .iter()
-                    .filter(|(_, v)| v.is_some())
-                    .map(|(d, _)| *d)
-                    .collect();
-                for d in styled {
-                    self.recompute_subtree(d);
-                }
             }
             _ => return false,
         }
@@ -1337,7 +1287,6 @@ impl ProjectedState {
                     &self.projected,
                     *block,
                     seg.leaf_type,
-                    seg.style.as_ref(),
                     Some(&new_cov),
                     attr_leaf,
                 );
@@ -1442,14 +1391,8 @@ impl ProjectedState {
             .is_some_and(|(_, own_empty, _)| *own_empty);
         let neighbor_cov = neighbor_seg.as_ref().and_then(|(_, _, c)| c.clone());
         // Segment key inputs mirror cold `segment_block`: covering seeded from the
-        // neighbour's segment, style from node_styles (none on a fresh leaf), singleton per
-        // node_attrs/non-inline.
+        // neighbour's segment, singleton per node_attrs/non-inline.
         let covering = self.covering_for_inserted(neighbor, pos, neighbor_cov);
-        let style = self
-            .projected
-            .node_styles
-            .get(&leaf)
-            .and_then(|o| o.clone());
         let attrs_singleton =
             self.projected.node_attrs.contains_key(&leaf) || !leaf_type.spec().inline;
         let (eff, own) = if covering.is_none() && neighbor_plain && !attrs_singleton {
@@ -1467,7 +1410,6 @@ impl ProjectedState {
                 &self.projected,
                 block,
                 leaf_type,
-                style.as_ref(),
                 covering.as_deref(),
                 attrs_singleton.then_some(leaf),
             )
@@ -1489,7 +1431,6 @@ impl ProjectedState {
                 editor_model::Seg {
                     count: 1,
                     leaf_type,
-                    style,
                     covering,
                     attrs_singleton,
                     eff,
@@ -1905,16 +1846,8 @@ impl ProjectedState {
         &self.logs.node_attrs
     }
 
-    pub fn node_styles(&self) -> &NodeStyleLog {
-        &self.logs.node_styles
-    }
-
     pub fn node_markers(&self) -> &NodeMarkerLog {
         &self.logs.node_markers
-    }
-
-    pub fn styles(&self) -> &StyleLog {
-        &self.logs.styles
     }
 
     pub fn spans(&self) -> &SpanLog {
@@ -1943,8 +1876,7 @@ impl ProjectedState {
         self.logs.spans.iter().any(|(_, op)| {
             let op_ty = match op {
                 SpanOp::AddSpan { modifier, .. } => modifier.as_type(),
-                SpanOp::RemoveSpan { modifier_type, .. }
-                | SpanOp::ClearSpan { modifier_type, .. } => *modifier_type,
+                SpanOp::RemoveSpan { modifier_type, .. } => *modifier_type,
             };
             if op_ty != ty {
                 return false;
@@ -2160,7 +2092,6 @@ impl ProjectedState {
 #[derive(Clone)]
 pub(crate) struct LeafTruth {
     pub leaf_type: NodeType,
-    pub style: Option<String>,
     pub covering: Option<editor_model::SegCovering>,
     pub eff: editor_model::LeafEff,
     pub own: editor_model::LeafOwn,
@@ -2183,11 +2114,6 @@ impl ProjectedState {
             .resolve_boundary(leaf, Bias::Before)
             .map(|b| b.position)
             .and_then(|p| canonical_covering_of(&rs.covering(p), &self.logs.spans));
-        let style = self
-            .projected
-            .node_styles
-            .get(&leaf)
-            .and_then(|o| o.clone());
         let attrs_singleton =
             self.projected.node_attrs.contains_key(&leaf) || !leaf_type.spec().inline;
         let attr_leaf = attrs_singleton.then_some(leaf);
@@ -2197,13 +2123,11 @@ impl ProjectedState {
             &self.projected,
             block,
             leaf_type,
-            style.as_ref(),
             covering.as_deref(),
             attr_leaf,
         );
         LeafTruth {
             leaf_type,
-            style,
             covering,
             eff,
             own,
@@ -2279,7 +2203,6 @@ impl ProjectedState {
                     seg.leaf_type, truth.leaf_type,
                     "leaf_type mismatch at {dot:?}"
                 );
-                assert_eq!(seg.style, truth.style, "style mismatch at {dot:?}");
                 assert_eq!(seg.covering, truth.covering, "covering mismatch at {dot:?}");
                 assert_eq!(&*seg.eff, &*truth.eff, "eff mismatch at {dot:?}");
                 assert_eq!(&*seg.own, &*truth.own, "own mismatch at {dot:?}");
@@ -2297,10 +2220,10 @@ impl ProjectedState {
 mod tests {
     use super::*;
     use crate::LayoutDirty;
-    use editor_crdt::{Dot, LwwRegOp, OrMapOp, OrSetOp};
+    use editor_crdt::{Dot, LwwRegOp};
     use editor_model::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, Marker, Modifier, ModifierAttrOp,
-        ModifierType, Node, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp, StyleOp, StyleRegOp,
+        ModifierType, Node, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp,
     };
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
@@ -2576,65 +2499,26 @@ mod tests {
         state
             .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
                 target: para,
-                modifier: Modifier::FontSize { value: 1600 },
+                modifier: Modifier::LineHeight { value: 200 },
             }))
             .unwrap();
         assert_eq!(
             state
                 .block_modifiers()
                 .modifiers_of(para)
-                .get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 })
+                .get(&ModifierType::LineHeight),
+            Some(&Modifier::LineHeight { value: 200 })
         );
-        let c = state.apply(seq_char(1, 'a')).unwrap().id;
+        let _c = state.apply(seq_char(1, 'a')).unwrap().id;
         assert_eq!(
             state
                 .view()
-                .leaf_state_by_dot_slow(c)
+                .node(para)
                 .unwrap()
-                .eff
-                .get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 })
-        );
-    }
-
-    #[test]
-    fn apply_node_style_and_style_log() {
-        let mut state = ProjectedState::empty();
-        let x = state.apply(seq_char(1, 'x')).unwrap().id;
-        state
-            .apply(EditOp::NodeStyle(NodeLwwOp {
-                target: x,
-                op: LwwRegOp::Set {
-                    value: Some("s".to_string()),
-                },
-            }))
-            .unwrap();
-        state
-            .apply(EditOp::Style(StyleRegOp {
-                style_id: "s".to_string(),
-                op: StyleOp::Presence(OrMapOp::Set {
-                    key: "s".to_string(),
-                    value: (),
-                }),
-            }))
-            .unwrap();
-        state
-            .apply(EditOp::Style(StyleRegOp {
-                style_id: "s".to_string(),
-                op: StyleOp::Modifiers(OrSetOp::Add {
-                    elem: Modifier::Italic,
-                }),
-            }))
-            .unwrap();
-        assert_eq!(
-            state
-                .view()
-                .leaf_state_by_dot_slow(x)
-                .unwrap()
-                .eff
-                .get(&ModifierType::Italic),
-            Some(&Modifier::Italic)
+                .effective()
+                .get(&ModifierType::LineHeight),
+            Some(&Modifier::LineHeight { value: 200 }),
+            "the Paragraph consumes LineHeight: it resolves on the paragraph block (its record does not pass down to text carriers)"
         );
     }
 
@@ -2656,7 +2540,6 @@ mod tests {
                 op: LwwRegOp::Set {
                     value: Some(Marker {
                         modifiers: vec![Modifier::Bold],
-                        style: None,
                     }),
                 },
             }))
@@ -2948,32 +2831,6 @@ mod tests {
             pos += 1;
         }
 
-        // A registered style on a slice of leaves inside the covered range: those
-        // leaves derive differently from their plain neighbors.
-        warm.apply(EditOp::Style(StyleRegOp {
-            style_id: "s".to_string(),
-            op: StyleOp::Presence(OrMapOp::Set {
-                key: "s".to_string(),
-                value: (),
-            }),
-        }))
-        .unwrap();
-        warm.apply(EditOp::Style(StyleRegOp {
-            style_id: "s".to_string(),
-            op: StyleOp::Modifiers(OrSetOp::Add {
-                elem: Modifier::FontSize { value: 1600 },
-            }),
-        }))
-        .unwrap();
-        for &leaf in &leaves[5..10] {
-            warm.apply(EditOp::NodeStyle(NodeLwwOp {
-                target: leaf,
-                op: LwwRegOp::Set {
-                    value: Some("s".to_string()),
-                },
-            }))
-            .unwrap();
-        }
         warm.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
             target: Dot::ROOT,
             modifier: Modifier::FontWeight { value: 400 },
@@ -3027,12 +2884,12 @@ mod tests {
                 end: anchors.1,
                 modifier: Modifier::FontWeight { value: 700 },
             }),
-            whole(SpanOp::ClearSpan {
+            whole(SpanOp::RemoveSpan {
                 start: anchors.0,
                 end: anchors.1,
                 modifier_type: ModifierType::Italic,
             }),
-            whole(SpanOp::ClearSpan {
+            whole(SpanOp::RemoveSpan {
                 start: anchors.0,
                 end: anchors.1,
                 modifier_type: ModifierType::FontWeight,
@@ -3212,7 +3069,7 @@ mod tests {
     }
 
     // Bulk-path variant of `warm_apply_with_spans_matches_cold`: larger leaf
-    // counts (crossing the bulk re-segmentation threshold), ClearSpan, per-leaf
+    // counts (crossing the bulk re-segmentation threshold), per-leaf
     // node styles, inline atoms, and a second paragraph. The incremental spine
     // must converge to the cold rebuild.
     proptest::proptest! {
@@ -3224,14 +3081,6 @@ mod tests {
             use editor_model::AtomLeaf;
 
             let mut warm = ProjectedState::empty();
-            warm.apply(EditOp::Style(StyleRegOp {
-                style_id: "s".to_string(),
-                op: StyleOp::Presence(OrMapOp::Set { key: "s".to_string(), value: () }),
-            })).unwrap();
-            warm.apply(EditOp::Style(StyleRegOp {
-                style_id: "s".to_string(),
-                op: StyleOp::Modifiers(OrSetOp::Add { elem: Modifier::FontSize { value: 1600 } }),
-            })).unwrap();
             let mut live: Vec<Dot> = Vec::new();
             // Seed enough chars that whole-range spans take the bulk path.
             let mut count = 1usize;
@@ -3276,12 +3125,6 @@ mod tests {
                         warm.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT])).unwrap();
                         count += 1;
                     }
-                    5 if !live.is_empty() => {
-                        warm.apply(EditOp::NodeStyle(NodeLwwOp {
-                            target: pick(a, &live),
-                            op: LwwRegOp::Set { value: Some("s".to_string()) },
-                        })).unwrap();
-                    }
                     6..=9 if !live.is_empty() => {
                         warm.apply(EditOp::Span(SpanOp::AddSpan {
                             start: Anchor { id: pick(a, &live), bias: bias_s },
@@ -3289,15 +3132,8 @@ mod tests {
                             modifier: m,
                         })).unwrap();
                     }
-                    10..=11 if !live.is_empty() => {
+                    10..=13 if !live.is_empty() => {
                         warm.apply(EditOp::Span(SpanOp::RemoveSpan {
-                            start: Anchor { id: pick(a, &live), bias: bias_s },
-                            end: Anchor { id: pick(b, &live), bias: bias_e },
-                            modifier_type: ty,
-                        })).unwrap();
-                    }
-                    12..=13 if !live.is_empty() => {
-                        warm.apply(EditOp::Span(SpanOp::ClearSpan {
                             start: Anchor { id: pick(a, &live), bias: bias_s },
                             end: Anchor { id: pick(b, &live), bias: bias_e },
                             modifier_type: ty,
@@ -3623,7 +3459,7 @@ mod tests {
         fn warm_apply_with_node_ops_matches_cold(
             actions in proptest::collection::vec(arb_span_action(), 0..50),
         ) {
-            use editor_crdt::{LwwRegOp, OrMapOp, OrSetOp};
+            use editor_crdt::LwwRegOp;
             let mut warm = ProjectedState::empty();
             let para = warm
                 .view()
@@ -3680,30 +3516,9 @@ mod tests {
                         };
                         warm.apply(EditOp::BlockModifier(op)).unwrap();
                     }
-                    11..=12 if !live.is_empty() => {
-                        let v = if b & 1 == 0 { Some("s".to_string()) } else { None };
-                        warm.apply(EditOp::NodeStyle(NodeLwwOp {
-                            target: pick(a, &live),
-                            op: LwwRegOp::Set { value: v },
-                        }))
-                        .unwrap();
-                    }
-                    13 => {
-                        warm.apply(EditOp::Style(StyleRegOp {
-                            style_id: "s".to_string(),
-                            op: StyleOp::Presence(OrMapOp::Set { key: "s".to_string(), value: () }),
-                        }))
-                        .unwrap();
-                        let elem = if b & 1 == 0 { Modifier::Italic } else { Modifier::Bold };
-                        warm.apply(EditOp::Style(StyleRegOp {
-                            style_id: "s".to_string(),
-                            op: StyleOp::Modifiers(OrSetOp::Add { elem }),
-                        }))
-                        .unwrap();
-                    }
                     14 => {
                         let v = if b & 1 == 0 {
-                            Some(Marker { modifiers: vec![Modifier::Bold], style: None })
+                            Some(Marker { modifiers: vec![Modifier::Bold] })
                         } else {
                             None
                         };
@@ -4005,9 +3820,8 @@ mod tests {
     }
 
     #[test]
-    fn accessor_smoke_node_style_block_modifier_span() {
-        use editor_crdt::LwwRegOp;
-        use editor_model::{Anchor, Bias, ModifierAttrOp, NodeLwwOp, SpanOp};
+    fn accessor_smoke_block_modifier_span() {
+        use editor_model::{Anchor, Bias, ModifierAttrOp, SpanOp};
 
         let mut state = ProjectedState::empty();
         let para = state
@@ -4021,14 +3835,6 @@ mod tests {
             .unwrap();
         let x = state.apply(seq_char(1, 'x')).unwrap().id;
 
-        state
-            .apply(EditOp::NodeStyle(NodeLwwOp {
-                target: x,
-                op: LwwRegOp::Set {
-                    value: Some("mystyle".to_string()),
-                },
-            }))
-            .unwrap();
         state
             .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
                 target: para,
@@ -4049,7 +3855,6 @@ mod tests {
             }))
             .unwrap();
 
-        assert_eq!(state.node_styles().value_of(x), Some("mystyle".to_string()));
         assert_eq!(
             state
                 .block_modifiers()

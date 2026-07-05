@@ -14,7 +14,6 @@ pub(crate) struct CapturedFirstTextMarker {
     paragraph_id: Dot,
     had_text: bool,
     first_text_carryable: Vec<Modifier>,
-    first_text_style: Option<String>,
 }
 
 pub(crate) fn capture_first_text_marker(
@@ -27,22 +26,20 @@ pub(crate) fn capture_first_text_marker(
         return None;
     }
     let first_text = first_char_leaf(&paragraph);
-    let (had_text, first_text_carryable, first_text_style) = match first_text {
-        Some((slot, leaf)) => {
-            let style = state.projected.node_styles().value_of(leaf.dot());
+    let (had_text, first_text_carryable) = match first_text {
+        Some((slot, _leaf)) => {
             let carryable = paragraph
                 .leaf_state_at(slot)
                 .map(|s| collect_carryable(s.own))
                 .unwrap_or_default();
-            (true, carryable, style)
+            (true, carryable)
         }
-        None => (false, Vec::new(), None),
+        None => (false, Vec::new()),
     };
     Some(CapturedFirstTextMarker {
         paragraph_id,
         had_text,
         first_text_carryable,
-        first_text_style,
     })
 }
 
@@ -50,9 +47,7 @@ pub(crate) fn apply_first_text_marker_lift(
     tr: &mut Transaction,
     captured: &CapturedFirstTextMarker,
 ) -> Result<(), CommandError> {
-    if !captured.had_text
-        || (captured.first_text_carryable.is_empty() && captured.first_text_style.is_none())
-    {
+    if !captured.had_text || captured.first_text_carryable.is_empty() {
         return Ok(());
     }
     let still_has_text = {
@@ -70,7 +65,6 @@ pub(crate) fn apply_first_text_marker_lift(
     }
     let marker = Marker {
         modifiers: captured.first_text_carryable.clone(),
-        style: captured.first_text_style.clone(),
     };
     if !marker.is_empty() {
         tr.set_marker(captured.paragraph_id, Some(marker))?;
@@ -87,7 +81,6 @@ fn first_char_leaf<'a>(paragraph: &NodeView<'a>) -> Option<(usize, LeafView<'a>)
 
 fn collect_carryable(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
     own.iter()
-        .filter(|(_, o)| !o.from_style)
         .filter(|(t, _)| {
             matches!(
                 Schema::modifier_spec(**t).expand,

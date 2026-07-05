@@ -139,53 +139,59 @@ impl Default for SchemaInner {
             },
             modifiers: enum_map! {
                 ModifierType::Bold => ModifierSpec {
-                    context: context_expr!(Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Italic => ModifierSpec {
-                    context: context_expr!(Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Underline => ModifierSpec {
-                    context: context_expr!(Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Strikethrough => ModifierSpec {
-                    context: context_expr!(Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::FontSize => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
-                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
+                    context: context_expr!(Root | Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     ..Default::default()
                 },
                 ModifierType::FontFamily => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
-                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
+                    context: context_expr!(Root | Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     ..Default::default()
                 },
                 ModifierType::FontWeight => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
-                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
+                    context: context_expr!(Root | Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     ..Default::default()
                 },
                 ModifierType::TextColor => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::BackgroundColor => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text | TableCell),
-                    target: context_expr!(Paragraph > Text),
+                    context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak | TableCell),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::LetterSpacing => ModifierSpec {
-                    context: context_expr!(Root | Paragraph | Paragraph > Text | Paragraph > Tab),
-                    target: context_expr!(Paragraph > Text | Paragraph > Tab),
+                    context: context_expr!(Root | Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
+                    target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     ..Default::default()
                 },
                 ModifierType::Link => ModifierSpec {
@@ -210,26 +216,55 @@ impl Default for SchemaInner {
                 },
                 ModifierType::BlockGap => ModifierSpec {
                     context: context_expr!(Root),
-                    target: context_expr!(Root),
+                    target: editor_model::ContextExpr::AnyOf(Vec::new()),
                     expand: Expand::None,
-                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::ParagraphIndent => ModifierSpec {
-                    context: context_expr!(Root),
-                    target: context_expr!(Root),
+                    context: context_expr!(Root | Root > Paragraph),
+                    target: context_expr!(Root > Paragraph),
                     expand: Expand::None,
-                    inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Alignment => ModifierSpec {
-                    context: context_expr!(Paragraph | Image | Table),
+                    context: context_expr!(Root | Paragraph | Image | Table),
                     target: context_expr!(Paragraph | Image | Table),
                     expand: Expand::None,
-                    inheritable: false,
                     ..Default::default()
                 },
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text_style_default_modifier;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn inheritable_kinds_form_the_eight_kind_symmetry() {
+        let inheritable: Vec<ModifierType> = ModifierType::iter()
+            .filter(|ty| Schema::modifier_spec(*ty).inheritable)
+            .collect();
+        let expected = [
+            ModifierType::FontSize,
+            ModifierType::FontFamily,
+            ModifierType::FontWeight,
+            ModifierType::LetterSpacing,
+            ModifierType::LineHeight,
+            ModifierType::Alignment,
+            ModifierType::BlockGap,
+            ModifierType::ParagraphIndent,
+        ];
+        assert_eq!(inheritable.len(), 8);
+        for ty in expected {
+            assert!(inheritable.contains(&ty));
+            assert!(text_style_default_modifier(ty).is_some());
+        }
+        for ty in ModifierType::iter().filter(|t| !inheritable.contains(t)) {
+            assert!(text_style_default_modifier(ty).is_none());
         }
     }
 }

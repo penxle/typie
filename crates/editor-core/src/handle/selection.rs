@@ -1476,36 +1476,6 @@ mod tests {
     }
 
     #[test]
-    fn selection_op_unset_clears_pending_style() {
-        let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("Hello") } } }
-            selection: (p1, 3)
-        };
-        let mut editor = Editor::new_test(initial);
-
-        editor
-            .transact(|tr| {
-                tr.set_pending_style(Some(editor_state::PendingStyle::Set {
-                    style_id: "s1".to_string(),
-                }))?;
-                Ok(())
-            })
-            .unwrap();
-
-        assert!(editor.state().pending_style.is_some());
-
-        editor.apply(Message::Selection {
-            op: SelectionOp::Unset,
-        });
-
-        assert!(editor.state().selection.is_none(), "selection cleared");
-        assert!(
-            editor.state().pending_style.is_none(),
-            "pending_style cleared"
-        );
-    }
-
-    #[test]
     fn selection_op_set_to_different_position_clears_pending_format() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
@@ -1518,9 +1488,6 @@ mod tests {
                 tr.set_pending_modifiers(vec![PendingModifier::Set {
                     modifier: Modifier::Bold,
                 }])?;
-                tr.set_pending_style(Some(editor_state::PendingStyle::Set {
-                    style_id: "s1".to_string(),
-                }))?;
                 Ok(())
             })
             .unwrap();
@@ -1535,10 +1502,6 @@ mod tests {
             editor.state().pending_modifiers.is_empty(),
             "pending modifiers cleared"
         );
-        assert!(
-            editor.state().pending_style.is_none(),
-            "pending style cleared"
-        );
     }
 
     #[test]
@@ -1551,14 +1514,10 @@ mod tests {
         let pending_modifiers = vec![PendingModifier::Set {
             modifier: Modifier::Bold,
         }];
-        let pending_style = Some(editor_state::PendingStyle::Set {
-            style_id: "s1".to_string(),
-        });
 
         editor
             .transact(|tr| {
                 tr.set_pending_modifiers(pending_modifiers.clone())?;
-                tr.set_pending_style(pending_style.clone())?;
                 Ok(())
             })
             .unwrap();
@@ -1570,7 +1529,6 @@ mod tests {
         });
 
         assert_eq!(editor.state().pending_modifiers, pending_modifiers);
-        assert_eq!(editor.state().pending_style, pending_style);
     }
 
     #[test]

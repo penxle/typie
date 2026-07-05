@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph, OrMapOp, OrSetOp};
+use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph};
 use editor_model::{
     Anchor, AtomLeaf, Bias, EditOp, ModifierAttrOp, NodeAttrOp, NodeLwwOp, PlainDoc, PlainNode,
-    PlainNodeEntry, SeqClass, SeqItem, SpanOp, StyleOp, StyleRegOp, classify,
+    PlainNodeEntry, SeqClass, SeqItem, SpanOp, classify,
 };
 
 use crate::{ProjectedState, State};
@@ -37,36 +37,6 @@ pub fn build_state_from_plain_with_actor(
         &mut handles,
         &mut seq_pos,
     );
-
-    for (style_id, entry) in plain.styles.iter() {
-        graph
-            .add_mut(EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Presence(OrMapOp::Set {
-                    key: style_id.clone(),
-                    value: (),
-                }),
-            }))
-            .expect("local style presence never conflicts");
-        graph
-            .add_mut(EditOp::Style(StyleRegOp {
-                style_id: style_id.clone(),
-                op: StyleOp::Name(LwwRegOp::Set {
-                    value: entry.name.clone(),
-                }),
-            }))
-            .expect("local style name never conflicts");
-        for modifier in entry.modifiers.iter() {
-            graph
-                .add_mut(EditOp::Style(StyleRegOp {
-                    style_id: style_id.clone(),
-                    op: StyleOp::Modifiers(OrSetOp::Add {
-                        elem: modifier.clone(),
-                    }),
-                }))
-                .expect("local style modifier never conflicts");
-        }
-    }
 
     graph.commit_mut();
     let projected = ProjectedState::from_graph(graph).expect("template always projects");
@@ -112,16 +82,6 @@ fn emit_node(
                         modifier: modifier.clone(),
                     }))
                     .expect("local block modifier never conflicts");
-            }
-            if let Some(style_id) = &entry.style {
-                graph
-                    .add_mut(EditOp::NodeStyle(NodeLwwOp {
-                        target: dot,
-                        op: LwwRegOp::Set {
-                            value: Some(style_id.clone()),
-                        },
-                    }))
-                    .expect("local node style never conflicts");
             }
             if let Some(marker) = &entry.marker {
                 graph
@@ -177,18 +137,6 @@ fn emit_node(
                             }))
                             .expect("local span never conflicts");
                     }
-                    if let Some(style_id) = &entry.style {
-                        for &d in &char_dots {
-                            graph
-                                .add_mut(EditOp::NodeStyle(NodeLwwOp {
-                                    target: d,
-                                    op: LwwRegOp::Set {
-                                        value: Some(style_id.clone()),
-                                    },
-                                }))
-                                .expect("local leaf style never conflicts");
-                        }
-                    }
                 }
             }
             if let Some(parent_dot) = parents.last() {
@@ -230,38 +178,22 @@ fn emit_node(
                     }))
                     .expect("local atom span never conflicts");
             }
-            if let Some(style_id) = &entry.style {
-                graph
-                    .add_mut(EditOp::NodeStyle(NodeLwwOp {
-                        target: dot,
-                        op: LwwRegOp::Set {
-                            value: Some(style_id.clone()),
-                        },
-                    }))
-                    .expect("local atom style never conflicts");
-            }
         }
     }
 }
 
 // ── assert_state_eq ──────────────────────────────────────────────────────────
 // Structural state equality for tests: compares the projected tree (node types,
-// inline content, effective/own modifiers, styles, markers) ignoring the concrete
+// inline content, effective/own modifiers, markers) ignoring the concrete
 // `Dot` identities, plus selection-by-path and pending state.
 
-fn node_style(state: &State, dot: Dot) -> Option<String> {
-    state.projected.node_styles().value_of(dot)
-}
-
 fn block_fingerprint(state: &State, block: &editor_model::NodeView, out: &mut Vec<String>) {
-    let style = node_style(state, block.id());
     let marker = state.projected.node_markers().value_of(block.id());
     let mut mods: Vec<editor_model::Modifier> = block.effective().values().cloned().collect();
     mods.sort_by_key(editor_model::Modifier::as_type);
     out.push(format!(
-        "OPEN {:?} style={:?} marker={:?} mods={:?}",
+        "OPEN {:?} marker={:?} mods={:?}",
         block.node_type(),
-        style,
         marker,
         mods
     ));
@@ -269,7 +201,6 @@ fn block_fingerprint(state: &State, block: &editor_model::NodeView, out: &mut Ve
         match child {
             editor_model::ChildView::Block(b) => block_fingerprint(state, &b, out),
             editor_model::ChildView::Leaf(l) => {
-                let lstyle = node_style(state, l.dot());
                 let mut lmods: Vec<editor_model::Modifier> = block
                     .leaf_state_at(slot)
                     .map(|st| st.own.values().map(|o| o.value.clone()).collect())
@@ -279,7 +210,7 @@ fn block_fingerprint(state: &State, block: &editor_model::NodeView, out: &mut Ve
                     Some(c) => format!("char {c:?}"),
                     None => format!("atom {:?}", l.node_type()),
                 };
-                out.push(format!("LEAF {content} style={lstyle:?} mods={lmods:?}"));
+                out.push(format!("LEAF {content} mods={lmods:?}"));
             }
         }
     }
@@ -332,10 +263,6 @@ pub fn assert_state_eq_impl(actual: &State, expected: &State) {
     assert_eq!(
         actual.pending_modifiers, expected.pending_modifiers,
         "pending modifiers differ"
-    );
-    assert_eq!(
-        actual.pending_style, expected.pending_style,
-        "pending style differs"
     );
 }
 

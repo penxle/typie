@@ -1,7 +1,7 @@
 use editor_crdt::{Dot, Op};
-use editor_model::{EditOp, Marker, Modifier, PlainNode, PlainStyleEntry, Subtree};
+use editor_model::{EditOp, Marker, Modifier, PlainNode, Subtree};
 use editor_state::Selection;
-use editor_state::{BatchedState, Composition, PendingModifiers, PendingStyle, State};
+use editor_state::{BatchedState, Composition, PendingModifiers, State};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, IntoStaticStr};
 
@@ -86,25 +86,10 @@ pub enum Step {
         last: Dot,
         modifier: Modifier,
     },
-    ClearSpanModifier {
-        first: Dot,
-        last: Dot,
-        modifier: Modifier,
-    },
-    SetNodeStyle {
-        block: Dot,
-        old: Option<String>,
-        new: Option<String>,
-    },
     SetNodeMarker {
         block: Dot,
         old: Option<Marker>,
         new: Option<Marker>,
-    },
-    SetStyle {
-        style_id: String,
-        old: Option<PlainStyleEntry>,
-        new: Option<PlainStyleEntry>,
     },
     SetSelection {
         old: Option<Selection>,
@@ -113,10 +98,6 @@ pub enum Step {
     SetPendingModifiers {
         old: PendingModifiers,
         new: PendingModifiers,
-    },
-    SetPendingStyle {
-        old: Option<PendingStyle>,
-        new: Option<PendingStyle>,
     },
     SetComposition {
         old: Option<Composition>,
@@ -130,7 +111,6 @@ impl Step {
             self,
             Step::SetSelection { .. }
                 | Step::SetPendingModifiers { .. }
-                | Step::SetPendingStyle { .. }
                 | Step::SetComposition { .. }
         )
     }
@@ -141,10 +121,6 @@ impl Step {
 
     pub fn is_pending_modifiers_step(&self) -> bool {
         matches!(self, Step::SetPendingModifiers { .. })
-    }
-
-    pub fn is_pending_style_step(&self) -> bool {
-        matches!(self, Step::SetPendingStyle { .. })
     }
 
     pub fn is_commitable(&self) -> bool {
@@ -223,25 +199,13 @@ impl Step {
                 last,
                 modifier,
             } => steps::remove_span_modifier::apply_to(batched, *first, *last, modifier),
-            Step::ClearSpanModifier {
-                first,
-                last,
-                modifier,
-            } => steps::clear_span_modifier::apply_to(batched, *first, *last, modifier),
-            Step::SetNodeStyle { block, new, .. } => {
-                steps::set_node_style::apply_to(batched, *block, new.clone())
-            }
             Step::SetNodeMarker { block, new, .. } => {
                 steps::set_node_marker::apply_to(batched, *block, new.clone())
-            }
-            Step::SetStyle { style_id, new, .. } => {
-                steps::set_style::apply_to(batched, style_id, new.clone())
             }
             Step::SetSelection { new, .. } => steps::set_selection::apply_to(batched, *new),
             Step::SetPendingModifiers { new, .. } => {
                 steps::set_pending_modifiers::apply_to(batched, new)
             }
-            Step::SetPendingStyle { new, .. } => steps::set_pending_style::apply_to(batched, new),
             Step::SetComposition { new, .. } => steps::set_composition::apply_to(batched, *new),
         }
     }
@@ -300,26 +264,12 @@ impl Step {
                 last,
                 modifier,
             } => steps::remove_span_modifier::inverse(*first, *last, modifier.clone()),
-            Step::ClearSpanModifier {
-                first,
-                last,
-                modifier,
-            } => steps::clear_span_modifier::inverse(*first, *last, modifier.clone()),
-            Step::SetNodeStyle { block, old, new } => {
-                steps::set_node_style::inverse(*block, old.clone(), new.clone())
-            }
             Step::SetNodeMarker { block, old, new } => {
                 steps::set_node_marker::inverse(*block, old.clone(), new.clone())
-            }
-            Step::SetStyle { style_id, old, new } => {
-                steps::set_style::inverse(style_id.clone(), old.clone(), new.clone())
             }
             Step::SetSelection { old, new } => steps::set_selection::inverse(*old, *new),
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::inverse(old.clone(), new.clone())
-            }
-            Step::SetPendingStyle { old, new } => {
-                steps::set_pending_style::inverse(old.clone(), new.clone())
             }
             Step::SetComposition { old, new } => steps::set_composition::inverse(*old, *new),
         }

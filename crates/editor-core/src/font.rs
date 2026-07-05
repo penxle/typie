@@ -262,8 +262,7 @@ mod base_style_tests {
     fn collect_requests_base_style_font_without_panic() {
         let (state, p1) = state! {
             doc {
-                styles { base: "기본" [font_family("Pretendard".to_string()), font_weight(400)] }
-                root @base [] { p1: paragraph { text("Hi") } }
+                root [font_family("Pretendard".to_string()), font_weight(400)] { p1: paragraph { text("Hi") } }
             }
             selection: (p1, 0)
         };
@@ -282,8 +281,7 @@ mod base_style_tests {
     fn collect_uses_effective_weight_override() {
         let (state, p1) = state! {
             doc {
-                styles { base: "기본" [font_family("Pretendard".to_string()), font_weight(400)] }
-                root @base [] { p1: paragraph { text("Hi") [font_weight(700)] } }
+                root [font_family("Pretendard".to_string()), font_weight(400)] { p1: paragraph { text("Hi") [font_weight(700)] } }
             }
             selection: (p1, 0)
         };
@@ -303,8 +301,7 @@ mod base_style_tests {
     fn derive_font_updates_rescans_doc() {
         let (state, _p1) = state! {
             doc {
-                styles { base: "기본" [font_family("Pretendard".to_string()), font_weight(400)] }
-                root @base [] { p1: paragraph { text("Hi") } }
+                root [font_family("Pretendard".to_string()), font_weight(400)] { p1: paragraph { text("Hi") } }
             }
             selection: (p1, 0)
         };

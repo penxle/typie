@@ -2,8 +2,8 @@ use editor_macros::state;
 use editor_model::Modifier;
 use editor_resource::RawTextReplacementRule;
 use editor_state::{
-    Composition, PendingModifier, PendingStyle, Position, ResolvedPosition,
-    ResolvedPositionFlatExt, Selection, assert_state_eq,
+    Composition, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    assert_state_eq,
 };
 use editor_transaction::HistoryMeta;
 
@@ -206,10 +206,7 @@ fn backspace_immediately_after_replacement_restores_original() {
 #[test]
 fn backspace_restore_clears_pending_format_restored_by_auto_replacement_undo() {
     let (s, ..) = state! {
-        doc {
-            styles { s1: "s" [] }
-            root { p1: paragraph { text("") } }
-        }
+        doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
     let mut editor = Editor::new_test(s);
@@ -219,9 +216,6 @@ fn backspace_restore_clears_pending_format_restored_by_auto_replacement_undo() {
             tr.set_pending_modifiers(vec![PendingModifier::Set {
                 modifier: Modifier::Bold,
             }])?;
-            tr.set_pending_style(Some(PendingStyle::Set {
-                style_id: "s1".to_string(),
-            }))?;
             Ok(())
         })
         .unwrap();
@@ -241,10 +235,6 @@ fn backspace_restore_clears_pending_format_restored_by_auto_replacement_undo() {
     assert!(
         editor.state().pending_modifiers.is_empty(),
         "pending modifiers cleared"
-    );
-    assert!(
-        editor.state().pending_style.is_none(),
-        "pending style cleared"
     );
     assert!(editor.undo_history.can_redo(), "redo stack must be intact");
 }

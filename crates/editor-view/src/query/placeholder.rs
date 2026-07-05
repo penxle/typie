@@ -15,25 +15,25 @@ pub struct PlaceholderMetrics {
 
 use editor_common::Rect;
 use editor_model::{
-    Alignment, DEFAULT_FONT_SIZE, DEFAULT_LETTER_SPACING, DEFAULT_LINE_HEIGHT, DocView, Modifier,
-    ModifierType, NodeType,
+    Alignment, DEFAULT_ALIGNMENT, DEFAULT_FONT_SIZE, DEFAULT_LETTER_SPACING, DEFAULT_LINE_HEIGHT,
+    DEFAULT_PARAGRAPH_INDENT, DocView, Modifier, ModifierType, NodeType,
 };
 use editor_state::{PendingModifier, PendingModifiers};
 
 use super::layout_index::LayoutIndex;
-use crate::view_state::PendingStyle;
+use crate::view_state::PendingOverlay;
 
 pub(crate) fn placeholder_metrics(
     layout_index: &LayoutIndex,
     view: &DocView,
-    pending_style: Option<&PendingStyle>,
+    pending_overlay: Option<&PendingOverlay>,
 ) -> Option<PlaceholderMetrics> {
     if !is_single_empty_paragraph(view) {
         return None;
     }
     let nv = view.root()?.child_blocks().next()?;
     let elem_id = nv.id();
-    let pending_modifiers = pending_style
+    let pending_modifiers = pending_overlay
         .filter(|style| style.node_id == elem_id)
         .map(|style| &style.modifiers);
 
@@ -139,14 +139,14 @@ fn resolve_align(
 ) -> Alignment {
     match resolve_modifier(nv, pending_modifiers, ModifierType::Alignment) {
         Some(Modifier::Alignment { value }) => value,
-        _ => Alignment::default(),
+        _ => DEFAULT_ALIGNMENT,
     }
 }
 
 fn placeholder_indent(nv: &editor_model::NodeView<'_>) -> f32 {
     let align = match nv.effective().get(&ModifierType::Alignment) {
         Some(Modifier::Alignment { value }) => *value,
-        _ => Alignment::default(),
+        _ => DEFAULT_ALIGNMENT,
     };
     match align {
         Alignment::Left | Alignment::Justify => resolve_paragraph_indent(nv),
@@ -162,10 +162,11 @@ fn resolve_paragraph_indent(nv: &editor_model::NodeView<'_>) -> f32 {
     if !parent_is_root {
         return 0.0;
     }
-    match nv.effective().get(&ModifierType::ParagraphIndent) {
-        Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * 16.0,
-        _ => 0.0,
-    }
+    let value = match nv.effective().get(&ModifierType::ParagraphIndent) {
+        Some(Modifier::ParagraphIndent { value }) => *value,
+        _ => DEFAULT_PARAGRAPH_INDENT,
+    };
+    value as f32 / 100.0 * 16.0
 }
 
 #[cfg(test)]
@@ -175,8 +176,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         Alignment, AtomLeaf, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp,
-        NodeAttrLog, NodeMarkerLog, NodeStyleLog, NodeType, SeqItem, SpanLog, StyleLog,
-        project_document,
+        NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog, project_document,
     };
     use editor_resource::Resource;
 
@@ -204,9 +204,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_styles: NodeStyleLog::new(),
             node_markers: NodeMarkerLog::new(),
-            styles: StyleLog::new(),
         }
     }
 
@@ -290,7 +288,7 @@ mod tests {
             .apply(
                 Dot::ROOT,
                 ModifierAttrOp::SetModifier {
-                    target: para,
+                    target: Dot::ROOT,
                     modifier: Modifier::FontSize { value: 1800 },
                 },
             )
@@ -306,7 +304,7 @@ mod tests {
             .apply(
                 Dot::new(2, 2),
                 ModifierAttrOp::SetModifier {
-                    target: para,
+                    target: Dot::ROOT,
                     modifier: Modifier::LetterSpacing { value: 5 },
                 },
             )

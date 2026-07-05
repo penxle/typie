@@ -1,10 +1,10 @@
 use editor_crdt::Dot;
-use editor_model::{DocView, Marker, Modifier, PlainNode, PlainStyleEntry, Subtree};
+use editor_model::{DocView, Marker, Modifier, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
-use editor_state::{Composition, PendingModifiers, PendingStyle, State};
+use editor_state::{Composition, PendingModifiers, State};
 
-use crate::steps::{set_style, support};
+use crate::steps::support;
 use crate::{Effect, Step, StepEffect, StepError, StepRecord, TransactionMeta};
 
 pub struct Transaction {
@@ -51,10 +51,6 @@ impl Transaction {
 
     pub fn pending_modifiers(&self) -> &PendingModifiers {
         &self.state.pending_modifiers
-    }
-
-    pub fn pending_style(&self) -> &Option<PendingStyle> {
-        &self.state.pending_style
     }
 
     pub fn composition(&self) -> Option<&Composition> {
@@ -248,34 +244,6 @@ impl Transaction {
         })
     }
 
-    /// Explicitly turns `modifier` off over the range: unlike `remove_span_modifier`
-    /// (which cancels inline formatting and lets node styles / inheritance show
-    /// through), the resulting `Clear` also blocks style- and inherited values.
-    pub fn clear_span_modifier(
-        &mut self,
-        first: Dot,
-        last: Dot,
-        modifier: Modifier,
-    ) -> Result<(), StepError> {
-        self.apply_step(Step::ClearSpanModifier {
-            first,
-            last,
-            modifier,
-        })
-    }
-
-    pub fn set_node_style(&mut self, block: Dot, style: Option<String>) -> Result<(), StepError> {
-        let old = self.state.projected.node_styles().value_of(block);
-        if old == style {
-            return Ok(());
-        }
-        self.apply_step(Step::SetNodeStyle {
-            block,
-            old,
-            new: style,
-        })
-    }
-
     pub fn set_marker(&mut self, block: Dot, marker: Option<Marker>) -> Result<(), StepError> {
         let old = self.state.projected.node_markers().value_of(block);
         if old == marker {
@@ -285,22 +253,6 @@ impl Transaction {
             block,
             old,
             new: marker,
-        })
-    }
-
-    pub fn set_style(
-        &mut self,
-        style_id: String,
-        entry: Option<PlainStyleEntry>,
-    ) -> Result<(), StepError> {
-        let old = set_style::capture_style_entry(&self.state.projected, &style_id);
-        if old == entry {
-            return Ok(());
-        }
-        self.apply_step(Step::SetStyle {
-            style_id,
-            old,
-            new: entry,
         })
     }
 
@@ -326,17 +278,8 @@ impl Transaction {
         })
     }
 
-    pub fn set_pending_style(&mut self, pending: Option<PendingStyle>) -> Result<(), StepError> {
-        if self.state.pending_style == pending {
-            return Ok(());
-        }
-        let old = self.state.pending_style.clone();
-        self.apply_step(Step::SetPendingStyle { old, new: pending })
-    }
-
     pub fn clear_pending_format(&mut self) -> Result<(), StepError> {
-        self.set_pending_modifiers(PendingModifiers::new())?;
-        self.set_pending_style(None)
+        self.set_pending_modifiers(PendingModifiers::new())
     }
 
     pub fn set_composition(&mut self, composition: Option<Composition>) -> Result<(), StepError> {
@@ -636,17 +579,17 @@ mod tests {
             selection: (p1, 0)
         };
         let steps = vec![
-            Step::SetPendingStyle {
+            Step::SetComposition {
                 old: None,
-                new: Some(editor_state::PendingStyle::Unset),
+                new: Some(Composition { start: 0, end: 0 }),
             },
             Step::InsertText {
                 block: p1,
                 offset: 5,
                 text: "!".into(),
             },
-            Step::SetPendingStyle {
-                old: Some(editor_state::PendingStyle::Unset),
+            Step::SetComposition {
+                old: Some(Composition { start: 0, end: 0 }),
                 new: None,
             },
         ];

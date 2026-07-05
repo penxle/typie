@@ -5,44 +5,22 @@ use strum::IntoEnumIterator;
 
 use crate::nodes::Node;
 use crate::seq::{BlockNode, BlockTree, Child, anchor_dot};
-use crate::span::ExplicitEffect;
-use crate::{Modifier, ModifierAttrLog, ModifierType, NodeType, Schema, StyleEntry};
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum OwnEffect {
-    Set(Modifier),
-    Clear,
-}
+use crate::{Alignment, Modifier, ModifierAttrLog, ModifierType, NodeType, Schema};
 
 pub struct EffectiveSources<'a> {
     pub block_modifiers: &'a ModifierAttrLog,
-    pub explicit_spans: &'a HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>>,
-    pub node_styles: &'a imbl::HashMap<Dot, Option<String>>,
-    pub styles: &'a imbl::HashMap<String, StyleEntry>,
+    pub explicit_spans: &'a HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub node_attrs: &'a imbl::HashMap<Dot, Node>,
 }
 
-pub(crate) fn style_modifiers(
-    style: &StyleEntry,
-    path: &[NodeType],
-) -> BTreeMap<ModifierType, Modifier> {
-    let mut best: BTreeMap<ModifierType, (Dot, Modifier)> = BTreeMap::new();
-    for m in style.modifiers.iter() {
-        let ty = m.as_type();
-        if !Schema::modifier_spec(ty).context.matches(path) {
-            continue;
-        }
-        let Some(rep) = style.modifiers.tags_for(m).copied().max() else {
-            continue;
-        };
-        match best.get(&ty) {
-            Some((cur, _)) if *cur >= rep => {}
-            _ => {
-                best.insert(ty, (rep, m.clone()));
+pub(crate) fn is_table_justify(node_type: NodeType, m: &Modifier) -> bool {
+    node_type == NodeType::Table
+        && matches!(
+            m,
+            Modifier::Alignment {
+                value: Alignment::Justify
             }
-        }
-    }
-    best.into_iter().map(|(t, (_, m))| (t, m)).collect()
+        )
 }
 
 pub(crate) fn own_effect(
@@ -51,37 +29,28 @@ pub(crate) fn own_effect(
     type_path: &[NodeType],
     is_leaf: bool,
     src: &EffectiveSources,
-) -> BTreeMap<ModifierType, OwnEffect> {
-    let mut out: BTreeMap<ModifierType, OwnEffect> = BTreeMap::new();
+) -> BTreeMap<ModifierType, Modifier> {
+    let mut out: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
 
     if is_leaf && Schema::node_spec(node_type).inline {
         if let Some(d) = dot
             && let Some(ex) = src.explicit_spans.get(&d)
         {
-            for (ty, e) in ex {
-                out.insert(
-                    *ty,
-                    match e {
-                        ExplicitEffect::Set(m) => OwnEffect::Set(m.clone()),
-                        ExplicitEffect::Clear => OwnEffect::Clear,
-                    },
-                );
+            for (ty, m) in ex {
+                if !m.is_valid() {
+                    continue;
+                }
+                out.insert(*ty, m.clone());
             }
         }
     } else if let Some(d) = dot {
         for (ty, m) in src.block_modifiers.modifiers_of(d) {
-            if Schema::modifier_spec(ty).context.matches(type_path) {
-                out.entry(ty).or_insert(OwnEffect::Set(m));
+            if Schema::modifier_spec(ty).context.matches(type_path)
+                && m.is_valid()
+                && !is_table_justify(node_type, &m)
+            {
+                out.entry(ty).or_insert(m);
             }
-        }
-    }
-
-    if let Some(d) = dot
-        && let Some(Some(sid)) = src.node_styles.get(&d)
-        && let Some(style) = src.styles.get(sid)
-    {
-        for (ty, m) in style_modifiers(style, type_path) {
-            out.entry(ty).or_insert(OwnEffect::Set(m));
         }
     }
 
@@ -89,7 +58,7 @@ pub(crate) fn own_effect(
         .and_then(|d| src.node_attrs.get(&d).cloned())
         .unwrap_or_else(|| node_type.into_node());
     for m in node.implicit_modifiers() {
-        out.entry(m.as_type()).or_insert(OwnEffect::Set(m.clone()));
+        out.entry(m.as_type()).or_insert(m.clone());
     }
 
     out
@@ -110,7 +79,7 @@ pub fn resolve_effective(
         .map(|i| {
             let (atype, adot) = block_path[i];
             let apath: Vec<NodeType> = block_path[0..=i].iter().map(|(t, _)| *t).collect();
-            let own: BTreeMap<ModifierType, OwnEffect> = match adot {
+            let own: BTreeMap<ModifierType, Modifier> = match adot {
                 Some(d) => own_effect(Some(d), atype, &apath, false, src),
                 None => BTreeMap::new(),
             };
@@ -119,19 +88,40 @@ pub fn resolve_effective(
         .collect();
 
     let inherited = |ty: ModifierType, inheritable: bool| -> Option<Modifier> {
+        let target = &Schema::modifier_spec(ty).target;
         for (adot, apath, own) in ancestors.iter().rev() {
-            if adot.is_none() {
-                continue;
-            }
             if inheritable {
-                if let Some(OwnEffect::Set(m)) = own.get(&ty) {
+                if target.matches(apath) {
+                    return None;
+                }
+                if adot.is_none() {
+                    continue;
+                }
+                if let Some(m) = own.get(&ty) {
                     return Some(m.clone());
                 }
-            } else if Schema::modifier_spec(ty).target.matches(apath) {
-                return match own.get(&ty) {
-                    Some(OwnEffect::Set(m)) => Some(m.clone()),
-                    _ => None,
-                };
+            } else {
+                if adot.is_none() {
+                    continue;
+                }
+                if target.matches(apath) {
+                    return own.get(&ty).cloned();
+                }
+            }
+        }
+        None
+    };
+
+    let ancestor_implicit = |ty: ModifierType| -> Option<Modifier> {
+        if !is_leaf {
+            return None;
+        }
+        for (atype, adot) in block_path.iter().rev() {
+            let node = adot
+                .and_then(|d| src.node_attrs.get(&d).cloned())
+                .unwrap_or_else(|| (*atype).into_node());
+            if let Some(m) = node.implicit_modifiers().iter().find(|m| m.as_type() == ty) {
+                return Some(m.clone());
             }
         }
         None
@@ -142,18 +132,11 @@ pub fn resolve_effective(
         let spec = Schema::modifier_spec(ty);
         let is_target_self = spec.target.matches(&self_path);
         let val = if spec.inheritable {
-            match self_own.get(&ty) {
-                Some(OwnEffect::Set(m)) => Some(m.clone()),
-                Some(OwnEffect::Clear) => None,
-                None => inherited(ty, true),
-            }
+            self_own.get(&ty).cloned().or_else(|| inherited(ty, true))
         } else if is_target_self {
-            match self_own.get(&ty) {
-                Some(OwnEffect::Set(m)) => Some(m.clone()),
-                _ => None,
-            }
+            self_own.get(&ty).cloned().or_else(|| ancestor_implicit(ty))
         } else {
-            inherited(ty, false)
+            inherited(ty, false).or_else(|| ancestor_implicit(ty))
         };
         if let Some(m) = val {
             out.insert(ty, m);
@@ -216,62 +199,29 @@ pub fn derive_block_effective(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OwnModifier {
     pub value: Modifier,
-    pub from_style: bool,
 }
 
-/// Own (non-inherited) modifiers of a single leaf: its explicit span effects plus
-/// node-style-provided modifiers, tagged by source. Returns an empty map when the
-/// leaf carries none. `leaf_path` is the full node-type path including the leaf.
+/// Own (non-inherited) modifiers of a single leaf: its explicit span effects.
+/// Returns an empty map when the leaf carries none.
 pub fn own_modifiers_for_leaf(
     leaf_dot: Dot,
-    leaf_path: &[NodeType],
     src: &EffectiveSources,
 ) -> BTreeMap<ModifierType, OwnModifier> {
-    let mut own: BTreeMap<ModifierType, Option<OwnModifier>> = BTreeMap::new();
+    let mut own: BTreeMap<ModifierType, OwnModifier> = BTreeMap::new();
     if let Some(ex) = src.explicit_spans.get(&leaf_dot) {
-        for (ty, e) in ex {
-            own.insert(
-                *ty,
-                match e {
-                    ExplicitEffect::Set(m) => Some(OwnModifier {
-                        value: m.clone(),
-                        from_style: false,
-                    }),
-                    ExplicitEffect::Clear => None,
-                },
-            );
+        for (ty, m) in ex {
+            if !m.is_valid() {
+                continue;
+            }
+            own.insert(*ty, OwnModifier { value: m.clone() });
         }
     }
-    if let Some(Some(sid)) = src.node_styles.get(&leaf_dot)
-        && let Some(style) = src.styles.get(sid)
-    {
-        for (ty, m) in style_modifiers(style, leaf_path) {
-            own.entry(ty).or_insert(Some(OwnModifier {
-                value: m,
-                from_style: true,
-            }));
-        }
-    }
-    own.into_iter()
-        .filter_map(|(t, o)| o.map(|m| (t, m)))
-        .collect()
+    own
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::OrSetOp;
-
-    fn style_with(mods: &[(Dot, Modifier)]) -> StyleEntry {
-        let mut s = StyleEntry::new();
-        for (d, m) in mods {
-            s.modifiers = s
-                .modifiers
-                .apply(*d, OrSetOp::Add { elem: m.clone() })
-                .unwrap();
-        }
-        s
-    }
 
     /// Per-leaf own-modifier maps for the whole tree (only non-empty entries),
     /// via `own_modifiers_for_leaf`.
@@ -280,13 +230,8 @@ mod tests {
         src: &EffectiveSources,
     ) -> HashMap<Dot, BTreeMap<ModifierType, OwnModifier>> {
         let mut out = HashMap::new();
-        crate::span::for_each_leaf(tree, |path, leaf_type, leaf_dot| {
-            let leaf_path: Vec<NodeType> = path
-                .iter()
-                .map(|(t, _)| *t)
-                .chain(std::iter::once(leaf_type))
-                .collect();
-            let m = own_modifiers_for_leaf(leaf_dot, &leaf_path, src);
+        crate::span::for_each_leaf(tree, |_path, _leaf_type, leaf_dot| {
+            let m = own_modifiers_for_leaf(leaf_dot, src);
             if !m.is_empty() {
                 out.insert(leaf_dot, m);
             }
@@ -294,57 +239,16 @@ mod tests {
         out
     }
 
-    #[test]
-    fn style_modifiers_picks_highest_dot_per_type() {
-        let style = style_with(&[
-            (Dot::new(1, 0), Modifier::FontSize { value: 1600 }),
-            (Dot::new(2, 0), Modifier::FontSize { value: 1200 }),
-        ]);
-        let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
-        let got = style_modifiers(&style, &path);
-        assert_eq!(
-            got.get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1200 }),
-            "highest add-Dot (2,0) wins"
-        );
-    }
-
     fn sources<'a>(
         bm: &'a ModifierAttrLog,
-        spans: &'a HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>>,
-        node_styles: &'a imbl::HashMap<Dot, Option<String>>,
-        styles: &'a imbl::HashMap<String, StyleEntry>,
+        spans: &'a HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
         node_attrs: &'a imbl::HashMap<Dot, Node>,
     ) -> EffectiveSources<'a> {
         EffectiveSources {
             block_modifiers: bm,
             explicit_spans: spans,
-            node_styles,
-            styles,
             node_attrs,
         }
-    }
-
-    #[test]
-    fn own_effect_leaf_span_clear_suppresses_style() {
-        let leaf = Dot::new(1, 5);
-        let bm = ModifierAttrLog::new();
-        let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
-        let mut e = BTreeMap::new();
-        e.insert(ModifierType::Bold, ExplicitEffect::Clear);
-        spans.insert(leaf, e);
-        let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        node_styles.insert(leaf, Some("s".to_string()));
-        let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-        styles.insert(
-            "s".to_string(),
-            style_with(&[(Dot::new(9, 0), Modifier::Bold)]),
-        );
-        let node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
-        let src = sources(&bm, &spans, &node_styles, &styles, &node_attrs);
-        let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
-        let own = own_effect(Some(leaf), NodeType::Text, &path, true, &src);
-        assert_eq!(own.get(&ModifierType::Bold), Some(&OwnEffect::Clear));
     }
 
     #[test]
@@ -362,10 +266,8 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
-        let src = sources(&bm, &spans, &node_styles, &styles, &node_attrs);
+        let src = sources(&bm, &spans, &node_attrs);
         let own = own_effect(
             Some(img),
             NodeType::Image,
@@ -375,7 +277,7 @@ mod tests {
         );
         assert!(matches!(
             own.get(&ModifierType::Alignment),
-            Some(OwnEffect::Set(_))
+            Some(Modifier::Alignment { .. })
         ));
     }
 
@@ -391,19 +293,17 @@ mod tests {
                 },
             )
             .unwrap();
-        let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
+        let mut spans: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
         let mut e = BTreeMap::new();
-        e.insert(ModifierType::Bold, ExplicitEffect::Set(Modifier::Bold));
+        e.insert(ModifierType::Bold, Modifier::Bold);
         spans.insert(leaf, e);
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
-        let src = sources(&bm, &spans, &node_styles, &styles, &node_attrs);
+        let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
         let own = own_effect(Some(leaf), NodeType::Text, &path, true, &src);
         assert_eq!(
             own.get(&ModifierType::Bold),
-            Some(&OwnEffect::Set(Modifier::Bold)),
+            Some(&Modifier::Bold),
             "inline leaf reads explicit span"
         );
     }
@@ -421,10 +321,8 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
-        let src = sources(&bm, &spans, &node_styles, &styles, &node_attrs);
+        let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root];
         let own = own_effect(Some(root), NodeType::Root, &path, false, &src);
         assert!(
@@ -434,13 +332,77 @@ mod tests {
     }
 
     #[test]
+    fn own_effect_block_modifier_out_of_range_value_is_ignored() {
+        let root = Dot::new(1, 0);
+        let bm = ModifierAttrLog::new()
+            .apply(
+                Dot::new(7, 0),
+                crate::ModifierAttrOp::SetModifier {
+                    target: root,
+                    modifier: Modifier::FontSize { value: 399 },
+                },
+            )
+            .unwrap();
+        let spans = HashMap::new();
+        let node_attrs = imbl::HashMap::new();
+        let src = sources(&bm, &spans, &node_attrs);
+        let path = [NodeType::Root];
+        let own = own_effect(Some(root), NodeType::Root, &path, false, &src);
+        assert!(
+            !own.contains_key(&ModifierType::FontSize),
+            "out-of-range value is treated as no record"
+        );
+    }
+
+    #[test]
+    fn own_effect_table_justify_alignment_is_ignored() {
+        let table = Dot::new(1, 1);
+        let bm = ModifierAttrLog::new()
+            .apply(
+                Dot::new(7, 0),
+                crate::ModifierAttrOp::SetModifier {
+                    target: table,
+                    modifier: Modifier::Alignment {
+                        value: Alignment::Justify,
+                    },
+                },
+            )
+            .unwrap();
+        let spans = HashMap::new();
+        let node_attrs = imbl::HashMap::new();
+        let src = sources(&bm, &spans, &node_attrs);
+        let path = [NodeType::Root, NodeType::Table];
+        let own = own_effect(Some(table), NodeType::Table, &path, false, &src);
+        assert!(
+            !own.contains_key(&ModifierType::Alignment),
+            "Table Justify record is treated as no record"
+        );
+    }
+
+    #[test]
+    fn own_effect_leaf_explicit_span_out_of_range_value_is_ignored() {
+        let leaf = Dot::new(1, 2);
+        let bm = ModifierAttrLog::new();
+        let mut spans: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
+        let mut e = BTreeMap::new();
+        e.insert(ModifierType::FontSize, Modifier::FontSize { value: 50000 });
+        spans.insert(leaf, e);
+        let node_attrs = imbl::HashMap::new();
+        let src = sources(&bm, &spans, &node_attrs);
+        let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
+        let own = own_effect(Some(leaf), NodeType::Text, &path, true, &src);
+        assert!(
+            !own.contains_key(&ModifierType::FontSize),
+            "out-of-range explicit span value is treated as no record"
+        );
+    }
+
+    #[test]
     fn own_effect_block_implicit_from_node_attrs() {
         use crate::nodes::{BlockquoteVariant, Node};
         let blk = Dot::new(1, 1);
         let bm = ModifierAttrLog::new();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let mut node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
         let mut bq = match NodeType::Blockquote.into_node() {
             Node::Blockquote(b) => b,
@@ -448,14 +410,14 @@ mod tests {
         };
         bq.variant = editor_crdt::LwwReg::with_value(BlockquoteVariant::MessageSent);
         node_attrs.insert(blk, Node::Blockquote(bq));
-        let src = sources(&bm, &spans, &node_styles, &styles, &node_attrs);
+        let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root, NodeType::Blockquote];
         let own = own_effect(Some(blk), NodeType::Blockquote, &path, false, &src);
         assert_eq!(
             own.get(&ModifierType::TextColor),
-            Some(&OwnEffect::Set(Modifier::TextColor {
+            Some(&Modifier::TextColor {
                 value: "bright".to_string()
-            }))
+            })
         );
     }
 
@@ -479,41 +441,23 @@ mod tests {
         is_leaf: bool,
         ty: ModifierType,
         src: &EffectiveSources,
-    ) -> Option<OwnEffect> {
+    ) -> Option<Modifier> {
         if is_leaf && Schema::node_spec(nt).inline {
             if let Some(d) = dot
                 && let Some(ex) = src.explicit_spans.get(&d)
-                && let Some(e) = ex.get(&ty)
+                && let Some(m) = ex.get(&ty)
+                && m.is_valid()
             {
-                return Some(match e {
-                    ExplicitEffect::Set(m) => OwnEffect::Set(m.clone()),
-                    ExplicitEffect::Clear => OwnEffect::Clear,
-                });
+                return Some(m.clone());
             }
         } else if let Some(d) = dot {
             let bm = src.block_modifiers.modifiers_of(d);
             if let Some(m) = bm.get(&ty)
                 && Schema::modifier_spec(ty).context.matches(path)
+                && m.is_valid()
+                && !is_table_justify(nt, m)
             {
-                return Some(OwnEffect::Set(m.clone()));
-            }
-        }
-        if let Some(d) = dot
-            && let Some(Some(sid)) = src.node_styles.get(&d)
-            && let Some(st) = src.styles.get(sid)
-        {
-            let mut best: Option<(Dot, Modifier)> = None;
-            for m in st.modifiers.iter() {
-                if m.as_type() == ty
-                    && Schema::modifier_spec(ty).context.matches(path)
-                    && let Some(rep) = st.modifiers.tags_for(m).copied().max()
-                    && best.as_ref().is_none_or(|(c, _)| rep > *c)
-                {
-                    best = Some((rep, m.clone()));
-                }
-            }
-            if let Some((_, m)) = best {
-                return Some(OwnEffect::Set(m));
+                return Some(m.clone());
             }
         }
         let node = dot
@@ -521,7 +465,7 @@ mod tests {
             .unwrap_or_else(|| nt.into_node());
         for m in node.implicit_modifiers() {
             if m.as_type() == ty {
-                return Some(OwnEffect::Set(m.clone()));
+                return Some(m.clone());
             }
         }
         None
@@ -541,43 +485,52 @@ mod tests {
             let spec = Schema::modifier_spec(ty);
             let is_target_self = spec.target.matches(&self_path);
             let inh = |ty: ModifierType| -> Option<Modifier> {
+                let target = &Schema::modifier_spec(ty).target;
                 for i in (0..block_path.len()).rev() {
                     let (atype, adot) = block_path[i];
-                    if adot.is_none() {
-                        continue;
-                    }
                     let apath: Vec<NodeType> = block_path[0..=i].iter().map(|(t, _)| *t).collect();
                     if spec.inheritable {
-                        if let Some(OwnEffect::Set(m)) =
-                            ref_own_ty(adot, atype, &apath, false, ty, src)
-                        {
+                        if target.matches(&apath) {
+                            return None;
+                        }
+                        if adot.is_none() {
+                            continue;
+                        }
+                        if let Some(m) = ref_own_ty(adot, atype, &apath, false, ty, src) {
                             return Some(m);
                         }
-                    } else if Schema::modifier_spec(ty).target.matches(&apath) {
-                        return match ref_own_ty(adot, atype, &apath, false, ty, src) {
-                            Some(OwnEffect::Set(m)) => Some(m),
-                            _ => None,
-                        };
+                    } else {
+                        if adot.is_none() {
+                            continue;
+                        }
+                        if target.matches(&apath) {
+                            return ref_own_ty(adot, atype, &apath, false, ty, src);
+                        }
+                    }
+                }
+                None
+            };
+            let ancestor_implicit = |ty: ModifierType| -> Option<Modifier> {
+                if !is_leaf {
+                    return None;
+                }
+                for (atype, adot) in block_path.iter().rev() {
+                    let node = adot
+                        .and_then(|d| src.node_attrs.get(&d).cloned())
+                        .unwrap_or_else(|| (*atype).into_node());
+                    if let Some(m) = node.implicit_modifiers().iter().find(|m| m.as_type() == ty) {
+                        return Some(m.clone());
                     }
                 }
                 None
             };
             let val = if spec.inheritable {
-                match (
-                    is_target_self,
-                    ref_own_ty(self_dot, self_type, &self_path, is_leaf, ty, src),
-                ) {
-                    (true, Some(OwnEffect::Set(m))) => Some(m),
-                    (true, Some(OwnEffect::Clear)) => None,
-                    _ => inh(ty),
-                }
+                ref_own_ty(self_dot, self_type, &self_path, is_leaf, ty, src).or_else(|| inh(ty))
             } else if is_target_self {
-                match ref_own_ty(self_dot, self_type, &self_path, is_leaf, ty, src) {
-                    Some(OwnEffect::Set(m)) => Some(m),
-                    _ => None,
-                }
+                ref_own_ty(self_dot, self_type, &self_path, is_leaf, ty, src)
+                    .or_else(|| ancestor_implicit(ty))
             } else {
-                inh(ty)
+                inh(ty).or_else(|| ancestor_implicit(ty))
             };
             if let Some(m) = val {
                 out.insert(ty, m);
@@ -591,8 +544,7 @@ mod tests {
         fn resolve_effective_matches_reference(
             root_mod in proptest::option::of(arb_mod()),
             para_mod in proptest::option::of(arb_mod()),
-            leaf_style_mod in proptest::option::of(arb_mod()),
-            leaf_span in proptest::option::of((arb_mod(), any::<bool>())),
+            leaf_span in proptest::option::of(arb_mod()),
         ) {
             let root = Dot::new(1, 0);
             let para = Dot::new(1, 1);
@@ -606,20 +558,14 @@ mod tests {
             if let Some(m) = para_mod {
                 bm = bm.apply(Dot::new(7, dc), crate::ModifierAttrOp::SetModifier { target: para, modifier: m }).unwrap();
             }
-            let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-            let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-            if let Some(m) = leaf_style_mod {
-                node_styles.insert(leaf, Some("s".to_string()));
-                styles.insert("s".to_string(), style_with(&[(Dot::new(8, 0), m)]));
-            }
-            let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
-            if let Some((m, clear)) = leaf_span {
+            let mut spans: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
+            if let Some(m) = leaf_span {
                 let mut e = BTreeMap::new();
-                e.insert(m.as_type(), if clear { ExplicitEffect::Clear } else { ExplicitEffect::Set(m) });
+                e.insert(m.as_type(), m);
                 spans.insert(leaf, e);
             }
             let node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
-            let src = EffectiveSources { block_modifiers: &bm, explicit_spans: &spans, node_styles: &node_styles, styles: &styles, node_attrs: &node_attrs };
+            let src = EffectiveSources { block_modifiers: &bm, explicit_spans: &spans, node_attrs: &node_attrs };
             let block_path = [(NodeType::Root, Some(root)), (NodeType::Paragraph, Some(para))];
             let got = resolve_effective(&block_path, Some(leaf), NodeType::Text, true, &src);
             let want = ref_effective(&block_path, Some(leaf), NodeType::Text, true, &src);
@@ -642,14 +588,10 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let bp = [
@@ -664,73 +606,9 @@ mod tests {
     }
 
     #[test]
-    fn resolve_effective_folds_leaf_local_style() {
+    fn paragraph_consumes_its_own_alignment_record() {
         let root = Dot::new(1, 0);
         let para = Dot::new(1, 1);
-        let leaf = Dot::new(1, 2);
-        let bm = ModifierAttrLog::new();
-        let spans = HashMap::new();
-        let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        node_styles.insert(leaf, Some("s".to_string()));
-        let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-        styles.insert(
-            "s".to_string(),
-            style_with(&[(Dot::new(8, 0), Modifier::Bold)]),
-        );
-        let node_attrs = imbl::HashMap::new();
-        let src = EffectiveSources {
-            block_modifiers: &bm,
-            explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
-            node_attrs: &node_attrs,
-        };
-        let bp = [
-            (NodeType::Root, Some(root)),
-            (NodeType::Paragraph, Some(para)),
-        ];
-        let eff = resolve_effective(&bp, Some(leaf), NodeType::Text, true, &src);
-        assert_eq!(eff.get(&ModifierType::Bold), Some(&Modifier::Bold));
-    }
-
-    #[test]
-    fn resolve_effective_inherits_block_style_to_leaf() {
-        let root = Dot::new(1, 0);
-        let para = Dot::new(1, 1);
-        let leaf = Dot::new(1, 2);
-        let bm = ModifierAttrLog::new();
-        let spans = HashMap::new();
-        let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        node_styles.insert(para, Some("s".to_string()));
-        let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-        styles.insert(
-            "s".to_string(),
-            style_with(&[(Dot::new(8, 0), Modifier::FontSize { value: 1600 })]),
-        );
-        let node_attrs = imbl::HashMap::new();
-        let src = EffectiveSources {
-            block_modifiers: &bm,
-            explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
-            node_attrs: &node_attrs,
-        };
-        let bp = [
-            (NodeType::Root, Some(root)),
-            (NodeType::Paragraph, Some(para)),
-        ];
-        let eff = resolve_effective(&bp, Some(leaf), NodeType::Text, true, &src);
-        assert_eq!(
-            eff.get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1600 })
-        );
-    }
-
-    #[test]
-    fn resolve_effective_non_inheritable_alignment_reaches_text() {
-        let root = Dot::new(1, 0);
-        let para = Dot::new(1, 1);
-        let leaf = Dot::new(1, 2);
         let bm = ModifierAttrLog::new()
             .apply(
                 Dot::new(7, 0),
@@ -743,70 +621,203 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
-        let bp = [
-            (NodeType::Root, Some(root)),
-            (NodeType::Paragraph, Some(para)),
-        ];
-        let eff = resolve_effective(&bp, Some(leaf), NodeType::Text, true, &src);
+        let bp = [(NodeType::Root, Some(root))];
+        let eff = resolve_effective(&bp, Some(para), NodeType::Paragraph, false, &src);
         assert_eq!(
             eff.get(&ModifierType::Alignment),
             Some(&Modifier::Alignment {
                 value: crate::Alignment::Center
-            })
+            }),
+            "a Paragraph consumes Alignment: its own record is its effective value, and does not pass down to its text carriers"
         );
     }
 
+    fn table_alignment_src(bm: &ModifierAttrLog) -> EffectiveSources<'_> {
+        static EMPTY_SPANS: std::sync::OnceLock<HashMap<Dot, BTreeMap<ModifierType, Modifier>>> =
+            std::sync::OnceLock::new();
+        static EMPTY_ATTRS: std::sync::OnceLock<imbl::HashMap<Dot, Node>> =
+            std::sync::OnceLock::new();
+        EffectiveSources {
+            block_modifiers: bm,
+            explicit_spans: EMPTY_SPANS.get_or_init(HashMap::new),
+            node_attrs: EMPTY_ATTRS.get_or_init(imbl::HashMap::new),
+        }
+    }
+
+    fn td(seq: u64) -> Dot {
+        Dot::new(1, seq)
+    }
+
+    fn cell_para_path() -> [(NodeType, Option<Dot>); 4] {
+        [
+            (NodeType::Root, Some(td(0))),
+            (NodeType::Table, Some(td(1))),
+            (NodeType::TableRow, Some(td(2))),
+            (NodeType::TableCell, Some(td(3))),
+        ]
+    }
+
+    fn cell_leaf_path() -> [(NodeType, Option<Dot>); 5] {
+        [
+            (NodeType::Root, Some(td(0))),
+            (NodeType::Table, Some(td(1))),
+            (NodeType::TableRow, Some(td(2))),
+            (NodeType::TableCell, Some(td(3))),
+            (NodeType::Paragraph, Some(td(4))),
+        ]
+    }
+
     #[test]
-    fn resolve_effective_non_inheritable_scoped_stops_at_nearest_target() {
-        let root = Dot::new(1, 0);
-        let table = Dot::new(1, 1);
-        let row = Dot::new(1, 2);
-        let cell = Dot::new(1, 3);
-        let para = Dot::new(1, 4);
-        let leaf = Dot::new(1, 5);
+    fn alignment_inheritance_terminates_at_table() {
         let bm = ModifierAttrLog::new()
             .apply(
                 Dot::new(7, 0),
                 crate::ModifierAttrOp::SetModifier {
-                    target: table,
+                    target: td(1),
+                    modifier: Modifier::Alignment {
+                        value: crate::Alignment::Right,
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(7, 1),
+                crate::ModifierAttrOp::SetModifier {
+                    target: td(0),
+                    modifier: Modifier::Alignment {
+                        value: crate::Alignment::Center,
+                    },
+                },
+            )
+            .unwrap();
+        let src = table_alignment_src(&bm);
+        let para_eff = resolve_effective(
+            &cell_para_path(),
+            Some(td(4)),
+            NodeType::Paragraph,
+            false,
+            &src,
+        );
+        assert_eq!(
+            para_eff.get(&ModifierType::Alignment),
+            None,
+            "Table consumes Alignment, so neither the Table's placement nor the Root's alignment passes into a cell paragraph — it falls back to DEFAULT_ALIGNMENT (Left)"
+        );
+    }
+
+    #[test]
+    fn table_placement_inherits_root_alignment() {
+        let bm = ModifierAttrLog::new()
+            .apply(
+                Dot::new(7, 0),
+                crate::ModifierAttrOp::SetModifier {
+                    target: td(0),
+                    modifier: Modifier::Alignment {
+                        value: crate::Alignment::Center,
+                    },
+                },
+            )
+            .unwrap();
+        let src = table_alignment_src(&bm);
+        let bp = [(NodeType::Root, Some(td(0)))];
+        let table_eff = resolve_effective(&bp, Some(td(1)), NodeType::Table, false, &src);
+        assert_eq!(
+            table_eff.get(&ModifierType::Alignment),
+            Some(&Modifier::Alignment {
+                value: crate::Alignment::Center
+            }),
+            "the Table has no consumer between itself and the Root, so its own placement inherits the Root alignment normally"
+        );
+    }
+
+    #[test]
+    fn cell_text_alignment_terminates_no_passthrough() {
+        let bm = ModifierAttrLog::new()
+            .apply(
+                Dot::new(7, 0),
+                crate::ModifierAttrOp::SetModifier {
+                    target: td(0),
+                    modifier: Modifier::Alignment {
+                        value: crate::Alignment::Center,
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(7, 1),
+                crate::ModifierAttrOp::SetModifier {
+                    target: td(1),
                     modifier: Modifier::Alignment {
                         value: crate::Alignment::Right,
                     },
                 },
             )
             .unwrap();
+        let src = table_alignment_src(&bm);
+        let leaf_eff =
+            resolve_effective(&cell_leaf_path(), Some(td(5)), NodeType::Text, true, &src);
+        assert_eq!(
+            leaf_eff.get(&ModifierType::Alignment),
+            None,
+            "cell text alignment terminates at its Paragraph consumer; no pass-through of Table or Root alignment → code default Left"
+        );
+    }
+
+    #[test]
+    fn root_font_size_reaches_cell_char() {
+        let bm = ModifierAttrLog::new()
+            .apply(
+                Dot::new(7, 0),
+                crate::ModifierAttrOp::SetModifier {
+                    target: td(0),
+                    modifier: Modifier::FontSize { value: 1600 },
+                },
+            )
+            .unwrap();
+        let src = table_alignment_src(&bm);
+        let leaf_eff =
+            resolve_effective(&cell_leaf_path(), Some(td(5)), NodeType::Text, true, &src);
+        assert_eq!(
+            leaf_eff.get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 1600 }),
+            "FontSize has no block consumer, so an inheritable non-alignment kind flows through the Table into the cell char unchanged"
+        );
+    }
+
+    #[test]
+    fn table_justify_record_resolves_to_code_default_left() {
+        let root = Dot::new(1, 0);
+        let table = Dot::new(1, 1);
+        let bm = ModifierAttrLog::new()
+            .apply(
+                Dot::new(7, 0),
+                crate::ModifierAttrOp::SetModifier {
+                    target: table,
+                    modifier: Modifier::Alignment {
+                        value: Alignment::Justify,
+                    },
+                },
+            )
+            .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
-        let bp = [
-            (NodeType::Root, Some(root)),
-            (NodeType::Table, Some(table)),
-            (NodeType::TableRow, Some(row)),
-            (NodeType::TableCell, Some(cell)),
-            (NodeType::Paragraph, Some(para)),
-        ];
-        let eff = resolve_effective(&bp, Some(leaf), NodeType::Text, true, &src);
-        assert!(
-            !eff.contains_key(&ModifierType::Alignment),
-            "scoped: stops at nearest Paragraph target"
+        let bp = [(NodeType::Root, Some(root))];
+        let eff = resolve_effective(&bp, Some(table), NodeType::Table, false, &src);
+        assert_eq!(
+            eff.get(&ModifierType::Alignment),
+            None,
+            "a Table's own Justify record is treated as no record; consumers fall back to DEFAULT_ALIGNMENT (Left)"
         );
     }
 
@@ -824,14 +835,10 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let bp = [(NodeType::Root, Some(root)), (NodeType::Paragraph, None)];
@@ -844,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_effective_non_inheritable_skips_none_target_ancestor() {
+    fn alignment_leaf_terminates_at_structural_paragraph_consumer() {
         let root = Dot::new(1, 0);
         let table = Dot::new(1, 1);
         let leaf = Dot::new(1, 5);
@@ -860,14 +867,10 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let bp = [
@@ -878,49 +881,8 @@ mod tests {
         let eff = resolve_effective(&bp, Some(leaf), NodeType::Text, true, &src);
         assert_eq!(
             eff.get(&ModifierType::Alignment),
-            Some(&Modifier::Alignment {
-                value: crate::Alignment::Right
-            }),
-            "non-inheritable walk skips the None Paragraph target and reaches Table"
-        );
-    }
-
-    #[test]
-    fn resolve_effective_leaf_span_clear_is_barrier() {
-        let root = Dot::new(1, 0);
-        let para = Dot::new(1, 1);
-        let leaf = Dot::new(1, 2);
-        let bm = ModifierAttrLog::new()
-            .apply(
-                Dot::new(7, 0),
-                crate::ModifierAttrOp::SetModifier {
-                    target: root,
-                    modifier: Modifier::FontSize { value: 1600 },
-                },
-            )
-            .unwrap();
-        let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
-        let mut e = BTreeMap::new();
-        e.insert(ModifierType::FontSize, ExplicitEffect::Clear);
-        spans.insert(leaf, e);
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
-        let node_attrs = imbl::HashMap::new();
-        let src = EffectiveSources {
-            block_modifiers: &bm,
-            explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
-            node_attrs: &node_attrs,
-        };
-        let bp = [
-            (NodeType::Root, Some(root)),
-            (NodeType::Paragraph, Some(para)),
-        ];
-        let eff = resolve_effective(&bp, Some(leaf), NodeType::Text, true, &src);
-        assert!(
-            !eff.contains_key(&ModifierType::FontSize),
-            "leaf Clear blocks inheritance"
+            None,
+            "the enclosing Paragraph is an Alignment consumer even without its own record, so the walk terminates there — Table alignment does not pass through → code default Left"
         );
     }
 
@@ -967,14 +929,10 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let be = derive_block_effective(&tree, &src);
@@ -986,7 +944,41 @@ mod tests {
     }
 
     #[test]
-    fn leaf_inherits_ancestor_implicit_text_color() {
+    fn fold_title_implicit_text_color_reaches_its_chars() {
+        let root = Dot::ROOT;
+        let fold = Dot::new(1, 1);
+        let title = Dot::new(1, 2);
+        let a = Dot::new(1, 3);
+        let bm = ModifierAttrLog::new();
+        let spans = HashMap::new();
+        let node_attrs = imbl::HashMap::new();
+        let src = sources(&bm, &spans, &node_attrs);
+        let eff = crate::span::resolve_effective(
+            &[
+                (NodeType::Root, Some(root)),
+                (NodeType::Fold, Some(fold)),
+                (NodeType::FoldTitle, Some(title)),
+            ],
+            Some(a),
+            NodeType::Text,
+            true,
+            &src,
+        );
+        assert_eq!(
+            eff.get(&ModifierType::TextColor),
+            Some(&Modifier::TextColor {
+                value: "gray".to_string()
+            }),
+            "the containing FoldTitle's implicit TextColor applies to its chars"
+        );
+        assert_eq!(
+            eff.get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 1050 })
+        );
+    }
+
+    #[test]
+    fn message_sent_implicit_text_color_reaches_nested_chars() {
         use crate::nodes::{BlockquoteVariant, Node};
         let root = Dot::ROOT;
         let bq = Dot::new(1, 1);
@@ -1014,8 +1006,6 @@ mod tests {
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let bm = ModifierAttrLog::new();
         let spans = HashMap::new();
-        let node_styles = imbl::HashMap::new();
-        let styles = imbl::HashMap::new();
         let mut node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
         let mut bqn = match NodeType::Blockquote.into_node() {
             Node::Blockquote(n) => n,
@@ -1026,17 +1016,14 @@ mod tests {
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
         let be = derive_block_effective(&tree, &src);
-        assert_eq!(
-            be.get(&para).and_then(|m| m.get(&ModifierType::TextColor)),
-            Some(&Modifier::TextColor {
-                value: "bright".to_string()
-            }),
-            "Paragraph block_effective inherits the Blockquote's implicit TextColor"
+        assert!(
+            be.get(&para)
+                .map(|m| !m.contains_key(&ModifierType::TextColor))
+                .unwrap_or(true),
+            "block records stay sparse; the implicit walk is a carrier-resolution layer, not a block record"
         );
         assert!(
             be.keys().any(|id| id.is_synthetic() && *id != Dot::ROOT),
@@ -1057,12 +1044,13 @@ mod tests {
             eff.get(&ModifierType::TextColor),
             Some(&Modifier::TextColor {
                 value: "bright".to_string()
-            })
+            }),
+            "the ancestor implicit walk carries MessageSent bright to nested chars"
         );
     }
 
     #[test]
-    fn own_modifiers_tags_source_and_tombstones_clear() {
+    fn own_modifiers_reports_set_spans_only() {
         let para = Dot::new(1, 1);
         let a = Dot::new(1, 2);
         let b = Dot::new(1, 3);
@@ -1081,29 +1069,13 @@ mod tests {
         let (els, _r) = checkout_with_resolver(&log);
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
 
-        let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
-        spans.insert(
-            a,
-            BTreeMap::from([(ModifierType::Bold, ExplicitEffect::Set(Modifier::Bold))]),
-        );
-        spans.insert(
-            b,
-            BTreeMap::from([(ModifierType::Bold, ExplicitEffect::Clear)]),
-        );
-        let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        node_styles.insert(b, Some("s".to_string()));
-        let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-        styles.insert(
-            "s".to_string(),
-            style_with(&[(Dot::new(9, 0), Modifier::Bold)]),
-        );
+        let mut spans: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
+        spans.insert(a, BTreeMap::from([(ModifierType::Bold, Modifier::Bold)]));
         let bm = ModifierAttrLog::new();
         let node_attrs = imbl::HashMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
             node_attrs: &node_attrs,
         };
 
@@ -1111,8 +1083,7 @@ mod tests {
         assert_eq!(
             own.get(&a).and_then(|m| m.get(&ModifierType::Bold)),
             Some(&OwnModifier {
-                value: Modifier::Bold,
-                from_style: false
+                value: Modifier::Bold
             })
         );
         assert!(
@@ -1122,124 +1093,24 @@ mod tests {
     }
 
     #[test]
-    fn own_modifiers_explicit_beats_same_type_style() {
-        let para = Dot::new(1, 1);
-        let a = Dot::new(1, 2);
-        let elems = vec![
-            (
-                para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                },
-            ),
-            (a, SeqItem::Char('a')),
-        ];
-        let log = oplog_of(&elems);
-        let (els, _r) = checkout_with_resolver(&log);
-        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
-
-        let mut spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
-        spans.insert(
-            a,
-            BTreeMap::from([(
-                ModifierType::FontSize,
-                ExplicitEffect::Set(Modifier::FontSize { value: 1600 }),
-            )]),
-        );
-        let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        node_styles.insert(a, Some("s".to_string()));
-        let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-        styles.insert(
-            "s".to_string(),
-            style_with(&[(Dot::new(9, 0), Modifier::FontSize { value: 1200 })]),
-        );
+    fn own_modifiers_for_leaf_explicit_span_out_of_range_value_is_ignored() {
+        let leaf = Dot::new(1, 2);
         let bm = ModifierAttrLog::new();
+        let mut spans: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
+        let mut e = BTreeMap::new();
+        e.insert(
+            ModifierType::Link,
+            Modifier::Link {
+                href: String::new(),
+            },
+        );
+        spans.insert(leaf, e);
         let node_attrs = imbl::HashMap::new();
-        let src = EffectiveSources {
-            block_modifiers: &bm,
-            explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
-            node_attrs: &node_attrs,
-        };
-
-        let own = own_map(&tree, &src);
-        assert_eq!(
-            own.get(&a).and_then(|m| m.get(&ModifierType::FontSize)),
-            Some(&OwnModifier {
-                value: Modifier::FontSize { value: 1600 },
-                from_style: false
-            }),
-            "explicit Set wins over a same-type style; style's 1200 loses and from_style is false"
-        );
-    }
-
-    #[test]
-    fn own_modifiers_style_only_is_from_style() {
-        let para = Dot::new(1, 1);
-        let a = Dot::new(1, 2);
-        let elems = vec![
-            (
-                para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                },
-            ),
-            (a, SeqItem::Char('a')),
-        ];
-        let log = oplog_of(&elems);
-        let (els, _r) = checkout_with_resolver(&log);
-        let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
-        let spans: HashMap<Dot, BTreeMap<ModifierType, ExplicitEffect>> = HashMap::new();
-        let mut node_styles: imbl::HashMap<Dot, Option<String>> = imbl::HashMap::new();
-        node_styles.insert(a, Some("s".to_string()));
-        let mut styles: imbl::HashMap<String, StyleEntry> = imbl::HashMap::new();
-        styles.insert(
-            "s".to_string(),
-            style_with(&[(Dot::new(9, 0), Modifier::Bold)]),
-        );
-        let bm = ModifierAttrLog::new();
-        let node_attrs = imbl::HashMap::new();
-        let src = EffectiveSources {
-            block_modifiers: &bm,
-            explicit_spans: &spans,
-            node_styles: &node_styles,
-            styles: &styles,
-            node_attrs: &node_attrs,
-        };
-        let own = own_map(&tree, &src);
-        assert_eq!(
-            own.get(&a).and_then(|m| m.get(&ModifierType::Bold)),
-            Some(&OwnModifier {
-                value: Modifier::Bold,
-                from_style: true
-            })
-        );
-    }
-
-    #[test]
-    fn style_same_type_conflict_is_order_independent() {
-        let a = Dot::new(1, 0);
-        let b = Dot::new(2, 0);
-        let forward = style_with(&[
-            (a, Modifier::FontSize { value: 1600 }),
-            (b, Modifier::FontSize { value: 1200 }),
-        ]);
-        let reverse = style_with(&[
-            (b, Modifier::FontSize { value: 1200 }),
-            (a, Modifier::FontSize { value: 1600 }),
-        ]);
-        let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
-        assert_eq!(
-            style_modifiers(&forward, &path),
-            style_modifiers(&reverse, &path)
-        );
-        assert_eq!(
-            style_modifiers(&forward, &path).get(&ModifierType::FontSize),
-            Some(&Modifier::FontSize { value: 1200 }),
-            "highest Dot b=(2,0) wins regardless of insertion order"
+        let src = sources(&bm, &spans, &node_attrs);
+        let own = own_modifiers_for_leaf(leaf, &src);
+        assert!(
+            !own.contains_key(&ModifierType::Link),
+            "out-of-range explicit span value is treated as no record"
         );
     }
 }

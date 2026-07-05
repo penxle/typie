@@ -19,7 +19,6 @@ pub enum StateField {
     Ime,
     Modifiers,
     Block,
-    Styles,
     TrackedRanges,
     LastHistoryTag,
     Placeholder,
