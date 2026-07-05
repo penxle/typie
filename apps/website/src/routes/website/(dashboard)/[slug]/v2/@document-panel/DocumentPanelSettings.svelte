@@ -1,31 +1,77 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
-  import { HorizontalDivider, Icon, SegmentButtons, Select, Slider, Switch, TextInput, Tooltip } from '@typie/ui/components';
+  import { createFloatingActions } from '@typie/ui/actions';
+  import {
+    DropdownMenu,
+    DropdownMenuItem,
+    HorizontalDivider,
+    Icon,
+    SearchableDropdown,
+    SegmentButtons,
+    Select,
+    Slider,
+    Switch,
+    TextInput,
+    Tooltip,
+  } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { tick } from 'svelte';
+  import { fly } from 'svelte/transition';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
   import FileIcon from '~icons/lucide/file';
   import FileTextIcon from '~icons/lucide/file-text';
   import HighlighterIcon from '~icons/lucide/highlighter';
   import InfoIcon from '~icons/lucide/info';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import TypeIcon from '~icons/lucide/type';
+  import LetterSpacingIcon from '~icons/typie/letter-spacing';
+  import LineHeightIcon from '~icons/typie/line-height';
+  import { FontSpecimen } from '$lib/components';
+  import { familySpecimenFallbacks } from '$lib/components/font-specimen';
   import { getMaxMargin, getPageMargin, MIN_PAGE_SIZE_MM, pxToMm, resizePageUnit } from '$lib/editor/utils';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { defaultContinuousLayout, defaultPaginatedLayout, setRootLayoutMode, setRootModifier } from '$lib/editor-ffi/root-attrs';
   import { values } from '$lib/editor-ffi/values';
+  import { activeFontsByWeight, fontWeightItemsForFonts, resolveFontWeightForFamily } from '$lib/font-weight';
+  import { graphql } from '$mearie';
   import type { LayoutMode, Modifier, ModifierType } from '@typie/editor-ffi/browser';
   import type { PageLayout, PageMarginSide } from '$lib/editor/utils';
-  import type { Editor } from '$lib/editor-ffi/editor.svelte';
+  import type { DocumentPanelV2_Settings_document$key } from '$mearie';
 
   type Props = {
-    editor: Editor | undefined;
+    document$key: DocumentPanelV2_Settings_document$key;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let { editor: _editor }: Props = $props();
+  let { document$key }: Props = $props();
+
+  const document = createFragment(
+    graphql(`
+      fragment DocumentPanelV2_Settings_document on Document {
+        id
+
+        fontFamilies {
+          id
+          familyName
+          displayName
+          state
+
+          fonts {
+            id
+            weight
+            subfamilyDisplayName
+            state
+          }
+        }
+      }
+    `),
+    () => document$key,
+  );
 
   const app = getAppContext();
   const ctx = getEditorContext();
@@ -39,8 +85,159 @@
     setRootModifier(ctx.editor, modifier);
   };
 
+  const fontFamilies = $derived(document.data.fontFamilies);
+
+  const currentFontFamily = $derived(mod('font_family')?.value ?? 'Pretendard');
+  const currentFontWeight = $derived(mod('font_weight')?.value ?? 400);
+
+  const activeFamilies = $derived(fontFamilies.filter((f) => f.state === 'ACTIVE'));
+
+  const fontFamilyItems = $derived.by(() => {
+    if (activeFamilies.every((f) => f.familyName !== currentFontFamily)) {
+      const current = fontFamilies.find((f) => f.familyName === currentFontFamily);
+      if (current) {
+        return [...activeFamilies, current];
+      }
+    }
+    return activeFamilies;
+  });
+
+  const representativeFontMap = $derived(
+    new Map(
+      fontFamilies.map((family) => {
+        const active = family.fonts.filter((f) => f.state === 'ACTIVE');
+        const representative =
+          active.length === 0
+            ? null
+            : active.reduce((prev, curr) => {
+                const prevDiff = Math.abs(prev.weight - 400);
+                const currDiff = Math.abs(curr.weight - 400);
+                if (currDiff < prevDiff) return curr;
+                if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
+                return prev;
+              });
+        return [family.familyName, representative] as const;
+      }),
+    ),
+  );
+
+  const currentFamilyFonts = $derived.by(() => {
+    const family = fontFamilies.find((f) => f.familyName === currentFontFamily);
+    if (!family) return [];
+    return activeFontsByWeight(family.fonts);
+  });
+
+  const fontWeightItems = $derived.by(() => {
+    const items = fontWeightItemsForFonts(currentFamilyFonts, values.fontWeight);
+    if (items.some((item) => item.value === currentFontWeight)) {
+      return items;
+    }
+    const label = values.fontWeight.find((l) => l.value === currentFontWeight)?.label ?? String(currentFontWeight);
+    return [...items, { value: currentFontWeight, label }].toSorted((a, b) => a.value - b.value);
+  });
+
+  const handleFontFamilyChange = (familyName: string) => {
+    if (familyName === currentFontFamily) {
+      return;
+    }
+    setMod({ type: 'font_family', value: familyName });
+    const resolvedWeight = resolveFontWeightForFamily(fontFamilies, familyName, currentFontWeight);
+    if (resolvedWeight !== currentFontWeight) {
+      setMod({ type: 'font_weight', value: resolvedWeight });
+    }
+  };
+
   const setLayout = (layout_mode: LayoutMode) => {
     setRootLayoutMode(ctx.editor, layout_mode);
+  };
+
+  let fontSizeAnchorElement: HTMLDivElement | undefined = $state();
+  let fontSizeFloatingElement: HTMLDivElement | undefined = $state();
+  let fontSizeInputElement: HTMLInputElement | undefined = $state();
+  let fontSizeInputValue = $state('');
+  let fontSizeIsFocused = $state(false);
+  let fontSizeOpened = $state(false);
+
+  const { anchor: fontSizeAnchorAction, floating: fontSizeFloatingAction } = createFloatingActions({
+    placement: 'bottom-end',
+    offset: 8,
+    onClickOutside: (event) => {
+      if (fontSizeAnchorElement?.contains(event.target as Node)) {
+        return;
+      }
+      fontSizeOpened = false;
+    },
+  });
+
+  const currentFontSize = $derived(mod('font_size')?.value ?? 1200);
+
+  $effect(() => {
+    if (!fontSizeOpened && !fontSizeIsFocused) {
+      fontSizeInputValue = String(currentFontSize / 100);
+    }
+  });
+
+  const applyFontSize = () => {
+    const parsed = Number.parseFloat(fontSizeInputValue);
+    if (!Number.isNaN(parsed) && Math.round(parsed * 100) !== currentFontSize) {
+      setMod({ type: 'font_size', value: clamp(Math.round(parsed * 100), values.minFontSize, values.maxFontSize) });
+    }
+  };
+
+  const handleFontSizeFocus = () => {
+    fontSizeIsFocused = true;
+    fontSizeOpened = true;
+    fontSizeInputValue = String(currentFontSize / 100);
+    fontSizeInputElement?.select();
+  };
+
+  const handleFontSizeBlur = (e: FocusEvent) => {
+    fontSizeIsFocused = false;
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (relatedTarget && fontSizeFloatingElement?.contains(relatedTarget)) {
+      return;
+    }
+    applyFontSize();
+    fontSizeOpened = false;
+  };
+
+  const handleFontSizeKeydown = (e: KeyboardEvent) => {
+    if (e.isComposing) return;
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      applyFontSize();
+      fontSizeInputElement?.blur();
+      fontSizeOpened = false;
+    } else if (e.key === 'Escape') {
+      fontSizeInputValue = String(currentFontSize / 100);
+      fontSizeInputElement?.blur();
+      fontSizeOpened = false;
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentInput = Number.parseFloat(fontSizeInputValue);
+      const current = (currentInput ? Math.round(currentInput * 100) : currentFontSize) || 1200;
+      const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
+      const currentIndex = sortedSizes.findIndex((size) => size >= current);
+
+      let newIndex: number;
+      if (e.key === 'ArrowDown') {
+        newIndex = currentIndex === -1 || currentIndex >= sortedSizes.length - 1 ? 0 : currentIndex + 1;
+      } else {
+        newIndex = (currentIndex === -1 || currentIndex <= 0 ? sortedSizes.length : currentIndex) - 1;
+      }
+
+      const newValue = sortedSizes[newIndex];
+      if (newValue !== undefined) {
+        fontSizeInputValue = String(newValue / 100);
+        setMod({ type: 'font_size', value: newValue });
+        tick().then(() => {
+          fontSizeInputElement?.select();
+        });
+      }
+    }
   };
 
   const fromLayoutMode = (mode: Extract<LayoutMode, { type: 'paginated' }>): PageLayout => ({
@@ -147,6 +344,184 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '16px', overflowY: 'auto', paddingY: '16px' })}>
+    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>기본 서식</div>
+
+    <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글꼴</div>
+      </div>
+      <SearchableDropdown
+        style={css.raw({ width: '140px' })}
+        getLabel={(value) => fontFamilies.find((f) => f.familyName === value)?.displayName ?? '(알 수 없는 폰트)'}
+        inputStyle={css.raw({ fontSize: '12px', fontWeight: 'medium', textAlign: 'right' })}
+        items={fontFamilyItems.map((f) => ({ value: f.familyName, label: f.displayName }))}
+        label="글꼴"
+        onchange={(familyName) => handleFontFamilyChange(familyName)}
+        placeholder="-"
+        value={currentFontFamily}
+      >
+        {#snippet renderItem(item)}
+          {@const font = representativeFontMap.get(item.value)}
+          <FontSpecimen
+            fallbacks={familySpecimenFallbacks(item.label, item.value)}
+            fontId={font?.id ?? undefined}
+            text={item.label}
+            weight={font?.weight}
+          />
+        {/snippet}
+      </SearchableDropdown>
+    </div>
+
+    <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글자 굵기</div>
+      </div>
+      <Select
+        items={fontWeightItems}
+        onselect={(value) => {
+          if (value !== currentFontWeight) {
+            setMod({ type: 'font_weight', value });
+          }
+        }}
+        value={currentFontWeight}
+      />
+    </div>
+
+    <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글자 크기</div>
+      </div>
+      <div
+        bind:this={fontSizeAnchorElement}
+        class={css({
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          borderRadius: '4px',
+          width: '140px',
+          height: '28px',
+          _hover: { backgroundColor: 'surface.muted' },
+        })}
+        use:fontSizeAnchorAction
+      >
+        <input
+          bind:this={fontSizeInputElement}
+          class={css({
+            flexGrow: '1',
+            size: 'full',
+            paddingLeft: '8px',
+            paddingRight: '24px',
+            fontSize: '12px',
+            fontWeight: 'medium',
+            color: 'text.subtle',
+            textAlign: 'right',
+            backgroundColor: 'transparent',
+            border: 'none',
+            outline: 'none',
+          })}
+          onblur={handleFontSizeBlur}
+          onfocus={handleFontSizeFocus}
+          onkeydown={handleFontSizeKeydown}
+          placeholder={String(currentFontSize / 100)}
+          type="text"
+          bind:value={fontSizeInputValue}
+        />
+        <button
+          class={css({ pointerEvents: fontSizeOpened ? 'auto' : 'none', cursor: 'pointer' })}
+          onclick={() => {
+            applyFontSize();
+            fontSizeInputElement?.blur();
+            fontSizeOpened = false;
+          }}
+          type="button"
+        >
+          <Icon
+            style={css.raw({
+              position: 'absolute',
+              right: '4px',
+              top: '1/2',
+              translate: 'auto',
+              translateY: '-1/2',
+              color: 'text.faint',
+              transform: fontSizeOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
+              transitionDuration: '150ms',
+            })}
+            icon={ChevronDownIcon}
+            size={16}
+          />
+        </button>
+      </div>
+      {#if fontSizeOpened}
+        <div
+          bind:this={fontSizeFloatingElement}
+          class={css({
+            borderWidth: '1px',
+            borderColor: 'border.subtle',
+            borderBottomRadius: '4px',
+            backgroundColor: 'surface.default',
+            zIndex: 'menu',
+            boxShadow: 'small',
+            overflow: 'hidden',
+          })}
+          use:fontSizeFloatingAction
+          in:fly={{ y: -5, duration: 150 }}
+        >
+          <DropdownMenu autoFocus={false} onclose={() => (fontSizeOpened = false)} opened={fontSizeOpened}>
+            {#each values.fontSize as { label, value } (value)}
+              <DropdownMenuItem
+                active={currentFontSize === value}
+                onclick={() => {
+                  if (value !== currentFontSize) {
+                    setMod({ type: 'font_size', value });
+                  }
+                  fontSizeOpened = false;
+                }}
+              >
+                {label}
+              </DropdownMenuItem>
+            {/each}
+          </DropdownMenu>
+        </div>
+      {/if}
+    </div>
+
+    <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={LetterSpacingIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>자간</div>
+      </div>
+      <Select
+        items={values.letterSpacing.map((s) => ({ value: s.value, label: s.label }))}
+        onselect={(value) => {
+          if (value !== (mod('letter_spacing')?.value ?? 0)) {
+            setMod({ type: 'letter_spacing', value });
+          }
+        }}
+        value={mod('letter_spacing')?.value ?? 0}
+      />
+    </div>
+
+    <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={LineHeightIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>행간</div>
+      </div>
+      <Select
+        items={values.lineHeight.map((s) => ({ value: s.value, label: s.label }))}
+        onselect={(value) => {
+          if (value !== (mod('line_height')?.value ?? 160)) {
+            setMod({ type: 'line_height', value });
+          }
+        }}
+        value={mod('line_height')?.value ?? 160}
+      />
+    </div>
+
+    <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
+
     {#if layoutMode}
       <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>레이아웃</div>
 

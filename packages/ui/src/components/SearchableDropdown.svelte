@@ -15,6 +15,7 @@
     value: T | undefined;
     items: { value: T; label: string }[];
     style?: SystemStyleObject;
+    inputStyle?: SystemStyleObject;
     label: string;
     placeholder?: string;
     disabled?: boolean;
@@ -29,6 +30,7 @@
     value,
     items,
     style,
+    inputStyle,
     label,
     placeholder,
     disabled = false,
@@ -212,19 +214,22 @@
 >
   <input
     bind:this={inputElement}
-    class={css({
-      flexGrow: '1',
-      size: 'full',
-      paddingLeft: '4px',
-      paddingRight: '20px',
-      fontSize: '14px',
-      color: 'text.subtle',
-      textAlign: 'left',
-      backgroundColor: 'transparent',
-      border: 'none',
-      outline: 'none',
-      textOverflow: 'ellipsis',
-    })}
+    class={css(
+      {
+        flexGrow: '1',
+        size: 'full',
+        paddingLeft: '4px',
+        paddingRight: '20px',
+        fontSize: '14px',
+        color: 'text.subtle',
+        textAlign: 'left',
+        backgroundColor: 'transparent',
+        border: 'none',
+        outline: 'none',
+        textOverflow: 'ellipsis',
+      },
+      inputStyle,
+    )}
     {disabled}
     onblur={handleBlur}
     onfocus={handleFocus}

@@ -47,6 +47,7 @@
 
         ...DocumentPanelV2_Ai_document
         ...DocumentPanelV2_Info_document
+        ...DocumentPanelV2_Settings_document
         ...DocumentPanelV2_Spellcheck_document
         ...DocumentPanelV2Timeline_document
       }
@@ -226,7 +227,7 @@
 
   {#if isExpanded}
     {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'settings'}
-      <DocumentPanelSettings editor={ctx.editor} />
+      <DocumentPanelSettings document$key={document.data} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
       <DocumentPanelInfo document$key={document.data} editor={ctx.editor} user$key={user.data} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
