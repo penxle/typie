@@ -236,6 +236,11 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       setOf(KeyModifier.Alt),
       action = { listOf(delete(Movement.Word(Direction.Forward))) },
     ),
+    KeyBinding(
+      ComposeKey.Delete,
+      setOf(KeyModifier.Ctrl),
+      action = { listOf(delete(Movement.Word(Direction.Forward))) },
+    ),
     KeyBinding(ComposeKey.Tab, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Tab))) }),
     KeyBinding(
       ComposeKey.Escape,
@@ -360,6 +365,14 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       action = { clipboard ->
         val read = clipboard.paste() ?: return@KeyBinding emptyList()
         listOf(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))
+      },
+    ),
+    KeyBinding(
+      ComposeKey.V,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      action = { clipboard ->
+        val read = clipboard.paste() ?: return@KeyBinding emptyList()
+        listOf(Message.Clipboard(ClipboardOp.Paste(html = null, text = read.text)))
       },
     ),
     KeyBinding(
