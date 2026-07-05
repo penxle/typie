@@ -88,6 +88,12 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.route.Route
+import co.typie.screen.editor.editor.aifeedback.AiFeedbackOptInSheet
+import co.typie.screen.editor.editor.aifeedback.AiFeedbackOverlay
+import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarCenter
+import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarLeading
+import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarTrailing
+import co.typie.screen.editor.editor.aifeedback.rememberEditorAiFeedbackSession
 import co.typie.screen.editor.editor.entry.rememberEditorEntryStateSession
 import co.typie.screen.editor.editor.findreplace.FindReplaceToolbar
 import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarCenter
@@ -106,6 +112,7 @@ import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarLeading
 import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarTrailing
 import co.typie.screen.editor.editor.spellcheck.rememberEditorSpellcheckSession
 import co.typie.screen.editor.editor.state.EditorInputEffect
+import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.state.resolveEditorVisibleAreas
 import co.typie.screen.editor.editor.subpane.CommentsSubPaneEnvironment
@@ -138,6 +145,8 @@ import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPan
 import co.typie.screen.editor.editor.toolbar.trustedImeBottomInset
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
+import co.typie.screen.settings.aisettings.AiPreferences
+import co.typie.serialization.json
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -154,6 +163,7 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.decodeFromJsonElement
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -271,6 +281,29 @@ fun EditorScreen(entityId: String) {
       benefits = listOf(PlanUpgradeBenefit.SpellCheck),
     )
   }
+  suspend fun ensureAiFeedbackSubscription(): Boolean {
+    return SubscriptionService.gate(
+      sheet = sheet,
+      nav = nav,
+      title = "AI 피드백은 FULL ACCESS 플랜에서 사용할 수 있어요.",
+      benefits = listOf(PlanUpgradeBenefit.AiFeedback),
+    )
+  }
+  val aiOptIn =
+    remember(model.query.data.me.preferences) {
+      runCatching {
+          json.decodeFromJsonElement<AiPreferences>(model.query.data.me.preferences).aiOptIn
+        }
+        .getOrDefault(false)
+    }
+  suspend fun ensureAiOptIn(): Boolean {
+    if (aiOptIn) return true
+    val result = sheet.present<Boolean> { AiFeedbackOptInSheet() }
+    if (result == true) {
+      nav.navigate(Route.AiSettings)
+    }
+    return false
+  }
   val spellcheck =
     rememberEditorSpellcheckSession(
       documentId = document?.id,
@@ -281,6 +314,21 @@ fun EditorScreen(entityId: String) {
       hideContextMenu = { uiState.contextMenu.hide() },
       closeSubPane = subPaneState::dismiss,
       ensureSubscription = ::ensureSpellcheckSubscription,
+    )
+  val aiFeedback =
+    rememberEditorAiFeedbackSession(
+      documentId = document?.id,
+      editor = editor,
+      editorState = editorState,
+      bringIntoViewRequests = bringIntoViewRequests,
+      closeIncompatibleModes = {
+        findReplace.close()
+        spellcheck.close()
+        uiState.contextMenu.hide()
+        subPaneState.dismiss()
+      },
+      ensureSubscription = ::ensureAiFeedbackSubscription,
+      ensureAiOptIn = ::ensureAiOptIn,
     )
 
   when {
@@ -303,6 +351,17 @@ fun EditorScreen(entityId: String) {
         centerKey = SpellcheckTopBarCenterKey,
         trailing = { SpellcheckTopBarTrailing(session = spellcheck) },
         trailingKey = SpellcheckTopBarTrailingKey,
+        scrollOffset = null,
+      )
+    }
+    aiFeedback.active -> {
+      ProvideTopBar(
+        leading = { AiFeedbackTopBarLeading(session = aiFeedback) },
+        leadingKey = AiFeedbackTopBarLeadingKey,
+        center = { AiFeedbackTopBarCenter(session = aiFeedback) },
+        centerKey = AiFeedbackTopBarCenterKey,
+        trailing = { AiFeedbackTopBarTrailing(session = aiFeedback) },
+        trailingKey = AiFeedbackTopBarTrailingKey,
         scrollOffset = null,
       )
     }
@@ -443,9 +502,17 @@ fun EditorScreen(entityId: String) {
 
     LaunchedEffect(subPaneActive) {
       if (subPaneActive) {
+        aiFeedback.close()
         spellcheck.close()
         findReplace.close()
         performInputEffects(listOf(EditorInputEffect.HideKeyboard))
+      }
+    }
+    LaunchedEffect(aiFeedback.active) {
+      if (aiFeedback.active) {
+        performInputEffects(
+          toolbarInputState.dispatch(ToolbarIntent.RestoreEditorInput, toolbarInputEnvironment)
+        )
       }
     }
     val trustedImeBottom =
@@ -546,7 +613,16 @@ fun EditorScreen(entityId: String) {
         rawBottomSafeInset = bottomSafeInset.value,
         rawEditorInputBottomInset = editorInputBottomOcclusion,
         rawSubPaneBottomInset = subPaneBottomOcclusion,
-        overlayOcclusion = spellcheck.occlusion,
+        overlayOcclusion =
+          EditorOverlayOcclusion(
+            top = maxOf(spellcheck.occlusion.top, aiFeedback.occlusion.top),
+            bottom = maxOf(spellcheck.occlusion.bottom, aiFeedback.occlusion.bottom),
+            bottomScrollReserve =
+              maxOf(
+                spellcheck.occlusion.bottomScrollReserve,
+                aiFeedback.occlusion.bottomScrollReserve,
+              ),
+          ),
       )
     val visibleArea = visibleAreas.editor
     LaunchedEffect(imeVisible, bottomPanelOpen) { previousImeVisible.value = imeVisible }
@@ -810,6 +886,11 @@ fun EditorScreen(entityId: String) {
               visibleArea = visibleAreas.base,
               modifier = Modifier.fillMaxSize(),
             )
+            AiFeedbackOverlay(
+              session = aiFeedback,
+              visibleArea = visibleAreas.base,
+              modifier = Modifier.fillMaxSize(),
+            )
           }
         },
         body = {
@@ -875,6 +956,7 @@ fun EditorScreen(entityId: String) {
             onToolAction = { action ->
               when (action) {
                 EditorToolbarToolAction.Search -> {
+                  aiFeedback.close()
                   spellcheck.close()
                   uiState.contextMenu.hide()
                   performInputEffects(
@@ -884,17 +966,20 @@ fun EditorScreen(entityId: String) {
                 }
                 EditorToolbarToolAction.RelatedNotes -> {
                   findReplace.close()
+                  aiFeedback.close()
                   spellcheck.close()
                   uiState.contextMenu.hide()
                   subPaneState.open(EditorSubPaneKey.RelatedNotes)
                 }
                 EditorToolbarToolAction.Comment -> {
                   findReplace.close()
+                  aiFeedback.close()
                   spellcheck.close()
                   comments.openFromToolPanel()
                 }
                 EditorToolbarToolAction.Spellcheck -> {
                   findReplace.close()
+                  aiFeedback.close()
                   spellcheck.openFromToolPanel()
                   performInputEffects(
                     toolbarInputState.dispatch(
@@ -903,7 +988,9 @@ fun EditorScreen(entityId: String) {
                     )
                   )
                 }
-                EditorToolbarToolAction.AiFeedback,
+                EditorToolbarToolAction.AiFeedback -> {
+                  aiFeedback.openFromToolPanel()
+                }
                 EditorToolbarToolAction.Timeline -> Unit
               }
             },
@@ -990,3 +1077,6 @@ private val FindReplaceTopBarTrailingKey = Any()
 private val SpellcheckTopBarLeadingKey = Any()
 private val SpellcheckTopBarCenterKey = Any()
 private val SpellcheckTopBarTrailingKey = Any()
+private val AiFeedbackTopBarLeadingKey = Any()
+private val AiFeedbackTopBarCenterKey = Any()
+private val AiFeedbackTopBarTrailingKey = Any()

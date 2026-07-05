@@ -10,6 +10,7 @@ enum class PlanUpgradeBenefit(val icon: IconData, val title: String, val descrip
   UnlimitedCharacters(Lucide.BookOpenText, "무제한 글자 수", "길어도 얼마든지 쓸 수 있어요"),
   UnlimitedFileUpload(Lucide.Images, "무제한 파일 업로드", "이미지와 첨부 용량 제한 없이"),
   SpellCheck(Lucide.SpellCheck, "맞춤법 검사", "실시간으로 맞춤법을 확인해요"),
+  AiFeedback(Lucide.Lightbulb, "AI 피드백", "작품을 분석하고 피드백을 제안해요"),
   BetaAccess(Lucide.FlaskConical, "베타 기능 우선 접근", "신기능을 가장 먼저 써볼 수 있어요"),
   PrioritySupport(Lucide.Headset, "문제 발생 시 우선 지원", "도움이 필요할 때 우선으로 응대해요"),
   DiscordCommunity(Lucide.Sprout, "디스코드 커뮤니티 참여", "다른 사용자들과 함께 쓰는 방법을 나눠요"),

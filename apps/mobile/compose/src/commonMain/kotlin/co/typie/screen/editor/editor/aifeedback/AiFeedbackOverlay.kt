@@ -1,4 +1,4 @@
-package co.typie.screen.editor.editor.spellcheck
+package co.typie.screen.editor.editor.aifeedback
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -48,10 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ext.clickable
@@ -69,26 +67,24 @@ import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun SpellcheckOverlay(
-  session: EditorSpellcheckSession,
+internal fun AiFeedbackOverlay(
+  session: EditorAiFeedbackSession,
   visibleArea: EditorVisibleArea,
   modifier: Modifier = Modifier,
 ) {
   val model = session.model ?: return
   val results = model.results
-  val checked = model.check.data != null
-  var displayedResults by remember { mutableStateOf<List<SpellcheckResult>>(emptyList()) }
+  var displayedResults by remember { mutableStateOf<List<AiFeedbackResult>>(emptyList()) }
   val resultIds = results.mapTo(mutableSetOf()) { it.id }
   val displayedResultIds = displayedResults.mapTo(mutableSetOf()) { it.id }
   val exitingResultIds = displayedResultIds - resultIds
-  val pagerVisible =
-    session.active && checked && (results.isNotEmpty() || displayedResults.isNotEmpty())
+  val pagerVisible = session.active && (results.isNotEmpty() || displayedResults.isNotEmpty())
   val pagerTransition = remember { MutableTransitionState(false) }
   pagerTransition.targetState = pagerVisible
 
   LaunchedEffect(results) {
     if (exitingResultIds.isNotEmpty()) {
-      delay(SpellcheckOverlayAnimationMillis.toLong())
+      delay(AiFeedbackOverlayAnimationMillis.toLong())
       displayedResults = results
     } else if (results.isNotEmpty()) {
       displayedResults = results
@@ -104,8 +100,8 @@ internal fun SpellcheckOverlay(
   Box(modifier = modifier.fillMaxSize()) {
     AnimatedVisibility(
       visibleState = pagerTransition,
-      enter = spellcheckEnter(TransformOrigin(0.5f, 1f)),
-      exit = spellcheckExit(TransformOrigin(0.5f, 1f)),
+      enter = aiFeedbackEnter(TransformOrigin(0.5f, 1f)),
+      exit = aiFeedbackExit(TransformOrigin(0.5f, 1f)),
       modifier = Modifier.fillMaxSize(),
     ) {
       val pagerResults =
@@ -115,7 +111,7 @@ internal fun SpellcheckOverlay(
           results.ifEmpty { displayedResults }
         }
       if (pagerResults.isNotEmpty()) {
-        SpellcheckResultPager(
+        AiFeedbackResultPager(
           session = session,
           results = pagerResults,
           exitingResultIds = exitingResultIds,
@@ -131,9 +127,9 @@ internal fun SpellcheckOverlay(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SpellcheckResultPager(
-  session: EditorSpellcheckSession,
-  results: List<SpellcheckResult>,
+private fun AiFeedbackResultPager(
+  session: EditorAiFeedbackSession,
+  results: List<AiFeedbackResult>,
   exitingResultIds: Set<String>,
   visibleArea: EditorVisibleArea,
   expanded: Boolean,
@@ -146,8 +142,8 @@ private fun SpellcheckResultPager(
   var userScrollPendingActivation by remember { mutableStateOf(false) }
   var programmaticScrollInProgress by remember { mutableStateOf(false) }
   val inactive = !expanded && activeRangeId == null
-  val compactOverlayHeight = spellcheckCompactOverlayHeight(activeRange = !inactive)
-  val bottomPadding = visibleArea.bottomOcclusion.dp + SpellcheckOverlayBottomGap
+  val compactOverlayHeight = aiFeedbackCompactOverlayHeight(activeRange = !inactive)
+  val bottomPadding = visibleArea.bottomOcclusion.dp + AiFeedbackOverlayBottomGap
   val expandedTopReserve = visibleArea.visibleViewportTop.dp + ExpandedTopGap
 
   SideEffect {
@@ -168,7 +164,7 @@ private fun SpellcheckResultPager(
       userScrollPendingActivation = false
       programmaticScrollInProgress = true
       try {
-        pagerState.animateScrollToPage(page, animationSpec = spellcheckTween())
+        pagerState.animateScrollToPage(page, animationSpec = aiFeedbackTween())
       } finally {
         programmaticScrollInProgress = false
       }
@@ -209,14 +205,14 @@ private fun SpellcheckResultPager(
     val pagerHeight by
       animateDpAsState(
         targetValue = if (expanded) expandedHeight else CompactCardHeight,
-        animationSpec = spellcheckTween(),
-        label = "SpellcheckPagerHeight",
+        animationSpec = aiFeedbackTween(),
+        label = "AiFeedbackPagerHeight",
       )
     val inactiveOffset by
       animateDpAsState(
         targetValue = if (inactive) InactiveCardOffset else 0.dp,
-        animationSpec = spellcheckTween(),
-        label = "SpellcheckInactiveCardOffset",
+        animationSpec = aiFeedbackTween(),
+        label = "AiFeedbackInactiveCardOffset",
       )
     val showExpandedContent =
       expanded &&
@@ -226,7 +222,7 @@ private fun SpellcheckResultPager(
       state = pagerState,
       contentPadding = PaddingValues(horizontal = CompactPagerHorizontalPadding),
       pageSpacing = 12.dp,
-      key = { page -> results.getOrNull(page)?.id ?: "spellcheck-page-$page" },
+      key = { page -> results.getOrNull(page)?.id ?: "ai-feedback-page-$page" },
       verticalAlignment = Alignment.Bottom,
       modifier = Modifier.fillMaxWidth().offset(y = inactiveOffset).height(pagerHeight),
     ) { page ->
@@ -234,21 +230,20 @@ private fun SpellcheckResultPager(
       AnimatedContent(
         targetState = result,
         transitionSpec = {
-          (spellcheckCardEnter() togetherWith spellcheckCardExit()).using(
+          (aiFeedbackCardEnter() togetherWith aiFeedbackCardExit()).using(
             SizeTransform(clip = false) { _, _ -> tween(0) }
           )
         },
         contentKey = { result -> result.id },
-        label = "SpellcheckResultCardContent",
+        label = "AiFeedbackResultCardContent",
         modifier = Modifier.fillMaxWidth().height(pagerHeight),
       ) { result ->
         val active = result.id == session.model?.activeRangeId
-        SpellcheckResultCard(
+        AiFeedbackResultCard(
           result = result,
           active = active,
           expanded = expanded,
           showExpandedContent = showExpandedContent,
-          sameContextVisible = results.count { it.context == result.context } > 1,
           exiting = result.id in exitingResultIds,
           onClick = {
             if (interactive) {
@@ -259,11 +254,6 @@ private fun SpellcheckResultPager(
               }
             }
           },
-          onSuggestion = { replacement ->
-            if (interactive) session.applySuggestion(result.id, replacement)
-          },
-          onDirectEdit = { if (interactive) session.directEdit(result.id) },
-          onIgnoreSame = { if (interactive) session.ignoreSame(result.id) },
           onIgnore = { if (interactive) session.ignore(result.id) },
           modifier = Modifier.fillMaxSize(),
         )
@@ -273,17 +263,13 @@ private fun SpellcheckResultPager(
 }
 
 @Composable
-private fun SpellcheckResultCard(
-  result: SpellcheckResult,
+private fun AiFeedbackResultCard(
+  result: AiFeedbackResult,
   active: Boolean,
   expanded: Boolean,
   showExpandedContent: Boolean,
-  sameContextVisible: Boolean,
   exiting: Boolean,
   onClick: () -> Unit,
-  onSuggestion: (String) -> Unit,
-  onDirectEdit: () -> Unit,
-  onIgnoreSame: () -> Unit,
   onIgnore: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -291,15 +277,15 @@ private fun SpellcheckResultCard(
   val background = AppTheme.colors.surfaceDefault
   val borderColor by
     animateColorAsState(
-      targetValue = if (active) AppTheme.colors.danger else AppTheme.colors.borderDefault,
-      animationSpec = spellcheckTween(),
-      label = "SpellcheckCardBorderColor",
+      targetValue = if (active) AppTheme.colors.palette.purple else AppTheme.colors.borderDefault,
+      animationSpec = aiFeedbackTween(),
+      label = "AiFeedbackCardBorderColor",
     )
 
   AnimatedVisibility(
     visible = !exiting,
-    enter = spellcheckCardEnter(),
-    exit = spellcheckCardExit(),
+    enter = aiFeedbackCardEnter(),
+    exit = aiFeedbackCardExit(),
     modifier = modifier,
   ) {
     Box(
@@ -311,26 +297,18 @@ private fun SpellcheckResultCard(
           .clickable(onClick = onClick)
     ) {
       if (showExpandedContent) {
-        ExpandedSpellcheckResultCardContent(
+        ExpandedAiFeedbackResultCardContent(
           result = result,
-          sameContextVisible = sameContextVisible,
           background = background,
-          onSuggestion = onSuggestion,
-          onDirectEdit = onDirectEdit,
-          onIgnoreSame = onIgnoreSame,
           onIgnore = onIgnore,
-          modifier = Modifier.fillMaxSize(),
+          modifier = Modifier.fillMaxSize().padding(AiFeedbackCardPadding),
         )
       } else {
-        CompactSpellcheckResultCardContent(
+        CompactAiFeedbackResultCardContent(
           result = result,
-          sameContextVisible = sameContextVisible,
           background = background,
-          onSuggestion = onSuggestion,
-          onDirectEdit = onDirectEdit,
-          onIgnoreSame = onIgnoreSame,
           onIgnore = onIgnore,
-          modifier = Modifier.fillMaxSize().padding(SpellcheckCardPadding),
+          modifier = Modifier.fillMaxSize().padding(AiFeedbackCardPadding),
         )
       }
     }
@@ -338,234 +316,113 @@ private fun SpellcheckResultCard(
 }
 
 @Composable
-private fun ExpandedSpellcheckResultCardContent(
-  result: SpellcheckResult,
-  sameContextVisible: Boolean,
+private fun ExpandedAiFeedbackResultCardContent(
+  result: AiFeedbackResult,
   background: Color,
-  onSuggestion: (String) -> Unit,
-  onDirectEdit: () -> Unit,
-  onIgnoreSame: () -> Unit,
   onIgnore: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val scrollState = rememberScrollState()
-
-  SubcomposeLayout(modifier = modifier) { constraints ->
-    val width = constraints.maxWidth
-    val height = constraints.maxHeight
-    val cardPaddingPx = SpellcheckCardPadding.roundToPx()
-    val minContentHeightPx = (height - cardPaddingPx * 2).coerceAtLeast(0)
-    val viewportConstraints =
-      Constraints(minWidth = width, maxWidth = width, minHeight = height, maxHeight = height)
-    val placeables =
-      subcompose(ExpandedSpellcheckCardSlot.Viewport) {
-          Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
-            ExpandedSpellcheckResultCardLayout(
-              result = result,
-              sameContextVisible = sameContextVisible,
-              background = background,
-              minContentHeightPx = minContentHeightPx,
-              onSuggestion = onSuggestion,
-              onDirectEdit = onDirectEdit,
-              onIgnoreSame = onIgnoreSame,
-              onIgnore = onIgnore,
-              modifier = Modifier.fillMaxWidth().padding(SpellcheckCardPadding),
-            )
-          }
-        }
-        .map { it.measure(viewportConstraints) }
-
-    layout(width = width, height = height) {
-      placeables.forEach { placeable -> placeable.placeRelative(0, 0) }
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AiFeedbackCardGap)) {
+    Column(
+      modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState),
+      verticalArrangement = Arrangement.spacedBy(AiFeedbackCardGap),
+    ) {
+      AiFeedbackResultHeader(result = result)
+      Text(
+        text = result.feedback,
+        style = AppTheme.typography.caption,
+        color = AppTheme.colors.textMuted,
+        modifier = Modifier.fillMaxWidth(),
+        overflow = TextOverflow.Clip,
+      )
     }
-  }
-}
-
-private enum class ExpandedSpellcheckCardSlot {
-  Viewport,
-  Body,
-  Corrections,
-  Actions,
-}
-
-@Composable
-private fun ExpandedSpellcheckResultCardLayout(
-  result: SpellcheckResult,
-  sameContextVisible: Boolean,
-  background: Color,
-  minContentHeightPx: Int,
-  onSuggestion: (String) -> Unit,
-  onDirectEdit: () -> Unit,
-  onIgnoreSame: () -> Unit,
-  onIgnore: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  SubcomposeLayout(modifier = modifier) { constraints ->
-    val contentWidth = constraints.maxWidth
-    val rowConstraints =
-      Constraints(
-        minWidth = contentWidth,
-        maxWidth = contentWidth,
-        minHeight = 0,
-        maxHeight = Constraints.Infinity,
-      )
-
-    val correctionsPlaceables =
-      if (result.corrections.isNotEmpty()) {
-        subcompose(ExpandedSpellcheckCardSlot.Corrections) {
-            SpellcheckActionRow(color = background, modifier = Modifier.fillMaxWidth()) {
-              result.corrections.forEach { correction ->
-                SpellcheckActionChip(
-                  text = correction,
-                  danger = true,
-                  onClick = { onSuggestion(correction) },
-                )
-              }
-            }
-          }
-          .map { it.measure(rowConstraints) }
-      } else {
-        emptyList()
-      }
-
-    val actionsPlaceables =
-      subcompose(ExpandedSpellcheckCardSlot.Actions) {
-          SpellcheckActionRow(color = background, modifier = Modifier.fillMaxWidth()) {
-            SpellcheckActionChip(text = "직접 수정", onClick = onDirectEdit)
-            if (sameContextVisible) {
-              SpellcheckActionChip(text = "같은 단어 모두 무시", onClick = onIgnoreSame)
-            }
-            SpellcheckActionChip(text = "무시", onClick = onIgnore)
-          }
-        }
-        .map { it.measure(rowConstraints) }
-
-    val correctionsHeight = correctionsPlaceables.maxOfOrNull { it.height } ?: 0
-    val actionsHeight = actionsPlaceables.maxOfOrNull { it.height } ?: 0
-    val gapPx = SpellcheckCardGap.roundToPx()
-    val gapCount = if (result.corrections.isNotEmpty()) 2 else 1
-    val minBodyHeight =
-      (minContentHeightPx - correctionsHeight - actionsHeight - gapPx * gapCount).coerceAtLeast(0)
-
-    val bodyPlaceables =
-      subcompose(ExpandedSpellcheckCardSlot.Body) {
-          ExpandedSpellcheckResultBody(result = result, modifier = Modifier.fillMaxWidth())
-        }
-        .map { it.measure(rowConstraints.copy(minHeight = minBodyHeight)) }
-    val bodyHeight = bodyPlaceables.maxOfOrNull { it.height } ?: 0
-    val contentHeight =
-      (bodyHeight + correctionsHeight + actionsHeight + gapPx * gapCount).coerceAtLeast(
-        minContentHeightPx
-      )
-
-    layout(width = contentWidth, height = contentHeight) {
-      var y = 0
-      bodyPlaceables.forEach { placeable -> placeable.placeRelative(0, y) }
-      y += bodyHeight + gapPx
-
-      if (correctionsPlaceables.isNotEmpty()) {
-        correctionsPlaceables.forEach { placeable -> placeable.placeRelative(0, y) }
-        y += correctionsHeight + gapPx
-      }
-
-      actionsPlaceables.forEach { placeable -> placeable.placeRelative(0, y) }
+    AiFeedbackActionRow(color = background, modifier = Modifier.fillMaxWidth()) {
+      AiFeedbackActionChip(text = "무시", onClick = onIgnore)
     }
   }
 }
 
 @Composable
-private fun ExpandedSpellcheckResultBody(result: SpellcheckResult, modifier: Modifier = Modifier) {
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(SpellcheckCardGap)) {
-    Text(
-      text = result.context,
-      style = AppTheme.typography.title.copy(fontWeight = FontWeight.SemiBold),
-      color = AppTheme.colors.danger,
-      overflow = TextOverflow.Clip,
-    )
-    Text(
-      text = result.explanation,
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textMuted,
-      modifier = Modifier.fillMaxWidth(),
-      overflow = TextOverflow.Clip,
-    )
-  }
-}
-
-@Composable
-private fun CompactSpellcheckResultCardContent(
-  result: SpellcheckResult,
-  sameContextVisible: Boolean,
+private fun CompactAiFeedbackResultCardContent(
+  result: AiFeedbackResult,
   background: Color,
-  onSuggestion: (String) -> Unit,
-  onDirectEdit: () -> Unit,
-  onIgnoreSame: () -> Unit,
   onIgnore: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(SpellcheckCardGap)) {
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AiFeedbackCardGap)) {
     Column(
       modifier = Modifier.weight(1f).fillMaxWidth(),
-      verticalArrangement = Arrangement.spacedBy(SpellcheckCardGap),
+      verticalArrangement = Arrangement.spacedBy(AiFeedbackCardGap),
     ) {
-      Text(
-        text = result.context,
-        style = AppTheme.typography.title.copy(fontWeight = FontWeight.SemiBold),
-        color = AppTheme.colors.danger,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      var descriptionClamped by remember(result.id, result.explanation) { mutableStateOf(false) }
-      val descriptionStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textMuted)
+      AiFeedbackResultHeader(result = result)
+      var feedbackClamped by remember(result.id, result.feedback) { mutableStateOf(false) }
+      val feedbackStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textMuted)
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp),
       ) {
         BasicText(
-          text = result.explanation,
+          text = result.feedback,
           modifier = Modifier.fillMaxWidth(),
-          style = descriptionStyle,
-          maxLines = CompactDescriptionMaxLines,
+          style = feedbackStyle,
+          maxLines = CompactFeedbackMaxLines,
           overflow = TextOverflow.Ellipsis,
           onTextLayout = { layout ->
             val lastLineIndex = (layout.lineCount - 1).coerceAtLeast(0)
-            descriptionClamped = layout.hasVisualOverflow || layout.isLineEllipsized(lastLineIndex)
+            feedbackClamped = layout.hasVisualOverflow || layout.isLineEllipsized(lastLineIndex)
           },
         )
-        if (descriptionClamped) {
+        if (feedbackClamped) {
           Text(
             text = "더 보기",
             style = AppTheme.typography.caption,
-            color = AppTheme.colors.danger,
+            color = AppTheme.colors.palette.purple,
             maxLines = 1,
             overflow = TextOverflow.Clip,
           )
         }
       }
     }
-    if (result.corrections.isNotEmpty()) {
-      SpellcheckActionRow(color = background, modifier = Modifier.fillMaxWidth()) {
-        result.corrections.forEach { correction ->
-          SpellcheckActionChip(
-            text = correction,
-            danger = true,
-            onClick = { onSuggestion(correction) },
-          )
-        }
-      }
-    }
-    SpellcheckActionRow(color = background, modifier = Modifier.fillMaxWidth()) {
-      SpellcheckActionChip(text = "직접 수정", onClick = onDirectEdit)
-      if (sameContextVisible) {
-        SpellcheckActionChip(text = "같은 단어 모두 무시", onClick = onIgnoreSame)
-      }
-      SpellcheckActionChip(text = "무시", onClick = onIgnore)
+    AiFeedbackActionRow(color = background, modifier = Modifier.fillMaxWidth()) {
+      AiFeedbackActionChip(text = "무시", onClick = onIgnore)
     }
   }
 }
 
 @Composable
-private fun SpellcheckActionRow(
+private fun AiFeedbackResultHeader(result: AiFeedbackResult, modifier: Modifier = Modifier) {
+  Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    result.category
+      ?.takeIf { it.isNotBlank() }
+      ?.let { category ->
+        Box(
+          modifier =
+            Modifier.clip(AppShapes.rounded(AppShapes.full))
+              .background(AppTheme.colors.palette.purple.copy(alpha = 0.14f))
+              .padding(horizontal = 8.dp, vertical = 3.dp)
+        ) {
+          Text(
+            text = category,
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.palette.purple,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+    Text(
+      text = result.quotedTarget,
+      style = AppTheme.typography.title.copy(fontWeight = FontWeight.SemiBold),
+      color = AppTheme.colors.palette.purple,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
+
+@Composable
+private fun AiFeedbackActionRow(
   color: Color,
   modifier: Modifier = Modifier,
   content: @Composable () -> Unit,
@@ -589,41 +446,50 @@ private fun SpellcheckActionRow(
 }
 
 @Composable
-private fun SpellcheckActionChip(text: String, danger: Boolean = false, onClick: () -> Unit) {
-  val background = if (danger) AppTheme.colors.dangerSubtle else AppTheme.colors.surfaceInset
-  val foreground = if (danger) AppTheme.colors.textOnDangerSubtle else AppTheme.colors.textDefault
+private fun AiFeedbackActionChip(text: String, onClick: () -> Unit) {
   Box(
     modifier =
       Modifier.clip(AppShapes.rounded(AppShapes.full))
-        .background(background)
+        .background(AppTheme.colors.surfaceInset)
         .clickable(onClick = onClick)
         .padding(horizontal = 10.dp, vertical = 6.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Text(text = text, style = AppTheme.typography.action, color = foreground, maxLines = 1)
+    Text(text = text, style = AppTheme.typography.action, color = AppTheme.colors.textDefault)
   }
 }
 
-internal const val SpellcheckOverlayAnimationMillis = 180
+private val AiFeedbackResult.quotedTarget: String
+  get() {
+    val start = startText.trim()
+    val end = endText.trim()
+    return if (end.isBlank() || end == start) {
+      "\"$start\""
+    } else {
+      "\"$start\" ... \"$end\""
+    }
+  }
+
+internal const val AiFeedbackOverlayAnimationMillis = 180
 private val CompactPagerHorizontalPadding = 24.dp
 private val ExpandedTopGap = 8.dp
-private val SpellcheckOverlayBottomGap = ToolbarSecondaryGap
-private val SpellcheckCardPadding = 14.dp
-private val SpellcheckCardGap = 8.dp
+private val AiFeedbackOverlayBottomGap = ToolbarSecondaryGap
+private val AiFeedbackCardPadding = 14.dp
+private val AiFeedbackCardGap = 8.dp
 private val ActionRowFogWidth = 16.dp
 private val CompactCardHeight = 200.dp
 private val InactiveCardOffset = 92.dp
-private const val CompactDescriptionMaxLines = 2
+private const val CompactFeedbackMaxLines = 2
 private const val ExpandedContentSettleTolerance = 0.5f
 private const val PagerSettledOffsetTolerance = 0.001f
 
-internal fun spellcheckCompactOverlayHeight(activeRange: Boolean) =
-  CompactCardHeight + SpellcheckOverlayBottomGap - if (activeRange) 0.dp else InactiveCardOffset
+internal fun aiFeedbackCompactOverlayHeight(activeRange: Boolean) =
+  CompactCardHeight + AiFeedbackOverlayBottomGap - if (activeRange) 0.dp else InactiveCardOffset
 
-private fun <T> spellcheckTween() =
-  tween<T>(durationMillis = SpellcheckOverlayAnimationMillis, easing = LinearOutSlowInEasing)
+private fun <T> aiFeedbackTween() =
+  tween<T>(durationMillis = AiFeedbackOverlayAnimationMillis, easing = LinearOutSlowInEasing)
 
-private fun spellcheckEnter(transformOrigin: TransformOrigin) =
+private fun aiFeedbackEnter(transformOrigin: TransformOrigin) =
   fadeIn(animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis)) +
     scaleIn(
       animationSpec = tween(ToolbarBottomPanelVisibilityEnterMillis),
@@ -631,7 +497,7 @@ private fun spellcheckEnter(transformOrigin: TransformOrigin) =
       transformOrigin = transformOrigin,
     )
 
-private fun spellcheckExit(transformOrigin: TransformOrigin) =
+private fun aiFeedbackExit(transformOrigin: TransformOrigin) =
   fadeOut(animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis)) +
     scaleOut(
       animationSpec = tween(ToolbarBottomPanelVisibilityExitMillis),
@@ -639,6 +505,6 @@ private fun spellcheckExit(transformOrigin: TransformOrigin) =
       transformOrigin = transformOrigin,
     )
 
-private fun spellcheckCardEnter() = spellcheckEnter(TransformOrigin(0.5f, 1f))
+private fun aiFeedbackCardEnter() = aiFeedbackEnter(TransformOrigin(0.5f, 1f))
 
-private fun spellcheckCardExit() = spellcheckExit(TransformOrigin(0.5f, 1f))
+private fun aiFeedbackCardExit() = aiFeedbackExit(TransformOrigin(0.5f, 1f))

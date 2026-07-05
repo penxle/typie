@@ -19,6 +19,7 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.EntityType
@@ -35,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 
 class EditorViewModel(val entityId: String) : ViewModel() {
   var titleDraft by mutableStateOf("")
@@ -305,6 +307,7 @@ class EditorViewModel(val entityId: String) : ViewModel() {
 
 private fun placeholderData() =
   EditorScreen_Query.Data(PlaceholderResolver) {
+    me = buildUser { preferences = JsonObject(emptyMap()) }
     entity = buildEntity {
       id = "placeholder-editor-entity"
       type = EntityType.DOCUMENT

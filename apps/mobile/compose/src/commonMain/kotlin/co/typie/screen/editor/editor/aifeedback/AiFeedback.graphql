@@ -1,0 +1,19 @@
+subscription AiFeedback_LiteraryAnalysisDocumentStream_Subscription($text: String!) {
+  literaryAnalysisDocumentStreamV2(text: $text) {
+    type
+    feedback {
+      id
+      start
+      end
+      startText
+      endText
+      feedback
+      category
+    }
+    progress {
+      current
+      total
+      phase
+    }
+  }
+}

@@ -3,6 +3,7 @@ query EditorScreen_Query($entityId: ID!) {
     id
     role
     name
+    preferences
     avatar {
       ...Img_image
     }

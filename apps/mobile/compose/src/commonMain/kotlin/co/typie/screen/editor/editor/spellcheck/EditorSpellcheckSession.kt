@@ -112,7 +112,7 @@ internal fun rememberEditorSpellcheckSession(
           if (activeModel.isPendingCheckStale(sourceText, activeEditor.proseText())) {
             activeModel.cancelCheck()
             if (activeModel.active) {
-              toast.show(ToastType.Success, "맞춤법 검사가 취소됐어요.")
+              toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
             }
             return@onRawResults
           }
@@ -145,7 +145,7 @@ internal fun rememberEditorSpellcheckSession(
         val stale = activeModel.isPendingCheckStale(sourceText, activeEditor.proseText())
         activeModel.clearPendingCheck()
         when {
-          stale && activeModel.active -> toast.show(ToastType.Success, "맞춤법 검사가 취소됐어요.")
+          stale && activeModel.active -> toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
           activeModel.active -> toast.show(ToastType.Error, "맞춤법 검사에 실패했어요.")
         }
       },
@@ -167,7 +167,18 @@ internal fun rememberEditorSpellcheckSession(
     }
   }
 
-  DisposableEffect(editor) { onDispose { editor?.clearSpellcheckRanges() } }
+  fun disposeEditor(activeEditor: Editor?) {
+    if (activeEditor == null) return
+    model?.exitMode(resetLoader = true)
+    activeEditor.clearSpellcheckRanges()
+    occlusionReleaseJob?.cancel()
+    occlusionReleaseJob = null
+    bottomOcclusion = 0f
+    lastSelectionMappedToSpellcheck = null
+    programmaticSelectionToSkip = null
+  }
+
+  DisposableEffect(editor) { onDispose { disposeEditor(editor) } }
 
   LaunchedEffect(active, editor) {
     if (active) {
@@ -183,7 +194,7 @@ internal fun rememberEditorSpellcheckSession(
     if (activeEditor.proseText() == expectedText) return@LaunchedEffect
 
     activeModel.cancelCheck()
-    toast.show(ToastType.Success, "맞춤법 검사가 취소됐어요.")
+    toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
   }
 
   LaunchedEffect(
