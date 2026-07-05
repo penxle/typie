@@ -6,6 +6,7 @@ cfg_if! {
         mod cpu_surface;
         pub use cpu_surface::{PlatformHandle, SurfaceHandle};
     } else if #[cfg(feature = "wasm-browser")] {
+        pub(crate) mod gl;
         mod wasm_browser;
         pub use wasm_browser::{PlatformHandle, SurfaceHandle};
     } else {

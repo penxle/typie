@@ -15,7 +15,7 @@ const UNPREMUL_RECIP: [u32; 256] = {
     t
 };
 
-pub fn unpremultiply_rgba8_inplace(pixels: &mut [u8]) {
+pub fn unpremultiply(pixels: &mut [u8]) {
     for px in pixels.chunks_exact_mut(4) {
         let a = px[3];
         if a == 0 || a == 255 {
@@ -117,6 +117,10 @@ impl CpuSink {
             let d = y as usize * dst_stride + rc.x0 as usize * 4;
             dst[d..d + row_len].copy_from_slice(&self.buf[s..s + row_len]);
         }
+    }
+
+    pub fn pixels(&self) -> &[u8] {
+        &self.buf
     }
 
     fn blit_premul_at(&mut self, src: &[u8], iw: i32, ih: i32, dst_x: i32, dst_y: i32) {
@@ -537,6 +541,19 @@ mod tests {
     }
 
     #[test]
+    fn pixels_exposes_premultiplied_backing_buffer() {
+        let mut s = CpuSink::new(4, 4);
+        s.fill_rect(
+            editor_common::Rect::from_xywh(0.0, 0.0, 4.0, 4.0),
+            Color::new(100, 150, 200, 128),
+            Transform::IDENTITY,
+        );
+        let px = s.pixels();
+        assert_eq!(px.len(), 4 * 4 * 4);
+        assert_eq!(&px[(4 + 1) * 4..][..4], &[49, 74, 99, 127]);
+    }
+
+    #[test]
     fn read_back_rect_returns_premultiplied_bytes() {
         let mut s = CpuSink::new(4, 4);
         s.fill_rect(
@@ -613,9 +630,9 @@ mod tests {
     }
 
     #[test]
-    fn unpremultiply_rgba8_inplace_converts_translucent_and_keeps_edges() {
+    fn unpremultiply_converts_translucent_and_keeps_edges() {
         let mut px = [49u8, 74, 99, 127, 0, 0, 0, 0, 10, 20, 30, 255, 1, 1, 1, 2];
-        unpremultiply_rgba8_inplace(&mut px);
+        unpremultiply(&mut px);
         assert_eq!(
             px,
             [
@@ -629,7 +646,7 @@ mod tests {
         for a in 1u32..=254 {
             for c in 0..=a {
                 let mut px = [c as u8, 0, 0, a as u8];
-                unpremultiply_rgba8_inplace(&mut px);
+                unpremultiply(&mut px);
                 let expected = ((c * 255 + a / 2) / a).min(255) as u8;
                 assert_eq!(px[0], expected, "a={a} c={c}");
             }

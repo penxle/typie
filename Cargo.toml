@@ -42,6 +42,7 @@ icu_provider = { version = "2", default-features = false, features = [
 icu_provider_blob = "2"
 icu_segmenter = { version = "2", default-features = false }
 imbl = "7"
+js-sys = "0.3"
 kurbo = "0.13"
 log = "0.4"
 markup5ever_rcdom = "0.39"

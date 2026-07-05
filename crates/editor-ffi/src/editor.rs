@@ -762,6 +762,13 @@ impl Editor {
         })
     }
 
+    pub fn invalidate_surface(&self, page: u32) -> EditorResult<()> {
+        self.with_inner(|inner| {
+            inner.clear_page_present_state(page);
+            Ok(())
+        })
+    }
+
     pub fn resize_surface(
         &self,
         page: u32,
@@ -2104,6 +2111,25 @@ mod tests {
         let g = editor.inner.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
         assert!(!g.last_render_sig.contains_key(&0));
+    }
+
+    #[test]
+    fn ffi_invalidate_surface_clears_present_state() {
+        let (initial, ..) =
+            state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
+        let editor = make_ffi_editor(initial);
+        {
+            let mut g = editor.inner.lock().unwrap();
+            g.prev_dl
+                .insert(0, editor_renderer::display_list::DisplayList::default());
+            g.last_render_sig.insert(0, 123);
+            g.last_content_height.insert(0, 456);
+        }
+        editor.invalidate_surface(0).unwrap();
+        let g = editor.inner.lock().unwrap();
+        assert!(!g.prev_dl.contains_key(&0));
+        assert!(!g.last_render_sig.contains_key(&0));
+        assert!(!g.last_content_height.contains_key(&0));
     }
 
     #[test]

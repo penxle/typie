@@ -106,6 +106,12 @@
 
           const off = editor.on('render_invalidated', paint);
 
+          const onContextRestored = () => {
+            editor.invalidateSurface(page);
+            paint();
+          };
+          canvas.addEventListener('contextrestored', onContextRestored);
+
           $effect.pre(() => {
             void editor.surfaceScaleFactor;
             void width;
@@ -147,6 +153,7 @@
           });
 
           return () => {
+            canvas.removeEventListener('contextrestored', onContextRestored);
             off();
             untrack(() => editor.detachSurface(page));
           };

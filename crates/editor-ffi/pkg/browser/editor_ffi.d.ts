@@ -659,6 +659,7 @@ declare class Editor {
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
+    invalidate_surface(page: number): void;
     last_history_tag(): HistoryTag | undefined;
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
@@ -721,6 +722,7 @@ declare class EditorHost {
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_auto_surround_enabled(enabled: boolean): void;
     set_fonts(families: FontFamily[]): void;
+    set_gl_canary(callback: Function): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
     set_theme_variant(variant: ThemeVariant): boolean;
 }

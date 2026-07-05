@@ -136,6 +136,27 @@ const [getEditorContext, setEditorContext] = createContext<EditorContext>();
 export { getEditorContext };
 export const setupEditorContext = () => setEditorContext(new EditorContext());
 
+let recoveryRegistered = false;
+
+function registerSurfaceRecovery() {
+  if (recoveryRegistered) return;
+  recoveryRegistered = true;
+  const recoverAll = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        for (const editor of snapshot()) {
+          editor.recoverSurfaces();
+        }
+      });
+    });
+  };
+  wasm.set_gl_canary(recoverAll);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recoverAll();
+  });
+  window.addEventListener('pageshow', recoverAll);
+}
+
 export class Editor {
   static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
     await ensureWasmInitialized();
@@ -275,6 +296,9 @@ export class Editor {
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
+
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #attachedPages = new Set<number>();
 
   #cursor = $state<CursorMetrics>();
   #placeholder = $state<PlaceholderMetrics | undefined>();
@@ -514,7 +538,7 @@ export class Editor {
   characterCountsVersion = $state(0);
 
   private constructor() {
-    // no-op
+    registerSurfaceRecovery();
   }
 
   #applyViewport(viewport: Viewport): void {
@@ -1233,12 +1257,27 @@ export class Editor {
   attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {
     if (this.#destroyed) return;
     this.#wasm.attach_surface(page, canvas, width, height, this.surfaceScaleFactor);
+    this.#attachedPages.add(page);
   }
 
   detachSurface(page: number): void {
     if (this.#destroyed) return;
+    this.#attachedPages.delete(page);
     this.#surfaceWork.delete(page);
     this.#wasm.detach_surface(page);
+  }
+
+  invalidateSurface(page: number): void {
+    if (this.#destroyed) return;
+    this.#wasm.invalidate_surface(page);
+  }
+
+  recoverSurfaces(): void {
+    if (this.#destroyed) return;
+    for (const page of this.#attachedPages) {
+      this.#wasm.invalidate_surface(page);
+    }
+    this.#emit({ type: 'render_invalidated' });
   }
 
   requestSurfaceRender(page: number): void {

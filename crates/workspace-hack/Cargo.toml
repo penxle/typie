@@ -27,7 +27,7 @@ thiserror = { version = "2" }
 tinystr = { version = "0.8", default-features = false, features = ["alloc", "serde", "zerovec"] }
 uncased = { version = "0.9" }
 wasm-bindgen = { version = "0.2" }
-web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "History", "HtmlCanvasElement", "HtmlHeadElement", "ImageData", "Location", "Window", "console"] }
+web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "Event", "History", "HtmlCanvasElement", "HtmlHeadElement", "ImageData", "Location", "OffscreenCanvas", "WebGl2RenderingContext", "WebGlFramebuffer", "WebGlTexture", "Window", "console"] }
 zerotrie = { version = "0.2", default-features = false, features = ["serde", "yoke", "zerofrom", "zerovec"] }
 
 [build-dependencies]
@@ -53,7 +53,7 @@ thiserror = { version = "2" }
 tinystr = { version = "0.8", default-features = false, features = ["alloc", "serde", "zerovec"] }
 uncased = { version = "0.9" }
 wasm-bindgen = { version = "0.2" }
-web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "History", "HtmlCanvasElement", "HtmlHeadElement", "ImageData", "Location", "Window", "console"] }
+web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "Event", "History", "HtmlCanvasElement", "HtmlHeadElement", "ImageData", "Location", "OffscreenCanvas", "WebGl2RenderingContext", "WebGlFramebuffer", "WebGlTexture", "Window", "console"] }
 zerotrie = { version = "0.2", default-features = false, features = ["serde", "yoke", "zerofrom", "zerovec"] }
 
 [target.aarch64-apple-darwin.dependencies]

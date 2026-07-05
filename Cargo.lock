@@ -780,6 +780,7 @@ dependencies = [
  "env_filter 0.1.4",
  "env_logger",
  "hashbrown 0.17.1",
+ "js-sys",
  "log",
  "objc2",
  "objc2-core-foundation",

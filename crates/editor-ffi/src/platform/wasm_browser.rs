@@ -1,9 +1,11 @@
 use editor_renderer::RenderBackend;
-use editor_renderer::backend::cpu::{CpuSink, unpremultiply_rgba8_inplace};
+use editor_renderer::backend::cpu::{CpuSink, unpremultiply};
 use editor_renderer::damage::IRect;
 use wasm_bindgen::prelude::*;
 
+use super::gl;
 use crate::error::FfiError;
+use crate::present;
 
 pub type PlatformHandle = web_sys::HtmlCanvasElement;
 
@@ -60,6 +62,8 @@ impl SurfaceHandle {
             .dyn_into::<web_sys::CanvasRenderingContext2d>()
             .unwrap();
 
+        let mut gl_ready = damage.iter().any(|&r| present::use_gl(r)) && gl::begin();
+
         for &r in damage {
             let w = r.width() as u32;
             let h = r.height() as u32;
@@ -67,18 +71,33 @@ impl SurfaceHandle {
                 continue;
             }
 
+            if gl_ready && present::use_gl(r) {
+                let sink_width = self.width as i32;
+                if gl::present(self.backend.cpu_sink().pixels(), sink_width, r, &ctx) {
+                    continue;
+                }
+                gl_ready = false;
+            }
+
             let mut buf = vec![0u8; (w * h * 4) as usize];
             self.backend
                 .cpu_sink()
                 .read_back_rect(&mut buf, (w * 4) as usize, r);
-            unpremultiply_rgba8_inplace(&mut buf);
+            unpremultiply(&mut buf);
 
             let clamped = wasm_bindgen::Clamped(&buf[..]);
-            let image_data =
-                web_sys::ImageData::new_with_u8_clamped_array_and_sh(clamped, w, h).unwrap();
+            let Ok(image_data) =
+                web_sys::ImageData::new_with_u8_clamped_array_and_sh(clamped, w, h)
+            else {
+                return false;
+            };
 
-            ctx.put_image_data(&image_data, r.x0 as f64, r.y0 as f64)
-                .unwrap();
+            if ctx
+                .put_image_data(&image_data, r.x0 as f64, r.y0 as f64)
+                .is_err()
+            {
+                return false;
+            }
         }
 
         true
