@@ -74,7 +74,8 @@
     if (!editor || inflight) return;
 
     abortController?.abort();
-    abortController = new AbortController();
+    const controller = new AbortController();
+    abortController = controller;
     inflight = true;
     hasChecked = true;
     checkFailed = false;
@@ -93,8 +94,13 @@
         {
           input: { documentId: document.data.id, text },
         },
-        { signal: abortController.signal },
+        { signal: controller.signal },
       );
+      if (abortController !== controller || controller.signal.aborted) return;
+      if (editor.proseText() !== text) {
+        cancelCheckForDocumentEdit();
+        return;
+      }
 
       const items = resp.checkSpellingDocumentV2
         .map((err) => {
@@ -112,12 +118,26 @@
 
       editor.setSpellcheckErrors(items);
     } catch (err) {
-      if (!(err instanceof Error) || err.name !== 'AbortError') {
+      if (abortController === controller && (!(err instanceof Error) || err.name !== 'AbortError')) {
         checkFailed = true;
       }
     } finally {
-      inflight = false;
+      if (abortController === controller) {
+        abortController = undefined;
+        inflight = false;
+      }
     }
+  };
+
+  const cancelCheckForDocumentEdit = () => {
+    if (!inflight) return;
+    abortController?.abort();
+    abortController = undefined;
+    inflight = false;
+    hasChecked = false;
+    checkFailed = false;
+    editor?.clearSpellcheckErrors();
+    Toast.success('내용이 수정되어 맞춤법 검사가 취소됐어요.');
   };
 
   const applyCorrection = (errorId: string, correction: string) => {
@@ -198,6 +218,17 @@
       const el = listContainer?.querySelector(`[data-panel-spellcheck-error="${activeError.id}"]`) as HTMLElement | null;
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
+  });
+
+  $effect(() => {
+    const activeEditor = editor;
+    if (!activeEditor) return;
+
+    return activeEditor.on('state_changed', (_, { fields }) => {
+      if (fields.includes('doc')) {
+        cancelCheckForDocumentEdit();
+      }
+    });
   });
 
   onMount(() => {

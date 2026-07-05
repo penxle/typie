@@ -4,6 +4,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
@@ -82,7 +83,12 @@
     () => ({
       skip: !analysisText,
       onData: (data) => {
-        if (!editor) return;
+        if (!editor || !analysisText || !inflight) return;
+        if (editor.proseText() !== analysisText) {
+          cancelAnalysisForDocumentEdit();
+          return;
+        }
+
         const payload = data.literaryAnalysisDocumentStreamV2;
         if (payload.type === 'feedback' && payload.feedback) {
           const fb = payload.feedback;
@@ -109,6 +115,7 @@
         }
       },
       onError: () => {
+        if (!analysisText || !inflight) return;
         inflight = false;
         progress = null;
         checkFailed = true;
@@ -156,6 +163,17 @@
     progress = null;
   };
 
+  const cancelAnalysisForDocumentEdit = () => {
+    if (!inflight) return;
+    analysisText = null;
+    inflight = false;
+    hasChecked = false;
+    checkFailed = false;
+    progress = null;
+    editor?.clearAiFeedbacks();
+    Toast.success('내용이 수정되어 분석이 취소됐어요.');
+  };
+
   const activeFeedback = $derived(
     editor && editor.activeAiFeedbackId ? editor.aiFeedbacks.find((f) => f.id === editor.activeAiFeedbackId) : undefined,
   );
@@ -199,6 +217,17 @@
       const el = listContainer?.querySelector(`[data-panel-ai-feedback="${activeFeedback.id}"]`) as HTMLElement | null;
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
+  });
+
+  $effect(() => {
+    const activeEditor = editor;
+    if (!activeEditor) return;
+
+    return activeEditor.on('state_changed', (_, { fields }) => {
+      if (fields.includes('doc')) {
+        cancelAnalysisForDocumentEdit();
+      }
+    });
   });
 
   onMount(() => {
