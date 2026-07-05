@@ -5,18 +5,26 @@ use crate::damage::IRect;
 use crate::sink::RenderSink;
 use crate::types::{Image, Path, Stroke, Transform};
 
-fn write_unpremult(dst4: &mut [u8], src4: &[u8]) {
-    let a = src4[3];
-    if a == 255 {
-        dst4.copy_from_slice(&[src4[0], src4[1], src4[2], 255]);
-    } else if a == 0 {
-        dst4.copy_from_slice(&[0, 0, 0, 0]);
-    } else {
-        let a32 = a as u32;
-        dst4[0] = ((src4[0] as u32 * 255 + a32 / 2) / a32).min(255) as u8;
-        dst4[1] = ((src4[1] as u32 * 255 + a32 / 2) / a32).min(255) as u8;
-        dst4[2] = ((src4[2] as u32 * 255 + a32 / 2) / a32).min(255) as u8;
-        dst4[3] = a;
+const UNPREMUL_RECIP: [u32; 256] = {
+    let mut t = [0u32; 256];
+    let mut a = 1u64;
+    while a < 256 {
+        t[a as usize] = (((255u64 << 24) + a - 1) / a) as u32;
+        a += 1;
+    }
+    t
+};
+
+pub fn unpremultiply_rgba8_inplace(pixels: &mut [u8]) {
+    for px in pixels.chunks_exact_mut(4) {
+        let a = px[3];
+        if a == 0 || a == 255 {
+            continue;
+        }
+        let r = UNPREMUL_RECIP[a as usize] as u64;
+        px[0] = (((px[0] as u64 * r + (1 << 23)) >> 24) as u32).min(255) as u8;
+        px[1] = (((px[1] as u64 * r + (1 << 23)) >> 24) as u32).min(255) as u8;
+        px[2] = (((px[2] as u64 * r + (1 << 23)) >> 24) as u32).min(255) as u8;
     }
 }
 
@@ -79,17 +87,20 @@ impl CpuSink {
         debug_assert!(dst.len() >= r.height() as usize * dst_stride);
         let sb = self.sink_bounds();
         let pitch = self.width as usize * 4;
+        let x0 = r.x0.max(sb.x0);
+        let x1 = r.x1.min(sb.x1);
         for y in r.y0..r.y1 {
-            for x in r.x0..r.x1 {
-                let d_off = (y - r.y0) as usize * dst_stride + (x - r.x0) as usize * 4;
-                let d = &mut dst[d_off..d_off + 4];
-                if x < sb.x0 || x >= sb.x1 || y < sb.y0 || y >= sb.y1 {
-                    d.copy_from_slice(&[0, 0, 0, 0]);
-                    continue;
-                }
-                let s = &self.buf[y as usize * pitch + x as usize * 4..][..4];
-                write_unpremult(d, s);
+            let row = &mut dst[(y - r.y0) as usize * dst_stride..][..r.width() as usize * 4];
+            if y < sb.y0 || y >= sb.y1 || x0 >= x1 {
+                row.fill(0);
+                continue;
             }
+            let left = (x0 - r.x0) as usize * 4;
+            let right = (x1 - r.x0) as usize * 4;
+            row[..left].fill(0);
+            row[right..].fill(0);
+            let s = y as usize * pitch + x0 as usize * 4;
+            row[left..right].copy_from_slice(&self.buf[s..s + (right - left)]);
         }
     }
 
@@ -100,12 +111,11 @@ impl CpuSink {
         debug_assert!(dst_stride >= self.width as usize * 4);
         debug_assert!(dst.len() >= rc.y1 as usize * dst_stride);
         let pitch = self.width as usize * 4;
+        let row_len = rc.width() as usize * 4;
         for y in rc.y0..rc.y1 {
-            for x in rc.x0..rc.x1 {
-                let d_off = y as usize * dst_stride + x as usize * 4;
-                let s = &self.buf[y as usize * pitch + x as usize * 4..][..4];
-                write_unpremult(&mut dst[d_off..d_off + 4], s);
-            }
+            let s = y as usize * pitch + rc.x0 as usize * 4;
+            let d = y as usize * dst_stride + rc.x0 as usize * 4;
+            dst[d..d + row_len].copy_from_slice(&self.buf[s..s + row_len]);
         }
     }
 
@@ -215,33 +225,6 @@ impl CpuSink {
                     dst[di + 3] = (sa + ((dst[di + 3] as u32 * inv) >> 8)).min(255) as u8;
                 }
             }
-        }
-    }
-
-    pub fn flush_to(&mut self, dst: &mut [u8]) {
-        for (d, s) in dst.chunks_exact_mut(4).zip(self.buf.chunks_exact_mut(4)) {
-            let a = s[3];
-            if a == 255 {
-                d[0] = s[0];
-                d[1] = s[1];
-                d[2] = s[2];
-                d[3] = 255;
-            } else if a == 0 {
-                d[0] = 0;
-                d[1] = 0;
-                d[2] = 0;
-                d[3] = 0;
-            } else {
-                let a32 = a as u32;
-                d[0] = ((s[0] as u32 * 255 + a32 / 2) / a32).min(255) as u8;
-                d[1] = ((s[1] as u32 * 255 + a32 / 2) / a32).min(255) as u8;
-                d[2] = ((s[2] as u32 * 255 + a32 / 2) / a32).min(255) as u8;
-                d[3] = a;
-            }
-            s[0] = 0;
-            s[1] = 0;
-            s[2] = 0;
-            s[3] = 0;
         }
     }
 }
@@ -549,6 +532,106 @@ mod tests {
                     expect_opaque,
                     "unexpected pixel state at ({x},{y})"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn read_back_rect_returns_premultiplied_bytes() {
+        let mut s = CpuSink::new(4, 4);
+        s.fill_rect(
+            editor_common::Rect::from_xywh(0.0, 0.0, 4.0, 4.0),
+            Color::new(100, 150, 200, 128),
+            Transform::IDENTITY,
+        );
+        let mut dst = vec![0u8; 4 * 4 * 4];
+        s.read_back_rect(
+            &mut dst,
+            4 * 4,
+            IRect {
+                x0: 0,
+                y0: 0,
+                x1: 4,
+                y1: 4,
+            },
+        );
+        assert_eq!(&dst[(4 + 1) * 4..][..4], &[49, 74, 99, 127]);
+    }
+
+    #[test]
+    fn read_back_rect_absolute_returns_premultiplied_bytes() {
+        let mut s = CpuSink::new(4, 4);
+        s.fill_rect(
+            editor_common::Rect::from_xywh(0.0, 0.0, 4.0, 4.0),
+            Color::new(100, 150, 200, 128),
+            Transform::IDENTITY,
+        );
+        let mut dst = vec![0u8; 4 * 4 * 4];
+        s.read_back_rect_absolute(
+            &mut dst,
+            4 * 4,
+            IRect {
+                x0: 0,
+                y0: 0,
+                x1: 4,
+                y1: 4,
+            },
+        );
+        assert_eq!(&dst[(4 + 1) * 4..][..4], &[49, 74, 99, 127]);
+    }
+
+    #[test]
+    fn read_back_output_satisfies_premul_invariant() {
+        let mut s = CpuSink::new(8, 8);
+        s.fill_rect(
+            editor_common::Rect::from_xywh(0.0, 0.0, 8.0, 8.0),
+            Color::new(100, 150, 200, 128),
+            Transform::IDENTITY,
+        );
+        s.fill_rect(
+            editor_common::Rect::from_xywh(2.0, 2.0, 4.0, 4.0),
+            Color::new(255, 30, 60, 90),
+            Transform::IDENTITY,
+        );
+        let mut dst = vec![0u8; 8 * 8 * 4];
+        s.read_back_rect(
+            &mut dst,
+            8 * 4,
+            IRect {
+                x0: 0,
+                y0: 0,
+                x1: 8,
+                y1: 8,
+            },
+        );
+        for px in dst.chunks_exact(4) {
+            assert!(
+                px[0] <= px[3] && px[1] <= px[3] && px[2] <= px[3],
+                "straight-alpha leak: {px:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unpremultiply_rgba8_inplace_converts_translucent_and_keeps_edges() {
+        let mut px = [49u8, 74, 99, 127, 0, 0, 0, 0, 10, 20, 30, 255, 1, 1, 1, 2];
+        unpremultiply_rgba8_inplace(&mut px);
+        assert_eq!(
+            px,
+            [
+                98, 149, 199, 127, 0, 0, 0, 0, 10, 20, 30, 255, 128, 128, 128, 2
+            ]
+        );
+    }
+
+    #[test]
+    fn unpremultiply_matches_divide_over_premul_domain() {
+        for a in 1u32..=254 {
+            for c in 0..=a {
+                let mut px = [c as u8, 0, 0, a as u8];
+                unpremultiply_rgba8_inplace(&mut px);
+                let expected = ((c * 255 + a / 2) / a).min(255) as u8;
+                assert_eq!(px[0], expected, "a={a} c={c}");
             }
         }
     }

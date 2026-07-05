@@ -854,31 +854,6 @@ impl Editor {
     }
 }
 
-#[cfg(feature = "wasm-server")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-impl Editor {
-    pub fn render_page_to_buffer(
-        &self,
-        page: u32,
-        width: u32,
-        height: u32,
-    ) -> EditorResult<Vec<u8>> {
-        self.with_inner(|inner| {
-            let mut backend = editor_renderer::RenderBackend::new_cpu(width as u16, height as u16);
-            inner.editor.render_page(page, backend.sink(), 1.0);
-
-            let mut buf = vec![0u8; (width * height * 4) as usize];
-            match &mut backend {
-                editor_renderer::RenderBackend::Cpu(sink) => {
-                    sink.flush_to(&mut buf);
-                }
-            }
-
-            Ok(buf)
-        })
-    }
-}
-
 impl Editor {
     pub(crate) fn new(core: editor_core::Editor) -> Self {
         Self {

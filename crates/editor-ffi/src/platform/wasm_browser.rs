@@ -1,5 +1,5 @@
 use editor_renderer::RenderBackend;
-use editor_renderer::backend::cpu::CpuSink;
+use editor_renderer::backend::cpu::{CpuSink, unpremultiply_rgba8_inplace};
 use editor_renderer::damage::IRect;
 use wasm_bindgen::prelude::*;
 
@@ -71,6 +71,7 @@ impl SurfaceHandle {
             self.backend
                 .cpu_sink()
                 .read_back_rect(&mut buf, (w * 4) as usize, r);
+            unpremultiply_rgba8_inplace(&mut buf);
 
             let clamped = wasm_bindgen::Clamped(&buf[..]);
             let image_data =

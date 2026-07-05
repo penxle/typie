@@ -127,9 +127,9 @@ internal actual fun RenderCanvas(
       RenderBuffer.endRead(handle)
 
       // ARGB_8888 stores bytes in R,G,B,A order in memory (despite the name) and is
-      // premultiplied by default. This matches CpuSink::flush_to's premultiplied RGBA8
-      // output, so copyPixelsFromBuffer is a direct memcpy with no channel swap or
-      // un-premultiplication.
+      // premultiplied by default. This matches CpuSink::read_back_rect_absolute's
+      // premultiplied RGBA8 output, so copyPixelsFromBuffer is a direct memcpy with
+      // no channel swap or un-premultiplication.
       val androidBitmap =
         cachedAndroidBitmap?.takeIf { cachedWidth == w && cachedHeight == h }
           ?: createBitmap(w, h).also {
