@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, NodeType, Subtree};
-use editor_state::{Affinity, Position, Selection};
+use editor_model::{ChildView, DocView, NodeType, NodeView, Subtree};
+use editor_state::{Affinity, Position, ResolvedSelection, Selection};
 use editor_transaction::{Transaction, fulfill};
 
 use crate::{CommandError, CommandResult};
@@ -11,24 +11,45 @@ fn is_list_type(ty: NodeType) -> bool {
     matches!(ty, NodeType::BulletList | NodeType::OrderedList)
 }
 
+#[derive(Clone)]
+enum LiftedListItemTarget {
+    ListItem(Dot),
+    Children(Vec<Dot>),
+}
+
 pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> CommandResult {
-    let (
-        list_id,
-        list_type,
-        owner_id,
-        owner_is_list_item,
-        list_index,
-        list_item_index,
-        after_items,
-        lifted_paragraph_id,
-        existing_sublist_id,
-    ) = {
+    let captured_head = {
+        let view = tr.view();
+        tr.selection()
+            .and_then(|selection| capture_anchor(&view, &[list_item_id], &selection.head))
+    };
+    let Some(target) = lift_list_item_to_parent(tr, list_item_id)? else {
+        return Ok(false);
+    };
+    let position = {
+        let view = tr.view();
+        captured_head
+            .as_ref()
+            .and_then(|head| restore_lift_anchor_in_target(&view, &target, head))
+            .or_else(|| first_position_in_lift_target(&view, &target))
+    };
+    if let Some(position) = position {
+        tr.set_selection(Some(Selection::collapsed(position)))?;
+    }
+    Ok(true)
+}
+
+fn lift_list_item_to_parent(
+    tr: &mut Transaction,
+    list_item_id: Dot,
+) -> Result<Option<LiftedListItemTarget>, CommandError> {
+    let (list_id, list_type, owner_id, owner_is_list_item, list_index, after_items) = {
         let view = tr.state().view();
         let list_item = view
             .node(list_item_id)
             .ok_or(CommandError::NodeNotFound(list_item_id))?;
         if list_item.node_type() != NodeType::ListItem {
-            return Ok(false);
+            return Ok(None);
         }
 
         let list = list_item
@@ -37,7 +58,7 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
         let list_id = list.id();
         let list_type = list.node_type();
         if !is_list_type(list_type) {
-            return Ok(false);
+            return Ok(None);
         }
 
         let owner = list.parent().ok_or(CommandError::NoParent(list_id))?;
@@ -57,33 +78,17 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
             .map(|c| c.id())
             .collect();
 
-        let lifted_paragraph_id: Option<Dot> = list_item.child_blocks().next().map(|c| c.id());
-
-        let existing_sublist_id: Option<Dot> = list_item
-            .child_blocks()
-            .find(|c| is_list_type(c.node_type()))
-            .map(|c| c.id());
-
         (
             list_id,
             list_type,
             owner_id,
             owner_is_list_item,
             list_index,
-            list_item_index,
             after_items,
-            lifted_paragraph_id,
-            existing_sublist_id,
         )
     };
-    let _ = list_item_index;
-    let _ = &existing_sublist_id;
 
-    let (sel_offset, sel_affinity) = match (tr.selection(), &lifted_paragraph_id) {
-        (Some(sel), Some(para)) if sel.head.node == *para => (sel.head.offset, sel.head.affinity),
-        _ => (0, Affinity::Downstream),
-    };
-    let mut new_para_id: Option<Dot> = None;
+    let mut lifted_target: Option<LiftedListItemTarget> = None;
 
     tr.batch::<_, CommandError>(|tr| {
         if owner_is_list_item {
@@ -112,12 +117,7 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
                     .map(|b| b.id())
                     .ok_or(CommandError::NodeNotFound(outer_list_id))?
             };
-            new_para_id = {
-                let view = tr.state().view();
-                view.node(moved_item_id)
-                    .and_then(|li| li.child_blocks().next())
-                    .map(|p| p.id())
-            };
+            lifted_target = Some(LiftedListItemTarget::ListItem(moved_item_id));
 
             if !after_items.is_empty() {
                 let existing = {
@@ -171,19 +171,23 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
                 let child_count = children.len();
                 (children, child_count)
             };
+            let mut moved_children = Vec::with_capacity(child_count);
             for (i, child_id) in children.iter().enumerate() {
                 let target_index = list_index + 1 + i;
                 tr.move_node(*child_id, owner_id, target_index)?;
-                if i == 0 {
-                    new_para_id = {
-                        let view = tr.state().view();
-                        view.node(owner_id)
-                            .and_then(|o| match o.child_at(target_index) {
-                                Some(ChildView::Block(p)) => Some(p.id()),
-                                _ => None,
-                            })
-                    };
-                }
+                let moved_child_id = {
+                    let view = tr.state().view();
+                    view.node(owner_id)
+                        .and_then(|o| match o.child_at(target_index) {
+                            Some(ChildView::Block(p)) => Some(p.id()),
+                            _ => None,
+                        })
+                        .ok_or(CommandError::NodeNotFound(owner_id))?
+                };
+                moved_children.push(moved_child_id);
+            }
+            if !moved_children.is_empty() {
+                lifted_target = Some(LiftedListItemTarget::Children(moved_children));
             }
             tr.remove_subtree(list_item_id)?;
 
@@ -230,53 +234,7 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
         Ok(())
     })?;
 
-    if let Some(para_id) = new_para_id
-        && tr.state().view().node(para_id).is_some()
-    {
-        tr.set_selection(Some(Selection::collapsed(Position {
-            node: para_id,
-            offset: sel_offset,
-            affinity: sel_affinity,
-        })))?;
-    }
-
-    Ok(true)
-}
-
-pub(crate) fn collect_top_level_list_items_in_selection(
-    view: &DocView,
-    from: Position,
-    to: Position,
-) -> Vec<Dot> {
-    let from_list_item = find_enclosing_list_item_id(view, from.node);
-    let to_list_item = find_enclosing_list_item_id(view, to.node);
-
-    let (Some(from_li), Some(to_li)) = (from_list_item, to_list_item) else {
-        return Vec::new();
-    };
-
-    if from_li == to_li {
-        return vec![from_li];
-    }
-
-    let Some(common_list_id) = lowest_common_list_ancestor(view, from_li, to_li) else {
-        return Vec::new();
-    };
-
-    let common_list = match view.node(common_list_id) {
-        Some(n) => n,
-        None => return Vec::new(),
-    };
-
-    let children: Vec<Dot> = common_list.child_blocks().map(|c| c.id()).collect();
-    let from_idx = ancestor_index_within(view, from_li, common_list_id);
-    let to_idx = ancestor_index_within(view, to_li, common_list_id);
-    let (Some(a), Some(b)) = (from_idx, to_idx) else {
-        return Vec::new();
-    };
-    let lo = a.min(b);
-    let hi = a.max(b);
-    children[lo..=hi].to_vec()
+    Ok(lifted_target)
 }
 
 pub(crate) fn find_enclosing_list_item_id(view: &DocView, node: Dot) -> Option<Dot> {
@@ -286,35 +244,6 @@ pub(crate) fn find_enclosing_list_item_id(view: &DocView, node: Dot) -> Option<D
             return Some(current.id());
         }
         current = current.parent()?;
-    }
-}
-
-fn lowest_common_list_ancestor(view: &DocView, a: Dot, b: Dot) -> Option<Dot> {
-    let ancestors_a: Vec<Dot> = view.node(a)?.ancestors().map(|n| n.id()).collect();
-    let ancestors_b: HashSet<Dot> = view.node(b)?.ancestors().map(|n| n.id()).collect();
-
-    for la in ancestors_a.iter() {
-        if view
-            .node(*la)
-            .map(|n| is_list_type(n.node_type()))
-            .unwrap_or(false)
-            && ancestors_b.contains(la)
-        {
-            return Some(*la);
-        }
-    }
-    None
-}
-
-fn ancestor_index_within(view: &DocView, node: Dot, ancestor: Dot) -> Option<usize> {
-    let mut current_id = node;
-    loop {
-        let current = view.node(current_id)?;
-        let parent = current.parent()?;
-        if parent.id() == ancestor {
-            return current.index();
-        }
-        current_id = parent.id();
     }
 }
 
@@ -333,6 +262,419 @@ pub(crate) fn is_at_list_item_content_start(view: &DocView, selection: &Selectio
         return false;
     };
     pos.node == para.id() && pos.offset == 0
+}
+
+pub(crate) fn collect_list_items_in_selection(rs: &ResolvedSelection<'_>) -> Vec<Dot> {
+    let mut items = Vec::new();
+    let mut seen = HashSet::new();
+    if let Some(root) = rs.view().root() {
+        collect_list_items_in_block(rs, &root, &mut items, &mut seen);
+    }
+    items
+}
+
+fn collect_list_items_in_block(
+    rs: &ResolvedSelection<'_>,
+    node: &NodeView<'_>,
+    out: &mut Vec<Dot>,
+    seen: &mut HashSet<Dot>,
+) {
+    if !rs.intersects_subtree(node) {
+        return;
+    }
+
+    if node.node_type() == NodeType::ListItem
+        && list_item_own_paragraph_intersects(rs, node)
+        && seen.insert(node.id())
+    {
+        out.push(node.id());
+    }
+
+    for child in node.child_blocks() {
+        collect_list_items_in_block(rs, &child, out, seen);
+    }
+}
+
+fn list_item_own_paragraph_intersects(rs: &ResolvedSelection<'_>, item: &NodeView<'_>) -> bool {
+    item.child_blocks()
+        .next()
+        .map(|paragraph| rs.intersects_subtree(&paragraph))
+        .unwrap_or_else(|| rs.intersects_subtree(item))
+}
+
+pub(crate) fn sort_list_items_for_lift(view: &DocView, items: &mut [Dot]) {
+    let order: Vec<Dot> = items.to_vec();
+    items.sort_by(|a, b| {
+        list_item_depth(view, *b)
+            .cmp(&list_item_depth(view, *a))
+            .then_with(|| item_order(&order, *b).cmp(&item_order(&order, *a)))
+    });
+}
+
+fn item_order(items: &[Dot], item: Dot) -> usize {
+    items
+        .iter()
+        .position(|id| *id == item)
+        .unwrap_or(usize::MAX)
+}
+
+fn retain_topmost_list_items(view: &DocView, items: &mut Vec<Dot>) {
+    let selected: HashSet<Dot> = items.iter().copied().collect();
+    items.retain(|item_id| {
+        let Some(item) = view.node(*item_id) else {
+            return false;
+        };
+        item.ancestors().skip(1).all(|ancestor| {
+            ancestor.node_type() != NodeType::ListItem || !selected.contains(&ancestor.id())
+        })
+    });
+}
+
+pub(crate) fn list_item_depth(view: &DocView, item_id: Dot) -> usize {
+    view.node(item_id)
+        .map(|item| {
+            item.ancestors()
+                .filter(|ancestor| ancestor.node_type() == NodeType::ListItem)
+                .count()
+        })
+        .unwrap_or_default()
+}
+
+pub(crate) fn list_item_parent_list_id(view: &DocView, item_id: Dot) -> Option<Dot> {
+    let item = view.node(item_id)?;
+    let parent = item.parent()?;
+    if is_list_type(parent.node_type()) {
+        Some(parent.id())
+    } else {
+        None
+    }
+}
+
+pub(crate) fn first_list_item_paragraph_id(view: &DocView, item_id: Dot) -> Option<Dot> {
+    view.node(item_id)
+        .and_then(|item| item.child_blocks().next())
+        .map(|paragraph| paragraph.id())
+}
+
+pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+
+    if selection.anchor == selection.head {
+        let list_item_id = {
+            let view = tr.view();
+            find_enclosing_list_item_id(&view, selection.head.node)
+        };
+        let Some(list_item_id) = list_item_id else {
+            return Ok(false);
+        };
+        return lift_list_item_inner(tr, list_item_id);
+    }
+
+    let mut items = {
+        let view = tr.view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        collect_list_items_in_selection(&resolved)
+    };
+    if items.is_empty() {
+        return Ok(false);
+    }
+    {
+        let view = tr.view();
+        retain_topmost_list_items(&view, &mut items);
+    }
+    if items.is_empty() {
+        return Ok(false);
+    }
+    // TODO(move-node-alias): Replace this list-relative selection capture/restore
+    // with StableSelection once move_node can resolve old dots to re-emitted dots.
+    let (captured_anchor, captured_head) = {
+        let view = tr.view();
+        (
+            capture_selection_endpoint(&view, &items, &selection.anchor),
+            capture_selection_endpoint(&view, &items, &selection.head),
+        )
+    };
+    let original_items = items.clone();
+    {
+        let view = tr.view();
+        sort_list_items_for_lift(&view, &mut items);
+    }
+
+    let mut new_targets: Vec<Option<LiftedListItemTarget>> = vec![None; original_items.len()];
+    for item_id in items.iter() {
+        let exists = {
+            let view = tr.view();
+            view.node(*item_id).is_some()
+        };
+        if !exists {
+            continue;
+        }
+        let Some(item_index) = original_items.iter().position(|id| id == item_id) else {
+            continue;
+        };
+        new_targets[item_index] = lift_list_item_to_parent(tr, *item_id)?;
+    }
+
+    let sel = {
+        let view = tr.view();
+        restore_lift_selection_endpoints(&view, &new_targets, &captured_anchor, &captured_head)
+    }
+    .ok_or_else(|| CommandError::Corrupted("cannot restore list selection".into()))?;
+    tr.set_selection(Some(sel))?;
+
+    Ok(true)
+}
+
+pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+
+    let items = {
+        let view = tr.view();
+        let resolved = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        collect_list_items_in_selection(&resolved)
+    };
+    if items.is_empty() {
+        return Ok(false);
+    }
+
+    // TODO(move-node-alias): Replace this list-relative selection capture/restore
+    // with StableSelection once move_node can resolve old dots to re-emitted dots.
+    let (captured_anchor, captured_head) = {
+        let view = tr.view();
+        (
+            capture_selection_endpoint(&view, &items, &selection.anchor),
+            capture_selection_endpoint(&view, &items, &selection.head),
+        )
+    };
+    let mut groups = {
+        let view = tr.view();
+        group_list_items_by_parent(&view, &items)
+    };
+    groups.sort_by(|a, b| {
+        b.depth
+            .cmp(&a.depth)
+            .then_with(|| a.first_index.cmp(&b.first_index))
+    });
+
+    let mut new_ids: Vec<Option<Dot>> = vec![None; items.len()];
+    let mut any_sunk = false;
+    for group in groups {
+        let first_has_prev = {
+            let view = tr.view();
+            view.node(group.items[0].1)
+                .and_then(|item| item.index())
+                .map(|index| index > 0)
+                .unwrap_or(false)
+        };
+
+        if !first_has_prev {
+            for (item_index, item_id) in group.items {
+                if tr.view().node(item_id).is_some() {
+                    new_ids[item_index] = Some(item_id);
+                }
+            }
+            continue;
+        }
+
+        for (item_index, item_id) in group.items {
+            let exists = {
+                let view = tr.view();
+                view.node(item_id).is_some()
+            };
+            if !exists {
+                continue;
+            }
+            let new_id = sink_list_item_inner(tr, item_id)?;
+            if new_id.is_some() {
+                any_sunk = true;
+            }
+            new_ids[item_index] = Some(new_id.unwrap_or(item_id));
+        }
+    }
+    if !any_sunk {
+        return Ok(!selection.is_collapsed());
+    }
+
+    let sel = {
+        let view = tr.view();
+        restore_sink_selection_endpoints(&view, &new_ids, &captured_anchor, &captured_head)
+    }
+    .ok_or_else(|| CommandError::Corrupted("cannot restore list selection".into()))?;
+    tr.set_selection(Some(sel))?;
+
+    Ok(true)
+}
+
+struct ListItemGroup {
+    depth: usize,
+    first_index: usize,
+    items: Vec<(usize, Dot)>,
+}
+
+// TODO(move-node-alias): Remove this custom endpoint/anchor restore machinery when
+// StableSelection can follow move_node through old-dot -> new-dot aliases.
+enum SelectionEndpoint {
+    ListItem(SelectionAnchor),
+    Unchanged(Position),
+}
+
+fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGroup> {
+    let mut groups: Vec<(Dot, ListItemGroup)> = Vec::new();
+    for (item_index, item_id) in items.iter().copied().enumerate() {
+        let Some(parent_id) = list_item_parent_list_id(view, item_id) else {
+            continue;
+        };
+        if let Some((_, group)) = groups.iter_mut().find(|(id, _)| *id == parent_id) {
+            group.items.push((item_index, item_id));
+            continue;
+        }
+        groups.push((
+            parent_id,
+            ListItemGroup {
+                depth: list_item_depth(view, item_id),
+                first_index: item_index,
+                items: vec![(item_index, item_id)],
+            },
+        ));
+    }
+    groups.into_iter().map(|(_, group)| group).collect()
+}
+
+fn restore_lift_selection_endpoints(
+    view: &DocView,
+    new_targets: &[Option<LiftedListItemTarget>],
+    anchor: &SelectionEndpoint,
+    head: &SelectionEndpoint,
+) -> Option<Selection> {
+    Some(Selection::new(
+        restore_lift_endpoint(view, new_targets, anchor)?,
+        restore_lift_endpoint(view, new_targets, head)?,
+    ))
+}
+
+fn restore_lift_endpoint(
+    view: &DocView,
+    new_targets: &[Option<LiftedListItemTarget>],
+    endpoint: &SelectionEndpoint,
+) -> Option<Position> {
+    match endpoint {
+        SelectionEndpoint::ListItem(anchor) => restore_lift_anchor(view, new_targets, anchor),
+        SelectionEndpoint::Unchanged(position) => restore_unchanged_position(view, *position),
+    }
+}
+
+fn restore_lift_anchor(
+    view: &DocView,
+    new_targets: &[Option<LiftedListItemTarget>],
+    cap: &SelectionAnchor,
+) -> Option<Position> {
+    restore_lift_anchor_in_target(view, new_targets.get(cap.item_index)?.as_ref()?, cap)
+}
+
+fn restore_lift_anchor_in_target(
+    view: &DocView,
+    target: &LiftedListItemTarget,
+    cap: &SelectionAnchor,
+) -> Option<Position> {
+    match target {
+        LiftedListItemTarget::ListItem(root) => {
+            restore_anchor_from_root(view, *root, &cap.path, cap.offset, cap.affinity)
+        }
+        LiftedListItemTarget::Children(roots) => {
+            let (&child_index, path) = cap.path.split_first()?;
+            let root = *roots.get(child_index)?;
+            restore_anchor_from_root(view, root, path, cap.offset, cap.affinity)
+        }
+    }
+}
+
+fn first_position_in_lift_target(
+    view: &DocView,
+    target: &LiftedListItemTarget,
+) -> Option<Position> {
+    match target {
+        LiftedListItemTarget::ListItem(root) => first_position_in_lift_root(view, *root),
+        LiftedListItemTarget::Children(roots) => roots
+            .iter()
+            .find_map(|root| first_position_in_lift_root(view, *root)),
+    }
+}
+
+fn first_position_in_lift_root(view: &DocView, root: Dot) -> Option<Position> {
+    let node = match view.node(root)?.node_type() {
+        NodeType::ListItem => first_list_item_paragraph_id(view, root)?,
+        _ => root,
+    };
+    Some(Position {
+        node,
+        offset: 0,
+        affinity: Affinity::Downstream,
+    })
+}
+
+fn restore_sink_selection_endpoints(
+    view: &DocView,
+    new_ids: &[Option<Dot>],
+    anchor: &SelectionEndpoint,
+    head: &SelectionEndpoint,
+) -> Option<Selection> {
+    Some(Selection::new(
+        restore_sink_endpoint(view, new_ids, anchor)?,
+        restore_sink_endpoint(view, new_ids, head)?,
+    ))
+}
+
+fn restore_sink_endpoint(
+    view: &DocView,
+    new_ids: &[Option<Dot>],
+    endpoint: &SelectionEndpoint,
+) -> Option<Position> {
+    match endpoint {
+        SelectionEndpoint::ListItem(anchor) => restore_sink_anchor(view, new_ids, anchor),
+        SelectionEndpoint::Unchanged(position) => restore_unchanged_position(view, *position),
+    }
+}
+
+fn restore_sink_anchor(
+    view: &DocView,
+    new_ids: &[Option<Dot>],
+    cap: &SelectionAnchor,
+) -> Option<Position> {
+    let item_id = *new_ids.get(cap.item_index)?.as_ref()?;
+    restore_anchor_from_root(view, item_id, &cap.path, cap.offset, cap.affinity)
+}
+
+fn restore_anchor_from_root(
+    view: &DocView,
+    root: Dot,
+    path: &[usize],
+    offset: usize,
+    affinity: Affinity,
+) -> Option<Position> {
+    let mut node = root;
+    for &idx in path {
+        match view.node(node)?.child_at(idx)? {
+            ChildView::Block(block) => node = block.id(),
+            ChildView::Leaf(_) => return None,
+        }
+    }
+    Some(Position {
+        node,
+        offset,
+        affinity,
+    })
+}
+
+fn restore_unchanged_position(view: &DocView, position: Position) -> Option<Position> {
+    position.resolve(view).map(|_| position)
 }
 
 /// Sinks `list_item_id` into the preceding sibling's sublist. Returns the moved
@@ -425,25 +767,21 @@ pub(crate) fn sink_list_item_inner(
     Ok(new_item_id)
 }
 
-pub(crate) struct SelectionAnchor {
+struct SelectionAnchor {
     item_index: usize,
     path: Vec<usize>,
     offset: usize,
     affinity: Affinity,
 }
 
-/// Captures the anchor/head positions relative to the top-level `items` being
-/// restructured, so they can be re-resolved after `move_node` re-emits the
-/// items with fresh dots.
-pub(crate) fn capture_selection_anchors(
+fn capture_selection_endpoint(
     view: &DocView,
     items: &[Dot],
-    selection: &Selection,
-) -> Option<(SelectionAnchor, SelectionAnchor)> {
-    Some((
-        capture_anchor(view, items, &selection.anchor)?,
-        capture_anchor(view, items, &selection.head)?,
-    ))
+    position: &Position,
+) -> SelectionEndpoint {
+    capture_anchor(view, items, position)
+        .map(SelectionEndpoint::ListItem)
+        .unwrap_or(SelectionEndpoint::Unchanged(*position))
 }
 
 fn capture_anchor(view: &DocView, items: &[Dot], pos: &Position) -> Option<SelectionAnchor> {
@@ -454,37 +792,5 @@ fn capture_anchor(view: &DocView, items: &[Dot], pos: &Position) -> Option<Selec
             offset: pos.offset,
             affinity: pos.affinity,
         })
-    })
-}
-
-pub(crate) fn restore_selection_anchors(
-    view: &DocView,
-    new_items: &[Option<Dot>],
-    anchor: &SelectionAnchor,
-    head: &SelectionAnchor,
-) -> Option<Selection> {
-    Some(Selection::new(
-        restore_anchor(view, new_items, anchor)?,
-        restore_anchor(view, new_items, head)?,
-    ))
-}
-
-fn restore_anchor(
-    view: &DocView,
-    new_items: &[Option<Dot>],
-    cap: &SelectionAnchor,
-) -> Option<Position> {
-    let item = new_items.get(cap.item_index)?.as_ref()?;
-    let mut node = *item;
-    for &idx in &cap.path {
-        match view.node(node)?.child_at(idx)? {
-            editor_model::ChildView::Block(b) => node = b.id(),
-            editor_model::ChildView::Leaf(_) => return None,
-        }
-    }
-    Some(Position {
-        node,
-        offset: cap.offset,
-        affinity: cap.affinity,
     })
 }

@@ -101,6 +101,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
         (Key::Tab, m) if m.shift => editor.transact(|tr| {
             commands::first!(
                 tr,
+                commands::lift_list_items_in_range(),
                 commands::lift_list_item_at_start(),
                 commands::delete_preceding_tab(),
             )?;
@@ -109,6 +110,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
         (Key::Tab, _) => editor.transact(|tr| {
             commands::first!(
                 tr,
+                commands::sink_list_items_in_range(),
                 commands::sink_list_item_at_start(),
                 commands::insert_tab(),
             )?;
@@ -1190,6 +1192,107 @@ mod tests {
                 }
             }
             selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn tab_indents_non_collapsed_list_range() {
+        let (state, _, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph { text("B") } }
+                        list_item { p2: paragraph { text("C") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Tab));
+        let (expected, _, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item { p1: paragraph { text("B") } }
+                                list_item { p2: paragraph { text("C") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn shift_tab_unindents_non_collapsed_mixed_range_list_items_only() {
+        let (state, _, _) = state! {
+            doc {
+                root {
+                    p0: paragraph { text("plain") }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p0, 0) -> (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key_shift(Key::Tab));
+        let (expected, _, _) = state! {
+            doc {
+                root {
+                    p0: paragraph { text("plain") }
+                    p1: paragraph { text("A") }
+                    paragraph {}
+                }
+            }
+            selection: (p0, 0) -> (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn shift_tab_unindents_non_collapsed_list_range_preserves_selection() {
+        let (state, _, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item { p1: paragraph { text("B") } }
+                                list_item { p2: paragraph { text("C") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key_shift(Key::Tab));
+        let (expected, _, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph { text("B") } }
+                        list_item { p2: paragraph { text("C") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }

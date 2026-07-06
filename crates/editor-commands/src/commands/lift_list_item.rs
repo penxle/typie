@@ -1,54 +1,10 @@
 use editor_transaction::Transaction;
 
-use crate::helpers::{
-    collect_top_level_list_items_in_selection, find_enclosing_list_item_id, lift_list_item_inner,
-};
-use crate::{CommandError, CommandResult};
+use crate::CommandResult;
+use crate::helpers::lift_selected_list_items;
 
 pub fn lift_list_item(tr: &mut Transaction) -> CommandResult {
-    let Some(selection) = tr.selection() else {
-        return Ok(false);
-    };
-
-    if selection.anchor == selection.head {
-        let list_item_id = {
-            let view = tr.view();
-            find_enclosing_list_item_id(&view, selection.head.node)
-        };
-        let Some(list_item_id) = list_item_id else {
-            return Ok(false);
-        };
-        return lift_list_item_inner(tr, list_item_id);
-    }
-
-    let items = {
-        let view = tr.view();
-        let resolved = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let from = resolved.from().position();
-        let to = resolved.to().position();
-        collect_top_level_list_items_in_selection(&view, from, to)
-    };
-    if items.is_empty() {
-        return Ok(false);
-    }
-
-    let mut any_lifted = false;
-    for item_id in items.iter().rev() {
-        let exists = {
-            let view = tr.view();
-            view.node(*item_id).is_some()
-        };
-        if !exists {
-            continue;
-        }
-        if lift_list_item_inner(tr, *item_id)? {
-            any_lifted = true;
-        }
-    }
-
-    Ok(any_lifted)
+    lift_selected_list_items(tr)
 }
 
 #[cfg(test)]
@@ -346,10 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn lift_range_across_separate_lists_returns_false() {
-        // Selection that straddles two top-level lists has no common list ancestor;
-        // collect_top_level_list_items_in_selection returns empty, so the range
-        // branch is a no-op. The user can lift each list separately.
+    fn lift_range_across_separate_lists_lifts_each_list() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -360,7 +313,18 @@ mod tests {
             }
             selection: (p1, 0) -> (p2, 1)
         };
-        transact_fail!(initial, |tr| lift_list_item(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("A") }
+                    p2: paragraph { text("B") }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -390,9 +354,103 @@ mod tests {
                     paragraph {}
                 }
             }
-            // Range lift processes items in reverse, so the final cursor lands on
-            // the last-lifted (earliest) item's paragraph rather than spanning the range.
-            selection: (p1, 0)
+            selection: (p1, 0) -> (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn lift_range_with_plain_paragraph_lifts_only_list_items() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p0: paragraph { text("plain") }
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p0, 0) -> (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p0: paragraph { text("plain") }
+                    p1: paragraph { text("A") }
+                    paragraph {}
+                }
+            }
+            selection: (p0, 0) -> (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn lift_range_parent_and_nested_child_lifts_each_one_level() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p0: paragraph { text("plain") }
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("A") }
+                            bullet_list {
+                                list_item { p2: paragraph { text("B") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p0, 0) -> (p2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p0: paragraph { text("plain") }
+                    p1: paragraph { text("A") }
+                    bullet_list {
+                        list_item { p2: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p0, 0) -> (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn lift_range_top_level_item_with_nested_endpoint_preserves_range() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("A") }
+                            bullet_list {
+                                list_item { p2: paragraph { text("B") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("A") }
+                    bullet_list {
+                        list_item { p2: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
