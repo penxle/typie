@@ -978,6 +978,7 @@ impl Editor {
         let undoable = !recorded.is_empty() || transient_fields_changed(&self.state, &state);
 
         match meta.history {
+            HistoryMeta::Skip if undoable => self.undo_history.invalidate_last_tag(),
             HistoryMeta::Skip => self.undo_history.clear_last_tag(),
             HistoryMeta::Record if undoable => self.undo_history.record(
                 UndoEntry {
@@ -1407,7 +1408,7 @@ impl Editor {
                 let restored = f.resolve(&ctx)?;
                 Some(restored.normalize(&view).unwrap_or(restored))
             });
-            self.undo_history.clear_last_tag();
+            self.undo_history.invalidate_last_tag();
         }
         self.state = next;
         self.pending_ops.extend(applied_ops);

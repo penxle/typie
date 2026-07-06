@@ -113,6 +113,23 @@ impl UndoHistory {
         }
     }
 
+    pub fn invalidate_last_tag(&mut self) {
+        let mut changed = false;
+        if let Some(entry) = self.undos.last_mut()
+            && entry.tag.is_some()
+        {
+            entry.tag = None;
+            changed = true;
+        }
+        if self.last_tag.is_some() {
+            self.last_tag = None;
+            changed = true;
+        }
+        if changed {
+            self.bump_last_tag_revision();
+        }
+    }
+
     pub fn sync_last_tag_from_top(&mut self) {
         let last_tag = self.undos.last().and_then(|e| e.tag.clone());
         let should_bump = self.last_tag != last_tag || last_tag.is_some();
@@ -155,6 +172,7 @@ impl UndoHistory {
                 .ops
                 .extend(entry.ops);
         } else {
+            self.invalidate_last_tag();
             self.undos.push(entry);
         }
         self.last_push = Some(now);
@@ -498,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn last_tag_tracks_record_and_syncs_on_undo_redo() {
+    fn last_tag_tracks_record_invalidates_previous_tag_and_syncs_on_undo_redo() {
         let mut state = ProjectedState::empty();
         let mut history = UndoHistory::new(Duration::from_secs(0));
 
@@ -539,10 +557,9 @@ mod tests {
         );
 
         history.undo(&mut state, TransientState::default());
-        assert_eq!(
-            history.last_tag(),
-            Some(&HistoryTag::AutoReplacement),
-            "undo syncs last_tag to the new (tagged) top"
+        assert!(
+            history.last_tag().is_none(),
+            "new undoable record invalidates the previous entry's tag"
         );
 
         history.redo(&mut state, TransientState::default());

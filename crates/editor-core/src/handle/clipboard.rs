@@ -1359,6 +1359,65 @@ mod tests {
     }
 
     #[test]
+    fn repaste_as_text_does_not_revive_after_selection_change_then_undo() {
+        let (s_source, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let payload = Slice::extract(&s_source).unwrap().to_payload();
+
+        let (s_target, p2) = state! {
+            doc { root { p2: paragraph { text("Hi") } } }
+            selection: (p2, 1)
+        };
+        let mut editor = Editor::new_test(s_target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html.clone()),
+                text: payload.text.clone(),
+            },
+        });
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: editor_state::Selection::collapsed(editor_state::Position::new(p2, 0)),
+            },
+        });
+        assert!(
+            editor.last_history_tag().is_none(),
+            "selection movement invalidates the first paste"
+        );
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+        assert!(
+            matches!(
+                editor.last_history_tag(),
+                Some(HistoryTag::PasteHtml { .. })
+            ),
+            "second paste exposes a fresh repaste affordance"
+        );
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert!(
+            editor.last_history_tag().is_none(),
+            "undoing the second paste must not revive the invalidated first paste"
+        );
+
+        let before = editor.state().clone();
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+        editor_state::assert_state_eq!(editor.state(), &before);
+    }
+
+    #[test]
     fn repaste_as_text_expires_after_undo() {
         let (s_source, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
