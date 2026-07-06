@@ -1,7 +1,7 @@
 use editor_common::Rect;
 use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{AtomLeaf, DocView};
+use editor_model::{DocView, Node};
 use editor_state::{Affinity, Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
@@ -94,18 +94,18 @@ pub(crate) fn external_elements(
 
 fn external_element_data(view: &DocView, id: &Dot) -> Option<ExternalElementData> {
     let dot = id;
-    match view.leaf(*dot)?.as_atom()? {
-        AtomLeaf::Image { node } => Some(ExternalElementData::Image {
+    match view.leaf(*dot)?.node()? {
+        Node::Image(node) => Some(ExternalElementData::Image {
             id: node.id.get().clone(),
             proportion: *node.proportion.get(),
         }),
-        AtomLeaf::File { node } => Some(ExternalElementData::File {
+        Node::File(node) => Some(ExternalElementData::File {
             id: node.id.get().clone(),
         }),
-        AtomLeaf::Embed { node } => Some(ExternalElementData::Embed {
+        Node::Embed(node) => Some(ExternalElementData::Embed {
             id: node.id.get().clone(),
         }),
-        AtomLeaf::Archived { node } => Some(ExternalElementData::Archived {
+        Node::Archived(node) => Some(ExternalElementData::Archived {
             id: node.id.get().clone(),
         }),
         _ => None,
@@ -118,8 +118,8 @@ mod tests {
     use editor_common::EdgeInsets;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AtomLeaf, DocLogs, DocView, ModifierAttrLog, Node, NodeAttrLog, NodeMarkerLog, NodeType,
-        SeqItem, SpanLog, project_document,
+        AtomLeaf, DocLogs, DocView, ImageNodeAttr, ModifierAttrLog, Node, NodeAttr, NodeAttrLog,
+        NodeAttrOp, NodeMarkerLog, NodeType, SeqItem, SpanLog, project_document,
     };
     use editor_resource::Resource;
     use editor_state::{Position, Selection};
@@ -218,9 +218,48 @@ mod tests {
                 id: None,
                 proportion: 100
             },
-            "Trap-1: leaf/as_atom read must yield Image data with default id and proportion"
+            "image data must use the current projected node"
         );
         assert!(!el.is_selected);
+    }
+
+    #[test]
+    fn image_external_element_data_reflects_node_attrs() {
+        let (mut doc, _root, img_dot, _para) = image_doc();
+        doc.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::new(20, 0),
+                NodeAttrOp {
+                    target: img_dot,
+                    attr: NodeAttr::Image {
+                        attr: ImageNodeAttr::Id(Some("asset-1".to_string())),
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(20, 1),
+                NodeAttrOp {
+                    target: img_dot,
+                    attr: NodeAttr::Image {
+                        attr: ImageNodeAttr::Proportion(150),
+                    },
+                },
+            )
+            .unwrap();
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let index = build_index(&doc, 400.0);
+
+        let elements = page_external_elements(&index, &view, 0, None);
+
+        assert_eq!(
+            elements[0].data,
+            ExternalElementData::Image {
+                id: Some("asset-1".to_string()),
+                proportion: 150
+            }
+        );
     }
 
     #[test]

@@ -314,13 +314,18 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
             state.node_markers().value_of(*target),
         )),
         EditOp::NodeAttr(NodeAttrOp { target, attr }) => {
-            let node_type = state
-                .projected()
-                .node_attrs
-                .get(target)
-                .map(|n| n.as_type())
-                .unwrap_or_else(|| node_type_of_attr(attr));
-            let prior_node = state.node_attrs().attrs_of(*target, node_type);
+            let prior_node = state
+                .block_node(*target)
+                .or_else(|| state.atom_leaf_node(*target))
+                .unwrap_or_else(|| {
+                    let node_type = state
+                        .projected()
+                        .node_attrs
+                        .get(target)
+                        .map(|n| n.as_type())
+                        .unwrap_or_else(|| node_type_of_attr(attr));
+                    state.node_attrs().attrs_of(*target, node_type.into_node())
+                });
             let prior_attrs = prior_node.to_plain().to_attrs();
             let target_disc = std::mem::discriminant(attr);
             let prior_attr = prior_attrs
@@ -1032,7 +1037,7 @@ mod tests {
 
         let get_variant = |s: &ProjectedState| {
             s.node_attrs()
-                .attrs_of(callout, NodeType::Callout)
+                .attrs_of(callout, NodeType::Callout.into_node())
                 .to_plain()
                 .to_attrs()
                 .into_iter()

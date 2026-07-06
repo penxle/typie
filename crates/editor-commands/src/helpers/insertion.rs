@@ -25,8 +25,8 @@ fn capture_child_subtree(ps: &ProjectedState, child: &ChildView) -> Subtree {
                 PlainNode::Text(PlainTextNode {
                     text: ch.to_string(),
                 })
-            } else if let Some(atom) = l.as_atom() {
-                atom.clone().into_node().to_plain()
+            } else if let Some(node) = l.node() {
+                node.to_plain()
             } else {
                 PlainNode::Text(PlainTextNode {
                     text: String::new(),

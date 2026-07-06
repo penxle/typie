@@ -105,7 +105,7 @@ fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Bloc
             match child {
                 ChildView::Block(b) => collect_contained(&b, rs, out),
                 ChildView::Leaf(l) => {
-                    let Some(atom) = l.as_atom() else { continue };
+                    let Some(leaf_node) = l.node() else { continue };
                     if Schema::node_spec(l.node_type()).inline {
                         continue;
                     }
@@ -128,7 +128,7 @@ fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Bloc
                     if rs.from() <= &start && &end <= rs.to() {
                         out.push(Block {
                             id: l.dot(),
-                            node: atom.clone().into_node().to_plain(),
+                            node: leaf_node.to_plain(),
                         });
                     }
                 }

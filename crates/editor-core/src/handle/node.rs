@@ -61,8 +61,14 @@ pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use editor_macros::state;
-    use editor_state::assert_state_eq;
+    use editor_model::{
+        ChildView, HorizontalRuleVariant, Node, PlainDoc, PlainHorizontalRuleNode, PlainNode,
+        PlainNodeEntry,
+    };
+    use editor_state::{Affinity, Position, Selection, State, assert_state_eq};
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
@@ -119,5 +125,93 @@ mod tests {
             op: HistoryOp::Redo,
         });
         assert_state_eq!(editor.state(), &deleted);
+    }
+
+    #[test]
+    fn set_attrs_updates_block_atom_leaf_and_records_history() {
+        fn entry(node: PlainNode, children: Vec<PlainNodeEntry>) -> PlainNodeEntry {
+            PlainNodeEntry {
+                node,
+                modifiers: BTreeMap::new(),
+                marker: None,
+                children,
+            }
+        }
+
+        let doc = PlainDoc {
+            root: entry(
+                PlainNode::Root(Default::default()),
+                vec![
+                    entry(
+                        PlainNode::HorizontalRule(PlainHorizontalRuleNode {
+                            variant: HorizontalRuleVariant::Diamond,
+                        }),
+                        vec![],
+                    ),
+                    entry(PlainNode::Paragraph(Default::default()), vec![]),
+                ],
+            ),
+        };
+        let mut initial = State::from_plain(&doc).unwrap();
+        let root = initial.view().root().unwrap().id();
+        let hr = match initial.view().root().unwrap().child_at(0).unwrap() {
+            ChildView::Leaf(leaf) => leaf.dot(),
+            ChildView::Block(_) => panic!("expected horizontal rule leaf"),
+        };
+        initial.selection = Some(Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        ));
+        let mut editor = Editor::new_test(initial.clone());
+
+        editor.apply(Message::Node {
+            op: NodeOp::SetAttrs {
+                id: hr,
+                attrs: PlainNode::HorizontalRule(PlainHorizontalRuleNode {
+                    variant: HorizontalRuleVariant::Zigzag,
+                }),
+            },
+        });
+
+        let variant = match editor.state().view().leaf(hr).unwrap().node().unwrap() {
+            Node::HorizontalRule(horizontal_rule) => *horizontal_rule.variant.get(),
+            other => panic!("expected horizontal rule, got {other:?}"),
+        };
+        assert_eq!(variant, HorizontalRuleVariant::Zigzag);
+        let block_state = crate::block_state::resolve_block_state(editor.state()).unwrap();
+        let block_state_variant = block_state
+            .nodes
+            .iter()
+            .find_map(|block| match &block.node {
+                PlainNode::HorizontalRule(horizontal_rule) if block.id == hr => {
+                    Some(horizontal_rule.variant)
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(block_state_variant, HorizontalRuleVariant::Zigzag);
+        assert!(editor.undo_history.can_undo());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        let variant = match editor.state().view().leaf(hr).unwrap().node().unwrap() {
+            Node::HorizontalRule(horizontal_rule) => *horizontal_rule.variant.get(),
+            other => panic!("expected horizontal rule, got {other:?}"),
+        };
+        assert_eq!(variant, HorizontalRuleVariant::Zigzag);
     }
 }

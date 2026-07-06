@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    AtomLeaf, ChildView, DocView, Marker, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc,
-    PlainNode, PlainNodeEntry, PlainTextNode, ProjectedDoc,
+    ChildView, DocView, Marker, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc, PlainNode,
+    PlainNodeEntry, PlainTextNode, ProjectedDoc,
 };
 
 pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {
@@ -31,9 +31,9 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
                 if let Some(ch) = l.as_char() {
                     let modifiers = own.map(span_modifiers).unwrap_or_default();
                     run.push(ch, modifiers, &mut children);
-                } else if let Some(atom) = l.as_atom() {
+                } else if let Some(node) = l.node() {
                     run.flush(&mut children);
-                    children.push(emit_atom(atom.clone(), own));
+                    children.push(emit_atom(node.to_plain(), own));
                 }
             }
         }
@@ -51,9 +51,9 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
     }
 }
 
-fn emit_atom(atom: AtomLeaf, own: Option<&BTreeMap<ModifierType, OwnModifier>>) -> PlainNodeEntry {
+fn emit_atom(node: PlainNode, own: Option<&BTreeMap<ModifierType, OwnModifier>>) -> PlainNodeEntry {
     PlainNodeEntry {
-        node: atom.into_node().to_plain(),
+        node,
         modifiers: own.map(span_modifiers).unwrap_or_default(),
         marker: None,
         children: Vec::new(),

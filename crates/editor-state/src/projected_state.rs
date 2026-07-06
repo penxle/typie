@@ -1,11 +1,12 @@
 use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
-    BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp, ModifierAttrLog,
-    ModifierType, Node, NodeAttrLog, NodeMarkerLog, NodeType, ProjectedDoc, ProjectionError,
-    ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog, SpanOp, SplitError,
-    anchor_dot, block_effective_one, normalize_content_shallow, normalize_subtree, project_blocks,
-    project_from, project_from_tree, seq_parents, split_block_insert, split_logs,
+    AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp,
+    ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeMarkerLog, NodeType, ProjectedDoc,
+    ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
+    SpanOp, SplitError, anchor_dot, block_effective_one, normalize_content_shallow,
+    normalize_subtree, project_blocks, project_from, project_from_tree, seq_parents,
+    split_block_insert, split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -833,11 +834,18 @@ impl ProjectedState {
         }
     }
 
-    fn node_type_of(&self, dot: Dot) -> Option<NodeType> {
+    fn node_base_of(&self, dot: Dot) -> Option<Node> {
         if self.indexes.paths.block_of(dot).is_some() {
-            return self.leaf_type_of(dot);
+            return self
+                .atom_leaf(dot)
+                .cloned()
+                .map(AtomLeaf::into_node)
+                .or_else(|| self.leaf_type_of(dot).map(NodeType::into_node));
         }
-        self.indexes.paths.node_type_of(dot)
+        self.indexes
+            .paths
+            .node_type_of(dot)
+            .map(NodeType::into_node)
     }
 
     fn recompute_block_effective(&mut self, block: Dot) {
@@ -1005,10 +1013,10 @@ impl ProjectedState {
                 if !self.indexes.paths.contains(target) {
                     return true;
                 }
-                let Some(nt) = self.node_type_of(target) else {
+                let Some(base) = self.node_base_of(target) else {
                     return true;
                 };
-                match self.logs.node_attrs.project_target(target, nt) {
+                match self.logs.node_attrs.project_target(target, base) {
                     Some(node) => {
                         self.projected.node_attrs.insert(target, node);
                     }
@@ -2054,6 +2062,27 @@ impl ProjectedState {
         )
     }
 
+    pub fn atom_leaf_node(&self, leaf: Dot) -> Option<Node> {
+        let base = self.atom_leaf(leaf)?.clone().into_node();
+        Some(self.logs.node_attrs.attrs_of(leaf, base))
+    }
+
+    fn atom_leaf(&self, leaf: Dot) -> Option<&AtomLeaf> {
+        let block = self.indexes.paths.block_of(leaf)?;
+        self.projected
+            .tree
+            .get(block)?
+            .children
+            .iter()
+            .find_map(|child| match child {
+                Child::Leaf {
+                    id,
+                    item: SeqItem::Atom(atom),
+                } if *id == leaf => Some(atom),
+                _ => None,
+            })
+    }
+
     /// A clone of `block`'s direct children (leaves carry their item inline). O(children).
     pub fn block_children(&self, block: Dot) -> Option<Vec<Child>> {
         self.projected.tree.get(block).map(|n| n.children.to_vec())
@@ -2222,8 +2251,8 @@ mod tests {
     use crate::LayoutDirty;
     use editor_crdt::{Dot, LwwRegOp};
     use editor_model::{
-        Anchor, Bias, CalloutNodeAttr, CalloutVariant, Marker, Modifier, ModifierAttrOp,
-        ModifierType, Node, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp,
+        Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Marker, Modifier,
+        ModifierAttrOp, ModifierType, Node, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp,
     };
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
@@ -2609,6 +2638,44 @@ mod tests {
             state.view().node(callout).unwrap().node(),
             Node::Callout(_)
         ));
+    }
+
+    #[test]
+    fn apply_node_attr_to_atom_leaf_preserves_payload_baseline() {
+        let mut state = ProjectedState::empty();
+        let mut image_node = match NodeType::Image.into_node() {
+            Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        image_node.id = editor_crdt::LwwReg::with_value(Some("asset-1".to_string()));
+        image_node.proportion = editor_crdt::LwwReg::with_value(75);
+        let image = state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: image_node },
+                    parents: vec![Dot::ROOT],
+                },
+            }))
+            .unwrap()
+            .id;
+
+        state
+            .apply(EditOp::NodeAttr(NodeAttrOp {
+                target: image,
+                attr: NodeAttr::Image {
+                    attr: ImageNodeAttr::Proportion(150),
+                },
+            }))
+            .unwrap();
+
+        match state.atom_leaf_node(image) {
+            Some(Node::Image(node)) => {
+                assert_eq!(node.id.get(), &Some("asset-1".to_string()));
+                assert_eq!(*node.proportion.get(), 150);
+            }
+            other => panic!("expected projected image node, got {other:?}"),
+        }
     }
 
     fn arb_chars() -> impl proptest::strategy::Strategy<Value = Vec<char>> {

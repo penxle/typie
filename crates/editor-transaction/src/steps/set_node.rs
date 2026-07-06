@@ -19,7 +19,9 @@ pub(crate) fn apply_to(
     _old_node: &PlainNode,
     new_node: &PlainNode,
 ) -> Result<(), StepError> {
-    if support::block_node_type(&batched.projected, block).is_none() {
+    if support::block_node_type(&batched.projected, block).is_none()
+        && batched.projected.atom_leaf_node(block).is_none()
+    {
         return Err(StepError::NodeNotFound(block));
     }
     // Real op dots and the implicit root (Dot::ROOT, a permanent anchor) are valid

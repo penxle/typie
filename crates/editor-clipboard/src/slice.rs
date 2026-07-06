@@ -2,9 +2,8 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    AtomLeaf, ChildView, DocView, Fragment, HardBreakNode, LeafView, Modifier, ModifierType, Node,
-    NodeView, OwnModifier, PageBreakNode, PlainHorizontalRuleNode, PlainNode, PlainRootNode,
-    PlainTextNode, TabNode,
+    ChildView, DocView, Fragment, LeafView, Modifier, ModifierType, NodeView, OwnModifier,
+    PlainNode, PlainRootNode, PlainTextNode,
 };
 use editor_resource::Resource;
 use editor_state::State;
@@ -141,21 +140,6 @@ fn leaf_modifiers(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
     own.values().map(|o| o.value.clone()).collect()
 }
 
-fn atom_to_plain(leaf: &AtomLeaf) -> PlainNode {
-    match leaf {
-        AtomLeaf::HardBreak => Node::HardBreak(HardBreakNode {}).to_plain(),
-        AtomLeaf::Tab => Node::Tab(TabNode {}).to_plain(),
-        AtomLeaf::PageBreak => Node::PageBreak(PageBreakNode {}).to_plain(),
-        AtomLeaf::HorizontalRule { variant } => {
-            PlainNode::HorizontalRule(PlainHorizontalRuleNode { variant: *variant })
-        }
-        AtomLeaf::Image { node } => Node::Image(node.clone()).to_plain(),
-        AtomLeaf::File { node } => Node::File(node.clone()).to_plain(),
-        AtomLeaf::Embed { node } => Node::Embed(node.clone()).to_plain(),
-        AtomLeaf::Archived { node } => Node::Archived(node.clone()).to_plain(),
-    }
-}
-
 struct RunAccum {
     modifiers: Vec<Modifier>,
     text: String,
@@ -189,10 +173,10 @@ fn push_leaf(
                 });
             }
         }
-    } else if let Some(atom) = leaf.as_atom() {
+    } else if let Some(node) = leaf.node() {
         flush_run(run, out);
         out.push(Fragment {
-            node: atom_to_plain(atom),
+            node: node.to_plain(),
             modifiers: own.map(leaf_modifiers).unwrap_or_default(),
             children: vec![],
         });

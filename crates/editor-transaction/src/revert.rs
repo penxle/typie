@@ -159,8 +159,8 @@ fn inline_leaf_units(node: &NodeView<'_>) -> Vec<InlineLeafUnit> {
                 slot,
                 token: InlineLeafToken::Char(ch),
             });
-        } else if let Some(atom) = leaf.as_atom() {
-            let atom_node = atom.clone().into_node().to_plain();
+        } else if let Some(leaf_node) = leaf.node() {
+            let atom_node = leaf_node.to_plain();
             let modifiers = node.leaf_own_modifiers_at(slot);
             units.push(InlineLeafUnit {
                 slot,

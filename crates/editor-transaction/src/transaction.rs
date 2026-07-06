@@ -210,6 +210,7 @@ impl Transaction {
             .state
             .projected
             .block_node(block)
+            .or_else(|| self.state.projected.atom_leaf_node(block))
             .ok_or(StepError::NodeNotFound(block))?
             .to_plain();
         self.apply_step(Step::SetNode {

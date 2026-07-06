@@ -1,7 +1,7 @@
 use editor_crdt::{CrdtError, Dot};
 use serde::{Deserialize, Serialize};
 
-use crate::{ModelError, Node, NodeAttr, NodeType};
+use crate::{ModelError, Node, NodeAttr};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
 pub struct NodeAttrOp {
@@ -47,19 +47,12 @@ impl NodeAttrLog {
         self.ops.iter()
     }
 
-    pub fn project(
-        &self,
-        node_type_of: impl Fn(Dot) -> Option<NodeType>,
-    ) -> imbl::HashMap<Dot, Node> {
+    pub fn project(&self, node_of: impl Fn(Dot) -> Option<Node>) -> imbl::HashMap<Dot, Node> {
         let mut out: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
         for (op_id, op) in &self.ops {
-            let Some(node_type) = node_type_of(op.target) else {
+            let Some(mut node) = out.get(&op.target).cloned().or_else(|| node_of(op.target)) else {
                 continue;
             };
-            let mut node = out
-                .get(&op.target)
-                .cloned()
-                .unwrap_or_else(|| node_type.into_node());
             if fold_op(&mut node, *op_id, &op.attr) {
                 out.insert(op.target, node);
             }
@@ -67,8 +60,7 @@ impl NodeAttrLog {
         out
     }
 
-    pub fn attrs_of(&self, target: Dot, node_type: NodeType) -> Node {
-        let mut node = node_type.into_node();
+    pub fn attrs_of(&self, target: Dot, mut node: Node) -> Node {
         for (op_id, op) in &self.ops {
             if op.target != target {
                 continue;
@@ -80,8 +72,7 @@ impl NodeAttrLog {
 
     /// The single-target projection, matching `project`: `Some(node)` iff at
     /// least one of `target`'s attr ops folded successfully, else `None`.
-    pub fn project_target(&self, target: Dot, node_type: NodeType) -> Option<Node> {
-        let mut node = node_type.into_node();
+    pub fn project_target(&self, target: Dot, mut node: Node) -> Option<Node> {
         let mut any = false;
         for (op_id, op) in &self.ops {
             if op.target != target {
@@ -109,7 +100,7 @@ fn fold_op(node: &mut Node, op_id: Dot, attr: &NodeAttr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CalloutNodeAttr, CalloutVariant};
+    use crate::{CalloutNodeAttr, CalloutVariant, NodeType};
 
     fn op(target: u64, attr: NodeAttr) -> NodeAttrOp {
         NodeAttrOp {
@@ -199,7 +190,7 @@ mod tests {
         let log = NodeAttrLog::new()
             .apply(Dot::new(2, 0), op(1, callout(CalloutVariant::Warning)))
             .unwrap();
-        let node = log.attrs_of(target, NodeType::Callout);
+        let node = log.attrs_of(target, NodeType::Callout.into_node());
         assert_eq!(callout_variant(&node), CalloutVariant::Warning);
     }
 
@@ -212,7 +203,7 @@ mod tests {
             .apply(Dot::new(3, 0), op(1, callout(CalloutVariant::Danger)))
             .unwrap();
         assert_eq!(
-            callout_variant(&log.attrs_of(target, NodeType::Callout)),
+            callout_variant(&log.attrs_of(target, NodeType::Callout.into_node())),
             CalloutVariant::Danger
         );
     }
@@ -221,7 +212,7 @@ mod tests {
     fn attrs_of_no_ops_returns_default() {
         let log = NodeAttrLog::new();
         assert_eq!(
-            callout_variant(&log.attrs_of(Dot::new(1, 9), NodeType::Callout)),
+            callout_variant(&log.attrs_of(Dot::new(1, 9), NodeType::Callout.into_node())),
             CalloutVariant::Info
         );
     }
@@ -234,7 +225,7 @@ mod tests {
             .apply(Dot::new(2, 1), op(2, callout(CalloutVariant::Danger)))
             .unwrap();
         assert_eq!(
-            callout_variant(&log.attrs_of(Dot::new(1, 1), NodeType::Callout)),
+            callout_variant(&log.attrs_of(Dot::new(1, 1), NodeType::Callout.into_node())),
             CalloutVariant::Warning
         );
     }
@@ -255,7 +246,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            callout_variant(&log.attrs_of(target, NodeType::Callout)),
+            callout_variant(&log.attrs_of(target, NodeType::Callout.into_node())),
             CalloutVariant::Info
         );
     }
@@ -275,9 +266,51 @@ mod tests {
                 },
             )
             .unwrap();
-        match log.attrs_of(target, NodeType::Image) {
+        match log.attrs_of(target, NodeType::Image.into_node()) {
             Node::Image(img) => assert_eq!(*img.proportion.get(), 150),
             other => panic!("expected Image, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn attrs_of_preserves_atom_payload_baseline() {
+        use crate::ImageNodeAttr;
+        let target = Dot::new(1, 5);
+        let mut base = NodeType::Image.into_node();
+        if let Node::Image(image) = &mut base {
+            image.id = editor_crdt::LwwReg::with_value(Some("asset-1".to_string()));
+            image.proportion = editor_crdt::LwwReg::with_value(75);
+        } else {
+            unreachable!();
+        }
+        let log = NodeAttrLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeAttrOp {
+                    target,
+                    attr: NodeAttr::Image {
+                        attr: ImageNodeAttr::Proportion(150),
+                    },
+                },
+            )
+            .unwrap();
+
+        match log.attrs_of(target, base.clone()) {
+            Node::Image(image) => {
+                assert_eq!(image.id.get(), &Some("asset-1".to_string()));
+                assert_eq!(*image.proportion.get(), 150);
+            }
+            other => panic!("expected Image, got {other:?}"),
+        }
+        match log
+            .project(|d| (d == target).then(|| base.clone()))
+            .get(&target)
+        {
+            Some(Node::Image(image)) => {
+                assert_eq!(image.id.get(), &Some("asset-1".to_string()));
+                assert_eq!(*image.proportion.get(), 150);
+            }
+            other => panic!("expected projected Image, got {other:?}"),
         }
     }
 
@@ -288,7 +321,7 @@ mod tests {
             .unwrap()
             .apply(Dot::new(2, 1), op(2, callout(CalloutVariant::Danger)))
             .unwrap();
-        let projected = log.project(|_| Some(NodeType::Callout));
+        let projected = log.project(|_| Some(NodeType::Callout.into_node()));
         assert_eq!(projected.len(), 2);
         assert_eq!(
             callout_variant(projected.get(&Dot::new(1, 1)).unwrap()),
@@ -305,7 +338,7 @@ mod tests {
         let log = NodeAttrLog::new()
             .apply(Dot::new(2, 0), op(1, callout(CalloutVariant::Warning)))
             .unwrap();
-        let projected = log.project(|_| Some(NodeType::Callout));
+        let projected = log.project(|_| Some(NodeType::Callout.into_node()));
         assert!(projected.get(&Dot::new(1, 1)).is_some());
         assert!(projected.get(&Dot::new(1, 7)).is_none());
     }
@@ -327,10 +360,10 @@ mod tests {
             .unwrap()
             .apply(Dot::new(3, 0), op(1, callout(CalloutVariant::Danger)))
             .unwrap();
-        let projected = log.project(|_| Some(NodeType::Callout));
+        let projected = log.project(|_| Some(NodeType::Callout.into_node()));
         assert_eq!(
             projected.get(&target).unwrap(),
-            &log.attrs_of(target, NodeType::Callout)
+            &log.attrs_of(target, NodeType::Callout.into_node())
         );
     }
 
@@ -349,7 +382,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let projected = log.project(|_| Some(NodeType::Callout));
+        let projected = log.project(|_| Some(NodeType::Callout.into_node()));
         assert!(
             projected.get(&target).is_none(),
             "mismatch-only target은 dormant → 부재여야 함"
@@ -364,7 +397,7 @@ mod proptests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{CalloutNodeAttr, CalloutVariant, TableNodeAttr};
+    use crate::{CalloutNodeAttr, CalloutVariant, NodeType, TableNodeAttr};
 
     fn permute<T: Clone>(items: &[T], seed: u64) -> Vec<T> {
         let mut indexed: Vec<(u64, T)> = items
@@ -407,7 +440,7 @@ mod proptests {
     }
 
     fn projected_proportion(log: &NodeAttrLog) -> u32 {
-        match log.attrs_of(Dot::new(1, 1), NodeType::Table) {
+        match log.attrs_of(Dot::new(1, 1), NodeType::Table.into_node()) {
             Node::Table(t) => *t.proportion.get(),
             other => panic!("expected Table, got {other:?}"),
         }

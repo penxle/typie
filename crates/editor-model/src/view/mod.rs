@@ -258,6 +258,17 @@ impl<'a> LeafView<'a> {
             _ => None,
         }
     }
+    pub fn node(&self) -> Option<Node> {
+        let atom = self.as_atom()?.clone();
+        Some(
+            self.view
+                .doc
+                .node_attrs
+                .get(&self.dot)
+                .cloned()
+                .unwrap_or_else(|| atom.into_node()),
+        )
+    }
     pub fn parent(&self) -> Option<NodeView<'a>> {
         self.view.node(self.block)
     }

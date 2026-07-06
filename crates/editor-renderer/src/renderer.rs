@@ -1340,11 +1340,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
         let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
-        let node = self
-            .doc
-            .leaf(node_id)
-            .and_then(|l| l.as_atom().cloned())
-            .map(|a| a.into_node());
+        let node = self.doc.leaf(node_id).and_then(|l| l.node());
 
         match node {
             Some(Node::HorizontalRule(hr)) => {

@@ -92,15 +92,19 @@ impl PartialEq for ProjectedDoc {
     }
 }
 
-fn collect_real_ids(tree: &BlockTree) -> HashMap<Dot, NodeType> {
-    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut HashMap<Dot, NodeType>) {
+fn collect_real_nodes(tree: &BlockTree) -> HashMap<Dot, Node> {
+    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut HashMap<Dot, Node>) {
         if let Some(d) = anchor_dot(node.id) {
-            out.insert(d, node.node_type);
+            out.insert(d, node.node_type.into_node());
         }
         for c in &node.children {
             match c {
                 Child::Leaf { id, item } => {
-                    out.insert(*id, item.as_child_type());
+                    let node = match item {
+                        SeqItem::Atom(atom) => atom.clone().into_node(),
+                        _ => item.as_child_type().into_node(),
+                    };
+                    out.insert(*id, node);
                 }
                 Child::Block(id) => {
                     if let Some(b) = tree.get(*id) {
@@ -639,11 +643,11 @@ pub fn project_from_tree<R: SeqResolve>(
     resolver: &R,
     logs: &DocLogs,
 ) -> ProjectedDoc {
-    let node_type_of = collect_real_ids(&tree);
-    let live: HashSet<Dot> = node_type_of.keys().copied().collect();
+    let node_of = collect_real_nodes(&tree);
+    let live: HashSet<Dot> = node_of.keys().copied().collect();
     let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
-    let node_attrs = logs.node_attrs.project(|d| node_type_of.get(&d).copied());
+    let node_attrs = logs.node_attrs.project(|d| node_of.get(&d).cloned());
     let node_markers = filter_live(logs.node_markers.project(), &live);
 
     let block_effective = block_effective_all(&tree, &logs.block_modifiers, &node_attrs);
@@ -786,14 +790,29 @@ mod tests {
     }
 
     #[test]
-    fn collect_real_ids_covers_blocks_chars_atoms() {
+    fn collect_real_nodes_covers_blocks_chars_atoms() {
         let tree = BlockTree::from_raw(&project_blocks(&elems_nested()).unwrap());
-        let ids = collect_real_ids(&tree);
-        assert_eq!(ids.get(&Dot::ROOT), Some(&NodeType::Root));
-        assert_eq!(ids.get(&Dot::new(1, 1)), Some(&NodeType::Paragraph));
-        assert_eq!(ids.get(&Dot::new(1, 2)), Some(&NodeType::Text));
-        assert_eq!(ids.get(&Dot::new(1, 4)), Some(&NodeType::HardBreak));
-        assert_eq!(ids.get(&Dot::new(1, 5)), Some(&NodeType::Blockquote));
+        let nodes = collect_real_nodes(&tree);
+        assert_eq!(
+            nodes.get(&Dot::ROOT).map(Node::as_type),
+            Some(NodeType::Root)
+        );
+        assert_eq!(
+            nodes.get(&Dot::new(1, 1)).map(Node::as_type),
+            Some(NodeType::Paragraph)
+        );
+        assert_eq!(
+            nodes.get(&Dot::new(1, 2)).map(Node::as_type),
+            Some(NodeType::Text)
+        );
+        assert_eq!(
+            nodes.get(&Dot::new(1, 4)).map(Node::as_type),
+            Some(NodeType::HardBreak)
+        );
+        assert_eq!(
+            nodes.get(&Dot::new(1, 5)).map(Node::as_type),
+            Some(NodeType::Blockquote)
+        );
     }
 
     #[test]
@@ -1102,10 +1121,12 @@ mod tests {
     #[test]
     fn image_atom_attr_projected() {
         let image = Dot::new(1, 1);
-        let img_node = match NodeType::Image.into_node() {
+        let mut img_node = match NodeType::Image.into_node() {
             Node::Image(n) => n,
             _ => unreachable!(),
         };
+        img_node.id = editor_crdt::LwwReg::with_value(Some("asset-1".to_string()));
+        img_node.proportion = editor_crdt::LwwReg::with_value(75);
         let elems = vec![
             (
                 image,
@@ -1136,7 +1157,13 @@ mod tests {
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
-        assert!(pd.node_attrs.contains_key(&image));
+        match pd.node_attrs.get(&image) {
+            Some(Node::Image(node)) => {
+                assert_eq!(node.id.get(), &Some("asset-1".to_string()));
+                assert_eq!(*node.proportion.get(), 150);
+            }
+            other => panic!("expected projected image attrs, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1149,8 +1176,8 @@ mod tests {
             },
         )];
         let pd = project_document(&logs_of(&elems)).unwrap();
-        let ids = collect_real_ids(&pd.tree);
-        assert!(!ids.contains_key(&Dot::new(1, 1)));
+        let nodes = collect_real_nodes(&pd.tree);
+        assert!(!nodes.contains_key(&Dot::new(1, 1)));
         assert!(validate_block_tree(&pd.tree).is_ok());
     }
 
@@ -1220,10 +1247,10 @@ mod tests {
         let mut l = logs_of(&[]);
         l.seq = build_oplog(&ev);
         let pd = project_document(&l).unwrap();
-        let ids = collect_real_ids(&pd.tree);
-        assert!(!ids.contains_key(&c));
-        assert!(!ids.contains_key(&p2));
-        assert!(!ids.contains_key(&b));
+        let nodes = collect_real_nodes(&pd.tree);
+        assert!(!nodes.contains_key(&c));
+        assert!(!nodes.contains_key(&p2));
+        assert!(!nodes.contains_key(&b));
         assert!(validate_block_tree(&pd.tree).is_ok());
     }
 
@@ -1297,8 +1324,8 @@ mod tests {
         let mut l = logs_of(&[]);
         l.seq = build_oplog(&ev);
         let pd = project_document(&l).unwrap();
-        let ids = collect_real_ids(&pd.tree);
-        assert!(!ids.contains_key(&Dot::new(2, 0)));
+        let nodes = collect_real_nodes(&pd.tree);
+        assert!(!nodes.contains_key(&Dot::new(2, 0)));
         assert!(validate_block_tree(&pd.tree).is_ok());
         assert_eq!(leaf_count(&pd), 0);
     }
@@ -1468,8 +1495,8 @@ mod tests {
             .unwrap();
         let (els, resolver) = checkout_with_resolver(&l.seq);
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
-        let node_type_of = collect_real_ids(&tree);
-        let node_attrs = l.node_attrs.project(|d| node_type_of.get(&d).copied());
+        let node_of = collect_real_nodes(&tree);
+        let node_attrs = l.node_attrs.project(|d| node_of.get(&d).cloned());
         let explicit: HashMap<Dot, _> =
             crate::span::derive_explicit_effect(&els, &tree, &resolver, &l.spans)
                 .into_iter()
@@ -1547,9 +1574,9 @@ mod tests {
 
             prop_assert!(validate_block_tree(&pd.tree).is_ok());
 
-            let live = collect_real_ids(&pd.tree);
+            let live = collect_real_nodes(&pd.tree);
             let live_leaves: HashSet<Dot> = live.iter()
-                .filter(|(_, t)| t.spec().is_leaf())
+                .filter(|(_, n)| n.as_type().spec().is_leaf())
                 .map(|(d, _)| *d)
                 .collect();
 

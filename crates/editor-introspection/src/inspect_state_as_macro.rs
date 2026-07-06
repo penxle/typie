@@ -65,11 +65,8 @@ fn display_children<'a>(node: &NodeView<'a>) -> Vec<Disp<'a>> {
     out
 }
 
-fn atom_node(leaf: &LeafView, pd: &ProjectedDoc) -> Node {
-    pd.node_attrs
-        .get(&leaf.dot())
-        .cloned()
-        .unwrap_or_else(|| leaf.as_atom().expect("atom leaf").clone().into_node())
+fn atom_node(leaf: &LeafView, _pd: &ProjectedDoc) -> Node {
+    leaf.node().expect("atom leaf")
 }
 
 /// Modifiers explicitly set on a block (`SetModifier`), excluding inherited and
