@@ -13,7 +13,7 @@ import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.syncWithBringIntoView
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.collect
@@ -52,7 +52,7 @@ internal fun rememberEditorEntryStateSession(
     }
     val selection = saved.bodySelection ?: return@LaunchedEffect
 
-    activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+    activeEditor.syncWithBringIntoView(bringIntoViewRequests) {
       enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
       beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
     }
