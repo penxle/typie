@@ -176,7 +176,7 @@ fn apply_inline_modifiers(
 /// ancestors up to the nearest real (or root) container — into real blocks and
 /// move the caret into the new real block, so the subsequent insert has a real
 /// target. No-op for a real caret block, the root, or a non-collapsed selection.
-fn materialize_caret_block(tr: &mut Transaction) -> Result<(), CommandError> {
+pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), CommandError> {
     let Some(selection) = tr.selection() else {
         return Ok(());
     };

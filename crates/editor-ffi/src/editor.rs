@@ -1358,6 +1358,56 @@ mod tests {
     }
 
     #[test]
+    fn ffi_enter_in_synthetic_trailing_paragraph_after_image() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    image
+                }
+            }
+            selection: none
+        };
+        let synth_p = {
+            let view = initial.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == editor_model::NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(
+            synth_p.is_synthetic(),
+            "trailing paragraph must be synthetic"
+        );
+
+        let editor = make_ffi_editor(initial);
+        let selection = editor_state::Selection::collapsed(editor_state::Position {
+            node: synth_p,
+            offset: 0,
+            affinity: editor_state::Affinity::Downstream,
+        });
+        editor
+            .enqueue(
+                editor_core::Message::Selection {
+                    op: editor_core::SelectionOp::Set { selection },
+                }
+                .into_ffi()
+                .unwrap(),
+            )
+            .unwrap();
+        editor.tick().unwrap();
+
+        let msg = editor_core::Message::Key {
+            event: editor_core::KeyEvent {
+                key: editor_core::Key::Enter,
+                modifiers: Default::default(),
+            },
+        };
+        editor.enqueue(msg.into_ffi().unwrap()).unwrap();
+        editor.tick().unwrap();
+    }
+
+    #[test]
     fn ffi_can_returns_false_for_undo_empty_history() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }

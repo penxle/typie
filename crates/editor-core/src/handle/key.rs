@@ -137,8 +137,10 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
-    use editor_state::{PendingModifier, assert_doc_eq, assert_state_eq};
+    use editor_model::{Modifier, NodeType};
+    use editor_state::{
+        Affinity, PendingModifier, Position, Selection, assert_doc_eq, assert_state_eq,
+    };
 
     use super::*;
     use crate::test_utils::assert_probe_predicts_apply;
@@ -303,6 +305,53 @@ mod tests {
                 }
             }
             selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_in_synthetic_trailing_paragraph_after_image() {
+        let (state, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                }
+            }
+            selection: none
+        };
+        let synth_p = {
+            let view = state.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(
+            synth_p.is_synthetic(),
+            "trailing paragraph must be synthetic"
+        );
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position {
+                    node: synth_p,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                }),
+            },
+        });
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    paragraph {}
+                    p2: paragraph {}
+                }
+            }
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }

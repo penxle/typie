@@ -2,7 +2,7 @@ use editor_model::{Marker, NodeType};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::carryable_modifiers_at;
+use crate::helpers::{carryable_modifiers_at, materialize_caret_block};
 use crate::{CommandError, CommandResult};
 
 pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
@@ -13,6 +13,21 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
+    {
+        let view = tr.state().view();
+        let node = view
+            .node(selection.head.node)
+            .ok_or(CommandError::NodeNotFound(selection.head.node))?;
+        if node.node_type() != NodeType::Paragraph {
+            return Ok(false);
+        }
+    }
+
+    materialize_caret_block(tr)?;
+
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
     let pos = selection.head;
 
     let (parent_id, block_index, carryable) = {
@@ -66,7 +81,9 @@ pub fn split_paragraph(tr: &mut Transaction) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_model::Modifier;
+    use editor_model::{Modifier, NodeType};
+    use editor_state::{Affinity, Position, Selection};
+    use editor_transaction::Transaction;
 
     use super::*;
     use crate::test_utils::*;
@@ -112,6 +129,46 @@ mod tests {
             selection: (ft1, 2)
         };
         transact_fail!(initial, |tr| split_paragraph(&mut tr));
+    }
+
+    #[test]
+    fn returns_false_in_synthetic_fold_title_without_materializing() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    fold
+                    paragraph {}
+                }
+            }
+            selection: none
+        };
+        let synth_title = {
+            let view = initial.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Fold)
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldTitle)
+                .map(|b| b.id())
+                .expect("synthetic fold title")
+        };
+        assert!(synth_title.is_synthetic());
+
+        let mut tr = Transaction::new(&initial);
+        let selection = Selection::collapsed(Position {
+            node: synth_title,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        });
+        tr.set_selection(Some(selection.clone())).unwrap();
+        assert!(!split_paragraph(&mut tr).unwrap());
+        let (actual, ..) = tr.commit();
+
+        let mut expected = initial;
+        expected.selection = Some(selection);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -181,6 +238,48 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
+                    paragraph {}
+                    p2: paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn materializes_synthetic_trailing_paragraph_before_split() {
+        let (initial, ..) = state! {
+            doc { root { image } }
+            selection: none
+        };
+        let synth_p = {
+            let view = initial.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(
+            synth_p.is_synthetic(),
+            "trailing paragraph must be synthetic"
+        );
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_selection(Some(Selection::collapsed(Position {
+            node: synth_p,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        })))
+        .unwrap();
+        assert!(split_paragraph(&mut tr).unwrap());
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    image
                     paragraph {}
                     p2: paragraph {}
                 }
