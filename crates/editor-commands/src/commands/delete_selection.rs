@@ -1397,6 +1397,62 @@ mod tests {
         assert_matches_cold_projection(&actual);
     }
 
+    #[test]
+    fn tr_323_synthetic_trailing_paragraph_repro_deletes_selection() {
+        use editor_model::NodeType;
+        use editor_state::{Affinity, Position, Selection};
+
+        let (state, p1) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    p1: paragraph {}
+                    image
+                    paragraph {}
+                    embed
+                }
+            }
+            selection: none
+        };
+        let synth_p = {
+            let view = state.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .filter(|b| b.node_type() == NodeType::Paragraph)
+                .find(|b| b.id().is_synthetic())
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        let initial = editor_state::State {
+            selection: Some(Selection::new(
+                Position {
+                    node: synth_p,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node: p1,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+            )),
+            ..state
+        };
+
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    p1: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_matches_cold_projection(&actual);
+    }
+
     // Sweep selection endpoints over a 12-paragraph doc: every shape — same-node
     // container ranges (bulk), cross-node ranges with bulk middles, and small
     // eager-path edges — must land on the projection a cold graph rebuild produces.
