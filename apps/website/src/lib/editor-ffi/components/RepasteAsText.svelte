@@ -9,16 +9,24 @@
   const { editor } = getEditorContext();
   const viewportOverlay = getViewportOverlayContext();
 
-  let show = $derived(editor !== undefined && !editor.readOnly && editor.lastHistoryTag?.type === 'paste_html');
+  let show = $derived(
+    editor !== undefined &&
+      !editor.readOnly &&
+      editor.focused &&
+      editor.selection !== undefined &&
+      editor.lastHistoryTag?.type === 'paste_html',
+  );
 
   const point = $derived.by(() => {
-    const cursor = editor?.cursor;
-    if (!show || !editor || !cursor) {
+    if (!show || !editor) {
       return null;
     }
 
     void viewportOverlay.change;
-    const rect = pageRectToClientRect(editor, { page_idx: cursor.page_idx, rect: cursor.caret });
+    const anchor = editor.cursor ? { page_idx: editor.cursor.page_idx, rect: editor.cursor.caret } : editor.selectionHeadRect();
+    if (!anchor) return null;
+
+    const rect = pageRectToClientRect(editor, anchor);
     if (!rect) return null;
 
     return { x: rect.left, y: rect.bottom + 4 };

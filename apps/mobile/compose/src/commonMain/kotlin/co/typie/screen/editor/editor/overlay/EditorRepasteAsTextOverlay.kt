@@ -37,10 +37,8 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
 import kotlinx.coroutines.launch
 
-internal val RepasteAsTextOverlayHeight = 40.dp
-
 private val RepasteAsTextOverlayShape = AppShapes.rounded(AppShapes.full)
-private val RepasteAsTextOverlayBottomGap = 12.dp
+private val RepasteAsTextOverlayTopGap = 12.dp
 private val RepasteAsTextOverlayEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private const val RepasteAsTextOverlayAnimationMillis = 150
 
@@ -64,7 +62,7 @@ internal fun EditorRepasteAsTextOverlay(
       ) +
         scaleIn(
           initialScale = 0.96f,
-          transformOrigin = TransformOrigin(0.5f, 1f),
+          transformOrigin = TransformOrigin(0.5f, 0f),
           animationSpec =
             tween(
               durationMillis = RepasteAsTextOverlayAnimationMillis,
@@ -81,7 +79,7 @@ internal fun EditorRepasteAsTextOverlay(
       ) +
         scaleOut(
           targetScale = 0.96f,
-          transformOrigin = TransformOrigin(0.5f, 1f),
+          transformOrigin = TransformOrigin(0.5f, 0f),
           animationSpec =
             tween(
               durationMillis = RepasteAsTextOverlayAnimationMillis,
@@ -93,8 +91,8 @@ internal fun EditorRepasteAsTextOverlay(
     Box(
       modifier =
         Modifier.fillMaxSize()
-          .padding(bottom = visibleArea.bottomOcclusion.dp + RepasteAsTextOverlayBottomGap),
-      contentAlignment = Alignment.BottomCenter,
+          .padding(top = visibleArea.visibleViewportTop.dp + RepasteAsTextOverlayTopGap),
+      contentAlignment = Alignment.TopCenter,
     ) {
       Row(
         modifier =

@@ -107,7 +107,6 @@ import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
-import co.typie.screen.editor.editor.overlay.RepasteAsTextOverlayHeight
 import co.typie.screen.editor.editor.placeholder.EditorDocumentPlaceholder
 import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
 import co.typie.screen.editor.editor.spellcheck.SpellcheckTopBarCenter
@@ -654,13 +653,11 @@ fun EditorScreen(entityId: String) {
       } else {
         maxOf(toolbarBottomOcclusion.value, findReplaceToolbarOcclusion).value.coerceAtLeast(0f)
       }
-    val repasteAsTextVisible = !documentLocked && editorState.lastHistoryTag is HistoryTag.PasteHtml
-    val repasteAsTextOcclusion =
-      if (repasteAsTextVisible) {
-        RepasteAsTextOverlayHeight.value
-      } else {
-        0f
-      }
+    val repasteAsTextVisible =
+      !documentLocked &&
+        uiState.focused &&
+        editorState.selection != null &&
+        editorState.lastHistoryTag is HistoryTag.PasteHtml
     val visibleAreas =
       screenState.resolveEditorVisibleAreas(
         topInset = topInset.value,
@@ -670,17 +667,11 @@ fun EditorScreen(entityId: String) {
         overlayOcclusion =
           EditorOverlayOcclusion(
             top = maxOf(spellcheck.occlusion.top, aiFeedback.occlusion.top),
-            bottom =
-              maxOf(
-                spellcheck.occlusion.bottom,
-                aiFeedback.occlusion.bottom,
-                repasteAsTextOcclusion,
-              ),
+            bottom = maxOf(spellcheck.occlusion.bottom, aiFeedback.occlusion.bottom),
             bottomScrollReserve =
               maxOf(
                 spellcheck.occlusion.bottomScrollReserve,
                 aiFeedback.occlusion.bottomScrollReserve,
-                repasteAsTextOcclusion,
               ),
           ),
       )

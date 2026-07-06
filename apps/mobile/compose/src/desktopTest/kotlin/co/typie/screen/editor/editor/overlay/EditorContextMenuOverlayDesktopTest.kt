@@ -23,6 +23,7 @@ import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -118,6 +119,47 @@ class EditorContextMenuOverlayDesktopTest {
     }
   }
 
+  @Test
+  fun repasteOverlayShowsWithoutCursorWhenVisible() = runComposeUiTest {
+    val fake = FakeFfiEditor()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    try {
+      setRepasteContent(editor)
+
+      waitForIdle()
+      assertEquals(1, onAllNodesWithText("서식 없이 다시 붙여넣기").fetchSemanticsNodes().size)
+    } finally {
+      scope.cancel()
+      editor.dispose()
+    }
+  }
+
+  @Test
+  fun repasteOverlayStaysNearTopWhenBottomIsOccluded() = runComposeUiTest {
+    val fake = FakeFfiEditor()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    try {
+      setRepasteContent(
+        editor = editor,
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 400f, height = 700f),
+            topInset = 24f,
+            bottomOcclusionInset = 280f,
+          ),
+      )
+
+      waitForIdle()
+      val top = onNodeWithText("서식 없이 다시 붙여넣기").fetchSemanticsNode().boundsInRoot.top
+      assertTrue(top < 120f, "expected top placement, got y=$top")
+    } finally {
+      scope.cancel()
+      editor.dispose()
+    }
+  }
+
   private fun androidx.compose.ui.test.ComposeUiTest.setMenuContent(
     showCopyCutActions: Boolean = true,
     onCopy: () -> Unit = {},
@@ -155,7 +197,10 @@ class EditorContextMenuOverlayDesktopTest {
     }
   }
 
-  private fun androidx.compose.ui.test.ComposeUiTest.setRepasteContent(editor: Editor) {
+  private fun androidx.compose.ui.test.ComposeUiTest.setRepasteContent(
+    editor: Editor,
+    visibleArea: EditorVisibleArea = EditorVisibleArea(viewport = Size(width = 400f, height = 700f)),
+  ) {
     setContent {
       CompositionLocalProvider(
         LocalAppColors provides LightColors,
@@ -164,7 +209,7 @@ class EditorContextMenuOverlayDesktopTest {
       ) {
         EditorRepasteAsTextOverlay(
           editor = editor,
-          visibleArea = EditorVisibleArea(viewport = Size(width = 400f, height = 700f)),
+          visibleArea = visibleArea,
           visible = true,
           bringIntoViewRequests = EditorBringIntoViewRequests(),
         )

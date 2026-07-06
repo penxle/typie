@@ -34,8 +34,6 @@ import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StablePosition
 import co.typie.editor.ffi.StablePositionBinding
 import co.typie.editor.ffi.StableSelection
-import co.typie.editor.ffi.StyleInfo
-import co.typie.editor.ffi.StyleRefValue
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeEndpoints
@@ -112,12 +110,6 @@ internal class FakeFfiEditor(
 
   override fun blockState(): BlockState = blockStateProvider()
 
-  override fun styleEntries(): List<StyleInfo> = emptyList()
-
-  override fun appliedStyle(): Tri<StyleRefValue> = Tri.Absent
-
-  override fun styleDivergence(): Boolean = false
-
   override fun characterCounts(): CharacterCounts = characterCountsProvider()
 
   override fun copySelection(): ClipboardPayload? = null
@@ -168,6 +160,8 @@ internal class FakeFfiEditor(
   override fun detachSurface(page: Int) {
     attached -= page
   }
+
+  override fun invalidateSurface(page: Int) = Unit
 
   override fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) = Unit
 
