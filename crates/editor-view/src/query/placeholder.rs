@@ -15,8 +15,8 @@ pub struct PlaceholderMetrics {
 
 use editor_common::Rect;
 use editor_model::{
-    Alignment, DEFAULT_ALIGNMENT, DEFAULT_FONT_SIZE, DEFAULT_LETTER_SPACING, DEFAULT_LINE_HEIGHT,
-    DEFAULT_PARAGRAPH_INDENT, DocView, Modifier, ModifierType, NodeType,
+    Alignment, ChildView, DEFAULT_ALIGNMENT, DEFAULT_FONT_SIZE, DEFAULT_LETTER_SPACING,
+    DEFAULT_LINE_HEIGHT, DEFAULT_PARAGRAPH_INDENT, DocView, Modifier, ModifierType, NodeType,
 };
 use editor_state::{PendingModifier, PendingModifiers};
 
@@ -76,14 +76,14 @@ pub(crate) fn is_single_empty_paragraph(view: &DocView) -> bool {
     let Some(root) = view.root() else {
         return false;
     };
-    let mut blocks = root.child_blocks();
-    let Some(first) = blocks.next() else {
+    let mut children = root.children();
+    let Some(ChildView::Block(first)) = children.next() else {
         return false;
     };
-    if blocks.next().is_some() {
+    if children.next().is_some() {
         return false;
     }
-    if !first.spec().is_textblock() {
+    if first.node_type() != NodeType::Paragraph {
         return false;
     }
     first.children().next().is_none()
@@ -374,6 +374,40 @@ mod tests {
             !is_single_empty_paragraph(&view),
             "paragraph with HardBreak must not be a placeholder"
         );
+    }
+
+    #[test]
+    fn root_with_image_and_empty_paragraph_is_not_placeholder() {
+        let root = Dot::ROOT;
+        let image = Dot::new(4, 1);
+        let para = Dot::new(4, 2);
+        let elems = vec![
+            (
+                image,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image {
+                        node: Default::default(),
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let doc = logs(&elems);
+        let (index, pd) = build_index_and_pd(&doc, 400.0);
+        let view = DocView::new(&pd);
+
+        assert!(
+            !is_single_empty_paragraph(&view),
+            "root-level image content must prevent the document placeholder"
+        );
+        assert!(placeholder_metrics(&index, &view, None).is_none());
     }
 
     #[test]
