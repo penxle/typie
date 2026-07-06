@@ -79,6 +79,7 @@
       editor?.handleRepasteAsText();
     }}
     onpointerdown={(e) => {
+      e.preventDefault();
       e.stopPropagation();
     }}
     type="button"
