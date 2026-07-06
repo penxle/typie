@@ -933,6 +933,33 @@ mod tests {
     }
 
     #[test]
+    fn enter_on_empty_list_item_after_image_keeps_selection_live() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    image
+                    bullet_list {
+                        list_item { p1: paragraph {} }
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    image
+                    p1: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn backspace_merges_list_items() {
         let (state, ..) = state! {
             doc {

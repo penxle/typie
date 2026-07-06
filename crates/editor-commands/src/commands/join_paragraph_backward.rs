@@ -2,6 +2,7 @@ use editor_model::{ChildView, NodeType};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::prev_sibling;
 use crate::{CommandError, CommandResult};
 
 pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
@@ -28,18 +29,11 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         if pos.offset > 0 {
             return Ok(false);
         }
-        let parent = node.parent().ok_or(CommandError::NoParent(pos.node))?;
-        let index = parent
-            .child_blocks()
-            .position(|b| b.id() == pos.node)
-            .ok_or_else(|| CommandError::orphan_child(pos.node, parent.id()))?;
-        if index == 0 {
-            return Ok(false);
-        }
-        let prev = parent
-            .child_blocks()
-            .nth(index - 1)
-            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        node.parent().ok_or(CommandError::NoParent(pos.node))?;
+        let prev = match prev_sibling(&node) {
+            Some(ChildView::Block(prev)) => prev,
+            _ => return Ok(false),
+        };
         if prev.node_type() != NodeType::Paragraph {
             return Ok(false);
         }
@@ -264,5 +258,20 @@ mod tests {
             selection: (m, 2, <)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn image_between_paragraphs_returns_false() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph { text("Hello") }
+                    image
+                    p1: paragraph { text("World") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        transact_fail!(initial, |tr| join_paragraph_backward(&mut tr));
     }
 }

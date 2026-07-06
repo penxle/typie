@@ -1,7 +1,7 @@
 use editor_model::{ChildView, Node, NodeType, PlainNode, PlainPageBreakNode, Subtree};
 use editor_transaction::Transaction;
 
-use crate::helpers::find_ancestor_textblock;
+use crate::helpers::{find_ancestor_textblock, prev_sibling};
 use crate::{CommandError, CommandResult};
 
 pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandResult {
@@ -32,17 +32,12 @@ pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandRes
             return Ok(false);
         }
 
-        let parent = paragraph
+        paragraph
             .parent()
             .ok_or(CommandError::NoParent(paragraph_id))?;
-        let Some(idx) = parent.child_blocks().position(|b| b.id() == paragraph.id()) else {
-            return Ok(false);
-        };
-        if idx == 0 {
-            return Ok(false);
-        }
-        let Some(prev) = parent.child_blocks().nth(idx - 1) else {
-            return Ok(false);
+        let prev = match prev_sibling(&paragraph) {
+            Some(ChildView::Block(prev)) => prev,
+            _ => return Ok(false),
         };
         if !matches!(prev.node(), Node::Paragraph(_)) {
             return Ok(false);
@@ -102,6 +97,21 @@ mod tests {
             doc {
                 root {
                     blockquote { paragraph { text("a") } }
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        transact_fail!(initial, |tr| insert_page_break_into_prev_paragraph(&mut tr));
+    }
+
+    #[test]
+    fn image_prev_sibling_returns_false() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph { text("a") }
+                    image
                     p1: paragraph { text("hello") }
                 }
             }

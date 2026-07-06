@@ -74,6 +74,32 @@ mod tests {
     }
 
     #[test]
+    fn tr_329_lift_empty_top_level_after_image_keeps_selection_live() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    image
+                    bullet_list {
+                        list_item { p1: paragraph {} }
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_empty_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    image
+                    p1: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn non_collapsed_returns_false() {
         let (initial, ..) = state! {
             doc {

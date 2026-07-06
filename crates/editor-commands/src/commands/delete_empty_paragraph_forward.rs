@@ -1,8 +1,9 @@
-use editor_model::Node;
+use editor_model::{ChildView, Node};
 use editor_state::Selection;
 use editor_state::first_cursor_position;
 use editor_transaction::{Transaction, fulfill};
 
+use crate::helpers::next_sibling;
 use crate::{CommandError, CommandResult};
 
 pub fn delete_empty_paragraph_forward(tr: &mut Transaction) -> CommandResult {
@@ -31,16 +32,12 @@ pub fn delete_empty_paragraph_forward(tr: &mut Transaction) -> CommandResult {
             return Ok(false);
         }
 
-        let parent = node.parent().ok_or(CommandError::NoParent(pos.node))?;
-        let idx = parent
-            .child_blocks()
-            .position(|b| b.id() == node.id())
-            .ok_or_else(|| CommandError::orphan_child(pos.node, parent.id()))?;
-        let next = match parent.child_blocks().nth(idx + 1) {
-            Some(next) => next,
-            None => return Ok(false),
+        let parent_id = node.parent().ok_or(CommandError::NoParent(pos.node))?.id();
+        let next = match next_sibling(&node) {
+            Some(ChildView::Block(next)) => next,
+            _ => return Ok(false),
         };
-        (next.id(), parent.id())
+        (next.id(), parent_id)
     };
 
     let paragraph_id = pos.node;
@@ -118,6 +115,19 @@ mod tests {
             doc { root {
                 paragraph { text("a") }
                 p1: paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        transact_fail!(initial, |tr| delete_empty_paragraph_forward(&mut tr));
+    }
+
+    #[test]
+    fn image_next_sibling_returns_false() {
+        let (initial, ..) = state! {
+            doc { root {
+                p1: paragraph {}
+                image
+                paragraph { text("a") }
             } }
             selection: (p1, 0)
         };

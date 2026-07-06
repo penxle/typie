@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use editor_crdt::Dot;
-use editor_model::{DocView, NodeType, Subtree};
+use editor_model::{ChildView, DocView, NodeType, Subtree};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
@@ -172,13 +172,16 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
                 (children, child_count)
             };
             for (i, child_id) in children.iter().enumerate() {
-                tr.move_node(*child_id, owner_id, list_index + 1 + i)?;
+                let target_index = list_index + 1 + i;
+                tr.move_node(*child_id, owner_id, target_index)?;
                 if i == 0 {
                     new_para_id = {
                         let view = tr.state().view();
                         view.node(owner_id)
-                            .and_then(|o| o.child_blocks().nth(list_index + 1))
-                            .map(|p| p.id())
+                            .and_then(|o| match o.child_at(target_index) {
+                                Some(ChildView::Block(p)) => Some(p.id()),
+                                _ => None,
+                            })
                     };
                 }
             }
@@ -194,8 +197,10 @@ pub(crate) fn lift_list_item_inner(tr: &mut Transaction, list_item_id: Dot) -> C
                 let new_list_elem = {
                     let view = tr.state().view();
                     view.node(owner_id)
-                        .and_then(|o| o.child_blocks().nth(list_index + 1 + child_count))
-                        .map(|b| b.id())
+                        .and_then(|o| match o.child_at(list_index + 1 + child_count) {
+                            Some(ChildView::Block(b)) => Some(b.id()),
+                            _ => None,
+                        })
                         .ok_or(CommandError::NodeNotFound(owner_id))?
                 };
                 for (i, item_id) in after_items.iter().enumerate() {

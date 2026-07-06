@@ -1,7 +1,7 @@
 use editor_model::{ChildView, Node, NodeType};
 use editor_transaction::Transaction;
 
-use crate::helpers::remove_atom_leaf;
+use crate::helpers::{prev_sibling, remove_atom_leaf};
 use crate::{CommandError, CommandResult};
 
 pub fn delete_page_break_backward(tr: &mut Transaction) -> CommandResult {
@@ -23,20 +23,9 @@ pub fn delete_page_break_backward(tr: &mut Transaction) -> CommandResult {
             .node(pos.node)
             .ok_or(CommandError::NodeNotFound(pos.node))?;
 
-        let parent = match node.parent() {
-            Some(parent) => parent,
-            None => return Ok(false),
-        };
-        let idx = match parent.child_blocks().position(|b| b.id() == node.id()) {
-            Some(idx) => idx,
-            None => return Ok(false),
-        };
-        if idx == 0 {
-            return Ok(false);
-        }
-        let prev = match parent.child_blocks().nth(idx - 1) {
-            Some(prev) => prev,
-            None => return Ok(false),
+        let prev = match prev_sibling(&node) {
+            Some(ChildView::Block(prev)) => prev,
+            _ => return Ok(false),
         };
 
         if !matches!(prev.node(), Node::Paragraph(_)) {
@@ -165,6 +154,21 @@ mod tests {
             doc {
                 root {
                     horizontal_rule
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        transact_fail!(initial, |tr| delete_page_break_backward(&mut tr));
+    }
+
+    #[test]
+    fn image_prev_sibling_returns_false() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph { page_break }
+                    image
                     p1: paragraph { text("hello") }
                 }
             }
