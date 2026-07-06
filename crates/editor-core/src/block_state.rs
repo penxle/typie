@@ -1,7 +1,7 @@
 use editor_crdt::Dot;
 use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeView, PlainNode, Schema};
-use editor_state::{Position, ResolvedSelection, Selection, State};
+use editor_state::{Affinity, Position, ResolvedSelection, Selection, State};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -110,8 +110,18 @@ fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Bloc
                         continue;
                     }
                     let (Some(start), Some(end)) = (
-                        Position::new(node.id(), i).resolve(view),
-                        Position::new(node.id(), i + 1).resolve(view),
+                        Position {
+                            node: node.id(),
+                            offset: i,
+                            affinity: Affinity::Downstream,
+                        }
+                        .resolve(view),
+                        Position {
+                            node: node.id(),
+                            offset: i + 1,
+                            affinity: Affinity::Upstream,
+                        }
+                        .resolve(view),
                     ) else {
                         continue;
                     };
@@ -187,6 +197,23 @@ mod tests {
                 .any(|b| matches!(b.node, PlainNode::Image(_)))
         );
         assert_eq!(bs.ancestors.len(), 1);
+    }
+
+    #[test]
+    fn nodes_includes_image_for_exact_unit_selection() {
+        let (state, ..) = state! {
+            doc { root: root {
+                img: image
+                p1: paragraph { text("ab") }
+            } }
+            selection: (root, 0, >) -> (root, 1, <)
+        };
+        let bs = resolve_block_state(&state).unwrap();
+        assert!(
+            bs.nodes
+                .iter()
+                .any(|b| matches!(b.node, PlainNode::Image(_)))
+        );
     }
 
     #[test]
