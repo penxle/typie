@@ -66,11 +66,8 @@ pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position)
     let Some(rs) = Selection::new(*from, *to).resolve(view) else {
         return Vec::new();
     };
-    let lo = rs.from().position();
-    let hi = rs.to().position();
-    let (Some(lo_r), Some(hi_r)) = (lo.resolve(view), hi.resolve(view)) else {
-        return Vec::new();
-    };
+    let from = rs.from().path();
+    let to = rs.to().path();
 
     let mut blocks = Vec::new();
     if let Some(root) = view.root() {
@@ -84,35 +81,11 @@ pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position)
 
     let mut out = Vec::new();
     for block in blocks {
-        let block_id = block.id();
         let mut base: Vec<usize> = block.ancestors().filter_map(|n| n.index()).collect();
         base.reverse();
         for (i, child) in block.children().enumerate() {
             let ChildView::Leaf(l) = child else { continue };
-            let start = ResolvedPosition {
-                view,
-                position: Position::new(block_id, i),
-                path: {
-                    let mut p = base.clone();
-                    p.push(i);
-                    p
-                },
-            };
-            let end = ResolvedPosition {
-                view,
-                position: Position::new(block_id, i + 1),
-                path: {
-                    let mut p = base.clone();
-                    p.push(i + 1);
-                    p
-                },
-            };
-            // Coverage is positional: a leaf is inside the range when its
-            // extent lies within [lo, hi] by path. Comparing full
-            // ResolvedPositions would fold in caret affinity, which drops the
-            // last leaf whenever `hi` sits at a block end with Upstream affinity
-            // (the canonical caret form there) — even though the range covers it.
-            if lo_r.path() <= start.path.as_slice() && end.path.as_slice() <= hi_r.path() {
+            if crate::traversal::leaf_slot_is_covered(i, &base, from, to) {
                 out.push(l.dot());
             }
         }

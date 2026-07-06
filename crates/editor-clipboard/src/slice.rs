@@ -216,23 +216,13 @@ fn build_fragment(state: &State, nv: &NodeView, rs: &ResolvedSelection) -> Fragm
     let to_block_path = &to.path()[..to.path().len().saturating_sub(1)];
 
     let children: Vec<ChildView> = nv.children().collect();
-    let lo = if nv.id() == from.node() {
-        from.offset()
-    } else {
-        0
-    };
-    let hi = if nv.id() == to.node() {
-        to.offset()
-    } else {
-        children.len()
-    };
 
     let mut out: Vec<Fragment> = Vec::new();
     let mut run: Option<RunAccum> = None;
     for (i, c) in children.iter().enumerate() {
         match c {
             ChildView::Leaf(l) => {
-                if i < lo || i >= hi {
+                if !rs.contains_leaf_slot(nv, i) {
                     flush_run(&mut run, &mut out);
                     continue;
                 }
@@ -463,6 +453,37 @@ mod tests {
         assert!(matches!(
             slice.fragment.children[0].node,
             editor_model::PlainNode::Image(_)
+        ));
+    }
+
+    #[test]
+    fn extract_range_between_paragraphs_excludes_image_before_selection() {
+        let (s, ..) = state! {
+            doc { root {
+                image
+                p1: paragraph { text("asd") }
+                image
+                p2: paragraph {}
+            } }
+            selection: (p1, 3) -> (p2, 0)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 2);
+        assert_eq!(slice.open_end, 2);
+        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
+        assert_eq!(slice.fragment.children.len(), 3);
+        assert!(matches!(
+            slice.fragment.children[0].node,
+            PlainNode::Paragraph(_)
+        ));
+        assert!(matches!(
+            slice.fragment.children[1].node,
+            PlainNode::Image(_)
+        ));
+        assert!(matches!(
+            slice.fragment.children[2].node,
+            PlainNode::Paragraph(_)
         ));
     }
 

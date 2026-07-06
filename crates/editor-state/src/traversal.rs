@@ -142,14 +142,7 @@ pub fn leaves_in_block_range<'a>(
     let mut out = Vec::new();
     for (i, child) in block.children().enumerate() {
         if let ChildView::Leaf(l) = child {
-            // A leaf fills the half-open content slot [i, i+1). It is inside the
-            // selection iff its start path >= from and its end path <= to, so the
-            // leaf at the exclusive `to` boundary is not over-collected.
-            let mut start = base.clone();
-            start.push(i);
-            let mut end = base.clone();
-            end.push(i + 1);
-            if from <= start.as_slice() && end.as_slice() <= to {
+            if leaf_slot_is_covered(i, &base, from, to) {
                 out.push((i, l));
             }
         }
@@ -157,7 +150,25 @@ pub fn leaves_in_block_range<'a>(
     out
 }
 
-fn leaf_slot_is_covered(slot: usize, base: &[usize], from: &[usize], to: &[usize]) -> bool {
+pub(crate) fn contains_leaf_slot(rs: &ResolvedSelection, block: &NodeView, slot: usize) -> bool {
+    if !matches!(block.child_at(slot), Some(ChildView::Leaf(_))) {
+        return false;
+    }
+    // A leaf fills the half-open content slot [slot, slot + 1). It is inside the
+    // selection iff its extent lies within [from, to] by path, so the leaf at
+    // the exclusive `to` boundary is not over-collected.
+    let from = rs.from().path();
+    let to = rs.to().path();
+    let base = node_path(block);
+    leaf_slot_is_covered(slot, &base, from, to)
+}
+
+pub(crate) fn leaf_slot_is_covered(
+    slot: usize,
+    base: &[usize],
+    from: &[usize],
+    to: &[usize],
+) -> bool {
     let mut start = base.to_vec();
     start.push(slot);
     let mut end = base.to_vec();
@@ -317,11 +328,7 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
                 let ChildView::Leaf(l) = child else {
                     continue;
                 };
-                let mut start = base.clone();
-                start.push(i);
-                let mut end = base.clone();
-                end.push(i + 1);
-                if !(from <= start.as_slice() && end.as_slice() <= to) {
+                if !leaf_slot_is_covered(i, &base, from, to) {
                     continue;
                 }
                 let ty = l.node_type();

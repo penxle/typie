@@ -1,7 +1,7 @@
 use editor_crdt::Dot;
 use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeView, PlainNode, Schema};
-use editor_state::{Affinity, Position, ResolvedSelection, Selection, State};
+use editor_state::{ResolvedSelection, Selection, State};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
@@ -100,7 +100,6 @@ fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Bloc
     // Descend even when self is wholly contained: nested non-inline children
     // (e.g., paragraphs inside a blockquote) must be enumerated too.
     if rs.intersects_subtree(node) {
-        let view = rs.view();
         for (i, child) in node.children().enumerate() {
             match child {
                 ChildView::Block(b) => collect_contained(&b, rs, out),
@@ -109,23 +108,7 @@ fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Bloc
                     if Schema::node_spec(l.node_type()).inline {
                         continue;
                     }
-                    let (Some(start), Some(end)) = (
-                        Position {
-                            node: node.id(),
-                            offset: i,
-                            affinity: Affinity::Downstream,
-                        }
-                        .resolve(view),
-                        Position {
-                            node: node.id(),
-                            offset: i + 1,
-                            affinity: Affinity::Upstream,
-                        }
-                        .resolve(view),
-                    ) else {
-                        continue;
-                    };
-                    if rs.from() <= &start && &end <= rs.to() {
+                    if rs.contains_leaf_slot(node, i) {
                         out.push(Block {
                             id: l.dot(),
                             node: leaf_node.to_plain(),

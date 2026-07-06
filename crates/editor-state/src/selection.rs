@@ -83,6 +83,13 @@ impl<'a> ResolvedSelection<'a> {
         crate::traversal::contains_subtree(self, node)
     }
 
+    /// Returns whether a direct leaf child slot of `block` is fully covered by
+    /// this selection. The slot is interpreted as the half-open path extent
+    /// `[slot, slot + 1)`, so coverage is independent of endpoint affinity.
+    pub fn contains_leaf_slot(&self, block: &NodeView, slot: usize) -> bool {
+        crate::traversal::contains_leaf_slot(self, block, slot)
+    }
+
     pub fn intersects_subtree(&self, node: &NodeView) -> bool {
         crate::traversal::intersects_subtree(self, node)
     }
@@ -489,6 +496,35 @@ mod tests {
         assert_eq!(
             rs.contains_subtree(&out_node),
             traversal::contains_subtree(&rs, &out_node),
+        );
+    }
+
+    #[test]
+    fn contains_leaf_slot_method_matches_free_fn() {
+        use crate::traversal;
+
+        let (pd, p1, p2) = two_paras();
+        let view = DocView::new(&pd);
+        let rs = Selection::new(Position::new(p1, 1), Position::new(p2, 0))
+            .resolve(&view)
+            .unwrap();
+        let p1_node = view.node(p1).unwrap();
+        let p2_node = view.node(p2).unwrap();
+        let root_node = view.root().unwrap();
+        let block_rs = Selection::new(
+            Position::new(root_node.id(), 0),
+            Position::new(root_node.id(), 1),
+        )
+        .resolve(&view)
+        .unwrap();
+
+        assert!(!rs.contains_leaf_slot(&p1_node, 0));
+        assert!(rs.contains_leaf_slot(&p1_node, 1));
+        assert!(!rs.contains_leaf_slot(&p2_node, 0));
+        assert!(!block_rs.contains_leaf_slot(&root_node, 0));
+        assert_eq!(
+            rs.contains_leaf_slot(&p1_node, 1),
+            traversal::contains_leaf_slot(&rs, &p1_node, 1),
         );
     }
 
