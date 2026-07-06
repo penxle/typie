@@ -572,7 +572,7 @@ export type NavigationOp = { type: "move"; movement: Movement; extend: boolean }
 
 export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph"; attr: ParagraphNodeAttr } | { type: "blockquote"; attr: BlockquoteNodeAttr } | { type: "callout"; attr: CalloutNodeAttr } | { type: "text"; attr: TextNodeAttr } | { type: "bullet_list"; attr: BulletListNodeAttr } | { type: "ordered_list"; attr: OrderedListNodeAttr } | { type: "list_item"; attr: ListItemNodeAttr } | { type: "fold"; attr: FoldNodeAttr } | { type: "fold_title"; attr: FoldTitleNodeAttr } | { type: "fold_content"; attr: FoldContentNodeAttr } | { type: "table"; attr: TableNodeAttr } | { type: "table_row"; attr: TableRowNodeAttr } | { type: "table_cell"; attr: TableCellNodeAttr } | { type: "image"; attr: ImageNodeAttr } | { type: "file"; attr: FileNodeAttr } | { type: "embed"; attr: EmbedNodeAttr } | { type: "archived"; attr: ArchivedNodeAttr } | { type: "hard_break"; attr: HardBreakNodeAttr } | { type: "horizontal_rule"; attr: HorizontalRuleNodeAttr } | { type: "page_break"; attr: PageBreakNodeAttr } | { type: "tab"; attr: TabNodeAttr };
 
-export type NodeOp = { type: "delete"; id: Dot } | { type: "set_attrs"; id: Dot; attrs: PlainNode } | { type: "table"; id: Dot; op: TableOp };
+export type NodeOp = { type: "delete"; id: Dot } | { type: "cycle_callout_variant"; id: Dot } | { type: "set_attrs"; id: Dot; attrs: PlainNode } | { type: "unwrap"; id: Dot } | { type: "table"; id: Dot; op: TableOp };
 
 export type OrderedListNodeAttr = void;
 

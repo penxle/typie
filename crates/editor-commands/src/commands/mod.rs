@@ -1,5 +1,6 @@
 mod auto_surround;
 mod clear_all_modifiers;
+mod cycle_callout_variant;
 mod delete_empty_paragraph_backward;
 mod delete_empty_paragraph_forward;
 mod delete_node;
@@ -70,9 +71,11 @@ mod try_text_replacement;
 mod unwrap_blockquote;
 mod unwrap_callout;
 mod unwrap_fold;
+mod unwrap_node;
 
 pub use auto_surround::auto_surround;
 pub use clear_all_modifiers::clear_all_modifiers;
+pub use cycle_callout_variant::cycle_callout_variant;
 pub use delete_empty_paragraph_backward::delete_empty_paragraph_backward;
 pub use delete_empty_paragraph_forward::delete_empty_paragraph_forward;
 pub use delete_node::delete_node;
@@ -143,3 +146,4 @@ pub use try_text_replacement::try_text_replacement;
 pub use unwrap_blockquote::unwrap_blockquote;
 pub use unwrap_callout::unwrap_callout;
 pub use unwrap_fold::unwrap_fold;
+pub use unwrap_node::unwrap_node;

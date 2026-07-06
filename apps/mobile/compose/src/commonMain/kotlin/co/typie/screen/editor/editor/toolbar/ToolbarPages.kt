@@ -98,11 +98,13 @@ internal fun rememberEditorToolbarPages(
             nodeId = toolbarContext.selectedNodeId,
           )
         EditorToolbarPageKey.Archived -> editorArchivedToolbarPage()
-        EditorToolbarPageKey.HorizontalRule -> editorHorizontalRuleToolbarPage()
+        EditorToolbarPageKey.HorizontalRule ->
+          editorHorizontalRuleToolbarPage(toolbarContext.horizontalRuleTarget)
         EditorToolbarPageKey.List -> editorListToolbarPage(toolbarContext.listMode)
-        EditorToolbarPageKey.Blockquote -> editorBlockquoteToolbarPage()
-        EditorToolbarPageKey.Callout -> editorCalloutToolbarPage()
-        EditorToolbarPageKey.Fold -> editorFoldToolbarPage()
+        EditorToolbarPageKey.Blockquote ->
+          editorBlockquoteToolbarPage(toolbarContext.blockquoteTarget)
+        EditorToolbarPageKey.Callout -> editorCalloutToolbarPage(toolbarContext.calloutTarget)
+        EditorToolbarPageKey.Fold -> editorFoldToolbarPage(toolbarContext.foldTargetId)
         EditorToolbarPageKey.Table -> editorTableToolbarPage(toolbarContext.tableMode)
       }
     }
@@ -117,11 +119,11 @@ internal fun EditorToolbarPages(
   autoTargetPageKey: EditorToolbarPageKey? = null,
   autoTargetKey: Any? = autoTargetPageKey,
   editorFocused: Boolean,
-  activeBottomPanel: EditorToolbarBottomPanelKey?,
+  activeBottomPanel: EditorToolbarBottomPanel?,
   fixedAction: ToolbarFixedAction,
   onEditorInputRequest: () -> Unit,
   onKeyboardDismissRequest: () -> Unit,
-  onBottomPanelToggle: (EditorToolbarBottomPanelKey) -> Unit,
+  onBottomPanelToggle: (EditorToolbarBottomPanel) -> Unit,
   onEditorMessage: (Message) -> Unit = {},
   onToolAction: (EditorToolbarToolAction) -> Unit = {},
   onCurrentPageKeyChange: (EditorToolbarPageKey?) -> Unit = {},

@@ -10,6 +10,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
+import co.typie.editor.ffi.Message
+import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarBlockquoteVariants
+import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarHorizontalRuleVariants
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarNodes
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarTools
 import co.typie.ui.theme.AppTheme
@@ -20,9 +23,11 @@ import dev.chrisbanes.haze.hazeEffect
 
 @Composable
 internal fun BottomToolbar(
-  panel: EditorToolbarBottomPanelKey,
+  panel: EditorToolbarBottomPanel,
   height: Dp,
   onEditorInputRequest: () -> Unit,
+  onBottomPanelRequest: (EditorToolbarBottomPanel) -> Unit,
+  onEditorMessage: (Message) -> Unit,
   onToolAction: (EditorToolbarToolAction) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -51,13 +56,28 @@ internal fun BottomToolbar(
         )
   ) {
     when (panel) {
-      EditorToolbarBottomPanelKey.Insert ->
+      EditorToolbarBottomPanel.Insert ->
         BottomToolbarNodes(
+          onEditorInputRequest = onEditorInputRequest,
+          onBottomPanelRequest = onBottomPanelRequest,
+          modifier = Modifier.fillMaxSize(),
+        )
+      EditorToolbarBottomPanel.Tools ->
+        BottomToolbarTools(onAction = onToolAction, modifier = Modifier.fillMaxSize())
+      is EditorToolbarBottomPanel.HorizontalRuleVariants ->
+        BottomToolbarHorizontalRuleVariants(
+          target = panel.target,
+          onEditorMessage = onEditorMessage,
           onEditorInputRequest = onEditorInputRequest,
           modifier = Modifier.fillMaxSize(),
         )
-      EditorToolbarBottomPanelKey.Tools ->
-        BottomToolbarTools(onAction = onToolAction, modifier = Modifier.fillMaxSize())
+      is EditorToolbarBottomPanel.BlockquoteVariants ->
+        BottomToolbarBlockquoteVariants(
+          target = panel.target,
+          onEditorMessage = onEditorMessage,
+          onEditorInputRequest = onEditorInputRequest,
+          modifier = Modifier.fillMaxSize(),
+        )
     }
   }
 }

@@ -28,7 +28,7 @@ internal data class ToolbarInputEnvironment(
 }
 
 internal sealed interface ToolbarIntent {
-  data class OpenPanel(val panel: EditorToolbarBottomPanelKey) : ToolbarIntent
+  data class OpenPanel(val panel: EditorToolbarBottomPanel) : ToolbarIntent
 
   data object RestoreEditorInput : ToolbarIntent
 
@@ -47,7 +47,7 @@ internal enum class ToolbarFixedAction {
 
 internal fun isEditorToolbarPresented(
   environment: ToolbarInputEnvironment,
-  activeBottomPanel: EditorToolbarBottomPanelKey?,
+  activeBottomPanel: EditorToolbarBottomPanel?,
   restoringEditorInput: Boolean = false,
   retainingToolbarModal: Boolean = false,
 ): Boolean {
@@ -90,12 +90,12 @@ internal sealed interface PanelKeyboardSpace {
 }
 
 internal data class PanelSession(
-  val key: EditorToolbarBottomPanelKey,
+  val panel: EditorToolbarBottomPanel,
   val height: Dp,
   val keyboardSpace: PanelKeyboardSpace?,
 )
 
-internal data class PanelSnapshot(val key: EditorToolbarBottomPanelKey, val height: Dp)
+internal data class PanelSnapshot(val panel: EditorToolbarBottomPanel, val height: Dp)
 
 private data class ImeObservation(val visible: Boolean = false, val hideEventVersion: Int = 0)
 
@@ -113,11 +113,11 @@ internal class EditorToolbarInputState {
   private var previousIme by mutableStateOf(ImeObservation())
   private var lastPanelSnapshot by mutableStateOf<PanelSnapshot?>(null)
 
-  val activeBottomPanel: EditorToolbarBottomPanelKey?
-    get() = panel?.key
+  val activeBottomPanel: EditorToolbarBottomPanel?
+    get() = panel?.panel
 
-  val lastBottomPanel: EditorToolbarBottomPanelKey?
-    get() = lastPanelSnapshot?.key
+  val lastBottomPanel: EditorToolbarBottomPanel?
+    get() = lastPanelSnapshot?.panel
 
   val lastBottomPanelHeight: Dp
     get() = lastPanelSnapshot?.height ?: ToolbarBottomPanelHeight
@@ -219,7 +219,7 @@ internal class EditorToolbarInputState {
         !currentPanel.keyboardSpace.retainsPanelSpaceWhenImeHidden
     ) {
       panel = currentPanel.copy(height = ToolbarBottomPanelMinHeight, keyboardSpace = null)
-      lastPanelSnapshot = PanelSnapshot(currentPanel.key, ToolbarBottomPanelMinHeight)
+      lastPanelSnapshot = PanelSnapshot(currentPanel.panel, ToolbarBottomPanelMinHeight)
     }
 
     if (keyboardRestoreInset != null) {
@@ -249,16 +249,16 @@ internal class EditorToolbarInputState {
     }
 
   private fun openPanel(
-    panelKey: EditorToolbarBottomPanelKey,
+    nextPanel: EditorToolbarBottomPanel,
     environment: ToolbarInputEnvironment,
   ): List<EditorInputEffect> {
     val currentPanel = panel
     if (currentPanel != null) {
-      if (currentPanel.key == panelKey) {
+      if (currentPanel.panel == nextPanel) {
         return restoreEditorInput(environment)
       } else {
-        panel = currentPanel.copy(key = panelKey)
-        lastPanelSnapshot = PanelSnapshot(panelKey, currentPanel.height)
+        panel = currentPanel.copy(panel = nextPanel)
+        lastPanelSnapshot = PanelSnapshot(nextPanel, currentPanel.height)
       }
       return emptyList()
     }
@@ -292,8 +292,8 @@ internal class EditorToolbarInputState {
       } else {
         0.dp
       }
-    panel = PanelSession(key = panelKey, height = panelHeight, keyboardSpace = keyboardSpace)
-    lastPanelSnapshot = PanelSnapshot(panelKey, panelHeight)
+    panel = PanelSession(panel = nextPanel, height = panelHeight, keyboardSpace = keyboardSpace)
+    lastPanelSnapshot = PanelSnapshot(nextPanel, panelHeight)
 
     return if (imeVisible || currentRestoreInset != null) {
       listOf(EditorInputEffect.HideKeyboard)
@@ -435,7 +435,7 @@ private fun PanelSession.withoutKeyboardRestoreOnClose(): PanelSession =
     null -> this
   }
 
-private fun PanelSession.snapshot(): PanelSnapshot = PanelSnapshot(key, height)
+private fun PanelSession.snapshot(): PanelSnapshot = PanelSnapshot(panel, height)
 
 private val PanelKeyboardSpace.retainsPanelSpaceWhenImeHidden: Boolean
   get() =
@@ -452,7 +452,7 @@ private val PanelKeyboardSpace.restoresKeyboardOnClose: Boolean
     }
 
 internal fun fixedActionFor(
-  activePanel: EditorToolbarBottomPanelKey?,
+  activePanel: EditorToolbarBottomPanel?,
   environment: ToolbarInputEnvironment,
   imeVisible: Boolean,
 ): ToolbarFixedAction =

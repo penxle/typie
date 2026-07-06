@@ -3,6 +3,8 @@ package co.typie.screen.editor.editor.toolbar
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import co.typie.editor.ffi.BlockquoteVariant
+import co.typie.editor.ffi.HorizontalRuleVariant
 import co.typie.editor.ffi.Message
 import co.typie.ui.icon.IconData
 import kotlinx.coroutines.CoroutineScope
@@ -78,9 +80,37 @@ internal enum class EditorToolbarPageKey {
   Table,
 }
 
-internal enum class EditorToolbarBottomPanelKey {
-  Insert,
-  Tools,
+internal sealed interface EditorToolbarBottomPanel {
+  data object Insert : EditorToolbarBottomPanel
+
+  data object Tools : EditorToolbarBottomPanel
+
+  data class HorizontalRuleVariants(val target: HorizontalRuleVariantPanelTarget) :
+    EditorToolbarBottomPanel
+
+  data class BlockquoteVariants(val target: BlockquoteVariantPanelTarget) : EditorToolbarBottomPanel
+}
+
+internal sealed interface HorizontalRuleVariantPanelTarget {
+  val currentVariant: HorizontalRuleVariant?
+
+  data object Insertion : HorizontalRuleVariantPanelTarget {
+    override val currentVariant: HorizontalRuleVariant? = null
+  }
+
+  data class Existing(val nodeId: String, override val currentVariant: HorizontalRuleVariant) :
+    HorizontalRuleVariantPanelTarget
+}
+
+internal sealed interface BlockquoteVariantPanelTarget {
+  val currentVariant: BlockquoteVariant?
+
+  data object Insertion : BlockquoteVariantPanelTarget {
+    override val currentVariant: BlockquoteVariant? = null
+  }
+
+  data class Existing(val nodeId: String, override val currentVariant: BlockquoteVariant) :
+    BlockquoteVariantPanelTarget
 }
 
 internal class EditorToolbarPage(
@@ -92,11 +122,11 @@ internal class EditorToolbarPage(
 )
 
 internal class EditorToolbarPageScope(
-  val activeBottomPanel: EditorToolbarBottomPanelKey?,
+  val activeBottomPanel: EditorToolbarBottomPanel?,
   val commandScope: CoroutineScope,
   val hasNextPage: Boolean,
   val navigateToPage: (EditorToolbarPageKey) -> Unit,
-  val toggleBottomPanel: (EditorToolbarBottomPanelKey) -> Unit,
+  val toggleBottomPanel: (EditorToolbarBottomPanel) -> Unit,
   val sendMessage: (Message) -> Unit,
   val performToolAction: (EditorToolbarToolAction) -> Unit,
 )

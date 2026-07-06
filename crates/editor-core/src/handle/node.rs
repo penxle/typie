@@ -14,6 +14,14 @@ pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError
             commands::delete_node(tr, id)?;
             Ok(())
         }
+        NodeOp::CycleCalloutVariant { id } => {
+            commands::cycle_callout_variant(tr, id)?;
+            Ok(())
+        }
+        NodeOp::Unwrap { id } => {
+            commands::unwrap_node(tr, id)?;
+            Ok(())
+        }
         NodeOp::Table { id, op } => match op {
             TableOp::InsertAxis {
                 axis,
@@ -65,8 +73,8 @@ mod tests {
 
     use editor_macros::state;
     use editor_model::{
-        ChildView, HorizontalRuleVariant, Node, PlainDoc, PlainHorizontalRuleNode, PlainNode,
-        PlainNodeEntry,
+        CalloutVariant, ChildView, HorizontalRuleVariant, Node, PlainDoc, PlainHorizontalRuleNode,
+        PlainNode, PlainNodeEntry,
     };
     use editor_state::{Affinity, Position, Selection, State, assert_state_eq};
 
@@ -213,5 +221,81 @@ mod tests {
             other => panic!("expected horizontal rule, got {other:?}"),
         };
         assert_eq!(variant, HorizontalRuleVariant::Zigzag);
+    }
+    #[test]
+    fn cycle_callout_variant_updates_target_and_records_history() {
+        let (initial, co, ..) = state! {
+            doc { root {
+                co: callout {
+                    p1: paragraph { text("body") }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+
+        editor.apply(Message::Node {
+            op: NodeOp::CycleCalloutVariant { id: co },
+        });
+
+        let variant = match editor.state().view().node(co).unwrap().node() {
+            Node::Callout(callout) => *callout.variant.get(),
+            other => panic!("expected callout, got {other:?}"),
+        };
+        assert_eq!(variant, CalloutVariant::Success);
+        assert!(editor.undo_history.can_undo());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        let variant = match editor.state().view().node(co).unwrap().node() {
+            Node::Callout(callout) => *callout.variant.get(),
+            other => panic!("expected callout, got {other:?}"),
+        };
+        assert_eq!(variant, CalloutVariant::Success);
+    }
+
+    #[test]
+    fn unwrap_node_lifts_blockquote_contents_and_records_history() {
+        let (initial, bq, ..) = state! {
+            doc { root {
+                bq: blockquote {
+                    p1: paragraph { text("quote") }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+
+        editor.apply(Message::Node {
+            op: NodeOp::Unwrap { id: bq },
+        });
+
+        let (unwrapped, ..) = state! {
+            doc { root {
+                p1: paragraph { text("quote") }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &unwrapped);
+        assert!(editor.undo_history.can_undo());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &unwrapped);
     }
 }

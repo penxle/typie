@@ -107,7 +107,7 @@ internal fun EditorToolbarHost(
   val pages =
     rememberEditorToolbarPages(toolbarContext = toolbarContext, textToolbarPage = textToolbarPage)
   val panel = inputState.panel
-  val activeBottomPanel = panel?.key
+  val activeBottomPanel = panel?.panel
   val effectiveImeInset = effectiveImeInset(environment)
   val imeVisible =
     isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
@@ -240,6 +240,14 @@ internal fun EditorToolbarHost(
     }
   }
 
+  fun restoreEditorInput() {
+    onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
+  }
+
+  fun toggleBottomPanel(panel: EditorToolbarBottomPanel) {
+    onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment))
+  }
+
   AnimatedVisibility(
     visible = toolbarPresented,
     enter = fadeIn(animationSpec = tween(ToolbarVisibilityEnterMillis)),
@@ -268,16 +276,12 @@ internal fun EditorToolbarHost(
           editorFocused = editorFocused,
           activeBottomPanel = activeBottomPanel,
           fixedAction = fixedAction,
-          onEditorInputRequest = {
-            onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
-          },
+          onEditorInputRequest = ::restoreEditorInput,
           onKeyboardDismissRequest = {
             sessionState.activeTextOptionMode = null
             onInputEffects(inputState.dispatch(ToolbarIntent.DismissInput, environment))
           },
-          onBottomPanelToggle = { panel ->
-            onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment))
-          },
+          onBottomPanelToggle = ::toggleBottomPanel,
           onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
           onToolAction = onToolAction,
           onCurrentPageKeyChange = { pageKey ->
@@ -329,11 +333,9 @@ internal fun EditorToolbarHost(
                 BottomToolbar(
                   panel = visiblePanel,
                   height = bottomPanelHeight,
-                  onEditorInputRequest = {
-                    onInputEffects(
-                      inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment)
-                    )
-                  },
+                  onEditorInputRequest = ::restoreEditorInput,
+                  onBottomPanelRequest = ::toggleBottomPanel,
+                  onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
                   onToolAction = onToolAction,
                 )
               }

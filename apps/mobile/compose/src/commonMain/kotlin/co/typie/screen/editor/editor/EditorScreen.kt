@@ -574,7 +574,7 @@ fun EditorScreen(entityId: String) {
     val toolbarPresented =
       isEditorToolbarPresented(
         environment = toolbarInputEnvironment,
-        activeBottomPanel = toolbarPanel?.key,
+        activeBottomPanel = toolbarPanel?.panel,
         restoringEditorInput = toolbarRestoreInset != null,
         retainingToolbarModal = toolbarSessionState.modalActive,
       )

@@ -21,14 +21,14 @@ private fun EditorMainToolbar(
   hasTextPage: Boolean,
   modifier: Modifier = Modifier,
 ) {
-  val insertPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.Insert
-  val toolsPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanelKey.Tools
+  val insertPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanel.Insert
+  val toolsPanelOpen = scope.activeBottomPanel == EditorToolbarBottomPanel.Tools
 
   EditorToolbarRow(scope = scope, modifier = modifier) {
     EditorToolbarButton(
       icon = Lucide.Plus,
       contentDescription = "새 노드 삽입",
-      onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanelKey.Insert) },
+      onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanel.Insert) },
       selected = insertPanelOpen,
     )
     if (hasTextPage) {
@@ -57,7 +57,7 @@ private fun EditorMainToolbar(
     EditorToolbarButton(
       icon = Lucide.Ellipsis,
       contentDescription = "도구",
-      onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanelKey.Tools) },
+      onClick = { scope.toggleBottomPanel(EditorToolbarBottomPanel.Tools) },
       selected = toolsPanelOpen,
     )
   }

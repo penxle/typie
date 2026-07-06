@@ -240,7 +240,9 @@ pub enum TableOp {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeOp {
     Delete { id: Dot },
+    CycleCalloutVariant { id: Dot },
     SetAttrs { id: Dot, attrs: PlainNode },
+    Unwrap { id: Dot },
     Table { id: Dot, op: TableOp },
 }
 

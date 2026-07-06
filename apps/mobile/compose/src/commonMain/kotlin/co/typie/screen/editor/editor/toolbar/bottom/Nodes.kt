@@ -48,6 +48,10 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
+import co.typie.icons.Typie
+import co.typie.screen.editor.editor.toolbar.BlockquoteVariantPanelTarget
+import co.typie.screen.editor.editor.toolbar.EditorToolbarBottomPanel
+import co.typie.screen.editor.editor.toolbar.HorizontalRuleVariantPanelTarget
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelRadius
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
@@ -58,7 +62,11 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun BottomToolbarNodes(onEditorInputRequest: () -> Unit, modifier: Modifier = Modifier) {
+internal fun BottomToolbarNodes(
+  onEditorInputRequest: () -> Unit,
+  onBottomPanelRequest: (EditorToolbarBottomPanel) -> Unit,
+  modifier: Modifier = Modifier,
+) {
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val scope = rememberCoroutineScope()
@@ -93,14 +101,19 @@ internal fun BottomToolbarNodes(onEditorInputRequest: () -> Unit, modifier: Modi
         item = item,
         modifier = Modifier.fillMaxWidth(),
         onClick = {
-          val currentEditor = runtime.editor ?: return@NodeInsertTile
-          scope.launch {
-            currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
-              enqueue(item.message)
-              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+          when (val action = item.action) {
+            is EditorToolbarNodeInsertAction.OpenPanel -> onBottomPanelRequest(action.panel)
+            is EditorToolbarNodeInsertAction.SendMessage -> {
+              val currentEditor = runtime.editor ?: return@NodeInsertTile
+              scope.launch {
+                currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+                  enqueue(action.message)
+                  beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                }
+              }
+              onEditorInputRequest()
             }
           }
-          onEditorInputRequest()
         },
       )
     }
@@ -165,8 +178,14 @@ private fun NodeInsertTile(
 internal data class EditorToolbarNodeInsertItem(
   val icon: IconData,
   val label: String,
-  val message: Message,
+  val action: EditorToolbarNodeInsertAction,
 )
+
+internal sealed interface EditorToolbarNodeInsertAction {
+  data class SendMessage(val message: Message) : EditorToolbarNodeInsertAction
+
+  data class OpenPanel(val panel: EditorToolbarBottomPanel) : EditorToolbarNodeInsertAction
+}
 
 internal fun editorToolbarNodeInsertItems(
   showPageBreak: Boolean,
@@ -176,53 +195,69 @@ internal fun editorToolbarNodeInsertItems(
       EditorToolbarNodeInsertItem(
         icon = Lucide.Image,
         label = "이미지",
-        message = fragmentInsertion(PlainNode.Image(id = null)),
+        action =
+          EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Image(id = null))),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Paperclip,
         label = "파일",
-        message = fragmentInsertion(PlainNode.File(id = null)),
+        action =
+          EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.File(id = null))),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.FileUp,
         label = "임베드",
-        message = fragmentInsertion(PlainNode.Embed(id = null)),
+        action =
+          EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Embed(id = null))),
       ),
       EditorToolbarNodeInsertItem(
-        icon = Lucide.Scissors,
+        icon = Typie.HorizontalRule,
         label = "구분선",
-        message = fragmentInsertion(PlainNode.HorizontalRule()),
+        action =
+          EditorToolbarNodeInsertAction.OpenPanel(
+            EditorToolbarBottomPanel.HorizontalRuleVariants(
+              target = HorizontalRuleVariantPanelTarget.Insertion
+            )
+          ),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Quote,
         label = "인용구",
-        message = fragmentInsertion(PlainNode.Blockquote()),
+        action =
+          EditorToolbarNodeInsertAction.OpenPanel(
+            EditorToolbarBottomPanel.BlockquoteVariants(
+              target = BlockquoteVariantPanelTarget.Insertion
+            )
+          ),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.GalleryVerticalEnd,
         label = "강조",
-        message = fragmentInsertion(PlainNode.Callout()),
+        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Callout())),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.ChevronsDownUp,
         label = "접기",
-        message = fragmentInsertion(PlainNode.Fold),
+        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Fold)),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Table,
         label = "표",
-        message = fragmentInsertion(PlainNode.Table()),
+        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Table())),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.List,
         label = "목록",
-        message = fragmentInsertion(PlainNode.BulletList),
+        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.BulletList)),
       ),
       if (showPageBreak) {
         EditorToolbarNodeInsertItem(
           icon = Lucide.FilePlus,
           label = "페이지 나누기",
-          message = Message.Insertion(InsertionOp.Break(Break.Page)),
+          action =
+            EditorToolbarNodeInsertAction.SendMessage(
+              Message.Insertion(InsertionOp.Break(Break.Page))
+            ),
         )
       } else {
         null
@@ -230,7 +265,10 @@ internal fun editorToolbarNodeInsertItems(
       EditorToolbarNodeInsertItem(
         icon = if (hasUnitSelection) Lucide.CornerLeftUp else Lucide.CornerDownLeft,
         label = if (hasUnitSelection) "위에 문단 넣기" else "문단 내 줄바꿈",
-        message = Message.Key(KeyEvent(Key.Enter, InputModifiers(shift = true))),
+        action =
+          EditorToolbarNodeInsertAction.SendMessage(
+            Message.Key(KeyEvent(Key.Enter, InputModifiers(shift = true)))
+          ),
       ),
     )
     .filterNotNull()
