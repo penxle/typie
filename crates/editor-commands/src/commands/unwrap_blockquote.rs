@@ -112,6 +112,36 @@ mod tests {
     }
 
     #[test]
+    fn unwrap_blockquote_after_image_keeps_children_in_wrapper_slot() {
+        let (initial, bq, ..) = state! {
+            doc {
+                root {
+                    image
+                    bq: blockquote {
+                        p1: paragraph { text("a") }
+                        paragraph { text("b") }
+                    }
+                    paragraph { text("c") }
+                }
+            }
+            selection: (bq, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| unwrap_blockquote(&mut tr, bq));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    image
+                    p1: paragraph { text("a") }
+                    paragraph { text("b") }
+                    paragraph { text("c") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn unwrap_non_blockquote_returns_false() {
         let (initial, p, ..) = state! {
             doc {

@@ -177,6 +177,9 @@ impl Transaction {
         })
     }
 
+    /// Moves a block node to `new_parent` at `new_index`, counted in the same
+    /// full child-slot index domain as `insert_subtree` and `remove_subtree`.
+    /// Leaf siblings such as image atoms are included in this index domain.
     pub fn move_node(
         &mut self,
         block: Dot,
@@ -187,7 +190,7 @@ impl Transaction {
             let ps = &self.state.projected;
             let parent = ps.parent_of(block).ok_or(StepError::NodeNotFound(block))?;
             let index = ps
-                .child_block_dots(parent)
+                .child_elem_dots(parent)
                 .iter()
                 .position(|d| *d == block)
                 .ok_or(StepError::NodeNotFound(block))?;

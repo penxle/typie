@@ -66,7 +66,10 @@ pub(crate) fn lift(
         lifted_id = {
             let view = tr.state().view();
             view.node(wrapper_parent_id)
-                .and_then(|parent| parent.child_blocks().nth(target_index).map(|b| b.id()))
+                .and_then(|parent| match parent.child_at(target_index) {
+                    Some(editor_model::ChildView::Block(block)) => Some(block.id()),
+                    _ => None,
+                })
                 .ok_or_else(|| CommandError::Corrupted("lifted paragraph not found".into()))?
         };
 

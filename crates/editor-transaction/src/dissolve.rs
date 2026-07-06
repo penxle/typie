@@ -23,7 +23,7 @@ pub fn dissolve(node: &NodeView) -> Vec<Step> {
         None => return vec![],
     };
 
-    let node_index = match parent.child_blocks().position(|b| b.id() == node.id()) {
+    let node_index = match node.index() {
         Some(i) => i,
         None => return vec![],
     };

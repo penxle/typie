@@ -49,7 +49,10 @@ pub(crate) fn unwrap_block_wrapper(tr: &mut Transaction, node_id: Dot) -> Comman
     let first_lifted = {
         let view = tr.state().view();
         view.node(parent_id)
-            .and_then(|parent| parent.child_blocks().nth(node_index).map(|b| b.id()))
+            .and_then(|parent| match parent.child_at(node_index) {
+                Some(editor_model::ChildView::Block(block)) => Some(block.id()),
+                _ => None,
+            })
     };
     if let Some(block_id) = first_lifted {
         place_caret_at_block_start(tr, block_id)?;

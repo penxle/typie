@@ -246,6 +246,68 @@ mod tests {
     }
 
     #[test]
+    fn enter_in_empty_blockquote_after_image_before_text_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    blockquote {
+                        p1: paragraph {}
+                    }
+                    paragraph {
+                        text("1")
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    p1: paragraph {}
+                    paragraph {
+                        text("1")
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_in_empty_blockquote_after_image_before_empty_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    blockquote {
+                        p1: paragraph {}
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    image
+                    p1: paragraph {}
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn shift_enter_inserts_hard_break() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }

@@ -235,6 +235,38 @@ mod tests {
     }
 
     #[test]
+    fn lift_after_image_keeps_paragraph_in_wrapper_slot() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    image
+                    blockquote {
+                        p1: paragraph { text("A") }
+                        paragraph { text("B") }
+                    }
+                    paragraph { text("C") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_first_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    image
+                    p1: paragraph { text("A") }
+                    blockquote {
+                        paragraph { text("B") }
+                    }
+                    paragraph { text("C") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn cursor_on_text_node_at_start() {
         let (initial, ..) = state! {
             doc {

@@ -17,14 +17,9 @@ pub(crate) fn children_count(ps: &ProjectedState, block: Dot) -> Option<usize> {
     ps.child_count(block)
 }
 
-pub(crate) fn child_block_ids(ps: &ProjectedState, block: Dot) -> Vec<Dot> {
-    ps.child_block_dots(block)
-}
-
 /// All children of `block` (chars, atom leaves, and nested blocks) as dots,
 /// in order. Block-level atoms (Image/HR/…) project as Child::Leaf, so this is
-/// the addressing the command layer uses (full child-slot index = offset),
-/// distinct from `child_block_ids` which is blocks-only.
+/// the addressing the command layer uses (full child-slot index = offset).
 pub(crate) fn child_elem_ids(ps: &ProjectedState, block: Dot) -> Vec<Dot> {
     ps.child_elem_dots(block)
 }
@@ -99,32 +94,6 @@ pub(crate) fn seq_insert_pos(ps: &ProjectedState, block: Dot, offset: usize) -> 
 
 pub(crate) fn subtree_dots(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> {
     ps.is_block(block).then(|| ps.subtree_real_dots(block))
-}
-
-/// Seq position at which to insert a new block as the `block_index`-th block
-/// child of `parent`, accounting for nested subtrees (insert after the entire
-/// preceding sibling subtree, not just its token).
-pub(crate) fn block_seq_insert_pos(
-    ps: &ProjectedState,
-    parent: Dot,
-    block_index: usize,
-) -> Result<usize, StepError> {
-    let children = child_block_ids(ps, parent);
-    if block_index > children.len() {
-        return Err(StepError::IndexOutOfBounds {
-            parent,
-            index: block_index,
-            len: children.len(),
-        });
-    }
-    if block_index == 0 {
-        return seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent));
-    }
-    let prev = children[block_index - 1];
-    let max = ps
-        .subtree_max_seq_pos(prev)
-        .ok_or(StepError::NodeNotFound(prev))?;
-    Ok(max + 1)
 }
 
 pub(crate) fn insert_text_ops(

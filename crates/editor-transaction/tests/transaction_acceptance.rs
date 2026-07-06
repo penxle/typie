@@ -30,6 +30,19 @@ fn root_blocks(state: &State) -> Vec<(NodeType, String)> {
         .collect()
 }
 
+fn root_child_labels(state: &State) -> Vec<String> {
+    state
+        .view()
+        .root()
+        .unwrap()
+        .children()
+        .map(|child| match child {
+            ChildView::Block(block) => block.inline_text(),
+            ChildView::Leaf(leaf) => format!("{:?}", leaf.node_type()),
+        })
+        .collect()
+}
+
 fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
     fn walk(nv: &NodeView, depth: usize, out: &mut Vec<(usize, NodeType, String)>) {
         out.push((depth, nv.node_type(), nv.inline_text()));
@@ -451,6 +464,29 @@ mod tests {
         };
         let restored = back.apply(&moved).unwrap().state;
         assert_eq!(snapshot(&restored), before);
+    }
+
+    #[test]
+    fn move_node_uses_full_child_slot_index() {
+        let (state, _p1, p2) = state! {
+            doc {
+                root {
+                    image
+                    p1: paragraph { text("a") }
+                    p2: paragraph { text("b") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let root = root_id(&state);
+        let mut tr = Transaction::new(&state);
+        tr.move_node(p2, root, 1).unwrap();
+        let (moved, ..) = tr.commit();
+
+        assert_eq!(
+            root_child_labels(&moved),
+            vec!["Image".to_string(), "b".to_string(), "a".to_string()]
+        );
     }
 
     #[test]

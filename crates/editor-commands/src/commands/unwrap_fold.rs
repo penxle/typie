@@ -2,7 +2,7 @@ use editor_crdt::Dot;
 use editor_model::{ChildView, Node, NodeType, PlainNode, PlainParagraphNode, Subtree};
 use editor_transaction::Transaction;
 
-use crate::helpers::place_caret_at_block_start;
+use crate::helpers::{child_node_type, place_caret_at_block_start};
 use crate::{CommandError, CommandResult};
 
 pub fn unwrap_fold(tr: &mut Transaction, node_id: Dot) -> CommandResult {
@@ -41,7 +41,7 @@ pub fn unwrap_fold(tr: &mut Transaction, node_id: Dot) -> CommandResult {
             .map(|b| (b.id(), b.node_type()))
             .collect();
 
-        let mut new_seq: Vec<NodeType> = parent.child_blocks().map(|b| b.node_type()).collect();
+        let mut new_seq: Vec<NodeType> = parent.children().map(|c| child_node_type(&c)).collect();
         new_seq.remove(fold_index);
         let mut insert_at = fold_index;
         if has_title_text {
@@ -76,8 +76,10 @@ pub fn unwrap_fold(tr: &mut Transaction, node_id: Dot) -> CommandResult {
             let new_para = {
                 let view = tr.view();
                 view.node(parent_id)
-                    .and_then(|p| p.child_blocks().nth(next_index))
-                    .map(|b| b.id())
+                    .and_then(|p| match p.child_at(next_index) {
+                        Some(ChildView::Block(block)) => Some(block.id()),
+                        _ => None,
+                    })
                     .ok_or(CommandError::NodeNotFound(parent_id))?
             };
             if !title_text.is_empty() {
@@ -100,8 +102,10 @@ pub fn unwrap_fold(tr: &mut Transaction, node_id: Dot) -> CommandResult {
             // stale; re-resolve the first lifted block at the fold's old slot.
             let view = tr.view();
             view.node(parent_id)
-                .and_then(|p| p.child_blocks().nth(fold_index))
-                .map(|b| b.id())
+                .and_then(|p| match p.child_at(fold_index) {
+                    Some(ChildView::Block(block)) => Some(block.id()),
+                    _ => None,
+                })
                 .ok_or_else(|| CommandError::Corrupted("lifted content missing".into()))?
         }
     };
@@ -168,6 +172,37 @@ mod tests {
                 root {
                     p1: paragraph { text("body") }
                     paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn unwrap_fold_after_image_keeps_content_in_fold_slot() {
+        let (initial, f, ..) = state! {
+            doc {
+                root {
+                    image
+                    f: fold {
+                        fold_title {}
+                        fold_content {
+                            p1: paragraph { text("body") }
+                        }
+                    }
+                    paragraph { text("tail") }
+                }
+            }
+            selection: (f, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| unwrap_fold(&mut tr, f));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    image
+                    p1: paragraph { text("body") }
+                    paragraph { text("tail") }
                 }
             }
             selection: (p1, 0)

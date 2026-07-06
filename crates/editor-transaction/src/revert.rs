@@ -50,8 +50,8 @@ fn current_children(tr: &Transaction, id: Dot) -> Vec<Dot> {
 }
 
 fn reconcile_children(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
-    let target_ids = target_children(target, id);
-    let target_set: HashSet<Dot> = target_ids.iter().copied().collect();
+    let target_children = target_children(target, id);
+    let target_set: HashSet<Dot> = target_children.iter().copied().collect();
 
     for cid in current_children(tr, id) {
         if !target_set.contains(&cid) {
@@ -59,17 +59,28 @@ fn reconcile_children(tr: &mut Transaction, target: &State, id: Dot) -> Result<(
         }
     }
 
-    for (index, cid) in target_ids.iter().enumerate() {
-        let cid = *cid;
+    for cid in target_children {
+        let target_index = target
+            .view()
+            .node(cid)
+            .and_then(|node| node.index())
+            .ok_or(StepError::NodeNotFound(cid))?;
         let live = tr.view().node(cid).is_some();
         if live {
-            let cur = current_children(tr, id);
-            if cur.iter().position(|x| *x == cid) != Some(index) {
-                tr.move_node(cid, id, index)?;
+            let current_location = {
+                let view = tr.view();
+                view.node(cid).and_then(|node| {
+                    let parent = node.parent()?;
+                    let index = node.index()?;
+                    Some((parent.id(), index))
+                })
+            };
+            if current_location != Some((id, target_index)) {
+                tr.move_node(cid, id, target_index)?;
             }
             reconcile_node(tr, target, cid)?;
         } else {
-            revive_node(tr, target, cid, id, index)?;
+            revive_node(tr, target, cid, id, target_index)?;
         }
     }
     Ok(())

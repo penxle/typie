@@ -7,9 +7,9 @@ use editor_state::{Affinity, Position, Selection, State};
 use editor_transaction::{Step, Transaction, fulfill};
 
 use super::{
-    apply_first_text_marker_lift, capture_first_text_marker, find_ancestor_textblock,
-    find_enclosing_paragraph_id, find_lowest_common_ancestor, is_block_container,
-    merge_element_cross_parent, next_sibling, path_from_ancestor,
+    apply_first_text_marker_lift, capture_first_text_marker, child_elem_id,
+    find_ancestor_textblock, find_enclosing_paragraph_id, find_lowest_common_ancestor,
+    is_block_container, merge_element_cross_parent, next_sibling, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
 
@@ -960,8 +960,8 @@ fn merge_containers(tr: &mut Transaction, target: Dot, source: Dot) -> Result<()
             let view = tr.state().view();
             view.node(target)
                 .map(|n| {
-                    n.child_blocks()
-                        .filter(|c| c.id().as_op_dot().is_some())
+                    n.children()
+                        .filter(|c| child_elem_id(c).as_op_dot().is_some())
                         .count()
                 })
                 .unwrap_or(0)
@@ -1117,7 +1117,11 @@ fn merge_after_delete(
                                 let from_len = {
                                     let view = tr.state().view();
                                     view.node(from_id)
-                                        .map(|n| n.child_blocks().count())
+                                        .map(|n| {
+                                            n.children()
+                                                .filter(|c| child_elem_id(c).as_op_dot().is_some())
+                                                .count()
+                                        })
                                         .unwrap_or(0)
                                 };
                                 tr.move_node(moved_id, from_id, from_len)?;
