@@ -32,4 +32,13 @@ internal actual object RenderBuffer {
   @JvmStatic actual external fun getPinnedDamagePointer(handle: Long): Long
 
   @JvmStatic actual external fun getPinnedDamageCount(handle: Long): Int
+
+  @JvmStatic
+  actual external fun readPinnedInto(
+    handle: Long,
+    dstAddr: Long,
+    dstLen: Long,
+    rowFrom: Int,
+    rowTo: Int,
+  ): Boolean
 }

@@ -24,4 +24,6 @@ internal expect object RenderBuffer {
   fun getPinnedDamagePointer(handle: Long): Long
 
   fun getPinnedDamageCount(handle: Long): Int
+
+  fun readPinnedInto(handle: Long, dstAddr: Long, dstLen: Long, rowFrom: Int, rowTo: Int): Boolean
 }

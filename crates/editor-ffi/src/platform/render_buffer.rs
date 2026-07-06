@@ -243,6 +243,34 @@ impl RenderBuffer {
             .map(|s| s.damage.as_slice())
             .unwrap_or(&[])
     }
+
+    /// # Safety
+    /// `dst` must be valid for `dst_len` bytes of writes and must not overlap the pinned slot.
+    pub unsafe fn read_pinned_into(
+        &self,
+        dst: *mut u8,
+        dst_len: usize,
+        row_from: u32,
+        row_to: u32,
+    ) -> bool {
+        let Some(slot) = self.pinned_slot() else {
+            return false;
+        };
+        if dst_len != slot.data.len() || row_from > row_to || row_to > slot.height {
+            return false;
+        }
+        let stride = slot.width as usize * 4;
+        let start = row_from as usize * stride;
+        let end = row_to as usize * stride;
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                slot.data[start..end].as_ptr(),
+                dst.add(start),
+                end - start,
+            );
+        }
+        true
+    }
 }
 
 cfg_if! {
@@ -358,6 +386,27 @@ cfg_if! {
                 return 0;
             }
             unsafe { ((*(handle as *const RenderBuffer)).pinned_damage().len() / 4) as i32 }
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn render_buffer_read_pinned_into(
+            handle: i64,
+            dst: i64,
+            dst_len: i64,
+            row_from: i32,
+            row_to: i32,
+        ) -> bool {
+            if handle == 0 || dst == 0 || dst_len < 0 || row_from < 0 || row_to < 0 {
+                return false;
+            }
+            unsafe {
+                (*(handle as *const RenderBuffer)).read_pinned_into(
+                    dst as *mut u8,
+                    dst_len as usize,
+                    row_from as u32,
+                    row_to as u32,
+                )
+            }
         }
     } else {
         use std::ffi::c_void;
@@ -524,6 +573,29 @@ cfg_if! {
                 return 0;
             }
             unsafe { ((*(handle as *const RenderBuffer)).pinned_damage().len() / 4) as i32 }
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_readPinnedInto(
+            _env: *mut c_void,
+            _class: *mut c_void,
+            handle: i64,
+            dst: i64,
+            dst_len: i64,
+            row_from: i32,
+            row_to: i32,
+        ) -> bool {
+            if handle == 0 || dst == 0 || dst_len < 0 || row_from < 0 || row_to < 0 {
+                return false;
+            }
+            unsafe {
+                (*(handle as *const RenderBuffer)).read_pinned_into(
+                    dst as *mut u8,
+                    dst_len as usize,
+                    row_from as u32,
+                    row_to as u32,
+                )
+            }
         }
     }
 }
@@ -857,5 +929,72 @@ mod tests {
         assert_eq!(rb.pinned_version(), 0);
         assert_eq!(rb.pinned_damage_from(), 0);
         assert_eq!(rb.pinned_damage(), &[] as &[i32]);
+    }
+
+    fn commit_full(rb: &RenderBuffer, w: u32, h: u32, seed: u8) {
+        rb.commit_damage(&[full_rect(w, h)], |data, r| {
+            for y in r.y0..r.y1 {
+                for x in r.x0..r.x1 {
+                    let off = y as usize * w as usize * 4 + x as usize * 4;
+                    data[off..off + 4].fill(seed.wrapping_add((x + y * w as i32) as u8));
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn read_pinned_into_copies_full_range() {
+        let rb = RenderBuffer::new(4, 3);
+        commit_full(&rb, 4, 3, 7);
+        assert!(rb.begin_read());
+        let mut dst = vec![0u8; 4 * 3 * 4];
+        assert!(unsafe { rb.read_pinned_into(dst.as_mut_ptr(), dst.len(), 0, 3) });
+        let slot = rb.pinned_slot().unwrap();
+        assert_eq!(&dst[..], &slot.data[..]);
+        rb.end_read();
+    }
+
+    #[test]
+    fn read_pinned_into_partial_rows_leave_rest_untouched() {
+        let rb = RenderBuffer::new(4, 3);
+        commit_full(&rb, 4, 3, 7);
+        assert!(rb.begin_read());
+        let mut dst = vec![0xAAu8; 4 * 3 * 4];
+        assert!(unsafe { rb.read_pinned_into(dst.as_mut_ptr(), dst.len(), 1, 2) });
+        let slot = rb.pinned_slot().unwrap();
+        let stride = 4 * 4;
+        assert!(dst[..stride].iter().all(|&b| b == 0xAA));
+        assert_eq!(&dst[stride..2 * stride], &slot.data[stride..2 * stride]);
+        assert!(dst[2 * stride..].iter().all(|&b| b == 0xAA));
+        rb.end_read();
+    }
+
+    #[test]
+    fn read_pinned_into_without_pin_fails() {
+        let rb = RenderBuffer::new(4, 3);
+        commit_full(&rb, 4, 3, 7);
+        let mut dst = vec![0u8; 4 * 3 * 4];
+        assert!(!unsafe { rb.read_pinned_into(dst.as_mut_ptr(), dst.len(), 0, 3) });
+    }
+
+    #[test]
+    fn read_pinned_into_wrong_len_fails() {
+        let rb = RenderBuffer::new(4, 3);
+        commit_full(&rb, 4, 3, 7);
+        assert!(rb.begin_read());
+        let mut dst = vec![0u8; 4 * 3 * 4 - 4];
+        assert!(!unsafe { rb.read_pinned_into(dst.as_mut_ptr(), dst.len(), 0, 3) });
+        rb.end_read();
+    }
+
+    #[test]
+    fn read_pinned_into_row_range_out_of_bounds_fails() {
+        let rb = RenderBuffer::new(4, 3);
+        commit_full(&rb, 4, 3, 7);
+        assert!(rb.begin_read());
+        let mut dst = vec![0u8; 4 * 3 * 4];
+        assert!(!unsafe { rb.read_pinned_into(dst.as_mut_ptr(), dst.len(), 0, 4) });
+        assert!(!unsafe { rb.read_pinned_into(dst.as_mut_ptr(), dst.len(), 2, 1) });
+        rb.end_read();
     }
 }

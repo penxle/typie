@@ -11,7 +11,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.asComposeImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,8 +19,8 @@ import kotlinx.coroutines.flow.conflate
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
-import org.jetbrains.skia.Image as SkImage
 import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.impl.use
 
 @Composable
 internal actual fun RenderCanvas(
@@ -70,8 +70,8 @@ internal actual fun RenderCanvas(
 
     var cachedWidth = 0
     var cachedHeight = 0
-    var cachedBytes: ByteArray? = null
     var cachedSkBitmap: Bitmap? = null
+    var cachedPixelsAddr = 0L
     var readerLastVersion = 0L
 
     trigger.conflate().collect { version ->
@@ -79,16 +79,36 @@ internal actual fun RenderCanvas(
 
       val w = RenderBuffer.getPixelWidth(handle)
       val h = RenderBuffer.getPixelHeight(handle)
-      val dataAddr = RenderBuffer.getDataPointer(handle)
-      if (w <= 0 || h <= 0 || dataAddr == 0L) {
+      if (w <= 0 || h <= 0) {
         RenderBuffer.endRead(handle)
         return@collect
       }
 
-      val byteCount = w * h * 4
-      val bytes =
-        cachedBytes?.takeIf { it.size == byteCount }
-          ?: ByteArray(byteCount).also { cachedBytes = it }
+      val hadBitmap = cachedSkBitmap != null
+      val prevW = cachedWidth
+      val prevH = cachedHeight
+      val skBitmap =
+        cachedSkBitmap?.takeIf { prevW == w && prevH == h }
+          ?: run {
+            val fresh = Bitmap()
+            if (!fresh.allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL))) {
+              fresh.close()
+              RenderBuffer.endRead(handle)
+              return@collect
+            }
+            val addr = fresh.peekPixels()?.use { it.addr.toLong() } ?: 0L
+            if (addr == 0L) {
+              fresh.close()
+              RenderBuffer.endRead(handle)
+              return@collect
+            }
+            cachedSkBitmap = fresh
+            cachedPixelsAddr = addr
+            cachedWidth = w
+            cachedHeight = h
+            readerLastVersion = 0L
+            fresh
+          }
 
       val pinnedVersion = RenderBuffer.getPinnedVersion(handle)
       val damageFrom = RenderBuffer.getPinnedDamageFrom(handle)
@@ -96,47 +116,32 @@ internal actual fun RenderCanvas(
       val damagePtr = RenderBuffer.getPinnedDamagePointer(handle)
       val partial =
         shouldPartialUpload(
-          cachedBytes != null,
-          cachedWidth,
-          cachedHeight,
+          hadBitmap,
+          prevW,
+          prevH,
           w,
           h,
           readerLastVersion,
           damageFrom,
           damageCount,
         )
+      var rowFrom = 0
+      var rowTo = h
       if (partial && damagePtr != 0L && damageCount.toLong() * 4 <= Int.MAX_VALUE) {
         val ints = readNativeInts(damagePtr, damageCount * 4)
         val rr = damageRowRange(ints, damageCount, h)
-        val rowStride = w.toLong() * 4
-        val offL = rr.minY.toLong() * rowStride
-        val lenL = (rr.maxY - rr.minY).toLong() * rowStride
-        if (
-          rr.minY < rr.maxY &&
-            offL >= 0 &&
-            lenL <= Int.MAX_VALUE &&
-            offL <= bytes.size.toLong() - lenL
-        ) {
-          copyNativeBytesRange(dataAddr, bytes, offL.toInt(), lenL.toInt())
-        } else {
-          copyNativeBytes(dataAddr, bytes, byteCount)
+        if (rr.minY < rr.maxY) {
+          rowFrom = rr.minY
+          rowTo = rr.maxY
         }
-      } else {
-        copyNativeBytes(dataAddr, bytes, byteCount)
       }
+      val ok =
+        RenderBuffer.readPinnedInto(handle, cachedPixelsAddr, w.toLong() * h * 4, rowFrom, rowTo)
       RenderBuffer.endRead(handle)
+      if (!ok) return@collect
 
-      val skBitmap =
-        cachedSkBitmap?.takeIf { cachedWidth == w && cachedHeight == h }
-          ?: Bitmap()
-            .apply { allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL)) }
-            .also {
-              cachedSkBitmap = it
-              cachedWidth = w
-              cachedHeight = h
-            }
-      skBitmap.installPixels(skBitmap.imageInfo, bytes, w * 4)
-      bitmap = SkImage.makeFromBitmap(skBitmap).toComposeImageBitmap()
+      skBitmap.notifyPixelsChanged()
+      bitmap = skBitmap.asComposeImageBitmap()
       currentOnBitmapCommitted(IntSize(w, h), version)
       readerLastVersion = pinnedVersion
     }

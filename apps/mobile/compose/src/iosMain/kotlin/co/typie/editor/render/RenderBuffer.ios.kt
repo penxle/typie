@@ -31,4 +31,12 @@ internal actual object RenderBuffer {
     SwiftRenderBuffer.pinnedDamagePointer(handle)
 
   actual fun getPinnedDamageCount(handle: Long): Int = SwiftRenderBuffer.pinnedDamageCount(handle)
+
+  actual fun readPinnedInto(
+    handle: Long,
+    dstAddr: Long,
+    dstLen: Long,
+    rowFrom: Int,
+    rowTo: Int,
+  ): Boolean = SwiftRenderBuffer.readPinnedInto(handle, dstAddr, dstLen, rowFrom, rowTo)
 }

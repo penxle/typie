@@ -36,6 +36,9 @@ private func renderBufferPinnedDamagePointer(_ handle: Int64) -> Int64
 @_silgen_name("render_buffer_pinned_damage_count")
 private func renderBufferPinnedDamageCount(_ handle: Int64) -> Int32
 
+@_silgen_name("render_buffer_read_pinned_into")
+private func renderBufferReadPinnedInto(_ handle: Int64, _ dst: Int64, _ dstLen: Int64, _ rowFrom: Int32, _ rowTo: Int32) -> Bool
+
 @objc public class RenderBuffer: NSObject {
     @objc public static func allocate(_ width: Int32, _ height: Int32) -> Int64 {
         renderBufferAllocate(width, height)
@@ -83,5 +86,9 @@ private func renderBufferPinnedDamageCount(_ handle: Int64) -> Int32
 
     @objc public static func pinnedDamageCount(_ handle: Int64) -> Int32 {
         renderBufferPinnedDamageCount(handle)
+    }
+
+    @objc public static func readPinnedInto(_ handle: Int64, _ dst: Int64, _ dstLen: Int64, _ rowFrom: Int32, _ rowTo: Int32) -> Bool {
+        renderBufferReadPinnedInto(handle, dst, dstLen, rowFrom, rowTo)
     }
 }

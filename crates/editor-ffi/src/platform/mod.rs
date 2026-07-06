@@ -15,3 +15,9 @@ cfg_if! {
         pub use default::{PlatformHandle, SurfaceHandle};
     }
 }
+
+#[cfg(all(
+    test,
+    not(any(target_os = "android", target_os = "ios", feature = "uniffi"))
+))]
+mod render_buffer;

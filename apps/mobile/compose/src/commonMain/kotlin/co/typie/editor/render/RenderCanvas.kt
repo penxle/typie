@@ -16,8 +16,4 @@ internal expect fun RenderCanvas(
   onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
 )
 
-internal expect fun copyNativeBytes(srcAddr: Long, dst: ByteArray, length: Int)
-
-internal expect fun copyNativeBytesRange(srcAddr: Long, dst: ByteArray, offset: Int, length: Int)
-
 internal expect fun readNativeInts(srcAddr: Long, count: Int): IntArray
