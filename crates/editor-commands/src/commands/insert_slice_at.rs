@@ -322,4 +322,52 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn insert_slice_at_image_materializes_synthetic_trailing_paragraph() {
+        let (initial, ..) = state! {
+            doc { root { image } }
+            selection: none
+        };
+        let root = initial.view().root().unwrap().id();
+        let synth_p = {
+            let view = initial.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        assert!(
+            synth_p.is_synthetic(),
+            "trailing paragraph must be synthetic"
+        );
+
+        let mut tr = Transaction::new(&initial);
+        let inserted_selection = insert_slice_at(&mut tr, Position::new(synth_p, 0), image_slice())
+            .expect("insert succeeds")
+            .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        assert_eq!(
+            kinds(&view, root),
+            vec![NodeType::Image, NodeType::Image, NodeType::Paragraph]
+        );
+        assert_eq!(
+            inserted_selection,
+            Selection::new(
+                Position {
+                    node: root,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: root,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+    }
 }

@@ -168,31 +168,28 @@ fn apply_inline_modifiers(
     Ok(())
 }
 
-/// If a collapsed caret sits inside a projection-synthesized scaffold block (one
-/// with no authored op — e.g. the mandatory trailing paragraph the Root schema
-/// derives after a block-level unit like a horizontal rule), that block has no
-/// CRDT identity to parent inserted content to, so an insert against it fails
-/// with `OffsetOutOfBounds`. Materialize the synthetic block — and any synthetic
+/// If a position targets a projection-synthesized scaffold block (one with no
+/// authored op — e.g. the mandatory trailing paragraph the Root schema derives
+/// after a block-level unit like a horizontal rule), that block has no CRDT
+/// identity to parent inserted content to, so an insert against it fails with
+/// `OffsetOutOfBounds`. Materialize the synthetic block — and any synthetic
 /// ancestors up to the nearest real (or root) container — into real blocks and
-/// move the caret into the new real block, so the subsequent insert has a real
-/// target. No-op for a real caret block, the root, or a non-collapsed selection.
-pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), CommandError> {
-    let Some(selection) = tr.selection() else {
-        return Ok(());
-    };
-    if selection.anchor != selection.head {
-        return Ok(());
-    }
-    let caret = selection.head.node;
-    if caret.as_op_dot().is_some() || caret == Dot::ROOT {
-        return Ok(());
+/// return the equivalent position in the new real block. No-op for a real block
+/// or the root.
+pub(crate) fn materialize_position_block(
+    tr: &mut Transaction,
+    position: Position,
+) -> Result<Position, CommandError> {
+    let block = position.node;
+    if block.as_op_dot().is_some() || block == Dot::ROOT {
+        return Ok(position);
     }
 
     // Walk up to the nearest real (or root) ancestor, recording the synthetic
     // chain (deepest-first) so it can be rebuilt as real nested blocks.
     let (anchor_id, anchor_slot, chain) = {
         let view = tr.state().view();
-        let mut node = view.node(caret).ok_or(CommandError::NodeNotFound(caret))?;
+        let mut node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
         let mut chain = vec![node.node().to_plain()];
         loop {
             let parent = node.parent().ok_or(CommandError::NoParent(node.id()))?;
@@ -219,7 +216,7 @@ pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), Comman
 
     tr.insert_subtree(anchor_id, anchor_slot, subtree)?;
 
-    let new_caret = {
+    let materialized_block = {
         let view = tr.state().view();
         let mut cur = match view.node(anchor_id).and_then(|p| p.child_at(anchor_slot)) {
             Some(ChildView::Block(b)) => b.id(),
@@ -234,8 +231,30 @@ pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), Comman
         cur
     };
 
+    Ok(Position {
+        node: materialized_block,
+        ..position
+    })
+}
+
+/// Materialize the synthetic block containing a collapsed caret and move the
+/// caret into the new real block. No-op for a real caret block, the root, or a
+/// non-collapsed selection.
+pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), CommandError> {
+    let Some(selection) = tr.selection() else {
+        return Ok(());
+    };
+    if selection.anchor != selection.head {
+        return Ok(());
+    }
+    let caret = selection.head;
+    let materialized = materialize_position_block(tr, caret)?;
+    if materialized.node == caret.node {
+        return Ok(());
+    }
+
     tr.set_selection(Some(Selection::collapsed(Position {
-        node: new_caret,
+        node: materialized.node,
         offset: 0,
         affinity: Affinity::Downstream,
     })))?;

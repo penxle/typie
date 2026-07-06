@@ -8,7 +8,7 @@ use editor_transaction::{Transaction, fulfill};
 
 use super::{
     child_node_type, find_ancestor_textblock, insert_hard_break_at_caret, insert_tab_at_caret,
-    insert_text_at_caret,
+    insert_text_at_caret, materialize_position_block,
 };
 use crate::{CommandError, CommandResult};
 
@@ -21,6 +21,7 @@ pub(crate) fn insert_slice_at_position(
         return Ok(None);
     }
 
+    let position = materialize_position_block(tr, position)?;
     let in_textblock = position_in_textblock(tr, &position);
     if in_textblock {
         if let Some(fragments) =

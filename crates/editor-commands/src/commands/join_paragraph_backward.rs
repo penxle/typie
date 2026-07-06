@@ -22,6 +22,9 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         if node.node_type() != NodeType::Paragraph {
             return Ok(false);
         }
+        if node.dot().is_none() {
+            return Ok(false);
+        }
         if pos.offset > 0 {
             return Ok(false);
         }
