@@ -81,6 +81,7 @@ class EditorCursorMoveSemanticTest {
       val fake =
         FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
       val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
 
       assertTrue(

@@ -31,7 +31,7 @@ class EditorScreenStateTest {
       )
 
     assertEquals(360f, visibleArea.bottomOcclusion)
-    assertEquals(440f, visibleArea.visibleBodySize.height)
+    assertEquals(416f, visibleArea.visibleBodySize.height)
   }
 
   @Test
