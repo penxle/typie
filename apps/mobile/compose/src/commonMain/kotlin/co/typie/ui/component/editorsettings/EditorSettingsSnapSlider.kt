@@ -2,11 +2,7 @@ package co.typie.ui.component.editorsettings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -30,14 +26,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.changedToUp
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -46,18 +37,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.times
 import co.typie.ext.clickable
 import co.typie.ext.ime
 import co.typie.ext.rememberTextInputBinding
 import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
+import co.typie.ui.component.Slider
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.shadow
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -77,6 +66,7 @@ internal fun EditorSettingsSnapSlider(
 ) {
   val scope = rememberCoroutineScope()
   val focusManager = LocalFocusManager.current
+  val haptic = LocalHapticFeedback.current
   val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
   var isDragging by remember { mutableStateOf(false) }
@@ -107,146 +97,42 @@ internal fun EditorSettingsSnapSlider(
       )
     }
 
-    SliderTrack(
-      value = displayValue,
-      onDrag = { dragValue = it },
+    Slider(
+      value = displayValue.toFloat(),
+      range = range.first.toFloat()..range.last.toFloat(),
+      step = sliderStep.toFloat(),
       onDragStart = {
         isDragging = true
         dragValue = value
         focusManager.clearFocus()
       },
-      onDragEnd = {
+      onDrag = { next ->
+        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        dragValue = next.roundToInt().coerceIn(range.first, range.last)
+      },
+      onDragEnd = { next ->
+        val rounded = next.roundToInt().coerceIn(range.first, range.last)
+        dragValue = rounded
         scope.launch {
-          onValueChange(dragValue)
+          onValueChange(rounded)
           isDragging = false
         }
       },
-      range = range,
-      step = sliderStep,
-    )
-  }
-}
-
-@Composable
-private fun SliderTrack(
-  value: Int,
-  onDrag: (Int) -> Unit,
-  onDragStart: () -> Unit,
-  onDragEnd: () -> Unit,
-  range: IntRange,
-  step: Int,
-) {
-  val colors = AppTheme.colors
-  val density = LocalDensity.current
-  val haptic = LocalHapticFeedback.current
-  val thumbSize = 24.dp
-
-  val inRange = value in range
-  val rangeSpan = (range.last - range.first).toFloat()
-
-  BoxWithConstraints(
-    modifier = Modifier.fillMaxWidth().height(32.dp),
-    contentAlignment = Alignment.CenterStart,
-  ) {
-    val travel = (maxWidth - thumbSize).coerceAtLeast(0.dp)
-    val travelPx = with(density) { travel.toPx() }
-    val thumbRadiusPx = with(density) { (thumbSize / 2).toPx() }
-
-    fun fractionOf(v: Int): Float = ((v - range.first) / rangeSpan).coerceIn(0f, 1f)
-
-    fun valueFromX(x: Float): Int {
-      val fraction = ((x - thumbRadiusPx) / travelPx).coerceIn(0f, 1f)
-      val raw = fraction * rangeSpan + range.first
-      val candidate = ((raw - range.first) / step).roundToInt() * step + range.first
-      return candidate.coerceIn(range)
-    }
-
-    val clampedFraction = fractionOf(value.coerceIn(range))
-    val filledFraction = if (inRange) clampedFraction else if (value < range.first) 0f else 1f
-    val thumbOffset = clampedFraction * travel
-
-    Box(
-      modifier =
-        Modifier.fillMaxWidth()
-          .height(8.dp)
-          .background(colors.borderEmphasis.copy(alpha = 0.5f), AppShapes.circle)
-    ) {
-      Box(
-        modifier =
-          Modifier.fillMaxWidth(filledFraction)
-            .height(8.dp)
-            .background(colors.textDefault, AppShapes.circle)
-      )
-    }
-
-    Box(
-      modifier =
-        Modifier.matchParentSize().pointerInput(maxWidth, range) {
-          awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = true)
-            val slop = viewConfiguration.touchSlop
-            var total = Offset.Zero
-            var dragging = false
-            var current = value
-
-            fun update(x: Float) {
-              val next = valueFromX(x)
-              if (next == current) return
-              current = next
-              haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-              onDrag(next)
-            }
-
-            while (true) {
-              val event = awaitPointerEvent()
-              val change = event.changes.firstOrNull { it.id == down.id } ?: break
-
-              if (change.changedToUp()) {
-                if (!dragging) {
-                  onDragStart()
-                  update(change.position.x)
-                  onDragEnd()
-                }
-                break
-              }
-              if (change.isConsumed) break
-
-              total += change.positionChange()
-              if (!dragging) {
-                if (abs(total.y) > slop) break
-                if (abs(total.x) > slop) {
-                  dragging = true
-                  onDragStart()
-                  change.consume()
-                }
-              }
-              if (dragging) {
-                update(change.position.x)
-                change.consume()
-              }
-            }
-            if (dragging) onDragEnd()
-          }
+      onDragCancel = {
+        dragValue = value
+        isDragging = false
+      },
+      modifier = Modifier.fillMaxWidth().height(32.dp),
+      thumbContent = { inRange ->
+        if (!inRange) {
+          Icon(
+            icon = if (displayValue < range.first) Lucide.ChevronsLeft else Lucide.ChevronsRight,
+            modifier = Modifier.size(14.dp),
+            tint = AppTheme.colors.textMuted,
+          )
         }
+      },
     )
-
-    Box(
-      modifier =
-        Modifier.graphicsLayer { translationX = thumbOffset.toPx() }
-          .size(thumbSize)
-          .shadow(AppTheme.shadows.sm, AppShapes.circle)
-          .border(1.dp, colors.borderDefault, AppShapes.circle)
-          .background(colors.surfaceDefault, AppShapes.circle),
-      contentAlignment = Alignment.Center,
-    ) {
-      if (!inRange) {
-        Icon(
-          icon = if (value < range.first) Lucide.ChevronsLeft else Lucide.ChevronsRight,
-          modifier = Modifier.size(14.dp),
-          tint = colors.textMuted,
-        )
-      }
-    }
   }
 }
 

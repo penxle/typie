@@ -1,13 +1,7 @@
 package co.typie.screen.settings.editorsettings
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -15,20 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.changedToUp
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.times
 import co.typie.domain.settings.SettingControlRow
 import co.typie.domain.settings.SettingSwitch
 import co.typie.ext.verticalScroll
@@ -37,19 +23,17 @@ import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
+import co.typie.ui.component.Slider
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
-import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.shadow
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 @Composable
 fun EditorSettingsScreen() {
   val scrollState = rememberScrollState()
+  val haptic = LocalHapticFeedback.current
 
   ProvideTopBar(
     center = { Text("에디터", style = AppTheme.typography.title) },
@@ -104,9 +88,17 @@ fun EditorSettingsScreen() {
               Text("화면 상단", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
               Slider(
-                value = Preference.typewriterPosition,
-                onValueChange = { next -> Preference.typewriterPosition = next },
-                modifier = Modifier.weight(1f),
+                value = (Preference.typewriterPosition * 100).toFloat().coerceIn(0f, 100f),
+                range = 0f..100f,
+                step = 5f,
+                onDragStart = {},
+                onDrag = { next ->
+                  haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                  Preference.typewriterPosition = next.toDouble() / 100.0
+                },
+                onDragEnd = {},
+                fillColor = AppTheme.colors.textDefault.copy(alpha = 0.75f),
+                modifier = Modifier.weight(1f).height(32.dp),
               )
 
               Text("화면 하단", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
@@ -152,98 +144,5 @@ private fun EditorSettingsSection(title: String, content: @Composable ColumnScop
     SectionTitle(title)
 
     CardSurface(modifier = Modifier.fillMaxWidth()) { Column(content = content) }
-  }
-}
-
-@Composable
-private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Modifier = Modifier) {
-  val colors = AppTheme.colors
-
-  val density = LocalDensity.current
-  val haptic = LocalHapticFeedback.current
-
-  val thumbSize = 24.dp
-
-  BoxWithConstraints(modifier = modifier.height(32.dp), contentAlignment = Alignment.CenterStart) {
-    val travel = (maxWidth - thumbSize).coerceAtLeast(0.dp)
-    val travelPx = with(density) { travel.toPx() }
-    val thumbRadiusPx = with(density) { (thumbSize / 2).toPx() }
-    val filledFraction = value.toFloat().coerceIn(0f, 1f)
-    val thumbOffset = filledFraction * travel
-
-    fun coerceValue(x: Float): Double {
-      val fraction = ((x - thumbRadiusPx) / travelPx).coerceIn(0f, 1f)
-      val snapped = (fraction.coerceIn(0f, 1f) / 0.05f).roundToInt() * 0.05f
-      return snapped.coerceIn(0f, 1f).toDouble()
-    }
-
-    Box(
-      modifier =
-        Modifier.fillMaxWidth()
-          .height(8.dp)
-          .background(AppTheme.colors.borderEmphasis.copy(alpha = 0.5f), AppShapes.circle)
-    ) {
-      Box(
-        modifier =
-          Modifier.fillMaxWidth(filledFraction)
-            .height(8.dp)
-            .background(AppTheme.colors.textDefault.copy(alpha = 0.75f), AppShapes.circle)
-      )
-    }
-
-    Box(
-      modifier =
-        Modifier.matchParentSize().pointerInput(maxWidth) {
-          awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = true)
-            val slop = viewConfiguration.touchSlop
-            var total = Offset.Zero
-            var dragging = false
-            var current = value
-
-            fun update(x: Float) {
-              val next = coerceValue(x)
-              if (next == current) return
-              current = next
-
-              haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-              onValueChange(next)
-            }
-
-            while (true) {
-              val event = awaitPointerEvent()
-              val change = event.changes.firstOrNull { it.id == down.id } ?: break
-
-              if (change.changedToUp()) {
-                if (!dragging) update(change.position.x)
-                break
-              }
-              if (change.isConsumed) break
-
-              total += change.positionChange()
-              if (!dragging) {
-                if (abs(total.y) > slop) break
-                if (abs(total.x) > slop) {
-                  dragging = true
-                  change.consume()
-                }
-              }
-              if (dragging) {
-                update(change.position.x)
-                change.consume()
-              }
-            }
-          }
-        }
-    )
-
-    Box(
-      modifier =
-        Modifier.graphicsLayer { translationX = thumbOffset.toPx() }
-          .size(thumbSize)
-          .shadow(AppTheme.shadows.sm, AppShapes.circle)
-          .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
-          .background(AppTheme.colors.surfaceDefault, AppShapes.circle)
-    )
   }
 }
