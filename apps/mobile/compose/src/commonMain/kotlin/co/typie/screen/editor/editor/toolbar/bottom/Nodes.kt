@@ -243,7 +243,7 @@ internal fun editorToolbarNodeInsertItems(
       EditorToolbarNodeInsertItem(
         icon = Lucide.Table,
         label = "표",
-        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Table())),
+        action = EditorToolbarNodeInsertAction.OpenPanel(EditorToolbarBottomPanel.TableSizeSelector),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.List,

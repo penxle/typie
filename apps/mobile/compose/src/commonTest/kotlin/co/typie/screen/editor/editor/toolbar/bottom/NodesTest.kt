@@ -73,6 +73,17 @@ class NodesTest {
   }
 
   @Test
+  fun tableInsertOpensTableSizePanel() {
+    val item =
+      editorToolbarNodeInsertItems(showPageBreak = false, hasUnitSelection = false).single {
+        it.label == "표"
+      }
+
+    val action = assertIs<EditorToolbarNodeInsertAction.OpenPanel>(item.action)
+    assertEquals(EditorToolbarBottomPanel.TableSizeSelector, action.panel)
+  }
+
+  @Test
   fun singleCharacterTextSelectionDoesNotUseUnitSelectionAction() {
     assertFalse(
       isEditorToolbarUnitSelection(

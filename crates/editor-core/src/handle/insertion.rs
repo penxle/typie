@@ -1,4 +1,8 @@
 use editor_commands::{self as commands};
+use editor_model::{
+    Fragment, PlainNode, PlainParagraphNode, PlainTableCellNode, PlainTableNode, PlainTableRowNode,
+    TableBorderStyle,
+};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -115,6 +119,22 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     commands::insert_fragment(fragment.clone()),
                 )?;
             }
+            InsertionOp::Table { rows, cols } => {
+                commands::chain!(
+                    tr,
+                    |tr| commands::first!(
+                        tr,
+                        commands::materialize_gap_paragraph(),
+                        commands::insert_paragraph_after_unit_selection(),
+                        |tr| commands::chain!(
+                            tr,
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
+                        ),
+                    ),
+                    commands::insert_fragment(table_fragment(*rows, *cols)),
+                )?;
+            }
         }
         Ok(())
     })?;
@@ -128,6 +148,34 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
         })?;
     }
     Ok(())
+}
+
+fn table_fragment(rows: usize, cols: usize) -> Fragment {
+    let rows = rows.max(1);
+    let cols = cols.max(1);
+    Fragment::leaf(PlainNode::Table(PlainTableNode {
+        border_style: TableBorderStyle::Solid,
+        proportion: 100,
+    }))
+    .with_children(
+        (0..rows)
+            .map(|_| {
+                Fragment::leaf(PlainNode::TableRow(PlainTableRowNode {})).with_children(
+                    (0..cols)
+                        .map(|_| {
+                            Fragment::leaf(PlainNode::TableCell(PlainTableCellNode {
+                                col_width: None,
+                                background_color: None,
+                            }))
+                            .with_children(vec![Fragment::leaf(
+                                PlainNode::Paragraph(PlainParagraphNode {}),
+                            )])
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -510,6 +558,38 @@ mod tests {
                 paragraph { text("c") }
             } }
             selection: (r, 2, >) -> (r, 3, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn insert_table_builds_requested_grid() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Table { rows: 2, cols: 3 },
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                table {
+                    table_row {
+                        table_cell { p00: paragraph {} }
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                    }
+                    table_row {
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p00, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }

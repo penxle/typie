@@ -85,6 +85,8 @@ internal sealed interface EditorToolbarBottomPanel {
 
   data object Tools : EditorToolbarBottomPanel
 
+  data object TableSizeSelector : EditorToolbarBottomPanel
+
   data class HorizontalRuleVariants(val target: HorizontalRuleVariantPanelTarget) :
     EditorToolbarBottomPanel
 

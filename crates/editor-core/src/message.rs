@@ -102,6 +102,7 @@ pub enum InsertionOp {
     Text { text: String },
     Break { kind: Break },
     Fragment { fragment: Fragment },
+    Table { rows: usize, cols: usize },
 }
 
 #[ffi]

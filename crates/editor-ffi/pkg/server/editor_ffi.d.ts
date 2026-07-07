@@ -598,7 +598,7 @@ export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "di
 
 export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "proportion" } & number);
 
-export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
+export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment } | { type: "table"; rows: number; cols: number };
 
 export type InteractiveHit = { type: "fold_title"; id: Dot; text_rect: Rect | undefined } | { type: "callout_icon"; id: Dot; next_variant: CalloutVariant };
 

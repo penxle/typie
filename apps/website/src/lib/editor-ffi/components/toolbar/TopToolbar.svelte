@@ -175,18 +175,7 @@
       {#snippet floating({ close })}
         <TableSizeSelector
           onSelect={(rows, cols) => {
-            enqueue(
-              insertFragment({
-                node: { type: 'table' },
-                children: Array.from({ length: rows }, () => ({
-                  node: { type: 'table_row' },
-                  children: Array.from({ length: cols }, () => ({
-                    node: { type: 'table_cell', col_width: undefined, background_color: undefined },
-                    children: [{ node: { type: 'paragraph' } }],
-                  })),
-                })),
-              }),
-            );
+            enqueue({ type: 'insertion', op: { type: 'table', rows, cols } });
             close();
           }}
         />
