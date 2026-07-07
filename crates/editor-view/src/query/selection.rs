@@ -229,14 +229,16 @@ pub(crate) fn selection_hit_test(
         return false;
     }
 
-    let min_x = rects.iter().map(|r| r.x).fold(f32::INFINITY, f32::min);
-    let max_x = rects
+    let rows = selection_hit_rows(rects);
+
+    let min_x = rows.iter().map(|r| r.x).fold(f32::INFINITY, f32::min);
+    let max_x = rows
         .iter()
         .map(|r| r.x + r.width)
         .fold(f32::NEG_INFINITY, f32::max);
-    let last_idx = rects.len() - 1;
+    let last_idx = rows.len() - 1;
 
-    for (i, rect) in rects.iter().enumerate() {
+    for (i, rect) in rows.iter().enumerate() {
         let (x_lo, x_hi) = if last_idx == 0 {
             (rect.x, rect.x + rect.width)
         } else if i == 0 {
@@ -251,7 +253,7 @@ pub(crate) fn selection_hit_test(
         }
     }
 
-    for pair in rects.windows(2) {
+    for pair in rows.windows(2) {
         let gap_top = pair[0].y + pair[0].height;
         let gap_bottom = pair[1].y;
         if gap_top < gap_bottom && x >= min_x && x <= max_x && y >= gap_top && y <= gap_bottom {
@@ -260,6 +262,25 @@ pub(crate) fn selection_hit_test(
     }
 
     false
+}
+
+fn selection_hit_rows(rects: Vec<Rect>) -> Vec<Rect> {
+    let mut rows: Vec<Rect> = Vec::new();
+    for rect in rects {
+        if let Some(row) = rows.last_mut()
+            && rect.y < row.bottom()
+            && rect.bottom() > row.y
+        {
+            let left = row.x.min(rect.x);
+            let top = row.y.min(rect.y);
+            let right = row.right().max(rect.right());
+            let bottom = row.bottom().max(rect.bottom());
+            *row = Rect::from_xywh(left, top, right - left, bottom - top);
+            continue;
+        }
+        rows.push(rect);
+    }
+    rows
 }
 
 fn selected_external_atom_hit_test(
@@ -657,6 +678,33 @@ mod tests {
         (logs(&items), root, para)
     }
 
+    fn two_para_doc(first_text: &str, second_text: &str) -> (DocLogs, Dot, Dot, Dot) {
+        let root = Dot::ROOT;
+        let first = Dot::new(11, 1);
+        let second = Dot::new(11, 100);
+        let mut items = vec![(
+            first,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        )];
+        for (i, ch) in first_text.chars().enumerate() {
+            items.push((Dot::new(11, 2 + i as u64), SeqItem::Char(ch)));
+        }
+        items.push((
+            second,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+            },
+        ));
+        for (i, ch) in second_text.chars().enumerate() {
+            items.push((Dot::new(11, 101 + i as u64), SeqItem::Char(ch)));
+        }
+        (logs(&items), root, first, second)
+    }
+
     fn para_doc_items(children: Vec<SeqItem>) -> (DocLogs, Dot, Dot) {
         let root = Dot::ROOT;
         let para = Dot::new(12, 1);
@@ -821,6 +869,51 @@ mod tests {
             text_rects.len() >= 2,
             "wrapped paragraph must yield ≥2 text rects (phase machine), got {:?}",
             rects
+        );
+    }
+
+    #[test]
+    fn paragraph_break_hit_test_preserves_first_line_leading_cutout() {
+        let (doc, _root, first_para, second_para) = two_para_doc("abcdefghij", "klmnopqrst");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+
+        let from_pos = Position {
+            node: first_para,
+            offset: 2,
+            affinity: Affinity::Downstream,
+        };
+        let to_pos = Position {
+            node: second_para,
+            offset: 3,
+            affinity: Affinity::Upstream,
+        };
+        let sel = Selection::new(from_pos, to_pos);
+        let rsel = sel.resolve(&view).expect("must resolve");
+        let rects = selection_rects(&index, &rsel);
+
+        assert!(
+            rects.len() >= 2,
+            "selection must span multiple rects, got {rects:?}"
+        );
+
+        let first = rects.first().unwrap().rect;
+        let min_x = rects.iter().map(|r| r.rect.x).fold(f32::INFINITY, f32::min);
+
+        assert!(
+            min_x < first.x,
+            "fixture must leave a leading cut-out on the first line: {rects:?}"
+        );
+
+        assert!(
+            !selection_hit_test(
+                &index,
+                &rsel,
+                0,
+                (min_x + first.x) * 0.5,
+                first.y + first.height * 0.5
+            ),
+            "first-line leading cut-out must not count as a selection hit even when the selection includes a paragraph break"
         );
     }
 
