@@ -52,6 +52,9 @@ pub enum StepError {
     #[error("unknown-placeholder subtree cannot be reinserted")]
     UnknownSubtree,
 
+    #[error("move target {block:?} carries unknown content and cannot move losslessly")]
+    UnknownBearingMove { block: Dot },
+
     #[error(transparent)]
     State(#[from] StateError),
 }

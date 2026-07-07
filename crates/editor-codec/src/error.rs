@@ -93,6 +93,9 @@ pub enum Corruption {
 
     #[error("missing required record field: {field}")]
     MissingRecordField { field: &'static str },
+
+    #[error("alias run violates creation-boundary/domain invariants")]
+    InvalidAliasOp,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -151,6 +154,9 @@ pub enum EncodeInvariant {
 
     #[error("changeset must contain at least one record")]
     EmptyChangeset,
+
+    #[error("alias run violates creation-boundary/domain invariants")]
+    InvalidAliasOp,
 }
 
 pub type CodecResult<T> = Result<T, CodecError>;

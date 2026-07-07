@@ -58,6 +58,7 @@ pub(crate) fn remove_child_at(
                     modifiers,
                     carry: Vec::new(),
                     children: Vec::new(),
+                    source_dots: Vec::new(),
                 }
             }
         }

@@ -22,9 +22,9 @@ pub enum StablePositionBinding {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct StablePosition {
-    chain: Vec<Dot>,
-    binding: StablePositionBinding,
-    affinity: Affinity,
+    pub chain: Vec<Dot>,
+    pub binding: StablePositionBinding,
+    pub affinity: Affinity,
 }
 
 fn child_elem_id(child: &ChildView) -> Dot {
@@ -160,6 +160,12 @@ impl<'a> StableResolveCtx<'a> {
             resolver: StableResolver::Live(seq),
         }
     }
+
+    fn alias(&self, d: Dot) -> Dot {
+        self.view.alias_classes().resolve_with(d, |m| {
+            self.view.node(m).is_some() || self.view.block_of(m).is_some()
+        })
+    }
 }
 
 fn index_of(host: &NodeView, anchor: Dot) -> Option<usize> {
@@ -205,13 +211,31 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
 
 impl StablePosition {
     pub fn resolve(&self, ctx: &StableResolveCtx) -> Option<Position> {
+        if let StablePositionBinding::Adjacent { anchor, bind } = &self.binding {
+            let a = ctx.alias(*anchor);
+            let host_dot = if ctx.view.node(a).is_some() {
+                ctx.view.parent_of(a)
+            } else {
+                ctx.view.block_of(a)
+            };
+            if let Some(hd) = host_dot
+                && let Some(host) = ctx.view.node(hd)
+                && let Some(j) = index_of(&host, a)
+            {
+                return Some(Position {
+                    node: host.id(),
+                    offset: j + usize::from(*bind == Bind::Right),
+                    affinity: self.affinity,
+                });
+            }
+        }
         if self.chain.is_empty() {
             return None;
         }
         let mut k = 0usize;
         let mut found = false;
         for (i, id) in self.chain.iter().enumerate() {
-            if ctx.view.node(*id).is_some() {
+            if ctx.view.node(ctx.alias(*id)).is_some() {
                 k = i;
                 found = true;
             } else {
@@ -221,19 +245,20 @@ impl StablePosition {
         if !found {
             return None;
         }
-        let host = ctx.view.node(self.chain[k]).unwrap();
+        let host = ctx.view.node(ctx.alias(self.chain[k])).unwrap();
         let offset = if k == self.chain.len() - 1 {
             match &self.binding {
                 StablePositionBinding::ContainerStart => 0,
                 StablePositionBinding::Adjacent { anchor, bind } => {
-                    match index_of(&host, *anchor) {
+                    let anchor = ctx.alias(*anchor);
+                    match index_of(&host, anchor) {
                         Some(j) => j + usize::from(*bind == Bind::Right),
-                        None => offset_within(&host, *anchor, ctx),
+                        None => offset_within(&host, anchor, ctx),
                     }
                 }
             }
         } else {
-            offset_within(&host, self.chain[k + 1], ctx)
+            offset_within(&host, ctx.alias(self.chain[k + 1]), ctx)
         };
         Some(Position {
             node: host.id(),
@@ -249,8 +274,8 @@ mod tests {
     use editor_crdt::Dot;
     use editor_crdt::{InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem, SpanLog,
-        project_document,
+        AliasLog, AliasOp, AliasRun, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType,
+        ProjectedDoc, SeqItem, SpanLog, project_document,
     };
 
     use crate::Position;
@@ -262,6 +287,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 
@@ -879,6 +905,280 @@ mod tests {
         let ctx = StableResolveCtx::new(&post_view, &logs.seq);
         assert!(post_view.leaf(b).is_some(), "Undel must restore 'b' live");
         assert_eq!(sp.resolve(&ctx), Some(pos));
+    }
+
+    #[test]
+    fn resolve_follows_alias_after_simulated_move() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let a = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let succ = Dot::new(5, 0);
+        let pre_items = vec![
+            (para, block(NodeType::Paragraph, vec![root])),
+            (a, SeqItem::Char('a')),
+            (b, SeqItem::Char('b')),
+        ];
+        let pre = project_document(&doclogs(&ins_only(&pre_items))).unwrap();
+        let pre_view = DocView::new(&pre);
+        let pos = Position {
+            node: para,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sp = StablePosition::capture(&pos, &pre_view);
+        assert_eq!(
+            sp.binding,
+            StablePositionBinding::Adjacent {
+                anchor: a,
+                bind: Bind::Right,
+            }
+        );
+
+        let mut post_ev = ins_only(&pre_items);
+        post_ev.push(InputEvent {
+            id: succ,
+            parents: vec![b],
+            op: ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Char('a'),
+            },
+        });
+        let del_op = Dot::new(1, 4);
+        post_ev.push(InputEvent {
+            id: del_op,
+            parents: vec![succ],
+            op: ListOp::Del { pos: 1, len: 1 },
+        });
+        let mut post_logs = doclogs(&post_ev);
+        post_logs.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: a,
+                len: 1,
+                new_start: succ,
+            }],
+        });
+        let post = project_document(&post_logs).unwrap();
+        let post_view = DocView::new(&post);
+        let ctx = StableResolveCtx::new(&post_view, &post_logs.seq);
+
+        assert!(post_view.leaf(a).is_none(), "'a' was deleted, not restored");
+        assert!(post_view.leaf(succ).is_some(), "successor is live");
+        let r = sp.resolve(&ctx).unwrap();
+        assert_eq!(r.node, para);
+        assert_eq!(
+            r.offset, 2,
+            "must land on succ's own slot, not a's stale tombstone rank"
+        );
+    }
+
+    #[test]
+    fn resolve_after_undo_returns_to_gen1_self() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let gen0 = Dot::new(9, 9);
+        let gen1 = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let pre_items = vec![
+            (para, block(NodeType::Paragraph, vec![root])),
+            (gen1, SeqItem::Char('a')),
+            (b, SeqItem::Char('b')),
+        ];
+        let pre = project_document(&doclogs(&ins_only(&pre_items))).unwrap();
+        let pre_view = DocView::new(&pre);
+        let pos = Position {
+            node: para,
+            offset: 1,
+            affinity: Affinity::Upstream,
+        };
+        let sp = StablePosition::capture(&pos, &pre_view);
+        assert_eq!(
+            sp.binding,
+            StablePositionBinding::Adjacent {
+                anchor: gen1,
+                bind: Bind::Right,
+            }
+        );
+
+        let mut ev = ins_only(&pre_items);
+        let del_op = Dot::new(1, 4);
+        ev.push(InputEvent {
+            id: del_op,
+            parents: vec![b],
+            op: ListOp::Del { pos: 1, len: 1 },
+        });
+        ev.push(InputEvent {
+            id: Dot::new(1, 5),
+            parents: vec![del_op],
+            op: ListOp::Undel { del: del_op },
+        });
+        let mut logs = doclogs(&ev);
+        logs.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: gen0,
+                len: 1,
+                new_start: gen1,
+            }],
+        });
+        let post = project_document(&logs).unwrap();
+        let post_view = DocView::new(&post);
+        let ctx = StableResolveCtx::new(&post_view, &logs.seq);
+        assert!(post_view.leaf(gen1).is_some(), "Undel restores gen1 live");
+        assert_eq!(sp.resolve(&ctx), Some(pos));
+    }
+
+    #[test]
+    fn resolve_gen2_anchor_maps_to_gen1_after_move_undo() {
+        let root = Dot::ROOT;
+        let para = Dot::new(1, 1);
+        let gen1 = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let gen2 = Dot::new(2, 1);
+        let base_items = vec![
+            (para, block(NodeType::Paragraph, vec![root])),
+            (gen1, SeqItem::Char('a')),
+            (b, SeqItem::Char('b')),
+            (gen2, SeqItem::Char('a')),
+        ];
+        let mut mid_ev = ins_only(&base_items);
+        let del1 = Dot::new(1, 4);
+        mid_ev.push(InputEvent {
+            id: del1,
+            parents: vec![gen2],
+            op: ListOp::Del { pos: 1, len: 1 },
+        });
+        let mut mid_logs = doclogs(&mid_ev);
+        mid_logs.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: gen1,
+                len: 1,
+                new_start: gen2,
+            }],
+        });
+        let mid = project_document(&mid_logs).unwrap();
+        let mid_view = DocView::new(&mid);
+        let pos = Position {
+            node: para,
+            offset: 2,
+            affinity: Affinity::Upstream,
+        };
+        let sp = StablePosition::capture(&pos, &mid_view);
+        assert_eq!(
+            sp.binding,
+            StablePositionBinding::Adjacent {
+                anchor: gen2,
+                bind: Bind::Right,
+            }
+        );
+
+        let mut post_ev = mid_ev.clone();
+        let del2 = Dot::new(2, 2);
+        post_ev.push(InputEvent {
+            id: del2,
+            parents: vec![del1],
+            op: ListOp::Del { pos: 2, len: 1 },
+        });
+        post_ev.push(InputEvent {
+            id: Dot::new(1, 5),
+            parents: vec![del2],
+            op: ListOp::Undel { del: del1 },
+        });
+        let mut post_logs = doclogs(&post_ev);
+        post_logs.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: gen1,
+                len: 1,
+                new_start: gen2,
+            }],
+        });
+        let post = project_document(&post_logs).unwrap();
+        let post_view = DocView::new(&post);
+        let ctx = StableResolveCtx::new(&post_view, &post_logs.seq);
+        assert!(post_view.leaf(gen1).is_some(), "gen1 restored by move undo");
+        assert!(post_view.leaf(gen2).is_none(), "gen2 dead again");
+
+        let r = sp.resolve(&ctx).unwrap();
+        assert_eq!(r.node, para);
+        assert_eq!(r.offset, 1, "gen2 anchor must map through to live gen1");
+    }
+
+    #[test]
+    fn resolve_container_start_follows_block_move_alias() {
+        let root = Dot::ROOT;
+        let empty_para = Dot::new(1, 1);
+        let new_para = Dot::new(5, 0);
+        let pre_items = vec![(empty_para, block(NodeType::Paragraph, vec![root]))];
+        let pre = project_document(&doclogs(&ins_only(&pre_items))).unwrap();
+        let pre_view = DocView::new(&pre);
+        let pos = Position::new(empty_para, 0);
+        let sp = StablePosition::capture(&pos, &pre_view);
+        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
+        assert_eq!(sp.chain.last(), Some(&empty_para));
+
+        let mut ev = ins_only(&pre_items);
+        ev.push(InputEvent {
+            id: new_para,
+            parents: vec![empty_para],
+            op: ListOp::Ins {
+                pos: 1,
+                item: block(NodeType::Paragraph, vec![root]),
+            },
+        });
+        let del_op = Dot::new(1, 2);
+        ev.push(InputEvent {
+            id: del_op,
+            parents: vec![new_para],
+            op: ListOp::Del { pos: 0, len: 1 },
+        });
+        let mut logs = doclogs(&ev);
+        logs.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: empty_para,
+                len: 1,
+                new_start: new_para,
+            }],
+        });
+        let post = project_document(&logs).unwrap();
+        let post_view = DocView::new(&post);
+        let ctx = StableResolveCtx::new(&post_view, &logs.seq);
+
+        assert!(
+            post_view.node(empty_para).is_none(),
+            "original block is gone"
+        );
+        let moved = post_view.node(new_para).expect("moved block is live");
+        assert_eq!(
+            moved.child_count(),
+            0,
+            "destination is empty, like the source"
+        );
+
+        let r = sp.resolve(&ctx).unwrap();
+        assert_eq!(r.node, new_para);
+        assert_eq!(r.offset, 0);
+    }
+
+    #[test]
+    fn adjacent_anchor_with_no_parent_falls_back_to_chain() {
+        let (pd, _para) = para_with(&[SeqItem::Char('a')]);
+        let view = DocView::new(&pd);
+        let logs = doclogs(&ins_only(&[
+            (Dot::new(1, 1), block(NodeType::Paragraph, vec![Dot::ROOT])),
+            (Dot::new(1, 2), SeqItem::Char('a')),
+        ]));
+        let ctx = StableResolveCtx::new(&view, &logs.seq);
+        let root_id = view.root().unwrap().id();
+        let sp = StablePosition {
+            chain: vec![root_id],
+            binding: StablePositionBinding::Adjacent {
+                anchor: root_id,
+                bind: Bind::Left,
+            },
+            affinity: Affinity::Downstream,
+        };
+        let r = sp.resolve(&ctx).unwrap();
+        assert_eq!(r.node, root_id);
+        assert_eq!(r.offset, 0);
     }
 
     fn arb_para_chars() -> impl proptest::strategy::Strategy<Value = Vec<char>> {

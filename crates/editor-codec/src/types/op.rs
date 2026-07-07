@@ -7,6 +7,14 @@ use crate::types::attr::DurableAttr;
 use crate::types::item::DurableItem;
 use crate::types::modifier::{DurableModifier, DurableModifierKind};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Durable)]
+#[durable(frozen)]
+pub struct DurableAliasRun {
+    pub old_start: Dot,
+    pub len: u64,
+    pub new_start: Dot,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Durable)]
 #[durable(open)]
 pub enum DurableOp {
@@ -63,6 +71,11 @@ pub enum DurableOp {
         kind: DurableModifierKind,
         tail: UnknownTail,
     },
+    #[durable(n(10))]
+    AliasDots {
+        pairs: Vec<DurableAliasRun>,
+        tail: UnknownTail,
+    },
     #[durable(unknown)]
     Unknown(UnknownPayload),
 }
@@ -87,6 +100,7 @@ impl DurableOp {
                 kind.contains_ctx_unknown() || !tail.0.is_empty()
             }
             DurableOp::SetNodeAttr { tail, .. } => !tail.0.is_empty(),
+            DurableOp::AliasDots { tail, .. } => !tail.0.is_empty(),
             DurableOp::Unknown(_) => true,
         }
     }

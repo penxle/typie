@@ -16,6 +16,7 @@ pub fn all_type_schemas() -> Vec<TypeSchema> {
         DurableAttr::schema(),
         DurableNodeType::schema(),
         DurableItem::schema(),
+        DurableAliasRun::schema(),
         DurableOp::schema(),
     ]
 }

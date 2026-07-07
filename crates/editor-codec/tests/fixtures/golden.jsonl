@@ -1,6 +1,7 @@
 DurableBias::Before	00
 DurableBias::After	01
 DurableAnchor	000200
+DurableAliasRun	0002030100
 DurableAlignment::Left	0000
 DurableAlignment::Center	0100
 DurableAlignment::Right	0200
@@ -120,4 +121,5 @@ DurableOp::ClearBlockModifier	060400020000
 DurableOp::SetNodeAttr	070600020402f80a
 DurableOp::SetNodeCarry	080400020000
 DurableOp::ClearNodeCarry	090400020000
+DurableOp::AliasDots	0a06010002030100
 DurableOp::Unknown	58021718

@@ -41,6 +41,30 @@ mod tests {
     }
 
     #[test]
+    fn lift_top_level_single_item_emits_alias_op() {
+        use editor_model::EditOp;
+
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (_, _, recorded, _, _) = transact!(initial, |tr| lift_list_item(&mut tr));
+        assert!(
+            recorded
+                .iter()
+                .any(|r| matches!(r.op.payload, EditOp::Alias(_))),
+            "lift moves the paragraph out of the list_item via move_node, which must alias the old dots to the new ones"
+        );
+    }
+
+    #[test]
     fn outside_list_returns_false() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("A") } } }

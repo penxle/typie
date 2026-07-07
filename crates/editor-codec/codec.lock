@@ -14,6 +14,30 @@
     "optional_features": {}
   },
   "types": {
+    "DurableAliasRun": {
+      "name": "DurableAliasRun",
+      "kind": {
+        "FrozenStruct": {
+          "fields": [
+            {
+              "name": "old_start",
+              "ty": "Dot",
+              "default": "Required"
+            },
+            {
+              "name": "len",
+              "ty": "u64",
+              "default": "Required"
+            },
+            {
+              "name": "new_start",
+              "ty": "Dot",
+              "default": "Required"
+            }
+          ]
+        }
+      }
+    },
     "DurableAlignment": {
       "name": "DurableAlignment",
       "kind": {
@@ -1130,6 +1154,18 @@
                 {
                   "name": "kind",
                   "ty": "DurableModifierKind",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "AliasDots",
+              "tag": 10,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "pairs",
+                  "ty": "Vec<DurableAliasRun>",
                   "default": "Required"
                 }
               ]

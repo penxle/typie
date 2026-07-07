@@ -408,6 +408,7 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
                 fully_covered,
             })
         }
+        EditOp::Alias(_) => None,
         _ => None,
     }
 }
@@ -615,6 +616,7 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
             })],
             _ => Vec::new(),
         },
+        EditOp::Alias(_) => Vec::new(),
         EditOp::Unknown { .. } => Vec::new(),
     }
 }
@@ -625,7 +627,7 @@ mod tests {
 
     use editor_common::time::Instant;
 
-    use editor_crdt::ListOp;
+    use editor_crdt::{Dot, ListOp};
     use editor_model::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, EditOp, Modifier, ModifierAttrOp,
         ModifierType, Node, NodeAttr, NodeAttrOp, NodeType, SeqItem, SpanOp, TableBorderStyle,
@@ -634,7 +636,7 @@ mod tests {
 
     use super::{
         HistoryTag, PriorValue, RecordMerge, RecordedOp, TransientState, UndoEntry, UndoHistory,
-        capture_prior,
+        capture_prior, invert,
     };
     use crate::projected_state::ProjectedState;
 
@@ -1965,6 +1967,21 @@ mod tests {
             None,
             "undo of a non-uniform span must clear the intruding leaf, not leave the undone value"
         );
+    }
+
+    #[test]
+    fn alias_op_inverts_to_nothing_and_captures_no_prior() {
+        let mut state = ProjectedState::empty();
+        let payload = EditOp::Alias(editor_model::AliasOp {
+            pairs: vec![editor_model::AliasRun {
+                old_start: Dot::new(1, 0),
+                len: 1,
+                new_start: Dot::new(2, 0),
+            }],
+        });
+        assert!(capture_prior(&state, &payload).is_none());
+        let ro = record_op(&mut state, payload);
+        assert!(invert(&state, &ro).is_empty());
     }
 }
 

@@ -509,6 +509,7 @@ fn plain_entry_to_subtree(entry: PlainNodeEntry) -> Subtree {
             .into_iter()
             .map(plain_entry_to_subtree)
             .collect(),
+        source_dots: Vec::new(),
     }
 }
 

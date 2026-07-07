@@ -267,6 +267,7 @@ fn insert_inline_leaf_units(
                         modifiers: modifiers.clone(),
                         carry: Vec::new(),
                         children: Vec::new(),
+                        source_dots: Vec::new(),
                     },
                 )?;
                 i += 1;

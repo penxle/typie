@@ -37,6 +37,18 @@ impl<'a> DocView<'a> {
             paths: std::borrow::Cow::Borrowed(paths),
         }
     }
+
+    pub fn alias_classes(&self) -> &crate::AliasClasses {
+        &self.doc.alias_classes
+    }
+
+    pub fn block_of(&self, leaf: Dot) -> Option<Dot> {
+        self.paths.block_of(leaf)
+    }
+
+    pub fn parent_of(&self, block: Dot) -> Option<Dot> {
+        self.paths.parent_of(block)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -433,7 +445,7 @@ mod tests {
     use super::*;
     use crate::projection::{DocLogs, project_document};
     use crate::{
-        Anchor, Bias, Modifier, ModifierAttrLog, ModifierAttrOp, ModifierType, NodeAttr,
+        AliasLog, Anchor, Bias, Modifier, ModifierAttrLog, ModifierAttrOp, ModifierType, NodeAttr,
         NodeAttrLog, NodeAttrOp, SpanLog, SpanOp, TableNodeAttr,
     };
     use editor_crdt::{InputEvent, ListOp, build_oplog};
@@ -462,6 +474,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 

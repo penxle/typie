@@ -3,7 +3,8 @@ use hashbrown::HashSet;
 use editor_crdt::{CrdtError, Dot, ListOp, Op, OpGraph, OpLog};
 
 use crate::{
-    DocLogs, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp, SeqItem, SpanLog, SpanOp,
+    AliasLog, AliasOp, DocLogs, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp, SeqItem,
+    SpanLog, SpanOp,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -13,6 +14,7 @@ pub enum EditOp {
     BlockModifier(ModifierAttrOp),
     NodeAttr(NodeAttrOp),
     NodeCarry(ModifierAttrOp),
+    Alias(AliasOp),
     Unknown { bytes: Vec<u8> },
 }
 
@@ -75,6 +77,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
     let mut block_modifiers = ModifierAttrLog::new();
     let mut node_attrs = NodeAttrLog::new();
     let mut node_carries = ModifierAttrLog::new();
+    let mut aliases = AliasLog::new();
 
     for op in ordered {
         match &op.payload {
@@ -103,6 +106,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
+            EditOp::Alias(o) => aliases.apply(o.clone()),
             EditOp::Unknown { .. } => {}
         }
     }
@@ -112,13 +116,14 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
         block_modifiers,
         node_attrs,
         node_carries,
+        aliases,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Modifier, ModifierType, NodeType, project_document};
+    use crate::{AliasRun, Modifier, ModifierType, NodeType, project_document};
     use editor_crdt::{Changeset, InputEvent};
 
     /// A leaf's effective modifiers, read from the authoritative segment index.
@@ -167,6 +172,36 @@ mod tests {
     fn is_seq_classifies() {
         assert!(seq_ins(0, SeqItem::Char('a')).is_seq());
         assert!(!dummy_span(Dot::new(1, 0)).is_seq());
+    }
+
+    #[test]
+    fn split_routes_alias_and_projection_builds_classes() {
+        let mut g: OpGraph<EditOp> = OpGraph::new();
+        let _para = g
+            .add_mut(seq_ins(
+                0,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ))
+            .unwrap()
+            .id;
+        let a = g.add_mut(seq_ins(1, SeqItem::Char('a'))).unwrap().id;
+        let b = g.add_mut(seq_ins(2, SeqItem::Char('b'))).unwrap().id;
+        g.add_mut(EditOp::Alias(crate::AliasOp {
+            pairs: vec![crate::AliasRun {
+                old_start: a,
+                len: 1,
+                new_start: b,
+            }],
+        }))
+        .unwrap();
+        let logs = split_logs(&g).unwrap();
+        assert_eq!(logs.aliases.iter().count(), 1);
+        let pd = project_document(&logs).unwrap();
+        assert_eq!(pd.alias_classes.members_of(a).map(|m| m.len()), Some(2));
     }
 
     #[test]
@@ -484,6 +519,33 @@ mod tests {
             payload: seq_ins(pos, item),
         }
     }
+    fn op_del(a: u64, c: u64, parents: &[Dot], pos: usize, len: usize) -> Op<EditOp> {
+        Op {
+            id: Dot::new(a, c),
+            parents: parents.to_vec(),
+            payload: EditOp::Seq(ListOp::Del { pos, len }),
+        }
+    }
+    fn op_alias(
+        a: u64,
+        c: u64,
+        parents: &[Dot],
+        old_start: Dot,
+        len: u32,
+        new_start: Dot,
+    ) -> Op<EditOp> {
+        Op {
+            id: Dot::new(a, c),
+            parents: parents.to_vec(),
+            payload: EditOp::Alias(AliasOp {
+                pairs: vec![AliasRun {
+                    old_start,
+                    len,
+                    new_start,
+                }],
+            }),
+        }
+    }
     fn op_carry(a: u64, c: u64, parents: &[Dot], target: Dot, v: &str) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
@@ -776,6 +838,49 @@ mod tests {
             let a_pd = project_document(&split_logs(&graphs(in_order)).unwrap()).unwrap();
             let b_pd = project_document(&split_logs(&graphs(shuffled)).unwrap()).unwrap();
             prop_assert_eq!(a_pd, b_pd);
+        }
+
+        #[test]
+        fn move_bundle_converges_under_changeset_delivery_permutation(
+            n_chars in 3usize..8,
+            move_pick in 0usize..8,
+            dest_pick in 0usize..8,
+        ) {
+            let n = n_chars;
+            let move_idx = move_pick % n;
+            let ins_pos = 1 + (dest_pick % n);
+
+            let para = Dot::new(1, 1);
+            let mut base: Vec<Op<EditOp>> =
+                vec![op_seq(1, 1, &[], 0, blk(NodeType::Paragraph, vec![Dot::ROOT]))];
+            let mut char_dots: Vec<(Dot, char)> = Vec::with_capacity(n);
+            let mut prev = para;
+            for i in 0..n {
+                let dot = Dot::new(1, 2 + i as u64);
+                let ch = (b'a' + (i % 26) as u8) as char;
+                base.push(op_seq(1, 2 + i as u64, &[prev], 1 + i, SeqItem::Char(ch)));
+                char_dots.push((dot, ch));
+                prev = dot;
+            }
+            let base_tail = prev;
+
+            let (moved_dot, moved_char) = char_dots[move_idx];
+            let del_dot = Dot::new(1, 900);
+            let new_dot = Dot::new(1, 901);
+            let move_branch = vec![
+                op_del(1, 900, &[base_tail], 1 + move_idx, 1),
+                op_seq(1, 901, &[del_dot], ins_pos, SeqItem::Char(moved_char)),
+                op_alias(1, 902, &[new_dot], moved_dot, 1, new_dot),
+            ];
+
+            let other_branch = vec![op_seq(2, 0, &[base_tail], 1 + n, SeqItem::Char('z'))];
+
+            let g_fwd = graphs(vec![base.clone(), move_branch.clone(), other_branch.clone()]);
+            let g_rev = graphs(vec![base, other_branch, move_branch]);
+
+            let pd_fwd = project_document(&split_logs(&g_fwd).unwrap()).unwrap();
+            let pd_rev = project_document(&split_logs(&g_rev).unwrap()).unwrap();
+            prop_assert_eq!(pd_fwd, pd_rev, "delivery order must not affect the projected document, including alias_classes");
         }
     }
 }

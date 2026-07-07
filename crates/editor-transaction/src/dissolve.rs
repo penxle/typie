@@ -61,6 +61,7 @@ fn dissolve_into(
             modifiers: vec![],
             carry: Vec::new(),
             children: vec![],
+            source_dots: Vec::new(),
         },
     });
 

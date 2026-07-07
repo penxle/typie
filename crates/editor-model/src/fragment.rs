@@ -46,6 +46,7 @@ impl Fragment {
                 .into_iter()
                 .map(|f| f.into_subtree())
                 .collect(),
+            source_dots: Vec::new(),
         }
     }
 }

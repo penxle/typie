@@ -24,8 +24,8 @@ pub(crate) fn measure_atom(leaf: &LeafView, width: f32, ctx: &MeasureContext) ->
 mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AtomLeaf, ChildView, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, Node,
-        NodeAttrLog, NodeType, SeqItem, SpanLog, project_document,
+        AliasLog, AtomLeaf, ChildView, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog,
+        Node, NodeAttrLog, NodeType, SeqItem, SpanLog, project_document,
     };
 
     use crate::measure::context::MeasureContext;
@@ -52,6 +52,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 

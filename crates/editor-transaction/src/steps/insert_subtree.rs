@@ -23,6 +23,6 @@ pub(crate) fn apply_to(
     let parents = support::self_inclusive_parents(&batched.projected, parent)
         .ok_or(StepError::NodeNotFound(parent))?;
     let mut seq_pos = pos;
-    support::emit_subtree(batched, subtree, &parents, &mut seq_pos)?;
+    support::emit_subtree(batched, subtree, &parents, &mut seq_pos, &mut Vec::new())?;
     Ok(())
 }

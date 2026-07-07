@@ -15,6 +15,9 @@ pub enum SpineError {
     Crdt(CrdtError),
     Split(SplitError),
     Projection(ProjectionError),
+    /// A locally-generated op failed admission validation (see
+    /// `editor_model::alias_op_is_valid`) before it could reach `graph.add_mut`.
+    InvalidOp,
 }
 
 impl From<CrdtError> for SpineError {
@@ -198,12 +201,23 @@ impl ProjectedState {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
+            EditOp::Alias(o) => {
+                self.logs.aliases.apply(o.clone());
+                self.projected.alias_classes.apply(o);
+            }
             EditOp::Unknown { .. } => {}
         }
         Ok(())
     }
 
+    /// Admission gate for locally-generated ops only — must reject before any
+    /// `&mut self` mutation; rehydrated ops enter via `ingest_op_warm` unvalidated.
     pub(crate) fn apply_op_warm(&mut self, payload: EditOp) -> Result<Op<EditOp>, SpineError> {
+        if let EditOp::Alias(o) = &payload
+            && !editor_model::alias_op_is_valid(o)
+        {
+            return Err(SpineError::InvalidOp);
+        }
         let op = self.graph.add_mut(payload)?;
         self.warm_dispatch(&op)?;
         Ok(op)
@@ -853,6 +867,10 @@ impl ProjectedState {
             EditOp::BlockModifier(_) | EditOp::NodeAttr(_) | EditOp::NodeCarry(_) => {
                 self.try_apply_node_op(op)
             }
+            // `warm_dispatch` already folded this op into `logs.aliases` and
+            // `projected.alias_classes` — no seq/tree change follows, so there is
+            // nothing left to project.
+            EditOp::Alias(_) => true,
             _ => false,
         }
     }
@@ -2353,8 +2371,8 @@ mod tests {
     use crate::LayoutDirty;
     use editor_crdt::Dot;
     use editor_model::{
-        Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Modifier, ModifierAttrOp,
-        ModifierType, Node, NodeAttr, NodeAttrOp, SpanOp,
+        AliasOp, AliasRun, Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Modifier,
+        ModifierAttrOp, ModifierType, Node, NodeAttr, NodeAttrOp, SpanOp,
     };
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
@@ -2784,6 +2802,97 @@ mod tests {
                 assert_eq!(*node.proportion.get(), 150);
             }
             other => panic!("expected projected image node, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn alias_warm_apply_matches_cold_projection() {
+        let mut state = ProjectedState::empty();
+        let a = state.apply(seq_char(1, 'a')).unwrap().id;
+        let b = state.apply(seq_char(2, 'b')).unwrap().id;
+        state
+            .apply(EditOp::Alias(AliasOp {
+                pairs: vec![AliasRun {
+                    old_start: a,
+                    len: 1,
+                    new_start: b,
+                }],
+            }))
+            .unwrap();
+        let warm = state.projected().alias_classes.clone();
+        let cold = {
+            let logs = editor_model::split_logs(state.graph()).unwrap();
+            editor_model::project_document(&logs).unwrap().alias_classes
+        };
+        assert_eq!(warm, cold);
+    }
+
+    #[test]
+    fn alias_survives_forced_reproject() {
+        let mut state = ProjectedState::empty();
+        let a = state.apply(seq_char(1, 'a')).unwrap().id;
+        let b = state.apply(seq_char(2, 'b')).unwrap().id;
+        state
+            .apply(EditOp::Alias(AliasOp {
+                pairs: vec![AliasRun {
+                    old_start: a,
+                    len: 1,
+                    new_start: b,
+                }],
+            }))
+            .unwrap();
+        let before = state.projected().alias_classes.clone();
+        state.reproject_all().unwrap();
+        assert_eq!(
+            state.projected().alias_classes,
+            before,
+            "reproject가 logs.aliases에서 맵을 재구성"
+        );
+    }
+
+    #[test]
+    fn alias_op_admission_rejects_invalid_op() {
+        let mut state = ProjectedState::empty();
+        let a = state.apply(seq_char(1, 'a')).unwrap().id;
+        let before = state.graph().clone();
+        let err = state.apply(EditOp::Alias(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: a,
+                len: 1,
+                new_start: a,
+            }],
+        }));
+        assert!(matches!(err, Err(SpineError::InvalidOp)));
+        assert_eq!(
+            state.graph(),
+            &before,
+            "invalid alias op must not mutate the graph"
+        );
+    }
+
+    #[test]
+    fn alias_apply_does_not_force_full_reproject() {
+        let mut state = ProjectedState::empty();
+        let a = state.apply(seq_char(1, 'a')).unwrap().id;
+        let b = state.apply(seq_char(2, 'b')).unwrap().id;
+        let _ = state.take_layout_dirty();
+        state
+            .apply(EditOp::Alias(AliasOp {
+                pairs: vec![AliasRun {
+                    old_start: a,
+                    len: 1,
+                    new_start: b,
+                }],
+            }))
+            .unwrap();
+        match state.take_layout_dirty() {
+            LayoutDirty::Full => panic!("alias op forced a full reproject"),
+            LayoutDirty::Incremental {
+                content,
+                structural,
+            } => {
+                assert!(content.is_empty() && structural.is_empty());
+            }
         }
     }
 

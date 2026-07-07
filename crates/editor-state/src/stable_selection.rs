@@ -9,8 +9,8 @@ use crate::stable_position::{StablePosition, StableResolveCtx};
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct StableSelection {
-    anchor: StablePosition,
-    head: StablePosition,
+    pub anchor: StablePosition,
+    pub head: StablePosition,
 }
 
 impl StableSelection {
@@ -50,7 +50,7 @@ mod tests {
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem, SpanLog,
+        AliasLog, DocLogs, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem, SpanLog,
         project_document,
     };
 
@@ -88,6 +88,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 

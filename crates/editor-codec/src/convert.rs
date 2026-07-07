@@ -1,7 +1,8 @@
 use editor_crdt::{Changeset, Dot, ListOp, Op};
 use editor_model::{
-    Alignment, AtomLeaf, EditOp, LayoutMode, Modifier, ModifierAttrOp, ModifierType, NodeAttr,
-    NodeAttrOp, NodeType, SeqClass, SeqItem, SpanOp, classify,
+    AliasOp, AliasRun, Alignment, AtomLeaf, EditOp, LayoutMode, Modifier, ModifierAttrOp,
+    ModifierType, NodeAttr, NodeAttrOp, NodeType, SeqClass, SeqItem, SpanOp, alias_op_is_valid,
+    classify,
 };
 
 use crate::bundle::{
@@ -263,6 +264,14 @@ fn to_durable_kind(k: &ModifierType) -> DurableModifierKind {
     }
 }
 
+fn to_durable_alias_run(run: &AliasRun) -> DurableAliasRun {
+    DurableAliasRun {
+        old_start: run.old_start,
+        len: u64::from(run.len),
+        new_start: run.new_start,
+    }
+}
+
 fn to_durable_anchor(a: &editor_model::Anchor) -> DurableAnchor {
     DurableAnchor {
         id: a.id,
@@ -387,6 +396,15 @@ pub fn to_durable_op(op: &EditOp) -> CodecResult<DurableOp> {
             attr: to_durable_attr(attr),
             tail: no_tail(),
         },
+        EditOp::Alias(op) => {
+            if !alias_op_is_valid(op) {
+                return Err(EncodeInvariant::InvalidAliasOp.into());
+            }
+            DurableOp::AliasDots {
+                pairs: op.pairs.iter().map(to_durable_alias_run).collect(),
+                tail: no_tail(),
+            }
+        }
         EditOp::Unknown { .. } => return Err(EncodeInvariant::UnknownPayloadEncode.into()),
     })
 }
@@ -430,7 +448,8 @@ pub fn changesets_contain_unknown(css: &[Changeset<EditOp>]) -> bool {
             | EditOp::Span(_)
             | EditOp::BlockModifier(_)
             | EditOp::NodeCarry(_)
-            | EditOp::NodeAttr(_) => false,
+            | EditOp::NodeAttr(_)
+            | EditOp::Alias(_) => false,
         })
     })
 }
@@ -801,6 +820,29 @@ fn item_as_unknown(item: &DurableItem, enc: &EncCtx) -> CodecResult<SeqItem> {
     })
 }
 
+fn from_durable_alias_op(pairs: &[DurableAliasRun]) -> CodecResult<AliasOp> {
+    let mut runtime_pairs = Vec::with_capacity(pairs.len());
+    for run in pairs {
+        if run.len == 0 {
+            return Err(Corruption::InvalidAliasOp.into());
+        }
+        let len = u32::try_from(run.len).map_err(|_| Corruption::VarintOverflow)?;
+        runtime_pairs.push(AliasRun {
+            old_start: run.old_start,
+            len,
+            new_start: run.new_start,
+        });
+    }
+    let op = AliasOp {
+        pairs: runtime_pairs,
+    };
+    if alias_op_is_valid(&op) {
+        Ok(op)
+    } else {
+        Err(Corruption::InvalidAliasOp.into())
+    }
+}
+
 fn op_as_unknown(op: &DurableOp, enc: &EncCtx, record_tail: &[u8]) -> CodecResult<EditOp> {
     let mut bytes = Vec::new();
     op.encode(enc, &mut bytes)?;
@@ -935,6 +977,14 @@ fn from_durable_op(
                     *lossy = true;
                     op_as_unknown(op, enc, record_tail)?
                 }
+            }
+        }
+        DurableOp::AliasDots { pairs, tail } => {
+            if !tail.0.is_empty() {
+                *lossy = true;
+                op_as_unknown(op, enc, record_tail)?
+            } else {
+                EditOp::Alias(from_durable_alias_op(pairs)?)
             }
         }
         DurableOp::Unknown(_) => {
@@ -1157,6 +1207,17 @@ mod tests {
                     modifier: Modifier::Italic,
                 }),
             },
+            Op {
+                id: d(14),
+                parents: vec![d(13)],
+                payload: EditOp::Alias(AliasOp {
+                    pairs: vec![AliasRun {
+                        old_start: Dot::new(1, 10),
+                        len: 3,
+                        new_start: Dot::new(2, 20),
+                    }],
+                }),
+            },
         ];
         vec![Changeset { ops }]
     }
@@ -1303,5 +1364,88 @@ mod tests {
             ReencodableChangesets::from_local_ops(css),
         ]);
         assert_eq!(combined.as_slice().len(), 2);
+    }
+
+    #[test]
+    fn to_durable_op_rejects_invalid_alias_op_same_as_admission_gate() {
+        let self_run = EditOp::Alias(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: Dot::new(1, 10),
+                len: 1,
+                new_start: Dot::new(1, 10),
+            }],
+        });
+        assert!(matches!(
+            to_durable_op(&self_run),
+            Err(CodecError::Encode(EncodeInvariant::InvalidAliasOp))
+        ));
+
+        let zero_len = EditOp::Alias(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: Dot::new(1, 10),
+                len: 0,
+                new_start: Dot::new(2, 20),
+            }],
+        });
+        assert!(matches!(
+            to_durable_op(&zero_len),
+            Err(CodecError::Encode(EncodeInvariant::InvalidAliasOp))
+        ));
+    }
+
+    #[test]
+    fn from_durable_alias_op_rejects_same_invalid_shapes_as_alias_op_is_valid() {
+        let invalid = DurableAliasRun {
+            old_start: Dot::new(1, 10),
+            len: 0,
+            new_start: Dot::new(2, 20),
+        };
+        assert!(matches!(
+            from_durable_alias_op(&[invalid]),
+            Err(CodecError::Corruption(Corruption::InvalidAliasOp))
+        ));
+
+        let len_overflow = DurableAliasRun {
+            old_start: Dot::new(1, 10),
+            len: u64::from(u32::MAX) + 1,
+            new_start: Dot::new(2, 20),
+        };
+        assert!(matches!(
+            from_durable_alias_op(&[len_overflow]),
+            Err(CodecError::Corruption(Corruption::VarintOverflow))
+        ));
+
+        let cross_run_overlap = [
+            DurableAliasRun {
+                old_start: Dot::new(1, 0),
+                len: 1,
+                new_start: Dot::new(1, 1),
+            },
+            DurableAliasRun {
+                old_start: Dot::new(1, 1),
+                len: 1,
+                new_start: Dot::new(1, 2),
+            },
+        ];
+        assert!(matches!(
+            from_durable_alias_op(&cross_run_overlap),
+            Err(CodecError::Corruption(Corruption::InvalidAliasOp))
+        ));
+
+        let valid = DurableAliasRun {
+            old_start: Dot::new(1, 10),
+            len: 3,
+            new_start: Dot::new(2, 20),
+        };
+        assert_eq!(
+            from_durable_alias_op(&[valid]).unwrap(),
+            AliasOp {
+                pairs: vec![AliasRun {
+                    old_start: Dot::new(1, 10),
+                    len: 3,
+                    new_start: Dot::new(2, 20),
+                }],
+            }
+        );
     }
 }

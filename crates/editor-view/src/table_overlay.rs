@@ -411,7 +411,7 @@ mod tests {
     use editor_common::{EdgeInsets, Rect, Size};
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        Alignment, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp, NodeAttr,
+        AliasLog, Alignment, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp, NodeAttr,
         NodeAttrLog, NodeAttrOp, NodeType, ProjectedDoc, SeqItem, SpanLog, TableNodeAttr,
         project_document,
     };
@@ -512,6 +512,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 

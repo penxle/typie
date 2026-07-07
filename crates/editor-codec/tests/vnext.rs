@@ -10,7 +10,7 @@ use editor_codec::types::anchor::{DurableAnchor, DurableBias};
 use editor_codec::types::attr::DurableAttr;
 use editor_codec::types::item::{DurableItem, DurableNodeType};
 use editor_codec::types::modifier::DurableModifier;
-use editor_codec::types::op::DurableOp;
+use editor_codec::types::op::{DurableAliasRun, DurableOp};
 use editor_codec::varint::{read_varint, write_varint};
 use editor_codec::{CodecError, Fenced};
 use editor_crdt::{Dot, ListOp};
@@ -240,6 +240,77 @@ fn evolvable_tail_bytes_demote_op_and_durable_reencode_holds() {
     assert!(matches!(
         lossy_gate,
         Err(CodecError::Fenced(Fenced::LossyForReencode))
+    ));
+}
+
+#[test]
+fn alias_dots_tail_bytes_demote_regardless_of_base_validity() {
+    // AliasDots(open payload)에 non-empty tail + 그 자체로는 alias_op_is_valid를 통과
+    // 못할 base pairs(self-run: old_start == new_start)를 함께 실었다. tail nonempty
+    // 감지가 semantic 검증보다 먼저 실행되어야 하므로, 이 op은 Corruption이 아니라
+    // EditOp::Unknown으로 강등되어야 한다(v2 확장 의미에서 이 base 값이 정당할 수
+    // 있으므로 — open-tail 전방 호환의 직접 핀).
+    let dot = Dot::new(5, 0);
+    let op = DurableOp::AliasDots {
+        pairs: vec![DurableAliasRun {
+            old_start: dot,
+            len: 1,
+            new_start: dot,
+        }],
+        tail: UnknownTail(vec![0xAA, 0xBB]),
+    };
+
+    // durable 계층 재인코드 항등
+    let ctx = EncCtx::from_parts(&[5], vec![0]).unwrap();
+    let mut bytes = Vec::new();
+    op.encode(&ctx, &mut bytes).unwrap();
+    let dec = editor_codec::ctx::DecCtx {
+        actors: vec![5],
+        baselines: vec![0],
+    };
+    let mut slice = &bytes[..];
+    let decoded_op = DurableOp::decode(&dec, &mut slice).unwrap();
+    assert!(slice.is_empty());
+    let mut reencoded = Vec::new();
+    decoded_op.encode(&ctx, &mut reencoded).unwrap();
+    assert_eq!(reencoded, bytes);
+
+    // op 수준 EditOp::Unknown 강등 (convert 경유, 실 changeset 파이프라인) — Corruption 아님
+    let bundle_bytes = single_op_bundle(&[5], &[0], Dot::new(5, 1), &op);
+    let ops = editor_codec::decode_changesets(&bundle_bytes)
+        .unwrap()
+        .into_graph_input();
+    assert!(matches!(ops[0].ops[0].payload, EditOp::Unknown { .. }));
+
+    let lossy_gate = editor_codec::decode_changesets(&bundle_bytes)
+        .unwrap()
+        .into_reencodable();
+    assert!(matches!(
+        lossy_gate,
+        Err(CodecError::Fenced(Fenced::LossyForReencode))
+    ));
+}
+
+#[test]
+fn alias_dots_invalid_base_without_tail_is_rejected_as_corruption() {
+    // tail이 비어 있으면 base validity(①~⑥, alias_op_is_valid와 동치)가 그대로
+    // 적용된다: self-run(old_start == new_start)은 원격 경로의 invalid AliasOp로
+    // 취급되어 Corruption으로 원자적 디코드 실패해야 한다.
+    let dot = Dot::new(5, 0);
+    let op = DurableOp::AliasDots {
+        pairs: vec![DurableAliasRun {
+            old_start: dot,
+            len: 1,
+            new_start: dot,
+        }],
+        tail: UnknownTail(Vec::new()),
+    };
+    let bundle_bytes = single_op_bundle(&[5], &[0], Dot::new(5, 1), &op);
+    assert!(matches!(
+        editor_codec::decode_changesets(&bundle_bytes),
+        Err(CodecError::Corruption(
+            editor_codec::Corruption::InvalidAliasOp
+        ))
     ));
 }
 

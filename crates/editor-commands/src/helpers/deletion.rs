@@ -213,6 +213,7 @@ fn text_subtree(text: String, modifiers: Vec<Modifier>) -> Subtree {
         modifiers,
         carry: Vec::new(),
         children: Vec::new(),
+        source_dots: Vec::new(),
     }
 }
 
@@ -243,6 +244,7 @@ pub(crate) fn capture_atom_leaf_subtree_at(
         modifiers,
         carry: Vec::new(),
         children: Vec::new(),
+        source_dots: Vec::new(),
     })
 }
 

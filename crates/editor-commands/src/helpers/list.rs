@@ -2,7 +2,9 @@ use std::collections::HashSet;
 
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, NodeType, NodeView, Subtree};
-use editor_state::{Affinity, Position, ResolvedSelection, Selection};
+use editor_state::{
+    Affinity, Position, ResolvedSelection, Selection, StableResolveCtx, StableSelection,
+};
 use editor_transaction::{Transaction, fulfill};
 
 use crate::{CommandError, CommandResult};
@@ -392,22 +394,12 @@ pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
     if items.is_empty() {
         return Ok(false);
     }
-    // TODO(move-node-alias): Replace this list-relative selection capture/restore
-    // with StableSelection once move_node can resolve old dots to re-emitted dots.
-    let (captured_anchor, captured_head) = {
-        let view = tr.view();
-        (
-            capture_selection_endpoint(&view, &items, &selection.anchor),
-            capture_selection_endpoint(&view, &items, &selection.head),
-        )
-    };
-    let original_items = items.clone();
+    let stable_selection = StableSelection::capture(&selection, &tr.view());
     {
         let view = tr.view();
         sort_list_items_for_lift(&view, &mut items);
     }
 
-    let mut new_targets: Vec<Option<LiftedListItemTarget>> = vec![None; original_items.len()];
     for item_id in items.iter() {
         let exists = {
             let view = tr.view();
@@ -416,15 +408,13 @@ pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
         if !exists {
             continue;
         }
-        let Some(item_index) = original_items.iter().position(|id| id == item_id) else {
-            continue;
-        };
-        new_targets[item_index] = lift_list_item_to_parent(tr, *item_id)?;
+        lift_list_item_to_parent(tr, *item_id)?;
     }
 
     let sel = {
         let view = tr.view();
-        restore_lift_selection_endpoints(&view, &new_targets, &captured_anchor, &captured_head)
+        let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
+        stable_selection.resolve(&ctx)
     }
     .ok_or_else(|| CommandError::Corrupted("cannot restore list selection".into()))?;
     tr.set_selection(Some(sel))?;
@@ -448,15 +438,7 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
-    // TODO(move-node-alias): Replace this list-relative selection capture/restore
-    // with StableSelection once move_node can resolve old dots to re-emitted dots.
-    let (captured_anchor, captured_head) = {
-        let view = tr.view();
-        (
-            capture_selection_endpoint(&view, &items, &selection.anchor),
-            capture_selection_endpoint(&view, &items, &selection.head),
-        )
-    };
+    let stable_selection = StableSelection::capture(&selection, &tr.view());
     let mut groups = {
         let view = tr.view();
         group_list_items_by_parent(&view, &items)
@@ -467,7 +449,6 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
             .then_with(|| a.first_index.cmp(&b.first_index))
     });
 
-    let mut new_ids: Vec<Option<Dot>> = vec![None; items.len()];
     let mut any_sunk = false;
     for group in groups {
         let first_has_prev = {
@@ -479,15 +460,10 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
         };
 
         if !first_has_prev {
-            for (item_index, item_id) in group.items {
-                if tr.view().node(item_id).is_some() {
-                    new_ids[item_index] = Some(item_id);
-                }
-            }
             continue;
         }
 
-        for (item_index, item_id) in group.items {
+        for (_item_index, item_id) in group.items {
             let exists = {
                 let view = tr.view();
                 view.node(item_id).is_some()
@@ -499,7 +475,6 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
             if new_id.is_some() {
                 any_sunk = true;
             }
-            new_ids[item_index] = Some(new_id.unwrap_or(item_id));
         }
     }
     if !any_sunk {
@@ -508,7 +483,8 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
 
     let sel = {
         let view = tr.view();
-        restore_sink_selection_endpoints(&view, &new_ids, &captured_anchor, &captured_head)
+        let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
+        stable_selection.resolve(&ctx)
     }
     .ok_or_else(|| CommandError::Corrupted("cannot restore list selection".into()))?;
     tr.set_selection(Some(sel))?;
@@ -520,13 +496,6 @@ struct ListItemGroup {
     depth: usize,
     first_index: usize,
     items: Vec<(usize, Dot)>,
-}
-
-// TODO(move-node-alias): Remove this custom endpoint/anchor restore machinery when
-// StableSelection can follow move_node through old-dot -> new-dot aliases.
-enum SelectionEndpoint {
-    ListItem(SelectionAnchor),
-    Unchanged(Position),
 }
 
 fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGroup> {
@@ -549,37 +518,6 @@ fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGrou
         ));
     }
     groups.into_iter().map(|(_, group)| group).collect()
-}
-
-fn restore_lift_selection_endpoints(
-    view: &DocView,
-    new_targets: &[Option<LiftedListItemTarget>],
-    anchor: &SelectionEndpoint,
-    head: &SelectionEndpoint,
-) -> Option<Selection> {
-    Some(Selection::new(
-        restore_lift_endpoint(view, new_targets, anchor)?,
-        restore_lift_endpoint(view, new_targets, head)?,
-    ))
-}
-
-fn restore_lift_endpoint(
-    view: &DocView,
-    new_targets: &[Option<LiftedListItemTarget>],
-    endpoint: &SelectionEndpoint,
-) -> Option<Position> {
-    match endpoint {
-        SelectionEndpoint::ListItem(anchor) => restore_lift_anchor(view, new_targets, anchor),
-        SelectionEndpoint::Unchanged(position) => restore_unchanged_position(view, *position),
-    }
-}
-
-fn restore_lift_anchor(
-    view: &DocView,
-    new_targets: &[Option<LiftedListItemTarget>],
-    cap: &SelectionAnchor,
-) -> Option<Position> {
-    restore_lift_anchor_in_target(view, new_targets.get(cap.item_index)?.as_ref()?, cap)
 }
 
 fn restore_lift_anchor_in_target(
@@ -623,38 +561,6 @@ fn first_position_in_lift_root(view: &DocView, root: Dot) -> Option<Position> {
     })
 }
 
-fn restore_sink_selection_endpoints(
-    view: &DocView,
-    new_ids: &[Option<Dot>],
-    anchor: &SelectionEndpoint,
-    head: &SelectionEndpoint,
-) -> Option<Selection> {
-    Some(Selection::new(
-        restore_sink_endpoint(view, new_ids, anchor)?,
-        restore_sink_endpoint(view, new_ids, head)?,
-    ))
-}
-
-fn restore_sink_endpoint(
-    view: &DocView,
-    new_ids: &[Option<Dot>],
-    endpoint: &SelectionEndpoint,
-) -> Option<Position> {
-    match endpoint {
-        SelectionEndpoint::ListItem(anchor) => restore_sink_anchor(view, new_ids, anchor),
-        SelectionEndpoint::Unchanged(position) => restore_unchanged_position(view, *position),
-    }
-}
-
-fn restore_sink_anchor(
-    view: &DocView,
-    new_ids: &[Option<Dot>],
-    cap: &SelectionAnchor,
-) -> Option<Position> {
-    let item_id = *new_ids.get(cap.item_index)?.as_ref()?;
-    restore_anchor_from_root(view, item_id, &cap.path, cap.offset, cap.affinity)
-}
-
 fn restore_anchor_from_root(
     view: &DocView,
     root: Dot,
@@ -674,10 +580,6 @@ fn restore_anchor_from_root(
         offset,
         affinity,
     })
-}
-
-fn restore_unchanged_position(view: &DocView, position: Position) -> Option<Position> {
-    position.resolve(view).map(|_| position)
 }
 
 /// Sinks `list_item_id` into the preceding sibling's sublist. Returns the moved
@@ -771,26 +673,14 @@ pub(crate) fn sink_list_item_inner(
 }
 
 struct SelectionAnchor {
-    item_index: usize,
     path: Vec<usize>,
     offset: usize,
     affinity: Affinity,
 }
 
-fn capture_selection_endpoint(
-    view: &DocView,
-    items: &[Dot],
-    position: &Position,
-) -> SelectionEndpoint {
-    capture_anchor(view, items, position)
-        .map(SelectionEndpoint::ListItem)
-        .unwrap_or(SelectionEndpoint::Unchanged(*position))
-}
-
 fn capture_anchor(view: &DocView, items: &[Dot], pos: &Position) -> Option<SelectionAnchor> {
-    items.iter().enumerate().find_map(|(item_index, item)| {
+    items.iter().find_map(|item| {
         super::path_from_ancestor(view, pos.node, *item).map(|path| SelectionAnchor {
-            item_index,
             path,
             offset: pos.offset,
             affinity: pos.affinity,

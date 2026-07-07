@@ -1261,7 +1261,7 @@ mod tests {
     #[test]
     fn project_document_keeps_unknown_leaf_as_one_slot() {
         use crate::projection::{DocLogs, project_document};
-        use crate::{ModifierAttrLog, NodeAttrLog, SpanLog};
+        use crate::{AliasLog, ModifierAttrLog, NodeAttrLog, SpanLog};
         use editor_crdt::{InputEvent, ListOp, build_oplog};
 
         let para = Dot::new(1, 1);
@@ -1304,6 +1304,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         };
         let pd = project_document(&logs).unwrap();
         let p = pd.tree.get(para).expect("paragraph present");

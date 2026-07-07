@@ -1,5 +1,6 @@
 editor_macros::preamble!();
 
+mod alias;
 mod alignment;
 mod attr;
 mod canonical;
@@ -20,6 +21,7 @@ mod view;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 
+pub use alias::{AliasClasses, AliasLog, AliasOp, AliasRun, alias_op_is_valid};
 pub use alignment::*;
 pub use attr::*;
 pub use canonical::*;

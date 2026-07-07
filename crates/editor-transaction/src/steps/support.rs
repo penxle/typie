@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use editor_crdt::sequence::Bias as SeqBias;
 use editor_crdt::{Dot, ListOp};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeType,
-    PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree, classify,
+    AliasRun, Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierAttrOp, ModifierType,
+    NodeType, PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree, classify,
 };
 use editor_state::{BatchedState, ProjectedState};
 
@@ -428,6 +428,7 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
 
     let mut children: Vec<Subtree> = Vec::new();
     let mut pending_text = String::new();
+    let mut pending_dots: Vec<Dot> = Vec::new();
     let mut pending_mods: Vec<Modifier> = Vec::new();
     let mut leaf_idx = 0usize;
     for c in ps.block_children(block)? {
@@ -440,16 +441,19 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
                         if !pending_text.is_empty() && own != pending_mods {
                             children.push(text_subtree(
                                 std::mem::take(&mut pending_text),
+                                std::mem::take(&mut pending_dots),
                                 std::mem::take(&mut pending_mods),
                             ));
                         }
                         pending_text.push(ch);
+                        pending_dots.push(id);
                         pending_mods = own;
                     }
                     SeqItem::Atom(atom) => {
                         if !pending_text.is_empty() {
                             children.push(text_subtree(
                                 std::mem::take(&mut pending_text),
+                                std::mem::take(&mut pending_dots),
                                 std::mem::take(&mut pending_mods),
                             ));
                         }
@@ -459,6 +463,7 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
                         if !pending_text.is_empty() {
                             children.push(text_subtree(
                                 std::mem::take(&mut pending_text),
+                                std::mem::take(&mut pending_dots),
                                 std::mem::take(&mut pending_mods),
                             ));
                         }
@@ -471,6 +476,7 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
                 if !pending_text.is_empty() {
                     children.push(text_subtree(
                         std::mem::take(&mut pending_text),
+                        std::mem::take(&mut pending_dots),
                         std::mem::take(&mut pending_mods),
                     ));
                 }
@@ -481,7 +487,7 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
         }
     }
     if !pending_text.is_empty() {
-        children.push(text_subtree(pending_text, pending_mods));
+        children.push(text_subtree(pending_text, pending_dots, pending_mods));
     }
 
     Some(Subtree {
@@ -489,15 +495,21 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
         modifiers,
         carry,
         children,
+        source_dots: if block.is_synthetic() {
+            Vec::new()
+        } else {
+            vec![block]
+        },
     })
 }
 
-fn text_subtree(text: String, modifiers: Vec<Modifier>) -> Subtree {
+fn text_subtree(text: String, dots: Vec<Dot>, modifiers: Vec<Modifier>) -> Subtree {
     Subtree {
         node: PlainNode::Text(PlainTextNode { text }),
         modifiers,
         carry: Vec::new(),
         children: Vec::new(),
+        source_dots: dots,
     }
 }
 
@@ -515,17 +527,72 @@ fn atom_leaf_subtree(ps: &ProjectedState, dot: Dot, atom: AtomLeaf) -> Subtree {
         modifiers,
         carry: Vec::new(),
         children: Vec::new(),
+        source_dots: if dot.is_synthetic() {
+            Vec::new()
+        } else {
+            vec![dot]
+        },
     }
+}
+
+/// Recursively scans the *projected* subtree rooted at `block` for any of the
+/// lossy shapes `remove_child_slots_steps` routes to `Step::DeleteOpaque`: an
+/// unknown-bearing leaf, or a `NodeType::Unknown` placeholder block (its whole
+/// subtree, since the block's children are only structurally attached). Must
+/// run against the live projection, not a captured `Subtree` — capture already
+/// drops unknown content, so by then it's undetectable.
+pub(crate) fn subtree_has_unknown(ps: &ProjectedState, block: Dot) -> bool {
+    if block_node_type(ps, block) == Some(NodeType::Unknown) {
+        return true;
+    }
+    let Some(children) = ps.block_children(block) else {
+        return false;
+    };
+    children.iter().any(|c| match c {
+        Child::Leaf { item, .. } => item.is_unknown_bearing(),
+        Child::Block(d) => subtree_has_unknown(ps, *d),
+    })
+}
+
+/// Coalesces `(old, new)` dot pairs from an `emit_subtree` walk into maximal
+/// `AliasRun`s: consecutive when both the old and new dots advance by one
+/// clock tick on the same actor. A discontinuity on either side (an
+/// interleaved overlay op consuming a clock tick, or a non-contiguous source)
+/// starts a new run.
+pub(crate) fn compress_alias_pairs(pairs: &[(Dot, Dot)]) -> Vec<AliasRun> {
+    let mut runs: Vec<AliasRun> = Vec::new();
+    for &(old, new) in pairs {
+        if let Some(last) = runs.last_mut()
+            && last.len < u32::MAX
+            && old.actor == last.old_start.actor
+            && new.actor == last.new_start.actor
+            && old.clock == last.old_start.clock + last.len as u64
+            && new.clock == last.new_start.clock + last.len as u64
+        {
+            last.len += 1;
+            continue;
+        }
+        runs.push(AliasRun {
+            old_start: old,
+            len: 1,
+            new_start: new,
+        });
+    }
+    runs
 }
 
 /// Emits a captured/described subtree into the working state starting at
 /// `seq_pos`, beneath the chain `parents` (root-incl/self-excl for the subtree
-/// root). Returns the dot of the subtree's root block, if any.
+/// root). Returns the dot of the subtree's root block, if any. Every dot this
+/// call mints is paired with the `source_dots` entry it replaces (if any) by
+/// pushing onto `pairs` — recursive calls for nested children must be passed
+/// the same `pairs` accumulator, or their pairs are lost.
 pub(crate) fn emit_subtree(
     batched: &mut BatchedState,
     subtree: &Subtree,
     parents: &[Dot],
     seq_pos: &mut usize,
+    pairs: &mut Vec<(Dot, Dot)>,
 ) -> Result<Option<Dot>, StepError> {
     if subtree.node == PlainNode::Unknown {
         return Err(StepError::UnknownSubtree);
@@ -547,6 +614,9 @@ pub(crate) fn emit_subtree(
                 }))?
                 .id;
             *seq_pos += 1;
+            if let Some(&old) = subtree.source_dots.first() {
+                pairs.push((old, dot));
+            }
             for modifier in &subtree.modifiers {
                 batched.apply(block_modifier_set(dot, modifier.clone()))?;
             }
@@ -562,7 +632,7 @@ pub(crate) fn emit_subtree(
             let mut child_parents = parents.to_vec();
             child_parents.push(dot);
             for child in &subtree.children {
-                emit_subtree(batched, child, &child_parents, seq_pos)?;
+                emit_subtree(batched, child, &child_parents, seq_pos, pairs)?;
             }
             Ok(Some(dot))
         }
@@ -578,6 +648,11 @@ pub(crate) fn emit_subtree(
                         .id;
                     *seq_pos += 1;
                     char_dots.push(d);
+                }
+                if subtree.source_dots.len() == char_dots.len() {
+                    for (&old, &new) in subtree.source_dots.iter().zip(char_dots.iter()) {
+                        pairs.push((old, new));
+                    }
                 }
                 if let (Some(&first), Some(&last)) = (char_dots.first(), char_dots.last()) {
                     for modifier in &subtree.modifiers {
@@ -608,6 +683,9 @@ pub(crate) fn emit_subtree(
                 }))?
                 .id;
             *seq_pos += 1;
+            if let Some(&old) = subtree.source_dots.first() {
+                pairs.push((old, dot));
+            }
             for modifier in &subtree.modifiers {
                 let ty = modifier.as_type();
                 if is_block_level {
@@ -620,5 +698,85 @@ pub(crate) fn emit_subtree(
             }
             Ok(Some(dot))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_macros::state;
+
+    use super::*;
+
+    fn p(actor: u64, clock: u64) -> Dot {
+        Dot::new(actor, clock)
+    }
+
+    #[test]
+    fn compress_alias_pairs_splits_on_old_discontinuity() {
+        let pairs = vec![
+            (p(1, 0), p(9, 100)),
+            (p(1, 1), p(9, 101)),
+            (p(2, 7), p(9, 102)),
+        ];
+        let runs = compress_alias_pairs(&pairs);
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].len, 2);
+        assert_eq!(runs[1].old_start, p(2, 7));
+    }
+
+    #[test]
+    fn compress_alias_pairs_splits_on_new_discontinuity() {
+        let pairs = vec![(p(1, 0), p(9, 100)), (p(1, 1), p(9, 102))];
+        let runs = compress_alias_pairs(&pairs);
+        assert_eq!(runs.len(), 2, "new 불연속에서도 분할");
+        assert_eq!(runs[1].new_start, p(9, 102));
+    }
+
+    /// A block-level atom leaf (e.g. a top-level image) can't be moved through
+    /// `Transaction::move_node` — it addresses `child_block_dots` only, and the
+    /// leaf isn't a block. Its projected `Child` item is `SeqItem::Atom` (the
+    /// tree form drops `BlockAtom`'s `parents`, implicit once nested) with
+    /// `AtomLeaf::is_block_level() == true`, so `atom_leaf_subtree` takes the
+    /// block-modifier branch. Exercise `capture_subtree`'s helper and
+    /// `emit_subtree`'s Atom-arm pairing directly against `support`, since
+    /// `Transaction::move_node` can never reach this leaf.
+    #[test]
+    fn emit_subtree_pairs_block_atom_source_dot() {
+        let (state, root) = state! {
+            doc { root: root {
+                image
+                paragraph { text("a") }
+            } }
+            selection: (root, 0)
+        };
+        let ps = &state.projected;
+        let (image_dot, atom) = ps
+            .block_children(root)
+            .unwrap()
+            .into_iter()
+            .find_map(|c| match c {
+                Child::Leaf {
+                    id,
+                    item: SeqItem::Atom(leaf),
+                } if leaf.is_block_level() => Some((id, leaf)),
+                _ => None,
+            })
+            .expect("image leaf present at root");
+
+        let subtree = atom_leaf_subtree(ps, image_dot, atom);
+        assert_eq!(subtree.source_dots, vec![image_dot]);
+
+        let parents = self_inclusive_parents(ps, root).unwrap();
+        let mut seq_pos = child_seq_insert_pos(ps, root, 2).unwrap();
+        let mut pairs: Vec<(Dot, Dot)> = Vec::new();
+        let mut new_dot = None;
+        state
+            .batch::<_, StepError>(|batched| {
+                new_dot = emit_subtree(batched, &subtree, &parents, &mut seq_pos, &mut pairs)?;
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(pairs, vec![(image_dot, new_dot.unwrap())]);
     }
 }

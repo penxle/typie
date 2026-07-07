@@ -62,6 +62,16 @@ fn corpus() -> Vec<Fixture> {
             }),
             redecode::<DurableAnchor>,
         ),
+        // ----- DurableAliasRun (frozen struct) -----
+        (
+            "DurableAliasRun",
+            bytes(&DurableAliasRun {
+                old_start: anchor3,
+                len: 3,
+                new_start: anchor9,
+            }),
+            redecode::<DurableAliasRun>,
+        ),
         // ----- DurableAlignment (open) -----
         (
             "DurableAlignment::Left",
@@ -784,6 +794,18 @@ fn corpus() -> Vec<Fixture> {
             bytes(&DurableOp::ClearNodeCarry {
                 target: anchor3,
                 kind: DurableModifierKind::Bold,
+                tail: UnknownTail(Vec::new()),
+            }),
+            redecode::<DurableOp>,
+        ),
+        (
+            "DurableOp::AliasDots",
+            bytes(&DurableOp::AliasDots {
+                pairs: vec![DurableAliasRun {
+                    old_start: anchor3,
+                    len: 3,
+                    new_start: anchor9,
+                }],
                 tail: UnknownTail(Vec::new()),
             }),
             redecode::<DurableOp>,

@@ -1,3 +1,4 @@
+use editor_common::time::{Duration, Instant};
 use editor_crdt::Dot;
 use editor_macros::state;
 use editor_model::{
@@ -5,7 +6,10 @@ use editor_model::{
     NodeAttrOp, NodeType, NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode,
     Subtree,
 };
-use editor_state::State;
+use editor_state::undo::{RecordMerge, TransientState, UndoEntry, UndoHistory};
+use editor_state::{
+    Affinity, Position, Selection, StablePosition, StableResolveCtx, StableSelection, State,
+};
 use editor_transaction::{Step, StepError, Transaction};
 use proptest::prelude::*;
 
@@ -185,6 +189,124 @@ mod proptests {
         }
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum AnchorCmd {
+        Move,
+        Undo,
+        Redo,
+        Insert,
+    }
+
+    fn arb_anchor_cmd() -> impl Strategy<Value = AnchorCmd> {
+        prop_oneof![
+            Just(AnchorCmd::Move),
+            Just(AnchorCmd::Undo),
+            Just(AnchorCmd::Redo),
+            Just(AnchorCmd::Insert),
+        ]
+    }
+
+    fn record_if_any(history: &mut UndoHistory, recorded: Vec<editor_state::undo::RecordedOp>) {
+        if !recorded.is_empty() {
+            history.record(
+                UndoEntry {
+                    ops: recorded,
+                    tag: None,
+                    transient: TransientState::default(),
+                    merge: RecordMerge::Isolated,
+                },
+                Instant::now(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn stable_position_tracks_marker_through_move_undo_redo_sequence(
+            cmds in prop::collection::vec(arb_anchor_cmd(), 1..12),
+        ) {
+            const MARKER: char = '#';
+            let (initial, p1, p2) = state! {
+                doc {
+                    root {
+                        p1: paragraph { text("xx#yy") }
+                        p2: paragraph { text("") }
+                    }
+                }
+                selection: (p1, 0)
+            };
+            let view0 = initial.view();
+            let marker_idx0 = "xx#yy".chars().position(|c| c == MARKER).unwrap();
+            let captured = StablePosition::capture(
+                &Position {
+                    node: p1,
+                    offset: marker_idx0 + 1,
+                    affinity: Affinity::Upstream,
+                },
+                &view0,
+            );
+
+            let mut state = initial;
+            let mut history = UndoHistory::new(Duration::from_millis(0));
+
+            for cmd in cmds {
+                match cmd {
+                    AnchorCmd::Move => {
+                        let root = state.view().root().unwrap().id();
+                        let (marker_block, old_index) = {
+                            let view = state.view();
+                            let root_v = view.root().unwrap();
+                            let idx = root_v
+                                .child_blocks()
+                                .position(|b| b.inline_text().contains(MARKER))
+                                .expect("marker paragraph must be a root child");
+                            let block = root_v.child_blocks().nth(idx).unwrap().id();
+                            (block, idx)
+                        };
+                        let new_index = 1 - old_index;
+                        let mut tr = Transaction::new(&state);
+                        if tr.move_node(marker_block, root, new_index).is_ok() {
+                            let (next, _, recorded, _, _) = tr.commit();
+                            record_if_any(&mut history, recorded);
+                            state = next;
+                        }
+                    }
+                    AnchorCmd::Undo => {
+                        history.undo(state.projected_mut(), TransientState::default());
+                    }
+                    AnchorCmd::Redo => {
+                        history.redo(state.projected_mut(), TransientState::default());
+                    }
+                    AnchorCmd::Insert => {
+                        let len = state.view().node(p2).unwrap().child_count();
+                        let mut tr = Transaction::new(&state);
+                        if tr.insert_text(p2, len, "z").is_ok() {
+                            let (next, _, recorded, _, _) = tr.commit();
+                            record_if_any(&mut history, recorded);
+                            state = next;
+                        }
+                    }
+                }
+            }
+
+            let view = state.view();
+            let ctx = StableResolveCtx::new(&view, state.projected.seq());
+            let resolved = captured.resolve(&ctx).expect("captured anchor must still resolve");
+
+            let oracle_block = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.inline_text().contains(MARKER))
+                .expect("marker must survive the whole sequence");
+            let oracle_text = oracle_block.inline_text();
+            let oracle_idx = oracle_text.chars().position(|c| c == MARKER).unwrap();
+
+            prop_assert_eq!(resolved.node, oracle_block.id());
+            prop_assert_eq!(resolved.offset, oracle_idx + 1);
+        }
+    }
+
     proptest! {
         #[test]
         fn insert_text_inverse_round_trip(text in "[a-z]{1,10}") {
@@ -253,6 +375,70 @@ mod tests {
         tr.split_node(p1, 3).unwrap();
         let (split_state, ..) = tr.commit();
         assert_eq!(root_blocks(&split_state).len(), 2);
+    }
+
+    #[test]
+    fn range_in_second_half_survives_split_precisely() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("abcd") } } }
+            selection: (p1, 0)
+        };
+
+        let view_before = state.view();
+        let sel_c_to_d = Selection::new(Position::new(p1, 2), Position::new(p1, 4));
+        let captured = StableSelection::capture(&sel_c_to_d, &view_before);
+
+        let mut tr = Transaction::new(&state);
+        tr.split_node(p1, 2).unwrap();
+        let (after, ..) = tr.commit();
+
+        let new_second_half_block = after
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .nth(1)
+            .unwrap()
+            .id();
+
+        let view_after = after.view();
+        let ctx_after = StableResolveCtx::new(&view_after, after.projected.seq());
+        let resolved = captured.resolve(&ctx_after).unwrap();
+
+        assert_eq!(resolved.anchor.node, new_second_half_block);
+        assert_eq!(resolved.anchor.offset, 0);
+        assert_eq!(resolved.head.node, new_second_half_block);
+        assert_eq!(resolved.head.offset, 2);
+    }
+
+    #[test]
+    fn range_in_merged_block_survives_merge_precisely() {
+        let (state, p1, p2) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("ab") }
+                    p2: paragraph { text("cd") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let view_before = state.view();
+        let sel_in_p2 = Selection::new(Position::new(p2, 0), Position::new(p2, 2));
+        let captured = StableSelection::capture(&sel_in_p2, &view_before);
+
+        let mut tr = Transaction::new(&state);
+        tr.merge_node(p1).unwrap();
+        let (after, ..) = tr.commit();
+
+        let view_after = after.view();
+        let ctx_after = StableResolveCtx::new(&view_after, after.projected.seq());
+        let resolved = captured.resolve(&ctx_after).unwrap();
+
+        assert_eq!(resolved.anchor.node, p1);
+        assert_eq!(resolved.anchor.offset, 2);
+        assert_eq!(resolved.head.node, p1);
+        assert_eq!(resolved.head.offset, 4);
     }
 
     #[test]

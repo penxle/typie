@@ -1,4 +1,5 @@
 use editor_crdt::Dot;
+use editor_model::{AliasOp, EditOp};
 use editor_state::BatchedState;
 
 use crate::steps::support;
@@ -28,6 +29,10 @@ pub(crate) fn apply_to(
     new_parent: Dot,
     new_index: usize,
 ) -> Result<(), StepError> {
+    if support::subtree_has_unknown(&batched.projected, block) {
+        return Err(StepError::UnknownBearingMove { block });
+    }
+
     let subtree = support::capture_subtree(&batched.projected, block)
         .ok_or(StepError::NodeNotFound(block))?;
 
@@ -44,6 +49,12 @@ pub(crate) fn apply_to(
     let parents = support::self_inclusive_parents(&batched.projected, new_parent)
         .ok_or(StepError::NodeNotFound(new_parent))?;
     let mut seq_pos = pos;
-    support::emit_subtree(batched, &subtree, &parents, &mut seq_pos)?;
+    let mut pairs: Vec<(Dot, Dot)> = Vec::new();
+    support::emit_subtree(batched, &subtree, &parents, &mut seq_pos, &mut pairs)?;
+    if !pairs.is_empty() {
+        batched.apply(EditOp::Alias(AliasOp {
+            pairs: support::compress_alias_pairs(&pairs),
+        }))?;
+    }
     Ok(())
 }

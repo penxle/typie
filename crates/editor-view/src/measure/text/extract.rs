@@ -358,8 +358,8 @@ mod tests {
 
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        Anchor, AtomLeaf, Bias, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, SeqItem,
-        SpanLog, SpanOp, project_document,
+        AliasLog, Anchor, AtomLeaf, Bias, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType,
+        SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::Resource;
 
@@ -524,6 +524,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
     fn build_logs(children: Vec<SeqItem>) -> DocLogs {

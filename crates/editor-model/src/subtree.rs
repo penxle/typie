@@ -1,3 +1,5 @@
+use editor_crdt::Dot;
+
 use crate::modifier::Modifier;
 use crate::nodes::PlainNode;
 
@@ -7,6 +9,12 @@ pub struct Subtree {
     pub modifiers: Vec<Modifier>,
     pub carry: Vec<Modifier>,
     pub children: Vec<Subtree>,
+    /// The real op dots this subtree was captured from, in walk order — `Text`:
+    /// one per char; `Block`/`Atom`: the node's own dot; a described (not
+    /// captured) subtree: empty. Only `capture_subtree` fills this; every other
+    /// constructor leaves it empty. Consumed by `emit_subtree` to pair each
+    /// freshly-emitted dot back to the dot it replaces.
+    pub source_dots: Vec<Dot>,
 }
 
 impl Subtree {
@@ -16,6 +24,7 @@ impl Subtree {
             modifiers: vec![],
             carry: vec![],
             children: vec![],
+            source_dots: vec![],
         }
     }
 

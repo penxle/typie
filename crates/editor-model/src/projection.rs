@@ -5,8 +5,8 @@ use editor_crdt::OpLog;
 use editor_crdt::sequence::{SeqCheckout, SeqResolve, checkout_with_resolver};
 
 use crate::{
-    BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog, ModifierType, NodeType,
-    OwnModifier, ProjectError, SchemaError, anchor_dot,
+    AliasClasses, AliasLog, BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog,
+    ModifierType, NodeType, OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
 use crate::{
     Node, NodeAttrLog, SeqItem, SpanLog, normalize, project_blocks, seed_block_init,
@@ -27,6 +27,7 @@ pub struct DocLogs {
     pub block_modifiers: ModifierAttrLog,
     pub node_attrs: NodeAttrLog,
     pub node_carries: ModifierAttrLog,
+    pub aliases: AliasLog,
 }
 
 /// A leaf's effective-modifier map, shared by reference: every leaf of a
@@ -47,6 +48,7 @@ pub struct ProjectedDoc {
     pub block_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub node_attrs: imbl::HashMap<Dot, Node>,
     pub node_carries: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub alias_classes: AliasClasses,
 }
 
 impl ProjectedDoc {
@@ -105,6 +107,7 @@ impl PartialEq for ProjectedDoc {
             && self.node_attrs == o.node_attrs
             && self.node_carries == o.node_carries
             && self.seg_index == o.seg_index
+            && self.alias_classes == o.alias_classes
     }
 }
 
@@ -745,6 +748,7 @@ pub fn project_from_tree<R: SeqResolve>(
     let node_carries = collect_node_carries(&tree, &logs.node_carries);
 
     let block_effective = block_effective_all(&tree, &logs.block_modifiers, &node_attrs);
+    let alias_classes = AliasClasses::from_log(&logs.aliases);
 
     let mut pd = ProjectedDoc {
         tree,
@@ -753,6 +757,7 @@ pub fn project_from_tree<R: SeqResolve>(
         block_modifiers,
         node_attrs,
         node_carries,
+        alias_classes,
     };
 
     let paths = BlockPaths::from_tree(&pd.tree);
@@ -792,7 +797,7 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
-    use crate::{AtomLeaf, SeqItem, project_blocks};
+    use crate::{AliasOp, AliasRun, AtomLeaf, SeqItem, project_blocks};
 
     fn elems_nested() -> Vec<(Dot, SeqItem)> {
         let bq = Dot::new(1, 5);
@@ -886,6 +891,7 @@ mod tests {
             block_modifiers: imbl::HashMap::new(),
             node_attrs: imbl::HashMap::new(),
             node_carries: imbl::HashMap::new(),
+            alias_classes: AliasClasses::default(),
         };
         let idx = ProjectionIndexes::rebuild_from(&projected, &SpanLog::new());
         assert_eq!(idx.paths, BlockPaths::from_tree(&tree));
@@ -947,6 +953,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 
@@ -1059,6 +1066,26 @@ mod tests {
         assert_eq!(pd.tree.root_node().iter().count(), 1);
         assert_eq!(pd.tree.root_node().unwrap().node_type, NodeType::Root);
         assert_eq!(leaf_count(&pd), 5);
+    }
+
+    #[test]
+    fn projected_doc_eq_covers_alias_classes() {
+        let (elems, _root, _para) = para_abc();
+        let base = logs_of(&elems);
+        let mut aliased = base.clone();
+        aliased.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: Dot::new(1, 2),
+                len: 1,
+                new_start: Dot::new(1, 3),
+            }],
+        });
+        let a = project_document(&base).unwrap();
+        let b = project_document(&aliased).unwrap();
+        assert_ne!(
+            a, b,
+            "alias 맵만 다른 두 ProjectedDoc은 PartialEq에서 달라야 한다"
+        );
     }
 
     #[test]

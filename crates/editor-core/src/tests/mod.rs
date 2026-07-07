@@ -1,5 +1,7 @@
+mod alias_e2e;
 mod can_invariants;
 mod perf_modifier;
+mod perf_tracked_resolve;
 mod set_doc;
 mod state_changed_tracked_ranges;
 mod tracked_decoration_integration;

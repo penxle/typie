@@ -9,7 +9,7 @@ pub use anchor::{DurableAnchor, DurableBias};
 pub use attr::DurableAttr;
 pub use item::{DurableItem, DurableNodeType};
 pub use modifier::{DurableModifier, DurableModifierKind};
-pub use op::DurableOp;
+pub use op::{DurableAliasRun, DurableOp};
 pub use values::{
     DurableAlignment, DurableBlockquoteVariant, DurableCalloutVariant,
     DurableHorizontalRuleVariant, DurableLayoutMode, DurableTableBorderStyle,

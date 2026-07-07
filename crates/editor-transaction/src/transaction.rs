@@ -522,10 +522,14 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::HistoryMeta;
+    use editor_crdt::ListOp;
     use editor_macros::state;
-    use editor_state::{Position, Selection};
+    use editor_model::{AtomLeaf, Child, EditOp, NodeType, SeqItem, UnknownNode};
+    use editor_state::{Position, ProjectedState, Selection};
 
     fn block_text(state: &State, elem: &Dot) -> String {
         state
@@ -934,5 +938,318 @@ mod tests {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
         let (_, _, _, _, meta) = tr.commit();
         assert!(matches!(meta.history, HistoryMeta::Skip));
+    }
+
+    fn collect_items(ps: &ProjectedState, block: Dot) -> BTreeMap<Dot, SeqItem> {
+        fn walk(ps: &ProjectedState, block: Dot, out: &mut BTreeMap<Dot, SeqItem>) {
+            if let Some(node_type) = ps.block_node_type(block) {
+                out.insert(
+                    block,
+                    SeqItem::Block {
+                        node_type,
+                        parents: Vec::new(),
+                        attrs: Vec::new(),
+                    },
+                );
+            }
+            if let Some(children) = ps.block_children(block) {
+                for c in children {
+                    match c {
+                        Child::Leaf { id, item } => {
+                            out.insert(id, item);
+                        }
+                        Child::Block(d) => walk(ps, d, out),
+                    }
+                }
+            }
+        }
+        let mut out = BTreeMap::new();
+        walk(ps, block, &mut out);
+        out
+    }
+
+    fn item_of(ps: &ProjectedState, dot: Dot) -> Option<SeqItem> {
+        if let Some(node_type) = ps.block_node_type(dot) {
+            return Some(SeqItem::Block {
+                node_type,
+                parents: Vec::new(),
+                attrs: Vec::new(),
+            });
+        }
+        let parent = ps.parent_of(dot)?;
+        ps.block_children(parent)?
+            .into_iter()
+            .find_map(|c| match c {
+                Child::Leaf { id, item } if id == dot => Some(item),
+                _ => None,
+            })
+    }
+
+    fn alias_ops_in(ops: &[editor_crdt::Op<editor_model::EditOp>]) -> Vec<&editor_model::AliasOp> {
+        ops.iter()
+            .filter_map(|op| match &op.payload {
+                EditOp::Alias(a) => Some(a),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn assert_pairs_match_content(
+        before_items: &BTreeMap<Dot, SeqItem>,
+        pd: &ProjectedState,
+        pairs: &[editor_model::AliasRun],
+    ) {
+        for r in pairs {
+            for i in 0..r.len as u64 {
+                let old = Dot::new(r.old_start.actor, r.old_start.clock + i);
+                let new = Dot::new(r.new_start.actor, r.new_start.clock + i);
+                let old_item = before_items.get(&old).expect("move 전 스냅샷에 존재");
+                let new_item = item_of(pd, new).expect("move 후 상태에 존재");
+                match (old_item, &new_item) {
+                    (SeqItem::Char(a), SeqItem::Char(b)) => assert_eq!(a, b, "char 페어링 불일치"),
+                    (SeqItem::Atom(a), SeqItem::Atom(b)) => assert_eq!(a, b, "atom 페어링 불일치"),
+                    (SeqItem::Block { node_type: a, .. }, SeqItem::Block { node_type: b, .. }) => {
+                        assert_eq!(a, b, "block 페어링 불일치")
+                    }
+                    (a, b) => panic!("kind 불일치 페어링: {a:?} -> {b:?}"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn move_node_emits_single_alias_op_pairing_old_to_new() {
+        let (state, root, p1) = state! {
+            doc { root: root {
+                p1: paragraph { text("ab") }
+                paragraph { text("") }
+            } }
+            selection: (p1, 0)
+        };
+        let before_items = collect_items(&state.projected, p1);
+
+        let mut tr = Transaction::new(&state);
+        tr.move_node(p1, root, 1).unwrap();
+        let ops = tr.ops_for_test();
+        let alias_ops = alias_ops_in(&ops);
+        assert_eq!(alias_ops.len(), 1, "move 1회당 alias op 1개");
+        let total: u32 = alias_ops[0].pairs.iter().map(|r| r.len).sum();
+        assert_eq!(total as usize, 3, "블록 1 + char 2 전부 페어링");
+
+        assert_pairs_match_content(&before_items, &tr.state().projected, &alias_ops[0].pairs);
+    }
+
+    #[test]
+    fn stable_selection_resolves_mid_transaction_after_move_node() {
+        use editor_state::{StableResolveCtx, StableSelection};
+
+        let (state, root, p1) = state! {
+            doc { root: root {
+                p1: paragraph { text("hello") }
+                paragraph { text("world") }
+            } }
+            selection: (p1, 0)
+        };
+        let before_view = state.view();
+        let sel = Selection::new(Position::new(p1, 1), Position::new(p1, 4));
+        let stable = StableSelection::capture(&sel, &before_view);
+
+        let mut tr = Transaction::new(&state);
+        tr.move_node(p1, root, 1).unwrap();
+
+        // Resolve *before* commit: `tr.state()`/`tr.view()` must already reflect
+        // the alias pairing this `move_node` call just emitted.
+        let resolved = {
+            let view = tr.view();
+            let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
+            stable.resolve(&ctx)
+        }
+        .expect("resolves against the transaction's in-flight state, before commit");
+
+        assert_ne!(
+            resolved.anchor.node, p1,
+            "moved content now lives under a fresh dot mid-transaction"
+        );
+        let view = tr.view();
+        assert_eq!(
+            resolved.resolve(&view).unwrap().collect_text(),
+            "ell",
+            "mid-transaction resolve must follow the alias to the re-emitted paragraph"
+        );
+    }
+
+    #[test]
+    fn move_node_rejects_unknown_bearing_subtree_losslessly() {
+        let (mut state, root, p1) = state! {
+            doc { root: root {
+                p1: paragraph { text("ab") }
+                paragraph { text("") }
+            } }
+            selection: (p1, 0)
+        };
+        state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Unknown {
+                    tag: 7,
+                    bytes: vec![0x01],
+                },
+            }))
+            .unwrap();
+
+        let mut tr = Transaction::new(&state);
+        let before_ops = tr.ops_for_test().len();
+        let before_projected = Arc::clone(&tr.state().projected);
+        let result = tr.move_node(p1, root, 1);
+        assert!(
+            matches!(&result, Err(StepError::UnknownBearingMove { block }) if *block == p1),
+            "unknown 포함 move는 전용 거부 변형으로 거부 — {result:?}"
+        );
+        assert_eq!(
+            tr.ops_for_test().len(),
+            before_ops,
+            "거부 시 op 무발행 (무손실)"
+        );
+        assert!(
+            Arc::ptr_eq(&before_projected, &tr.state().projected),
+            "가드가 첫 op보다 먼저이므로 투영 상태 무변이"
+        );
+    }
+
+    #[test]
+    fn move_node_rejects_nested_unknown_block_losslessly() {
+        let (mut state, root, bq, _) = state! {
+            doc { root: root {
+                bq: blockquote { p1: paragraph { text("a") } }
+                paragraph { text("x") }
+            } }
+            selection: (p1, 0)
+        };
+        let pos = support::child_seq_insert_pos(&state.projected, bq, 1).unwrap();
+        state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Block {
+                    node_type: NodeType::Unknown,
+                    parents: vec![root, bq],
+                    attrs: vec![],
+                },
+            }))
+            .unwrap();
+
+        let mut tr = Transaction::new(&state);
+        let before_ops = tr.ops_for_test().len();
+        let before_projected = Arc::clone(&tr.state().projected);
+        let result = tr.move_node(bq, root, 1);
+        assert!(
+            matches!(&result, Err(StepError::UnknownBearingMove { block }) if *block == bq),
+            "중첩 Unknown 블록 포함 move는 전용 거부 변형으로 거부 — {result:?}"
+        );
+        assert_eq!(
+            tr.ops_for_test().len(),
+            before_ops,
+            "거부 시 op 무발행 (무손실)"
+        );
+        assert!(
+            Arc::ptr_eq(&before_projected, &tr.state().projected),
+            "가드가 첫 op보다 먼저이므로 투영 상태 무변이"
+        );
+    }
+
+    #[test]
+    fn move_node_rejects_unknown_bearing_atom_losslessly() {
+        let (mut state, root, p1) = state! {
+            doc { root: root {
+                p1: paragraph { text("ab") }
+                paragraph { text("") }
+            } }
+            selection: (p1, 0)
+        };
+        let pos = support::child_seq_insert_pos(&state.projected, p1, 2).unwrap();
+        state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Unknown(UnknownNode),
+                    parents: vec![root, p1],
+                },
+            }))
+            .unwrap();
+
+        let mut tr = Transaction::new(&state);
+        let before_ops = tr.ops_for_test().len();
+        let before_projected = Arc::clone(&tr.state().projected);
+        let result = tr.move_node(p1, root, 1);
+        assert!(
+            matches!(&result, Err(StepError::UnknownBearingMove { block }) if *block == p1),
+            "unknown-bearing atom 포함 move는 전용 거부 변형으로 거부 — {result:?}"
+        );
+        assert_eq!(
+            tr.ops_for_test().len(),
+            before_ops,
+            "거부 시 op 무발행 (무손실)"
+        );
+        assert!(
+            Arc::ptr_eq(&before_projected, &tr.state().projected),
+            "가드가 첫 op보다 먼저이므로 투영 상태 무변이"
+        );
+    }
+
+    #[test]
+    fn move_node_pairs_nested_blocks_and_chars_across_full_hierarchy() {
+        let (state, root, bq, ..) = state! {
+            doc { root: root {
+                bq: blockquote {
+                    p1: paragraph { text("a") }
+                    p2: paragraph { text("b") }
+                }
+                paragraph { text("x") }
+            } }
+            selection: (bq, 0)
+        };
+        let before_items = collect_items(&state.projected, bq);
+
+        let mut tr = Transaction::new(&state);
+        tr.move_node(bq, root, 1).unwrap();
+        let ops = tr.ops_for_test();
+        let alias_ops = alias_ops_in(&ops);
+        assert_eq!(alias_ops.len(), 1);
+        let total: u32 = alias_ops[0].pairs.iter().map(|r| r.len).sum();
+        assert_eq!(
+            total as usize,
+            before_items.len(),
+            "blockquote + 2 paragraph + 2 char 전 계층 페어링"
+        );
+
+        assert_pairs_match_content(&before_items, &tr.state().projected, &alias_ops[0].pairs);
+    }
+
+    #[test]
+    fn move_node_pairs_inline_atom_dot() {
+        let (state, root, p1) = state! {
+            doc { root: root {
+                p1: paragraph { text("a") tab text("b") }
+                paragraph { text("") }
+            } }
+            selection: (p1, 0)
+        };
+        let before_items = collect_items(&state.projected, p1);
+
+        let mut tr = Transaction::new(&state);
+        tr.move_node(p1, root, 1).unwrap();
+        let ops = tr.ops_for_test();
+        let alias_ops = alias_ops_in(&ops);
+        assert_eq!(alias_ops.len(), 1);
+        let total: u32 = alias_ops[0].pairs.iter().map(|r| r.len).sum();
+        assert_eq!(
+            total as usize,
+            before_items.len(),
+            "block + char 'a' + tab atom + char 'b' 전부 페어링"
+        );
+
+        assert_pairs_match_content(&before_items, &tr.state().projected, &alias_ops[0].pairs);
     }
 }

@@ -174,8 +174,8 @@ pub(crate) fn measure_fold(
 mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        Alignment, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog, NodeType, SeqItem,
-        SpanLog, project_document,
+        AliasLog, Alignment, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog, NodeType,
+        SeqItem, SpanLog, project_document,
     };
     use editor_resource::Resource;
     use editor_state::PendingModifier;
@@ -208,6 +208,7 @@ mod tests {
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
             node_carries: ModifierAttrLog::new(),
+            aliases: AliasLog::new(),
         }
     }
 
