@@ -172,6 +172,13 @@ export const DocumentConflictKind = {
   ORDER: 'ORDER',
 } as const;
 
+export type DocumentBundleKind = keyof typeof DocumentBundleKind;
+export const DocumentBundleKind = {
+  PUSHED: 'PUSHED',
+  CONSOLIDATED: 'CONSOLIDATED',
+  BASELINE: 'BASELINE',
+} as const;
+
 export type DocumentType = keyof typeof DocumentType;
 export const DocumentType = {
   NORMAL: 'NORMAL',

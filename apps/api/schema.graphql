@@ -242,6 +242,12 @@ enum DocumentAvailableAction {
   EDIT
 }
 
+enum DocumentBundleKind {
+  BASELINE
+  CONSOLIDATED
+  PUSHED
+}
+
 type DocumentChangesetsUpdatedEvent {
   changesets: [Binary!]!
   durableHeads: Binary!

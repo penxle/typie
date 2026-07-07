@@ -668,8 +668,6 @@ export const DocumentReactions = pgTable(
   (t) => [index().on(t.documentId, t.createdAt)],
 );
 
-export const DOCUMENT_BUNDLE_KINDS = ['pushed', 'consolidated', 'baseline'] as const;
-
 export const DocumentBundles = pgTable(
   'document_bundles',
   {
@@ -681,7 +679,7 @@ export const DocumentBundles = pgTable(
       .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     seq: integer('seq').notNull(),
     epoch: integer('epoch').notNull().default(0),
-    kind: text('kind').notNull().default('pushed'),
+    kind: E._DocumentBundleKind('kind').notNull().default('PUSHED'),
     payload: bytea('payload').notNull(),
     createdAt: datetime('created_at')
       .notNull()

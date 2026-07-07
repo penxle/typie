@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/node';
+import { DocumentBundleKind } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { and, asc, count, eq, lte, max, sql } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
@@ -297,7 +298,7 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
       .orderBy(asc(DocumentBundles.seq));
     if (rows.length < 2) return;
 
-    if (rows.some((r, i) => i > 0 && r.kind === 'consolidated')) {
+    if (rows.some((r, i) => i > 0 && r.kind === DocumentBundleKind.CONSOLIDATED)) {
       Sentry.captureMessage(`document_bundles invariant violation: non-prefix consolidated row documentId=${documentId}`);
       return;
     }
@@ -339,7 +340,7 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
       await tx.insert(DocumentBundles).values({
         documentId,
         seq: lastMergedSeq,
-        kind: 'consolidated',
+        kind: DocumentBundleKind.CONSOLIDATED,
         payload: consolidatedPayload,
       });
     });

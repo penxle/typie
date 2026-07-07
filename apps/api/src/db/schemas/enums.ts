@@ -28,6 +28,7 @@ export const _DocumentCommentThreadState = createPgEnum('_document_comment_threa
 export const _DocumentCommentState = createPgEnum('_document_comment_state', E.DocumentCommentState);
 export const _DocumentType = createPgEnum('_document_type', E.DocumentType);
 export const _DocumentConflictKind = createPgEnum('_document_conflict_kind', E.DocumentConflictKind);
+export const _DocumentBundleKind = createPgEnum('_document_bundle_kind', E.DocumentBundleKind);
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
 export const _RedirectType = createPgEnum('_redirect_type', E.RedirectType);
 export const _SiteDateDisplay = createPgEnum('_site_date_display', E.SiteDateDisplay);
