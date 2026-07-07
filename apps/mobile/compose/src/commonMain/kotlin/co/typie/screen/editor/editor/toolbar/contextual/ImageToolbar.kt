@@ -31,6 +31,7 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageScope
 import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
+import co.typie.screen.editor.editor.toolbar.EditorToolbarSecondary
 import co.typie.ui.component.toast.LocalToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ private fun EditorImageToolbar(
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val imageState = LocalEditorExternalElementState.current.images
   val imageId = image?.id
+  val readyAsset = imageId?.let(imageState.assets::get)
   val uploading = nodeId?.let { imageState.uploads.containsKey(it) } == true
   val hasImage = imageId != null || uploading
 
@@ -159,6 +161,16 @@ private fun EditorImageToolbar(
         icon = Lucide.Image,
         contentDescription = "이미지 선택",
         onClick = { picker("image/*") },
+      )
+    }
+    if (readyAsset != null && nodeId != null) {
+      val resizeSecondary = EditorToolbarSecondary.ImageResize(nodeId = nodeId)
+      val selected = scope.activeSecondaryToolbar == resizeSecondary
+      EditorToolbarButton(
+        icon = Lucide.MoveHorizontal,
+        contentDescription = "이미지 폭 조정",
+        selected = selected,
+        onClick = { scope.toggleSecondaryToolbar(resizeSecondary) },
       )
     }
     EditorToolbarButton(

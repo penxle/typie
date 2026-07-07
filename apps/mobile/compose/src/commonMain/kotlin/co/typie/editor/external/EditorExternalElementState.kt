@@ -21,10 +21,16 @@ internal class EditorExternalElementState {
 internal class EditorExternalImageElementState {
   val assets = mutableStateMapOf<String, EditorImageAsset>()
   val uploads = mutableStateMapOf<String, EditorImageUpload>()
+  val resizeDraftProportions = mutableStateMapOf<String, Float>()
+
+  fun clearResizeState(nodeId: String) {
+    resizeDraftProportions.remove(nodeId)
+  }
 
   fun clear() {
     assets.clear()
     uploads.clear()
+    resizeDraftProportions.clear()
   }
 }
 

@@ -127,6 +127,8 @@ internal fun EditorToolbarPages(
   onEditorMessage: (Message) -> Unit = {},
   onToolAction: (EditorToolbarToolAction) -> Unit = {},
   onCurrentPageKeyChange: (EditorToolbarPageKey?) -> Unit = {},
+  activeSecondaryToolbar: EditorToolbarSecondary? = null,
+  onSecondaryToolbarToggle: (EditorToolbarSecondary) -> Unit = {},
   secondaryToolbarVisible: Boolean = false,
   onSecondaryToolbarInLayoutChange: (Boolean) -> Unit = {},
   secondaryToolbar: @Composable () -> Unit = {},
@@ -632,9 +634,11 @@ internal fun EditorToolbarPages(
               val pageScope =
                 EditorToolbarPageScope(
                   activeBottomPanel = activeBottomPanel,
+                  activeSecondaryToolbar = activeSecondaryToolbar,
                   commandScope = commandScope,
                   hasNextPage = index < lastPageIndex,
                   navigateToPage = ::navigateToPage,
+                  toggleSecondaryToolbar = onSecondaryToolbarToggle,
                   toggleBottomPanel = onBottomPanelToggle,
                   sendMessage = onEditorMessage,
                   performToolAction = onToolAction,

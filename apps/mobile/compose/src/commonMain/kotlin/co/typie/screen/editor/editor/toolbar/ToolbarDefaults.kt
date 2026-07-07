@@ -125,9 +125,11 @@ internal class EditorToolbarPage(
 
 internal class EditorToolbarPageScope(
   val activeBottomPanel: EditorToolbarBottomPanel?,
+  val activeSecondaryToolbar: EditorToolbarSecondary?,
   val commandScope: CoroutineScope,
   val hasNextPage: Boolean,
   val navigateToPage: (EditorToolbarPageKey) -> Unit,
+  val toggleSecondaryToolbar: (EditorToolbarSecondary) -> Unit,
   val toggleBottomPanel: (EditorToolbarBottomPanel) -> Unit,
   val sendMessage: (Message) -> Unit,
   val performToolAction: (EditorToolbarToolAction) -> Unit,

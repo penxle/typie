@@ -1,0 +1,234 @@
+package co.typie.screen.editor.editor.toolbar.contextual
+
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import co.typie.editor.external.IMAGE_MAX_PROPORTION
+import co.typie.editor.external.IMAGE_MIN_PROPORTION
+import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.external.imageResizeProportionRange
+import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NodeOp
+import co.typie.editor.ffi.PlainNode
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.ext.InteractionScope
+import co.typie.icons.Lucide
+import co.typie.screen.editor.editor.toolbar.EditorToolbarIconButton
+import co.typie.screen.editor.editor.toolbar.EditorToolbarSurfaceBackground
+import co.typie.screen.editor.editor.toolbar.ToolbarBackdropBlurRadius
+import co.typie.screen.editor.editor.toolbar.ToolbarBorderWidth
+import co.typie.screen.editor.editor.toolbar.ToolbarCapsuleShape
+import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionPadding
+import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionShape
+import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
+import co.typie.screen.editor.editor.toolbar.ToolbarLabelTextStyle
+import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryHeight
+import co.typie.screen.editor.editor.toolbar.preserveEditorFocusOnToolbarInteraction
+import co.typie.ui.component.Slider
+import co.typie.ui.component.Text
+import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.LocalHazeState
+import co.typie.ui.theme.shadow
+import dev.chrisbanes.haze.blur.blurEffect
+import dev.chrisbanes.haze.hazeEffect
+import kotlin.math.roundToInt
+
+private const val IMAGE_RESIZE_HAPTIC_STEP = 5
+private val ImageResizeToolbarItemGap = 8.dp
+private val ImageResizeToolbarEndPadding = 12.dp
+
+@Composable
+internal fun ImageResizeSecondaryToolbar(
+  nodeId: String,
+  onClose: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val runtime = LocalEditorRuntime.current
+  val editor = runtime.editor
+  val imageState = LocalEditorExternalElementState.current.images
+  val externalElement =
+    editor?.externalElements?.firstOrNull { element ->
+      element.node == nodeId && element.data is ExternalElementData.Image
+    }
+  val image = externalElement?.data as? ExternalElementData.Image
+  val imageId = image?.id
+  val asset = imageId?.let(imageState.assets::get)
+  val boundsWidth = externalElement?.bounds?.width ?: 0f
+
+  if (image == null || asset == null || boundsWidth <= 0f) {
+    LaunchedEffect(nodeId, imageId, boundsWidth) {
+      imageState.clearResizeState(nodeId)
+      onClose()
+    }
+    return
+  }
+
+  val range =
+    imageResizeProportionRange(boundsWidth = boundsWidth, originalWidth = asset.width.toFloat())
+  val nodeProportion = image.proportion.coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
+  val currentProportion =
+    (imageState.resizeDraftProportions[nodeId] ?: nodeProportion.toFloat()).coerceIn(
+      range.first.toFloat(),
+      range.last.toFloat(),
+    )
+  val currentPercent = currentProportion.roundToInt()
+  val haptic = LocalHapticFeedback.current
+  var lastHapticStop by remember(nodeId) { mutableStateOf<Int?>(null) }
+
+  DisposableEffect(nodeId) { onDispose { imageState.resizeDraftProportions.remove(nodeId) } }
+
+  fun maybeHaptic(value: Float) {
+    val percent = value.roundToInt()
+    val stop =
+      when {
+        percent == range.first || percent == range.last -> percent
+        percent % IMAGE_RESIZE_HAPTIC_STEP == 0 -> percent
+        else -> null
+      }
+    if (stop != null && stop != lastHapticStop) {
+      haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+      lastHapticStop = stop
+    }
+  }
+
+  fun updateDraft(value: Float) {
+    val next = value.coerceIn(range.first.toFloat(), range.last.toFloat())
+    maybeHaptic(next)
+    imageState.resizeDraftProportions[nodeId] = next
+  }
+
+  fun startDraft() {
+    lastHapticStop = null
+    imageState.resizeDraftProportions[nodeId] = currentProportion
+  }
+
+  fun commit(value: Float) {
+    val next = value.roundToInt().coerceIn(range.first, range.last)
+    if (next != nodeProportion) {
+      editor.sync {
+        enqueue(
+          Message.Node(
+            NodeOp.SetAttrs(id = nodeId, attrs = PlainNode.Image(id = imageId, proportion = next))
+          )
+        )
+      }
+    }
+    imageState.resizeDraftProportions.remove(nodeId)
+  }
+
+  fun cancelDraft() {
+    imageState.resizeDraftProportions.remove(nodeId)
+  }
+
+  ImageResizeSecondaryToolbarSurface(onClose = onClose, modifier = modifier) {
+    Slider(
+      value = currentProportion,
+      range = range.first.toFloat()..range.last.toFloat(),
+      onDragStart = ::startDraft,
+      onDrag = ::updateDraft,
+      onDragEnd = ::commit,
+      onDragCancel = ::cancelDraft,
+      thumbSize = 20.dp,
+      trackHeight = 6.dp,
+      fillColor = AppTheme.colors.textDefault.copy(alpha = 0.78f),
+      modifier = Modifier.weight(1f).height(30.dp),
+    )
+    Text(
+      text = "$currentPercent%",
+      modifier = Modifier.width(48.dp),
+      style = ToolbarLabelTextStyle,
+      color = AppTheme.colors.textDefault,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      textAlign = TextAlign.End,
+    )
+  }
+}
+
+@Composable
+private fun ImageResizeSecondaryToolbarSurface(
+  onClose: () -> Unit,
+  modifier: Modifier = Modifier,
+  content: @Composable RowScope.() -> Unit,
+) {
+  val hazeState = LocalHazeState.current
+  val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
+
+  Box(
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .height(ToolbarSecondaryHeight)
+        .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
+        .clip(ToolbarCapsuleShape)
+        .hazeEffect(hazeState) {
+          blurEffect {
+            backgroundColor = toolbarSurfaceColor
+            blurRadius = ToolbarBackdropBlurRadius
+          }
+        }
+        .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
+        .preserveEditorFocusOnToolbarInteraction()
+  ) {
+    EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
+    Row(
+      modifier =
+        Modifier.fillMaxSize()
+          .padding(
+            start = ToolbarFixedActionWidth + ImageResizeToolbarItemGap,
+            top = ToolbarPageVerticalPadding,
+            end = ImageResizeToolbarEndPadding,
+            bottom = ToolbarPageVerticalPadding,
+          ),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(ImageResizeToolbarItemGap),
+    ) {
+      content()
+    }
+    Box(modifier = Modifier.align(Alignment.CenterStart)) {
+      ImageResizeCloseButton(onClick = onClose)
+    }
+  }
+}
+
+@Composable
+private fun ImageResizeCloseButton(onClick: () -> Unit) {
+  InteractionScope {
+    EditorToolbarIconButton(
+      icon = Lucide.X,
+      contentDescription = "이미지 폭 조정 닫기",
+      onClick = onClick,
+      shape = ToolbarFixedActionShape,
+      fixedActionSurface = true,
+      inheritInteractionSource = true,
+      modifier =
+        Modifier.width(ToolbarFixedActionWidth).fillMaxHeight().padding(ToolbarFixedActionPadding),
+      iconSize = 20.dp,
+    )
+  }
+}
