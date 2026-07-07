@@ -390,4 +390,221 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn materializes_synthetic_fold_content_chain_after_synthetic_title() {
+        use editor_model::NodeType;
+        use editor_state::{Position, Selection};
+
+        let (initial, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    fold
+                    paragraph {}
+                }
+            }
+            selection: none
+        };
+        let synth_p = {
+            let view = initial.view();
+            let fold = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Fold)
+                .expect("fold");
+            let title = fold
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldTitle)
+                .expect("synthetic fold title");
+            assert!(title.id().is_synthetic());
+            let content = fold
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldContent)
+                .expect("synthetic fold content");
+            assert!(content.id().is_synthetic());
+            let paragraph = content
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .expect("synthetic fold content paragraph");
+            paragraph.id()
+        };
+        assert!(synth_p.is_synthetic());
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_selection(Some(Selection::collapsed(Position::new(synth_p, 0))))
+            .unwrap();
+        assert!(insert_text(&mut tr, "x").unwrap());
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    fold {
+                        fold_title {}
+                        fold_content {
+                            p1: paragraph { text("x") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn materializes_synthetic_empty_block_containers() {
+        use editor_model::NodeType;
+        use editor_state::{Position, Selection};
+
+        let cases = [
+            (NodeType::Blockquote, "blockquote"),
+            (NodeType::Callout, "callout"),
+            (NodeType::BulletList, "bullet_list"),
+            (NodeType::OrderedList, "ordered_list"),
+            (NodeType::Table, "table"),
+        ];
+        for (container_type, label) in cases {
+            let (initial, ..) = match container_type {
+                NodeType::Blockquote => state! {
+                    doc { root { blockquote paragraph {} } }
+                    selection: none
+                },
+                NodeType::Callout => state! {
+                    doc { root { callout paragraph {} } }
+                    selection: none
+                },
+                NodeType::BulletList => state! {
+                    doc { root { bullet_list paragraph {} } }
+                    selection: none
+                },
+                NodeType::OrderedList => state! {
+                    doc { root { ordered_list paragraph {} } }
+                    selection: none
+                },
+                NodeType::Table => state! {
+                    doc { root { table paragraph {} } }
+                    selection: none
+                },
+                _ => unreachable!(),
+            };
+            let synth_p = {
+                let view = initial.view();
+                let container = view
+                    .root()
+                    .unwrap()
+                    .child_blocks()
+                    .find(|b| b.node_type() == container_type)
+                    .unwrap_or_else(|| panic!("{label} container"));
+                let paragraph = container
+                    .descendants()
+                    .filter_map(|child| match child {
+                        editor_model::ChildView::Block(block)
+                            if block.node_type() == NodeType::Paragraph =>
+                        {
+                            Some(block.id())
+                        }
+                        _ => None,
+                    })
+                    .next()
+                    .unwrap_or_else(|| panic!("{label} synthetic paragraph"));
+                paragraph
+            };
+            assert!(synth_p.is_synthetic(), "{label} paragraph is synthetic");
+
+            let mut tr = Transaction::new(&initial);
+            tr.set_selection(Some(Selection::collapsed(Position::new(synth_p, 0))))
+                .unwrap();
+            assert!(insert_text(&mut tr, "x").unwrap(), "{label}");
+            let (actual, ..) = tr.commit();
+            let selection = actual.selection.expect("selection");
+            assert_eq!(selection.anchor, selection.head, "{label}");
+            assert!(
+                selection.head.node.as_op_dot().is_some(),
+                "{label} caret host must be real"
+            );
+            let view = actual.view();
+            let paragraph = view.node(selection.head.node).expect("paragraph");
+            assert_eq!(paragraph.node_type(), NodeType::Paragraph, "{label}");
+            assert_eq!(paragraph.inline_text(), "x", "{label}");
+        }
+    }
+
+    #[test]
+    fn materializes_table_cell_after_synthetic_padded_cell() {
+        use editor_model::NodeType;
+        use editor_state::{Position, Selection};
+
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph { text("b") } }
+                            table_cell { paragraph { text("c") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("d") } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: none
+        };
+        let synth_p = {
+            let view = initial.view();
+            let table = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Table)
+                .expect("table");
+            let row = table
+                .child_blocks()
+                .nth(1)
+                .expect("short row padded by normalize_grid");
+            let preceding_cell = row.child_blocks().nth(1).expect("first synthetic cell");
+            assert!(preceding_cell.id().is_synthetic());
+            let target_cell = row.child_blocks().nth(2).expect("second synthetic cell");
+            assert!(target_cell.id().is_synthetic());
+            let paragraph = target_cell
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .expect("synthetic table cell paragraph");
+            paragraph.id()
+        };
+        assert!(synth_p.is_synthetic());
+
+        let mut tr = Transaction::new(&initial);
+        tr.set_selection(Some(Selection::collapsed(Position::new(synth_p, 0))))
+            .unwrap();
+        assert!(insert_text(&mut tr, "x").unwrap());
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            table_cell { paragraph { text("b") } }
+                            table_cell { paragraph { text("c") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("d") } }
+                            table_cell {}
+                            table_cell { p1: paragraph { text("x") } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
 }

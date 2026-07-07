@@ -1146,6 +1146,72 @@ mod tests {
     }
 
     #[test]
+    fn ime_composition_into_synthetic_empty_fold_content_paragraph() {
+        use editor_model::NodeType;
+        use editor_state::{Position, Selection};
+
+        let (state,) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    fold
+                    paragraph {}
+                }
+            }
+            selection: none
+        };
+        let synth_p = {
+            let view = state.view();
+            let fold = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Fold)
+                .expect("fold");
+            let content = fold
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldContent)
+                .expect("synthetic fold content");
+            assert!(content.id().is_synthetic());
+            let paragraph = content
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .expect("synthetic fold content paragraph");
+            paragraph.id()
+        };
+        assert!(synth_p.is_synthetic());
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(synth_p, 0)),
+            },
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    fold {
+                        fold_title {}
+                        fold_content {
+                            p1: paragraph { text("ㅎ") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 5, end: 6 })
+        );
+    }
+
+    #[test]
     fn set_region_rejects_cross_block() {
         let (state, ..) = state! {
             doc {

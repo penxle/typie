@@ -214,6 +214,7 @@ pub(crate) fn materialize_position_block(
     }
     let subtree = subtree.expect("synthetic chain is non-empty");
 
+    materialize_preceding_synthetic_siblings(tr, anchor_id, anchor_slot)?;
     tr.insert_subtree(anchor_id, anchor_slot, subtree)?;
 
     let materialized_block = {
@@ -235,6 +236,45 @@ pub(crate) fn materialize_position_block(
         node: materialized_block,
         ..position
     })
+}
+
+fn materialize_preceding_synthetic_siblings(
+    tr: &mut Transaction,
+    parent_id: Dot,
+    end_slot: usize,
+) -> Result<(), CommandError> {
+    let mut start_slot = end_slot;
+    while start_slot > 0 {
+        let is_synthetic = {
+            let view = tr.state().view();
+            matches!(
+                view.node(parent_id).and_then(|p| p.child_at(start_slot - 1)),
+                Some(ChildView::Block(child)) if child.id().as_op_dot().is_none()
+            )
+        };
+        if !is_synthetic {
+            break;
+        }
+        start_slot -= 1;
+    }
+
+    for slot in start_slot..end_slot {
+        let subtree = {
+            let view = tr.state().view();
+            let Some(ChildView::Block(child)) = view.node(parent_id).and_then(|p| p.child_at(slot))
+            else {
+                continue;
+            };
+            if child.id().as_op_dot().is_some() {
+                continue;
+            }
+            // InsertSubtree computes the insertion point from the previous sibling,
+            // so the synthetic run immediately before the target must become addressable first.
+            Subtree::leaf(child.node().to_plain())
+        };
+        tr.insert_subtree(parent_id, slot, subtree)?;
+    }
+    Ok(())
 }
 
 /// Materialize the synthetic block containing a collapsed caret and move the
