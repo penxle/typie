@@ -7,71 +7,74 @@ mod project;
 pub use normalize::*;
 pub use project::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SeqItem {
-    #[wire(n(0))]
     Char(char),
-    #[wire(n(1))]
     Atom(AtomLeaf),
-    #[wire(n(2))]
     Block {
-        #[wire(n(0))]
         node_type: NodeType,
-        #[wire(n(1))]
+        parents: Vec<Dot>,
+        attrs: Vec<crate::NodeAttr>,
+    },
+    BlockAtom {
+        leaf: AtomLeaf,
         parents: Vec<Dot>,
     },
-    #[wire(n(3))]
-    BlockAtom {
-        #[wire(n(0))]
-        leaf: AtomLeaf,
-        #[wire(n(1))]
-        parents: Vec<Dot>,
+    Unknown {
+        tag: u64,
+        bytes: Vec<u8>,
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomLeaf {
-    #[wire(n(0))]
     HardBreak,
-    #[wire(n(1))]
     Tab,
-    #[wire(n(2))]
     PageBreak,
-    #[wire(n(3))]
     HorizontalRule {
-        #[wire(n(0))]
         variant: crate::nodes::HorizontalRuleVariant,
     },
-    #[wire(n(4))]
     Image {
-        #[wire(n(0))]
         node: crate::nodes::ImageNode,
     },
-    #[wire(n(5))]
     File {
-        #[wire(n(0))]
         node: crate::nodes::FileNode,
     },
-    #[wire(n(6))]
     Embed {
-        #[wire(n(0))]
         node: crate::nodes::EmbedNode,
     },
-    #[wire(n(7))]
     Archived {
-        #[wire(n(0))]
         node: crate::nodes::ArchivedNode,
     },
+    Unknown(crate::nodes::UnknownNode),
 }
 
 impl SeqItem {
-    pub fn as_child_type(&self) -> NodeType {
+    pub fn as_child_type(&self) -> Option<NodeType> {
         match self {
-            SeqItem::Char(_) => NodeType::Text,
-            SeqItem::Atom(l) => l.node_type(),
-            SeqItem::Block { node_type, .. } => *node_type,
-            SeqItem::BlockAtom { leaf, .. } => leaf.node_type(),
+            SeqItem::Char(_) => Some(NodeType::Text),
+            SeqItem::Atom(l) => Some(l.node_type()),
+            SeqItem::Block { node_type, .. } => Some(*node_type),
+            SeqItem::BlockAtom { leaf, .. } => Some(leaf.node_type()),
+            SeqItem::Unknown { .. } => None,
         }
+    }
+
+    /// Whether this item is one of the three placeholder shapes for lossy
+    /// unknown content: a classless inline `Unknown`, or an atom/block-atom
+    /// carrying `AtomLeaf::Unknown`. `SeqItem::Block { node_type: NodeType::Unknown, .. }`
+    /// is a fourth shape but is addressed by `Child`/block-tree walking, not
+    /// per-item inspection, since it is a container rather than a leaf value.
+    pub fn is_unknown_bearing(&self) -> bool {
+        matches!(
+            self,
+            SeqItem::Unknown { .. }
+                | SeqItem::Atom(AtomLeaf::Unknown(_))
+                | SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Unknown(_),
+                    ..
+                }
+        )
     }
 }
 
@@ -86,6 +89,7 @@ impl AtomLeaf {
             AtomLeaf::File { .. } => NodeType::File,
             AtomLeaf::Embed { .. } => NodeType::Embed,
             AtomLeaf::Archived { .. } => NodeType::Archived,
+            AtomLeaf::Unknown(_) => NodeType::Unknown,
         }
     }
 
@@ -120,6 +124,7 @@ impl AtomLeaf {
             AtomLeaf::File { node } => Node::File(node),
             AtomLeaf::Embed { node } => Node::Embed(node),
             AtomLeaf::Archived { node } => Node::Archived(node),
+            AtomLeaf::Unknown(node) => Node::Unknown(node),
         }
     }
 
@@ -136,6 +141,7 @@ impl AtomLeaf {
             Node::File(n) => AtomLeaf::File { node: n },
             Node::Embed(n) => AtomLeaf::Embed { node: n },
             Node::Archived(n) => AtomLeaf::Archived { node: n },
+            Node::Unknown(n) => AtomLeaf::Unknown(n),
             _ => return None,
         })
     }
@@ -221,31 +227,6 @@ mod tests {
         for t in AtomLeaf::node_type_set() {
             assert!(matches!(classify(t), SeqClass::Atom), "{t:?}");
         }
-    }
-
-    #[test]
-    fn block_atom_wire_round_trip() {
-        use crate::nodes::HorizontalRuleVariant;
-        use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire};
-        let v = SeqItem::BlockAtom {
-            leaf: AtomLeaf::HorizontalRule {
-                variant: HorizontalRuleVariant::default(),
-            },
-            parents: vec![editor_crdt::Dot::new(1, 0), editor_crdt::Dot::new(2, 3)],
-        };
-        let mut cc = CollectCtx::new();
-        v.collect(&mut cc);
-        let (t, b) = cc.finalize();
-        let ec = EncCtx::from_table(&t, b.clone());
-        let dc = DecCtx {
-            actor_table: t,
-            baselines: b,
-        };
-        let mut buf = Vec::new();
-        v.encode(&ec, &mut buf).unwrap();
-        let mut s = &buf[..];
-        let decoded = SeqItem::decode(&dc, &mut s).unwrap();
-        assert_eq!(decoded, v);
     }
 
     #[test]

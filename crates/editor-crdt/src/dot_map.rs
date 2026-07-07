@@ -65,10 +65,9 @@ impl<V: Clone> DotMap<V> {
     pub fn get(&self, d: &Dot) -> Option<&V> {
         if let Some(lane) = self.lanes.get(&d.actor)
             && let Some(idx) = lane.index_of(d.clock)
+            && let Some(v) = &lane.slots[idx]
         {
-            if let Some(v) = &lane.slots[idx] {
-                return Some(v);
-            }
+            return Some(v);
         }
         if self.spill.is_empty() {
             None
@@ -305,7 +304,7 @@ mod tests {
             for (actor, clock, value, kind) in ops {
                 let d = Dot::new(actor, clock);
                 match kind {
-                    0 => prop_assert_eq!(dut.insert(d, value), reference.insert(d, value).map(|v| v)),
+                    0 => prop_assert_eq!(dut.insert(d, value), reference.insert(d, value)),
                     1 => prop_assert_eq!(dut.remove(&d), reference.remove(&d)),
                     _ => prop_assert_eq!(dut.get(&d), reference.get(&d)),
                 }

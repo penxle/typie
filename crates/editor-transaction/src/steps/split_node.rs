@@ -26,7 +26,11 @@ pub(crate) fn apply_to(
     let new_dot = batched
         .apply(EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block { node_type, parents },
+            item: SeqItem::Block {
+                node_type,
+                parents,
+                attrs: vec![],
+            },
         }))?
         .id;
     if let Some(src) = block.as_op_dot() {

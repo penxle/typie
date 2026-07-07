@@ -362,6 +362,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         for (i, c) in text.chars().enumerate() {
@@ -381,6 +382,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -388,6 +390,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 3), SeqItem::Char('n')),
@@ -408,6 +411,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         for (i, c) in text.chars().enumerate() {
@@ -426,6 +430,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(4, 2), SeqItem::Char('a')),
@@ -447,6 +452,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(5, 2), SeqItem::Atom(AtomLeaf::Tab)),
@@ -465,6 +471,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(6, 2), SeqItem::Char('h')),
@@ -487,6 +494,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(7, 2), SeqItem::Char('h')),
@@ -510,6 +518,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(8, 2), SeqItem::Char('H')),
@@ -522,6 +531,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(8, 8), SeqItem::Char('W')),

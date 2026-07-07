@@ -34,7 +34,8 @@ fn emit_node(
 
     match classify(node_type) {
         SeqClass::Block => {
-            let dot = if node_type == NodeType::Root {
+            let is_root = node_type == NodeType::Root;
+            let dot = if is_root {
                 Dot::ROOT
             } else {
                 let dot = graph
@@ -43,6 +44,7 @@ fn emit_node(
                         item: SeqItem::Block {
                             node_type,
                             parents: parents.to_vec(),
+                            attrs: entry.node.to_attrs(),
                         },
                     }))
                     .expect("local seq block insert never conflicts")
@@ -73,10 +75,12 @@ fn emit_node(
                     }))
                     .expect("local node carry never conflicts");
             }
-            for attr in entry.node.to_attrs() {
-                graph
-                    .add_mut(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))
-                    .expect("local node attr never conflicts");
+            if is_root {
+                for attr in entry.node.to_attrs() {
+                    graph
+                        .add_mut(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))
+                        .expect("local node attr never conflicts");
+                }
             }
 
             let mut child_parents = parents.to_vec();
@@ -159,8 +163,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use editor_model::{
-        Alignment, BlockquoteVariant, Modifier, ModifierType, NodeType, PlainBlockquoteNode,
-        PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        Alignment, BlockquoteVariant, CalloutVariant, EditOp, Modifier, ModifierType, Node,
+        NodeAttrOp, NodeType, PlainBlockquoteNode, PlainCalloutNode, PlainDoc, PlainNode,
+        PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
 
     use crate::projected_state::ProjectedState;
@@ -415,5 +420,57 @@ mod tests {
             .children()
             .any(|c| matches!(c, ChildView::Leaf(l) if l.as_atom() == Some(&AtomLeaf::Tab)));
         assert!(has_tab, "inline tab loaded into the paragraph");
+    }
+
+    #[test]
+    fn non_root_block_init_is_single_op() {
+        let callout = block_entry(
+            vec![block_entry(
+                vec![],
+                PlainNode::Paragraph(PlainParagraphNode {}),
+            )],
+            PlainNode::Callout(PlainCalloutNode {
+                variant: CalloutVariant::Warning,
+            }),
+        );
+        let root = block_entry(vec![callout], PlainNode::Root(PlainRootNode::default()));
+        let template = PlainDoc { root };
+
+        let mut graph = build_graph_from_plain(&template).expect("builds graph");
+        graph.commit_mut();
+        let state = ProjectedState::from_graph(graph).expect("projects");
+        let callout_dot = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Callout)
+            .expect("callout present")
+            .dot()
+            .unwrap();
+
+        let attr_ops = state
+            .graph()
+            .ordered_ops()
+            .expect("storage order")
+            .iter()
+            .filter(|op| {
+                matches!(&op.payload, EditOp::NodeAttr(NodeAttrOp { target, .. }) if *target == callout_dot)
+            })
+            .count();
+        assert_eq!(
+            attr_ops, 0,
+            "비-Root 블록 init은 단일 op — target 한정 NodeAttrOp 0"
+        );
+
+        let node = state
+            .projected()
+            .node_attrs
+            .get(&callout_dot)
+            .expect("init attrs가 시딩돼야 한다");
+        let Node::Callout(c) = node else {
+            panic!("callout node expected");
+        };
+        assert_eq!(*c.variant.get(), CalloutVariant::Warning);
     }
 }

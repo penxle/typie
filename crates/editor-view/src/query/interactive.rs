@@ -188,6 +188,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Callout,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -195,6 +196,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, callout],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
@@ -237,6 +239,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -244,6 +247,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 3), SeqItem::Char('T')),
@@ -283,6 +287,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(3, 2), SeqItem::Char('p')),

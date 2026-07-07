@@ -20,6 +20,7 @@ mod table;
 mod table_cell;
 mod table_row;
 mod text;
+mod unknown;
 
 pub use archived::*;
 pub use blockquote::*;
@@ -43,6 +44,7 @@ pub use table::*;
 pub use table_cell::*;
 pub use table_row::*;
 pub use text::*;
+pub use unknown::*;
 
 use std::sync::LazyLock;
 
@@ -66,56 +68,34 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     EnumCount,
     Enum,
     IntoStaticStr,
-    editor_macros::Wire,
 ))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[from_discriminant(NodeType)]
 pub enum Node {
-    #[strum_discriminants(wire(n(0)))]
     Root(RootNode),
-    #[strum_discriminants(wire(n(1)))]
     Paragraph(ParagraphNode),
-    #[strum_discriminants(wire(n(2)))]
     Blockquote(BlockquoteNode),
-    #[strum_discriminants(wire(n(3)))]
     Callout(CalloutNode),
-    #[strum_discriminants(wire(n(4)))]
     Text(TextNode),
-    #[strum_discriminants(wire(n(5)))]
     BulletList(BulletListNode),
-    #[strum_discriminants(wire(n(6)))]
     OrderedList(OrderedListNode),
-    #[strum_discriminants(wire(n(7)))]
     ListItem(ListItemNode),
-    #[strum_discriminants(wire(n(8)))]
     Fold(FoldNode),
-    #[strum_discriminants(wire(n(9)))]
     FoldTitle(FoldTitleNode),
-    #[strum_discriminants(wire(n(10)))]
     FoldContent(FoldContentNode),
-    #[strum_discriminants(wire(n(11)))]
     Table(TableNode),
-    #[strum_discriminants(wire(n(12)))]
     TableRow(TableRowNode),
-    #[strum_discriminants(wire(n(13)))]
     TableCell(TableCellNode),
-    #[strum_discriminants(wire(n(14)))]
     Image(ImageNode),
-    #[strum_discriminants(wire(n(15)))]
     File(FileNode),
-    #[strum_discriminants(wire(n(16)))]
     Embed(EmbedNode),
-    #[strum_discriminants(wire(n(17)))]
     Archived(ArchivedNode),
-    #[strum_discriminants(wire(n(18)))]
     HardBreak(HardBreakNode),
-    #[strum_discriminants(wire(n(19)))]
     HorizontalRule(HorizontalRuleNode),
-    #[strum_discriminants(wire(n(20)))]
     PageBreak(PageBreakNode),
-    #[strum_discriminants(wire(n(21)))]
     Tab(TabNode),
+    Unknown(UnknownNode),
 }
 
 static FOLD_TITLE_IMPLICIT: LazyLock<Vec<Modifier>> = LazyLock::new(|| {
@@ -216,42 +196,5 @@ mod tests {
             },
         );
         assert_eq!(result, Err(ModelError::AttrNodeKindMismatch));
-    }
-
-    #[test]
-    fn node_type_wire_round_trip_all_variants() {
-        use editor_crdt::wire::{DecCtx, EncCtx, Wire};
-        use strum::IntoEnumIterator;
-        let ec = EncCtx::from_table(&[], vec![]);
-        let dc = DecCtx {
-            actor_table: vec![],
-            baselines: vec![],
-        };
-        for v in NodeType::iter() {
-            let mut buf = Vec::new();
-            v.encode(&ec, &mut buf).unwrap();
-            let mut slice = &buf[..];
-            let got = <NodeType as Wire>::decode(&dc, &mut slice).unwrap();
-            assert_eq!(got, v);
-        }
-    }
-
-    #[test]
-    fn node_type_wire_unknown_tag_errors() {
-        use editor_crdt::wire::{DecCtx, Wire};
-        let dc = DecCtx {
-            actor_table: vec![],
-            baselines: vec![],
-        };
-        let bad = [99u8];
-        let mut slice = &bad[..];
-        let err = <NodeType as Wire>::decode(&dc, &mut slice).unwrap_err();
-        assert!(matches!(
-            err,
-            editor_crdt::wire::WireError::UnknownVariant {
-                ty: "NodeType",
-                tag: 99
-            }
-        ));
     }
 }

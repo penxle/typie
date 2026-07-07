@@ -241,7 +241,7 @@ impl<'a> LeafView<'a> {
         self.dot
     }
     pub fn node_type(&self) -> NodeType {
-        self.item().as_child_type()
+        self.item().as_child_type().unwrap_or(NodeType::Unknown)
     }
     pub fn item(&self) -> &'a SeqItem {
         self.item
@@ -415,7 +415,7 @@ impl<'a> NodeView<'a> {
                     char_index += 1;
                     k
                 }
-                _ => InlineKind::Atom(item.as_child_type()),
+                _ => InlineKind::Atom(item.as_child_type().unwrap_or(NodeType::Unknown)),
             };
             out.push(InlineItem {
                 dot: *d,
@@ -491,6 +491,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('H')),
@@ -500,6 +501,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Blockquote,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (
@@ -507,6 +509,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, bq],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 6), SeqItem::Char('y')),
@@ -547,6 +550,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (
@@ -554,6 +558,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![Dot::ROOT, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -561,6 +566,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![Dot::ROOT, table, row],
+                    attrs: vec![],
                 },
             ),
             (
@@ -568,6 +574,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, table, row, cell],
+                    attrs: vec![],
                 },
             ),
             (
@@ -575,6 +582,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -639,6 +647,37 @@ mod tests {
         ));
     }
 
+    /// An unknown leaf's resolved `node_type()` must be the real `NodeType::Unknown`
+    /// placeholder, never the pre-Task-1b `NodeType::Root` sentinel (which would
+    /// wrongly imply a dangling block reference).
+    #[test]
+    fn unknown_leaf_node_type_is_unknown_not_root_sentinel() {
+        let para = Dot::new(1, 1);
+        let unknown = Dot::new(1, 2);
+        let elems = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (
+                unknown,
+                SeqItem::Unknown {
+                    tag: 999,
+                    bytes: vec![0xAA],
+                },
+            ),
+        ];
+        let pd = project_document(&logs_of(&elems)).unwrap();
+        let view = DocView::new(&pd);
+        let leaf = view.leaf(unknown).unwrap();
+        assert_eq!(leaf.node_type(), NodeType::Unknown);
+        assert_ne!(leaf.node_type(), NodeType::Root);
+    }
+
     #[test]
     fn derived_block_node_default_and_dot_none() {
         let pd = nested_doc();
@@ -698,6 +737,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (x, SeqItem::Char('x')),
@@ -746,6 +786,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('a')),
@@ -764,6 +805,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![Dot::ROOT],
+                attrs: vec![],
             },
         )];
         project_document(&logs_of(&elems)).unwrap()
@@ -922,6 +964,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![Dot::ROOT],
+                        attrs: vec![],
                     },
                 ));
                 for ch in s.chars() {
@@ -1027,6 +1070,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1034,6 +1078,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![Dot::ROOT, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1041,6 +1086,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![Dot::ROOT, table, row],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1048,6 +1094,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, table, row, cell_with_bg],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1055,6 +1102,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![Dot::ROOT, table, row],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1062,6 +1110,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, table, row, cell_without_bg],
+                    attrs: vec![],
                 },
             ),
         ];

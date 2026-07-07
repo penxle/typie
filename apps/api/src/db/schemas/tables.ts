@@ -668,6 +668,28 @@ export const DocumentReactions = pgTable(
   (t) => [index().on(t.documentId, t.createdAt)],
 );
 
+export const DOCUMENT_BUNDLE_KINDS = ['pushed', 'consolidated', 'baseline'] as const;
+
+export const DocumentBundles = pgTable(
+  'document_bundles',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_BUNDLES)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    seq: integer('seq').notNull(),
+    epoch: integer('epoch').notNull().default(0),
+    kind: text('kind').notNull().default('pushed'),
+    payload: bytea('payload').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.documentId, t.seq), index().on(t.documentId, t.createdAt)],
+);
+
 export const DocumentStates = pgTable('document_states', {
   id: text('id')
     .primaryKey()
@@ -676,7 +698,9 @@ export const DocumentStates = pgTable('document_states', {
     .notNull()
     .unique()
     .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  graph: bytea('graph').notNull(),
+  heads: bytea('heads').notNull(),
+  epoch: integer('epoch').notNull().default(0),
+  lastBundleSeq: integer('last_bundle_seq').notNull().default(0),
   json: jsonb('json').notNull(),
   text: text('text').notNull(),
   characterCount: integer('character_count').notNull().default(0),

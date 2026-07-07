@@ -436,8 +436,9 @@ impl Editor {
     pub fn receive_remote_changeset(&self, payload: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
             let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-                editor_crdt::wire::decode(&payload[..])
-                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+                editor_codec::decode_changeset_stream(&payload[..])
+                    .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                    .into_graph_input();
             for changeset in css {
                 inner.editor.receive_remote_changeset(changeset);
             }
@@ -447,12 +448,17 @@ impl Editor {
 
     pub fn local_changesets_since(&self, remote_heads_payload: Vec<u8>) -> EditorResult<Vec<u8>> {
         self.with_inner(|inner| {
-            let heads_vec = editor_crdt::wire::decode_dots(&remote_heads_payload[..])
+            let heads_vec = editor_codec::decode_dots(&remote_heads_payload[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
             let css = inner.editor.local_changesets_since(&heads_set)?;
-            let bytes = editor_crdt::wire::encode(&css)
-                .map_err(|e| FfiError::Serialization(e.to_string()))?;
+            if css.is_empty() {
+                return Ok(Vec::new());
+            }
+            let bytes = editor_codec::encode_changesets(
+                editor_codec::ReencodableChangesets::from_local_ops(css),
+            )
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
             Ok(bytes)
         })
     }
@@ -462,12 +468,21 @@ impl Editor {
         remote_heads_payload: Vec<u8>,
     ) -> EditorResult<Vec<u8>> {
         self.with_inner(|inner| {
-            let heads_vec = editor_crdt::wire::decode_dots(&remote_heads_payload[..])
+            let heads_vec = editor_codec::decode_dots(&remote_heads_payload[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
             let css = inner.editor.missing_changesets_tolerant(&heads_set);
-            let bytes = editor_crdt::wire::encode(&css)
-                .map_err(|e| FfiError::Serialization(e.to_string()))?;
+            if css.is_empty() {
+                return Ok(Vec::new());
+            }
+            // Tolerant reads may surface remotely-authored ops, but in the hub-spoke
+            // topology the server never loses what it distributed, so this set is
+            // effectively local-authored. A pathological unknown carrier still fails
+            // loudly here (EncodeInvariant), never silently.
+            let bytes = editor_codec::encode_changesets(
+                editor_codec::ReencodableChangesets::from_local_ops(css),
+            )
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
             Ok(bytes)
         })
     }
@@ -477,40 +492,44 @@ impl Editor {
         payload: Vec<u8>,
     ) -> EditorResult<Complex<PartitionedChangesets>> {
         self.with_inner(|inner| {
+            // Classification-only decode (readiness needs op id/parents); the byte
+            // split below is what actually produces `ready`/`blocked` payloads, so
+            // remote (possibly v-next) bytes are never value-reencoded.
             let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-                editor_crdt::wire::decode(&payload[..])
-                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-            let (ready, blocked) = inner.editor.partition_ready(css);
-            let encode =
-                |v: &[editor_crdt::Changeset<editor_model::EditOp>]| -> EditorResult<Vec<u8>> {
-                    if v.is_empty() {
-                        Ok(Vec::new())
-                    } else {
-                        editor_crdt::wire::encode(v)
-                            .map_err(|e| FfiError::Serialization(e.to_string()).into())
-                    }
-                };
+                editor_codec::decode_changeset_stream(&payload[..])
+                    .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                    .into_graph_input();
+            let parts = editor_codec::split_bundle_bytes(&payload)
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            debug_assert_eq!(css.len(), parts.len());
+            let (ready_idx, blocked_idx) = inner.editor.partition_ready_indices(&css);
+            let concat =
+                |idx: &[usize]| -> Vec<u8> { idx.iter().flat_map(|&i| parts[i].clone()).collect() };
             Ok(PartitionedChangesets {
-                ready: encode(&ready)?,
-                blocked: encode(&blocked)?,
+                ready: concat(&ready_idx),
+                blocked: concat(&blocked_idx),
             }
             .into_ffi()?)
         })
     }
 
     pub fn split_changesets(&self, payload: Vec<u8>) -> EditorResult<Vec<Complex<ChangesetEntry>>> {
+        // Classification-only decode for the `id` key; `parts[i]` (from the
+        // byte-level split, no value reencode) is the entry's `bytes` directly.
         let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&payload[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&payload[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let parts = editor_codec::split_bundle_bytes(&payload)
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        debug_assert_eq!(css.len(), parts.len());
         let mut out = Vec::with_capacity(css.len());
-        for cs in css {
+        for (cs, bytes) in css.into_iter().zip(parts) {
             let first = cs
                 .ops
                 .first()
                 .ok_or(FfiError::Deserialization("empty changeset".into()))?;
             let id = format!("{}:{}", first.id.actor, first.id.clock);
-            let bytes = editor_crdt::wire::encode(std::slice::from_ref(&cs))
-                .map_err(|e| FfiError::Serialization(e.to_string()))?;
             out.push(ChangesetEntry { id, bytes }.into_ffi()?);
         }
         Ok(out)
@@ -519,7 +538,10 @@ impl Editor {
     pub fn current_heads(&self) -> EditorResult<Vec<u8>> {
         self.with_inner(|inner| {
             let heads = inner.editor.current_heads();
-            let bytes = editor_crdt::wire::encode_dots(&heads)
+            if heads.is_empty() {
+                return Ok(Vec::new());
+            }
+            let bytes = editor_codec::encode_dots(&heads)
                 .map_err(|e| FfiError::Serialization(e.to_string()))?;
             Ok(bytes)
         })
@@ -552,10 +574,20 @@ impl Editor {
 
     pub fn insert_template_fragment(&self, changesets: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-                editor_crdt::wire::decode(&changesets[..])
-                    .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-            let template = editor_state::State::from_changesets(css, None)?;
+            // 빈 bytes: bundle_stream_contains_unknown([]) == Ok(false) — 무해 통과
+            if editor_codec::bundle_stream_contains_unknown(&changesets)
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            {
+                return Err(FfiError::Deserialization(
+                    "template contains ops newer than this reader".to_owned(),
+                )
+                .into());
+            }
+            let css = editor_codec::decode_changeset_stream(&changesets)
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_reencodable()
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            let template = editor_state::State::from_changesets(css.as_slice().to_vec(), None)?;
             inner.editor.insert_template_fragment(template.to_plain())?;
             Ok(())
         })
@@ -563,7 +595,7 @@ impl Editor {
 
     pub fn materialize_at(&self, heads: Vec<u8>) -> EditorResult<Complex<editor_model::PlainDoc>> {
         self.with_inner(|inner| {
-            let heads_vec = editor_crdt::wire::decode_dots(&heads[..])
+            let heads_vec = editor_codec::decode_dots(&heads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
             let state = inner.editor.state();
@@ -988,16 +1020,18 @@ mod tests {
             selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
-        let empty_heads = editor_crdt::wire::encode_dots(&[]).unwrap();
+        let empty_heads = editor_codec::encode_dots(&[]).unwrap();
         let bytes = editor.missing_changesets_tolerant(empty_heads).unwrap();
         let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&bytes).unwrap();
+            editor_codec::decode_changeset_stream(&bytes)
+                .unwrap()
+                .into_graph_input();
         assert!(
             !css.is_empty(),
             "seed paragraph is unconfirmed vs empty heads"
         );
 
-        let bogus = editor_crdt::wire::encode_dots(&[editor_crdt::Dot::new(424242, 7)]).unwrap();
+        let bogus = editor_codec::encode_dots(&[editor_crdt::Dot::new(424242, 7)]).unwrap();
         assert!(
             editor.missing_changesets_tolerant(bogus).is_ok(),
             "unknown head must not error"
@@ -1012,10 +1046,151 @@ mod tests {
         };
         let editor = make_ffi_editor(initial);
         let bytes = editor
-            .missing_changesets_tolerant(editor_crdt::wire::encode_dots(&[]).unwrap())
+            .missing_changesets_tolerant(editor_codec::encode_dots(&[]).unwrap())
             .unwrap();
         let entries = editor.split_changesets(bytes).unwrap();
         assert!(!entries.is_empty());
+    }
+
+    #[test]
+    fn ffi_split_changesets_empty_input_is_empty_list() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let entries = editor.split_changesets(Vec::new()).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn ffi_local_changesets_since_current_heads_is_empty_bytes() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let heads = editor.current_heads().unwrap();
+        let bytes = editor.local_changesets_since(heads).unwrap();
+        assert!(
+            bytes.is_empty(),
+            "no changesets past current heads must be exactly 0 bytes, not a minimal envelope"
+        );
+    }
+
+    /// Hand-assembles a single-changeset bundle whose one op is an unrecognized
+    /// (v-next) op tag, using only editor-codec's public low-level primitives —
+    /// mirrors editor-codec's own `vnext.rs` synth pattern (the `test-util`-gated
+    /// helpers there aren't visible from this crate).
+    fn synth_bundle_with_unknown_op() -> Vec<u8> {
+        use editor_codec::ctx::{EncCtx, write_dot, write_preamble};
+        use editor_codec::durable::Durable;
+        use editor_codec::envelope::{Envelope, PayloadKind, wrap};
+        use editor_codec::framing::{UnknownPayload, write_frame};
+        use editor_codec::types::DurableOp;
+        use editor_codec::varint::write_varint;
+
+        let actors = [7u64];
+        let baselines = [0u64];
+        let ctx = EncCtx::from_parts(&actors, baselines.to_vec()).unwrap();
+        let mut body = Vec::new();
+        write_preamble(&actors, &baselines, &mut body).unwrap();
+        write_varint(1, &mut body); // changeset_count
+        body.push(0); // cs_parents: Genesis
+        write_varint(1, &mut body); // op_count
+        write_frame(&mut body, |b| {
+            write_dot(&editor_crdt::Dot::new(7, 0), &ctx, b)?;
+            DurableOp::Unknown(UnknownPayload {
+                tag: 12345,
+                bytes: vec![0xAB],
+            })
+            .encode(&ctx, b)
+        })
+        .unwrap();
+        wrap(&Envelope::new(PayloadKind::ChangesetBundle, body)).unwrap()
+    }
+
+    #[test]
+    fn ffi_insert_template_fragment_rejects_unknown_bearing_template() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let bytes = synth_bundle_with_unknown_op();
+        assert!(
+            editor.insert_template_fragment(bytes).is_err(),
+            "template carrying an op newer than this reader must be rejected at insert time"
+        );
+    }
+
+    #[test]
+    fn ffi_insert_template_fragment_accepts_empty_bytes_as_noop() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        assert!(editor.insert_template_fragment(Vec::new()).is_ok());
+    }
+
+    #[test]
+    fn ffi_partition_remote_changesets_splits_ready_from_blocked_by_byte_index() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        // Independent genesis actor — no dependency on the editor's own graph or
+        // on the other changeset in this payload, so unconditionally ready.
+        let ready_op = editor_crdt::Op {
+            id: editor_crdt::Dot::new(50, 0),
+            parents: vec![],
+            payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
+                pos: 0,
+                item: editor_model::SeqItem::Char('r'),
+            }),
+        };
+        // Parent dot is neither in the editor's graph nor produced by the other
+        // changeset in this payload, so it stays blocked.
+        let blocked_op = editor_crdt::Op {
+            id: editor_crdt::Dot::new(51, 0),
+            parents: vec![editor_crdt::Dot::new(999, 5)],
+            payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
+                pos: 0,
+                item: editor_model::SeqItem::Char('b'),
+            }),
+        };
+        let ready_cs = editor_crdt::Changeset {
+            ops: vec![ready_op.clone()],
+        };
+        let blocked_cs = editor_crdt::Changeset {
+            ops: vec![blocked_op.clone()],
+        };
+
+        // Blocked changeset first in the payload so the byte-index selection is
+        // pinned against source order, not merely "first entry is ready".
+        let payload =
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                vec![blocked_cs.clone(), ready_cs.clone()],
+            ))
+            .unwrap();
+
+        let result = editor.partition_remote_changesets(payload).unwrap();
+        let result: PartitionedChangesets = result.from_ffi().unwrap();
+
+        let ready_decoded = editor_codec::decode_changeset_stream(&result.ready)
+            .unwrap()
+            .into_graph_input();
+        let blocked_decoded = editor_codec::decode_changeset_stream(&result.blocked)
+            .unwrap()
+            .into_graph_input();
+
+        assert_eq!(ready_decoded.len(), 1);
+        assert_eq!(ready_decoded[0].ops[0].id, ready_op.id);
+        assert_eq!(blocked_decoded.len(), 1);
+        assert_eq!(blocked_decoded[0].ops[0].id, blocked_op.id);
     }
 
     // Regression: the website pusher captures `missing_changesets_tolerant(captured)`
@@ -1032,8 +1207,11 @@ mod tests {
             selection: (p1, 0)
         };
         let server_graph =
-            editor_crdt::wire::encode(&initial.projected.graph().changesets_as_vec()).unwrap();
-        let server_heads = editor_crdt::wire::encode_dots(
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                initial.projected.graph().changesets_as_vec(),
+            ))
+            .unwrap();
+        let server_heads = editor_codec::encode_dots(
             &initial
                 .projected
                 .graph()

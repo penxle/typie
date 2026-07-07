@@ -42,8 +42,20 @@ fn is_structural(view: &DocView, id: Dot) -> bool {
 }
 
 enum PlannedSlot {
-    Text { offset: usize, text: String },
-    Subtree { index: usize, subtree: Subtree },
+    Text {
+        offset: usize,
+        text: String,
+    },
+    Subtree {
+        index: usize,
+        subtree: Subtree,
+    },
+    /// A run of slots carrying lossy/unrepresentable content (unknown
+    /// placeholders) — deleted position-based (`Step::DeleteOpaque`, inverse =
+    /// dot-based `Undel`), never captured into a `Subtree`.
+    Opaque {
+        dots: Vec<Dot>,
+    },
     Structural(Dot),
 }
 
@@ -74,6 +86,7 @@ fn delete_child_slots(
         let mut slots: Vec<PlannedSlot> = Vec::new();
         let mut block_slots = 0usize;
         let mut prev_char_idx = usize::MAX;
+        let mut prev_opaque_idx = usize::MAX;
         for (i, c) in node.children().enumerate().skip(from).take(to - from) {
             match c {
                 ChildView::Leaf(l) => {
@@ -90,6 +103,18 @@ fn delete_child_slots(
                             }),
                         }
                         prev_char_idx = i;
+                    } else if l.item().is_unknown_bearing() {
+                        match slots.last_mut() {
+                            Some(PlannedSlot::Opaque { dots })
+                                if prev_opaque_idx.wrapping_add(1) == i =>
+                            {
+                                dots.push(l.dot())
+                            }
+                            _ => slots.push(PlannedSlot::Opaque {
+                                dots: vec![l.dot()],
+                            }),
+                        }
+                        prev_opaque_idx = i;
                     } else if l.as_atom().is_some() {
                         slots.push(PlannedSlot::Subtree {
                             index: i,
@@ -99,7 +124,18 @@ fn delete_child_slots(
                 }
                 ChildView::Block(b) => {
                     let id = b.id();
-                    if is_structural(&view, id) {
+                    if b.node_type() == NodeType::Unknown {
+                        let dots = state.projected.subtree_real_dots(id);
+                        match slots.last_mut() {
+                            Some(PlannedSlot::Opaque { dots: acc })
+                                if prev_opaque_idx.wrapping_add(1) == i =>
+                            {
+                                acc.extend(dots)
+                            }
+                            _ => slots.push(PlannedSlot::Opaque { dots }),
+                        }
+                        prev_opaque_idx = i;
+                    } else if is_structural(&view, id) {
                         slots.push(PlannedSlot::Structural(id));
                     } else {
                         block_slots += 1;
@@ -132,6 +168,10 @@ fn delete_child_slots(
                 parent: block,
                 index,
                 subtree,
+            }),
+            PlannedSlot::Opaque { dots } => pending.push(Step::DeleteOpaque {
+                dots,
+                emitted: Vec::new(),
             }),
             PlannedSlot::Structural(id) => {
                 flush_pending(tr, &mut pending, bulk)?;

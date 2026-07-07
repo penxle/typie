@@ -85,7 +85,7 @@ export type ModifierType = "bold" | "italic" | "underline" | "strikethrough" | "
 /**
  *Auto-generated discriminant enum variants
  */
-export type NodeType = "root" | "paragraph" | "blockquote" | "callout" | "text" | "bullet_list" | "ordered_list" | "list_item" | "fold" | "fold_title" | "fold_content" | "table" | "table_row" | "table_cell" | "image" | "file" | "embed" | "archived" | "hard_break" | "horizontal_rule" | "page_break" | "tab";
+export type NodeType = "root" | "paragraph" | "blockquote" | "callout" | "text" | "bullet_list" | "ordered_list" | "list_item" | "fold" | "fold_title" | "fold_content" | "table" | "table_row" | "table_cell" | "image" | "file" | "embed" | "archived" | "hard_break" | "horizontal_rule" | "page_break" | "tab" | "unknown";
 
 export interface AlignmentValue {
     value: Alignment;
@@ -144,13 +144,18 @@ export interface ClipboardPayload {
 }
 
 export interface CollectResult {
-    graph: Uint8Array;
     heads: Uint8Array;
-    applied: boolean[];
+    statuses: BundleStatus[];
     char_counts: number[];
     base_char_count: number;
     plain: PlainDoc;
     text: string;
+}
+
+export interface ConsolidateResult {
+    payload: Uint8Array | null;
+    consumed: number;
+    consumed_bytes: number;
 }
 
 export interface CursorMetrics {
@@ -537,6 +542,8 @@ export type Break = "line" | "paragraph" | "page";
 
 export type BulletListNodeAttr = void;
 
+export type BundleStatus = "applied" | "duplicate" | "failed";
+
 export type CalloutNodeAttr = { type: "variant" } & CalloutVariant;
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
@@ -615,7 +622,7 @@ export type Movement = { type: "grapheme"; direction: Direction } | { type: "wor
 
 export type NavigationOp = { type: "move"; movement: Movement; extend: boolean };
 
-export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph"; attr: ParagraphNodeAttr } | { type: "blockquote"; attr: BlockquoteNodeAttr } | { type: "callout"; attr: CalloutNodeAttr } | { type: "text"; attr: TextNodeAttr } | { type: "bullet_list"; attr: BulletListNodeAttr } | { type: "ordered_list"; attr: OrderedListNodeAttr } | { type: "list_item"; attr: ListItemNodeAttr } | { type: "fold"; attr: FoldNodeAttr } | { type: "fold_title"; attr: FoldTitleNodeAttr } | { type: "fold_content"; attr: FoldContentNodeAttr } | { type: "table"; attr: TableNodeAttr } | { type: "table_row"; attr: TableRowNodeAttr } | { type: "table_cell"; attr: TableCellNodeAttr } | { type: "image"; attr: ImageNodeAttr } | { type: "file"; attr: FileNodeAttr } | { type: "embed"; attr: EmbedNodeAttr } | { type: "archived"; attr: ArchivedNodeAttr } | { type: "hard_break"; attr: HardBreakNodeAttr } | { type: "horizontal_rule"; attr: HorizontalRuleNodeAttr } | { type: "page_break"; attr: PageBreakNodeAttr } | { type: "tab"; attr: TabNodeAttr };
+export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph"; attr: ParagraphNodeAttr } | { type: "blockquote"; attr: BlockquoteNodeAttr } | { type: "callout"; attr: CalloutNodeAttr } | { type: "text"; attr: TextNodeAttr } | { type: "bullet_list"; attr: BulletListNodeAttr } | { type: "ordered_list"; attr: OrderedListNodeAttr } | { type: "list_item"; attr: ListItemNodeAttr } | { type: "fold"; attr: FoldNodeAttr } | { type: "fold_title"; attr: FoldTitleNodeAttr } | { type: "fold_content"; attr: FoldContentNodeAttr } | { type: "table"; attr: TableNodeAttr } | { type: "table_row"; attr: TableRowNodeAttr } | { type: "table_cell"; attr: TableCellNodeAttr } | { type: "image"; attr: ImageNodeAttr } | { type: "file"; attr: FileNodeAttr } | { type: "embed"; attr: EmbedNodeAttr } | { type: "archived"; attr: ArchivedNodeAttr } | { type: "hard_break"; attr: HardBreakNodeAttr } | { type: "horizontal_rule"; attr: HorizontalRuleNodeAttr } | { type: "page_break"; attr: PageBreakNodeAttr } | { type: "tab"; attr: TabNodeAttr } | { type: "unknown"; tag: number; bytes: number[] };
 
 export type NodeOp = { type: "delete"; id: Dot } | { type: "cycle_callout_variant"; id: Dot } | { type: "set_attrs"; id: Dot; attrs: PlainNode } | { type: "unwrap"; id: Dot } | { type: "table"; id: Dot; op: TableOp };
 
@@ -629,7 +636,7 @@ export type PendingModifier = { type: "set"; modifier: Modifier } | { type: "uns
 
 export type PendingModifiers = PendingModifier[];
 
-export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph" } & PlainParagraphNode) | ({ type: "blockquote" } & PlainBlockquoteNode) | ({ type: "callout" } & PlainCalloutNode) | ({ type: "text" } & PlainTextNode) | ({ type: "bullet_list" } & PlainBulletListNode) | ({ type: "ordered_list" } & PlainOrderedListNode) | ({ type: "list_item" } & PlainListItemNode) | ({ type: "fold" } & PlainFoldNode) | ({ type: "fold_title" } & PlainFoldTitleNode) | ({ type: "fold_content" } & PlainFoldContentNode) | ({ type: "table" } & PlainTableNode) | ({ type: "table_row" } & PlainTableRowNode) | ({ type: "table_cell" } & PlainTableCellNode) | ({ type: "image" } & PlainImageNode) | ({ type: "file" } & PlainFileNode) | ({ type: "embed" } & PlainEmbedNode) | ({ type: "archived" } & PlainArchivedNode) | ({ type: "hard_break" } & PlainHardBreakNode) | ({ type: "horizontal_rule" } & PlainHorizontalRuleNode) | ({ type: "page_break" } & PlainPageBreakNode) | ({ type: "tab" } & PlainTabNode);
+export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph" } & PlainParagraphNode) | ({ type: "blockquote" } & PlainBlockquoteNode) | ({ type: "callout" } & PlainCalloutNode) | ({ type: "text" } & PlainTextNode) | ({ type: "bullet_list" } & PlainBulletListNode) | ({ type: "ordered_list" } & PlainOrderedListNode) | ({ type: "list_item" } & PlainListItemNode) | ({ type: "fold" } & PlainFoldNode) | ({ type: "fold_title" } & PlainFoldTitleNode) | ({ type: "fold_content" } & PlainFoldContentNode) | ({ type: "table" } & PlainTableNode) | ({ type: "table_row" } & PlainTableRowNode) | ({ type: "table_cell" } & PlainTableCellNode) | ({ type: "image" } & PlainImageNode) | ({ type: "file" } & PlainFileNode) | ({ type: "embed" } & PlainEmbedNode) | ({ type: "archived" } & PlainArchivedNode) | ({ type: "hard_break" } & PlainHardBreakNode) | ({ type: "horizontal_rule" } & PlainHorizontalRuleNode) | ({ type: "page_break" } & PlainPageBreakNode) | ({ type: "tab" } & PlainTabNode) | { type: "unknown" };
 
 export type PointerStyle = "default" | "text" | "pointer";
 
@@ -765,18 +772,6 @@ declare class EditorServer {
     free(): void;
     [Symbol.dispose](): void;
     apply(existing: Uint8Array, _new: Uint8Array): Uint8Array;
-    /**
-     * Fold many bundles onto `existing` with a single decode/encode. Calling
-     * [`apply`] once per bundle re-decodes and re-encodes the whole (multi-MB)
-     * graph every time — `O(bundles × N)`; here `existing` is decoded once,
-     * every bundle is applied against an in-memory accumulator, and the result
-     * is encoded once — `O(N + total ops)`. `packed_bundles` is the
-     * length-prefixed concatenation of the per-push wire blobs (see
-     * `graph::decode_length_prefixed`). A bundle that fails validation (dup or
-     * causal-order break) is skipped rather than aborting the whole fold, so a
-     * single bad entry can never break a document load.
-     */
-    apply_many(existing: Uint8Array, packed_bundles: Uint8Array): Uint8Array;
     build_font(ttf_data: Uint8Array, chunk_codepoints: ChunkCodepoints): BuiltFont;
     /**
      * Fold a batch onto `existing` for the collect job while attributing
@@ -786,9 +781,11 @@ declare class EditorServer {
      * each bundle is projected incrementally (`receive_remote_changesets`), then
      * only the text is re-read per entry (`O(tail × extract)`, far cheaper than
      * rebuilding). `char_counts[i]` is the document's character count right after
-     * bundle `i`; `applied[i]` is false for a dead-lettered bundle.
+     * bundle `i`; `statuses[i]` is `Applied`, `Duplicate` (verbatim re-delivery —
+     * advance the cursor, no dead-letter), or `Failed` (dead-letter).
      */
     collect_fold(existing: Uint8Array, packed_bundles: Uint8Array): CollectResult;
+    consolidate(stream: Uint8Array): ConsolidateResult;
     static create(): EditorServer;
     default_doc_with_preset(root: PlainRootNode, modifiers: Modifier[]): PlainDoc;
     extract_text(doc: PlainDoc): string;

@@ -46,6 +46,12 @@ pub enum StepError {
     #[error("merge target {block:?} has no following sibling block to merge")]
     MergeNoSibling { block: Dot },
 
+    #[error("root subtree cannot be inserted")]
+    RootSubtree,
+
+    #[error("unknown-placeholder subtree cannot be reinserted")]
+    UnknownSubtree,
+
     #[error(transparent)]
     State(#[from] StateError),
 }

@@ -124,6 +124,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -145,6 +146,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -152,6 +154,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -159,6 +162,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldContent,
                     parents: vec![root, fold1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -166,6 +170,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -173,6 +178,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold2],
+                    attrs: vec![],
                 },
             ),
             (
@@ -180,6 +186,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldContent,
                     parents: vec![root, fold2],
+                    attrs: vec![],
                 },
             ),
             (
@@ -187,6 +194,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -217,6 +225,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         let pd = project_document(&logs(&items)).unwrap();

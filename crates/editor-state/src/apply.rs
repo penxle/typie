@@ -63,6 +63,19 @@ impl<'a> BatchedState<'a> {
         self.deferred
     }
 
+    /// Count of ops emitted so far in this batch — a checkpoint a caller can
+    /// pair with [`emitted_dots_since`](Self::emitted_dots_since) to learn which
+    /// op dots a single step's `apply_to` produced, without threading that
+    /// bookkeeping through every step.
+    pub fn emitted_len(&self) -> usize {
+        self.emitted.len()
+    }
+
+    /// The dots of ops emitted since the `emitted_len()` checkpoint `from`.
+    pub fn emitted_dots_since(&self, from: usize) -> Vec<Dot> {
+        self.emitted[from..].iter().map(|r| r.op.id).collect()
+    }
+
     pub fn set_selection(&mut self, selection: Option<Selection>) {
         self.inner.selection = selection;
     }
@@ -143,11 +156,8 @@ impl State {
         (next, dropped)
     }
 
-    pub fn partition_ready(
-        &self,
-        css: Vec<Changeset<EditOp>>,
-    ) -> (Vec<Changeset<EditOp>>, Vec<Changeset<EditOp>>) {
-        self.projected.graph().partition_ready(css)
+    pub fn partition_ready_indices(&self, css: &[Changeset<EditOp>]) -> (Vec<usize>, Vec<usize>) {
+        self.projected.graph().partition_ready_indices(css)
     }
 
     pub fn batch_with_ops<F, E>(&self, f: F) -> Result<(Self, Vec<Op<EditOp>>), E>

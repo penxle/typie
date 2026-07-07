@@ -194,12 +194,16 @@ impl EditorHost {
 
     pub fn graph_heads(&self, changesets: Vec<u8>) -> EditorResult<Vec<u8>> {
         let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&changesets[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&changesets[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
         let (g, _dropped) =
             editor_crdt::OpGraph::<editor_model::EditOp>::new().receive_changesets_ordered(css);
         let heads: Vec<editor_crdt::Dot> = g.current_heads().copied().collect();
-        let bytes = editor_crdt::wire::encode_dots(&heads)
+        if heads.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bytes = editor_codec::encode_dots(&heads)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
@@ -247,7 +251,20 @@ mod tests {
 
     fn graph_from_plain(plain: &editor_model::PlainDoc) -> Vec<u8> {
         let state = editor_state::State::from_plain(plain).unwrap();
-        editor_crdt::wire::encode(&state.graph().changesets_as_vec()).unwrap()
+        editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+            state.graph().changesets_as_vec(),
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn graph_heads_of_empty_input_is_empty_bytes() {
+        let host = make_host();
+        let bytes = host.graph_heads(Vec::new()).unwrap();
+        assert!(
+            bytes.is_empty(),
+            "heads of a graph built from zero changesets must be exactly 0 bytes"
+        );
     }
 
     #[test]
@@ -281,7 +298,10 @@ mod tests {
             ],
         );
         let state = editor_state::State::from_plain(&plain).unwrap();
-        let graph = editor_crdt::wire::encode(&state.graph().changesets_as_vec()).unwrap();
+        let graph = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(state.graph().changesets_as_vec()),
+        )
+        .unwrap();
 
         let modifiers = host.root_modifiers_from_graph(graph).unwrap();
 

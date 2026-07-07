@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq, max } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
-import { db, DocumentStates, firstOrThrow } from '#/db/index.ts';
+import { db, DocumentBundles, DocumentStates, first } from '#/db/index.ts';
 import { wasm } from './wasm-ffi.ts';
 
 // * Sync storage model
@@ -13,15 +13,16 @@ import { wasm } from './wasm-ffi.ts';
 //
 //   stream:{id}    Redis Stream. fields: c=base64 bundle, u=userId, d=deviceId
 //   collected:{id} last stream id folded into the persisted snapshot by collect
-//   durable:{id}   durableHeads (base64) of the persisted snapshot (collect writes)
 //
-// The persisted snapshot (`DocumentStates.graph`) is materialized by the collect
-// job for text/search/full-load; it is fed from the stream, which is trimmed
-// behind the collected cursor while retaining a catch-up window.
+// The persisted history (`DocumentBundles`, one row per collected bundle) backs
+// text/search/full-load; it is fed from the stream, which is trimmed behind
+// the collected cursor while retaining a catch-up window. `document_states.heads`
+// is the durable frontier of that persisted history — a single-row PK lookup,
+// not expensive enough to justify caching (and a cache would just reintroduce
+// the staleness window it was meant to solve).
 
 export const streamKey = (documentId: string) => `document:changesets:stream:${documentId}`;
 export const collectedKey = (documentId: string) => `document:changesets:collected:${documentId}`;
-export const durableKey = (documentId: string) => `document:changesets:durable:${documentId}`;
 export const liveKey = (documentId: string) => `document:changesets:live:${documentId}`;
 
 // Retain this much history behind the collected cursor so a briefly-
@@ -119,9 +120,15 @@ export const streamTip = async (documentId: string): Promise<string | null> => {
   return rows.length > 0 ? rows[0][0] : null;
 };
 
+// The durable frontier of the persisted (collected) history — `null` only for
+// a document with no `DocumentStates` row yet (no durable truth to report).
 export const getDurableHeads = async (documentId: string): Promise<Uint8Array | null> => {
-  const b64 = await redis.get(durableKey(documentId));
-  return b64 ? Uint8Array.fromBase64(b64) : null;
+  const row = await db
+    .select({ heads: DocumentStates.heads })
+    .from(DocumentStates)
+    .where(eq(DocumentStates.documentId, documentId))
+    .then(first);
+  return row?.heads ?? null;
 };
 
 // The stream id up to which the persisted snapshot already includes everything.
@@ -161,41 +168,61 @@ export const getLiveHeads = async (documentId: string): Promise<Uint8Array | nul
   return b64 ? Uint8Array.fromBase64(b64) : null;
 };
 
-// Advance the collected cursor and record the snapshot's durable heads together
-// (collect job). Everything at or before `seq` is now folded into the persisted
-// snapshot; `readMergedGraph` replays only what comes after.
-export const setCollected = async (documentId: string, seq: string, durableHeads: Uint8Array): Promise<void> => {
-  await redis.set(collectedKey(documentId), seq);
-  await redis.set(durableKey(documentId), durableHeads.toBase64());
+// The collected bundle history for a document, seq-ascending, concatenated
+// as-is — no decode, no re-encode. Every row is a verbatim copy of a push
+// payload the collect job already applied successfully.
+export const loadBundleStream = async (documentId: string): Promise<Uint8Array> => {
+  const rows = await db
+    .select({ payload: DocumentBundles.payload })
+    .from(DocumentBundles)
+    .where(eq(DocumentBundles.documentId, documentId))
+    .orderBy(asc(DocumentBundles.seq));
+  const total = rows.reduce((n, r) => n + r.payload.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const r of rows) {
+    out.set(r.payload, off);
+    off += r.payload.length;
+  }
+  return out;
 };
 
-// The full current document = persisted snapshot + the stream tail the collect
-// job has not folded in yet. Used by the initial full-load `graph` query, by
-// push to report accurate live heads, and by collect as its base.
-export const readMergedGraph = async (documentId: string, persistedGraph?: Uint8Array): Promise<Uint8Array> => {
-  let persisted = persistedGraph;
-  if (!persisted) {
-    const row = await db
-      .select({ graph: DocumentStates.graph })
-      .from(DocumentStates)
-      .where(eq(DocumentStates.documentId, documentId))
-      .then(firstOrThrow);
-    persisted = row.graph;
-  }
+// CAS baseline for the collect job: the tx-time `max(seq)` must match this
+// pre-fold read, or another collect run appended in between.
+export const getMaxBundleSeq = async (documentId: string): Promise<number> => {
+  const row = await db
+    .select({ max: max(DocumentBundles.seq) })
+    .from(DocumentBundles)
+    .where(eq(DocumentBundles.documentId, documentId));
+  return row[0]?.max ?? 0;
+};
+
+// The full current document = collected bundle history + the stream tail the
+// collect job has not folded in yet. Used by the full-load `graph` query, by
+// push to report accurate live heads, and by revert. Pure byte concatenation
+// (no FFI call): the bundle history is only ever collect-applied entries, and
+// the tail is a stream the pusher validated before append — readers here only
+// need to tolerate apply-level causal-not-ready gaps, not decode failure.
+export const readMergedGraph = async (documentId: string): Promise<Uint8Array> => {
+  const persisted = await loadBundleStream(documentId);
 
   const collected = await redis.get(collectedKey(documentId));
   const { entries } = await readStreamSince(documentId, collected);
   if (entries.length === 0) return persisted;
 
-  // Fold the whole tail in ONE wasm call: `apply` per entry re-decodes the
-  // multi-MB graph every time (`O(tail × N)`, the load/push runaway); `apply_many`
-  // decodes once and applies the tail against an in-memory accumulator (`O(N + tail)`).
-  const packed = packLengthPrefixed(entries.map((e) => e.changeset));
-  return await wasm.use((host) => host.apply_many(persisted, packed));
+  const total = persisted.length + entries.reduce((n, e) => n + e.changeset.length, 0);
+  const out = new Uint8Array(total);
+  out.set(persisted, 0);
+  let off = persisted.length;
+  for (const e of entries) {
+    out.set(e.changeset, off);
+    off += e.changeset.length;
+  }
+  return out;
 };
 
 // `[u32 LE count][for each: u32 LE len, bytes]` — matches the Rust
-// `graph::decode_length_prefixed` reader used by `apply_many`.
+// `graph::decode_length_prefixed` reader used by `collect_fold`.
 export const packLengthPrefixed = (blobs: Uint8Array[]): Uint8Array => {
   const total = 4 + blobs.reduce((sum, b) => sum + 4 + b.length, 0);
   const out = new Uint8Array(total);

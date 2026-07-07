@@ -1,4 +1,4 @@
-import { DocumentChangesetsCollectJob, DocumentChangesetsScanCron } from './changeset.ts';
+import { DocumentChangesetsCollectJob, DocumentChangesetsConsolidateJob, DocumentChangesetsScanCron } from './changeset.ts';
 import {
   DocumentGCJob,
   DocumentGCScanCron,
@@ -23,6 +23,7 @@ import {
 
 export const jobs = [
   DocumentChangesetsCollectJob,
+  DocumentChangesetsConsolidateJob,
   DocumentSyncCollectJob,
   DocumentPreviewInvalidateJob,
   DocumentIndexJob,

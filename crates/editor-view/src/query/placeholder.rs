@@ -234,6 +234,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         (elems, root, para)
@@ -340,6 +341,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 2), SeqItem::Char('x')),
@@ -362,6 +364,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(3, 2), SeqItem::Atom(AtomLeaf::HardBreak)),
@@ -396,6 +399,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];

@@ -1,0 +1,6 @@
+error: duplicate #[durable(unknown)] variant
+  --> tests/compile_fail/duplicate_unknown.rs:11:5
+   |
+11 | /     #[durable(unknown)]
+12 | |     Unknown2(UnknownPayload),
+   | |____________________________^

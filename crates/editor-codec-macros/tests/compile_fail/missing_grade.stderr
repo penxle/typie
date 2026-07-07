@@ -1,0 +1,5 @@
+error: missing #[durable(...)] grade (struct: evolvable|frozen, enum: open|closed)
+ --> tests/compile_fail/missing_grade.rs:4:12
+  |
+4 | pub struct S {
+  |            ^

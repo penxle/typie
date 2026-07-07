@@ -8,7 +8,10 @@ use crate::{
     BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog, ModifierType, NodeType,
     OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
-use crate::{Node, NodeAttrLog, SeqItem, SpanLog, normalize, project_blocks, validate_block_tree};
+use crate::{
+    Node, NodeAttrLog, SeqItem, SpanLog, normalize, project_blocks, seed_block_init,
+    validate_block_tree,
+};
 
 #[derive(Debug)]
 pub enum ProjectionError {
@@ -105,20 +108,48 @@ impl PartialEq for ProjectedDoc {
     }
 }
 
+fn collect_block_init(tree: &BlockTree) -> imbl::HashMap<Dot, Node> {
+    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut imbl::HashMap<Dot, Node>) {
+        if !node.attrs.is_empty()
+            && let Some(d) = anchor_dot(node.id)
+            && let Some(seeded) = seed_block_init(node.node_type, &node.attrs)
+        {
+            out.insert(d, seeded);
+        }
+        for c in &node.children {
+            if let Child::Block(id) = c
+                && let Some(b) = tree.get(*id)
+            {
+                walk(tree, b, out);
+            }
+        }
+    }
+    let mut out = imbl::HashMap::new();
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, &mut out);
+    }
+    out
+}
+
 fn collect_real_nodes(tree: &BlockTree) -> HashMap<Dot, Node> {
     fn walk(tree: &BlockTree, node: &BlockNode, out: &mut HashMap<Dot, Node>) {
         if let Some(d) = anchor_dot(node.id) {
-            out.insert(d, node.node_type.into_node());
+            let seeded = seed_block_init(node.node_type, &node.attrs)
+                .unwrap_or_else(|| node.node_type.into_node());
+            out.insert(d, seeded);
         }
         for c in &node.children {
             match c {
-                Child::Leaf { id, item } => {
-                    let node = match item {
-                        SeqItem::Atom(atom) => atom.clone().into_node(),
-                        _ => item.as_child_type().into_node(),
-                    };
-                    out.insert(*id, node);
-                }
+                Child::Leaf { id, item } => match item {
+                    SeqItem::Atom(atom) => {
+                        out.insert(*id, atom.clone().into_node());
+                    }
+                    _ => {
+                        if let Some(t) = item.as_child_type() {
+                            out.insert(*id, t.into_node());
+                        }
+                    }
+                },
                 Child::Block(id) => {
                     if let Some(b) = tree.get(*id) {
                         walk(tree, b, out);
@@ -132,6 +163,14 @@ fn collect_real_nodes(tree: &BlockTree) -> HashMap<Dot, Node> {
         walk(tree, r, &mut out);
     }
     out
+}
+
+pub fn block_init_of(tree: &BlockTree, dot: Dot) -> Option<Node> {
+    let node = tree.get(dot)?;
+    if node.attrs.is_empty() {
+        return None;
+    }
+    seed_block_init(node.node_type, &node.attrs)
 }
 
 fn collect_block_modifiers(
@@ -428,7 +467,7 @@ pub fn segment_block(
             continue;
         };
         let dot = *id;
-        let leaf_type = item.as_child_type();
+        let leaf_type = item.as_child_type().unwrap_or(NodeType::Unknown);
         let covering = canonical_covering(&covering_for(dot), &logs.spans);
         // Per-leaf-input singleton: attrs carriers, plus every non-inline leaf —
         // `own_effect` reads `block_modifiers` through the REAL dot for those, which
@@ -598,6 +637,7 @@ pub fn split_block_insert(
         BlockNode {
             id: new_block,
             node_type: new_type,
+            attrs: vec![],
             children: tail,
         },
     );
@@ -696,7 +736,12 @@ pub fn project_from_tree<R: SeqResolve>(
     let node_of = collect_real_nodes(&tree);
     let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
-    let node_attrs = logs.node_attrs.project(|d| node_of.get(&d).cloned());
+    let mut node_attrs = logs.node_attrs.project(|d| node_of.get(&d).cloned());
+    for (d, seeded) in collect_block_init(&tree) {
+        if !node_attrs.contains_key(&d) {
+            node_attrs.insert(d, seeded);
+        }
+    }
     let node_carries = collect_node_carries(&tree, &logs.node_carries);
 
     let block_effective = block_effective_all(&tree, &logs.block_modifiers, &node_attrs);
@@ -757,6 +802,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('H')),
@@ -767,6 +813,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Blockquote,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (
@@ -774,6 +821,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, bq],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 7), SeqItem::Char('y')),
@@ -790,12 +838,15 @@ mod tests {
         let b = Dot::new(1, 4);
         let raw = crate::RawTree {
             roots: vec![crate::RawNode {
+                attrs: vec![],
                 id: root,
                 node_type: NodeType::Root,
                 children: vec![crate::RawChild::Block(crate::RawNode {
+                    attrs: vec![],
                     id: bq,
                     node_type: NodeType::Blockquote,
                     children: vec![crate::RawChild::Block(crate::RawNode {
+                        attrs: vec![],
                         id: para,
                         node_type: NodeType::Paragraph,
                         children: vec![
@@ -907,6 +958,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('a')),
@@ -1047,6 +1099,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Callout,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1054,6 +1107,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, callout],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
@@ -1085,6 +1139,186 @@ mod tests {
             !pd.node_carries.contains_key(&callout),
             "a non-text block (callout) does not hold carry records"
         );
+    }
+
+    #[test]
+    fn init_attrs_project_equivalently_to_attr_ops() {
+        // 문서 A: Callout 블록을 init attrs(Variant=Warning)로 삽입 (단일 op)
+        // 문서 B: 기본 Callout 삽입 + NodeAttrOp(Variant=Warning) (2 op)
+        // 두 문서의 node_attrs 투영에서 해당 블록의 "값"이 동등해야 한다.
+        // 주의: Node 전체 assert_eq는 불가 — LwwReg의 PartialEq가 last_set(Option<Dot>)을
+        // 포함하고 A는 Dot(0,0), B는 Dot(2,0)이므로 값이 같아도 불일치한다. 값 비교가 정답.
+        let callout = Dot::new(1, 1);
+        let init_attr = NodeAttr::Callout {
+            attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+        };
+
+        let a_items = vec![(
+            callout,
+            SeqItem::Block {
+                node_type: NodeType::Callout,
+                parents: vec![Dot::ROOT],
+                attrs: vec![init_attr.clone()],
+            },
+        )];
+        let a_logs = logs_of(&a_items);
+        let a = project_document(&a_logs).unwrap();
+
+        let b_items = vec![(
+            callout,
+            SeqItem::Block {
+                node_type: NodeType::Callout,
+                parents: vec![Dot::ROOT],
+                attrs: vec![],
+            },
+        )];
+        let mut b_logs = logs_of(&b_items);
+        b_logs.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeAttrOp {
+                    target: callout,
+                    attr: init_attr,
+                },
+            )
+            .unwrap();
+        let b = project_document(&b_logs).unwrap();
+
+        let variant_of = |pd: &ProjectedDoc| {
+            let node = pd.node_attrs.get(&callout).expect("materialized");
+            let crate::Node::Callout(c) = node else {
+                panic!("callout node expected");
+            };
+            *c.variant.get()
+        };
+        assert_eq!(variant_of(&a), crate::CalloutVariant::Warning);
+        assert_eq!(variant_of(&a), variant_of(&b));
+
+        let crate::Node::Callout(seeded) = a.node_attrs.get(&callout).expect("materialized") else {
+            panic!("callout node expected");
+        };
+        assert_eq!(
+            seeded.variant.last_set(),
+            Some(Dot::new(0, 0)),
+            "baseline은 정확히 Dot(0,0)으로 시딩돼야 한다 — 값 직접 세팅(ledger 없음)이면 실패"
+        );
+    }
+
+    #[test]
+    fn init_attrs_feed_block_effective() {
+        // implicit modifier를 내는 variant(Blockquote MessageSent)로 init 시딩이
+        // node_attrs 값만이 아니라 effective 계산에도 먹여지는지 핀한다
+        // (시딩이 effective 계산보다 뒤에 배선되는 순서 회귀 방지).
+        //
+        // MessageSent의 implicit TextColor는 타깃이 `Paragraph > Text`라 Blockquote
+        // 자신의 block_effective에는 절대 나타나지 않고(inheritable=false, self_path가
+        // 타깃과 불일치) `ancestor_implicit`를 거쳐 자손 Text 리프의 own effective로만
+        // 전파된다 — 실측 확인됨(block_effective(bq)/block_effective(para)는 항상 빈
+        // 맵). 그래서 관측 지점은 block_effective가 아니라 자손 Text 리프의 eff다.
+        let bq = Dot::new(1, 1);
+        let para = Dot::new(1, 2);
+        let text = Dot::new(1, 3);
+        let sent_attr = NodeAttr::Blockquote {
+            attr: crate::BlockquoteNodeAttr::Variant(crate::BlockquoteVariant::MessageSent),
+        };
+
+        let a_items = vec![
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![sent_attr.clone()],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, bq],
+                    attrs: vec![],
+                },
+            ),
+            (text, SeqItem::Char('a')),
+        ];
+        let a = project_document(&logs_of(&a_items)).unwrap();
+
+        let plain_items = vec![
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, bq],
+                    attrs: vec![],
+                },
+            ),
+            (text, SeqItem::Char('a')),
+        ];
+        let mut b_logs = logs_of(&plain_items);
+        b_logs.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeAttrOp {
+                    target: bq,
+                    attr: sent_attr,
+                },
+            )
+            .unwrap();
+        let b = project_document(&b_logs).unwrap();
+        assert_eq!(
+            eff_of(&a, text).get(&ModifierType::TextColor),
+            eff_of(&b, text).get(&ModifierType::TextColor),
+            "init 시딩이 effective 계산에 반영돼야 한다"
+        );
+
+        let default_doc = project_document(&logs_of(&plain_items)).unwrap();
+        assert_ne!(
+            eff_of(&a, text).get(&ModifierType::TextColor),
+            eff_of(&default_doc, text).get(&ModifierType::TextColor),
+            "MessageSent implicit modifier가 effective를 실제로 바꿔야 한다 — 둘 다 빈 값이면 이 오라클은 공허하다"
+        );
+    }
+
+    #[test]
+    fn overlay_op_beats_init_baseline() {
+        // init Variant=Warning 위에 overlay Variant=Error → overlay가 이긴다 (LWW: 실제 dot > min-dot)
+        let callout = Dot::new(1, 1);
+        let items = vec![(
+            callout,
+            SeqItem::Block {
+                node_type: NodeType::Callout,
+                parents: vec![Dot::ROOT],
+                attrs: vec![NodeAttr::Callout {
+                    attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+                }],
+            },
+        )];
+        let mut logs = logs_of(&items);
+        logs.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::new(2, 0),
+                NodeAttrOp {
+                    target: callout,
+                    attr: NodeAttr::Callout {
+                        attr: CalloutNodeAttr::Variant(CalloutVariant::Success),
+                    },
+                },
+            )
+            .unwrap();
+        let pd = project_document(&logs).unwrap();
+        let node = pd.node_attrs.get(&callout).expect("materialized");
+        let crate::Node::Callout(callout_node) = node else {
+            panic!("callout node expected");
+        };
+        assert_eq!(*callout_node.variant.get(), crate::CalloutVariant::Success);
     }
 
     #[test]
@@ -1179,6 +1413,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
@@ -1212,6 +1447,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![Dot::new(9, 9)],
+                attrs: vec![],
             },
         )];
         let pd = project_document(&logs_of(&elems)).unwrap();
@@ -1236,6 +1472,7 @@ mod tests {
                     item: SeqItem::Block {
                         node_type: NodeType::Callout,
                         parents: vec![Dot::ROOT],
+                        attrs: vec![],
                     },
                 },
             },
@@ -1247,6 +1484,7 @@ mod tests {
                     item: SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![Dot::ROOT, c],
+                        attrs: vec![],
                     },
                 },
             },
@@ -1271,6 +1509,7 @@ mod tests {
                     item: SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![Dot::ROOT, c],
+                        attrs: vec![],
                     },
                 },
             },
@@ -1301,6 +1540,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: leaf_ty,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             )];
             assert!(
@@ -1327,6 +1567,7 @@ mod tests {
                     item: SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![Dot::ROOT],
+                        attrs: vec![],
                     },
                 },
             },
@@ -1405,6 +1646,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (a, SeqItem::Char('a')),
@@ -1466,6 +1708,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1473,6 +1716,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![Dot::ROOT, fold],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1480,6 +1724,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![Dot::ROOT, fold],
+                    attrs: vec![],
                 },
             ),
             (
@@ -1487,6 +1732,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldContent,
                     parents: vec![Dot::ROOT, fold],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -1589,6 +1835,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             )];
             for (i, ch) in s.chars().enumerate() {
@@ -1665,6 +1912,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             )];
             let mut full = base.clone();

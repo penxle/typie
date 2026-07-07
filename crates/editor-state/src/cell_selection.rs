@@ -257,6 +257,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -264,6 +265,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -271,6 +273,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row0],
+                    attrs: vec![],
                 },
             ),
             (
@@ -278,6 +281,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row0, cell00],
+                    attrs: vec![],
                 },
             ),
             (
@@ -285,6 +289,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row0],
+                    attrs: vec![],
                 },
             ),
             (
@@ -292,6 +297,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row0, cell01],
+                    attrs: vec![],
                 },
             ),
             (
@@ -299,6 +305,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -306,6 +313,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -313,6 +321,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row1, cell10],
+                    attrs: vec![],
                 },
             ),
             (
@@ -320,6 +329,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -327,6 +337,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row1, cell11],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -456,6 +467,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (atom_dot, SeqItem::Atom(AtomLeaf::HardBreak)),
@@ -499,6 +511,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('a')),
@@ -613,6 +626,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -620,6 +634,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -627,6 +642,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table1, row1t1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -634,6 +650,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table1, row1t1, _cell1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -641,6 +658,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -648,6 +666,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table2],
+                    attrs: vec![],
                 },
             ),
             (
@@ -655,6 +674,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table2, row1t2],
+                    attrs: vec![],
                 },
             ),
             (
@@ -662,6 +682,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table2, row1t2, _cell2],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -730,6 +751,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -737,6 +759,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -744,6 +767,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row0],
+                    attrs: vec![],
                 },
             ),
             (
@@ -751,6 +775,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row0, cell00],
+                    attrs: vec![],
                 },
             ),
             (
@@ -758,6 +783,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row0],
+                    attrs: vec![],
                 },
             ),
             (
@@ -765,6 +791,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row0, cell01],
+                    attrs: vec![],
                 },
             ),
             (
@@ -772,6 +799,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row0],
+                    attrs: vec![],
                 },
             ),
             (
@@ -779,6 +807,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row0, cell02],
+                    attrs: vec![],
                 },
             ),
             (
@@ -786,6 +815,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -793,6 +823,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -800,6 +831,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row1, cell10],
+                    attrs: vec![],
                 },
             ),
             (
@@ -807,6 +839,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row1],
+                    attrs: vec![],
                 },
             ),
             (
@@ -814,6 +847,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row1, cell11],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -886,6 +920,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Table,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -893,6 +928,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableRow,
                     parents: vec![root, table],
+                    attrs: vec![],
                 },
             ),
             (
@@ -900,6 +936,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::TableCell,
                     parents: vec![root, table, row],
+                    attrs: vec![],
                 },
             ),
             (
@@ -907,6 +944,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, table, row, cell],
+                    attrs: vec![],
                 },
             ),
             (
@@ -914,6 +952,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -947,6 +986,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         let pd = project_document(&logs(&items)).unwrap();

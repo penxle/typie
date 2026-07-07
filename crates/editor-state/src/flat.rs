@@ -417,6 +417,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         for (i, c) in children.iter().enumerate() {
@@ -496,6 +497,7 @@ mod tests {
                         SeqItem::Block {
                             node_type: NodeType::Paragraph,
                             parents: vec![root],
+                            attrs: vec![],
                         },
                     );
                     blocks.push(p);
@@ -509,6 +511,7 @@ mod tests {
                         SeqItem::Block {
                             node_type: NodeType::Blockquote,
                             parents: vec![root],
+                            attrs: vec![],
                         },
                     );
                     blocks.push(bq);
@@ -518,6 +521,7 @@ mod tests {
                             SeqItem::Block {
                                 node_type: NodeType::Paragraph,
                                 parents: vec![root, bq],
+                                attrs: vec![],
                             },
                         );
                         blocks.push(p);
@@ -625,6 +629,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (a, SeqItem::Char('a')),
@@ -722,6 +727,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Blockquote,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -729,6 +735,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, bq],
+                    attrs: vec![],
                 },
             ),
             (x, SeqItem::Char('x')),
@@ -764,6 +771,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (a, SeqItem::Char('a')),
@@ -887,6 +895,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Blockquote,
                         parents: vec![root],
+                        attrs: vec![],
                     },
                 ));
                 items.push((
@@ -894,6 +903,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![root, bq],
+                        attrs: vec![],
                     },
                 ));
             } else {
@@ -902,6 +912,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![root],
+                        attrs: vec![],
                     },
                 ));
             }

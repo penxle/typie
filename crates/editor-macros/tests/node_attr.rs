@@ -1,14 +1,10 @@
 use editor_crdt::LwwReg;
 use editor_macros::NodeAttr;
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, editor_macros::Wire,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ExampleVariant {
     #[default]
-    #[wire(n(0))]
     A,
-    #[wire(n(1))]
     B,
 }
 
@@ -21,22 +17,6 @@ pub struct ExampleNode {
 fn macro_generates_attr_enum() {
     let attr = ExampleNodeAttr::Variant(ExampleVariant::B);
     assert!(matches!(attr, ExampleNodeAttr::Variant(ExampleVariant::B)));
-}
-
-#[test]
-fn macro_emits_wire_impl() {
-    use editor_crdt::wire::{DecCtx, EncCtx, Wire};
-    let ec = EncCtx::from_table(&[], vec![]);
-    let dc = DecCtx {
-        actor_table: vec![],
-        baselines: vec![],
-    };
-    let v = ExampleNodeAttr::Variant(ExampleVariant::B);
-    let mut buf = Vec::new();
-    <ExampleNodeAttr as Wire>::encode(&v, &ec, &mut buf).unwrap();
-    let mut slice = &buf[..];
-    let got = <ExampleNodeAttr as Wire>::decode(&dc, &mut slice).unwrap();
-    assert_eq!(got, v);
 }
 
 #[test]

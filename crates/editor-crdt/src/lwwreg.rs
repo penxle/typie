@@ -2,21 +2,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LwwRegOp<T> {
-    #[wire(n(0))]
-    Set {
-        #[wire(n(0))]
-        value: T,
-    },
+    Set { value: T },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LwwReg<T> {
-    #[wire(n(0))]
     last_set: Option<Dot>,
-    #[wire(n(1))]
     value: T,
 }
 
@@ -76,32 +70,6 @@ impl<T: Clone + PartialEq + Default> Default for LwwReg<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn lwwreg_and_usize_wire_round_trip() {
-        use crate::wire::{CollectCtx, DecCtx, EncCtx, Wire};
-        fn rt<T: Wire + PartialEq + std::fmt::Debug>(v: &T) -> T {
-            let mut cc = CollectCtx::new();
-            v.collect(&mut cc);
-            let (t, b) = cc.finalize();
-            let ec = EncCtx::from_table(&t, b.clone());
-            let dc = DecCtx {
-                actor_table: t,
-                baselines: b,
-            };
-            let mut buf = Vec::new();
-            v.encode(&ec, &mut buf).unwrap();
-            let mut s = &buf[..];
-            T::decode(&dc, &mut s).unwrap()
-        }
-        assert_eq!(rt(&12345usize), 12345usize);
-        let a = LwwReg::with_value(7u32)
-            .apply(Dot::new(1, 0), LwwRegOp::Set { value: 42 })
-            .unwrap();
-        assert_eq!(rt(&a), a);
-        let b = LwwReg::with_value(Some("x".to_string()));
-        assert_eq!(rt(&b), b);
-    }
 
     #[test]
     fn with_value_initial_state() {

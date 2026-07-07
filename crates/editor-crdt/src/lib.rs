@@ -12,9 +12,7 @@ pub mod ormap;
 pub mod orset;
 pub mod sequence;
 pub mod sync;
-pub mod text;
 pub mod to_plain;
-pub mod wire;
 
 pub use changeset::Changeset;
 pub use dot::{Dot, Dots, OpDot};
@@ -25,7 +23,6 @@ pub use oplog::{InputEvent, ListOp, OpLog, build_oplog};
 pub use ormap::{OrMap, OrMapOp};
 pub use orset::{OrSet, OrSetOp};
 pub use sync::SyncMessage;
-pub use text::{EntryDot, PlacementId, Text, TextOp, TextPlacement};
 pub use to_plain::ToPlain;
 
 #[cfg(test)]

@@ -1413,6 +1413,112 @@ mod tests {
         assert_state_eq!(&restored, &initial);
     }
 
+    /// A `SeqItem::Unknown` leaf cannot be captured into a `Subtree` (no lossless
+    /// `Plain` form), so its selection-delete must route to `Step::DeleteOpaque`
+    /// (position-based `ListOp::Del`) rather than `Step::RemoveSubtree`. Undo must
+    /// restore it via `Undel` — the SAME dot, not a freshly re-inserted carrier.
+    #[test]
+    fn unknown_leaf_delete_undo_restores_via_undel_same_dot() {
+        use editor_crdt::ListOp;
+        use editor_model::{EditOp, SeqItem};
+
+        let (base, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 0)
+        };
+        let mut seeded = base.clone();
+        let unknown = seeded
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::Unknown {
+                    tag: 999,
+                    bytes: vec![0xAA],
+                },
+            }))
+            .unwrap()
+            .id;
+        let initial = editor_state::State {
+            selection: Some(editor_state::Selection::new(
+                editor_state::Position::new(p1, 1),
+                editor_state::Position::new(p1, 2),
+            )),
+            ..seeded
+        };
+
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        assert!(
+            after.view().leaf(unknown).is_none(),
+            "unknown leaf must be deleted"
+        );
+
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert!(
+            restored.view().leaf(unknown).is_some(),
+            "undo must restore the unknown leaf under the SAME dot (Undel), not a re-inserted carrier"
+        );
+        assert_state_eq!(&restored, &initial);
+    }
+
+    /// A placeholder `SeqItem::Block { node_type: NodeType::Unknown, .. }` sitting
+    /// among known blocks must also delete/undo through the opaque, dot-based
+    /// path (not `RemoveSubtree`/`InsertSubtree`, which would need a lossless
+    /// `Subtree` capture the placeholder cannot provide).
+    #[test]
+    fn unknown_block_range_delete_undo_round_trips_same_dot() {
+        use editor_crdt::{Dot, ListOp};
+        use editor_model::{EditOp, NodeType, SeqItem};
+
+        let (base, p1, ..) = state! {
+            doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: none
+        };
+        let mut seeded = base.clone();
+        let unknown_block = seeded
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::Block {
+                    node_type: NodeType::Unknown,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            }))
+            .unwrap()
+            .id;
+        let initial = editor_state::State {
+            selection: Some(editor_state::Selection::new(
+                editor_state::Position::new(Dot::ROOT, 0),
+                editor_state::Position::new(Dot::ROOT, 2),
+            )),
+            ..seeded
+        };
+
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        assert!(
+            after.view().node(unknown_block).is_none(),
+            "unknown placeholder block must be deleted"
+        );
+        assert!(after.view().node(p1).is_none(), "p1 must be deleted too");
+
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert!(
+            restored.view().node(unknown_block).is_some(),
+            "undo must restore the placeholder block under the SAME dot (Undel)"
+        );
+        assert_state_eq!(&restored, &initial);
+    }
+
     #[test]
     fn cross_boundary_merge_keeps_front_carry() {
         let (initial, p1, _p2) = state! {

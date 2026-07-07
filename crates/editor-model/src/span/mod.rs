@@ -24,42 +24,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Modifier, ModifierType};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Bias {
-    #[wire(n(0))]
     Before,
-    #[wire(n(1))]
     After,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Anchor {
-    #[wire(n(0))]
     pub id: Dot,
-    #[wire(n(1))]
     pub bias: Bias,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SpanOp {
-    #[wire(n(0))]
     AddSpan {
-        #[wire(n(0))]
         start: Anchor,
-        #[wire(n(1))]
         end: Anchor,
-        #[wire(n(2))]
         modifier: Modifier,
     },
-    #[wire(n(1))]
     RemoveSpan {
-        #[wire(n(0))]
         start: Anchor,
-        #[wire(n(1))]
         end: Anchor,
-        #[wire(n(2))]
         modifier_type: ModifierType,
     },
 }
@@ -129,28 +117,6 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    fn round_trip<T: editor_crdt::wire::Wire>(value: &T) -> editor_crdt::wire::WireResult<T> {
-        use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireError};
-        let mut cc = CollectCtx::new();
-        value.collect(&mut cc);
-        let (table, baselines) = cc.finalize();
-        let ec = EncCtx::from_table(&table, baselines.clone());
-        let dc = DecCtx {
-            actor_table: table,
-            baselines,
-        };
-        let mut buf = Vec::new();
-        value.encode(&ec, &mut buf)?;
-        let mut slice = &buf[..];
-        let out = T::decode(&dc, &mut slice)?;
-        if !slice.is_empty() {
-            return Err(WireError::TrailingBytes {
-                remaining: slice.len(),
-            });
-        }
-        Ok(out)
-    }
-
     fn anc(actor: u64, clock: u64, bias: Bias) -> Anchor {
         Anchor {
             id: Dot::new(actor, clock),
@@ -175,22 +141,6 @@ mod tests {
             modifier: Modifier::Bold,
         };
         assert_eq!(add.anchors(), (s, e));
-    }
-
-    #[test]
-    fn span_op_wire_round_trips() {
-        let add = SpanOp::AddSpan {
-            start: anc(1, 0, Bias::Before),
-            end: anc(1, 5, Bias::After),
-            modifier: Modifier::FontSize { value: 1600 },
-        };
-        let rem = SpanOp::RemoveSpan {
-            start: anc(2, 3, Bias::After),
-            end: anc(2, 9, Bias::Before),
-            modifier_type: ModifierType::Bold,
-        };
-        assert_eq!(round_trip(&add).unwrap(), add);
-        assert_eq!(round_trip(&rem).unwrap(), rem);
     }
 
     fn add(a: u64, c: u64, m: Modifier) -> SpanOp {

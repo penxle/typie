@@ -3,19 +3,11 @@ use std::hash::Hash;
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrSetOp<T> {
-    #[wire(n(0))]
-    Add {
-        #[wire(n(0))]
-        elem: T,
-    },
-    #[wire(n(1))]
-    Remove {
-        #[wire(n(0))]
-        observed: Dot,
-    },
+    Add { elem: T },
+    Remove { observed: Dot },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

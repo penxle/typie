@@ -19,6 +19,7 @@ import {
   validateDbId,
 } from '#/db/index.ts';
 import { generateDocument } from '#/export/index.ts';
+import { loadBundleStream } from '#/utils/changeset.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import type { ExportFontFamily, ExportFormat, PageLayout } from '#/export/index.ts';
@@ -110,7 +111,7 @@ builder.mutationFields((t) => ({
       }
 
       const state = await db
-        .select({ graph: DocumentStates.graph })
+        .select({ documentId: DocumentStates.documentId })
         .from(DocumentStates)
         .where(eq(DocumentStates.documentId, document.id))
         .then(first);
@@ -121,12 +122,16 @@ builder.mutationFields((t) => ({
       const user = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow);
 
       if (state) {
+        // No stream-tail merge: export reads the persisted snapshot as-of the
+        // last collect run, matching the existing freshness contract.
+        const graph = await loadBundleStream(document.id);
+
         let data: Uint8Array;
 
         if (format === 'pdf') {
           const { generateDocumentPdfV2 } = await import('../../export/pdf/v2/generate.ts');
           data = await generateDocumentPdfV2({
-            graph: state.graph,
+            graph,
             userId: entity.userId,
             title,
             author: user.name,
@@ -137,13 +142,13 @@ builder.mutationFields((t) => ({
 
           if (format === 'hwp') {
             const { generateDocumentHwpV2 } = await import('../../export/hwp/v2/index.ts');
-            data = await generateDocumentHwpV2({ graph: state.graph, title, author: user.name, fonts, layout: layout as PageLayout });
+            data = await generateDocumentHwpV2({ graph, title, author: user.name, fonts, layout: layout as PageLayout });
           } else if (format === 'docx') {
             const { generateDocumentDocxV2 } = await import('../../export/docx/v2/index.ts');
-            data = await generateDocumentDocxV2({ graph: state.graph, title, author: user.name, fonts, layout: layout as PageLayout });
+            data = await generateDocumentDocxV2({ graph, title, author: user.name, fonts, layout: layout as PageLayout });
           } else {
             const { generateDocumentEpubV2 } = await import('../../export/epub/v2/index.ts');
-            data = await generateDocumentEpubV2({ graph: state.graph, title, author: user.name, fonts });
+            data = await generateDocumentEpubV2({ graph, title, author: user.name, fonts });
           }
         }
 

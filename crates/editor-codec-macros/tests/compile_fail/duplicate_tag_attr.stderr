@@ -1,0 +1,5 @@
+error: duplicate tag attribute
+ --> tests/compile_fail/duplicate_tag_attr.rs:8:15
+  |
+8 |     #[durable(n(1))]
+  |               ^

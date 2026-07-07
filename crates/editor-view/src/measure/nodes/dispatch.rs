@@ -133,6 +133,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('H')),
@@ -145,6 +146,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 8), SeqItem::Char('W')),
@@ -203,6 +205,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
@@ -251,6 +254,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root2],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 3), SeqItem::Char('x')),
@@ -290,6 +294,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Blockquote,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -297,6 +302,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, bq],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 4), SeqItem::Char('a')),
@@ -305,6 +311,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 5), SeqItem::Char('b')),
@@ -359,6 +366,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('x')),

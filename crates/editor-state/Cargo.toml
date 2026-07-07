@@ -28,6 +28,7 @@ wasm-bindgen = { workspace = true, optional = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
+editor-codec = { path = "../editor-codec" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 proptest = { workspace = true }

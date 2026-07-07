@@ -1,0 +1,5 @@
+error: evolvable/frozen grades are struct-only
+ --> tests/compile_fail/grade_on_enum.rs:6:10
+  |
+6 | pub enum E {
+  |          ^

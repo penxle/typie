@@ -1,11 +1,12 @@
 use editor_crdt::Dot;
 use editor_macros::state;
 use editor_model::{
-    AtomLeaf, CalloutVariant, ChildView, LayoutMode, Modifier, ModifierType, Node, NodeType,
-    NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode, Subtree,
+    AtomLeaf, CalloutVariant, ChildView, EditOp, LayoutMode, Modifier, ModifierType, Node,
+    NodeAttrOp, NodeType, NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode,
+    Subtree,
 };
 use editor_state::State;
-use editor_transaction::{Step, Transaction};
+use editor_transaction::{Step, StepError, Transaction};
 use proptest::prelude::*;
 
 fn block_text(state: &State, elem: &Dot) -> String {
@@ -527,6 +528,70 @@ mod tests {
         assert_eq!(root_blocks(&after).len(), 1);
         let restored = step.inverse().apply(&after).unwrap().state;
         assert_eq!(snapshot(&restored), before);
+    }
+
+    #[test]
+    fn insert_subtree_carries_init_attrs_in_single_op() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph } }
+            selection: (p1, 0)
+        };
+        let root = root_id(&state);
+        let subtree = Subtree::leaf(PlainNode::Callout(PlainCalloutNode {
+            variant: CalloutVariant::Warning,
+        }));
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_subtree(root, 1, subtree).unwrap();
+        let (inserted, _, _, _, _) = tr.commit();
+
+        let view = inserted.view();
+        let callout = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Callout)
+            .expect("callout inserted");
+        let callout_dot = callout.dot().unwrap();
+        let PlainNode::Callout(plain) = callout.node().to_plain() else {
+            panic!("callout plain node expected");
+        };
+        assert_eq!(
+            plain.variant,
+            CalloutVariant::Warning,
+            "init attrs가 투영에 시딩돼야 한다"
+        );
+
+        let callout_attr_ops = inserted
+            .graph()
+            .ordered_ops()
+            .expect("storage order is ancestry-first")
+            .iter()
+            .filter(|op| {
+                matches!(&op.payload, EditOp::NodeAttr(NodeAttrOp { target, .. }) if *target == callout_dot)
+            })
+            .count();
+        assert_eq!(
+            callout_attr_ops, 0,
+            "삽입 블록의 init은 단일 op — 이 블록을 향한 NodeAttrOp 방출 금지"
+        );
+    }
+
+    #[test]
+    fn insert_root_subtree_is_rejected() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph } }
+            selection: (p1, 0)
+        };
+        let root = root_id(&state);
+        let subtree = Subtree::leaf(PlainNode::Root(PlainRootNode::default()));
+
+        let mut tr = Transaction::new(&state);
+        let result = tr.insert_subtree(root, 1, subtree);
+        assert!(
+            matches!(result, Err(StepError::RootSubtree)),
+            "root subtree 삽입은 정확히 StepError::RootSubtree로 거부돼야 한다"
+        );
     }
 
     fn capture(state: &State, block: &Dot) -> Subtree {

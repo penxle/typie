@@ -1,0 +1,5 @@
+error: missing #[durable(n(N))] on variant
+ --> tests/compile_fail/missing_tag.rs:7:5
+  |
+7 |     A,
+  |     ^

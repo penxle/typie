@@ -222,6 +222,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -229,6 +230,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('T')),
@@ -241,6 +243,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -260,6 +263,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -267,6 +271,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 9), SeqItem::Char('T')),
@@ -275,6 +280,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldContent,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (
@@ -282,6 +288,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, fold, fc],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 5), SeqItem::Char('C')),
@@ -290,6 +297,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -414,6 +422,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -421,6 +430,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(3, 8), SeqItem::Char('T')),
@@ -429,6 +439,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldContent,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (
@@ -436,6 +447,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, fold, fc],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(3, 5), SeqItem::Char('C')),
@@ -444,6 +456,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -582,6 +595,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Fold,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -589,6 +603,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::FoldTitle,
                     parents: vec![root, fold],
+                    attrs: vec![],
                 },
             ),
             (
@@ -596,6 +611,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];

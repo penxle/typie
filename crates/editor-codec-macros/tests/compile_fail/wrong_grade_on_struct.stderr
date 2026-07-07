@@ -1,0 +1,5 @@
+error: open/closed grades are enum-only
+ --> tests/compile_fail/wrong_grade_on_struct.rs:5:12
+  |
+5 | pub struct S {
+  |            ^

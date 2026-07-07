@@ -48,6 +48,22 @@ pub enum Step {
         index: usize,
         subtree: Subtree,
     },
+    /// Position-based deletion for slots that carry lossy/unrepresentable
+    /// content (an unknown placeholder) and so cannot be captured into a
+    /// `Subtree` for algebraic (re-insert) inversion. `emitted` is empty at
+    /// construction — the CRDT delete op's own dot does not exist yet — and is
+    /// filled in by the `Transaction` dispatch right after `apply_to` runs, from
+    /// the ops it actually emitted. `inverse()` reads `emitted`, so it is only
+    /// meaningful after application.
+    DeleteOpaque {
+        dots: Vec<Dot>,
+        emitted: Vec<Dot>,
+    },
+    /// Inverse of `DeleteOpaque`: restores each delete op in `dels` (dot-based,
+    /// via `ListOp::Undel`) — no carrier is synthesized.
+    UndeleteOpaque {
+        dels: Vec<Dot>,
+    },
     MoveNode {
         block: Dot,
         old_parent: Dot,
@@ -159,6 +175,8 @@ impl Step {
                 index,
                 subtree,
             } => steps::remove_subtree::apply_to(batched, *parent, *index, subtree),
+            Step::DeleteOpaque { dots, .. } => steps::delete_opaque::apply_to(batched, dots),
+            Step::UndeleteOpaque { dels } => steps::delete_opaque::apply_to_undelete(batched, dels),
             Step::MoveNode {
                 block,
                 old_parent,
@@ -233,6 +251,8 @@ impl Step {
                 index,
                 subtree,
             } => steps::remove_subtree::inverse(*parent, *index, subtree.clone()),
+            Step::DeleteOpaque { emitted, .. } => steps::delete_opaque::inverse(emitted.clone()),
+            Step::UndeleteOpaque { .. } => steps::delete_opaque::inverse_of_undelete(),
             Step::MoveNode {
                 block,
                 old_parent,

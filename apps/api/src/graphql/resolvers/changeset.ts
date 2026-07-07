@@ -10,6 +10,7 @@ import {
   getCollectedSeq,
   getDurableHeads,
   getLiveHeads,
+  loadBundleStream,
   readMergedGraph,
   readStreamSince,
   setLiveHeads,
@@ -32,7 +33,7 @@ DocumentState.implement({
     // the tail up with a single `O(tail)` seq-pull instead.
     graph: t.field({
       type: 'Binary',
-      resolve: (self) => self.graph,
+      resolve: (self) => loadBundleStream(self.documentId),
     }),
     // Cursor the snapshot corresponds to: the client resumes incremental sync
     // here and pulls only what the snapshot is missing. Empty ⇒ start from the
@@ -41,16 +42,16 @@ DocumentState.implement({
       type: 'String',
       resolve: (self) => getCollectedSeq(self.documentId).then((seq) => seq ?? ''),
     }),
-    // Frontier of the snapshot (matches `graph`). The client seeds its pusher
-    // with this, then its first pull advances it to the live frontier. O(1) read;
-    // the wasm fallback runs only before the first collect.
+    // Frontier of the snapshot (matches `graph`): `self` is already the loaded
+    // `document_states` row (see `Document.state` below), so its `heads` column
+    // — the durable source of truth — needs no further lookup.
     heads: t.field({
       type: 'Binary',
-      resolve: async (self) => (await getDurableHeads(self.documentId)) ?? (await wasm.use((host) => host.heads(self.graph))),
+      resolve: (self) => self.heads,
     }),
     durableHeads: t.field({
       type: 'Binary',
-      resolve: async (self) => (await getDurableHeads(self.documentId)) ?? (await wasm.use((host) => host.heads(self.graph))),
+      resolve: (self) => self.heads,
     }),
     json: t.expose('json', { type: 'JSON' }),
     text: t.exposeString('text'),
@@ -114,23 +115,18 @@ builder.mutationFields((t) => ({
       // stream tail, re-scan the whole graph for heads) made every push on a
       // large document `O(history)` — ~3 s of blocking wasm per push at 8MB.
       let heads = opsCount > 0 ? await advanceLiveHeads(input.documentId, input.changesets) : await getLiveHeads(input.documentId);
-      let durableHeads = await getDurableHeads(input.documentId);
+      // `getDurableHeads` reads `document_states.heads` directly — no cache to
+      // bootstrap. Empty bytes is only reachable for a document with no
+      // persisted state at all.
+      const durableHeads = (await getDurableHeads(input.documentId)) ?? new Uint8Array();
 
       // Cold cache (fresh document, Redis flush, or pre-cache deploys):
-      // bootstrap both frontiers from the snapshot + tail once, then the warm
-      // path above keeps them current.
-      if (!heads || !durableHeads) {
-        const persistedState = await db
-          .select({ graph: DocumentStates.graph })
-          .from(DocumentStates)
-          .where(eq(DocumentStates.documentId, input.documentId))
-          .then(firstOrThrow);
-        if (!heads) {
-          const graph = await readMergedGraph(input.documentId, persistedState.graph);
-          heads = await wasm.use((host) => host.heads(graph));
-          await setLiveHeads(input.documentId, heads);
-        }
-        durableHeads ??= await wasm.use((host) => host.heads(persistedState.graph));
+      // bootstrap the live frontier once via the merged graph, then the warm
+      // path above keeps it current.
+      if (!heads) {
+        const graph = await readMergedGraph(input.documentId);
+        heads = await wasm.use((host) => host.heads(graph));
+        await setLiveHeads(input.documentId, heads);
       }
 
       if (opsCount > 0 && seq) {

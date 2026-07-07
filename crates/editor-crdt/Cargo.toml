@@ -17,7 +17,6 @@ base62.workspace = true
 getrandom.workspace = true
 hashbrown = { workspace = true }
 imbl = { workspace = true, features = ["serde"] }
-ruzstd.workspace = true
 serde.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true

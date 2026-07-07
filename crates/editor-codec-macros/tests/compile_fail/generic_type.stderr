@@ -1,0 +1,5 @@
+error: Durable does not support generic parameters
+ --> tests/compile_fail/generic_type.rs:6:13
+  |
+6 | pub struct S<T> {
+  |             ^^^

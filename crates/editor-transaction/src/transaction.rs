@@ -4,7 +4,7 @@ use editor_crdt::Dot;
 use editor_model::{DocView, Modifier, ModifierType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
-use editor_state::{Composition, PendingModifiers, State};
+use editor_state::{BatchedState, Composition, PendingModifiers, State};
 use strum::IntoEnumIterator;
 
 use crate::steps::support;
@@ -27,6 +27,21 @@ pub struct Savepoint {
     step_records_len: usize,
     recorded_len: usize,
     effects_len: usize,
+}
+
+/// `Step::DeleteOpaque`'s `emitted` field does not exist at construction (the
+/// CRDT delete op's own dot is only assigned once `apply_to` runs) — this
+/// rebuilds the step with `emitted` populated from the ops it just produced, so
+/// `Step::inverse()` can consume them (mechanism for a delete-only step whose
+/// inverse is a dot-based `Undel`, not a re-inserted carrier).
+fn finalize_step(step: &Step, batched: &BatchedState, before: usize) -> Step {
+    match step {
+        Step::DeleteOpaque { dots, .. } => Step::DeleteOpaque {
+            dots: dots.clone(),
+            emitted: batched.emitted_dots_since(before),
+        },
+        other => other.clone(),
+    }
 }
 
 impl Transaction {
@@ -95,17 +110,21 @@ impl Transaction {
     }
 
     fn apply_step(&mut self, step: Step) -> Result<(), StepError> {
+        let mut final_step = step.clone();
         let recorded = self
             .state
             .batch_with_recorded_mut::<_, StepError>(|batched| {
-                step.apply_to_with_effect(batched)
+                let before = batched.emitted_len();
+                step.apply_to_with_effect(batched)?;
+                final_step = finalize_step(&step, batched, before);
+                Ok(())
             })?;
         self.recorded.extend(recorded);
         self.step_records.push(StepRecord {
-            step: step.clone(),
+            step: final_step.clone(),
             effect: StepEffect,
         });
-        self.steps.push(step);
+        self.steps.push(final_step);
         Ok(())
     }
 
@@ -390,16 +409,19 @@ impl Transaction {
     }
 
     pub fn apply_steps(&mut self, steps: Vec<Step>) -> Result<Vec<StepRecord>, StepError> {
+        let mut finals: Vec<Step> = Vec::with_capacity(steps.len());
         let recorded = self
             .state
             .batch_with_recorded_mut::<_, StepError>(|batched| {
                 for step in &steps {
+                    let before = batched.emitted_len();
                     step.apply_to_with_effect(batched)?;
+                    finals.push(finalize_step(step, batched, before));
                 }
                 Ok(())
             })?;
         self.recorded.extend(recorded);
-        let records: Vec<StepRecord> = steps
+        let records: Vec<StepRecord> = finals
             .iter()
             .cloned()
             .map(|step| StepRecord {
@@ -408,7 +430,7 @@ impl Transaction {
             })
             .collect();
         self.step_records.extend(records.clone());
-        self.steps.extend(steps);
+        self.steps.extend(finals);
         Ok(records)
     }
 
@@ -428,12 +450,15 @@ impl Transaction {
             return Ok(Vec::new());
         }
         let mut deferred = 0usize;
+        let mut finals: Vec<Step> = Vec::with_capacity(steps.len());
         let recorded = self
             .state
             .batch_with_recorded_mut::<_, StepError>(|batched| {
                 batched.set_defer_deletes(true);
                 for step in &steps {
+                    let before = batched.emitted_len();
                     step.apply_to_with_effect(batched)?;
+                    finals.push(finalize_step(step, batched, before));
                 }
                 deferred = batched.deferred_deletes();
                 Ok(())
@@ -445,7 +470,7 @@ impl Transaction {
                 .map_err(editor_state::StateError::from)?;
         }
         self.recorded.extend(recorded);
-        let records: Vec<StepRecord> = steps
+        let records: Vec<StepRecord> = finals
             .iter()
             .cloned()
             .map(|step| StepRecord {
@@ -454,7 +479,7 @@ impl Transaction {
             })
             .collect();
         self.step_records.extend(records.clone());
-        self.steps.extend(steps);
+        self.steps.extend(finals);
         Ok(records)
     }
 
@@ -674,6 +699,62 @@ mod tests {
             .expect("tab deletion must record RemoveSubtree");
 
         assert_eq!(subtree.modifiers, vec![Modifier::FontSize { value: 2400 }]);
+    }
+
+    /// `remove_child_slots_steps` must route a `SeqItem::Unknown` slot to
+    /// `Step::DeleteOpaque` (position-based, `emitted` filled in post-apply) —
+    /// not the old `Err(InvalidChildSlot)` — and its inverse must be a
+    /// dot-based `Undel` that restores the SAME dot.
+    #[test]
+    fn remove_child_slots_routes_unknown_leaf_to_delete_opaque() {
+        use editor_crdt::ListOp;
+        use editor_model::{EditOp, SeqItem};
+
+        let (base, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 0)
+        };
+        let mut state = base;
+        let unknown = state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::Unknown {
+                    tag: 42,
+                    bytes: vec![0xFF],
+                },
+            }))
+            .unwrap()
+            .id;
+
+        let mut tr = Transaction::new(&state);
+        tr.remove_child_slots(p1, 1, 2).unwrap();
+        let (after, records, ..) = tr.commit();
+
+        assert!(after.view().leaf(unknown).is_none());
+        let emitted = records
+            .iter()
+            .find_map(|r| match &r.step {
+                Step::DeleteOpaque { dots, emitted } if dots == &vec![unknown] => {
+                    Some(emitted.clone())
+                }
+                _ => None,
+            })
+            .expect("must record a DeleteOpaque step targeting the unknown dot");
+        assert_eq!(
+            emitted.len(),
+            1,
+            "must have recorded exactly one emitted delete op dot"
+        );
+
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert!(
+            restored.view().leaf(unknown).is_some(),
+            "inverse (Undel) must restore the unknown leaf under the SAME dot"
+        );
     }
 
     #[test]

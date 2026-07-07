@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 42dc7257dcd7c03f8c05c68804397a29296ceea5b8aa6da56782cad8d23fa50c # shrinks to tree = RawTree { roots: [RawNode { id: Dot { actor: 1, clock: 0 }, node_type: Table, attrs: [], children: [Block(RawNode { id: Dot { actor: 1, clock: 1 }, node_type: Unknown, attrs: [], children: [Block(RawNode { id: Dot { actor: 1, clock: 2 }, node_type: Table, attrs: [], children: [] })] })] }] }

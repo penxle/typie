@@ -9,7 +9,6 @@ mod node_attr_macro;
 mod node_companion_macro;
 mod preamble_macro;
 mod state_macro;
-mod wire_macro;
 
 use proc_macro::TokenStream;
 
@@ -92,14 +91,4 @@ pub fn ffi_export(attr: TokenStream, input: TokenStream) -> TokenStream {
     let mode = syn::parse_macro_input!(attr as ffi_export_macro::parse::FfiExportMode);
     let item = syn::parse_macro_input!(input as syn::ItemImpl);
     ffi_export_macro::codegen::generate(mode, item).into()
-}
-
-#[proc_macro_derive(Wire, attributes(wire))]
-pub fn derive_wire(input: TokenStream) -> TokenStream {
-    let derive_input = syn::parse_macro_input!(input as syn::DeriveInput);
-    let parsed = match wire_macro::parse::WireInput::from_derive(&derive_input) {
-        Ok(v) => v,
-        Err(e) => return e.to_compile_error().into(),
-    };
-    wire_macro::codegen::generate(&parsed).into()
 }

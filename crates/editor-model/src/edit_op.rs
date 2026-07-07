@@ -1,24 +1,19 @@
 use hashbrown::HashSet;
 
-use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire, WireChangeset, WireError, WireResult};
 use editor_crdt::{CrdtError, Dot, ListOp, Op, OpGraph, OpLog};
 
 use crate::{
     DocLogs, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp, SeqItem, SpanLog, SpanOp,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditOp {
-    #[wire(n(0))]
     Seq(ListOp<SeqItem>),
-    #[wire(n(1))]
     Span(SpanOp),
-    #[wire(n(2))]
     BlockModifier(ModifierAttrOp),
-    #[wire(n(3))]
     NodeAttr(NodeAttrOp),
-    #[wire(n(5))]
     NodeCarry(ModifierAttrOp),
+    Unknown { bytes: Vec<u8> },
 }
 
 impl EditOp {
@@ -108,6 +103,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
+            EditOp::Unknown { .. } => {}
         }
     }
     Ok(DocLogs {
@@ -119,77 +115,10 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
     })
 }
 
-#[derive(Default)]
-pub struct EditOpBundleState;
-
-impl WireChangeset for EditOp {
-    type BundleState = EditOpBundleState;
-
-    fn collect_changeset(ops: &[Op<Self>], ctx: &mut CollectCtx) {
-        for op in ops {
-            ctx.observe(&op.id);
-            for p in &op.parents {
-                ctx.observe(p);
-            }
-            <EditOp as Wire>::collect(&op.payload, ctx);
-        }
-    }
-
-    fn encode_changeset(
-        ops: &[Op<Self>],
-        _state: &mut Self::BundleState,
-        ctx: &EncCtx,
-        out: &mut Vec<u8>,
-    ) -> WireResult<u32> {
-        if ops.is_empty() {
-            return Err(WireError::EmptyChangesetOps);
-        }
-        for (i, op) in ops.iter().enumerate() {
-            op.id.encode(ctx, out)?;
-            if i > 0 {
-                op.parents.encode(ctx, out)?;
-            }
-            op.payload.encode(ctx, out)?;
-        }
-        Ok(ops.len() as u32)
-    }
-
-    fn decode_changeset(
-        _state: &mut Self::BundleState,
-        ctx: &DecCtx,
-        first_op_parents: Vec<Dot>,
-        entry_count: u32,
-        input: &mut &[u8],
-    ) -> WireResult<Vec<Op<Self>>> {
-        if entry_count == 0 {
-            return Err(WireError::EmptyChangesetEntries);
-        }
-        let mut ops = Vec::with_capacity(entry_count as usize);
-        for i in 0..entry_count {
-            let id = Dot::decode(ctx, input)?;
-            let parents = if i == 0 {
-                first_op_parents.clone()
-            } else {
-                <Vec<Dot>>::decode(ctx, input)?
-            };
-            let payload = EditOp::decode(ctx, input)?;
-            ops.push(Op {
-                id,
-                parents,
-                payload,
-            });
-        }
-        Ok(ops)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        Anchor, AtomLeaf, Bias, HorizontalRuleVariant, Modifier, ModifierType, Node, NodeType,
-        project_document,
-    };
+    use crate::{Modifier, ModifierType, NodeType, project_document};
     use editor_crdt::{Changeset, InputEvent};
 
     /// A leaf's effective modifiers, read from the authoritative segment index.
@@ -217,110 +146,6 @@ mod tests {
         pd.tree.root_node().map(|r| count(&pd.tree, r)).unwrap_or(0)
     }
 
-    fn round_trip<T: editor_crdt::wire::Wire>(value: &T) -> editor_crdt::wire::WireResult<T> {
-        use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireError};
-        let mut cc = CollectCtx::new();
-        value.collect(&mut cc);
-        let (table, baselines) = cc.finalize();
-        let ec = EncCtx::from_table(&table, baselines.clone());
-        let dc = DecCtx {
-            actor_table: table,
-            baselines,
-        };
-        let mut buf = Vec::new();
-        value.encode(&ec, &mut buf)?;
-        let mut slice = &buf[..];
-        let out = T::decode(&dc, &mut slice)?;
-        if !slice.is_empty() {
-            return Err(WireError::TrailingBytes {
-                remaining: slice.len(),
-            });
-        }
-        Ok(out)
-    }
-
-    #[test]
-    fn edit_op_wire_round_trip_all_variants() {
-        let node = |t: NodeType| t.into_node();
-        let img = match node(NodeType::Image) {
-            Node::Image(n) => n,
-            _ => unreachable!(),
-        };
-        let file = match node(NodeType::File) {
-            Node::File(n) => n,
-            _ => unreachable!(),
-        };
-        let embed = match node(NodeType::Embed) {
-            Node::Embed(n) => n,
-            _ => unreachable!(),
-        };
-        let arch = match node(NodeType::Archived) {
-            Node::Archived(n) => n,
-            _ => unreachable!(),
-        };
-        let atom = |a: AtomLeaf| {
-            EditOp::Seq(ListOp::Ins {
-                pos: 0,
-                item: SeqItem::Atom(a),
-            })
-        };
-        let ops = vec![
-            EditOp::Seq(ListOp::Ins {
-                pos: 0,
-                item: SeqItem::Char('a'),
-            }),
-            EditOp::Seq(ListOp::Ins {
-                pos: 7,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::new(1, 0)],
-                },
-            }),
-            atom(AtomLeaf::HardBreak),
-            atom(AtomLeaf::Tab),
-            atom(AtomLeaf::PageBreak),
-            atom(AtomLeaf::HorizontalRule {
-                variant: HorizontalRuleVariant::default(),
-            }),
-            atom(AtomLeaf::Image { node: img }),
-            atom(AtomLeaf::File { node: file }),
-            atom(AtomLeaf::Embed { node: embed }),
-            atom(AtomLeaf::Archived { node: arch }),
-            EditOp::Seq(ListOp::Del { pos: 2, len: 4 }),
-            EditOp::Seq(ListOp::Undel {
-                del: Dot::new(2, 5),
-            }),
-            EditOp::Span(SpanOp::AddSpan {
-                start: Anchor {
-                    id: Dot::new(1, 2),
-                    bias: Bias::Before,
-                },
-                end: Anchor {
-                    id: Dot::new(1, 2),
-                    bias: Bias::After,
-                },
-                modifier: Modifier::Bold,
-            }),
-            EditOp::BlockModifier(ModifierAttrOp::SetModifier {
-                target: Dot::new(1, 1),
-                modifier: Modifier::FontSize { value: 1600 },
-            }),
-            EditOp::NodeAttr(crate::NodeAttrOp {
-                target: Dot::new(1, 1),
-                attr: crate::NodeAttr::Callout {
-                    attr: crate::CalloutNodeAttr::Variant(crate::CalloutVariant::Warning),
-                },
-            }),
-            EditOp::NodeCarry(ModifierAttrOp::SetModifier {
-                target: Dot::new(1, 1),
-                modifier: Modifier::Bold,
-            }),
-        ];
-        for op in &ops {
-            assert_eq!(&round_trip(op).unwrap(), op, "round-trip mismatch: {op:?}");
-        }
-    }
-
     fn seq_ins(pos: usize, item: SeqItem) -> EditOp {
         EditOp::Seq(ListOp::Ins { pos, item })
     }
@@ -344,69 +169,27 @@ mod tests {
         assert!(!dummy_span(Dot::new(1, 0)).is_seq());
     }
 
-    fn build_chained_bundle() -> Vec<Changeset<EditOp>> {
-        let mut g: OpGraph<EditOp> = OpGraph::with_actor(1);
-        let root = g
-            .add_mut(seq_ins(
-                0,
-                SeqItem::Block {
-                    node_type: NodeType::Root,
-                    parents: vec![],
-                },
-            ))
-            .unwrap()
-            .id;
-        let para = g
-            .add_mut(seq_ins(
-                1,
-                SeqItem::Block {
+    #[test]
+    fn unknown_op_routes_to_no_log() {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
                     node_type: NodeType::Paragraph,
-                    parents: vec![root],
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
-            ))
-            .unwrap()
-            .id;
-        g.add_mut(seq_ins(2, SeqItem::Char('a'))).unwrap();
-        g.add_mut(EditOp::Span(SpanOp::AddSpan {
-            start: Anchor {
-                id: para,
-                bias: Bias::Before,
-            },
-            end: Anchor {
-                id: para,
-                bias: Bias::After,
-            },
-            modifier: Modifier::Bold,
-        }))
-        .unwrap();
-        g.commit_mut();
-        g.add_mut(seq_ins(3, SeqItem::Char('b'))).unwrap();
-        g.add_mut(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
-            target: para,
-            modifier: Modifier::Bold,
-        }))
-        .unwrap();
-        g.commit_mut();
-        g.changesets_as_vec()
-    }
-
-    #[test]
-    fn edit_op_changeset_wire_round_trip() {
-        let css = build_chained_bundle();
-        assert!(css.len() >= 2);
-        let bytes = editor_crdt::wire::encode(&css).unwrap();
-        let decoded: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&bytes).unwrap();
-        assert_eq!(decoded, css);
-    }
-
-    #[test]
-    fn edit_op_encode_changeset_rejects_empty() {
-        use editor_crdt::wire::WireError;
-        let empty: Vec<Changeset<EditOp>> = vec![Changeset { ops: vec![] }];
-        assert!(matches!(
-            editor_crdt::wire::encode(&empty),
-            Err(WireError::EmptyChangesetOps)
-        ));
+            }))
+            .unwrap();
+        graph
+            .add_mut(EditOp::Unknown {
+                bytes: vec![0x01, 0x02, 0x03],
+            })
+            .unwrap();
+        let logs = split_logs(&graph).unwrap();
+        assert_eq!(logs.seq.len(), 1, "unknown op은 seq 로그에 없어야 한다");
+        assert!(logs.node_attrs.is_empty());
     }
 
     #[test]
@@ -445,6 +228,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -474,6 +258,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -509,6 +294,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Callout,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -519,6 +305,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT, callout],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -544,6 +331,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -568,6 +356,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Root,
                     parents: vec![],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -578,6 +367,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ))
             .unwrap()
@@ -602,6 +392,7 @@ mod tests {
                     item: SeqItem::Block {
                         node_type: NodeType::Root,
                         parents: vec![],
+                        attrs: vec![],
                     },
                 },
             },
@@ -613,6 +404,7 @@ mod tests {
                     item: SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![root],
+                        attrs: vec![],
                     },
                 },
             },
@@ -668,6 +460,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![Dot::ROOT],
+                        attrs: vec![],
                     },
                 ),
             }],
@@ -681,6 +474,7 @@ mod tests {
         SeqItem::Block {
             node_type: nt,
             parents,
+            attrs: vec![],
         }
     }
     fn op_seq(a: u64, c: u64, parents: &[Dot], pos: usize, item: SeqItem) -> Op<EditOp> {
@@ -942,36 +736,6 @@ mod tests {
                 project_document(&split_logs(&g_ab).unwrap()).unwrap(),
                 project_document(&split_logs(&g_ba).unwrap()).unwrap(),
             );
-        }
-
-        #[test]
-        fn changeset_wire_round_trip_proptest(text in "[a-c]{1,10}") {
-            let mut g: OpGraph<EditOp> = OpGraph::with_actor(1);
-            let root = g
-                .add_mut(seq_ins(
-                    0,
-                    SeqItem::Block {
-                        node_type: NodeType::Root,
-                        parents: vec![],
-                    },
-                ))
-                .unwrap()
-                .id;
-            g.add_mut(seq_ins(
-                1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                },
-            ))
-            .unwrap();
-            for (i, ch) in text.chars().enumerate() {
-                g.add_mut(seq_ins(2 + i, SeqItem::Char(ch))).unwrap();
-            }
-            let css = g.commit().changesets_as_vec();
-            let bytes = editor_crdt::wire::encode(&css).unwrap();
-            let decoded: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&bytes).unwrap();
-            prop_assert_eq!(decoded, css);
         }
 
         #[test]

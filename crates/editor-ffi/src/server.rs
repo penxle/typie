@@ -22,22 +22,42 @@ pub struct Materialized {
 
 #[ffi]
 #[allow(dead_code)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BundleStatus {
+    Applied,
+    Duplicate,
+    Failed,
+}
+
+#[ffi]
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct CollectResult {
     #[serde(with = "serde_bytes")]
     #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
-    pub graph: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub heads: Vec<u8>,
-    // Per-bundle: whether it advanced the snapshot (else dead-lettered) and the
-    // document's character count right after it (for per-user attribution).
-    pub applied: Vec<bool>,
+    // Per-bundle: whether it advanced the snapshot, was a no-op duplicate, or
+    // was dead-lettered, plus the document's character count right after it
+    // (for per-user attribution — unchanged for `duplicate`/`failed`).
+    pub statuses: Vec<BundleStatus>,
     pub char_counts: Vec<u32>,
     pub base_char_count: u32,
     pub plain: editor_model::PlainDoc,
     pub text: String,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ConsolidateResult {
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array | null"))]
+    pub payload: Option<Vec<u8>>,
+    pub consumed: u32,
+    pub consumed_bytes: u32,
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
@@ -102,11 +122,19 @@ impl EditorServer {
 
     pub fn apply(&self, existing: Vec<u8>, new: Vec<u8>) -> EditorResult<Vec<u8>> {
         let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&existing[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&existing[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_reencodable()
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .as_slice()
+                .to_vec();
         let new_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&new[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&new[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_reencodable()
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .as_slice()
+                .to_vec();
 
         // Atomic boundaries make the first-op dot a stable changeset key, so
         // dedup and dot-reuse rejection only need to walk by first-op dot.
@@ -168,83 +196,13 @@ impl EditorServer {
             out.push(cs);
         }
 
-        let bytes =
-            editor_crdt::wire::encode(&out).map_err(|e| FfiError::Serialization(e.to_string()))?;
-        Ok(bytes)
-    }
-
-    /// Fold many bundles onto `existing` with a single decode/encode. Calling
-    /// [`apply`] once per bundle re-decodes and re-encodes the whole (multi-MB)
-    /// graph every time — `O(bundles × N)`; here `existing` is decoded once,
-    /// every bundle is applied against an in-memory accumulator, and the result
-    /// is encoded once — `O(N + total ops)`. `packed_bundles` is the
-    /// length-prefixed concatenation of the per-push wire blobs (see
-    /// `graph::decode_length_prefixed`). A bundle that fails validation (dup or
-    /// causal-order break) is skipped rather than aborting the whole fold, so a
-    /// single bad entry can never break a document load.
-    pub fn apply_many(&self, existing: Vec<u8>, packed_bundles: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&existing[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
-
-        let mut known: hashbrown::HashSet<editor_crdt::Dot> = existing_cs
-            .iter()
-            .flat_map(|cs| cs.ops.iter().map(|op| op.id))
-            .collect();
-        // First-op dot → index in `out`: an `O(1)` dedup probe, versus `apply`'s
-        // `O(out.len())` linear `find` that would make the fold quadratic.
-        let mut first_ops: hashbrown::HashMap<editor_crdt::Dot, usize> = existing_cs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, cs)| cs.ops.first().map(|op| (op.id, i)))
-            .collect();
-        let mut out = existing_cs;
-
-        for bundle in bundles {
-            let Ok(new_cs) = editor_crdt::wire::decode::<editor_model::EditOp>(&bundle[..]) else {
-                continue;
-            };
-            for cs in new_cs {
-                let Some(first) = cs.ops.first() else {
-                    continue;
-                };
-                // Already have a changeset at this boundary (verbatim dup or a
-                // divergent body) → skip; the fold must not abort a whole load.
-                if first_ops.contains_key(&first.id) {
-                    continue;
-                }
-                let mut seen: hashbrown::HashSet<editor_crdt::Dot> = hashbrown::HashSet::new();
-                let mut ok = true;
-                for op in &cs.ops {
-                    if known.contains(&op.id) {
-                        ok = false;
-                        break;
-                    }
-                    if !op
-                        .parents
-                        .iter()
-                        .all(|p| known.contains(p) || seen.contains(p))
-                    {
-                        ok = false;
-                        break;
-                    }
-                    if !seen.insert(op.id) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if !ok {
-                    continue;
-                }
-                known.extend(seen);
-                first_ops.insert(first.id, out.len());
-                out.push(cs);
-            }
+        if out.is_empty() {
+            return Ok(Vec::new());
         }
-
-        let bytes =
-            editor_crdt::wire::encode(&out).map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_verified(out),
+        )
+        .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
@@ -255,54 +213,57 @@ impl EditorServer {
     /// each bundle is projected incrementally (`receive_remote_changesets`), then
     /// only the text is re-read per entry (`O(tail × extract)`, far cheaper than
     /// rebuilding). `char_counts[i]` is the document's character count right after
-    /// bundle `i`; `applied[i]` is false for a dead-lettered bundle.
+    /// bundle `i`; `statuses[i]` is `Applied`, `Duplicate` (verbatim re-delivery —
+    /// advance the cursor, no dead-letter), or `Failed` (dead-letter).
     pub fn collect_fold(
         &self,
         existing: Vec<u8>,
         packed_bundles: Vec<u8>,
     ) -> EditorResult<Complex<CollectResult>> {
         let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&existing[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&existing[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
         let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
 
         let mut state = editor_state::State::from_changesets(existing_cs, None)?;
         let base_char_count = count_characters(&extract_text_from_view(&state.view()));
 
-        let mut applied: Vec<bool> = Vec::with_capacity(bundles.len());
+        let mut statuses: Vec<BundleStatus> = Vec::with_capacity(bundles.len());
         let mut char_counts: Vec<u32> = Vec::with_capacity(bundles.len());
         let mut last = base_char_count;
 
         for bundle in bundles {
-            let ok = match editor_crdt::wire::decode::<editor_model::EditOp>(&bundle[..]) {
-                Ok(cs) => match state.receive_remote_changesets(cs) {
+            let status = match editor_codec::decode_changeset_stream(&bundle[..]) {
+                Ok(decoded) => match state.receive_remote_changesets(decoded.into_graph_input()) {
                     Ok((next, ops)) if !ops.is_empty() => {
                         state = next;
-                        true
+                        BundleStatus::Applied
                     }
-                    _ => false,
+                    Ok(_) => BundleStatus::Duplicate,
+                    Err(_) => BundleStatus::Failed,
                 },
-                Err(_) => false,
+                Err(_) => BundleStatus::Failed,
             };
-            if ok {
+            if status == BundleStatus::Applied {
                 last = count_characters(&extract_text_from_view(&state.view()));
             }
-            applied.push(ok);
+            statuses.push(status);
             char_counts.push(last);
         }
 
-        let graph = editor_crdt::wire::encode(&state.graph().changesets_as_vec())
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
         let heads: Vec<editor_crdt::Dot> = state.graph().current_heads().copied().collect();
-        let heads = editor_crdt::wire::encode_dots(&heads)
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let heads = if heads.is_empty() {
+            Vec::new()
+        } else {
+            editor_codec::encode_dots(&heads).map_err(|e| FfiError::Serialization(e.to_string()))?
+        };
         let plain = state.to_plain();
         let text = extract_text_from_view(&state.view());
 
         Ok(CollectResult {
-            graph,
             heads,
-            applied,
+            statuses,
             char_counts,
             base_char_count,
             plain,
@@ -311,23 +272,54 @@ impl EditorServer {
         .into_ffi()?)
     }
 
+    pub fn consolidate(&self, stream: Vec<u8>) -> EditorResult<Complex<ConsolidateResult>> {
+        let result = editor_codec::consolidate_stream(&stream).map_err(|e| match e {
+            editor_codec::CodecError::Encode(_) => FfiError::Serialization(e.to_string()),
+            editor_codec::CodecError::Corruption(_) | editor_codec::CodecError::Fenced(_) => {
+                FfiError::Deserialization(e.to_string())
+            }
+        })?;
+        let out = match result {
+            Some(c) => ConsolidateResult {
+                payload: Some(c.payload),
+                consumed: c.consumed as u32,
+                consumed_bytes: c.consumed_bytes as u32,
+            },
+            None => ConsolidateResult {
+                payload: None,
+                consumed: 0,
+                consumed_bytes: 0,
+            },
+        };
+        Ok(out.into_ffi()?)
+    }
+
     pub fn missing_for(
         &self,
         all_changesets: Vec<u8>,
         remote_heads_payload: Vec<u8>,
     ) -> EditorResult<Vec<u8>> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&all_changesets[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let heads_vec = editor_crdt::wire::decode_dots(&remote_heads_payload[..])
+            editor_codec::decode_changeset_stream(&all_changesets[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_reencodable()
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .as_slice()
+                .to_vec();
+        let heads_vec = editor_codec::decode_dots(&remote_heads_payload[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
 
         let g = editor_crdt::OpGraph::from_changesets(cs)?;
         let missing = g.missing_changesets_tolerant(&heads_set);
+        if missing.is_empty() {
+            return Ok(Vec::new());
+        }
 
-        let bytes = editor_crdt::wire::encode(&missing)
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_verified(missing),
+        )
+        .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
@@ -336,8 +328,14 @@ impl EditorServer {
         let state = editor_state::State::from_plain(&plain).map_err(|e| EditorError::General {
             msg: format!("{e:?}"),
         })?;
-        let bytes = editor_crdt::wire::encode(&state.graph().changesets_as_vec())
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let changesets = state.graph().changesets_as_vec();
+        if changesets.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(changesets),
+        )
+        .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
@@ -346,9 +344,10 @@ impl EditorServer {
         changeset_payloads: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainDoc>> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&changeset_payloads[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let state = editor_state::State::from_changesets(cs, None)?;
+            editor_codec::decode_changeset_stream(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let state = crate::graph::build_state_tolerant(cs)?;
         Ok(state.to_plain().into_ffi()?)
     }
 
@@ -357,21 +356,26 @@ impl EditorServer {
         changeset_payloads: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainDoc>> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&changeset_payloads[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let state = editor_state::State::from_changesets(cs, None)?;
+            editor_codec::decode_changeset_stream(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let state = crate::graph::build_state_tolerant(cs)?;
         Ok(state.to_plain().into_ffi()?)
     }
 
     pub fn heads(&self, changeset_payloads: Vec<u8>) -> EditorResult<Vec<u8>> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&changeset_payloads[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
         // Frontier scan, not a full `from_changesets` build: heads is just
         // `all ids − referenced parent ids`, and every heads/durableHeads
         // caller on the server was paying a whole-graph rebuild for it.
         let heads = editor_crdt::OpGraph::<editor_model::EditOp>::heads_of(&cs);
-        let bytes = editor_crdt::wire::encode_dots(&heads)
+        if heads.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bytes = editor_codec::encode_dots(&heads)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
@@ -384,11 +388,14 @@ impl EditorServer {
     /// Set arithmetic makes it idempotent under duplicate redelivery and
     /// order-independent across concurrent pushes.
     pub fn update_heads(&self, prev_heads: Vec<u8>, bundle: Vec<u8>) -> EditorResult<Vec<u8>> {
-        let prev = editor_crdt::wire::decode_dots(&prev_heads[..])
+        let prev = editor_codec::decode_dots(&prev_heads[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        // Structural read only (op id/parents) to update the frontier set — no
+        // changeset value is reencoded, so a v-next-bearing bundle is fine here.
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&bundle[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&bundle[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
 
         let mut heads: hashbrown::HashSet<editor_crdt::Dot> = prev.into_iter().collect();
         for cs in &cs {
@@ -405,20 +412,28 @@ impl EditorServer {
         }
         let mut heads: Vec<editor_crdt::Dot> = heads.into_iter().collect();
         heads.sort();
-        let bytes = editor_crdt::wire::encode_dots(&heads)
+        if heads.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bytes = editor_codec::encode_dots(&heads)
             .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
     pub fn revert(&self, graph: Vec<u8>, target_heads: Vec<u8>) -> EditorResult<Vec<u8>> {
+        // Input graph is used only to build state (`into_graph_input`); the only
+        // thing ever reencoded is the revert transaction's own new local
+        // changesets below (`from_local_ops`) — the input graph is never
+        // value-reencoded.
         let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&graph[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let target_vec = editor_crdt::wire::decode_dots(&target_heads[..])
+            editor_codec::decode_changeset_stream(&graph[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let target_vec = editor_codec::decode_dots(&target_heads[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let target_set: hashbrown::HashSet<editor_crdt::Dot> = target_vec.into_iter().collect();
 
-        let state = editor_state::State::from_changesets(css, None)
+        let state = crate::graph::build_state_tolerant(css)
             .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
         let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
             state.graph().current_heads().copied().collect();
@@ -430,17 +445,23 @@ impl EditorServer {
         let (new_state, ..) = tr.commit();
 
         let revert_css = new_state.graph().local_changesets_since(&current_heads)?;
+        if revert_css.is_empty() {
+            return Ok(Vec::new());
+        }
 
-        let bytes = editor_crdt::wire::encode(&revert_css)
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(revert_css),
+        )
+        .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
     }
 
     /// Returns the total ops count in a Changesets bundle. Used by push light validation.
     pub fn peek_changeset_ops_count(&self, bundle: Vec<u8>) -> EditorResult<u32> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&bundle[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&bundle[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
         let count: u32 = cs.iter().map(|c| c.ops.len() as u32).sum();
         Ok(count)
     }
@@ -457,9 +478,10 @@ impl EditorServer {
 
     pub fn materialize(&self, changeset_payloads: Vec<u8>) -> EditorResult<Complex<Materialized>> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&changeset_payloads[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let state = editor_state::State::from_changesets(cs, None)?;
+            editor_codec::decode_changeset_stream(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let state = crate::graph::build_state_tolerant(cs)?;
         let plain = state.to_plain();
         let text = extract_text_from_view(&state.view());
         Ok(Materialized { plain, text }.into_ffi()?)
@@ -467,9 +489,10 @@ impl EditorServer {
 
     pub fn validate_and_extract_text(&self, changeset_payloads: Vec<u8>) -> EditorResult<String> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&changeset_payloads[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-        let state = editor_state::State::from_changesets(cs, None)?;
+            editor_codec::decode_changeset_stream(&changeset_payloads[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let state = crate::graph::build_state_tolerant(cs)?;
         Ok(extract_text_from_view(&state.view()))
     }
 }
@@ -562,16 +585,21 @@ mod tests {
     }
 
     fn enc_css(css: &[Changeset<EditOp>]) -> Vec<u8> {
-        editor_crdt::wire::encode(css).unwrap()
+        editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+            css.to_vec(),
+        ))
+        .unwrap()
     }
     fn dec_css(b: &[u8]) -> Vec<Changeset<EditOp>> {
-        editor_crdt::wire::decode(b).unwrap()
+        editor_codec::decode_changeset_stream(b)
+            .unwrap()
+            .into_graph_input()
     }
     fn enc_dots(dots: &[Dot]) -> Vec<u8> {
-        editor_crdt::wire::encode_dots(dots).unwrap()
+        editor_codec::encode_dots(dots).unwrap()
     }
     fn dec_dots(b: &[u8]) -> Vec<Dot> {
-        editor_crdt::wire::decode_dots(b).unwrap()
+        editor_codec::decode_dots(b).unwrap()
     }
 
     #[cfg(feature = "wasm-server")]
@@ -846,7 +874,45 @@ mod tests {
     }
 
     #[test]
-    fn apply_many_matches_folded_apply() {
+    fn collect_fold_classifies_applied_duplicate_and_failed() {
+        let cs_a = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(1, 0),
+                parents: vec![],
+                payload: dummy_payload(),
+            }],
+        };
+        let cs_b = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(2, 0),
+                parents: vec![Dot::new(1, 0)],
+                payload: dummy_payload(),
+            }],
+        };
+        let server = EditorServer;
+        let existing = enc_css(std::slice::from_ref(&cs_a));
+        let applied_bundle = enc_css(std::slice::from_ref(&cs_b));
+        let malformed_bundle = vec![0xFF, 0x00, 0x01];
+
+        let packed = pack(&[applied_bundle.clone(), applied_bundle, malformed_bundle]);
+        let result = server.collect_fold(existing, packed).unwrap();
+
+        assert_eq!(
+            result.statuses,
+            vec![
+                BundleStatus::Applied,
+                BundleStatus::Duplicate,
+                BundleStatus::Failed,
+            ]
+        );
+        assert!(
+            result.char_counts[0] == result.char_counts[1],
+            "duplicate must not change the character count"
+        );
+    }
+
+    #[test]
+    fn consolidate_merges_stream_preserving_changesets_and_heads() {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
@@ -869,24 +935,38 @@ mod tests {
             }],
         };
         let server = EditorServer;
-        let base = enc_css(std::slice::from_ref(&cs_a));
-        let b1 = enc_css(std::slice::from_ref(&cs_b));
-        let b2 = enc_css(std::slice::from_ref(&cs_c));
+        let stream = [
+            enc_css(std::slice::from_ref(&cs_a)),
+            enc_css(std::slice::from_ref(&cs_b)),
+            enc_css(std::slice::from_ref(&cs_c)),
+        ]
+        .concat();
 
-        // Repeated `apply` (the O(tail × N) fold) vs one `apply_many`.
-        let folded = server
-            .apply(server.apply(base.clone(), b1.clone()).unwrap(), b2.clone())
-            .unwrap();
-        let many = server
-            .apply_many(base.clone(), pack(&[b1.clone(), b2.clone()]))
-            .unwrap();
-        assert_eq!(dec_css(&folded), dec_css(&many));
+        let result = server.consolidate(stream.clone()).unwrap();
+        let payload = result.payload.expect("3 bundles should be merged");
+        assert_eq!(result.consumed, 3);
+        assert_eq!(result.consumed_bytes as usize, stream.len());
 
-        // A re-pushed (duplicate) bundle in the pack is skipped, not duplicated.
-        let with_dup = server
-            .apply_many(base, pack(&[b1.clone(), b1, b2]))
-            .unwrap();
-        assert_eq!(dec_css(&folded), dec_css(&with_dup));
+        let merged = dec_css(&payload);
+        let original = dec_css(&stream);
+        assert_eq!(
+            merged, original,
+            "changeset count and contents must be preserved"
+        );
+
+        let base = enc_css(&[]);
+        let via_original = server.apply(base.clone(), stream).unwrap();
+        let via_consolidated = server.apply(base, payload).unwrap();
+        assert_eq!(
+            dec_css(&via_original),
+            dec_css(&via_consolidated),
+            "apply result must match"
+        );
+        assert_eq!(
+            dec_dots(&server.heads(via_original).unwrap()),
+            dec_dots(&server.heads(via_consolidated).unwrap()),
+            "heads must match"
+        );
     }
 
     #[test]
@@ -1053,14 +1133,19 @@ mod tests {
         .unwrap();
         ps.commit();
 
-        let graph_bytes = editor_crdt::wire::encode(&ps.graph().changesets_as_vec()).unwrap();
-        let target_bytes = editor_crdt::wire::encode_dots(&target_heads).unwrap();
+        let graph_bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(ps.graph().changesets_as_vec()),
+        )
+        .unwrap();
+        let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
         let server = EditorServer;
         let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
 
         let merged = server.apply(graph_bytes, revert_bytes).unwrap();
-        let merged_css: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&merged).unwrap();
+        let merged_css: Vec<Changeset<EditOp>> = editor_codec::decode_changeset_stream(&merged)
+            .unwrap()
+            .into_graph_input();
         let state = State::from_changesets(merged_css, None).unwrap();
         let view = state.view();
         let para = view.root().unwrap().child_blocks().next().unwrap();
@@ -1080,12 +1165,22 @@ mod tests {
         .unwrap();
         ps.commit();
 
-        let graph_bytes = editor_crdt::wire::encode(&ps.graph().changesets_as_vec()).unwrap();
+        let graph_bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(ps.graph().changesets_as_vec()),
+        )
+        .unwrap();
         let heads_bytes = EditorServer.heads(graph_bytes.clone()).unwrap();
 
         let server = EditorServer;
         let revert_bytes = server.revert(graph_bytes, heads_bytes).unwrap();
-        let revert_cs: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&revert_bytes).unwrap();
+        assert!(
+            revert_bytes.is_empty(),
+            "revert to current heads must be exactly 0 bytes, not a minimal empty envelope"
+        );
+        let revert_cs: Vec<Changeset<EditOp>> =
+            editor_codec::decode_changeset_stream(&revert_bytes)
+                .unwrap()
+                .into_graph_input();
         assert!(
             revert_cs.is_empty(),
             "revert to current heads must be empty (no-op)"
@@ -1103,15 +1198,21 @@ mod tests {
                 item: SeqItem::Block {
                     node_type: editor_model::NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             }))
             .unwrap();
             g.commit_mut();
-            editor_crdt::wire::encode(&g.changesets_as_vec()).unwrap()
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                g.changesets_as_vec(),
+            ))
+            .unwrap()
         };
 
         let new_cs_bytes = {
-            let css: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&base_graph).unwrap();
+            let css: Vec<Changeset<EditOp>> = editor_codec::decode_changeset_stream(&base_graph)
+                .unwrap()
+                .into_graph_input();
             let mut g = OpGraph::<EditOp>::from_changesets(css).unwrap();
             g.add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 1,
@@ -1120,7 +1221,10 @@ mod tests {
             .unwrap();
             g.commit_mut();
             let all = g.changesets_as_vec();
-            editor_crdt::wire::encode(&all[all.len() - 1..]).unwrap()
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                all[all.len() - 1..].to_vec(),
+            ))
+            .unwrap()
         };
 
         let server = EditorServer;
@@ -1146,6 +1250,7 @@ mod tests {
             item: SeqItem::Block {
                 node_type: editor_model::NodeType::Paragraph,
                 parents: vec![Dot::ROOT],
+                attrs: vec![],
             },
         }))
         .unwrap();
@@ -1174,14 +1279,19 @@ mod tests {
             .unwrap();
         ps.commit();
 
-        let graph_bytes = editor_crdt::wire::encode(&ps.graph().changesets_as_vec()).unwrap();
-        let target_bytes = editor_crdt::wire::encode_dots(&target_heads).unwrap();
+        let graph_bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(ps.graph().changesets_as_vec()),
+        )
+        .unwrap();
+        let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
         let server = EditorServer;
         let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
 
         let merged = server.apply(graph_bytes, revert_bytes).unwrap();
-        let merged_css: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&merged).unwrap();
+        let merged_css: Vec<Changeset<EditOp>> = editor_codec::decode_changeset_stream(&merged)
+            .unwrap()
+            .into_graph_input();
         let state = State::from_changesets(merged_css, None).unwrap();
         let view = state.view();
         let root = view.root().unwrap();

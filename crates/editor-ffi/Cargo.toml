@@ -51,6 +51,7 @@ wasm-server = ["wasm", "dep:editor-server", "editor-server/wasm"]
 
 [dependencies]
 editor-clipboard = { path = "../editor-clipboard" }
+editor-codec = { path = "../editor-codec" }
 editor-common = { path = "../editor-common" }
 editor-core = { path = "../editor-core" }
 editor-crdt = { path = "../editor-crdt" }

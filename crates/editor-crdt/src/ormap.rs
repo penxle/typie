@@ -3,24 +3,19 @@ use std::hash::Hash;
 
 use crate::{CrdtError, Dot, ToPlain};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrMapOp<K, V> {
-    #[wire(n(0))]
     Set {
-        #[wire(n(0))]
         key: K,
-        #[wire(n(1))]
         value: V,
     },
     /// `observed` — the add-token dots this unset has observed at generation time.
     /// Concurrent adds whose dots are not in `observed` survive (add-wins): the
     /// unset cannot kill what it did not see.
     /// `observed` must be ascending-sorted and deduplicated by the op generator
-    /// (canonical wire form for hash/equality stability).
-    #[wire(n(1))]
+    /// (canonical form for hash/equality stability).
     Unset {
-        #[wire(n(0))]
         observed: Vec<Dot>,
     },
 }

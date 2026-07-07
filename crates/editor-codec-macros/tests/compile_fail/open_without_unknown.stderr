@@ -1,0 +1,5 @@
+error: open enum requires exactly one #[durable(unknown)] variant
+ --> tests/compile_fail/open_without_unknown.rs:5:10
+  |
+5 | pub enum E {
+  |          ^

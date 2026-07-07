@@ -1,0 +1,1177 @@
+{
+  "envelope": {
+    "magic": 194,
+    "format_version": 1,
+    "max_body_bytes": 1073741824,
+    "compression_threshold_bytes": 256,
+    "known_flags": 1,
+    "payload_kinds": {
+      "changeset-bundle": 0,
+      "dots": 1,
+      "snapshot": 2
+    },
+    "required_features": {},
+    "optional_features": {}
+  },
+  "types": {
+    "DurableAlignment": {
+      "name": "DurableAlignment",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Left",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Center",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Right",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Justify",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableAnchor": {
+      "name": "DurableAnchor",
+      "kind": {
+        "FrozenStruct": {
+          "fields": [
+            {
+              "name": "id",
+              "ty": "editor_crdt::Dot",
+              "default": "Required"
+            },
+            {
+              "name": "bias",
+              "ty": "DurableBias",
+              "default": "Required"
+            }
+          ]
+        }
+      }
+    },
+    "DurableAttr": {
+      "name": "DurableAttr",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "RootLayoutMode",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "DurableLayoutMode",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "BlockquoteVariant",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "DurableBlockquoteVariant",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "CalloutVariant",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "DurableCalloutVariant",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "TableBorderStyle",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "DurableTableBorderStyle",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "TableProportion",
+              "tag": 4,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "TableCellColWidth",
+              "tag": 5,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "Option<u32>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "TableCellBackgroundColor",
+              "tag": 6,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "Option<String>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "ImageId",
+              "tag": 7,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "Option<String>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "ImageProportion",
+              "tag": 8,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "FileId",
+              "tag": 9,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "Option<String>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "EmbedId",
+              "tag": 10,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "Option<String>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "ArchivedId",
+              "tag": 11,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "Option<String>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "HorizontalRuleVariant",
+              "tag": 12,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "DurableHorizontalRuleVariant",
+                  "default": "Required"
+                }
+              ]
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableBias": {
+      "name": "DurableBias",
+      "kind": {
+        "ClosedEnum": {
+          "variants": [
+            {
+              "name": "Before",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "After",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ]
+        }
+      }
+    },
+    "DurableBlockquoteVariant": {
+      "name": "DurableBlockquoteVariant",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "LeftLine",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "LeftQuote",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "MessageSent",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "MessageReceived",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableCalloutVariant": {
+      "name": "DurableCalloutVariant",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Info",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Success",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Warning",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Danger",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableHorizontalRuleVariant": {
+      "name": "DurableHorizontalRuleVariant",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Line",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "DashedLine",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "CircleLine",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "DiamondLine",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Circle",
+              "tag": 4,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Diamond",
+              "tag": 5,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "ThreeCircles",
+              "tag": 6,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "ThreeDiamonds",
+              "tag": 7,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Zigzag",
+              "tag": 8,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableItem": {
+      "name": "DurableItem",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Char",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "char",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Atom",
+              "tag": 1,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "node_type",
+                  "ty": "DurableNodeType",
+                  "default": "Required"
+                },
+                {
+                  "name": "init",
+                  "ty": "Vec<DurableAttr>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Block",
+              "tag": 2,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "node_type",
+                  "ty": "DurableNodeType",
+                  "default": "Required"
+                },
+                {
+                  "name": "parents",
+                  "ty": "Vec<Dot>",
+                  "default": "Required"
+                },
+                {
+                  "name": "init",
+                  "ty": "Vec<DurableAttr>",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "BlockAtom",
+              "tag": 3,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "node_type",
+                  "ty": "DurableNodeType",
+                  "default": "Required"
+                },
+                {
+                  "name": "parents",
+                  "ty": "Vec<Dot>",
+                  "default": "Required"
+                },
+                {
+                  "name": "init",
+                  "ty": "Vec<DurableAttr>",
+                  "default": "Required"
+                }
+              ]
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableLayoutMode": {
+      "name": "DurableLayoutMode",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Paginated",
+              "tag": 0,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "page_width",
+                  "ty": "u32",
+                  "default": "Required"
+                },
+                {
+                  "name": "page_height",
+                  "ty": "u32",
+                  "default": "Required"
+                },
+                {
+                  "name": "page_margin_top",
+                  "ty": "u32",
+                  "default": "Required"
+                },
+                {
+                  "name": "page_margin_bottom",
+                  "ty": "u32",
+                  "default": "Required"
+                },
+                {
+                  "name": "page_margin_left",
+                  "ty": "u32",
+                  "default": "Required"
+                },
+                {
+                  "name": "page_margin_right",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Continuous",
+              "tag": 1,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "max_width",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableModifier": {
+      "name": "DurableModifier",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Bold",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Italic",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Underline",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Strikethrough",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "FontSize",
+              "tag": 4,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "FontFamily",
+              "tag": 5,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "String",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "FontWeight",
+              "tag": 6,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u16",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "TextColor",
+              "tag": 7,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "String",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "BackgroundColor",
+              "tag": 8,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "String",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "LetterSpacing",
+              "tag": 9,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "i32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Link",
+              "tag": 10,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "String",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Ruby",
+              "tag": 11,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "String",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "LineHeight",
+              "tag": 12,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "BlockGap",
+              "tag": 13,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "ParagraphIndent",
+              "tag": 14,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "u32",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Alignment",
+              "tag": 15,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "DurableAlignment",
+                  "default": "Required"
+                }
+              ]
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableModifierKind": {
+      "name": "DurableModifierKind",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Bold",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Italic",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Underline",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Strikethrough",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "FontSize",
+              "tag": 4,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "FontFamily",
+              "tag": 5,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "FontWeight",
+              "tag": 6,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "TextColor",
+              "tag": 7,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "BackgroundColor",
+              "tag": 8,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "LetterSpacing",
+              "tag": 9,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Link",
+              "tag": 10,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Ruby",
+              "tag": 11,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "LineHeight",
+              "tag": 12,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "BlockGap",
+              "tag": 13,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "ParagraphIndent",
+              "tag": 14,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Alignment",
+              "tag": 15,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableNodeType": {
+      "name": "DurableNodeType",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Root",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Paragraph",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Blockquote",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Callout",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Text",
+              "tag": 4,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "BulletList",
+              "tag": 5,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "OrderedList",
+              "tag": 6,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "ListItem",
+              "tag": 7,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Fold",
+              "tag": 8,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "FoldTitle",
+              "tag": 9,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "FoldContent",
+              "tag": 10,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Table",
+              "tag": 11,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "TableRow",
+              "tag": 12,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "TableCell",
+              "tag": 13,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Image",
+              "tag": 14,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "File",
+              "tag": 15,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Embed",
+              "tag": 16,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Archived",
+              "tag": 17,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "HardBreak",
+              "tag": 18,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "HorizontalRule",
+              "tag": 19,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "PageBreak",
+              "tag": 20,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Tab",
+              "tag": 21,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableOp": {
+      "name": "DurableOp",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "SeqIns",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "pos",
+                  "ty": "u64",
+                  "default": "Required"
+                },
+                {
+                  "name": "item",
+                  "ty": "DurableItem",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "SeqDel",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "pos",
+                  "ty": "u64",
+                  "default": "Required"
+                },
+                {
+                  "name": "len",
+                  "ty": "u64",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "SeqUndel",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "del",
+                  "ty": "Dot",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "AddSpan",
+              "tag": 3,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "start",
+                  "ty": "DurableAnchor",
+                  "default": "Required"
+                },
+                {
+                  "name": "end",
+                  "ty": "DurableAnchor",
+                  "default": "Required"
+                },
+                {
+                  "name": "modifier",
+                  "ty": "DurableModifier",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "RemoveSpan",
+              "tag": 4,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "start",
+                  "ty": "DurableAnchor",
+                  "default": "Required"
+                },
+                {
+                  "name": "end",
+                  "ty": "DurableAnchor",
+                  "default": "Required"
+                },
+                {
+                  "name": "kind",
+                  "ty": "DurableModifierKind",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "SetBlockModifier",
+              "tag": 5,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "target",
+                  "ty": "Dot",
+                  "default": "Required"
+                },
+                {
+                  "name": "modifier",
+                  "ty": "DurableModifier",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "ClearBlockModifier",
+              "tag": 6,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "target",
+                  "ty": "Dot",
+                  "default": "Required"
+                },
+                {
+                  "name": "kind",
+                  "ty": "DurableModifierKind",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "SetNodeAttr",
+              "tag": 7,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "target",
+                  "ty": "Dot",
+                  "default": "Required"
+                },
+                {
+                  "name": "attr",
+                  "ty": "DurableAttr",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "SetNodeCarry",
+              "tag": 8,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "target",
+                  "ty": "Dot",
+                  "default": "Required"
+                },
+                {
+                  "name": "modifier",
+                  "ty": "DurableModifier",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "ClearNodeCarry",
+              "tag": 9,
+              "frozen_payload": false,
+              "fields": [
+                {
+                  "name": "target",
+                  "ty": "Dot",
+                  "default": "Required"
+                },
+                {
+                  "name": "kind",
+                  "ty": "DurableModifierKind",
+                  "default": "Required"
+                }
+              ]
+            }
+          ],
+          "retired": []
+        }
+      }
+    },
+    "DurableTableBorderStyle": {
+      "name": "DurableTableBorderStyle",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Solid",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Dashed",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "Dotted",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "None",
+              "tag": 3,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": []
+        }
+      }
+    }
+  }
+}

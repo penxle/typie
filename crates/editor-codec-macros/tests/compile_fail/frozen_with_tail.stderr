@@ -1,0 +1,5 @@
+error: frozen payloads must not contain UnknownTail
+ --> tests/compile_fail/frozen_with_tail.rs:6:12
+  |
+6 | pub struct S {
+  |            ^

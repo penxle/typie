@@ -813,7 +813,11 @@ mod invalidation_tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block { node_type, parents },
+            item: SeqItem::Block {
+                node_type,
+                parents,
+                attrs: vec![],
+            },
         })
     }
 
@@ -1143,7 +1147,11 @@ mod incremental_tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block { node_type, parents },
+            item: SeqItem::Block {
+                node_type,
+                parents,
+                attrs: vec![],
+            },
         })
     }
 

@@ -289,7 +289,7 @@ impl PartialEq for BlockSegs {
             block: Dot,
         ) -> impl Iterator<Item = (NodeType, &LeafEff, &LeafOwn)> + '_ {
             segs.group_iter(block)
-                .flat_map(|s| std::iter::repeat((s.leaf_type, &s.eff, &s.own)).take(s.count))
+                .flat_map(|s| std::iter::repeat_n((s.leaf_type, &s.eff, &s.own), s.count))
         }
         self.blocks
             .keys()

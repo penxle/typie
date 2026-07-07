@@ -23,9 +23,11 @@ pub fn leaves_with_paths(tree: &BlockTree) -> Vec<(Vec<NodeType>, Dot)> {
                     }
                 }
                 Child::Leaf { id, item } => {
-                    let mut p = path.clone();
-                    p.push(item.as_child_type());
-                    out.push((p, *id));
+                    if let Some(t) = item.as_child_type() {
+                        let mut p = path.clone();
+                        p.push(t);
+                        out.push((p, *id));
+                    }
                 }
             }
         }
@@ -63,11 +65,13 @@ pub fn leaves_with_context(tree: &BlockTree) -> Vec<LeafContext> {
                     }
                 }
                 Child::Leaf { id, item } => {
-                    out.push(LeafContext {
-                        block_path: path.clone(),
-                        leaf_type: item.as_child_type(),
-                        leaf_dot: *id,
-                    });
+                    if let Some(t) = item.as_child_type() {
+                        out.push(LeafContext {
+                            block_path: path.clone(),
+                            leaf_type: t,
+                            leaf_dot: *id,
+                        });
+                    }
                 }
             }
         }
@@ -103,7 +107,11 @@ pub fn for_each_leaf(
                         walk(tree, b, path, f);
                     }
                 }
-                Child::Leaf { id, item } => f(path, item.as_child_type(), *id),
+                Child::Leaf { id, item } => {
+                    if let Some(t) = item.as_child_type() {
+                        f(path, t, *id);
+                    }
+                }
             }
         }
         path.pop();
@@ -213,6 +221,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![Dot::ROOT],
+                attrs: vec![],
             },
         )];
         for (i, ch) in chars.chars().enumerate() {
@@ -533,6 +542,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('가')),
@@ -541,6 +551,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(2, 2), SeqItem::Char('나')),
@@ -630,6 +641,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('a')),
@@ -676,6 +688,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 1), SeqItem::Char('a')),
@@ -784,6 +797,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 2), SeqItem::Char('a')),

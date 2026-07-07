@@ -1,0 +1,5 @@
+error: duplicate retired tag 4
+ --> tests/compile_fail/retired_duplicate.rs:6:11
+  |
+6 | #[durable(retired(4, 4))]
+  |           ^^^^^^^^^^^^^

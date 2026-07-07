@@ -1,9 +1,10 @@
 import * as Sentry from '@sentry/node';
 import dayjs from 'dayjs';
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, lte, max, sql } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import {
   db,
+  DocumentBundles,
   DocumentChangesetsDeadLetter,
   DocumentCharacterCountChanges,
   DocumentHeadContributors,
@@ -15,7 +16,7 @@ import {
 } from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
-import { collectedKey, durableKey, packLengthPrefixed, readStreamBatch, trimStream } from '#/utils/changeset.ts';
+import { collectedKey, getMaxBundleSeq, loadBundleStream, packLengthPrefixed, readStreamBatch, trimStream } from '#/utils/changeset.ts';
 import { calculateBlobSizeFromAssetIds, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
 import { enqueueJob } from '../index.ts';
@@ -23,8 +24,23 @@ import { defineCron, defineJob } from '../types.ts';
 import type { Dayjs } from 'dayjs';
 
 const HEAD_BUCKET_SECONDS = 10 * 60;
+const CONSOLIDATE_THRESHOLD = 64;
 
 const headBucket = (ts: Dayjs): Dayjs => dayjs.unix(Math.floor(ts.unix() / HEAD_BUCKET_SECONDS) * HEAD_BUCKET_SECONDS);
+
+class StaleCollectError extends Error {}
+class StaleConsolidationError extends Error {}
+
+const concatPayloads = (payloads: Uint8Array[]): Uint8Array => {
+  const total = payloads.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of payloads) {
+    out.set(p, off);
+    off += p.length;
+  }
+  return out;
+};
 
 export const DocumentChangesetsCollectJob = defineJob('document:changesets:collect', async (documentId: string) => {
   const lock = new Lock(`document:changesets:${documentId}`);
@@ -36,6 +52,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 
   let updated = false;
   let persistedHeads: Uint8Array | null = null;
+  let stale = false;
+  let shouldConsolidate = false;
 
   try {
     const collected = await redis.get(collectedKey(documentId));
@@ -44,11 +62,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       return;
     }
 
-    const { graph: existing } = await db
-      .select({ graph: DocumentStates.graph })
-      .from(DocumentStates)
-      .where(eq(DocumentStates.documentId, documentId))
-      .then(firstOrThrow);
+    const observedMaxSeq = await getMaxBundleSeq(documentId);
+    const existing = await loadBundleStream(documentId);
 
     const failed: { userId: string; deviceId: string; payload: Uint8Array; error: string }[] = [];
     const perUserDelta = new Map<string, number>();
@@ -63,21 +78,20 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     let mergedChanged = false;
     let prevCharacterCount = fold.base_char_count;
     for (const [i, entry] of entries.entries()) {
-      const applied = fold.applied[i];
+      const status = fold.statuses[i];
       const charCount = fold.char_counts[i];
-      if (applied) {
+      if (status === 'applied') {
         perUserDelta.set(entry.userId, (perUserDelta.get(entry.userId) ?? 0) + (charCount - prevCharacterCount));
         prevCharacterCount = charCount;
         contributorIds.add(entry.userId);
         mergedChanged = true;
-      } else {
+      } else if (status === 'failed') {
         failed.push({ userId: entry.userId, deviceId: entry.deviceId, payload: entry.changeset, error: 'changeset apply failed' });
       }
     }
 
     const result = mergedChanged
       ? {
-          graph: fold.graph,
           plain: fold.plain,
           text: fold.text,
           characterCount: fold.char_counts.at(-1) ?? fold.base_char_count,
@@ -104,10 +118,32 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       await db.transaction(async (tx) => {
         lock.signal.throwIfAborted();
 
+        const maxSeq = await tx
+          .select({ max: max(DocumentBundles.seq) })
+          .from(DocumentBundles)
+          .where(eq(DocumentBundles.documentId, documentId))
+          .then((rows) => rows[0]?.max ?? 0);
+        if (maxSeq !== observedMaxSeq) {
+          throw new StaleCollectError();
+        }
+
         if (result) {
+          let seq = maxSeq;
+          for (const [i, entry] of entries.entries()) {
+            if (fold.statuses[i] !== 'applied') {
+              continue;
+            }
+            seq += 1;
+            await tx.insert(DocumentBundles).values({
+              documentId,
+              seq,
+              payload: entry.changeset,
+            });
+          }
+
           await tx
             .update(DocumentStates)
-            .set({ graph: result.graph, json: result.plain, text: result.text, characterCount, blobSize, updatedAt })
+            .set({ json: result.plain, text: result.text, characterCount, blobSize, heads: result.heads, lastBundleSeq: seq, updatedAt })
             .where(eq(DocumentStates.documentId, documentId));
           await tx.update(Documents).set({ updatedAt }).where(eq(Documents.id, documentId));
           updated = true;
@@ -179,20 +215,37 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       }
     }
 
-    // Advance the collected cursor past this batch (applied + dead-lettered),
-    // record the durable snapshot heads, then trim history behind the cursor.
+    // Advance the collected cursor past this batch (applied + duplicate + dead-lettered),
+    // then trim history behind the cursor.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- entries is non-empty (guarded above)
     const lastSeq = entries.at(-1)!.seq;
     await redis.set(collectedKey(documentId), lastSeq);
-    if (result) {
-      await redis.set(durableKey(documentId), result.heads.toBase64());
-    }
     await trimStream(documentId, lastSeq);
+
+    const bundleCount = await db.$count(DocumentBundles, eq(DocumentBundles.documentId, documentId));
+    shouldConsolidate = bundleCount > CONSOLIDATE_THRESHOLD;
   } catch (err) {
-    Sentry.captureException(err);
-    throw err;
+    if (err instanceof StaleCollectError) {
+      stale = true;
+    } else {
+      Sentry.captureException(err);
+      throw err;
+    }
   } finally {
     await lock.release();
+    // Re-enqueue only after the lock is released, or the fresh job's tryAcquire
+    // races the still-held lock and is lost (see lock.ts:32).
+    if (stale) {
+      await enqueueJob('document:changesets:collect', documentId);
+    }
+  }
+
+  if (shouldConsolidate) {
+    await enqueueJob('document:changesets:consolidate', documentId, { deduplication: { id: documentId, ttl: 60 * 1000 } });
+  }
+
+  if (stale) {
+    return;
   }
 
   const collectedNow = await redis.get(collectedKey(documentId));
@@ -228,6 +281,74 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     await enqueueJob('document:preview:invalidate', documentId, {
       deduplication: { id: documentId, ttl: 60 * 60 * 1000 },
     });
+  }
+});
+
+export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:consolidate', async (documentId: string) => {
+  const lock = new Lock(`document:changesets:${documentId}`);
+  const acquired = await lock.tryAcquire();
+  if (!acquired) return;
+
+  try {
+    const rows = await db
+      .select({ seq: DocumentBundles.seq, kind: DocumentBundles.kind, payload: DocumentBundles.payload })
+      .from(DocumentBundles)
+      .where(eq(DocumentBundles.documentId, documentId))
+      .orderBy(asc(DocumentBundles.seq));
+    if (rows.length < 2) return;
+
+    if (rows.some((r, i) => i > 0 && r.kind === 'consolidated')) {
+      Sentry.captureMessage(`document_bundles invariant violation: non-prefix consolidated row documentId=${documentId}`);
+      return;
+    }
+
+    const stream = concatPayloads(rows.map((r) => r.payload));
+    const result = await wasm.use((host) => host.consolidate(stream));
+    if (!result.payload || result.consumed < 2) return;
+    const consolidatedPayload = result.payload;
+
+    let acc = 0;
+    let lastMergedIdx = -1;
+    for (const [i, row] of rows.entries()) {
+      acc += row.payload.length;
+      if (acc === result.consumed_bytes) {
+        lastMergedIdx = i;
+        break;
+      }
+      if (acc > result.consumed_bytes) break;
+    }
+    if (lastMergedIdx < 0) {
+      Sentry.captureMessage(`consolidation boundary mid-row (multi-envelope row?) documentId=${documentId}`);
+      return;
+    }
+
+    const lastMergedSeq = rows[lastMergedIdx].seq;
+    await db.transaction(async (tx) => {
+      lock.signal.throwIfAborted();
+
+      const prefix = await tx
+        .select({ count: count(), max: max(DocumentBundles.seq) })
+        .from(DocumentBundles)
+        .where(and(eq(DocumentBundles.documentId, documentId), lte(DocumentBundles.seq, lastMergedSeq)))
+        .then(firstOrThrow);
+      if (prefix.count !== lastMergedIdx + 1 || prefix.max !== lastMergedSeq) {
+        throw new StaleConsolidationError();
+      }
+
+      await tx.delete(DocumentBundles).where(and(eq(DocumentBundles.documentId, documentId), lte(DocumentBundles.seq, lastMergedSeq)));
+      await tx.insert(DocumentBundles).values({
+        documentId,
+        seq: lastMergedSeq,
+        kind: 'consolidated',
+        payload: consolidatedPayload,
+      });
+    });
+  } catch (err) {
+    if (err instanceof StaleConsolidationError) return;
+    Sentry.captureException(err);
+    throw err;
+  } finally {
+    await lock.release();
   }
 });
 

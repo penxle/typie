@@ -265,23 +265,4 @@ mod tests {
         let parsed: Dot = serde_json::from_str(&json).unwrap();
         assert_eq!(original, parsed);
     }
-
-    #[test]
-    fn wire_roundtrip() {
-        use crate::wire::{CollectCtx, DecCtx, EncCtx, Wire};
-        let original = Dot::new(42, 1234);
-        let mut cc = CollectCtx::new();
-        original.collect(&mut cc);
-        let (table, baselines) = cc.finalize();
-        let ec = EncCtx::from_table(&table, baselines.clone());
-        let dc = DecCtx {
-            actor_table: table,
-            baselines,
-        };
-        let mut buf = Vec::new();
-        original.encode(&ec, &mut buf).unwrap();
-        let mut slice = &buf[..];
-        let decoded = Dot::decode(&dc, &mut slice).unwrap();
-        assert_eq!(original, decoded);
-    }
 }

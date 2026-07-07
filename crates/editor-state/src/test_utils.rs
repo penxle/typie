@@ -57,7 +57,8 @@ fn emit_node(
         SeqClass::Block => {
             // The root is implicit (Dot::ROOT): no Block op in the seq, children
             // parent to Dot::ROOT, and its overlays target Dot::ROOT.
-            let dot = if matches!(entry.node, PlainNode::Root(_)) {
+            let is_root = matches!(entry.node, PlainNode::Root(_));
+            let dot = if is_root {
                 Dot::ROOT
             } else {
                 let d = graph
@@ -66,6 +67,7 @@ fn emit_node(
                         item: SeqItem::Block {
                             node_type,
                             parents: parents.to_vec(),
+                            attrs: entry.node.to_attrs(),
                         },
                     }))
                     .expect("local seq block insert never conflicts")
@@ -97,10 +99,12 @@ fn emit_node(
                     }))
                     .expect("local node carry never conflicts");
             }
-            for attr in entry.node.to_attrs() {
-                graph
-                    .add_mut(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))
-                    .expect("local node attr never conflicts");
+            if is_root {
+                for attr in entry.node.to_attrs() {
+                    graph
+                        .add_mut(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))
+                        .expect("local node attr never conflicts");
+                }
             }
 
             let mut child_parents = parents.to_vec();
@@ -296,4 +300,76 @@ macro_rules! assert_doc_eq {
     ($actual:expr, $expected:expr) => {
         $crate::test_utils::assert_doc_eq_impl(&$actual, &$expected)
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use editor_model::{
+        CalloutVariant, EditOp, Node, NodeAttrOp, NodeType, PlainCalloutNode, PlainDoc, PlainNode,
+        PlainNodeEntry, PlainParagraphNode, PlainRootNode,
+    };
+
+    use super::build_state_from_plain_with_actor;
+
+    fn block_entry(children: Vec<PlainNodeEntry>, node: PlainNode) -> PlainNodeEntry {
+        PlainNodeEntry {
+            node,
+            modifiers: BTreeMap::new(),
+            carry: Vec::new(),
+            children,
+        }
+    }
+
+    #[test]
+    fn non_root_block_init_is_single_op() {
+        let callout = block_entry(
+            vec![block_entry(
+                vec![],
+                PlainNode::Paragraph(PlainParagraphNode {}),
+            )],
+            PlainNode::Callout(PlainCalloutNode {
+                variant: CalloutVariant::Warning,
+            }),
+        );
+        let root = block_entry(vec![callout], PlainNode::Root(PlainRootNode::default()));
+        let template = PlainDoc { root };
+
+        let (state, _handles) = build_state_from_plain_with_actor(template, 1);
+        let callout_dot = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Callout)
+            .expect("callout present")
+            .dot()
+            .unwrap();
+
+        let attr_ops = state
+            .graph()
+            .ordered_ops()
+            .expect("storage order")
+            .iter()
+            .filter(|op| {
+                matches!(&op.payload, EditOp::NodeAttr(NodeAttrOp { target, .. }) if *target == callout_dot)
+            })
+            .count();
+        assert_eq!(
+            attr_ops, 0,
+            "비-Root 블록 init은 단일 op — target 한정 NodeAttrOp 0"
+        );
+
+        let node = state
+            .projected
+            .projected()
+            .node_attrs
+            .get(&callout_dot)
+            .expect("init attrs가 시딩돼야 한다");
+        let Node::Callout(c) = node else {
+            panic!("callout node expected");
+        };
+        assert_eq!(*c.variant.get(), CalloutVariant::Warning);
+    }
 }

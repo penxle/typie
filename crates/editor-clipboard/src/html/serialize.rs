@@ -91,6 +91,7 @@ fn serialize_node(fragment: &Fragment, out: &mut String) {
                 serialize_node(child, out);
             }
         }
+        PlainNode::Unknown => {}
     }
 }
 

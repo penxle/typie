@@ -1,0 +1,6 @@
+error: closed enum variants must be unit
+ --> tests/compile_fail/closed_with_fields.rs:6:5
+  |
+6 | /     #[durable(n(0))]
+7 | |     A { x: u64 },
+  | |________________^

@@ -2,27 +2,11 @@ use crate::Dot;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-#[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ListOp<P = char> {
-    #[wire(n(0))]
-    Ins {
-        #[wire(n(0))]
-        pos: usize,
-        #[wire(n(1))]
-        item: P,
-    },
-    #[wire(n(1))]
-    Del {
-        #[wire(n(0))]
-        pos: usize,
-        #[wire(n(1))]
-        len: usize,
-    },
-    #[wire(n(2))]
-    Undel {
-        #[wire(n(0))]
-        del: Dot,
-    },
+    Ins { pos: usize, item: P },
+    Del { pos: usize, len: usize },
+    Undel { del: Dot },
 }
 
 #[derive(Clone, Debug)]

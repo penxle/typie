@@ -1,0 +1,5 @@
+error: frozen struct fields cannot be defaulted
+ --> tests/compile_fail/frozen_field_defaulted.rs:5:12
+  |
+5 | pub struct S {
+  |            ^

@@ -75,6 +75,7 @@ strum = { version = "0.28", features = ["derive"] }
 syn = { version = "2", features = ["full", "extra-traits"] }
 thiserror = "2"
 toml = "1.1"
+trybuild = "1"
 tsify = { version = "0.5", features = ["js"] }
 unicode-segmentation = "1"
 uniffi = "0.31"

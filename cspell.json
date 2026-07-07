@@ -10,6 +10,7 @@
   "useGitignore": true,
   "ignorePaths": [
     "*.rs",
+    "*.jsonl",
     "*.toml",
     ".git",
     ".gitignore",

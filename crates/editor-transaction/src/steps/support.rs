@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use editor_crdt::sequence::Bias as SeqBias;
 use editor_crdt::{Dot, ListOp};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeAttrOp,
-    NodeType, PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree, classify,
+    Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeType,
+    PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree, classify,
 };
 use editor_state::{BatchedState, ProjectedState};
 
@@ -252,6 +252,7 @@ pub(crate) fn remove_child_slots_steps(
     let mut steps = Vec::new();
     let mut text_offset = None;
     let mut text = String::new();
+    let mut opaque_dots: Vec<Dot> = Vec::new();
 
     for (idx, child) in children.iter().enumerate().skip(from).take(to - from) {
         match child {
@@ -259,17 +260,28 @@ pub(crate) fn remove_child_slots_steps(
                 item: SeqItem::Char(ch),
                 ..
             } => {
+                flush_opaque_step(&mut steps, &mut opaque_dots);
                 if text_offset.is_none() {
                     text_offset = Some(idx);
                 }
                 text.push(*ch);
             }
+            // A slot that carries lossy/unrepresentable content cannot be
+            // captured into a `Subtree` (no lossless Plain form, and
+            // reinserting one via `emit_subtree` would synthesize a new
+            // carrier dot) — route it to a position-based delete-only step
+            // instead (`Step::DeleteOpaque`, inverse = dot-based `Undel`).
+            Child::Leaf { id, item } if item.is_unknown_bearing() => {
+                flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+                opaque_dots.push(*id);
+            }
             Child::Leaf { id, item } => {
                 flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+                flush_opaque_step(&mut steps, &mut opaque_dots);
                 let atom = match item {
                     SeqItem::Atom(atom) => atom,
                     SeqItem::BlockAtom { leaf, .. } => leaf,
-                    SeqItem::Char(_) | SeqItem::Block { .. } => {
+                    SeqItem::Char(_) | SeqItem::Block { .. } | SeqItem::Unknown { .. } => {
                         return Err(StepError::InvalidChildSlot { parent, index: idx });
                     }
                 };
@@ -279,8 +291,13 @@ pub(crate) fn remove_child_slots_steps(
                     subtree: atom_leaf_subtree(ps, *id, atom.clone()),
                 });
             }
+            Child::Block(block) if block_node_type(ps, *block) == Some(NodeType::Unknown) => {
+                flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+                opaque_dots.extend(subtree_dots(ps, *block).unwrap_or_default());
+            }
             Child::Block(block) => {
                 flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+                flush_opaque_step(&mut steps, &mut opaque_dots);
                 let subtree = capture_subtree(ps, *block).ok_or(StepError::NodeNotFound(*block))?;
                 steps.push(Step::RemoveSubtree {
                     parent,
@@ -291,8 +308,18 @@ pub(crate) fn remove_child_slots_steps(
         }
     }
     flush_remove_text_step(&mut steps, parent, &mut text_offset, &mut text);
+    flush_opaque_step(&mut steps, &mut opaque_dots);
     steps.reverse();
     Ok(steps)
+}
+
+fn flush_opaque_step(steps: &mut Vec<Step>, dots: &mut Vec<Dot>) {
+    if !dots.is_empty() {
+        steps.push(Step::DeleteOpaque {
+            dots: std::mem::take(dots),
+            emitted: Vec::new(),
+        });
+    }
 }
 
 fn flush_remove_text_step(
@@ -500,15 +527,22 @@ pub(crate) fn emit_subtree(
     parents: &[Dot],
     seq_pos: &mut usize,
 ) -> Result<Option<Dot>, StepError> {
+    if subtree.node == PlainNode::Unknown {
+        return Err(StepError::UnknownSubtree);
+    }
     let node_type = subtree.node.as_type();
     match classify(node_type) {
         SeqClass::Block => {
+            if node_type == NodeType::Root {
+                return Err(StepError::RootSubtree);
+            }
             let dot = batched
                 .apply(EditOp::Seq(ListOp::Ins {
                     pos: *seq_pos,
                     item: SeqItem::Block {
                         node_type,
                         parents: parents.to_vec(),
+                        attrs: subtree.node.to_attrs(),
                     },
                 }))?
                 .id;
@@ -524,9 +558,6 @@ pub(crate) fn emit_subtree(
             }
             for (_ty, m) in carry_by_type {
                 batched.apply(node_carry_set(dot, m))?;
-            }
-            for attr in subtree.node.to_attrs() {
-                batched.apply(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))?;
             }
             let mut child_parents = parents.to_vec();
             child_parents.push(dot);

@@ -1,0 +1,5 @@
+error: n(...) takes exactly one tag
+ --> tests/compile_fail/n_surplus.rs:7:15
+  |
+7 |     #[durable(n(0, 1))]
+  |               ^^^^^^^

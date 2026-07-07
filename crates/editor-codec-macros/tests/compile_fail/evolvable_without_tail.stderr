@@ -1,0 +1,5 @@
+error: evolvable struct requires an UnknownTail as its last field
+ --> tests/compile_fail/evolvable_without_tail.rs:5:12
+  |
+5 | pub struct S {
+  |            ^

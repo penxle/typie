@@ -29,9 +29,10 @@ pub(crate) fn decode_length_prefixed(data: &[u8]) -> Result<Vec<Vec<u8>>, FfiErr
 
 pub(crate) fn state_from_changesets(changesets: Vec<u8>) -> EditorResult<editor_state::State> {
     let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-        editor_crdt::wire::decode(&changesets[..])
-            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
-    Ok(editor_state::State::from_changesets(css, None)?)
+        editor_codec::decode_changeset_stream(&changesets[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            .into_graph_input();
+    build_state_tolerant(css)
 }
 
 pub(crate) fn state_from_changesets_with_pending(
@@ -39,36 +40,41 @@ pub(crate) fn state_from_changesets_with_pending(
     pending: Vec<Vec<u8>>,
 ) -> EditorResult<editor_state::State> {
     let mut all: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-        editor_crdt::wire::decode(&server[..])
-            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        editor_codec::decode_changeset_stream(&server[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            .into_graph_input();
     for blob in pending {
         if blob.is_empty() {
             continue;
         }
         let mut css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_crdt::wire::decode(&blob[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            editor_codec::decode_changeset_stream(&blob[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
         all.append(&mut css);
     }
-    if all.is_empty() {
+    build_state_tolerant(all)
+}
+
+pub(crate) fn build_state_tolerant(
+    css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
+) -> EditorResult<editor_state::State> {
+    if css.is_empty() {
         return Ok(editor_state::State::new(
             editor_state::ProjectedState::empty(),
             None,
         ));
     }
     let (graph, dropped) =
-        editor_crdt::OpGraph::<editor_model::EditOp>::new().receive_changesets_ordered(all);
+        editor_crdt::OpGraph::<editor_model::EditOp>::new().receive_changesets_ordered(css);
     if !dropped.is_empty() {
-        // Dropped changesets are unrecoverable data loss for the client that
-        // persisted them — never silent. The ids give the IndexedDB records to
-        // inspect when a report comes in.
         let ids: Vec<String> = dropped
             .iter()
             .filter_map(|cs| cs.ops.first())
             .map(|op| format!("{}:{}", op.id.actor, op.id.clock))
             .collect();
         log::warn!(
-            "load with pending dropped {} changeset(s) as unappliable (orphaned or partially duplicated): {}",
+            "state build dropped {} causally-not-ready changeset(s): {}",
             dropped.len(),
             ids.join(", ")
         );

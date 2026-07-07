@@ -1,0 +1,5 @@
+error: UnknownTail field cannot have durable attributes
+ --> tests/compile_fail/tail_with_default.rs:6:12
+  |
+6 | pub struct S {
+  |            ^

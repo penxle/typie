@@ -1,0 +1,5 @@
+error: duplicate durable grade
+ --> tests/compile_fail/duplicate_grade.rs:6:11
+  |
+6 | #[durable(frozen)]
+  |           ^^^^^^

@@ -8,9 +8,8 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
     let attr_ident = &input.attr_ident;
     let plain_ident = &input.plain_ident;
 
-    let attr_variants = input.fields.iter().enumerate().map(|(i, s)| {
+    let attr_variants = input.fields.iter().map(|s| {
         let v = &s.variant;
-        let i_u8 = i as u8;
         let payload = match &s.kind {
             FieldKind::LwwReg { inner } => quote! { #inner },
             FieldKind::OrMap { key, value } => {
@@ -18,7 +17,7 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
             }
             FieldKind::OrSet { elem } => quote! { ::editor_crdt::OrSetOp<#elem> },
         };
-        quote! { #[wire(n(#i_u8))] #v(#[wire(n(0))] #payload) }
+        quote! { #v(#payload) }
     });
 
     let plain_fields = input.fields.iter().map(|s| {
@@ -141,7 +140,7 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
 
     quote! {
         #[::editor_macros::ffi]
-        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize, ::editor_macros::Wire)]
+        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
         #[serde(tag = "type", rename_all = "snake_case")]
         pub enum #attr_ident {
             #(#attr_variants),*

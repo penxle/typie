@@ -383,10 +383,7 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
                     state.node_attrs().attrs_of(*target, node_type.into_node())
                 });
             let prior_attrs = prior_node.to_plain().to_attrs();
-            let target_disc = std::mem::discriminant(attr);
-            let prior_attr = prior_attrs
-                .into_iter()
-                .find(|a| std::mem::discriminant(a) == target_disc)?;
+            let prior_attr = prior_attrs.into_iter().find(|a| a.same_field(attr))?;
             Some(PriorValue::NodeAttr(prior_attr))
         }
         EditOp::Span(SpanOp::AddSpan {
@@ -518,6 +515,7 @@ fn node_type_of_attr(attr: &NodeAttr) -> NodeType {
         NodeAttr::HorizontalRule { .. } => NodeType::HorizontalRule,
         NodeAttr::PageBreak { .. } => NodeType::PageBreak,
         NodeAttr::Tab { .. } => NodeType::Tab,
+        NodeAttr::Unknown { .. } => unreachable!(),
     }
 }
 
@@ -617,6 +615,7 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
             })],
             _ => Vec::new(),
         },
+        EditOp::Unknown { .. } => Vec::new(),
     }
 }
 
@@ -629,7 +628,8 @@ mod tests {
     use editor_crdt::ListOp;
     use editor_model::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, EditOp, Modifier, ModifierAttrOp,
-        ModifierType, NodeAttr, NodeAttrOp, NodeType, SeqItem, SpanOp,
+        ModifierType, Node, NodeAttr, NodeAttrOp, NodeType, SeqItem, SpanOp, TableBorderStyle,
+        TableNodeAttr,
     };
 
     use super::{
@@ -648,7 +648,11 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<editor_crdt::Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block { node_type, parents },
+            item: SeqItem::Block {
+                node_type,
+                parents,
+                attrs: vec![],
+            },
         })
     }
 
@@ -1479,6 +1483,123 @@ mod tests {
         );
     }
 
+    // init attrs만 있고 명시 NodeAttrOp prior가 없는 블록의 attr 변경을 undo하면
+    // 타입 기본값(Info)이 아니라 init baseline(Warning)으로 복구되어야 한다.
+    #[test]
+    fn node_attr_undo_restores_init_baseline() {
+        let mut state = ProjectedState::empty();
+        let root = state.view().root().unwrap().dot().unwrap();
+
+        let callout = state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![root],
+                    attrs: vec![NodeAttr::Callout {
+                        attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+                    }],
+                },
+            }))
+            .unwrap()
+            .id;
+        state
+            .apply(seq_block(2, NodeType::Paragraph, vec![root, callout]))
+            .unwrap();
+
+        let ro = record_op(
+            &mut state,
+            EditOp::NodeAttr(NodeAttrOp {
+                target: callout,
+                attr: NodeAttr::Callout {
+                    attr: CalloutNodeAttr::Variant(CalloutVariant::Danger),
+                },
+            }),
+        );
+
+        let get_variant = |s: &ProjectedState| {
+            let node = s
+                .projected()
+                .node_attrs
+                .get(&callout)
+                .expect("seeded entry");
+            let Node::Callout(c) = node else {
+                panic!("callout node expected");
+            };
+            *c.variant.get()
+        };
+
+        assert_eq!(get_variant(&state), CalloutVariant::Danger);
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            get_variant(&state),
+            CalloutVariant::Warning,
+            "undo가 init baseline으로 복구해야 한다 — 타입 기본값(Info) 아님"
+        );
+    }
+
+    #[test]
+    fn node_attr_undo_targets_correct_field_on_multi_attr_node() {
+        let mut state = ProjectedState::empty();
+        let root = state.view().root().unwrap().dot().unwrap();
+
+        let table = state
+            .apply(seq_block(1, NodeType::Table, vec![root]))
+            .unwrap()
+            .id;
+
+        state
+            .apply(EditOp::NodeAttr(NodeAttrOp {
+                target: table,
+                attr: NodeAttr::Table {
+                    attr: TableNodeAttr::BorderStyle(TableBorderStyle::Dashed),
+                },
+            }))
+            .unwrap();
+        state
+            .apply(EditOp::NodeAttr(NodeAttrOp {
+                target: table,
+                attr: NodeAttr::Table {
+                    attr: TableNodeAttr::Proportion(60),
+                },
+            }))
+            .unwrap();
+
+        let ro = record_op(
+            &mut state,
+            EditOp::NodeAttr(NodeAttrOp {
+                target: table,
+                attr: NodeAttr::Table {
+                    attr: TableNodeAttr::Proportion(80),
+                },
+            }),
+        );
+
+        let read = |s: &ProjectedState| {
+            let node = s.node_attrs().attrs_of(table, NodeType::Table.into_node());
+            let Node::Table(t) = node else {
+                panic!("table node expected")
+            };
+            (*t.border_style.get(), *t.proportion.get())
+        };
+
+        assert_eq!(read(&state), (TableBorderStyle::Dashed, 80));
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            read(&state),
+            (TableBorderStyle::Dashed, 60),
+            "proportion 변경의 undo는 proportion만 60으로 복구 — border_style을 건드리면 버그 재발"
+        );
+    }
+
     #[test]
     fn coalescing_within_interval_merges_into_one_undo_unit() {
         let mut state = ProjectedState::empty();
@@ -1632,6 +1753,7 @@ mod tests {
                 item: SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             })
         }
@@ -1723,6 +1845,7 @@ mod tests {
                 item: SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             })
         }
@@ -1938,6 +2061,7 @@ mod concurrency_proptest {
                 item: SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             }))
             .unwrap();

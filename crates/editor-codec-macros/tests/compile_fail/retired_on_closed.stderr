@@ -1,0 +1,5 @@
+error: retired is only allowed on open enums
+ --> tests/compile_fail/retired_on_closed.rs:6:10
+  |
+6 | pub enum E {
+  |          ^

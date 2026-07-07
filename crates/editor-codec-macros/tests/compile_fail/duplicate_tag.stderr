@@ -1,0 +1,6 @@
+error: duplicate tag 1
+  --> tests/compile_fail/duplicate_tag.rs:9:5
+   |
+ 9 | /     #[durable(n(1))]
+10 | |     B,
+   | |_____^

@@ -241,4 +241,67 @@ mod tests {
 
         round_trip(&PlainDoc { root });
     }
+
+    /// plain doc -> build -> graph.changesets -> encode_changesets(from_local_ops) ->
+    /// decode(.into_graph_input()) -> from_changesets -> 투영 -> to_plain == 원본 plain.
+    /// 기존 `round_trip`(plain -> State -> to_plain -> State)과 달리, 코덱의 wire 경계
+    /// (encode_changesets/decode_changesets)를 실제로 관통시켜 의미 보존을 증명한다.
+    #[test]
+    fn plain_doc_survives_codec_round_trip() {
+        let mut text_entry = entry(
+            vec![],
+            PlainNode::Text(PlainTextNode {
+                text: "Hi".to_string(),
+            }),
+        );
+        text_entry
+            .modifiers
+            .insert(ModifierType::Bold, Modifier::Bold);
+        let hr = entry(vec![], AtomLeaf::HardBreak.into_node().to_plain());
+
+        let mut para_entry = entry(
+            vec![text_entry, hr],
+            PlainNode::Paragraph(PlainParagraphNode {}),
+        );
+        para_entry
+            .modifiers
+            .insert(ModifierType::FontSize, Modifier::FontSize { value: 1600 });
+        para_entry.carry = vec![Modifier::Bold];
+
+        let bq_text = entry(
+            vec![],
+            PlainNode::Text(PlainTextNode {
+                text: "Yo".to_string(),
+            }),
+        );
+        let bq_para = entry(vec![bq_text], PlainNode::Paragraph(PlainParagraphNode {}));
+        let bq = entry(
+            vec![bq_para],
+            PlainNode::Blockquote(PlainBlockquoteNode::default()),
+        );
+
+        let root_entry = entry(
+            vec![para_entry, bq],
+            PlainNode::Root(PlainRootNode::default()),
+        );
+        let plain = PlainDoc { root: root_entry };
+
+        let s1 = State::from_plain(&plain).expect("load template");
+        let css = s1.graph().changesets_as_vec();
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(css),
+        )
+        .unwrap();
+        let decoded = editor_codec::decode_changesets(&bytes)
+            .unwrap()
+            .into_graph_input();
+        let s2 = State::from_changesets(decoded, None).expect("load round-trip");
+
+        assert_eq!(s1.to_plain(), s2.to_plain());
+        assert_eq!(
+            s1.projected.projected(),
+            s2.projected.projected(),
+            "코덱 왕복 전후 ProjectedDoc 동등(atom 없는 픽스처 — 장부 재시딩 이슈 없음)"
+        );
+    }
 }

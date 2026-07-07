@@ -1,0 +1,6 @@
+error: tag 4 is retired and must not be reused
+ --> tests/compile_fail/retired_reuse.rs:8:5
+  |
+8 | /     #[durable(n(4))]
+9 | |     A,
+  | |_____^

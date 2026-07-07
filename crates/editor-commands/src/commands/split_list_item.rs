@@ -52,6 +52,15 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     // drops identity, and a list_item rejects a second paragraph), so capture
     // visible content plus leaf-owned formatting and re-create them in the new
     // item's paragraph.
+    let has_uncapturable = paragraph
+        .children()
+        .skip(split_index)
+        .any(|c| matches!(c, ChildView::Leaf(l) if l.item().is_unknown_bearing()));
+    if has_uncapturable {
+        return Err(CommandError::Corrupted(
+            "list item split tail contains an unsupported node".into(),
+        ));
+    }
     let tail = capture_charlike_slots(&tr.state().projected, &paragraph, split_index, para_len)?;
     let tail_len = para_len - split_index;
 
@@ -179,6 +188,61 @@ mod tests {
             selection: (p1, 0)
         };
         transact_fail!(initial, |tr| split_list_item(&mut tr));
+    }
+
+    /// The tail is captured by value (Char/Atom) and re-created in the new
+    /// item's paragraph — an unknown-bearing leaf cannot be captured losslessly,
+    /// so the split must reject rather than silently drop it, leaving the
+    /// document untouched (safe to retry).
+    #[test]
+    fn split_rejects_unknown_leaf_in_tail_leaving_doc_unchanged() {
+        use editor_crdt::ListOp;
+        use editor_model::{ChildView, EditOp, SeqItem};
+
+        let (base, p1) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("ab") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let a_dot = {
+            let view = base.view();
+            match view.node(p1).unwrap().child_at(0).unwrap() {
+                ChildView::Leaf(l) => l.dot(),
+                ChildView::Block(_) => panic!("expected char leaf"),
+            }
+        };
+        let pos = base.projected.seq_flat_pos(a_dot).unwrap() + 1;
+        let mut initial = base;
+        initial
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Unknown {
+                    tag: 1,
+                    bytes: vec![],
+                },
+            }))
+            .unwrap();
+        let before = initial.clone();
+
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        let result = split_list_item(&mut tr);
+        assert!(
+            result.is_err(),
+            "split must reject a tail containing an unsupported (unknown) node"
+        );
+        let (after, records, ..) = tr.commit();
+        assert!(
+            records.is_empty(),
+            "a rejected split must not have applied any steps"
+        );
+        assert_state_eq!(&after, &before);
     }
 
     #[test]

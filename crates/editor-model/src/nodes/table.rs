@@ -16,18 +16,12 @@ fn default_proportion() -> u32 {
 }
 
 #[ffi]
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, editor_macros::Wire,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TableBorderStyle {
     #[default]
-    #[wire(n(0))]
     Solid,
-    #[wire(n(1))]
     Dashed,
-    #[wire(n(2))]
     Dotted,
-    #[wire(n(3))]
     None,
 }

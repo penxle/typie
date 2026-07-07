@@ -1,0 +1,5 @@
+error: retired is only allowed on open enums
+ --> tests/compile_fail/retired_on_struct.rs:7:12
+  |
+7 | pub struct S {
+  |            ^

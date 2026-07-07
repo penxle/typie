@@ -26,6 +26,7 @@ import {
   db,
   decodeDbId,
   DocumentArchivedNodes,
+  DocumentBundles,
   DocumentCharacterCountChanges,
   DocumentContents,
   DocumentHeadContributors,
@@ -55,7 +56,7 @@ import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { appendBundle, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
+import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
 import { compressZstd, decompressZstd } from '#/utils/compression.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, derivePlainRootFromPreset, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
@@ -669,13 +670,13 @@ DocumentView.implement({
         }
 
         const state = await db
-          .select({ graph: DocumentStates.graph })
+          .select({ documentId: DocumentStates.documentId })
           .from(DocumentStates)
           .where(eq(DocumentStates.documentId, self.id))
           .then(first);
 
         if (state) {
-          const graph = await readMergedGraph(self.id, state.graph);
+          const graph = await readMergedGraph(self.id);
           return {
             __typename: 'DocumentViewBodyAvailableV2' as const,
             graph,
@@ -972,18 +973,21 @@ builder.mutationFields((t) => ({
           await wasmFfi.use(async (host) => {
             const plain = host.default_doc_with_preset(root, modifiers);
             const graph = host.to_graph(plain);
+            const heads = host.heads(graph);
             const text = host.extract_text(plain);
             const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(plain);
             const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
             const characterCount = countCharacters(text);
 
+            await tx.insert(DocumentBundles).values({ documentId: document.id, seq: 1, payload: graph });
             await tx.insert(DocumentStates).values({
               documentId: document.id,
-              graph,
               json: plain,
               text,
               characterCount,
               blobSize,
+              heads,
+              lastBundleSeq: 1,
             });
           });
         }
@@ -1509,16 +1513,12 @@ builder.mutationFields((t) => ({
 
       const seq = await appendBundle(input.documentId, revert, ctx.session.userId, ctx.session.deviceId);
 
-      const persistedRow = await db
-        .select({ graph: DocumentStates.graph })
-        .from(DocumentStates)
-        .where(eq(DocumentStates.documentId, input.documentId))
-        .then(firstOrThrow);
-      const mergedGraph = await readMergedGraph(input.documentId, persistedRow.graph);
-      const { heads, durableHeads } = await wasmFfi.use((host) => ({
-        heads: host.heads(mergedGraph),
-        durableHeads: host.heads(persistedRow.graph),
-      }));
+      const mergedGraph = await readMergedGraph(input.documentId);
+      const heads = await wasmFfi.use((host) => host.heads(mergedGraph));
+      // No wasm recompute: the durable frontier is whatever collect has folded
+      // into `document_states.heads` so far — the revert bundle itself only
+      // affects it once collect processes this push, same as any other push.
+      const durableHeads = (await getDurableHeads(input.documentId)) ?? new Uint8Array();
 
       await setLiveHeads(input.documentId, heads);
 

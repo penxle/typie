@@ -5,6 +5,11 @@ use super::SchemaError;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ContentExpr {
     Empty,
+    /// Accepts any sequence of children unconditionally (never leaf, never
+    /// invalid) — used for a node whose true content model is unknowable
+    /// (the `Unknown` placeholder), so its children are never validated,
+    /// repaired, or dropped.
+    Any,
     Single(NodeType),
     Seq(Vec<ContentExpr>),
     Choice(Vec<ContentExpr>),
@@ -26,7 +31,7 @@ impl ContentExpr {
 
     fn collect_types(&self, types: &mut Vec<NodeType>) {
         match self {
-            Self::Empty => {}
+            Self::Empty | Self::Any => {}
             Self::Single(t) => types.push(*t),
             Self::Choice(choices) => {
                 for choice in choices {
@@ -55,7 +60,7 @@ impl ContentExpr {
     /// return false, so a splice involving them must not skip normalization.
     pub fn is_repeatable(&self, node_type: NodeType) -> bool {
         match self {
-            Self::Empty | Self::Single(_) => false,
+            Self::Empty | Self::Any | Self::Single(_) => false,
             Self::Optional(inner) => inner.is_repeatable(node_type),
             Self::ZeroOrMore(inner) | Self::OneOrMore(inner) => {
                 inner.matches(node_type) || inner.is_repeatable(node_type)
@@ -69,6 +74,7 @@ impl ContentExpr {
     pub fn matches(&self, node_type: NodeType) -> bool {
         match self {
             Self::Empty => false,
+            Self::Any => true,
             Self::Single(t) => *t == node_type,
             Self::Choice(choices) => choices.iter().any(|choice| choice.matches(node_type)),
             Self::ZeroOrMore(expr) => expr.matches(node_type),
@@ -80,7 +86,7 @@ impl ContentExpr {
 
     pub fn min_required(&self) -> usize {
         match self {
-            Self::Empty => 0,
+            Self::Empty | Self::Any => 0,
             Self::ZeroOrMore(_) => 0,
             Self::Optional(_) => 0,
             Self::Single(_) => 1,
@@ -92,6 +98,7 @@ impl ContentExpr {
 
     pub fn validate(&self, nodes: &[NodeType]) -> Result<(), SchemaError> {
         match self {
+            Self::Any => Ok(()),
             Self::Empty => {
                 if !nodes.is_empty() {
                     return Err(SchemaError::InvalidContent(format!(

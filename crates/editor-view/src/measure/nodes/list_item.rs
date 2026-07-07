@@ -321,6 +321,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::OrderedList,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -328,6 +329,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::ListItem,
                     parents: vec![root, ol],
+                    attrs: vec![],
                 },
             ),
             (
@@ -335,6 +337,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, ol, li],
+                    attrs: vec![],
                 },
             ),
             (ch, SeqItem::Char('x')),
@@ -343,6 +346,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -361,6 +365,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::BulletList,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -368,6 +373,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::ListItem,
                     parents: vec![root, bl],
+                    attrs: vec![],
                 },
             ),
             (
@@ -375,6 +381,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, bl, li],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 4), SeqItem::Char('x')),
@@ -383,6 +390,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -459,6 +467,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::OrderedList,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -466,6 +475,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::ListItem,
                     parents: vec![root, ol],
+                    attrs: vec![],
                 },
             ),
             (
@@ -473,6 +483,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, ol, li],
+                    attrs: vec![],
                 },
             ),
             (ch_small, SeqItem::Char('a')),
@@ -482,6 +493,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -547,6 +559,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: list_node_type,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -554,6 +567,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::ListItem,
                     parents: vec![root, list],
+                    attrs: vec![],
                 },
             ),
             (
@@ -561,6 +575,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, list, li],
+                    attrs: vec![],
                 },
             ),
             (ch, SeqItem::Char('x')),
@@ -569,6 +584,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];
@@ -704,6 +720,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::OrderedList,
                         parents: vec![root],
+                        attrs: vec![],
                     },
                 ),
                 (
@@ -711,6 +728,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::ListItem,
                         parents: vec![root, ol],
+                        attrs: vec![],
                     },
                 ),
                 (
@@ -718,6 +736,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![root, ol, li],
+                        attrs: vec![],
                     },
                 ),
                 (ch, SeqItem::Char('x')),
@@ -726,6 +745,7 @@ mod tests {
                     SeqItem::Block {
                         node_type: NodeType::Paragraph,
                         parents: vec![root],
+                        attrs: vec![],
                     },
                 ),
             ]
@@ -814,6 +834,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::OrderedList,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -821,6 +842,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::ListItem,
                     parents: vec![root, ol],
+                    attrs: vec![],
                 },
             ),
             (
@@ -828,6 +850,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, ol, li1],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(4, 4), SeqItem::Char('a')),
@@ -836,6 +859,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::ListItem,
                     parents: vec![root, ol],
+                    attrs: vec![],
                 },
             ),
             (
@@ -843,6 +867,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, ol, li2],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(4, 7), SeqItem::Char('b')),
@@ -851,6 +876,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];

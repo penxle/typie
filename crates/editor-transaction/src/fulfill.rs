@@ -6,38 +6,56 @@ use crate::Step;
 /// needed to make it valid. Returns empty vec if already valid.
 pub fn fulfill(node: &NodeView) -> Vec<Step> {
     let spec = node.spec();
-    let child_types: Vec<NodeType> = child_types(node);
+    let (child_types, real_indices) = known_child_types(node);
 
     if spec.content.matches_sequence(&child_types) {
         return vec![];
     }
 
     let insertions = compute_insertions(&spec.content, &child_types);
+    let total_children = node.child_count();
     insertions
         .into_iter()
-        .map(|(index, node_type)| {
+        .enumerate()
+        .map(|(k, (filtered_index, node_type))| {
+            let unshifted = filtered_index - k;
+            let real_index = real_indices
+                .get(unshifted)
+                .copied()
+                .unwrap_or(total_children);
             let subtree = scaffold(node_type);
             Step::InsertSubtree {
                 parent: node.id(),
-                index,
+                index: real_index + k,
                 subtree,
             }
         })
         .collect()
 }
 
-fn child_types(node: &NodeView) -> Vec<NodeType> {
-    node.children()
-        .map(|c| match c {
+fn known_child_types(node: &NodeView) -> (Vec<NodeType>, Vec<usize>) {
+    let mut types = Vec::new();
+    let mut real_indices = Vec::new();
+    for (i, c) in node.children().enumerate() {
+        let node_type = match c {
             ChildView::Block(b) => b.node_type(),
             ChildView::Leaf(l) => l.node_type(),
-        })
-        .collect()
+        };
+        if node_type == NodeType::Unknown {
+            continue;
+        }
+        types.push(node_type);
+        real_indices.push(i);
+    }
+    (types, real_indices)
 }
 
 fn compute_insertions(content: &ContentExpr, existing: &[NodeType]) -> Vec<(usize, NodeType)> {
     match content {
-        ContentExpr::Empty | ContentExpr::ZeroOrMore(_) | ContentExpr::Optional(_) => vec![],
+        ContentExpr::Empty
+        | ContentExpr::Any
+        | ContentExpr::ZeroOrMore(_)
+        | ContentExpr::Optional(_) => vec![],
 
         ContentExpr::Single(t) => {
             if existing.is_empty() {
@@ -115,7 +133,7 @@ fn first_type(expr: &ContentExpr) -> NodeType {
         | ContentExpr::ZeroOrMore(inner)
         | ContentExpr::Optional(inner) => first_type(inner),
         ContentExpr::Seq(exprs) => first_type(&exprs[0]),
-        ContentExpr::Empty => unreachable!("Empty content has no type"),
+        ContentExpr::Empty | ContentExpr::Any => unreachable!("Empty/Any content has no type"),
     }
 }
 
@@ -135,7 +153,10 @@ fn scaffold(node_type: NodeType) -> Subtree {
 
 fn scaffold_children(content: &ContentExpr) -> Vec<Subtree> {
     match content {
-        ContentExpr::Empty | ContentExpr::ZeroOrMore(_) | ContentExpr::Optional(_) => vec![],
+        ContentExpr::Empty
+        | ContentExpr::Any
+        | ContentExpr::ZeroOrMore(_)
+        | ContentExpr::Optional(_) => vec![],
         ContentExpr::Single(t) => vec![scaffold(*t)],
         ContentExpr::OneOrMore(inner) => vec![scaffold(first_type(inner))],
         ContentExpr::Choice(choices) => vec![scaffold(first_type(&choices[0]))],
@@ -161,5 +182,155 @@ mod tests {
         let view = state.view();
         let root = view.root().unwrap();
         assert!(fulfill(&root).is_empty());
+    }
+
+    #[test]
+    fn fulfill_skips_unknown_children_and_remaps_insertion_index() {
+        use editor_crdt::Dot;
+        use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
+
+        let fold_id = Dot::new(1, 0);
+        let unknown_id = Dot::new(1, 1);
+        let title_id = Dot::new(1, 2);
+
+        let mut nodes = editor_model::imbl::HashMap::new();
+        nodes.insert(
+            fold_id,
+            BlockNode {
+                id: fold_id,
+                node_type: NodeType::Fold,
+                attrs: vec![],
+                children: ChildList::from(vec![Child::Block(unknown_id), Child::Block(title_id)]),
+            },
+        );
+        nodes.insert(
+            unknown_id,
+            BlockNode {
+                id: unknown_id,
+                node_type: NodeType::Unknown,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+        nodes.insert(
+            title_id,
+            BlockNode {
+                id: title_id,
+                node_type: NodeType::FoldTitle,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+
+        let doc = ProjectedDoc {
+            tree: BlockTree {
+                nodes,
+                root: fold_id,
+            },
+            block_effective: editor_model::imbl::HashMap::new(),
+            seg_index: editor_model::BlockSegs::default(),
+            block_modifiers: editor_model::imbl::HashMap::new(),
+            node_attrs: editor_model::imbl::HashMap::new(),
+            node_carries: editor_model::imbl::HashMap::new(),
+        };
+        let view = DocView::new(&doc);
+        let node = view.node(fold_id).unwrap();
+
+        let steps = fulfill(&node);
+        assert_eq!(
+            steps,
+            vec![Step::InsertSubtree {
+                parent: fold_id,
+                index: 2,
+                subtree: scaffold(NodeType::FoldContent),
+            }]
+        );
+    }
+
+    /// The append-fallback case above hits `real_indices.get(unshifted) == None`
+    /// (the missing type sorts after every known child, so the repair index
+    /// falls back to `total_children`). This oracle instead hits `Some(_)`: an
+    /// interior real_indices lookup succeeds because the missing child must be
+    /// inserted *before* an already-present known child, with an Unknown
+    /// placeholder sitting between the two known children (`[Known, Unknown,
+    /// Known]`). Physical order here is deliberately [FoldContent, Unknown,
+    /// FoldTitle] — wrong content-order, so `fulfill` must still insert the
+    /// missing FoldTitle, and it must land at real index 0 (immediately before
+    /// the physically-first FoldContent), not appended at the tail.
+    #[test]
+    fn fulfill_remaps_insertion_index_via_real_indices_hit_between_unknowns() {
+        use editor_crdt::Dot;
+        use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
+
+        let fold_id = Dot::new(1, 0);
+        let content_id = Dot::new(1, 1);
+        let unknown_id = Dot::new(1, 2);
+        let title_id = Dot::new(1, 3);
+
+        let mut nodes = editor_model::imbl::HashMap::new();
+        nodes.insert(
+            fold_id,
+            BlockNode {
+                id: fold_id,
+                node_type: NodeType::Fold,
+                attrs: vec![],
+                children: ChildList::from(vec![
+                    Child::Block(content_id),
+                    Child::Block(unknown_id),
+                    Child::Block(title_id),
+                ]),
+            },
+        );
+        nodes.insert(
+            content_id,
+            BlockNode {
+                id: content_id,
+                node_type: NodeType::FoldContent,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+        nodes.insert(
+            unknown_id,
+            BlockNode {
+                id: unknown_id,
+                node_type: NodeType::Unknown,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+        nodes.insert(
+            title_id,
+            BlockNode {
+                id: title_id,
+                node_type: NodeType::FoldTitle,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+
+        let doc = ProjectedDoc {
+            tree: BlockTree {
+                nodes,
+                root: fold_id,
+            },
+            block_effective: editor_model::imbl::HashMap::new(),
+            seg_index: editor_model::BlockSegs::default(),
+            block_modifiers: editor_model::imbl::HashMap::new(),
+            node_attrs: editor_model::imbl::HashMap::new(),
+            node_carries: editor_model::imbl::HashMap::new(),
+        };
+        let view = DocView::new(&doc);
+        let node = view.node(fold_id).unwrap();
+
+        let steps = fulfill(&node);
+        assert_eq!(
+            steps,
+            vec![Step::InsertSubtree {
+                parent: fold_id,
+                index: 0,
+                subtree: scaffold(NodeType::FoldTitle),
+            }]
+        );
     }
 }

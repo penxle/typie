@@ -33,6 +33,7 @@ impl DocBuilder {
         self.ins(SeqItem::Block {
             node_type,
             parents: parents.to_vec(),
+            attrs: vec![],
         })
     }
 

@@ -78,6 +78,7 @@ fn node_type_abbreviation(node_type: NodeType) -> &'static str {
         NodeType::HorizontalRule => "hr",
         NodeType::PageBreak => "pb",
         NodeType::Tab => "tab",
+        NodeType::Unknown => "unk",
     }
 }
 

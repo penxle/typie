@@ -1,0 +1,102 @@
+{
+  "envelope": {
+    "magic": 194,
+    "format_version": 1,
+    "max_body_bytes": 1073741824,
+    "compression_threshold_bytes": 256,
+    "known_flags": 1,
+    "payload_kinds": {
+      "changeset-bundle": 0,
+      "dots": 1,
+      "snapshot": 2
+    },
+    "required_features": {},
+    "optional_features": {}
+  },
+  "types": {
+    "Anchor": {
+      "name": "Anchor",
+      "kind": {
+        "FrozenStruct": {
+          "fields": [
+            {
+              "name": "id",
+              "ty": "u64",
+              "default": "Required"
+            },
+            {
+              "name": "bias",
+              "ty": "u8",
+              "default": "Required"
+            }
+          ]
+        }
+      }
+    },
+    "Bias": {
+      "name": "Bias",
+      "kind": {
+        "ClosedEnum": {
+          "variants": [
+            {
+              "name": "Before",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": []
+            },
+            {
+              "name": "After",
+              "tag": 1,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ]
+        }
+      }
+    },
+    "Item": {
+      "name": "Item",
+      "kind": {
+        "OpenEnum": {
+          "variants": [
+            {
+              "name": "Char",
+              "tag": 0,
+              "frozen_payload": true,
+              "fields": [
+                {
+                  "name": "",
+                  "ty": "char",
+                  "default": "Required"
+                }
+              ]
+            },
+            {
+              "name": "Break",
+              "tag": 2,
+              "frozen_payload": true,
+              "fields": []
+            }
+          ],
+          "retired": [
+            9
+          ]
+        }
+      }
+    },
+    "Rec": {
+      "name": "Rec",
+      "kind": {
+        "EvolvableStruct": {
+          "fields": [
+            {
+              "name": "a",
+              "ty": "u64",
+              "default": "Required"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

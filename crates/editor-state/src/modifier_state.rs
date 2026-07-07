@@ -417,7 +417,11 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block { node_type, parents },
+            item: SeqItem::Block {
+                node_type,
+                parents,
+                attrs: vec![],
+            },
         })
     }
 
@@ -1842,7 +1846,7 @@ mod tests {
                         let pos = 1 + (a as usize) % count;
                         let d = state.apply(EditOp::Seq(ListOp::Ins {
                             pos,
-                            item: SeqItem::Block { node_type: NodeType::Paragraph, parents: vec![Dot::ROOT] },
+                            item: SeqItem::Block { node_type: NodeType::Paragraph, parents: vec![Dot::ROOT], attrs: vec![] },
                         })).unwrap().id;
                         paras.push(d);
                         count += 1;

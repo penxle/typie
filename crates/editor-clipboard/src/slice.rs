@@ -311,7 +311,7 @@ mod tests {
     use super::*;
     use crate::test_doc::DocBuilder;
     use editor_macros::state;
-    use editor_model::{AtomLeaf, Modifier, NodeType};
+    use editor_model::{AtomLeaf, CalloutVariant, Modifier, NodeType};
     use editor_resource::Resource;
     use editor_state::{Position, Selection};
 
@@ -499,6 +499,25 @@ mod tests {
             slice.fragment.children[2].node,
             PlainNode::Paragraph(_)
         ));
+    }
+
+    #[test]
+    fn extract_preserves_single_op_init_block_attrs() {
+        let (s, ..) = state! {
+            doc { root: root {
+                callout(variant: CalloutVariant::Warning) {
+                    paragraph {}
+                }
+                paragraph {}
+            } }
+            selection: (root, 0) -> (root, 1)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert_eq!(slice.fragment.children.len(), 1);
+        let PlainNode::Callout(plain) = &slice.fragment.children[0].node else {
+            panic!("expected callout fragment");
+        };
+        assert_eq!(plain.variant, CalloutVariant::Warning);
     }
 
     #[test]

@@ -1,0 +1,6 @@
+error: #[durable(unknown)] variant must have exactly one UnknownPayload field
+ --> tests/compile_fail/unknown_bad_shape.rs:8:5
+  |
+8 | /     #[durable(unknown)]
+9 | |     Unknown { tag: u64 },
+  | |________________________^

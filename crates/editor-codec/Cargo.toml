@@ -1,0 +1,25 @@
+[package]
+name = "editor-codec"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+doctest = false
+
+[features]
+test-util = []
+
+[dependencies]
+editor-crdt = { path = "../editor-crdt" }
+editor-model = { path = "../editor-model" }
+editor-codec-macros = { path = "../editor-codec-macros" }
+ruzstd.workspace = true
+xxhash-rust.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror.workspace = true
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[dev-dependencies]
+editor-codec = { path = ".", features = ["test-util"] }
+proptest = { workspace = true }

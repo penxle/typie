@@ -5,23 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Modifier, ModifierType};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ModifierAttrOp {
-    #[wire(n(0))]
-    SetModifier {
-        #[wire(n(0))]
-        target: Dot,
-        #[wire(n(1))]
-        modifier: Modifier,
-    },
-    #[wire(n(1))]
-    ClearModifier {
-        #[wire(n(0))]
-        target: Dot,
-        #[wire(n(1))]
-        key: ModifierType,
-    },
+    SetModifier { target: Dot, modifier: Modifier },
+    ClearModifier { target: Dot, key: ModifierType },
 }
 
 impl ModifierAttrOp {
@@ -100,42 +88,6 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-
-    fn round_trip<T: editor_crdt::wire::Wire>(value: &T) -> editor_crdt::wire::WireResult<T> {
-        use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireError};
-        let mut cc = CollectCtx::new();
-        value.collect(&mut cc);
-        let (table, baselines) = cc.finalize();
-        let ec = EncCtx::from_table(&table, baselines.clone());
-        let dc = DecCtx {
-            actor_table: table,
-            baselines,
-        };
-        let mut buf = Vec::new();
-        value.encode(&ec, &mut buf)?;
-        let mut slice = &buf[..];
-        let out = T::decode(&dc, &mut slice)?;
-        if !slice.is_empty() {
-            return Err(WireError::TrailingBytes {
-                remaining: slice.len(),
-            });
-        }
-        Ok(out)
-    }
-
-    #[test]
-    fn modifier_attr_op_wire_round_trips() {
-        let set = ModifierAttrOp::SetModifier {
-            target: Dot::new(1, 0),
-            modifier: Modifier::FontSize { value: 1600 },
-        };
-        let clear = ModifierAttrOp::ClearModifier {
-            target: Dot::new(2, 3),
-            key: ModifierType::Bold,
-        };
-        assert_eq!(round_trip(&set).unwrap(), set);
-        assert_eq!(round_trip(&clear).unwrap(), clear);
-    }
 
     #[test]
     fn target_key_derives_from_modifier() {

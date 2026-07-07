@@ -17,7 +17,6 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     Serialize,
     Deserialize,
     EnumDiscriminants,
-    editor_macros::Wire,
     editor_macros::ModifierState,
 )]
 #[strum_discriminants(name(ModifierType))]
@@ -32,112 +31,67 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
     EnumCount,
     Enum,
     IntoStaticStr,
-    editor_macros::Wire,
 ))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[modifier_state(computed(effective_bold))]
 pub enum Modifier {
-    #[wire(n(0))]
-    #[strum_discriminants(wire(n(0)))]
     Bold,
-    #[wire(n(1))]
-    #[strum_discriminants(wire(n(1)))]
     Italic,
-    #[wire(n(2))]
-    #[strum_discriminants(wire(n(2)))]
     Underline,
-    #[wire(n(3))]
-    #[strum_discriminants(wire(n(3)))]
     Strikethrough,
 
     /// pt x 100 (e.g. 16pt -> 1600)
-    #[wire(n(4))]
-    #[strum_discriminants(wire(n(4)))]
     FontSize {
-        #[wire(n(0))]
         value: u32,
     },
 
-    #[wire(n(5))]
-    #[strum_discriminants(wire(n(5)))]
     FontFamily {
-        #[wire(n(0))]
         value: String,
     },
 
-    #[wire(n(6))]
-    #[strum_discriminants(wire(n(6)))]
     FontWeight {
-        #[wire(n(0))]
         value: u16,
     },
 
-    #[wire(n(7))]
-    #[strum_discriminants(wire(n(7)))]
     TextColor {
-        #[wire(n(0))]
         value: String,
     },
 
-    #[wire(n(8))]
-    #[strum_discriminants(wire(n(8)))]
     BackgroundColor {
-        #[wire(n(0))]
         value: String,
     },
 
     /// em x 100 (e.g. 0.05em -> 5)
-    #[wire(n(9))]
-    #[strum_discriminants(wire(n(9)))]
     LetterSpacing {
-        #[wire(n(0))]
         value: i32,
     },
 
-    #[wire(n(10))]
-    #[strum_discriminants(wire(n(10)))]
     Link {
-        #[wire(n(0))]
         href: String,
     },
 
-    #[wire(n(11))]
-    #[strum_discriminants(wire(n(11)))]
     Ruby {
-        #[wire(n(0))]
         text: String,
     },
 
     /// % (e.g. 160 -> 160%)
-    #[wire(n(12))]
-    #[strum_discriminants(wire(n(12)))]
     LineHeight {
-        #[wire(n(0))]
         value: u32,
     },
 
     /// x 100 (e.g. 100% -> 100)
-    #[wire(n(13))]
-    #[strum_discriminants(wire(n(13)))]
     BlockGap {
-        #[wire(n(0))]
         value: u32,
     },
 
     /// x 100 (e.g. 100% -> 100)
-    #[wire(n(14))]
-    #[strum_discriminants(wire(n(14)))]
     ParagraphIndent {
-        #[wire(n(0))]
         value: u32,
     },
 
-    #[wire(n(15))]
-    #[strum_discriminants(wire(n(15)))]
     Alignment {
-        #[wire(n(0))]
         value: Alignment,
     },
 }
@@ -560,70 +514,5 @@ mod tests {
                 }
             }
         );
-    }
-
-    #[test]
-    fn modifier_wire_round_trip_all_variants() {
-        use editor_crdt::wire::{DecCtx, EncCtx, Wire};
-        let ec = EncCtx::from_table(&[], vec![]);
-        let dc = DecCtx {
-            actor_table: vec![],
-            baselines: vec![],
-        };
-        let cases = vec![
-            Modifier::Bold,
-            Modifier::Italic,
-            Modifier::Underline,
-            Modifier::Strikethrough,
-            Modifier::FontSize { value: 1600 },
-            Modifier::FontFamily {
-                value: "Pretendard".to_owned(),
-            },
-            Modifier::FontWeight { value: 700 },
-            Modifier::TextColor {
-                value: "#ff0000".to_owned(),
-            },
-            Modifier::BackgroundColor {
-                value: "#00ff00".to_owned(),
-            },
-            Modifier::LetterSpacing { value: -5 },
-            Modifier::Link {
-                href: "https://example.com".to_owned(),
-            },
-            Modifier::Ruby {
-                text: "ruby".to_owned(),
-            },
-            Modifier::LineHeight { value: 160 },
-            Modifier::BlockGap { value: 100 },
-            Modifier::ParagraphIndent { value: 100 },
-            Modifier::Alignment {
-                value: Alignment::Center,
-            },
-        ];
-        for v in cases {
-            let mut buf = Vec::new();
-            <Modifier as Wire>::encode(&v, &ec, &mut buf).unwrap();
-            let mut slice = &buf[..];
-            let got = <Modifier as Wire>::decode(&dc, &mut slice).unwrap();
-            assert_eq!(got, v);
-        }
-    }
-
-    #[test]
-    fn modifier_type_wire_round_trip_all_variants() {
-        use editor_crdt::wire::{DecCtx, EncCtx, Wire};
-        use strum::IntoEnumIterator;
-        let ec = EncCtx::from_table(&[], vec![]);
-        let dc = DecCtx {
-            actor_table: vec![],
-            baselines: vec![],
-        };
-        for v in ModifierType::iter() {
-            let mut buf = Vec::new();
-            <ModifierType as Wire>::encode(&v, &ec, &mut buf).unwrap();
-            let mut slice = &buf[..];
-            let got = <ModifierType as Wire>::decode(&dc, &mut slice).unwrap();
-            assert_eq!(got, v);
-        }
     }
 }

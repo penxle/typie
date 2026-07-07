@@ -4,7 +4,7 @@ use editor_model::{
     Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp,
     Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeType, ProjectedDoc,
     ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
-    SpanOp, SplitError, anchor_dot, block_effective_one, normalize_content_shallow,
+    SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of, normalize_content_shallow,
     normalize_subtree, project_blocks, project_from, project_from_tree, seq_parents,
     split_block_insert, split_logs,
 };
@@ -93,7 +93,7 @@ fn plan_subtree(
     node: &RawNode,
     parent: Dot,
     blocks: &mut Vec<(Dot, Dot, NodeType)>,
-    block_leaves: &mut Vec<(Dot, Vec<(Dot, NodeType)>)>,
+    block_leaves: &mut Vec<(Dot, Vec<(Dot, Option<NodeType>)>)>,
     nodes: &mut HashSet<Dot>,
 ) {
     nodes.insert(node.id);
@@ -196,6 +196,7 @@ impl ProjectedState {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
+            EditOp::Unknown { .. } => {}
         }
         Ok(())
     }
@@ -231,6 +232,7 @@ impl ProjectedState {
                 item: SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![Dot::ROOT],
+                    attrs: vec![],
                 },
             }))
             .expect("seed paragraph never conflicts");
@@ -592,13 +594,13 @@ impl ProjectedState {
         // Normalize each window block, plan its index entries, and graft its subtree
         // into the live `nodes` map, building the flat child-reference list to splice.
         let mut plan_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
-        let mut plan_block_leaves: Vec<(Dot, Vec<(Dot, NodeType)>)> = Vec::new();
+        let mut plan_block_leaves: Vec<(Dot, Vec<(Dot, Option<NodeType>)>)> = Vec::new();
         let mut new_nodes: HashSet<Dot> = HashSet::new();
         let mut new_children: Vec<Child> = Vec::new();
         // Block-level atoms (image / horizontal rule) project as a `Leaf` directly under
         // Root; they are leaves of Root, not of any window block, so they need their own
         // index/derivation maintenance (`plan_subtree` only covers block subtrees).
-        let mut root_leaves: Vec<(Dot, NodeType)> = Vec::new();
+        let mut root_leaves: Vec<(Dot, Option<NodeType>)> = Vec::new();
         for c in raw_children {
             match c {
                 RawChild::Block(mut b) => {
@@ -637,6 +639,18 @@ impl ProjectedState {
             self.indexes.paths.add_block(*block, *parent, *nt);
             let m = self.logs.block_modifiers.modifiers_of(*block);
             self.projected.set_block_own_modifiers(*block, m);
+            let init = block_init_of(&self.projected.tree, *block);
+            let base = init.clone().unwrap_or_else(|| nt.into_node());
+            match self.logs.node_attrs.project_target(*block, base) {
+                Some(node) => {
+                    self.projected.node_attrs.insert(*block, node);
+                }
+                None => {
+                    if let Some(seeded) = init {
+                        self.projected.node_attrs.insert(*block, seeded);
+                    }
+                }
+            }
         }
         for (block, _, _) in &plan_blocks {
             self.recompute_block_effective(*block);
@@ -661,7 +675,7 @@ impl ProjectedState {
         // blocks to index.
         let scaffolded = self.repair_root_content_shallow();
         let mut s_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
-        let mut s_block_leaves: Vec<(Dot, Vec<(Dot, NodeType)>)> = Vec::new();
+        let mut s_block_leaves: Vec<(Dot, Vec<(Dot, Option<NodeType>)>)> = Vec::new();
         let mut s_nodes: HashSet<Dot> = HashSet::new();
         for b in &scaffolded {
             plan_subtree(
@@ -735,6 +749,7 @@ impl ProjectedState {
         let mut shallow = RawNode {
             id: root_id,
             node_type: root.node_type,
+            attrs: root.attrs.clone(),
             children: Vec::new(),
         };
         for c in &root.children {
@@ -744,15 +759,16 @@ impl ProjectedState {
                     item: item.clone(),
                 }),
                 Child::Block(id) => {
-                    let nt = self
+                    let (nt, attrs) = self
                         .projected
                         .tree
                         .get(*id)
-                        .map(|b| b.node_type)
-                        .unwrap_or(NodeType::Paragraph);
+                        .map(|b| (b.node_type, b.attrs.clone()))
+                        .unwrap_or((NodeType::Paragraph, Vec::new()));
                     shallow.children.push(RawChild::Block(RawNode {
                         id: *id,
                         node_type: nt,
+                        attrs,
                         children: Vec::new(),
                     }));
                 }
@@ -821,9 +837,14 @@ impl ProjectedState {
                 self.try_insert_leaf(op.id, item)
             }
             EditOp::Seq(ListOp::Ins {
-                item: SeqItem::Block { node_type, parents },
+                item:
+                    SeqItem::Block {
+                        node_type,
+                        parents,
+                        attrs,
+                    },
                 ..
-            }) => self.try_insert_block(op.id, *node_type, parents),
+            }) => attrs.is_empty() && self.try_insert_block(op.id, *node_type, parents),
             EditOp::Seq(ListOp::Del { .. }) => self.try_delete_chars(op.id),
             EditOp::Seq(ListOp::Undel { del }) => self.try_undelete(*del),
             EditOp::Span(span_op) => self.try_apply_span(op.id, span_op),
@@ -845,7 +866,7 @@ impl ProjectedState {
         self.indexes
             .paths
             .node_type_of(dot)
-            .map(NodeType::into_node)
+            .map(|nt| block_init_of(&self.projected.tree, dot).unwrap_or_else(|| nt.into_node()))
     }
 
     fn recompute_block_effective(&mut self, block: Dot) {
@@ -895,7 +916,7 @@ impl ProjectedState {
                     continue;
                 };
                 let dot = *id;
-                let leaf_type = item.as_child_type();
+                let leaf_type = item.as_child_type().unwrap_or(NodeType::Unknown);
                 let covering = match source {
                     CoveringSource::Resolved(rs) => self
                         .seq
@@ -1020,9 +1041,14 @@ impl ProjectedState {
                     Some(node) => {
                         self.projected.node_attrs.insert(target, node);
                     }
-                    None => {
-                        self.projected.node_attrs.remove(&target);
-                    }
+                    None => match block_init_of(&self.projected.tree, target) {
+                        Some(seeded) => {
+                            self.projected.node_attrs.insert(target, seeded);
+                        }
+                        None => {
+                            self.projected.node_attrs.remove(&target);
+                        }
+                    },
                 }
                 self.recompute_subtree(target);
             }
@@ -1062,7 +1088,7 @@ impl ProjectedState {
     fn leaf_type_of(&self, dot: Dot) -> Option<NodeType> {
         let lv = *self.logs.seq.lv_of.get(&dot)?;
         match &self.logs.seq.entries[lv].op {
-            ListOp::Ins { item, .. } => Some(item.as_child_type()),
+            ListOp::Ins { item, .. } => item.as_child_type(),
             _ => None,
         }
     }
@@ -1360,7 +1386,7 @@ impl ProjectedState {
         let Some(neighbor) = self.seq.dot_at_visible(&self.logs.seq, pos - 1) else {
             return false;
         };
-        let leaf_type = item.as_child_type();
+        let leaf_type = item.as_child_type().unwrap_or(NodeType::Unknown);
         // The new leaf's parent block: the neighbor's block if the neighbor is a
         // leaf, or — when inserting at a block's start — the neighbor block itself.
         let (block, neighbor_is_leaf) = match self.indexes.paths.block_of(neighbor) {
@@ -2132,6 +2158,7 @@ impl ProjectedState {
         Some(
             anchor_dot(block)
                 .and_then(|d| self.projected.node_attrs.get(&d).cloned())
+                .or_else(|| block_init_of(&self.projected.tree, block))
                 .unwrap_or_else(|| n.node_type.into_node()),
         )
     }
@@ -2255,7 +2282,8 @@ impl ProjectedState {
             for c in node.children.iter() {
                 match c {
                     Child::Leaf { id, item } => {
-                        out.insert(*id, self.leaf_truth(*id, bid, item.as_child_type(), &rs));
+                        let lt = item.as_child_type().unwrap_or(NodeType::Unknown);
+                        out.insert(*id, self.leaf_truth(*id, bid, lt, &rs));
                     }
                     Child::Block(id) => stack.push(*id),
                 }
@@ -2285,7 +2313,9 @@ impl ProjectedState {
                 .children
                 .iter()
                 .filter_map(|c| match c {
-                    Child::Leaf { id, item } => Some((*id, item.as_child_type())),
+                    Child::Leaf { id, item } => {
+                        Some((*id, item.as_child_type().unwrap_or(NodeType::Unknown)))
+                    }
                     Child::Block(_) => None,
                 })
                 .collect();
@@ -2332,7 +2362,11 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block { node_type, parents },
+            item: SeqItem::Block {
+                node_type,
+                parents,
+                attrs: vec![],
+            },
         })
     }
 
@@ -3556,6 +3590,45 @@ mod tests {
             cold.projected(),
             "window reprojection over survivors diverged from cold rebuild"
         );
+    }
+
+    // attr 보유 블록의 단일 op 삽입은 try_insert_block이 아니라 reproject_window로
+    // 흐른다. window 경로가 init attrs를 node_attrs에 시딩하지 않으면 콜드 재구축과
+    // 드리프트한다 — 이 테스트가 그 경로를 직접 운동시킨다.
+    #[test]
+    fn attr_block_single_op_insert_matches_cold() {
+        let mut warm = ProjectedState::empty();
+        for i in 0..3 {
+            warm.apply(seq_char(i + 1, 'a')).unwrap();
+        }
+        let id = warm
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 4,
+                item: SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![NodeAttr::Callout {
+                        attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+                    }],
+                },
+            }))
+            .unwrap()
+            .id;
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(
+            warm.projected(),
+            cold.projected(),
+            "단일 op init 블록에서 warm이 콜드 재구축과 드리프트"
+        );
+        let node = warm
+            .projected()
+            .node_attrs
+            .get(&id)
+            .expect("init attrs가 node_attrs에 시딩돼야 한다");
+        let Node::Callout(c) = node else {
+            panic!("callout node expected");
+        };
+        assert_eq!(*c.variant.get(), CalloutVariant::Warning);
     }
 
     // Typing into a large, heavily-spanned document must stay incremental — no

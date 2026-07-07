@@ -136,6 +136,10 @@ impl Default for SchemaInner {
                     inline: true,
                     ..Default::default()
                 },
+                NodeType::Unknown => NodeSpec {
+                    content: super::ContentExpr::Any,
+                    ..Default::default()
+                },
             },
             modifiers: enum_map! {
                 ModifierType::Bold => ModifierSpec {

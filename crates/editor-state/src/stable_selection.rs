@@ -57,7 +57,11 @@ mod tests {
     use crate::Position;
 
     fn block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
-        SeqItem::Block { node_type, parents }
+        SeqItem::Block {
+            node_type,
+            parents,
+            attrs: vec![],
+        }
     }
 
     fn ins_only(items: &[(Dot, SeqItem)]) -> Vec<InputEvent<SeqItem>> {

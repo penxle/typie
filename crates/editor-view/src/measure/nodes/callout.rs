@@ -119,6 +119,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Callout,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
             (
@@ -126,6 +127,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root, callout],
+                    attrs: vec![],
                 },
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
@@ -134,6 +136,7 @@ mod tests {
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![root],
+                    attrs: vec![],
                 },
             ),
         ];

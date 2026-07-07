@@ -1,0 +1,7 @@
+error: unknown variant must not have a tag
+  --> tests/compile_fail/unknown_with_tag.rs:9:5
+   |
+ 9 | /     #[durable(unknown)]
+10 | |     #[durable(n(3))]
+11 | |     Unknown(UnknownPayload),
+   | |___________________________^

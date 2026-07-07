@@ -126,6 +126,8 @@ fn typing_run(kind: MergeKind, before: &State, after: &State) -> RecordMerge {
     }
 }
 
+type SelectionRectsCache = Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>;
+
 pub struct Editor {
     pub(crate) state: State,
     pub(crate) view: View,
@@ -155,7 +157,7 @@ pub struct Editor {
     // per-page render signatures, the selection mark, and the endpoints query —
     // a whole-document selection otherwise recomputes the full rect walk for
     // each of those consumers on every frame.
-    selection_rects_cache: Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>,
+    selection_rects_cache: SelectionRectsCache,
 }
 
 struct ProbeGuard<'e> {
@@ -265,11 +267,8 @@ impl Editor {
         self.state.missing_changesets_tolerant(remote_heads)
     }
 
-    pub fn partition_ready(
-        &self,
-        css: Vec<Changeset<EditOp>>,
-    ) -> (Vec<Changeset<EditOp>>, Vec<Changeset<EditOp>>) {
-        self.state.partition_ready(css)
+    pub fn partition_ready_indices(&self, css: &[Changeset<EditOp>]) -> (Vec<usize>, Vec<usize>) {
+        self.state.partition_ready_indices(css)
     }
 
     pub fn current_heads(&self) -> Vec<Dot> {

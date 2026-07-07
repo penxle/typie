@@ -663,6 +663,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "editor-codec"
+version = "0.0.1"
+dependencies = [
+ "editor-codec",
+ "editor-codec-macros",
+ "editor-crdt",
+ "editor-model",
+ "proptest",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "workspace-hack",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "editor-codec-macros"
+version = "0.0.1"
+dependencies = [
+ "editor-codec",
+ "editor-crdt",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "trybuild",
+ "workspace-hack",
+]
+
+[[package]]
 name = "editor-commands"
 version = "0.0.1"
 dependencies = [
@@ -745,7 +775,6 @@ dependencies = [
  "hashbrown 0.17.1",
  "imbl",
  "proptest",
- "ruzstd",
  "serde",
  "serde_json",
  "smallvec",
@@ -765,6 +794,7 @@ dependencies = [
  "console_error_panic_hook",
  "console_log",
  "editor-clipboard",
+ "editor-codec",
  "editor-common",
  "editor-core",
  "editor-crdt",
@@ -950,6 +980,7 @@ dependencies = [
 name = "editor-state"
 version = "0.0.1"
 dependencies = [
+ "editor-codec",
  "editor-common",
  "editor-crdt",
  "editor-macros",
@@ -2914,6 +2945,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "target-triple"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "591ef38edfb78ca4771ee32cf494cb8771944bee237a9b91fc9c1424ac4b777b"
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2934,6 +2971,15 @@ checksum = "c4790fc369d5a530f4b544b094e31388b9b3a37c0f4652ade4505945f5660d24"
 dependencies = [
  "new_debug_unreachable",
  "utf-8",
+]
+
+[[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
 ]
 
 [[package]]
@@ -3080,6 +3126,21 @@ name = "toml_writer"
 version = "1.1.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
+
+[[package]]
+name = "trybuild"
+version = "1.0.117"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0710d4dfbeae4f9c390baa784c49858a7468fa433f3fe5d0ec5ebef651cf59f9"
+dependencies = [
+ "glob",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-triple",
+ "termcolor",
+ "toml 1.1.2+spec-1.1.0",
+]
 
 [[package]]
 name = "tsify"
@@ -3594,6 +3655,15 @@ checksum = "0ce5da8ecb62bcd8ec8b7ea19f69a51275e91299be594ea5cc6ef7819e16cd03"
 dependencies = [
  "bytemuck",
  "safe_arch",
+]
+
+[[package]]
+name = "winapi-util"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

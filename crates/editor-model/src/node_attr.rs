@@ -1,13 +1,11 @@
 use editor_crdt::{CrdtError, Dot};
 use serde::{Deserialize, Serialize};
 
-use crate::{ModelError, Node, NodeAttr};
+use crate::{ModelError, Node, NodeAttr, NodeType};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, editor_macros::Wire)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeAttrOp {
-    #[wire(n(0))]
     pub target: Dot,
-    #[wire(n(1))]
     pub attr: NodeAttr,
 }
 
@@ -97,6 +95,19 @@ fn fold_op(node: &mut Node, op_id: Dot, attr: &NodeAttr) -> bool {
     }
 }
 
+pub fn seed_block_init(node_type: NodeType, attrs: &[NodeAttr]) -> Option<Node> {
+    let mut node = node_type.into_node();
+    let mut any = false;
+    for attr in attrs {
+        match node.apply_attr(Dot::new(0, 0), attr) {
+            Ok(()) => any = true,
+            Err(ModelError::AttrNodeKindMismatch) => {}
+            Err(e) => debug_assert!(false, "unexpected init attr failure: {e:?}"),
+        }
+    }
+    any.then_some(node)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,39 +153,6 @@ mod tests {
             .apply(d, op(1, callout(CalloutVariant::Danger)))
             .unwrap_err();
         assert_eq!(err, CrdtError::DotConflict { dot: d });
-    }
-
-    fn round_trip<T: editor_crdt::wire::Wire>(value: &T) -> editor_crdt::wire::WireResult<T> {
-        use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, WireError};
-        let mut cc = CollectCtx::new();
-        value.collect(&mut cc);
-        let (table, baselines) = cc.finalize();
-        let ec = EncCtx::from_table(&table, baselines.clone());
-        let dc = DecCtx {
-            actor_table: table,
-            baselines,
-        };
-        let mut buf = Vec::new();
-        value.encode(&ec, &mut buf)?;
-        let mut slice = &buf[..];
-        let out = T::decode(&dc, &mut slice)?;
-        if !slice.is_empty() {
-            return Err(WireError::TrailingBytes {
-                remaining: slice.len(),
-            });
-        }
-        Ok(out)
-    }
-
-    #[test]
-    fn node_attr_op_wire_round_trips() {
-        let op = NodeAttrOp {
-            target: Dot::new(1, 0),
-            attr: NodeAttr::Callout {
-                attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
-            },
-        };
-        assert_eq!(round_trip(&op).unwrap(), op);
     }
 
     fn callout_variant(node: &Node) -> CalloutVariant {

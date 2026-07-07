@@ -148,8 +148,14 @@ impl<P: Clone + Eq> Eq for OpGraph<P> {}
 impl<P: Clone> OpGraph<P> {
     pub fn new() -> Self {
         let mut buf = [0u8; 8];
-        getrandom::fill(&mut buf).expect("failed to generate random bytes");
-        Self::with_actor(u64::from_le_bytes(buf))
+        let actor = loop {
+            getrandom::fill(&mut buf).expect("failed to generate random bytes");
+            let candidate = u64::from_le_bytes(buf);
+            if candidate != 0 {
+                break candidate;
+            }
+        };
+        Self::with_actor(actor)
     }
 
     pub fn with_actor(actor: u64) -> Self {
@@ -818,10 +824,13 @@ impl<P: Clone + Eq> OpGraph<P> {
         (graph, dropped)
     }
 
-    pub fn partition_ready(
-        &self,
-        css: Vec<crate::Changeset<P>>,
-    ) -> (Vec<crate::Changeset<P>>, Vec<crate::Changeset<P>>) {
+    /// Same readiness partition as [`Self::partition_ready`], but over indices into
+    /// `css` instead of the changesets themselves — callers that hold an out-of-band
+    /// byte representation aligned 1:1 with `css` (e.g. a bundle split into
+    /// per-changeset byte chunks) can select from that representation instead of
+    /// re-encoding the values. `ready` is in dependency order, `blocked` in original
+    /// order — `partition_ready` is a value-picking wrapper over this.
+    pub fn partition_ready_indices(&self, css: &[crate::Changeset<P>]) -> (Vec<usize>, Vec<usize>) {
         // Kahn O(n+refs) (round-2 MED: naive 반복 스캔 금지). ready는 의존성 순서, blocked는 원래 순서.
         use hashbrown::HashMap;
         let n = css.len();
@@ -871,12 +880,24 @@ impl<P: Clone + Eq> OpGraph<P> {
                 }
             }
         }
+        let blocked_order: Vec<usize> = (0..n).filter(|&i| !ready_flag[i]).collect();
+        (ready_order, blocked_order)
+    }
+
+    pub fn partition_ready(
+        &self,
+        css: Vec<crate::Changeset<P>>,
+    ) -> (Vec<crate::Changeset<P>>, Vec<crate::Changeset<P>>) {
+        let (ready_order, blocked_order) = self.partition_ready_indices(&css);
         let mut slots: Vec<Option<crate::Changeset<P>>> = css.into_iter().map(Some).collect();
-        let mut ready: Vec<crate::Changeset<P>> = Vec::with_capacity(ready_order.len());
-        for &i in &ready_order {
-            ready.push(slots[i].take().expect("ready slot present"));
-        }
-        let blocked: Vec<crate::Changeset<P>> = slots.into_iter().flatten().collect();
+        let ready: Vec<crate::Changeset<P>> = ready_order
+            .into_iter()
+            .map(|i| slots[i].take().expect("ready slot present"))
+            .collect();
+        let blocked: Vec<crate::Changeset<P>> = blocked_order
+            .into_iter()
+            .map(|i| slots[i].take().expect("blocked slot present"))
+            .collect();
         (ready, blocked)
     }
 
@@ -962,10 +983,11 @@ impl<P: Clone> OpGraph<P> {
             match fwd_stack.pop() {
                 None => return FrontierDelta::RemoteKnown(fwd_known),
                 Some(dot) => {
-                    if self.ops.contains_key(&dot) && fwd_known.insert(dot) {
-                        if let Some(op) = self.ops.get(&dot) {
-                            fwd_stack.extend(op.parents.iter().copied());
-                        }
+                    if self.ops.contains_key(&dot)
+                        && fwd_known.insert(dot)
+                        && let Some(op) = self.ops.get(&dot)
+                    {
+                        fwd_stack.extend(op.parents.iter().copied());
                     }
                 }
             }
@@ -2236,6 +2258,70 @@ mod tests {
         assert_eq!(still_blocked[0].ops[0].id, blocked.id);
         assert!(!g.contains(&b.id));
         assert!(!g.contains(&c.id));
+    }
+
+    #[test]
+    fn partition_ready_indices_matches_partition_ready_order() {
+        let g: OpGraph<u32> = OpGraph::with_actor(0);
+        let root = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 0,
+        };
+        let a = Op {
+            id: Dot::new(99, 1),
+            parents: vec![root.id],
+            payload: 1,
+        };
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![root.clone()],
+            })
+            .unwrap();
+        let g = g
+            .receive_changeset(crate::Changeset {
+                ops: vec![a.clone()],
+            })
+            .unwrap();
+
+        let b = Op {
+            id: Dot::new(99, 2),
+            parents: vec![a.id],
+            payload: 2,
+        };
+        let c = Op {
+            id: Dot::new(99, 3),
+            parents: vec![b.id],
+            payload: 3,
+        };
+        let blocked = Op {
+            id: Dot::new(99, 9),
+            parents: vec![Dot::new(55, 5)],
+            payload: 9,
+        };
+
+        // Same fixture as `partition_ready_splits_by_parent_presence` (css = [c, b,
+        // blocked]) — indices must line up with that test's value-based ready order
+        // (b then c), i.e. index 1 (b) then index 0 (c).
+        let css = vec![
+            crate::Changeset {
+                ops: vec![c.clone()],
+            },
+            crate::Changeset {
+                ops: vec![b.clone()],
+            },
+            crate::Changeset {
+                ops: vec![blocked.clone()],
+            },
+        ];
+
+        let (ready_idx, blocked_idx) = g.partition_ready_indices(&css);
+        assert_eq!(
+            ready_idx,
+            vec![1, 0],
+            "ready indices in dependency order: b(1) then c(0)"
+        );
+        assert_eq!(blocked_idx, vec![2]);
     }
 
     #[test]

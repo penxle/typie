@@ -1,0 +1,6 @@
+error: closed enum must not have an unknown variant
+  --> tests/compile_fail/closed_with_unknown.rs:9:5
+   |
+ 9 | /     #[durable(unknown)]
+10 | |     Unknown(UnknownPayload),
+   | |___________________________^
