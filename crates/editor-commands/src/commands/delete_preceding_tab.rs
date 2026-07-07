@@ -2,7 +2,10 @@ use editor_model::{AtomLeaf, ChildView};
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::remove_atom_leaf;
+use crate::helpers::{
+    apply_carry_from_selection, capture_first_charlike_paint, find_ancestor_textblock,
+    remove_atom_leaf,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn delete_preceding_tab(tr: &mut Transaction) -> CommandResult {
@@ -31,6 +34,12 @@ pub fn delete_preceding_tab(tr: &mut Transaction) -> CommandResult {
         }
     }
 
+    let captured = {
+        let view = tr.state().view();
+        find_ancestor_textblock(&view, pos.node)
+            .map(|block| capture_first_charlike_paint(tr.state(), block))
+    };
+
     let new_offset = pos.offset - 1;
     remove_atom_leaf(tr, pos.node, tab_index)?;
     tr.set_selection(Some(Selection::collapsed(Position {
@@ -38,6 +47,10 @@ pub fn delete_preceding_tab(tr: &mut Transaction) -> CommandResult {
         offset: new_offset,
         affinity: Affinity::Downstream,
     })))?;
+
+    if let Some(captured) = &captured {
+        apply_carry_from_selection(tr, captured)?;
+    }
     Ok(true)
 }
 
@@ -78,5 +91,21 @@ mod tests {
             selection: (p1, 2)
         };
         transact_fail!(initial, |tr| delete_preceding_tab(&mut tr));
+    }
+
+    #[test]
+    fn delete_preceding_sole_tab_records_font_size_carry() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(1600)] } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_preceding_tab(&mut tr));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 1600 })),
+            "got {carry:?}"
+        );
     }
 }

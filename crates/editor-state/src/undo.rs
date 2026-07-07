@@ -3,17 +3,18 @@ use std::time::Duration;
 use editor_common::HistoryTag;
 use editor_common::time::Instant;
 
-use editor_crdt::{ListOp, LwwRegOp, Op};
+use editor_crdt::{Dot, ListOp, Op};
 use editor_model::{
-    EditOp, Marker, Modifier, ModifierAttrOp, NodeAttr, NodeAttrOp, NodeLwwOp, NodeType, SpanOp,
+    Anchor, Bias, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeAttr, NodeAttrOp, NodeType,
+    SpanOp,
 };
 
+use crate::StableSelection;
 use crate::projected_state::ProjectedState;
-use crate::{Composition, PendingModifiers, StableSelection};
 
-/// Editor state restored alongside a doc undo/redo: the caret/selection and the
-/// transient IME/pending overlays that the op-level history does not encode as
-/// document ops. Recorded as the pre-transaction state; restored on undo.
+/// Editor state restored alongside a doc undo/redo: the caret/selection that the
+/// op-level history does not encode as document ops. Recorded as the
+/// pre-transaction state; restored on undo.
 ///
 /// The selection is stored as a [`StableSelection`] (path + boundary binding),
 /// not a raw `(node, offset)` `Position`. Concurrent remote ops can restructure
@@ -25,20 +26,38 @@ use crate::{Composition, PendingModifiers, StableSelection};
 #[derive(Clone, Default, PartialEq)]
 pub struct TransientState {
     pub selection: Option<StableSelection>,
-    pub composition: Option<Composition>,
-    pub pending_modifiers: PendingModifiers,
+}
+
+pub struct SpanRun {
+    pub start: Anchor,
+    pub end: Anchor,
+    pub modifier: Modifier,
 }
 
 pub enum PriorValue {
     BlockModifier(Option<Modifier>),
     NodeAttr(NodeAttr),
-    NodeMarker(Option<Marker>),
-    SpanModifier(Modifier),
+    NodeCarry(Option<Modifier>),
+    SpanRuns {
+        runs: Vec<SpanRun>,
+        fully_covered: bool,
+    },
 }
 
 pub struct RecordedOp {
     pub op: Op<EditOp>,
     pub prior: Option<PriorValue>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum RecordMerge {
+    #[default]
+    Isolated,
+    Typing {
+        block: Dot,
+        before: usize,
+        after: usize,
+    },
 }
 
 pub struct UndoEntry {
@@ -48,6 +67,7 @@ pub struct UndoEntry {
     /// as the state *before* the transaction; the redo entry pushed by `undo`
     /// captures the state current at undo time.
     pub transient: TransientState,
+    pub merge: RecordMerge,
 }
 
 pub struct UndoHistory {
@@ -157,20 +177,30 @@ impl UndoHistory {
         self.redos.clear();
 
         let tag = entry.tag.clone();
-        let should_merge = self
+        let within_interval = self
             .last_push
             .map(|t| now.duration_since(t) < self.merge_interval)
             .unwrap_or(false);
-        let can_merge = should_merge
+        let can_merge = within_interval
+            && entry.tag.is_none()
             && matches!(self.undos.last(), Some(e) if e.tag.is_none())
-            && entry.tag.is_none();
+            && mergeable(self.undos.last().map(|e| &e.merge), &entry);
 
         if can_merge {
-            self.undos
-                .last_mut()
-                .expect("can_merge guarantees Some")
-                .ops
-                .extend(entry.ops);
+            let new_merge = entry.merge;
+            let last = self.undos.last_mut().expect("can_merge guarantees Some");
+            if let (
+                RecordMerge::Typing {
+                    after: last_after, ..
+                },
+                RecordMerge::Typing {
+                    after: new_after, ..
+                },
+            ) = (&mut last.merge, &new_merge)
+            {
+                *last_after = *new_after;
+            }
+            last.ops.extend(entry.ops);
         } else {
             self.invalidate_last_tag();
             self.undos.push(entry);
@@ -237,7 +267,9 @@ impl UndoHistory {
             ops: redo_ops,
             tag,
             transient: current_transient,
+            merge: RecordMerge::Isolated,
         });
+        self.last_push = None;
         self.sync_last_tag_from_top();
         Some((applied, restore_transient))
     }
@@ -286,10 +318,25 @@ impl UndoHistory {
             ops: undo_ops,
             tag,
             transient: current_transient,
+            merge: RecordMerge::Isolated,
         });
+        self.last_push = None;
         self.sync_last_tag_from_top();
         Some((applied, restore_transient))
     }
+}
+
+fn mergeable(last_merge: Option<&RecordMerge>, entry: &UndoEntry) -> bool {
+    if entry.ops.is_empty() {
+        return true;
+    }
+    matches!(
+        (last_merge, &entry.merge),
+        (
+            Some(RecordMerge::Typing { block: lb, after, .. }),
+            RecordMerge::Typing { block: nb, before, .. },
+        ) if lb == nb && after == before
+    )
 }
 
 pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> {
@@ -310,9 +357,18 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
                 .cloned();
             Some(PriorValue::BlockModifier(prior))
         }
-        EditOp::NodeMarker(NodeLwwOp { target, .. }) => Some(PriorValue::NodeMarker(
-            state.node_markers().value_of(*target),
-        )),
+        EditOp::NodeCarry(ModifierAttrOp::SetModifier { target, modifier }) => {
+            let prior = state
+                .node_carries()
+                .modifiers_of(*target)
+                .get(&modifier.as_type())
+                .cloned();
+            Some(PriorValue::NodeCarry(prior))
+        }
+        EditOp::NodeCarry(ModifierAttrOp::ClearModifier { target, key }) => {
+            let prior = state.node_carries().modifiers_of(*target).get(key).cloned();
+            Some(PriorValue::NodeCarry(prior))
+        }
         EditOp::NodeAttr(NodeAttrOp { target, attr }) => {
             let prior_node = state
                 .block_node(*target)
@@ -333,31 +389,109 @@ pub fn capture_prior(state: &ProjectedState, op: &EditOp) -> Option<PriorValue> 
                 .find(|a| std::mem::discriminant(a) == target_disc)?;
             Some(PriorValue::NodeAttr(prior_attr))
         }
+        EditOp::Span(SpanOp::AddSpan {
+            start,
+            end,
+            modifier,
+        }) => {
+            let (runs, fully_covered) = span_prior_runs(state, *start, *end, modifier.as_type());
+            Some(PriorValue::SpanRuns {
+                runs,
+                fully_covered,
+            })
+        }
         EditOp::Span(SpanOp::RemoveSpan {
             start,
             end,
             modifier_type,
         }) => {
-            let found = state.spans().iter().find_map(|(_, span_op)| {
-                if let SpanOp::AddSpan {
-                    start: s,
-                    end: e,
-                    modifier,
-                } = span_op
-                {
-                    if s == start && e == end && &modifier.as_type() == modifier_type {
-                        Some(modifier.clone())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            });
-            found.map(PriorValue::SpanModifier)
+            let (runs, fully_covered) = span_prior_runs(state, *start, *end, *modifier_type);
+            Some(PriorValue::SpanRuns {
+                runs,
+                fully_covered,
+            })
         }
         _ => None,
     }
+}
+
+fn span_prior_runs(
+    state: &ProjectedState,
+    start: Anchor,
+    end: Anchor,
+    ty: ModifierType,
+) -> (Vec<SpanRun>, bool) {
+    let mut runs: Vec<SpanRun> = Vec::new();
+    let mut cur: Option<(Dot, Dot, Modifier)> = None;
+    let mut saw_leaf = false;
+    let mut saw_gap = false;
+    let flush = |cur: &mut Option<(Dot, Dot, Modifier)>, runs: &mut Vec<SpanRun>| {
+        if let Some((first, last, modifier)) = cur.take() {
+            runs.push(SpanRun {
+                start: Anchor {
+                    id: first,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: last,
+                    bias: Bias::After,
+                },
+                modifier,
+            });
+        }
+    };
+    for (leaf, own) in state.span_covered_own(start, end, ty) {
+        saw_leaf = true;
+        match (&mut cur, own) {
+            (Some((_, last, m)), Some(v)) if *m == v => *last = leaf,
+            (_, Some(v)) => {
+                flush(&mut cur, &mut runs);
+                cur = Some((leaf, leaf, v));
+            }
+            (_, None) => {
+                saw_gap = true;
+                flush(&mut cur, &mut runs);
+            }
+        }
+    }
+    flush(&mut cur, &mut runs);
+    (runs, saw_leaf && !saw_gap)
+}
+
+fn span_invert(
+    start: Anchor,
+    end: Anchor,
+    ty: ModifierType,
+    prior: &Option<PriorValue>,
+) -> Vec<EditOp> {
+    if let Some(PriorValue::SpanRuns {
+        runs,
+        fully_covered: true,
+    }) = prior
+        && let Some((head, rest)) = runs.split_first()
+        && rest.iter().all(|r| r.modifier == head.modifier)
+    {
+        return vec![EditOp::Span(SpanOp::AddSpan {
+            start,
+            end,
+            modifier: head.modifier.clone(),
+        })];
+    }
+    let mut ops = vec![EditOp::Span(SpanOp::RemoveSpan {
+        start,
+        end,
+        modifier_type: ty,
+    })];
+    if let Some(PriorValue::SpanRuns { runs, .. }) = prior {
+        for run in runs {
+            ops.push(EditOp::Span(SpanOp::AddSpan {
+                start: run.start,
+                end: run.end,
+                modifier: run.modifier.clone(),
+            }));
+        }
+    }
+    ops
 }
 
 fn node_type_of_attr(attr: &NodeAttr) -> NodeType {
@@ -415,19 +549,12 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
             start,
             end,
             modifier,
-        }) => vec![EditOp::Span(SpanOp::RemoveSpan {
-            start: *start,
-            end: *end,
-            modifier_type: modifier.as_type(),
-        })],
-        EditOp::Span(SpanOp::RemoveSpan { start, end, .. }) => match &ro.prior {
-            Some(PriorValue::SpanModifier(modifier)) => vec![EditOp::Span(SpanOp::AddSpan {
-                start: *start,
-                end: *end,
-                modifier: modifier.clone(),
-            })],
-            _ => Vec::new(),
-        },
+        }) => span_invert(*start, *end, modifier.as_type(), &ro.prior),
+        EditOp::Span(SpanOp::RemoveSpan {
+            start,
+            end,
+            modifier_type,
+        }) => span_invert(*start, *end, *modifier_type, &ro.prior),
         EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier }) => {
             match &ro.prior {
                 Some(PriorValue::BlockModifier(Some(prior_m))) => {
@@ -456,14 +583,32 @@ pub fn invert(state: &ProjectedState, ro: &RecordedOp) -> Vec<EditOp> {
                 _ => Vec::new(),
             }
         }
-        EditOp::NodeMarker(NodeLwwOp { target, .. }) => match &ro.prior {
-            Some(PriorValue::NodeMarker(prior)) => vec![EditOp::NodeMarker(NodeLwwOp {
-                target: *target,
-                op: LwwRegOp::Set {
-                    value: prior.clone(),
-                },
-            })],
+        EditOp::NodeCarry(ModifierAttrOp::SetModifier { target, modifier }) => match &ro.prior {
+            Some(PriorValue::NodeCarry(Some(prior_m))) => {
+                vec![EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                    target: *target,
+                    modifier: prior_m.clone(),
+                })]
+            }
+            Some(PriorValue::NodeCarry(None)) => {
+                vec![EditOp::NodeCarry(ModifierAttrOp::ClearModifier {
+                    target: *target,
+                    key: modifier.as_type(),
+                })]
+            }
             _ => Vec::new(),
+        },
+        EditOp::NodeCarry(ModifierAttrOp::ClearModifier { target, key }) => match &ro.prior {
+            Some(PriorValue::NodeCarry(Some(prior_m))) => {
+                vec![EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                    target: *target,
+                    modifier: prior_m.clone(),
+                })]
+            }
+            _ => vec![EditOp::NodeCarry(ModifierAttrOp::ClearModifier {
+                target: *target,
+                key: *key,
+            })],
         },
         EditOp::NodeAttr(NodeAttrOp { target, .. }) => match &ro.prior {
             Some(PriorValue::NodeAttr(prior_attr)) => vec![EditOp::NodeAttr(NodeAttrOp {
@@ -488,7 +633,8 @@ mod tests {
     };
 
     use super::{
-        HistoryTag, PriorValue, RecordedOp, TransientState, UndoEntry, UndoHistory, capture_prior,
+        HistoryTag, PriorValue, RecordMerge, RecordedOp, TransientState, UndoEntry, UndoHistory,
+        capture_prior,
     };
     use crate::projected_state::ProjectedState;
 
@@ -517,6 +663,25 @@ mod tests {
             ops: vec![ro],
             tag: None,
             transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
+        }
+    }
+
+    fn typing_entry(
+        ro: RecordedOp,
+        block: editor_crdt::Dot,
+        before: usize,
+        after: usize,
+    ) -> UndoEntry {
+        UndoEntry {
+            ops: vec![ro],
+            tag: None,
+            transient: TransientState::default(),
+            merge: RecordMerge::Typing {
+                block,
+                before,
+                after,
+            },
         }
     }
 
@@ -543,6 +708,7 @@ mod tests {
                 ops: vec![ro2],
                 tag: Some(HistoryTag::AutoReplacement),
                 transient: TransientState::default(),
+                merge: RecordMerge::Isolated,
             },
             Instant::now(),
         );
@@ -635,6 +801,7 @@ mod tests {
             ],
             tag: None,
             transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
         };
 
         let mut history = UndoHistory::new(Duration::from_secs(0));
@@ -676,6 +843,7 @@ mod tests {
             ops: vec![ro_a, ro_b, ro_c],
             tag: None,
             transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
         };
 
         let mut history = UndoHistory::new(Duration::from_secs(1));
@@ -760,6 +928,7 @@ mod tests {
             ops: vec![ro_ins_a, ro_del_a, ro_ins_b],
             tag: None,
             transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
         };
 
         let mut history = UndoHistory::new(Duration::from_secs(1));
@@ -814,6 +983,7 @@ mod tests {
                 ops,
                 tag: None,
                 transient: TransientState::default(),
+                merge: RecordMerge::Isolated,
             },
             Instant::now(),
         );
@@ -951,6 +1121,130 @@ mod tests {
         );
     }
 
+    fn add_font_span(start: editor_crdt::Dot, end: editor_crdt::Dot, value: u32) -> EditOp {
+        EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: start,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: end,
+                bias: Bias::After,
+            },
+            modifier: Modifier::FontSize { value },
+        })
+    }
+
+    fn own_font_size(state: &ProjectedState, dot: editor_crdt::Dot) -> Option<u32> {
+        match state
+            .view()
+            .leaf_state_by_dot_slow(dot)
+            .unwrap()
+            .own
+            .get(&ModifierType::FontSize)
+            .map(|o| &o.value)
+        {
+            Some(Modifier::FontSize { value }) => Some(*value),
+            Some(_) => unreachable!(),
+            None => None,
+        }
+    }
+
+    #[test]
+    fn span_add_span_value_type_undo_restores_prior_value() {
+        let mut state = ProjectedState::empty();
+        let x = state.apply(seq_char(1, 'x')).unwrap().id;
+
+        state.apply(add_font_span(x, x, 1400)).unwrap();
+        assert_eq!(own_font_size(&state, x), Some(1400));
+
+        let ro = record_op(&mut state, add_font_span(x, x, 2000));
+        assert_eq!(own_font_size(&state, x), Some(2000));
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            own_font_size(&state, x),
+            Some(1400),
+            "undo of a value-type Set over an already-valued leaf must restore the prior value"
+        );
+    }
+
+    #[test]
+    fn span_add_span_nonuniform_undo_restores_each_prior() {
+        let mut state = ProjectedState::empty();
+        let x = state.apply(seq_char(1, 'x')).unwrap().id;
+        let y = state.apply(seq_char(2, 'y')).unwrap().id;
+
+        state.apply(add_font_span(x, x, 1400)).unwrap();
+        state.apply(add_font_span(y, y, 1600)).unwrap();
+
+        let ro = record_op(&mut state, add_font_span(x, y, 2000));
+        assert_eq!(own_font_size(&state, x), Some(2000));
+        assert_eq!(own_font_size(&state, y), Some(2000));
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(own_font_size(&state, x), Some(1400));
+        assert_eq!(
+            own_font_size(&state, y),
+            Some(1600),
+            "a non-uniform prior range must restore each leaf's own value per run"
+        );
+    }
+
+    #[test]
+    fn span_add_span_value_type_redo_reapplies() {
+        let mut state = ProjectedState::empty();
+        let x = state.apply(seq_char(1, 'x')).unwrap().id;
+
+        state.apply(add_font_span(x, x, 1400)).unwrap();
+        let ro = record_op(&mut state, add_font_span(x, x, 2000));
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+
+        history.undo(&mut state, TransientState::default());
+        assert_eq!(own_font_size(&state, x), Some(1400));
+
+        history.redo(&mut state, TransientState::default());
+        assert_eq!(
+            own_font_size(&state, x),
+            Some(2000),
+            "redo must re-apply the value-type Set (round-trip restores 20pt)"
+        );
+
+        history.undo(&mut state, TransientState::default());
+        assert_eq!(
+            own_font_size(&state, x),
+            Some(1400),
+            "a second undo after redo must restore the prior value again"
+        );
+    }
+
+    #[test]
+    fn span_add_span_first_value_undo_clears_to_absent() {
+        let mut state = ProjectedState::empty();
+        let x = state.apply(seq_char(1, 'x')).unwrap().id;
+
+        let ro = record_op(&mut state, add_font_span(x, x, 2000));
+        assert_eq!(own_font_size(&state, x), Some(2000));
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            own_font_size(&state, x),
+            None,
+            "undo of a first value-type application clears own to absent"
+        );
+    }
+
     #[test]
     fn block_modifier_set_undo_restores_to_none() {
         let mut state = ProjectedState::empty();
@@ -1000,6 +1294,125 @@ mod tests {
                 .get(&ModifierType::Alignment),
             None,
             "undo of SetModifier(Alignment) must clear it back to None"
+        );
+    }
+
+    fn first_para(state: &ProjectedState) -> editor_crdt::Dot {
+        state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap()
+    }
+
+    #[test]
+    fn node_carry_set_undo_clears_when_no_prior() {
+        let mut state = ProjectedState::empty();
+        let para = first_para(&state);
+
+        let ro = record_op(
+            &mut state,
+            EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Bold,
+            }),
+        );
+        assert!(
+            state
+                .node_carries()
+                .modifiers_of(para)
+                .contains_key(&ModifierType::Bold)
+        );
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            state
+                .node_carries()
+                .modifiers_of(para)
+                .get(&ModifierType::Bold),
+            None,
+            "undo of a carry Set with no prior clears it back to absent"
+        );
+    }
+
+    #[test]
+    fn node_carry_set_undo_restores_prior_value() {
+        let mut state = ProjectedState::empty();
+        let para = first_para(&state);
+
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontSize { value: 1200 },
+            }))
+            .unwrap();
+        let ro = record_op(
+            &mut state,
+            EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontSize { value: 1600 },
+            }),
+        );
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            state
+                .node_carries()
+                .modifiers_of(para)
+                .get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 1200 }),
+            "undo of a carry Set with a prior restores the prior value"
+        );
+    }
+
+    #[test]
+    fn node_carry_clear_without_prior_round_trips_through_redo() {
+        let mut state = ProjectedState::empty();
+        let para = first_para(&state);
+
+        let ro = record_op(
+            &mut state,
+            EditOp::NodeCarry(ModifierAttrOp::ClearModifier {
+                target: para,
+                key: ModifierType::Bold,
+            }),
+        );
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(
+            state
+                .node_carries()
+                .modifiers_of(para)
+                .get(&ModifierType::Bold),
+            None,
+            "undoing a prior-less clear leaves the (already-absent) carry absent"
+        );
+
+        let (applied, _) = history
+            .redo(&mut state, TransientState::default())
+            .expect("redo applies");
+        assert!(
+            applied.iter().any(|op| matches!(
+                &op.payload,
+                EditOp::NodeCarry(ModifierAttrOp::ClearModifier {
+                    target,
+                    key: ModifierType::Bold,
+                }) if *target == para
+            )),
+            "redo must re-emit the prior-less carry clear (redo is the exact inverse of undo)"
         );
     }
 
@@ -1084,10 +1497,13 @@ mod tests {
         let mut history = UndoHistory::new(interval);
 
         let ro_a = record_op(&mut state, seq_char(1, 'a'));
-        history.record(single_entry(ro_a), now);
+        history.record(typing_entry(ro_a, para, 0, 1), now);
 
         let ro_b = record_op(&mut state, seq_char(2, 'b'));
-        history.record(single_entry(ro_b), now + Duration::from_millis(100));
+        history.record(
+            typing_entry(ro_b, para, 1, 2),
+            now + Duration::from_millis(100),
+        );
 
         assert_eq!(state.view().node(para).unwrap().inline_text(), "ab");
 
@@ -1118,14 +1534,17 @@ mod tests {
         let mut history = UndoHistory::new(interval);
 
         let ro_a = record_op(&mut state, seq_char(1, 'a'));
-        history.record(single_entry(ro_a), now);
+        history.record(typing_entry(ro_a, para, 0, 1), now);
 
         let ro_b = record_op(&mut state, seq_char(2, 'b'));
         let t1 = now + Duration::from_millis(100);
-        history.record(single_entry(ro_b), t1);
+        history.record(typing_entry(ro_b, para, 1, 2), t1);
 
         let ro_c = record_op(&mut state, seq_char(3, 'c'));
-        history.record(single_entry(ro_c), t1 + interval + Duration::from_millis(1));
+        history.record(
+            typing_entry(ro_c, para, 2, 3),
+            t1 + interval + Duration::from_millis(1),
+        );
 
         assert_eq!(state.view().node(para).unwrap().inline_text(), "abc");
 
@@ -1168,11 +1587,15 @@ mod tests {
             ops: vec![ro_a],
             tag: Some(super::HistoryTag::AutoReplacement),
             transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
         };
         history.record(tagged, now);
 
         let ro_b = record_op(&mut state, seq_char(2, 'b'));
-        history.record(single_entry(ro_b), now + Duration::from_millis(10));
+        history.record(
+            typing_entry(ro_b, para, 1, 2),
+            now + Duration::from_millis(10),
+        );
 
         assert_eq!(state.view().node(para).unwrap().inline_text(), "ab");
 
@@ -1357,6 +1780,69 @@ mod tests {
             .expect("undo applies");
         assert_eq!(state.view().node(para).unwrap().inline_text(), "");
     }
+
+    #[test]
+    fn undo_redo_repeated_cycles_keep_span_invert_op_count_fixed() {
+        let mut state = ProjectedState::empty();
+        let x = state.apply(seq_char(1, 'x')).unwrap().id;
+
+        state.apply(add_font_span(x, x, 1400)).unwrap();
+        let ro = record_op(&mut state, add_font_span(x, x, 2000));
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+
+        let (first_undo, _) = history.undo(&mut state, TransientState::default()).unwrap();
+        let undo_len = first_undo.len();
+        assert_eq!(own_font_size(&state, x), Some(1400));
+
+        let (first_redo, _) = history.redo(&mut state, TransientState::default()).unwrap();
+        let redo_len = first_redo.len();
+        assert_eq!(own_font_size(&state, x), Some(2000));
+
+        for _ in 0..3 {
+            let (applied_u, _) = history.undo(&mut state, TransientState::default()).unwrap();
+            assert_eq!(applied_u.len(), undo_len);
+            assert_eq!(own_font_size(&state, x), Some(1400));
+
+            let (applied_r, _) = history.redo(&mut state, TransientState::default()).unwrap();
+            assert_eq!(applied_r.len(), redo_len);
+            assert_eq!(own_font_size(&state, x), Some(2000));
+        }
+    }
+
+    #[test]
+    fn undo_nonuniform_span_clears_leaf_inserted_between_runs_after_capture() {
+        let mut state = ProjectedState::empty();
+        let x = state.apply(seq_char(1, 'x')).unwrap().id;
+        let y = state.apply(seq_char(2, 'y')).unwrap().id;
+
+        state.apply(add_font_span(x, x, 1400)).unwrap();
+        state.apply(add_font_span(y, y, 1600)).unwrap();
+
+        let ro = record_op(&mut state, add_font_span(x, y, 2000));
+        assert_eq!(own_font_size(&state, x), Some(2000));
+        assert_eq!(own_font_size(&state, y), Some(2000));
+
+        let z = state.apply(seq_char(2, 'z')).unwrap().id;
+        assert_eq!(
+            own_font_size(&state, z),
+            Some(2000),
+            "the recorded span's positional range must cover the leaf inserted between the runs"
+        );
+
+        let mut history = UndoHistory::new(Duration::from_secs(1));
+        history.record(single_entry(ro), Instant::now());
+        history.undo(&mut state, TransientState::default());
+
+        assert_eq!(own_font_size(&state, x), Some(1400));
+        assert_eq!(own_font_size(&state, y), Some(1600));
+        assert_eq!(
+            own_font_size(&state, z),
+            None,
+            "undo of a non-uniform span must clear the intruding leaf, not leave the undone value"
+        );
+    }
 }
 
 /// Faithful end-to-end fuzz of the REAL `UndoHistory`/`invert`/`undo`/`redo`
@@ -1375,7 +1861,7 @@ mod concurrency_proptest {
     use std::time::Duration;
 
     use crate::projected_state::ProjectedState;
-    use crate::undo::{RecordedOp, TransientState, UndoEntry, UndoHistory};
+    use crate::undo::{RecordMerge, RecordedOp, TransientState, UndoEntry, UndoHistory};
 
     #[derive(Clone, Debug)]
     enum Cmd {
@@ -1412,6 +1898,7 @@ mod concurrency_proptest {
                 ops: vec![RecordedOp { op, prior: None }],
                 tag: None,
                 transient: TransientState::default(),
+                merge: RecordMerge::Isolated,
             },
             Instant::now(),
         );

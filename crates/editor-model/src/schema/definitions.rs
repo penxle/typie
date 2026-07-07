@@ -2,7 +2,7 @@ use editor_macros::{content_expr, context_expr};
 use enum_map::{EnumMap, enum_map};
 use std::sync::LazyLock;
 
-use super::{Expand, ModifierSpec, NodeSpec};
+use super::{ModifierSpec, NodeSpec};
 use crate::{ModifierType, NodeType};
 
 static INNER: LazyLock<SchemaInner> = LazyLock::new(SchemaInner::default);
@@ -197,39 +197,33 @@ impl Default for SchemaInner {
                 ModifierType::Link => ModifierSpec {
                     context: context_expr!(Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
-                    expand: Expand::None,
                     inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::Ruby => ModifierSpec {
                     context: context_expr!(Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
-                    expand: Expand::None,
                     inheritable: false,
                     ..Default::default()
                 },
                 ModifierType::LineHeight => ModifierSpec {
                     context: context_expr!(Root | Paragraph),
                     target: context_expr!(Paragraph),
-                    expand: Expand::None,
                     ..Default::default()
                 },
                 ModifierType::BlockGap => ModifierSpec {
                     context: context_expr!(Root),
                     target: editor_model::ContextExpr::AnyOf(Vec::new()),
-                    expand: Expand::None,
                     ..Default::default()
                 },
                 ModifierType::ParagraphIndent => ModifierSpec {
                     context: context_expr!(Root | Root > Paragraph),
                     target: context_expr!(Root > Paragraph),
-                    expand: Expand::None,
                     ..Default::default()
                 },
                 ModifierType::Alignment => ModifierSpec {
                     context: context_expr!(Root | Paragraph | Image | Table),
                     target: context_expr!(Paragraph | Image | Table),
-                    expand: Expand::None,
                     ..Default::default()
                 },
             },

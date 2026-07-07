@@ -1,10 +1,14 @@
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::insert_tab_at_caret;
+use crate::helpers::{consume_pending_modifiers, insert_tab_at_caret};
 
 pub fn insert_tab(tr: &mut Transaction) -> CommandResult {
-    insert_tab_at_caret(tr)
+    let changed = insert_tab_at_caret(tr, None)?;
+    if changed {
+        consume_pending_modifiers(tr)?;
+    }
+    Ok(changed)
 }
 
 #[cfg(test)]
@@ -66,17 +70,33 @@ mod tests {
     }
 
     #[test]
-    fn insert_at_end_attaches_carryable_marker() {
+    fn tab_copies_left_neighbor_paint_writes_no_block_carry() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [bold] } } }
             selection: (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph marker([bold]) { text("Hello") [bold] tab } } }
+            doc { root { p1: paragraph { text("Hello") [bold] tab [bold] } } }
             selection: (p1, 6)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn pending_modifiers_consumed() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 5)
+            pending_modifiers: [bold]
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") tab [bold] } } }
+            selection: (p1, 6)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert!(actual.pending_modifiers.is_empty());
     }
 
     #[test]
@@ -87,21 +107,21 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph marker([font_size(2400)]) { text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
+            doc { root { p1: paragraph { text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
             selection: (p1, 3)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn tab_into_empty_paragraph_with_marker_carries_metric() {
-        let (state, ..) = state! {
-            doc { root { p1: paragraph marker([font_size(2400)]) {} } }
+    fn tab_in_empty_paragraph_preserves_carry() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph carry([font_size(2400)]) {} } }
             selection: (p1, 0)
         };
-        let (actual, ..) = transact!(state, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { tab [font_size(2400)] } } }
+            doc { root { p1: paragraph carry([font_size(2400)]) { tab [font_size(2400)] } } }
             selection: (p1, 1)
         };
         assert_state_eq!(&actual, &expected);

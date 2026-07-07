@@ -3,6 +3,7 @@ use editor_model::NodeView;
 use editor_transaction::Transaction;
 
 use crate::CommandError;
+use crate::helpers::{capture_charlike_slots, insert_charlike_slots};
 
 fn next_block_sibling_id(parent: &NodeView, target_id: Dot) -> Option<Dot> {
     let idx = parent.child_blocks().position(|b| b.id() == target_id)?;
@@ -19,8 +20,8 @@ fn next_block_sibling_id(parent: &NodeView, target_id: Dot) -> Option<Dot> {
 ///
 /// Single-slot containers (a `ListItem` holds exactly one paragraph) reject the
 /// extra sibling: projection normalization drops it again, so the move cannot
-/// land. In that case `source`'s inline text is appended to `target` and the
-/// `source` subtree is removed.
+/// land. In that case `source`'s inline content (chars and formatting-bearing
+/// atoms) is appended to `target` and the `source` subtree is removed.
 pub(crate) fn merge_element_cross_parent(
     tr: &mut Transaction,
     source_id: Dot,
@@ -56,21 +57,63 @@ pub(crate) fn merge_element_cross_parent(
 
     tr.rollback(sp);
 
-    let text = {
-        let view = tr.state().view();
-        view.node(source_id)
-            .map(|s| s.inline_text())
-            .unwrap_or_default()
-    };
-    let target_len = {
-        let view = tr.state().view();
-        view.node(target_id)
+    let (slots, target_len) = {
+        let state = tr.state();
+        let view = state.view();
+        let source = view
+            .node(source_id)
+            .ok_or(CommandError::NodeNotFound(source_id))?;
+        let source_len = source.children().count();
+        let slots = capture_charlike_slots(&state.projected, &source, 0, source_len)?;
+        let target_len = view
+            .node(target_id)
             .map(|t| t.children().count())
-            .ok_or(CommandError::NodeNotFound(target_id))?
+            .ok_or(CommandError::NodeNotFound(target_id))?;
+        (slots, target_len)
     };
-    if !text.is_empty() {
-        tr.insert_text(target_id, target_len, &text)?;
-    }
+    insert_charlike_slots(tr, target_id, target_len, &slots)?;
     tr.remove_subtree(source_id)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_macros::state;
+    use editor_model::{ChildView, NodeType};
+
+    use super::*;
+
+    #[test]
+    fn cross_parent_fallback_drops_page_break() {
+        let (initial, t1, src) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { t1: paragraph { text("A") } }
+                    }
+                    src: paragraph { text("B") page_break }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        merge_element_cross_parent(&mut tr, src, t1).unwrap();
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let para = view.node(t1).unwrap();
+        assert_eq!(para.inline_text(), "AB");
+        assert!(
+            para.children().all(|c| !matches!(
+                c,
+                ChildView::Leaf(l) if l.node_type() == NodeType::PageBreak
+            )),
+            "the merge fallback drops the source PageBreak instead of pulling it into a list item"
+        );
+        assert!(
+            actual.view().node(src).is_none(),
+            "the source paragraph is removed after merging"
+        );
+    }
 }

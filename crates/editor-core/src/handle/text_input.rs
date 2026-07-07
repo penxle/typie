@@ -1,13 +1,14 @@
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
-use editor_model::{DocView, Modifier};
+use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{
-    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, PendingModifier, ResolvedPosition,
-    ResolvedPositionFlatExt, Selection, as_gap_cursor, flat_chars, flat_segments_in_range,
-    flat_size, is_unit_node_selection, resolve_effective_modifiers_at,
+    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, Position, ProjectedState, ResolvedPosition,
+    ResolvedPositionFlatExt, Selection, apply_pending, as_gap_cursor, continuation_at, flat_chars,
+    flat_segments_in_range, flat_size, is_unit_node_selection, replacement_paint,
 };
 use editor_transaction::Transaction;
 
@@ -15,84 +16,36 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
-fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
-    let doc = tr.view();
-    let replacement_modifiers = uniform_own_text_modifiers_in_range(&doc, start, end);
-    let resolve_selection_from_flat = || -> Result<Selection, CommandError> {
-        let start_pos = ResolvedPosition::from_flat(&doc, start)
-            .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
-        let end_pos = ResolvedPosition::from_flat(&doc, end)
-            .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
-        Ok(Selection::new((&start_pos).into(), (&end_pos).into()))
-    };
-    let current_selection_flat_range = |selection: Selection| -> Option<(usize, usize)> {
-        let anchor = selection.anchor.resolve(&doc)?.to_flat();
-        let head = selection.head.resolve(&doc)?.to_flat();
-        Some((anchor.min(head), anchor.max(head)))
-    };
-    let selection = tr
-        .selection()
-        .filter(|selection| current_selection_flat_range(*selection) == Some((start, end)))
-        .map_or_else(resolve_selection_from_flat, Ok)?;
-
-    commands::chain!(
-        tr,
-        commands::set_selection(selection),
-        commands::optional!(commands::ensure_paragraph()),
-        commands::optional!(commands::delete_selection()),
-        |tr| apply_replacement_format(tr, text, replacement_modifiers.as_deref()),
-        commands::when!(!text.is_empty(), commands::insert_text(text)),
-    )
-}
-
-fn apply_replacement_format(
-    tr: &mut Transaction,
-    text: &str,
-    target_modifiers: Option<&[Modifier]>,
-) -> CommandResult {
-    if text.is_empty() {
-        return Ok(true);
-    }
-
-    if let Some(target_modifiers) = target_modifiers {
-        let Some(selection) = tr.selection() else {
-            return Ok(true);
-        };
-        let base_modifiers = resolve_effective_modifiers_at(tr.state(), &selection.head);
-        let pending = PendingModifier::diff(&base_modifiers, target_modifiers);
-        tr.set_pending_modifiers(pending)?;
-    }
-
-    Ok(true)
-}
-
-fn uniform_own_text_modifiers_in_range(
-    view: &DocView,
+fn selection_from_flat_range(
+    doc: &DocView,
     start: usize,
     end: usize,
-) -> Option<Vec<Modifier>> {
-    if start >= end {
-        return None;
-    }
+) -> Result<Selection, CommandError> {
+    let start_pos = ResolvedPosition::from_flat(doc, start)
+        .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
+    let end_pos = ResolvedPosition::from_flat(doc, end)
+        .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
+    Ok(Selection::new((&start_pos).into(), (&end_pos).into()))
+}
 
-    let mut range_modifiers: Option<Vec<Modifier>> = None;
-    for seg in flat_segments_in_range(view, start..end) {
-        let FlatSegment::Text { leaves, .. } = seg else {
-            return None;
-        };
-        for leaf_dot in leaves {
-            let st = view.leaf_state_by_dot_slow(leaf_dot)?;
-            let mut modifiers: Vec<Modifier> = st.own.values().map(|o| o.value.clone()).collect();
-            modifiers.sort_by_key(|m| m.as_type());
-            match &range_modifiers {
-                Some(existing) if existing != &modifiers => return None,
-                Some(_) => {}
-                None => range_modifiers = Some(modifiers),
-            }
-        }
+fn seed_composition_paint(
+    projected: &ProjectedState,
+    start: usize,
+    end: usize,
+) -> BTreeMap<ModifierType, Modifier> {
+    let view = projected.view();
+    let (Some(from), Some(to)) = (
+        ResolvedPosition::from_flat(&view, start),
+        ResolvedPosition::from_flat(&view, end),
+    ) else {
+        return BTreeMap::new();
+    };
+    let from_pos: Position = (&from).into();
+    let to_pos: Position = (&to).into();
+    if let Some(paint) = replacement_paint(projected, from_pos, to_pos) {
+        return paint.into_iter().map(|m| (m.as_type(), m)).collect();
     }
-
-    range_modifiers
+    continuation_at(projected, from_pos.node, from_pos.offset)
 }
 
 fn composition_range_valid(view: &DocView, start: usize, end: usize) -> bool {
@@ -745,6 +698,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         let (initial, reduced) = if initial.text != reduced.state.text && started_at_gap {
             let before_materialize = initial.clone();
             editor.transact(|tr| {
+                tr.keep_pending_modifiers();
                 tr.set_composition(None)?;
                 commands::materialize_gap_paragraph(tr)?;
                 Ok(())
@@ -801,6 +755,8 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         let has_text_delta = !del.is_empty() || !text_change.insert.is_empty();
         let has_structural_seams = delta.start_tokens > 0 || delta.end_tokens > 0;
 
+        let sidecar_before = editor.composition_paint.clone();
+
         if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
             editor.transact(|tr| {
                 let mut composition_text_start = delta.composition_text_start;
@@ -817,27 +773,44 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                         let full_replace = text_change.replace_start == initial.sel_start
                             && text_change.replace_end == initial.sel_end;
                         if full_replace {
-                            replace_text_range(
-                                tr,
+                            let sel = selection_from_flat_range(
+                                &tr.view(),
                                 text_change.replace_start,
                                 text_change.replace_end,
+                            )?;
+                            commands::replace_range_with_text(
+                                tr,
+                                sel,
                                 &delta.ins_text,
+                                sidecar_before.clone(),
                             )?;
                         } else {
                             let deletes_body = delta.replace_start != delta.replace_end;
-                            let replacement_modifiers = if !delta.ins_text.is_empty() {
-                                let doc = tr.view();
-                                uniform_own_text_modifiers_in_range(
-                                    &doc,
+                            let paint = if !delta.ins_text.is_empty() {
+                                let sel = selection_from_flat_range(
+                                    &tr.view(),
                                     delta.replace_start,
                                     delta.replace_end,
                                 )
+                                .ok();
+                                sel.and_then(|sel| {
+                                    editor_state::replacement_paint(
+                                        &tr.state().projected,
+                                        sel.anchor,
+                                        sel.head,
+                                    )
+                                })
                             } else {
                                 None
                             };
 
                             if deletes_body {
-                                replace_text_range(tr, delta.replace_start, delta.replace_end, "")?;
+                                let sel = selection_from_flat_range(
+                                    &tr.view(),
+                                    delta.replace_start,
+                                    delta.replace_end,
+                                )?;
+                                commands::replace_range_with_text(tr, sel, "", None)?;
                             }
 
                             if delta.end_tokens > 0 {
@@ -867,22 +840,29 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                                 }
                             }
 
-                            if !delta.ins_text.is_empty() {
-                                apply_replacement_format(
+                            if !delta.ins_text.is_empty()
+                                && let Some(head) = tr.selection().map(|s| s.head)
+                            {
+                                commands::replace_range_with_text(
                                     tr,
+                                    Selection::collapsed(head),
                                     &delta.ins_text,
-                                    replacement_modifiers.as_deref(),
+                                    sidecar_before.clone().or(paint),
                                 )?;
-                                commands::insert_text(tr, &delta.ins_text)?;
                             }
                         }
                         composition_text_start = Some(text_change.replace_start);
                     } else {
-                        replace_text_range(
-                            tr,
+                        let sel = selection_from_flat_range(
+                            &tr.view(),
                             delta.replace_start,
                             delta.replace_end,
+                        )?;
+                        commands::replace_range_with_text(
+                            tr,
+                            sel,
                             &delta.ins_text,
+                            sidecar_before.clone(),
                         )?;
                     }
                 }
@@ -920,6 +900,17 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
                 if composition.is_some() || tr.composition().is_some() {
                     tr.set_composition(composition)?;
+                }
+
+                if sidecar_before.is_none()
+                    && let Some(comp) = composition
+                {
+                    let mut paint =
+                        seed_composition_paint(&tr.state().projected, comp.start, comp.end);
+                    apply_pending(&mut paint, tr.pending_modifiers());
+                    tr.clear_pending_format()?;
+                    let paint: Vec<Modifier> = paint.into_values().collect();
+                    tr.update_meta(|m| m.composition_paint = Some(paint));
                 }
 
                 Ok(())
@@ -1841,7 +1832,7 @@ mod tests {
     #[test]
     fn retroactive_composition_across_formatting_boundary() {
         // "안"[bold] + "녕" (two text nodes in same paragraph, different modifiers)
-        let (state, ..) = state! {
+        let (state, p1) = state! {
             doc { root { p1: paragraph {
                 text("안") [bold]
                 text("녕")
@@ -1874,6 +1865,243 @@ mod tests {
 
         let view = editor.state().view();
         assert_eq!(editor_state::flat_text(&view, 1..4), "안녕하");
+
+        let para = view.node(p1).unwrap();
+        assert!(
+            para.inline().iter().all(|item| item
+                .effective
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold))),
+            "the replacement inherits the first-charlike own paint (bold) across the whole composition"
+        );
+    }
+
+    #[test]
+    fn composition_start_seeds_bold_neighbor_and_consumes_italic_pending() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가") [bold] } } }
+            selection: (p1, 1)
+            pending_modifiers: [italic]
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending consumed at composition start"
+        );
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "하".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::CommitAsIs],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {
+                text("가") [bold]
+                text("하") [bold, italic]
+            } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn empty_composition_start_overlays_and_consumes_pending() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("하") } } }
+            selection: (p1, 1)
+            pending_modifiers: [italic]
+        };
+        let mut editor = Editor::new_test(state);
+
+        let flat = {
+            let view = editor.state().view();
+            editor
+                .state()
+                .selection
+                .unwrap()
+                .head
+                .resolve(&view)
+                .unwrap()
+                .to_flat()
+        };
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetComposition {
+                start: flat,
+                end: flat,
+            }],
+        });
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending consumed at empty composition start"
+        );
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "가".into() }],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {
+                text("하")
+                text("가") [italic]
+            } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_then_compose_seed_overlays_and_consumes_pending() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph {
+                text("하")
+                text("ㅎ") [italic]
+            } } }
+            selection: (p1, 2)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::Compose { text: "하".into() },
+            ],
+        });
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending consumed at composition start"
+        );
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {
+                text("하")
+                text("하") [italic, bold]
+            } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    fn remote_change(
+        base: &editor_state::State,
+        ops: Vec<editor_model::EditOp>,
+    ) -> editor_crdt::Changeset<editor_model::EditOp> {
+        use hashbrown::HashSet;
+        let mut pa = base.projected.as_ref().clone();
+        let baseline: HashSet<editor_crdt::Dot> = pa.graph().current_heads().copied().collect();
+        pa.apply_batch(ops).unwrap();
+        pa.commit();
+        pa.graph()
+            .local_changesets_since(&baseline)
+            .unwrap()
+            .remove(0)
+    }
+
+    #[test]
+    fn remote_concurrent_edit_preserves_confirmed_composition_paint() {
+        use editor_crdt::ListOp;
+        use editor_model::{EditOp, SeqItem};
+
+        let (replica_a, _p1) = state! {
+            doc { root { p1: paragraph { text("가") [bold] } } }
+            selection: (p1, 1)
+        };
+        let css_a = replica_a.graph().changesets_as_vec();
+        let replica_b = editor_state::State::from_changesets(css_a, replica_a.selection).unwrap();
+        let mut editor = Editor::new_test(replica_b);
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        let seeded = editor.composition_paint.clone();
+        assert!(
+            seeded
+                .as_ref()
+                .is_some_and(|p| p.iter().any(|m| matches!(m, editor_model::Modifier::Bold))),
+            "composition start seeds the bold neighbor paint"
+        );
+
+        let cs = remote_change(
+            &replica_a,
+            vec![EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('Z'),
+            })],
+        );
+        editor.receive_remote_changeset(cs);
+        let _ = editor.tick().unwrap();
+
+        assert_eq!(
+            editor.composition_paint, seeded,
+            "the confirmed composition paint survives a concurrent remote edit"
+        );
+    }
+
+    #[test]
+    fn undo_dissolves_active_composition() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        assert!(editor.state().composition.is_some(), "composition active");
+        assert!(editor.composition_paint.is_some(), "sidecar seeded");
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        assert!(
+            editor.state().composition.is_none(),
+            "a successful undo dissolves the active composition rather than restoring it"
+        );
+        assert!(
+            editor.composition_paint.is_none(),
+            "the sidecar is dropped alongside the dissolved composition"
+        );
+        let view = editor.state().view();
+        let full = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
+        assert!(!full.contains('ㅎ'), "the composed char is undone");
+    }
+
+    #[test]
+    fn noop_undo_without_history_keeps_pending() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a") } } }
+            selection: (p1, 1)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        assert!(
+            !editor.undo_history.can_undo(),
+            "no history: undo is a no-op"
+        );
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        assert_eq!(
+            editor.state().pending_modifiers.as_slice(),
+            &[editor_state::PendingModifier::Set {
+                modifier: editor_model::Modifier::Bold
+            }],
+            "a no-op undo moves no cursor and so keeps the pending format"
+        );
     }
 
     fn flat_ime_state(text: &str, sel: usize) -> FlatImeState {
@@ -2667,6 +2895,62 @@ mod tests {
             selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn structural_backward_merge_drops_front_trailing_page_break() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { text("AB") page_break }
+                    cur: paragraph { text("CD") }
+                }
+            }
+            selection: (cur, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(structural_backward(&mut tr).unwrap());
+        let (actual, ..) = tr.commit();
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    m: paragraph {
+                        text("AB")
+                        text("CD")
+                    }
+                }
+            }
+            selection: (m, 2, <)
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn structural_forward_merge_drops_front_trailing_page_break() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("AB") page_break }
+                    paragraph { text("CD") }
+                }
+            }
+            selection: (p1, 3)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(structural_forward(&mut tr).unwrap());
+        let (actual, ..) = tr.commit();
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    m: paragraph {
+                        text("AB")
+                        text("CD")
+                    }
+                }
+            }
+            selection: (m, 2)
+        };
+        assert_state_eq!(actual, expected);
     }
 
     #[test]

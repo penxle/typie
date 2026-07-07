@@ -3,9 +3,10 @@ use editor_state::{Position, Selection};
 use editor_state::{first_cursor_position, last_cursor_position};
 use editor_transaction::Transaction;
 
+use crate::helpers::{apply_inline_modifiers, child_leaf_dots, resolve_effective_modifiers};
 use crate::{CommandError, CommandResult};
 
-pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> CommandResult {
+pub(crate) fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
@@ -88,9 +89,26 @@ pub fn surround_selection(tr: &mut Transaction, left: &str, right: &str) -> Comm
     let left_char_count = left.chars().count();
     let right_char_count = right.chars().count();
 
-    // Insert right first so the from position is not shifted.
+    let left_paint = resolve_effective_modifiers(
+        &tr.state().projected,
+        from_id,
+        from_offset,
+        tr.pending_modifiers(),
+    );
+    let right_paint = resolve_effective_modifiers(
+        &tr.state().projected,
+        to_id,
+        to_offset,
+        tr.pending_modifiers(),
+    );
+
     tr.insert_text(to_id, to_offset, right)?;
+    let right_dots = child_leaf_dots(tr, to_id, to_offset, right_char_count);
     tr.insert_text(from_id, from_offset, left)?;
+    let left_dots = child_leaf_dots(tr, from_id, from_offset, left_char_count);
+
+    apply_inline_modifiers(tr, &left_dots, &left_paint)?;
+    apply_inline_modifiers(tr, &right_dots, &right_paint)?;
 
     let new_to_offset = if from_id == to_id {
         to_offset + left_char_count + right_char_count
@@ -191,6 +209,67 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("\u{201C}hello\u{201D}") } } }
             selection: (p1, 0) -> (p1, 7)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn surrounds_bold_range_paints_brackets_bold() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("가나") [bold] } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "(", ")"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(가나)") [bold] } } }
+            selection: (p1, 0) -> (p1, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn surrounds_paints_each_bracket_by_its_own_position() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("가") [bold] text("나") } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "(", ")"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {
+                text("(가") [bold]
+                text("나)")
+            } } }
+            selection: (p1, 0) -> (p1, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn surrounds_inside_uniform_bold_run_keeps_neighbors_bold() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("가나다") [bold] } } }
+            selection: (p1, 1) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "(", ")"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가(나)다") [bold] } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn surround_over_range_selection_is_pending_neutral() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("가나") [bold] } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        assert!(initial.pending_modifiers.is_empty());
+        let (actual, ..) = transact!(initial, |tr| surround_selection(&mut tr, "(", ")"));
+        assert!(actual.pending_modifiers.is_empty());
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(가나)") [bold] } } }
+            selection: (p1, 0) -> (p1, 4)
         };
         assert_state_eq!(&actual, &expected);
     }

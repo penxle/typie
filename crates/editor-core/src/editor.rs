@@ -10,7 +10,7 @@ use editor_state::{
     LayoutDirty, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
     State, closest_empty_paragraph_break_end_between, farther_endpoint, is_unit_node_selection,
 };
-use editor_transaction::{Effect, HistoryMeta, StepError, Transaction};
+use editor_transaction::{Effect, HistoryMeta, MergeKind, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -26,7 +26,7 @@ use crate::message::*;
 use crate::state_field::StateField;
 use crate::tracked_range::TrackedRangeRegistry;
 use editor_common::time::Instant;
-use editor_state::undo::{TransientState, UndoEntry, UndoHistory};
+use editor_state::undo::{RecordMerge, TransientState, UndoEntry, UndoHistory};
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
@@ -73,7 +73,7 @@ fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
 }
 
 /// Snapshot of the transient (non-document) editor state recorded with each undo
-/// entry so undo/redo restore the caret/IME/pending overlays.
+/// entry so undo/redo restore the caret.
 ///
 /// The caret is captured as a [`StableSelection`] (path + boundary binding) so it
 /// survives document restructuring by concurrent remote ops between record and
@@ -90,20 +90,40 @@ fn capture_transient(state: &State) -> TransientState {
         .selection
         .filter(|s| s.resolve(&view).is_some())
         .map(|s| StableSelection::capture(&s, &view));
-    TransientState {
-        selection,
-        composition: state.composition,
-        pending_modifiers: state.pending_modifiers.clone(),
-    }
+    TransientState { selection }
 }
 
 /// Whether the transient (non-document) state differs between two states. Used to
-/// decide if a selection/IME/pending-only transaction is undoable, without paying
-/// for a `StableSelection` capture on the per-keystroke path.
+/// decide if a selection-only transaction is undoable, without paying for a
+/// `StableSelection` capture on the per-keystroke path.
 fn transient_fields_changed(before: &State, after: &State) -> bool {
     before.selection != after.selection
-        || before.composition != after.composition
-        || before.pending_modifiers != after.pending_modifiers
+}
+
+fn logical_caret_moved(before: Option<Selection>, after: Option<Selection>) -> bool {
+    fn key(sel: Option<Selection>) -> Option<(Dot, usize, Dot, usize)> {
+        sel.map(|s| (s.anchor.node, s.anchor.offset, s.head.node, s.head.offset))
+    }
+    key(before) != key(after)
+}
+
+fn collapsed_caret(state: &State) -> Option<Position> {
+    let sel = state.selection?;
+    (sel.anchor == sel.head).then_some(sel.head)
+}
+
+fn typing_run(kind: MergeKind, before: &State, after: &State) -> RecordMerge {
+    if !matches!(kind, MergeKind::Typing) {
+        return RecordMerge::Isolated;
+    }
+    match (collapsed_caret(before), collapsed_caret(after)) {
+        (Some(from), Some(to)) if from.node == to.node => RecordMerge::Typing {
+            block: to.node,
+            before: from.offset,
+            after: to.offset,
+        },
+        _ => RecordMerge::Isolated,
+    }
 }
 
 pub struct Editor {
@@ -129,6 +149,7 @@ pub struct Editor {
     pub(crate) pending_ops: Vec<Op<EditOp>>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
+    pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     mode: Mode,
     // Selection rects for the current (selection, render_epoch), shared by the
     // per-page render signatures, the selection mark, and the endpoints query —
@@ -194,6 +215,7 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            composition_paint: None,
             mode: Mode::Apply,
             selection_rects_cache: Mutex::new(None),
         }
@@ -260,6 +282,17 @@ impl Editor {
 
     pub fn modifier_state(&self) -> Option<ModifierState> {
         let sel = self.state.selection.as_ref()?;
+        if self.state.composition.is_some()
+            && let Some(paint) = &self.composition_paint
+        {
+            let pending: editor_state::PendingModifiers = paint
+                .iter()
+                .map(|m| editor_state::PendingModifier::Set {
+                    modifier: m.clone(),
+                })
+                .collect();
+            return editor_state::resolve_modifier_state(&self.state.projected, sel, &pending);
+        }
         editor_state::resolve_modifier_state(
             &self.state.projected,
             sel,
@@ -548,6 +581,7 @@ impl Editor {
         let old_selection = self.state.selection;
         let old_pending_modifiers = self.state.pending_modifiers.clone();
         let old_composition = self.state.composition;
+        let old_composition_paint = self.composition_paint.clone();
         let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
         let messages = std::mem::take(&mut self.message_queue);
@@ -669,6 +703,10 @@ impl Editor {
         }
 
         if old_pending_modifiers != self.state.pending_modifiers {
+            fields.insert(StateField::Modifiers);
+        }
+
+        if old_composition_paint != self.composition_paint {
             fields.insert(StateField::Modifiers);
         }
 
@@ -959,24 +997,41 @@ impl Editor {
         let mut tr = Transaction::new(&self.state);
         f(&mut tr)?;
 
+        if !tr.keeps_pending_modifiers()
+            && !tr.has_pending_modifiers_step()
+            && logical_caret_moved(self.state.selection, tr.state().selection)
+        {
+            tr.clear_pending_format()?;
+        }
+
+        let composition_paint_signal = tr.meta().composition_paint.is_some();
+
         if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= editor_state::state_observably_changed(&self.state, tr.state());
+            *changed |= composition_paint_signal
+                || editor_state::state_observably_changed(&self.state, tr.state());
             return Ok(());
         }
 
-        if only_if_observable && !editor_state::state_observably_changed(&self.state, tr.state()) {
+        if only_if_observable
+            && !composition_paint_signal
+            && !editor_state::state_observably_changed(&self.state, tr.state())
+        {
             return Ok(());
         }
 
+        let prev_composition = self.state.composition;
         let (state, _step_records, recorded, effects, meta) = tr.commit();
+        let composition_paint_update = meta.composition_paint;
         let ops: Vec<Op<EditOp>> = recorded.iter().map(|r| r.op.clone()).collect();
         // A Record/Tagged transaction is undoable when it changes the document
-        // OR the transient state (caret/IME/pending), matching the old
-        // step-history's SetSelection/SetComposition entries. `self.state` is
-        // still the pre-transaction state here (reassigned below), so this
-        // compares pre vs post; the entry's transient is the *pre* state,
-        // captured stably against the pre-transaction view.
+        // OR the transient state (selection), matching the old
+        // step-history's SetSelection entries; composition-only changes are
+        // not recorded. `self.state` is still the pre-transaction state here
+        // (reassigned below), so this compares pre vs post; the entry's
+        // transient is the *pre* state, captured stably against the
+        // pre-transaction view.
         let undoable = !recorded.is_empty() || transient_fields_changed(&self.state, &state);
+        let merge = typing_run(meta.merge, &self.state, &state);
 
         match meta.history {
             HistoryMeta::Skip if undoable => self.undo_history.invalidate_last_tag(),
@@ -986,6 +1041,7 @@ impl Editor {
                     ops: recorded,
                     tag: None,
                     transient: capture_transient(&self.state),
+                    merge,
                 },
                 Instant::now(),
             ),
@@ -994,6 +1050,7 @@ impl Editor {
                     ops: recorded,
                     tag: Some(tag),
                     transient: capture_transient(&self.state),
+                    merge: RecordMerge::Isolated,
                 },
                 Instant::now(),
             ),
@@ -1001,6 +1058,12 @@ impl Editor {
         }
 
         self.state = state;
+        if let Some(paint) = composition_paint_update {
+            self.composition_paint = Some(paint);
+        }
+        if prev_composition.is_some() && self.state.composition.is_none() {
+            self.composition_paint = None;
+        }
         self.pending_ops.extend(ops);
         self.pending_effects.extend(effects);
 
@@ -1321,8 +1384,9 @@ impl Editor {
                     let restored = ss.resolve(&ctx)?;
                     Some(restored.normalize(&view).unwrap_or(restored))
                 });
-                self.state.composition = transient.composition;
-                self.state.pending_modifiers = transient.pending_modifiers;
+                self.state.composition = None;
+                self.composition_paint = None;
+                self.state.pending_modifiers.clear();
                 self.pending_ops.extend(ops);
                 true
             }
@@ -1418,6 +1482,7 @@ impl Editor {
 
     pub fn set_doc(&mut self, plain: editor_model::PlainDoc) {
         self.state = State::from_plain(&plain).expect("set_doc template must build");
+        self.composition_paint = None;
         crate::font::reresolve_fonts(self).ok();
         self.view.layout(&self.state);
         self.push_event(EditorEvent::StateChanged {
@@ -1435,7 +1500,7 @@ impl Editor {
             root_entry.modifiers.values().cloned().collect();
 
         // Build the template as a projected state and capture each root child as a
-        // subtree (subtrees carry their own modifiers/style/marker recursively, so
+        // subtree (subtrees carry their own modifiers/style/carry recursively, so
         // inserting them re-establishes per-node styling in the eg-walker model).
         let template_state =
             editor_state::State::from_plain(&template).map_err(|e| EditorError::General {
@@ -1637,6 +1702,7 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            composition_paint: None,
             mode: Mode::Apply,
             selection_rects_cache: Mutex::new(None),
         };
@@ -1862,6 +1928,31 @@ mod tests {
         assert_eq!(editor.state().selection, before);
     }
 
+    #[test]
+    fn noop_undo_without_history_keeps_pending() {
+        let (mut editor, _) = test_editor();
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(vec![PendingModifier::Set {
+                    modifier: Modifier::Bold,
+                }])?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(!editor.undo_history.can_undo());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        assert_eq!(
+            editor.state().pending_modifiers.as_slice(),
+            &[PendingModifier::Set {
+                modifier: Modifier::Bold
+            }]
+        );
+    }
+
     // Inverse ops must be sealed at the message boundary: unsealed ops are
     // invisible to `missing_changesets_tolerant` (the sync capture/push source)
     // while still advancing `current_heads`, so a sync capture landing between
@@ -1942,7 +2033,7 @@ mod tests {
     // The batched undo path (a run of sequence inverses deferred into one reproject,
     // flushed around non-sequence inverses) must round-trip a multi-block edit exactly:
     // undo restores the pre-edit doc, redo re-applies it. Exercises the flush boundary
-    // via the marker/span ops the typed replacement introduces.
+    // via the carry/span ops the typed replacement introduces.
     #[test]
     fn batched_undo_redo_round_trips_multi_paragraph_replace() {
         use editor_state::assert_state_eq;
@@ -3690,6 +3781,47 @@ mod tests {
     }
 
     #[test]
+    fn internal_drop_move_block_preserves_bold_and_alignment() {
+        let (initial, _root, _p_src, _p_after) = state! {
+            doc {
+                root: root {
+                    p_src: paragraph [alignment(editor_model::Alignment::Center)] {
+                        text("X") [bold]
+                    }
+                    p_after: paragraph { text("Y") }
+                }
+            }
+            selection: (root, 0) -> (root, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let source = editor.state().selection.expect("block selection");
+        let moved = crate::handle::apply_drop_for_test(
+            &mut editor,
+            Position::new(Dot::ROOT, 2),
+            DndDropPayload::InternalSelection,
+            InputModifiers::default(),
+            Some(source),
+        );
+        assert!(moved.is_ok(), "block move should succeed: {moved:?}");
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    py: paragraph { text("Y") }
+                    paragraph [alignment(editor_model::Alignment::Center)] {
+                        text("X") [bold]
+                    }
+                }
+            }
+            selection: (py, 0)
+        };
+        editor_state::assert_doc_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn normalize_gap_phantom_some_for_leading_unit() {
         let (state, ..) = state! {
             doc { root: root { image paragraph { text("b") } } }
@@ -4094,8 +4226,13 @@ mod tests {
             target.node, target.offset
         );
         let r2 = editor.transact(|tr| {
-            commands::insert_slice_at(tr, target, slice.clone())
-                .map_err(crate::error::EditorError::from)?;
+            commands::insert_slice_at(
+                tr,
+                target,
+                slice.clone(),
+                commands::types::SliceProvenance::Formatted,
+            )
+            .map_err(crate::error::EditorError::from)?;
             Ok(())
         });
         match r2 {
@@ -4764,13 +4901,13 @@ mod tests {
                     text: "the quick brown fox jumps over the lazy dog".into(),
                 }),
                 modifiers: BTreeMap::new(),
-                marker: None,
+                carry: Vec::new(),
                 children: vec![],
             };
             paras.push(PlainNodeEntry {
                 node: PlainNode::Paragraph(PlainParagraphNode {}),
                 modifiers: BTreeMap::new(),
-                marker: None,
+                carry: Vec::new(),
                 children: vec![text],
             });
         }
@@ -4787,7 +4924,7 @@ mod tests {
                     },
                 }),
                 modifiers: root_font_modifiers(),
-                marker: None,
+                carry: Vec::new(),
                 children: paras,
             },
         };

@@ -171,6 +171,7 @@ export interface FontWeightValue {
 export interface Fragment {
     node: PlainNode;
     modifiers?: Modifier[];
+    carry?: Modifier[];
     children?: Fragment[];
 }
 
@@ -218,10 +219,6 @@ export interface LinkRect {
 
 export interface LinkValue {
     href: string;
-}
-
-export interface Marker {
-    modifiers: Modifier[];
 }
 
 export interface ModifierState {
@@ -315,7 +312,7 @@ export interface PlainListItemNode {}
 export interface PlainNodeEntry {
     node: PlainNode;
     modifiers: Record<ModifierType, Modifier>;
-    marker?: Marker | undefined;
+    carry?: Modifier[];
     children: PlainNodeEntry[];
 }
 
@@ -469,6 +466,7 @@ export interface TrackedRangeHit {
 
 export interface TransactionMeta {
     history: HistoryMeta;
+    composition_paint?: Modifier[] | undefined;
 }
 
 export interface Underline {

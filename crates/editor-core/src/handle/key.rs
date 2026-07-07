@@ -25,7 +25,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             Ok(())
         }),
         (Key::Enter, _) => editor.transact(|tr| {
-            commands::first!(
+            let applied = commands::first!(
                 tr,
                 commands::materialize_gap_paragraph(),
                 commands::insert_paragraph_after_unit_selection(),
@@ -41,6 +41,9 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     ),
                 ),
             )?;
+            if applied {
+                tr.clear_pending_format()?;
+            }
             Ok(())
         }),
         (Key::Backspace, _) if editor.try_undo_auto_replacement() => {
@@ -73,7 +76,6 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::lift_first_paragraph(),
                     commands::delete_empty_paragraph_backward(),
                 )?;
-                tr.clear_pending_format()?;
                 Ok(())
             })
         }
@@ -94,26 +96,31 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::lift_paragraph_forward(),
                     commands::delete_empty_paragraph_forward(),
                 )?;
-                tr.clear_pending_format()?;
                 Ok(())
             })
         }
         (Key::Tab, m) if m.shift => editor.transact(|tr| {
-            commands::first!(
+            let applied = commands::first!(
                 tr,
                 commands::lift_list_items_in_range(),
                 commands::lift_list_item_at_start(),
                 commands::delete_preceding_tab(),
             )?;
+            if applied {
+                tr.clear_pending_format()?;
+            }
             Ok(())
         }),
         (Key::Tab, _) => editor.transact(|tr| {
-            commands::first!(
+            let applied = commands::first!(
                 tr,
                 commands::sink_list_items_in_range(),
                 commands::sink_list_item_at_start(),
                 commands::insert_tab(),
             )?;
+            if applied {
+                tr.clear_pending_format()?;
+            }
             Ok(())
         }),
         (Key::Escape, _) => editor.transact(|tr| {
@@ -231,6 +238,27 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Enter));
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_at_cell_paragraph_end_does_not_cross_cell_boundary() {
+        let (state, ..) = state! {
+            doc { root { table { table_row {
+                table_cell { p1: paragraph { text("A") } }
+                table_cell { paragraph { text("B") } }
+            } } } }
+            selection: (p1, 1)
+        };
+        let (expected, ..) = state! {
+            doc { root { table { table_row {
+                table_cell { p1: paragraph { text("A") } }
+                table_cell { paragraph { text("B") } }
+            } } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
         assert_state_eq!(editor.state(), &expected);
     }
 
@@ -496,6 +524,9 @@ mod tests {
 
         editor.apply(key(Key::Backspace));
         editor.apply(key(Key::Backspace));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
         editor.apply(Message::History {
             op: HistoryOp::Undo,
         });
@@ -982,6 +1013,36 @@ mod tests {
                 root {
                     bullet_list {
                         list_item { p1: paragraph { text("HelloWorld") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_merges_list_items_preserves_bold() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("Hello") [bold] } }
+                        list_item { p2: paragraph { text("World") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("HelloWorld") [bold] } }
                     }
                     paragraph {}
                 }
@@ -1584,7 +1645,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_text_clears_pending_format_when_cursor_stays_put() {
+    fn forward_delete_preserves_pending_format_when_cursor_stays_put() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
@@ -1597,9 +1658,13 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("helo") } } }
             selection: (p1, 2)
+            pending_modifiers: [bold]
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_pending_format_cleared(&editor);
+        assert!(
+            !editor.state().pending_modifiers.is_empty(),
+            "forward delete keeps pending when the caret stays put"
+        );
     }
 
     #[test]
@@ -1752,5 +1817,82 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Escape));
         assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn enter_dissolves_pending_and_new_paragraph_typing_is_plain() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        set_pending_format(&mut editor);
+
+        editor.apply(key(Key::Enter));
+        assert_pending_format_cleared(&editor);
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+
+        let view = editor.state().view();
+        let second = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .nth(1)
+            .expect("second paragraph");
+        let items = second.inline();
+        let first = items.first().expect("typed text in second paragraph");
+        assert!(
+            !first
+                .effective
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "typing after Enter must not inherit the dissolved pending bold"
+        );
+    }
+
+    #[test]
+    fn undo_dissolves_pending_rather_than_restoring() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+        set_pending_format(&mut editor);
+        assert!(!editor.state().pending_modifiers.is_empty());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        assert_pending_format_cleared(&editor);
+    }
+
+    #[test]
+    fn redo_dissolves_pending_rather_than_restoring() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        set_pending_format(&mut editor);
+        assert!(!editor.state().pending_modifiers.is_empty());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+
+        assert_pending_format_cleared(&editor);
     }
 }

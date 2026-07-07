@@ -1,4 +1,3 @@
-use crate::marker::Marker;
 use crate::modifier::Modifier;
 use crate::nodes::PlainNode;
 
@@ -6,7 +5,7 @@ use crate::nodes::PlainNode;
 pub struct Subtree {
     pub node: PlainNode,
     pub modifiers: Vec<Modifier>,
-    pub marker: Option<Marker>,
+    pub carry: Vec<Modifier>,
     pub children: Vec<Subtree>,
 }
 
@@ -15,7 +14,7 @@ impl Subtree {
         Self {
             node,
             modifiers: vec![],
-            marker: None,
+            carry: vec![],
             children: vec![],
         }
     }

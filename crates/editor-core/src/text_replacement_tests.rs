@@ -690,3 +690,101 @@ fn deletion_via_flat_ime_does_not_fire_replacement() {
     };
     assert_state_eq!(editor.state(), &expected);
 }
+
+#[test]
+fn auto_replacement_preserves_bold_of_replaced_char() {
+    let (s, p1) = state! {
+        doc { root { p1: paragraph {} } }
+        selection: (p1, 0)
+        pending_modifiers: [bold]
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule("\"", "\u{201C}", false)]);
+
+    type_text(&mut editor, "\"");
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("\u{201C}") [bold] } } }
+        selection: (p1, 1)
+    };
+    assert_state_eq!(editor.state(), &expected);
+    let _ = p1;
+}
+
+#[test]
+fn nonempty_auto_replacement_writes_no_carry() {
+    let (s, p1) = state! {
+        doc { root { p1: paragraph { text("a") [bold] } } }
+        selection: (p1, 1)
+        pending_modifiers: [bold]
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule("ab", "X", false)]);
+
+    type_text(&mut editor, "b");
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("X") [bold] } } }
+        selection: (p1, 1)
+    };
+    assert_state_eq!(editor.state(), &expected);
+    assert!(
+        editor.state().projected.carry_modifiers(p1).is_empty(),
+        "a non-empty substitute must not write carry, got {:?}",
+        editor.state().projected.carry_modifiers(p1)
+    );
+}
+
+#[test]
+fn empty_auto_replacement_that_empties_block_updates_carry() {
+    let (s, p1) = state! {
+        doc { root { p1: paragraph { text("a") [bold] } } }
+        selection: (p1, 1)
+        pending_modifiers: [bold]
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule("ab", "", false)]);
+
+    type_text(&mut editor, "b");
+
+    let flat = flat_text(&editor);
+    assert!(
+        !flat.contains('a') && !flat.contains('b'),
+        "block must be emptied by the empty substitute, got {flat:?}"
+    );
+    let carry = editor.state().projected.carry_modifiers(p1);
+    assert!(
+        carry.values().any(|m| matches!(m, Modifier::Bold)),
+        "emptying the block via an empty substitute must carry the deleted paint, got {carry:?}"
+    );
+}
+
+#[test]
+fn auto_replacement_undo_restores_matched_text_in_one_step() {
+    let (s, p1) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule("abc", "X", false)]);
+
+    for ch in "abc".chars() {
+        type_text(&mut editor, &ch.to_string());
+    }
+    let after = flat_text(&editor);
+    assert!(
+        after.contains('X') && !after.contains('a'),
+        "replacement produced {after:?}"
+    );
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+
+    let restored = flat_text(&editor);
+    assert!(
+        restored.contains("abc") && !restored.contains('X'),
+        "one undo of the atomic replacement restores the matched text, got {restored:?}"
+    );
+    let _ = p1;
+}

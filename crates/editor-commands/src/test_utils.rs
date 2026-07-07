@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
-use editor_model::{
-    AtomLeaf, ChildView, DocView, Marker, Modifier, ModifierType, NodeType, NodeView,
-};
+use editor_model::{AtomLeaf, ChildView, DocView, Modifier, ModifierType, NodeType, NodeView};
 use editor_state::Position;
 use editor_state::State;
 
@@ -12,7 +10,7 @@ enum Shape {
     Block {
         ty: NodeType,
         modifiers: BTreeMap<ModifierType, Modifier>,
-        marker: Option<Marker>,
+        carry: BTreeMap<ModifierType, Modifier>,
         children: Vec<Shape>,
     },
     Char {
@@ -31,8 +29,8 @@ fn leaf_own_from(
     own.iter().map(|(t, o)| (*t, o.value.clone())).collect()
 }
 
-fn node_marker(state: &State, id: Dot) -> Option<Marker> {
-    state.projected.node_markers().value_of(id)
+fn node_carry(state: &State, id: Dot) -> BTreeMap<ModifierType, Modifier> {
+    state.projected.carry_modifiers(id)
 }
 
 fn block_modifiers(state: &State, id: Dot) -> BTreeMap<ModifierType, Modifier> {
@@ -63,7 +61,7 @@ fn shape_of(state: &State, nv: &NodeView) -> Shape {
     Shape::Block {
         ty: nv.node_type(),
         modifiers: block_modifiers(state, nv.id()),
-        marker: node_marker(state, nv.id()),
+        carry: node_carry(state, nv.id()),
         children,
     }
 }

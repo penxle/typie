@@ -141,7 +141,7 @@ mod tests {
             PlainNodeEntry {
                 node,
                 modifiers: BTreeMap::new(),
-                marker: None,
+                carry: Vec::new(),
                 children,
             }
         }

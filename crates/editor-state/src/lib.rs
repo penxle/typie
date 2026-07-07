@@ -4,9 +4,11 @@ mod affinity;
 mod apply;
 mod bind;
 mod builders;
+mod carry;
 mod cell_selection;
 mod classify;
 mod composition;
+mod continuation;
 mod edit_commands;
 mod error;
 mod flat;
@@ -23,6 +25,7 @@ mod pending_modifier;
 mod position;
 mod projected_state;
 mod prose;
+mod replacement;
 mod selection;
 mod selection_expansion;
 mod stable_position;
@@ -41,11 +44,13 @@ pub use bind::*;
 pub use builders::{
     cell_rect_selection, gap_cursor_selection_between, gap_cursor_selection_leading,
 };
+pub use carry::{block_accepts_carry_kind, end_touched_textblocks};
 pub use cell_selection::{
     CellRect, as_cell_rect, as_node_selection, enclosing_table, enclosing_table_cell,
     table_cell_ids,
 };
 pub use composition::*;
+pub use continuation::{apply_pending, continuation_at, continuation_from_neighbors};
 pub use error::*;
 pub use flat::{
     FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPositionFlatExt, flat_chars, flat_segments,
@@ -65,6 +70,7 @@ pub use pending_modifier::*;
 pub use position::{Position, ResolvedPosition, inline_leaf_dots_in_range};
 pub use projected_state::*;
 pub use prose::{ProseText, prose};
+pub use replacement::replacement_paint;
 pub use selection::{ResolvedSelection, Selection};
 pub use selection_expansion::{
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
@@ -75,6 +81,6 @@ pub use stable_selection::StableSelection;
 pub use state::*;
 pub use to_plain::to_plain;
 pub use traversal::{
-    LeafGroup, first_cursor_position, last_cursor_position, leaf_groups_in_range,
-    leaf_span_in_range,
+    LeafGroup, blocks_in_range, first_cursor_position, last_cursor_position, leaf_groups_in_range,
+    leaf_span_in_range, leaves_in_block_range,
 };

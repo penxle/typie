@@ -14,10 +14,10 @@ pub struct NodeDef {
     pub params: Vec<FieldValue>,
     pub content: NodeContent,
     pub modifiers: Option<Vec<DecorationDef>>,
-    pub marker: Option<MarkerDef>,
+    pub carry: Option<CarryDef>,
 }
 
-pub struct MarkerDef {
+pub struct CarryDef {
     pub modifiers: Vec<DecorationDef>,
 }
 
@@ -90,14 +90,14 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
         } else {
             None
         };
-        let marker = parse_optional_marker(input)?;
+        let carry = parse_optional_carry(input)?;
         Ok(NodeDef {
             binding,
             node_type,
             params: vec![],
             content: NodeContent::Text(text),
             modifiers,
-            marker,
+            carry,
         })
     } else {
         let params = if input.peek(token::Paren) {
@@ -112,7 +112,7 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             None
         };
 
-        let marker = parse_optional_marker(input)?;
+        let carry = parse_optional_carry(input)?;
 
         let content = if input.peek(token::Brace) {
             let inner;
@@ -128,15 +128,15 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
             params,
             content,
             modifiers,
-            marker,
+            carry,
         })
     }
 }
 
-fn parse_optional_marker(input: ParseStream) -> Result<Option<MarkerDef>> {
-    let is_marker = matches!(input.fork().parse::<Ident>(), Ok(id) if id == "marker")
+fn parse_optional_carry(input: ParseStream) -> Result<Option<CarryDef>> {
+    let is_carry = matches!(input.fork().parse::<Ident>(), Ok(id) if id == "carry")
         && input.peek2(token::Paren);
-    if !is_marker {
+    if !is_carry {
         return Ok(None);
     }
 
@@ -151,10 +151,10 @@ fn parse_optional_marker(input: ParseStream) -> Result<Option<MarkerDef>> {
     };
 
     if modifiers.is_empty() {
-        return Err(syn::Error::new(kw.span(), "marker must have modifiers"));
+        return Err(syn::Error::new(kw.span(), "carry must have modifiers"));
     }
 
-    Ok(Some(MarkerDef { modifiers }))
+    Ok(Some(CarryDef { modifiers }))
 }
 
 fn parse_text_content(input: ParseStream) -> Result<LitStr> {

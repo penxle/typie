@@ -4,8 +4,7 @@ use editor_crdt::wire::{CollectCtx, DecCtx, EncCtx, Wire, WireChangeset, WireErr
 use editor_crdt::{CrdtError, Dot, ListOp, Op, OpGraph, OpLog};
 
 use crate::{
-    DocLogs, Marker, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp, NodeLwwOp,
-    NodeMarkerLog, SeqItem, SpanLog, SpanOp,
+    DocLogs, ModifierAttrLog, ModifierAttrOp, NodeAttrLog, NodeAttrOp, SeqItem, SpanLog, SpanOp,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, editor_macros::Wire)]
@@ -19,7 +18,7 @@ pub enum EditOp {
     #[wire(n(3))]
     NodeAttr(NodeAttrOp),
     #[wire(n(5))]
-    NodeMarker(NodeLwwOp<Option<Marker>>),
+    NodeCarry(ModifierAttrOp),
 }
 
 impl EditOp {
@@ -80,7 +79,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
     let mut spans = SpanLog::new();
     let mut block_modifiers = ModifierAttrLog::new();
     let mut node_attrs = NodeAttrLog::new();
-    let mut node_markers = NodeMarkerLog::new();
+    let mut node_carries = ModifierAttrLog::new();
 
     for op in ordered {
         match &op.payload {
@@ -104,8 +103,8 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
-            EditOp::NodeMarker(o) => {
-                node_markers = node_markers
+            EditOp::NodeCarry(o) => {
+                node_carries = node_carries
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
@@ -116,7 +115,7 @@ pub fn split_logs(graph: &OpGraph<EditOp>) -> Result<DocLogs, SplitError> {
         spans,
         block_modifiers,
         node_attrs,
-        node_markers,
+        node_carries,
     })
 }
 
@@ -188,9 +187,10 @@ impl WireChangeset for EditOp {
 mod tests {
     use super::*;
     use crate::{
-        Anchor, AtomLeaf, Bias, HorizontalRuleVariant, Modifier, Node, NodeType, project_document,
+        Anchor, AtomLeaf, Bias, HorizontalRuleVariant, Modifier, ModifierType, Node, NodeType,
+        project_document,
     };
-    use editor_crdt::{Changeset, InputEvent, LwwRegOp};
+    use editor_crdt::{Changeset, InputEvent};
 
     /// A leaf's effective modifiers, read from the authoritative segment index.
     fn leaf_eff(
@@ -311,13 +311,9 @@ mod tests {
                     attr: crate::CalloutNodeAttr::Variant(crate::CalloutVariant::Warning),
                 },
             }),
-            EditOp::NodeMarker(crate::NodeLwwOp {
+            EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                 target: Dot::new(1, 1),
-                op: LwwRegOp::Set {
-                    value: Some(Marker {
-                        modifiers: vec![Modifier::Bold],
-                    }),
-                },
+                modifier: Modifier::Bold,
             }),
         ];
         for op in &ops {
@@ -385,13 +381,9 @@ mod tests {
         .unwrap();
         g.commit_mut();
         g.add_mut(seq_ins(3, SeqItem::Char('b'))).unwrap();
-        g.add_mut(EditOp::NodeMarker(crate::NodeLwwOp {
+        g.add_mut(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
             target: para,
-            op: LwwRegOp::Set {
-                value: Some(Marker {
-                    modifiers: vec![Modifier::Bold],
-                }),
-            },
+            modifier: Modifier::Bold,
         }))
         .unwrap();
         g.commit_mut();
@@ -557,13 +549,9 @@ mod tests {
             .unwrap()
             .id;
         let a = g.add_mut(seq_ins(1, SeqItem::Char('a'))).unwrap().id;
-        g.add_mut(EditOp::NodeMarker(crate::NodeLwwOp {
+        g.add_mut(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
             target: a,
-            op: LwwRegOp::Set {
-                value: Some(Marker {
-                    modifiers: vec![Modifier::Bold],
-                }),
-            },
+            modifier: Modifier::Bold,
         }))
         .unwrap();
         let _b = g.add_mut(seq_ins(2, SeqItem::Char('b'))).unwrap().id;
@@ -595,13 +583,9 @@ mod tests {
             .unwrap()
             .id;
         let a = g.add_mut(seq_ins(2, SeqItem::Char('a'))).unwrap().id;
-        g.add_mut(EditOp::NodeMarker(crate::NodeLwwOp {
+        g.add_mut(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
             target: a,
-            op: LwwRegOp::Set {
-                value: Some(Marker {
-                    modifiers: vec![Modifier::Bold],
-                }),
-            },
+            modifier: Modifier::Bold,
         }))
         .unwrap();
         let b = g.add_mut(seq_ins(3, SeqItem::Char('b'))).unwrap().id;
@@ -706,18 +690,14 @@ mod tests {
             payload: seq_ins(pos, item),
         }
     }
-    fn op_marker(a: u64, c: u64, parents: &[Dot], target: Dot, v: &str) -> Op<EditOp> {
+    fn op_carry(a: u64, c: u64, parents: &[Dot], target: Dot, v: &str) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
             parents: parents.to_vec(),
-            payload: EditOp::NodeMarker(NodeLwwOp {
+            payload: EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                 target,
-                op: LwwRegOp::Set {
-                    value: Some(Marker {
-                        modifiers: vec![Modifier::TextColor {
-                            value: v.to_string(),
-                        }],
-                    }),
+                modifier: Modifier::TextColor {
+                    value: v.to_string(),
                 },
             }),
         }
@@ -747,7 +727,7 @@ mod tests {
             op_seq(1, 0, &[], 0, blk(NodeType::Root, vec![])),
             op_seq(1, 1, &[root], 1, blk(NodeType::Paragraph, vec![root])),
             op_seq(1, 2, &[para], 2, SeqItem::Char('a')),
-            op_marker(2, 0, &[a], a, "s"),
+            op_carry(2, 0, &[a], a, "s"),
             op_seq(1, 3, &[ov], 3, SeqItem::Char('b')),
         ]);
         let g_pure = graph(vec![
@@ -773,7 +753,7 @@ mod tests {
             op_seq(1, 0, &[], 0, blk(NodeType::Root, vec![])),
             op_seq(1, 1, &[root], 1, blk(NodeType::Paragraph, vec![root])),
             op_seq(1, 2, &[para], 2, SeqItem::Char('a')),
-            op_marker(2, 0, &[a], a, "s"),
+            op_carry(2, 0, &[a], a, "s"),
             op_seq(1, 3, &[ov], 3, SeqItem::Char('x')),
             op_seq(3, 0, &[a], 3, SeqItem::Char('y')),
         ]);
@@ -812,14 +792,14 @@ mod tests {
             op_seq(1, 1, &[], 0, blk(NodeType::Paragraph, vec![Dot::ROOT])),
             op_seq(1, 2, &[para], 1, SeqItem::Char('a')),
         ];
-        let cs1 = vec![op_marker(1, 3, &[para], para, "s1")];
-        let cs2 = vec![op_marker(2, 0, &[para], para, "s2")];
+        let cs1 = vec![op_carry(1, 3, &[para], para, "s1")];
+        let cs2 = vec![op_carry(2, 0, &[para], para, "s2")];
         let g_ab = graphs(vec![cs0.clone(), cs1.clone(), cs2.clone()]);
         let g_ba = graphs(vec![cs0, cs2, cs1]);
         let pd_ab = project_document(&split_logs(&g_ab).unwrap()).unwrap();
         let pd_ba = project_document(&split_logs(&g_ba).unwrap()).unwrap();
         assert_eq!(pd_ab, pd_ba);
-        assert!(pd_ab.node_markers.get(&para).is_some());
+        assert!(pd_ab.node_carries.get(&para).is_some());
     }
 
     #[test]
@@ -830,9 +810,9 @@ mod tests {
             op_seq(1, 1, &[], 0, blk(NodeType::Paragraph, vec![Dot::ROOT])),
             op_seq(1, 2, &[para], 1, SeqItem::Char('a')),
         ];
-        let o1 = vec![op_marker(1, 3, &[a], para, "s1")];
-        let o2 = vec![op_marker(2, 0, &[a], Dot::ROOT, "s2")];
-        let o3 = vec![op_marker(3, 0, &[a], para, "s3")];
+        let o1 = vec![op_carry(1, 3, &[a], para, "s1")];
+        let o2 = vec![op_carry(2, 0, &[a], Dot::ROOT, "s2")];
+        let o3 = vec![op_carry(3, 0, &[a], para, "s3")];
         let g1 = graphs(vec![cs0.clone(), o1.clone(), o2.clone(), o3.clone()]);
         let g2 = graphs(vec![cs0.clone(), o3.clone(), o1.clone(), o2.clone()]);
         let g3 = graphs(vec![cs0, o2, o3, o1]);
@@ -841,6 +821,104 @@ mod tests {
         let p3 = project_document(&split_logs(&g3).unwrap()).unwrap();
         assert_eq!(p1, p2);
         assert_eq!(p1, p3);
+    }
+
+    fn op_carry_mod(
+        a: u64,
+        c: u64,
+        parents: &[Dot],
+        target: Dot,
+        modifier: Modifier,
+    ) -> Op<EditOp> {
+        Op {
+            id: Dot::new(a, c),
+            parents: parents.to_vec(),
+            payload: EditOp::NodeCarry(ModifierAttrOp::SetModifier { target, modifier }),
+        }
+    }
+
+    fn para_seed() -> (Dot, Dot, Vec<Op<EditOp>>) {
+        let para = Dot::new(1, 1);
+        let a = Dot::new(1, 2);
+        let base = vec![
+            op_seq(1, 1, &[], 0, blk(NodeType::Paragraph, vec![Dot::ROOT])),
+            op_seq(1, 2, &[para], 1, SeqItem::Char('a')),
+        ];
+        (para, a, base)
+    }
+
+    #[test]
+    fn concurrent_distinct_carry_kinds_both_survive() {
+        let (para, a, base) = para_seed();
+        let bold = vec![op_carry_mod(2, 0, &[a], para, Modifier::Bold)];
+        let size = vec![op_carry_mod(
+            3,
+            0,
+            &[a],
+            para,
+            Modifier::FontSize { value: 1600 },
+        )];
+        for order in [
+            graphs(vec![base.clone(), bold.clone(), size.clone()]),
+            graphs(vec![base.clone(), size.clone(), bold.clone()]),
+        ] {
+            let pd = project_document(&split_logs(&order).unwrap()).unwrap();
+            let c = pd.node_carries.get(&para).expect("carries on paragraph");
+            assert_eq!(c.get(&ModifierType::Bold), Some(&Modifier::Bold));
+            assert_eq!(
+                c.get(&ModifierType::FontSize),
+                Some(&Modifier::FontSize { value: 1600 }),
+                "distinct-kind concurrent carries both survive per-kind LWW"
+            );
+        }
+    }
+
+    #[test]
+    fn same_carry_kind_conflict_higher_dot_wins() {
+        let (para, a, base) = para_seed();
+        let lo = vec![op_carry_mod(
+            2,
+            0,
+            &[a],
+            para,
+            Modifier::FontSize { value: 1200 },
+        )];
+        let hi = vec![op_carry_mod(
+            3,
+            0,
+            &[a],
+            para,
+            Modifier::FontSize { value: 1600 },
+        )];
+        let g = graphs(vec![base, lo, hi]);
+        let pd = project_document(&split_logs(&g).unwrap()).unwrap();
+        assert_eq!(
+            pd.node_carries
+                .get(&para)
+                .and_then(|c| c.get(&ModifierType::FontSize)),
+            Some(&Modifier::FontSize { value: 1600 }),
+            "same-kind concurrent carries resolve to the higher Dot"
+        );
+    }
+
+    #[test]
+    fn non_carry_kind_carry_op_ignored_in_projection() {
+        let (para, a, base) = para_seed();
+        let link = vec![op_carry_mod(
+            2,
+            0,
+            &[a],
+            para,
+            Modifier::Link { href: "x".into() },
+        )];
+        let g = graphs(vec![base, link]);
+        let pd = project_document(&split_logs(&g).unwrap()).unwrap();
+        assert!(
+            pd.node_carries
+                .get(&para)
+                .is_none_or(|c| !c.contains_key(&ModifierType::Link)),
+            "a non-carry kind never reaches the projected carries"
+        );
     }
 
     use proptest::prelude::*;
@@ -894,6 +972,46 @@ mod tests {
             let bytes = editor_crdt::wire::encode(&css).unwrap();
             let decoded: Vec<Changeset<EditOp>> = editor_crdt::wire::decode(&bytes).unwrap();
             prop_assert_eq!(decoded, css);
+        }
+
+        #[test]
+        fn carry_merge_converges_under_delivery_shuffle(
+            kinds in prop::collection::vec(0u8..4, 1..8),
+            seed in any::<u64>(),
+        ) {
+            let (para, a, base) = para_seed();
+            let carries: Vec<Vec<Op<EditOp>>> = kinds
+                .iter()
+                .enumerate()
+                .map(|(i, k)| {
+                    let modifier = match k {
+                        0 => Modifier::Bold,
+                        1 => Modifier::Italic,
+                        2 => Modifier::FontSize { value: 1200 + i as u32 },
+                        _ => Modifier::FontWeight { value: 400 },
+                    };
+                    vec![op_carry_mod(2 + i as u64, 0, &[a], para, modifier)]
+                })
+                .collect();
+
+            let mut idx: Vec<(u64, usize)> = (0..carries.len())
+                .map(|i| {
+                    let mut z = (i as u64).wrapping_add(seed.wrapping_mul(0x9E3779B97F4A7C15));
+                    z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+                    z ^= z >> 31;
+                    (z, i)
+                })
+                .collect();
+            idx.sort_by_key(|(z, _)| *z);
+
+            let mut in_order = vec![base.clone()];
+            in_order.extend(carries.clone());
+            let mut shuffled = vec![base];
+            shuffled.extend(idx.iter().map(|(_, i)| carries[*i].clone()));
+
+            let a_pd = project_document(&split_logs(&graphs(in_order)).unwrap()).unwrap();
+            let b_pd = project_document(&split_logs(&graphs(shuffled)).unwrap()).unwrap();
+            prop_assert_eq!(a_pd, b_pd);
         }
     }
 }

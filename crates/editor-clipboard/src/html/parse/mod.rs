@@ -70,6 +70,7 @@ fn fallback_body_parse(doc: &Html, resource: &Resource) -> Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
+            carry: vec![],
             children: crate::html::parse::schema_normalize::normalize(children),
         },
         open_start: 0,
@@ -422,9 +423,11 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                carry: vec![],
                 children: vec![Fragment {
                     node: PlainNode::Paragraph(PlainParagraphNode::default()),
                     modifiers: vec![],
+                    carry: vec![],
                     children: vec![
                         Fragment::leaf(PlainNode::Text(PlainTextNode { text: "x".into() }))
                             .with_modifiers(vec![

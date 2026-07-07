@@ -341,6 +341,64 @@ mod tests {
     }
 
     #[test]
+    fn merge_preserves_merged_side_bold() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { t1: paragraph { text("A") } }
+                        list_item { t2: paragraph { text("B") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| merge_list_item_backward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { t1: paragraph { text("A") text("B") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn merge_preserves_merged_side_tab_and_hard_break() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { t1: paragraph { text("A") } }
+                        list_item { t2: paragraph { text("B") tab text("C") hard_break } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t2, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| merge_list_item_backward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { t1: paragraph { text("A") text("B") tab text("C") hard_break } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn merge_empty_current_into_prev() {
         let (initial, ..) = state! {
             doc {

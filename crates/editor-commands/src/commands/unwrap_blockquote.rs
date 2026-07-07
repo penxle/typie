@@ -142,6 +142,64 @@ mod tests {
     }
 
     #[test]
+    fn unwrap_blockquote_preserves_color_and_link() {
+        let (initial, bq, ..) = state! {
+            doc {
+                root {
+                    bq: blockquote {
+                        p1: paragraph {
+                            text("red")  [text_color("#ff0000".to_string())]
+                            text("link") [link(href: "https://example.com".to_string())]
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (bq, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| unwrap_blockquote(&mut tr, bq));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("red")  [text_color("#ff0000".to_string())]
+                        text("link") [link(href: "https://example.com".to_string())]
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn unwrap_blockquote_preserves_center_alignment() {
+        let (initial, bq, ..) = state! {
+            doc {
+                root {
+                    bq: blockquote {
+                        p1: paragraph [alignment(editor_model::Alignment::Center)] { text("x") }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (bq, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| unwrap_blockquote(&mut tr, bq));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph [alignment(editor_model::Alignment::Center)] { text("x") }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn unwrap_non_blockquote_returns_false() {
         let (initial, p, ..) = state! {
             doc {

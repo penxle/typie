@@ -1,36 +1,12 @@
 use editor_common::Tri;
-use editor_crdt::Dot;
-use editor_model::{DEFAULT_FONT_FAMILY, DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
+use editor_model::{DEFAULT_FONT_WEIGHT, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
-use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
-use editor_state::{ResolvedSelection, leaf_groups_in_range};
-use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
+use editor_state::resolve_modifier_state;
+use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 
+use crate::helpers::{block_weight, toggle_bold_range};
 use crate::{CommandError, CommandResult};
-
-fn block_weight(view: &DocView, elem: Dot) -> Option<u16> {
-    match view.node(elem)?.effective().get(&ModifierType::FontWeight) {
-        Some(Modifier::FontWeight { value }) => Some(*value),
-        _ => None,
-    }
-}
-
-fn block_family(view: &DocView, elem: Dot) -> Option<String> {
-    match view.node(elem)?.effective().get(&ModifierType::FontFamily) {
-        Some(Modifier::FontFamily { value }) => Some(value.clone()),
-        _ => None,
-    }
-}
-
-fn range_has_heavy_weight(rs: &ResolvedSelection) -> bool {
-    leaf_groups_in_range(rs).iter().any(|g| {
-        matches!(
-            g.effective.get(&ModifierType::FontWeight),
-            Some(Modifier::FontWeight { value }) if *value >= 700
-        )
-    })
-}
 
 pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let Some(selection) = tr.selection() else {
@@ -41,106 +17,7 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
         return toggle_bold_collapsed(tr, resource);
     }
 
-    let (
-        first,
-        last,
-        current_weight,
-        font_family,
-        inherited_weight,
-        is_bold,
-        synthetic_bold,
-        weight_bold,
-    ) = {
-        let view = tr.view();
-        let rs = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = leaf_span_in_range(&rs) else {
-            return Ok(false);
-        };
-        let ms = resolve_modifier_state_in_range(&rs);
-        let from_block = rs.from().node();
-        let inherited_weight = block_weight(&view, from_block).unwrap_or(DEFAULT_FONT_WEIGHT);
-        let current_weight = match &ms.font_weight {
-            Tri::Uniform { value } => value.value,
-            _ => inherited_weight,
-        };
-        let font_family = match &ms.font_family {
-            Tri::Uniform { value } => value.value.clone(),
-            _ => block_family(&view, from_block).unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_string()),
-        };
-        let is_bold = matches!(ms.effective_bold, Tri::Uniform { .. });
-        let synthetic_bold = !matches!(ms.bold, Tri::Absent);
-        let weight_bold = range_has_heavy_weight(&rs);
-        (
-            first,
-            last,
-            current_weight,
-            font_family,
-            inherited_weight,
-            is_bold,
-            synthetic_bold,
-            weight_bold,
-        )
-    };
-
-    let available = resource.font_registry.weights(&font_family).unwrap_or(&[]);
-
-    if is_bold {
-        if synthetic_bold {
-            tr.remove_span_modifier(first, last, Modifier::Bold)?;
-        }
-        if weight_bold {
-            let unbold = find_unbold_target(current_weight, available);
-            tr.remove_span_modifier(
-                first,
-                last,
-                Modifier::FontWeight {
-                    value: current_weight,
-                },
-            )?;
-            if unbold != inherited_weight {
-                tr.add_span_modifier(first, last, Modifier::FontWeight { value: unbold })?;
-            }
-        } else {
-            tr.remove_span_modifier(
-                first,
-                last,
-                Modifier::FontWeight {
-                    value: current_weight,
-                },
-            )?;
-        }
-    } else {
-        match find_bold_target(current_weight, available) {
-            Some(target) => {
-                // The cancel-to-absent pass only matters when some FontWeight
-                // span actually overlaps the range; on a pristine range it is a
-                // whole-range no-op, and skipping it halves the styling cost.
-                if tr
-                    .state()
-                    .projected
-                    .span_of_type_overlaps(first, last, ModifierType::FontWeight)
-                {
-                    tr.remove_span_modifier(
-                        first,
-                        last,
-                        Modifier::FontWeight {
-                            value: current_weight,
-                        },
-                    )?;
-                }
-                if target != inherited_weight {
-                    tr.add_span_modifier(first, last, Modifier::FontWeight { value: target })?;
-                }
-            }
-            None => {
-                tr.add_span_modifier(first, last, Modifier::Bold)?;
-            }
-        }
-    }
-
-    Ok(true)
+    toggle_bold_range(tr, selection, resource)
 }
 
 fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandResult {
@@ -531,7 +408,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph { text("Hello") [font_weight(700)] }
+                    p1: paragraph carry([bold]) { text("Hello") [font_weight(700)] }
                 }
             }
             selection: (p1, 0) -> (p1, 5)
@@ -556,7 +433,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -583,7 +460,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 r1: root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -610,7 +487,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p: paragraph {
+                    p: paragraph carry([bold]) {
                         text("Hello ") [font_weight(400), font_family("Pretendard".to_string())]
                         text("World") [font_weight(700), font_family("Pretendard".to_string())]
                     }
@@ -639,7 +516,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p: paragraph {
+                    p: paragraph carry([bold]) {
                         text("HelloBold") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -666,7 +543,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(700), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_family("Pretendard".to_string())]
                     }
                 }
@@ -676,7 +553,7 @@ mod tests {
         assert_state_eq!(&actual, &expected);
     }
 
-    // SC-FMT-3: toggling bold off leaves no effective Bold on any covered leaf,
+    // toggling bold off leaves no effective Bold on any covered leaf,
     // and that absence is achieved purely by removing the record (Task 1 made
     // Bold non-inheritable, so removal and blocking are observationally identical).
     #[test]
@@ -685,7 +562,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("가나") [bold, font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -712,7 +589,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -739,7 +616,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -766,7 +643,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [bold]
                     }
                 }
@@ -794,7 +671,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("A") [bold, font_weight(300)]
                         text("B") [bold, font_weight(400)]
                     }
@@ -824,7 +701,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(300), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -851,7 +728,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p: paragraph {
+                    p: paragraph carry([bold]) {
                         text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
                         text("World") [font_weight(700), font_family("Pretendard".to_string())]
                     }
@@ -893,10 +770,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
-                    p2: paragraph {
+                    p2: paragraph carry([bold]) {
                         text("World") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -923,7 +800,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [bold, font_weight(400), font_family("Pretendard".to_string())]
                     }
                 }
@@ -1012,7 +889,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
-                    p1: paragraph {
+                    p1: paragraph carry([bold]) {
                         text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
                     }
                 }
@@ -1043,6 +920,176 @@ mod tests {
         assert!(
             matches!(result, Ok(true)),
             "block-level selection over a root carrying its weight via a style must not report corruption, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn full_paragraph_bold_records_carry_bold() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, p1) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry.contains_key(&ModifierType::Bold),
+            "full-paragraph bold records carry bold, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn mid_paragraph_bold_leaves_carry_untouched() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, p1) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("HelloWorld") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        assert!(
+            actual.projected.carry_modifiers(p1).is_empty(),
+            "a selection that stops before the paragraph end must not touch carry"
+        );
+    }
+
+    #[test]
+    fn toggle_off_removes_carry_bold_and_heavy_weight() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, p1) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph carry([bold, font_weight(700)]) {
+                        text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            !carry.contains_key(&ModifierType::Bold),
+            "toggle-off removes carry bold, got {carry:?}"
+        );
+        assert!(
+            !carry.contains_key(&ModifierType::FontWeight),
+            "toggle-off removes carry heavy weight, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn carry_absent_forces_bold_on_even_when_leaves_bold() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, p1) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [bold, font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry.contains_key(&ModifierType::Bold),
+            "uniformly-bold leaves with no carry aggregate as mixed → toggle on records carry bold, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn empty_paragraph_bold_apply_aggregates_uniform_on() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                r: root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {}
+                    paragraph {
+                        text("x") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let ms = resolve_modifier_state(
+            &actual.projected,
+            actual.selection.as_ref().unwrap(),
+            &actual.pending_modifiers,
+        )
+        .unwrap();
+        assert_eq!(
+            ms.effective_bold,
+            Tri::Uniform { value: () },
+            "the applied bold aggregates uniform-on immediately"
+        );
+    }
+
+    #[test]
+    fn range_toggle_off_when_carry_is_heavy_weight() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph carry([font_weight(700)]) {
+                        text("Hello") [font_weight(700), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {
+                        text("Hello") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn empty_paragraph_only_selection_records_carry_and_returns_true() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, _r, p1) = state! {
+            doc {
+                r: root [font_weight(400), font_family("Pretendard".to_string())] {
+                    p1: paragraph {}
+                    paragraph {
+                        text("x") [font_weight(400), font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let mut tr = Transaction::new(&initial);
+        let changed = toggle_bold(&mut tr, &resource).unwrap();
+        assert!(
+            changed,
+            "empty-paragraph-only bold still reports a document change"
+        );
+        let (actual, ..) = tr.commit();
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry.contains_key(&ModifierType::Bold),
+            "empty paragraph records carry bold even with no leaf span, got {carry:?}"
         );
     }
 }

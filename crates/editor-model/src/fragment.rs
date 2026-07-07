@@ -11,6 +11,8 @@ pub struct Fragment {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub modifiers: Vec<Modifier>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub carry: Vec<Modifier>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub children: Vec<Fragment>,
 }
 
@@ -19,6 +21,7 @@ impl Fragment {
         Self {
             node,
             modifiers: vec![],
+            carry: vec![],
             children: vec![],
         }
     }
@@ -37,7 +40,7 @@ impl Fragment {
         Subtree {
             node: self.node,
             modifiers: self.modifiers,
-            marker: None,
+            carry: self.carry,
             children: self
                 .children
                 .into_iter()

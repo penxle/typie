@@ -20,7 +20,7 @@ fn plain_text(text: String) -> PlainNodeEntry {
     PlainNodeEntry {
         node: PlainNode::Text(PlainTextNode { text }),
         modifiers: BTreeMap::new(),
-        marker: None,
+        carry: Vec::new(),
         children: vec![],
     }
 }
@@ -29,7 +29,7 @@ fn plain_para(text: String) -> PlainNodeEntry {
     PlainNodeEntry {
         node: PlainNode::Paragraph(PlainParagraphNode::default()),
         modifiers: BTreeMap::new(),
-        marker: None,
+        carry: Vec::new(),
         children: vec![plain_text(text)],
     }
 }
@@ -55,7 +55,7 @@ fn build_large_state(paras: usize, chars_per_para: usize) -> State {
         root: PlainNodeEntry {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: root_modifiers,
-            marker: None,
+            carry: Vec::new(),
             children: (0..paras).map(|_| plain_para(text.clone())).collect(),
         },
     };
@@ -199,7 +199,7 @@ fn perf_modifier_state_level() {
             editor.state.selection.unwrap().resolve(&view).unwrap()
         });
         timed("  command: resolve_modifier_state_in_range", || {
-            editor_state::resolve_modifier_state_in_range(&rs)
+            editor_state::resolve_modifier_state_in_range(&editor.state.projected, &rs)
         });
         drop(view);
 

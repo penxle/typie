@@ -1,6 +1,8 @@
 use editor_model::{ChildView, NodeType};
+use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
+use crate::helpers::remove_atom_leaf;
 use crate::{CommandError, CommandResult};
 
 pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
@@ -13,7 +15,7 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
 
     let pos = selection.head;
 
-    let paragraph_id = {
+    let (paragraph_id, page_break_index) = {
         let view = tr.state().view();
         let node = view
             .node(pos.node)
@@ -38,12 +40,26 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
                 if b.node_type() == NodeType::Paragraph && b.dot().is_some() => {}
             _ => return Ok(false),
         }
-        pos.node
+        let has_trailing_page_break = matches!(
+            node.last_child(),
+            Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak
+        );
+        let page_break_index = has_trailing_page_break.then(|| child_count - 1);
+        (pos.node, page_break_index)
     };
+
+    if let Some(index) = page_break_index {
+        remove_atom_leaf(tr, paragraph_id, index)?;
+    }
 
     tr.merge_node(paragraph_id)?;
 
-    tr.set_selection(Some(selection))?;
+    let head_offset = pos.offset - usize::from(page_break_index.is_some());
+    tr.set_selection(Some(Selection::collapsed(Position {
+        node: pos.node,
+        offset: head_offset,
+        affinity: pos.affinity,
+    })))?;
 
     Ok(true)
 }
@@ -234,5 +250,83 @@ mod tests {
             selection: (m, 2)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn structural_merge_drops_front_trailing_page_break() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("AB") page_break }
+                    paragraph { text("CD") }
+                }
+            }
+            selection: (p1, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| join_paragraph_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    m: paragraph {
+                        text("AB")
+                        text("CD")
+                    }
+                }
+            }
+            selection: (m, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn structural_merge_drops_empty_front_trailing_page_break() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { page_break }
+                    paragraph { text("CD") }
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| join_paragraph_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    m: paragraph {
+                        text("CD")
+                    }
+                }
+            }
+            selection: (m, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_merge_keeps_front_paragraph_carry() {
+        let (initial, p1, _p2) = state! {
+            doc {
+                root {
+                    p1: paragraph carry([bold]) { text("Hello") }
+                    p2: paragraph carry([italic]) { text("World") }
+                }
+            }
+            selection: (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| join_paragraph_forward(&mut tr));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "merged block keeps the front paragraph's carry, got {carry:?}"
+        );
+        assert!(
+            !carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Italic)),
+            "the trailing paragraph's carry is discarded on merge, got {carry:?}"
+        );
     }
 }

@@ -378,7 +378,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         Anchor, AtomLeaf, Bias, DocLogs, HorizontalRuleVariant, Modifier, ModifierAttrLog,
-        ModifierType, NodeAttrLog, NodeMarkerLog, NodeType, ProjectedDoc, SeqItem, SpanLog, SpanOp,
+        ModifierType, NodeAttrLog, NodeType, ProjectedDoc, SeqItem, SpanLog, SpanOp,
         project_document,
     };
 
@@ -405,7 +405,7 @@ mod tests {
             spans,
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

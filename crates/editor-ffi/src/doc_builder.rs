@@ -10,13 +10,13 @@ pub(crate) fn build_default_doc(
     let paragraph = editor_model::PlainNodeEntry {
         node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
         modifiers: Default::default(),
-        marker: None,
+        carry: Vec::new(),
         children: vec![],
     };
     let root = editor_model::PlainNodeEntry {
         node: editor_model::PlainNode::Root(root),
         modifiers: by_type,
-        marker: None,
+        carry: Vec::new(),
         children: vec![paragraph],
     };
 

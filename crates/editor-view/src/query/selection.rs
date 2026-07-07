@@ -585,8 +585,8 @@ mod tests {
     use editor_common::EdgeInsets;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog,
-        NodeMarkerLog, NodeType, ProjectedDoc, SeqItem, SpanLog, project_document,
+        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog, NodeType,
+        ProjectedDoc, SeqItem, SpanLog, project_document,
     };
     use editor_state::Affinity;
     use editor_state::{Position, Selection};
@@ -619,7 +619,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

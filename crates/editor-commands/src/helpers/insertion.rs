@@ -3,58 +3,14 @@ use std::collections::BTreeMap;
 use editor_common::StrExt;
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, Modifier, ModifierType, NodeView, PlainHardBreakNode, PlainNode, PlainTabNode,
-    PlainTextNode, Subtree,
+    ChildView, Modifier, ModifierType, PlainHardBreakNode, PlainNode, PlainTabNode, PlainTextNode,
+    Subtree,
 };
-use editor_state::{Affinity, PendingModifiers, Position, ProjectedState, Selection};
+use editor_state::{Affinity, PendingModifiers, Position, Selection};
 use editor_transaction::{Step, Transaction};
 
-use crate::helpers::{
-    carryable_modifiers_at, find_enclosing_paragraph_id, is_tab_metric_modifier,
-    is_text_applicable, resolve_effective_modifiers,
-};
+use crate::helpers::resolve_effective_modifiers;
 use crate::{CommandError, CommandResult};
-
-/// Capture a projected child (block or leaf atom/char) as a `Subtree`, mirroring
-/// the substrate's internal capture so the removal is reversible.
-fn capture_child_subtree(ps: &ProjectedState, child: &ChildView) -> Subtree {
-    match child {
-        ChildView::Block(b) => capture_block_subtree(ps, b),
-        ChildView::Leaf(l) => {
-            let plain = if let Some(ch) = l.as_char() {
-                PlainNode::Text(PlainTextNode {
-                    text: ch.to_string(),
-                })
-            } else if let Some(node) = l.node() {
-                node.to_plain()
-            } else {
-                PlainNode::Text(PlainTextNode {
-                    text: String::new(),
-                })
-            };
-            Subtree::leaf(plain)
-        }
-    }
-}
-
-fn capture_block_subtree(ps: &ProjectedState, block: &NodeView) -> Subtree {
-    let node = block.node().to_plain();
-    let dot = block.dot();
-    let modifiers: Vec<Modifier> = dot
-        .map(|d| ps.block_modifiers().modifiers_of(d).into_values().collect())
-        .unwrap_or_default();
-    let marker = dot.and_then(|d| ps.node_markers().value_of(d));
-    let children = block
-        .children()
-        .map(|c| capture_child_subtree(ps, &c))
-        .collect();
-    Subtree {
-        node,
-        modifiers,
-        marker,
-        children,
-    }
-}
 
 /// Remove the child at full child-slot `index` of `parent` (a block OR a
 /// block-level/inline atom leaf). Unlike `Transaction::remove_subtree`, this
@@ -65,14 +21,46 @@ pub(crate) fn remove_child_at(
     index: usize,
 ) -> Result<(), CommandError> {
     let subtree = {
-        let view = tr.state().view();
+        let state = tr.state();
+        let view = state.view();
         let parent_node = view
             .node(parent)
             .ok_or(CommandError::NodeNotFound(parent))?;
         let child = parent_node
             .child_at(index)
             .ok_or_else(|| CommandError::Corrupted("child index out of range".into()))?;
-        capture_child_subtree(&tr.state().projected, &child)
+        match child {
+            ChildView::Block(b) => editor_transaction::capture_subtree(&state.projected, b.id())
+                .ok_or(CommandError::NodeNotFound(b.id()))?,
+            ChildView::Leaf(l) => {
+                let node = if let Some(ch) = l.as_char() {
+                    PlainNode::Text(PlainTextNode {
+                        text: ch.to_string(),
+                    })
+                } else {
+                    l.node().map(|n| n.to_plain()).unwrap_or_else(|| {
+                        PlainNode::Text(PlainTextNode {
+                            text: String::new(),
+                        })
+                    })
+                };
+                let modifiers = match l.as_atom() {
+                    Some(atom) if atom.is_block_level() => state
+                        .projected
+                        .block_modifiers()
+                        .modifiers_of(l.dot())
+                        .into_values()
+                        .collect(),
+                    _ => parent_node.leaf_own_modifiers_at(index),
+                };
+                Subtree {
+                    node,
+                    modifiers,
+                    carry: Vec::new(),
+                    children: Vec::new(),
+                }
+            }
+        }
     };
     tr.apply_steps(vec![Step::RemoveSubtree {
         parent,
@@ -117,7 +105,7 @@ pub(crate) fn prune_empty_real(tr: &mut Transaction, block: Dot) -> Result<(), C
 }
 
 /// Collect the leaf ids of the children in `[offset, offset + len)` of `block`.
-fn child_leaf_dots(tr: &Transaction, block: Dot, offset: usize, len: usize) -> Vec<Dot> {
+pub(crate) fn child_leaf_dots(tr: &Transaction, block: Dot, offset: usize, len: usize) -> Vec<Dot> {
     let view = tr.state().view();
     let Some(node) = view.node(block) else {
         return Vec::new();
@@ -131,21 +119,52 @@ fn child_leaf_dots(tr: &Transaction, block: Dot, offset: usize, len: usize) -> V
 }
 
 /// Reconcile inline (span) formatting on `dots` so the non-style own modifiers
-/// match `desired`: add desired spans that are missing or differ, and strip
-/// text-applicable spans that are not desired (so e.g. typing with bold unset
-/// inside a bold run yields plain text).
-fn apply_inline_modifiers(
+/// match `desired`, applied per leaf kind (char excludes nothing; atom excludes
+/// link/ruby) over consecutive same-kind runs.
+pub(crate) fn apply_inline_modifiers(
     tr: &mut Transaction,
     dots: &[Dot],
     desired: &[Modifier],
 ) -> Result<(), CommandError> {
-    let (Some(first), Some(last)) = (dots.first(), dots.last()) else {
+    if dots.is_empty() {
         return Ok(());
+    }
+    let is_char: Vec<bool> = {
+        let view = tr.state().view();
+        dots.iter()
+            .map(|d| view.leaf(*d).and_then(|l| l.as_char()).is_some())
+            .collect()
     };
-    let (first, last) = (*first, *last);
+    let mut i = 0;
+    while i < dots.len() {
+        let kind = is_char[i];
+        let mut j = i + 1;
+        while j < dots.len() && is_char[j] == kind {
+            j += 1;
+        }
+        apply_inline_modifiers_run(tr, dots[i], dots[j - 1], kind, desired)?;
+        i = j;
+    }
+    Ok(())
+}
 
-    let desired_map: BTreeMap<ModifierType, Modifier> =
-        desired.iter().map(|m| (m.as_type(), m.clone())).collect();
+fn apply_inline_modifiers_run(
+    tr: &mut Transaction,
+    first: Dot,
+    last: Dot,
+    is_char: bool,
+    desired: &[Modifier],
+) -> Result<(), CommandError> {
+    let applicable = |ty: ModifierType| -> bool {
+        ty.is_text_applicable()
+            && (is_char || !matches!(ty, ModifierType::Link | ModifierType::Ruby))
+    };
+
+    let desired_map: BTreeMap<ModifierType, Modifier> = desired
+        .iter()
+        .filter(|m| applicable(m.as_type()))
+        .map(|m| (m.as_type(), m.clone()))
+        .collect();
 
     let actual: BTreeMap<ModifierType, Modifier> = {
         let view = tr.state().view();
@@ -161,7 +180,7 @@ fn apply_inline_modifiers(
         }
     }
     for (ty, m) in &actual {
-        if !desired_map.contains_key(ty) && is_text_applicable(*ty) {
+        if !desired_map.contains_key(ty) && ty.is_text_applicable() {
             tr.remove_span_modifier(first, last, m.clone())?;
         }
     }
@@ -302,7 +321,16 @@ pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), Comman
     Ok(())
 }
 
-pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandResult {
+fn caret_paint(tr: &Transaction, block: Dot, offset: usize) -> Vec<Modifier> {
+    let pending_modifiers = tr.pending_modifiers().clone();
+    resolve_effective_modifiers(&tr.state().projected, block, offset, &pending_modifiers)
+}
+
+pub(crate) fn insert_text_at_caret(
+    tr: &mut Transaction,
+    text: &str,
+    paint_override: Option<&[Modifier]>,
+) -> CommandResult {
     if text.is_empty() {
         return Err(CommandError::InvalidArgument(
             "text must not be empty".into(),
@@ -325,39 +353,17 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
     let pos = selection.head;
     let block = pos.node;
 
-    let pending_modifiers = tr.pending_modifiers().clone();
-
-    let (mut effective_mods, host_paragraph_id, host_has_marker) = {
-        let view = tr.state().view();
-        let node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
-
-        let host_paragraph_id = find_enclosing_paragraph_id(&view, block);
-        let host_marker =
-            host_paragraph_id.and_then(|id| tr.state().projected.node_markers().value_of(id));
-
-        let mut effective_mods = resolve_effective_modifiers(&node, pos.offset, &pending_modifiers);
-        effective_mods.retain(|m| is_text_applicable(m.as_type()));
-
-        if let Some(marker) = &host_marker {
-            for m in &marker.modifiers {
-                if !is_text_applicable(m.as_type()) {
-                    continue;
-                }
-                if !effective_mods.iter().any(|e| e.as_type() == m.as_type()) {
-                    effective_mods.push(m.clone());
-                }
-            }
-        }
-
-        (effective_mods, host_paragraph_id, host_marker.is_some())
+    let mut paint = match paint_override {
+        Some(paint) => paint.to_vec(),
+        None => caret_paint(tr, block, pos.offset),
     };
-    effective_mods.retain(|m| is_text_applicable(m.as_type()));
+    paint.retain(|m| m.as_type().is_text_applicable());
 
     let insert_len = text.char_count();
     tr.insert_text(block, pos.offset, text)?;
 
     let new_dots = child_leaf_dots(tr, block, pos.offset, insert_len);
-    apply_inline_modifiers(tr, &new_dots, &effective_mods)?;
+    apply_inline_modifiers(tr, &new_dots, &paint)?;
 
     tr.set_selection(Some(Selection::collapsed(Position {
         node: block,
@@ -365,22 +371,13 @@ pub(crate) fn insert_text_at_caret(tr: &mut Transaction, text: &str) -> CommandR
         affinity: Affinity::Upstream,
     })))?;
 
-    if !tr.pending_modifiers().is_empty() {
-        tr.set_pending_modifiers(PendingModifiers::new())?;
-    }
-    if let Some(p_id) = host_paragraph_id
-        && host_has_marker
-    {
-        tr.set_marker(p_id, None)?;
-    }
-
     Ok(true)
 }
 
 fn insert_atom_at_caret(
     tr: &mut Transaction,
     plain: PlainNode,
-    metric_only: bool,
+    paint_override: Option<&[Modifier]>,
 ) -> CommandResult {
     materialize_caret_block(tr)?;
 
@@ -392,54 +389,20 @@ fn insert_atom_at_caret(
     }
     let pos = selection.head;
     let block = pos.node;
-    let pending_modifiers = tr.pending_modifiers().clone();
 
-    let (metric_mods, carryable, host_paragraph_id, host_has_marker) = {
-        let view = tr.state().view();
-        let node = view.node(block).ok_or(CommandError::NodeNotFound(block))?;
-
-        let host_paragraph_id = find_enclosing_paragraph_id(&view, block);
-        let host_marker = host_paragraph_id
-            .filter(|&id| {
-                view.node(id)
-                    .map(|p| {
-                        !p.children()
-                            .any(|c| matches!(c, ChildView::Leaf(l) if l.as_char().is_some()))
-                    })
-                    .unwrap_or(false)
-            })
-            .and_then(|id| tr.state().projected.node_markers().value_of(id));
-
-        let mut metric_mods = resolve_effective_modifiers(&node, pos.offset, &pending_modifiers);
-        if metric_only {
-            metric_mods.retain(|m| is_tab_metric_modifier(m.as_type()));
-            if let Some(marker) = &host_marker {
-                for m in &marker.modifiers {
-                    if is_tab_metric_modifier(m.as_type())
-                        && !metric_mods.iter().any(|e| e.as_type() == m.as_type())
-                    {
-                        metric_mods.push(m.clone());
-                    }
-                }
-            }
-        } else {
-            metric_mods.clear();
-        }
-
-        let carryable = carryable_modifiers_at(&view, pos, &pending_modifiers);
-
-        (
-            metric_mods,
-            carryable,
-            host_paragraph_id,
-            host_marker.is_some(),
-        )
+    let mut paint = match paint_override {
+        Some(paint) => paint.to_vec(),
+        None => caret_paint(tr, block, pos.offset),
     };
+    paint.retain(|m| {
+        m.as_type().is_text_applicable()
+            && !matches!(m.as_type(), ModifierType::Link | ModifierType::Ruby)
+    });
 
     tr.insert_subtree(block, pos.offset, Subtree::leaf(plain))?;
 
     let new_dots = child_leaf_dots(tr, block, pos.offset, 1);
-    apply_inline_modifiers(tr, &new_dots, &metric_mods)?;
+    apply_inline_modifiers(tr, &new_dots, &paint)?;
 
     tr.set_selection(Some(Selection::collapsed(Position {
         node: block,
@@ -447,30 +410,139 @@ fn insert_atom_at_caret(
         affinity: Affinity::Downstream,
     })))?;
 
-    if let Some(p_id) = host_paragraph_id {
-        if host_has_marker {
-            tr.set_marker(p_id, None)?;
-        } else {
-            let marker = editor_model::Marker {
-                modifiers: carryable,
-            };
-            if !marker.is_empty() {
-                tr.set_marker(p_id, Some(marker))?;
+    Ok(true)
+}
+
+pub(crate) fn insert_hard_break_at_caret(
+    tr: &mut Transaction,
+    paint_override: Option<&[Modifier]>,
+) -> CommandResult {
+    insert_atom_at_caret(
+        tr,
+        PlainNode::HardBreak(PlainHardBreakNode::default()),
+        paint_override,
+    )
+}
+
+pub(crate) fn insert_tab_at_caret(
+    tr: &mut Transaction,
+    paint_override: Option<&[Modifier]>,
+) -> CommandResult {
+    insert_atom_at_caret(tr, PlainNode::Tab(PlainTabNode::default()), paint_override)
+}
+
+pub(crate) fn consume_pending_modifiers(tr: &mut Transaction) -> Result<(), CommandError> {
+    if !tr.pending_modifiers().is_empty() {
+        tr.set_pending_modifiers(PendingModifiers::new())?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_macros::state;
+    use editor_model::{Alignment, ChildView, EditOp, SpanOp};
+    use editor_state::State;
+    use editor_transaction::Step;
+
+    use super::*;
+
+    fn root_id(state: &State) -> Dot {
+        state.view().root().unwrap().id()
+    }
+
+    fn first_child_leaf_dot(state: &State, block: Dot, index: usize) -> Dot {
+        match state.view().node(block).unwrap().child_at(index).unwrap() {
+            ChildView::Leaf(l) => l.dot(),
+            ChildView::Block(_) => panic!("expected leaf child"),
+        }
+    }
+
+    #[test]
+    fn remove_child_at_undo_restores_image_alignment() {
+        let (base, _p1) = state! {
+            doc { root { image p1: paragraph { text("x") } } }
+            selection: (p1, 0)
+        };
+        let root = root_id(&base);
+        let img = first_child_leaf_dot(&base, root, 0);
+
+        let mut prep = Transaction::new(&base);
+        prep.apply_steps(vec![Step::AddModifier {
+            block: img,
+            modifier: Modifier::Alignment {
+                value: Alignment::Center,
+            },
+        }])
+        .unwrap();
+        let (initial, ..) = prep.commit();
+        let center = Modifier::Alignment {
+            value: Alignment::Center,
+        };
+        assert_eq!(
+            initial
+                .projected
+                .block_modifiers()
+                .modifiers_of(img)
+                .get(&ModifierType::Alignment),
+            Some(&center),
+            "precondition: the image carries center alignment as its own block modifier"
+        );
+
+        let mut tr = Transaction::new(&initial);
+        remove_child_at(&mut tr, root, 0).unwrap();
+        let (after, records, ..) = tr.commit();
+        assert!(after.view().leaf(img).is_none(), "the image is removed");
+
+        let mut ops = Vec::new();
+        let restored = records.iter().rev().fold(after, |s, r| {
+            let out = r.step.inverse().apply(&s).unwrap();
+            ops.extend(out.ops);
+            out.state
+        });
+
+        let rimg = first_child_leaf_dot(&restored, root, 0);
+        assert_eq!(
+            restored
+                .projected
+                .block_modifiers()
+                .modifiers_of(rimg)
+                .get(&ModifierType::Alignment),
+            Some(&center),
+            "undo restores the image's center alignment as a block modifier"
+        );
+
+        for op in &ops {
+            if let EditOp::Span(SpanOp::AddSpan { modifier, .. }) = &op.payload {
+                assert!(
+                    modifier.as_type().is_text_applicable(),
+                    "undo recorded an invalid-target span carrying {modifier:?}"
+                );
             }
         }
     }
 
-    Ok(true)
-}
+    #[test]
+    fn remove_child_at_undo_restores_inline_atom_paint() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab [font_size(2400)] text("b") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        remove_child_at(&mut tr, p1, 1).unwrap();
+        let (after, records, ..) = tr.commit();
 
-pub(crate) fn insert_hard_break_at_caret(tr: &mut Transaction) -> CommandResult {
-    insert_atom_at_caret(
-        tr,
-        PlainNode::HardBreak(PlainHardBreakNode::default()),
-        false,
-    )
-}
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
 
-pub(crate) fn insert_tab_at_caret(tr: &mut Transaction) -> CommandResult {
-    insert_atom_at_caret(tr, PlainNode::Tab(PlainTabNode::default()), true)
+        let view = restored.view();
+        let para = view.node(p1).unwrap();
+        assert!(
+            para.leaf_own_modifiers_at(1)
+                .contains(&Modifier::FontSize { value: 2400 }),
+            "undo restores the tab's own font-size span"
+        );
+    }
 }

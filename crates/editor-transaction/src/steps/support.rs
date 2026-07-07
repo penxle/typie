@@ -1,9 +1,10 @@
+use std::collections::BTreeMap;
+
 use editor_crdt::sequence::Bias as SeqBias;
-use editor_crdt::{Dot, ListOp, LwwRegOp};
+use editor_crdt::{Dot, ListOp};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, Child, EditOp, Marker, Modifier, ModifierAttrOp, ModifierType,
-    NodeAttrOp, NodeLwwOp, NodeType, PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree,
-    classify,
+    Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeAttrOp,
+    NodeType, PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree, classify,
 };
 use editor_state::{BatchedState, ProjectedState};
 
@@ -343,16 +344,13 @@ pub(crate) fn block_modifier_set(target: Dot, modifier: Modifier) -> EditOp {
     EditOp::BlockModifier(ModifierAttrOp::SetModifier { target, modifier })
 }
 
-/// Ops that copy a source block's overlays (block modifiers, node marker) onto
-/// `target`. Used when a structural step mints a new block dot that should
-/// inherit the source's block-level formatting (e.g. SplitNode).
+/// Ops that copy a source block's block modifiers onto `target`. Used when a
+/// structural step mints a new block dot that should inherit the source's
+/// block-level formatting (e.g. SplitNode).
 pub(crate) fn block_overlay_ops(ps: &ProjectedState, src: Dot, target: Dot) -> Vec<EditOp> {
     let mut ops = Vec::new();
     for (_ty, m) in ps.block_modifiers().modifiers_of(src) {
         ops.push(block_modifier_set(target, m));
-    }
-    if let Some(marker) = ps.node_markers().value_of(src) {
-        ops.push(node_marker_set(target, Some(marker)));
     }
     ops
 }
@@ -361,17 +359,18 @@ pub(crate) fn block_modifier_clear(target: Dot, key: ModifierType) -> EditOp {
     EditOp::BlockModifier(ModifierAttrOp::ClearModifier { target, key })
 }
 
-pub(crate) fn node_marker_set(target: Dot, value: Option<Marker>) -> EditOp {
-    EditOp::NodeMarker(NodeLwwOp {
-        target,
-        op: LwwRegOp::Set { value },
-    })
+pub(crate) fn node_carry_set(target: Dot, modifier: Modifier) -> EditOp {
+    EditOp::NodeCarry(ModifierAttrOp::SetModifier { target, modifier })
 }
 
-/// Builds a `Subtree` snapshot of the projected block at `block`. Char leaves
-/// are grouped into plain `Text` subtrees (per-char span styling is dropped —
-/// the M1 move/subtree path is structural). Atom leaves keep their own
-/// modifiers. Nested blocks recurse.
+pub(crate) fn node_carry_clear(target: Dot, key: ModifierType) -> EditOp {
+    EditOp::NodeCarry(ModifierAttrOp::ClearModifier { target, key })
+}
+
+/// Builds a `Subtree` snapshot of the projected block at `block`. Consecutive
+/// char leaves that share the same own paint collapse into one `Text` subtree
+/// carrying that run's own modifiers; a paint change starts a new run. Atom
+/// leaves keep their own modifiers. Nested blocks recurse.
 pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
     let node = ps.block_node(block)?.to_plain();
     let dot = editor_model::anchor_dot(block);
@@ -384,31 +383,69 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
                 .collect()
         })
         .unwrap_or_default();
-    let marker = dot.and_then(|d| ps.node_markers().value_of(d));
+    let carry: Vec<Modifier> = dot
+        .map(|d| ps.node_carries().modifiers_of(d).into_values().collect())
+        .unwrap_or_default();
+
+    let leaf_own: Vec<Vec<Modifier>> = {
+        let view = ps.view();
+        match view.node(block) {
+            Some(nv) => nv
+                .inline()
+                .iter()
+                .map(|it| it.own_modifiers.values().map(|o| o.value.clone()).collect())
+                .collect(),
+            None => Vec::new(),
+        }
+    };
 
     let mut children: Vec<Subtree> = Vec::new();
     let mut pending_text = String::new();
+    let mut pending_mods: Vec<Modifier> = Vec::new();
+    let mut leaf_idx = 0usize;
     for c in ps.block_children(block)? {
         match c {
-            Child::Leaf { id, item } => match item {
-                SeqItem::Char(ch) => pending_text.push(ch),
-                SeqItem::Atom(atom) => {
-                    if !pending_text.is_empty() {
-                        children.push(text_subtree(std::mem::take(&mut pending_text)));
+            Child::Leaf { id, item } => {
+                let own = leaf_own.get(leaf_idx).cloned().unwrap_or_default();
+                leaf_idx += 1;
+                match item {
+                    SeqItem::Char(ch) => {
+                        if !pending_text.is_empty() && own != pending_mods {
+                            children.push(text_subtree(
+                                std::mem::take(&mut pending_text),
+                                std::mem::take(&mut pending_mods),
+                            ));
+                        }
+                        pending_text.push(ch);
+                        pending_mods = own;
                     }
-                    children.push(atom_leaf_subtree(ps, id, atom));
-                }
-                SeqItem::BlockAtom { leaf, .. } => {
-                    if !pending_text.is_empty() {
-                        children.push(text_subtree(std::mem::take(&mut pending_text)));
+                    SeqItem::Atom(atom) => {
+                        if !pending_text.is_empty() {
+                            children.push(text_subtree(
+                                std::mem::take(&mut pending_text),
+                                std::mem::take(&mut pending_mods),
+                            ));
+                        }
+                        children.push(atom_leaf_subtree(ps, id, atom));
                     }
-                    children.push(atom_leaf_subtree(ps, id, leaf));
+                    SeqItem::BlockAtom { leaf, .. } => {
+                        if !pending_text.is_empty() {
+                            children.push(text_subtree(
+                                std::mem::take(&mut pending_text),
+                                std::mem::take(&mut pending_mods),
+                            ));
+                        }
+                        children.push(atom_leaf_subtree(ps, id, leaf));
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
             Child::Block(d) => {
                 if !pending_text.is_empty() {
-                    children.push(text_subtree(std::mem::take(&mut pending_text)));
+                    children.push(text_subtree(
+                        std::mem::take(&mut pending_text),
+                        std::mem::take(&mut pending_mods),
+                    ));
                 }
                 if let Some(sub) = capture_subtree(ps, d) {
                     children.push(sub);
@@ -417,26 +454,39 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
         }
     }
     if !pending_text.is_empty() {
-        children.push(text_subtree(pending_text));
+        children.push(text_subtree(pending_text, pending_mods));
     }
 
     Some(Subtree {
         node,
         modifiers,
-        marker,
+        carry,
         children,
     })
 }
 
-fn text_subtree(text: String) -> Subtree {
-    Subtree::leaf(PlainNode::Text(PlainTextNode { text }))
+fn text_subtree(text: String, modifiers: Vec<Modifier>) -> Subtree {
+    Subtree {
+        node: PlainNode::Text(PlainTextNode { text }),
+        modifiers,
+        carry: Vec::new(),
+        children: Vec::new(),
+    }
 }
 
 fn atom_leaf_subtree(ps: &ProjectedState, dot: Dot, atom: AtomLeaf) -> Subtree {
+    let modifiers = if atom.is_block_level() {
+        ps.block_modifiers()
+            .modifiers_of(dot)
+            .into_values()
+            .collect()
+    } else {
+        ps.view().leaf_own_modifiers_by_dot_slow(dot)
+    };
     Subtree {
         node: atom.into_node().to_plain(),
-        modifiers: ps.view().leaf_own_modifiers_by_dot_slow(dot),
-        marker: None,
+        modifiers,
+        carry: Vec::new(),
         children: Vec::new(),
     }
 }
@@ -466,8 +516,14 @@ pub(crate) fn emit_subtree(
             for modifier in &subtree.modifiers {
                 batched.apply(block_modifier_set(dot, modifier.clone()))?;
             }
-            if let Some(marker) = &subtree.marker {
-                batched.apply(node_marker_set(dot, Some(marker.clone())))?;
+            let mut carry_by_type: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+            for m in &subtree.carry {
+                if m.as_type().is_carry_kind() {
+                    carry_by_type.insert(m.as_type(), m.clone());
+                }
+            }
+            for (_ty, m) in carry_by_type {
+                batched.apply(node_carry_set(dot, m))?;
             }
             for attr in subtree.node.to_attrs() {
                 batched.apply(EditOp::NodeAttr(NodeAttrOp { target: dot, attr }))?;
@@ -494,7 +550,9 @@ pub(crate) fn emit_subtree(
                 }
                 if let (Some(&first), Some(&last)) = (char_dots.first(), char_dots.last()) {
                     for modifier in &subtree.modifiers {
-                        batched.apply(span_add(first, last, modifier.clone()))?;
+                        if modifier.as_type().is_text_applicable() {
+                            batched.apply(span_add(first, last, modifier.clone()))?;
+                        }
                     }
                 }
             }
@@ -503,7 +561,8 @@ pub(crate) fn emit_subtree(
         SeqClass::Atom => {
             let leaf = AtomLeaf::from_plain_node(&subtree.node)
                 .ok_or(StepError::NodeNotFound(Dot::ROOT))?;
-            let item = if leaf.is_block_level() {
+            let is_block_level = leaf.is_block_level();
+            let item = if is_block_level {
                 SeqItem::BlockAtom {
                     leaf,
                     parents: parents.to_vec(),
@@ -519,7 +578,14 @@ pub(crate) fn emit_subtree(
                 .id;
             *seq_pos += 1;
             for modifier in &subtree.modifiers {
-                batched.apply(span_add(dot, dot, modifier.clone()))?;
+                let ty = modifier.as_type();
+                if is_block_level {
+                    batched.apply(block_modifier_set(dot, modifier.clone()))?;
+                } else if ty.is_text_applicable()
+                    && !matches!(ty, ModifierType::Link | ModifierType::Ruby)
+                {
+                    batched.apply(span_add(dot, dot, modifier.clone()))?;
+                }
             }
             Ok(Some(dot))
         }

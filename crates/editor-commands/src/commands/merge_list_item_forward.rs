@@ -291,6 +291,34 @@ mod tests {
     }
 
     #[test]
+    fn last_item_pulls_next_paragraph_preserves_bold() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                    }
+                    paragraph { text("B") [bold] }
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| merge_list_item_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") text("B") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn last_item_pulls_next_paragraph_strips_trailing_page_break() {
         // Root-level paragraph may carry a trailing PageBreak, but pulling it
         // into a list_item paragraph would violate PageBreak's `Root > Paragraph`

@@ -1,8 +1,8 @@
 use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
-    AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp,
-    ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeMarkerLog, NodeType, ProjectedDoc,
+    Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp,
+    Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeType, ProjectedDoc,
     ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
     SpanOp, SplitError, anchor_dot, block_effective_one, normalize_content_shallow,
     normalize_subtree, project_blocks, project_from, project_from_tree, seq_parents,
@@ -189,10 +189,10 @@ impl ProjectedState {
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
-            EditOp::NodeMarker(o) => {
-                self.logs.node_markers = self
+            EditOp::NodeCarry(o) => {
+                self.logs.node_carries = self
                     .logs
-                    .node_markers
+                    .node_carries
                     .apply(op.id, o.clone())
                     .map_err(SplitError::Crdt)?
             }
@@ -714,7 +714,7 @@ impl ProjectedState {
         self.projected.block_effective.remove(&n);
         self.projected.block_modifiers.remove(&n);
         self.projected.node_attrs.remove(&n);
-        self.projected.node_markers.remove(&n);
+        self.projected.node_carries.remove(&n);
         self.projected.seg_index.remove_block(n);
         self.indexes.paths.remove_block(n);
         self.indexes.paths.remove_leaf(n);
@@ -827,7 +827,7 @@ impl ProjectedState {
             EditOp::Seq(ListOp::Del { .. }) => self.try_delete_chars(op.id),
             EditOp::Seq(ListOp::Undel { del }) => self.try_undelete(*del),
             EditOp::Span(span_op) => self.try_apply_span(op.id, span_op),
-            EditOp::BlockModifier(_) | EditOp::NodeAttr(_) | EditOp::NodeMarker(_) => {
+            EditOp::BlockModifier(_) | EditOp::NodeAttr(_) | EditOp::NodeCarry(_) => {
                 self.try_apply_node_op(op)
             }
             _ => false,
@@ -1026,14 +1026,32 @@ impl ProjectedState {
                 }
                 self.recompute_subtree(target);
             }
-            EditOp::NodeMarker(o) => {
-                let target = o.target;
+            EditOp::NodeCarry(o) => {
+                let target = o.target_key().0;
                 if !self.indexes.paths.contains(target) {
                     return true;
                 }
-                // Markers don't participate in effective/own derivation.
-                let v = self.logs.node_markers.value_of(target);
-                self.projected.node_markers.insert(target, v);
+                // Carries don't participate in effective/own derivation. The
+                // projection is the final guard against inflow: drop non-carry
+                // kinds and records whose target is not a text block.
+                let is_textblock = self
+                    .indexes
+                    .paths
+                    .node_type_of(target)
+                    .map(|nt| nt.spec().is_textblock())
+                    .unwrap_or(false);
+                let carries: std::collections::BTreeMap<_, _> = self
+                    .logs
+                    .node_carries
+                    .modifiers_of(target)
+                    .into_iter()
+                    .filter(|(ty, _)| ty.is_carry_kind())
+                    .collect();
+                if is_textblock && !carries.is_empty() {
+                    self.projected.node_carries.insert(target, carries);
+                } else {
+                    self.projected.node_carries.remove(&target);
+                }
                 self.mark_dirty_block(target);
             }
             _ => return false,
@@ -1854,8 +1872,15 @@ impl ProjectedState {
         &self.logs.node_attrs
     }
 
-    pub fn node_markers(&self) -> &NodeMarkerLog {
-        &self.logs.node_markers
+    pub fn node_carries(&self) -> &ModifierAttrLog {
+        &self.logs.node_carries
+    }
+
+    pub fn carry_modifiers(
+        &self,
+        block: Dot,
+    ) -> std::collections::BTreeMap<ModifierType, editor_model::Modifier> {
+        self.projected.carry_modifiers(block)
     }
 
     pub fn spans(&self) -> &SpanLog {
@@ -1902,6 +1927,55 @@ impl ProjectedState {
             };
             os < e && s < oe
         })
+    }
+
+    pub fn span_covered_own(
+        &self,
+        start: Anchor,
+        end: Anchor,
+        ty: ModifierType,
+    ) -> Vec<(Dot, Option<Modifier>)> {
+        let (Some(s), Some(e)) = (
+            self.seq
+                .resolve_boundary(start.id, start.bias.into())
+                .map(|b| b.position),
+            self.seq
+                .resolve_boundary(end.id, end.bias.into())
+                .map(|b| b.position),
+        ) else {
+            return Vec::new();
+        };
+        if s >= e {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        let mut cur_block: Option<Dot> = None;
+        let mut ord = 0usize;
+        for pos in s..e {
+            let Some(leaf) = self.seq.dot_at_visible(&self.logs.seq, pos) else {
+                continue;
+            };
+            let Some(block) = self.indexes.paths.block_of(leaf) else {
+                cur_block = None;
+                continue;
+            };
+            if cur_block != Some(block) {
+                let Some(base) = self.leaf_ordinal_of(block, leaf) else {
+                    cur_block = None;
+                    continue;
+                };
+                cur_block = Some(block);
+                ord = base;
+            }
+            let own = self
+                .projected
+                .seg_index
+                .seg_at(block, ord)
+                .and_then(|(seg, _)| seg.own.get(&ty).map(|o| o.value.clone()));
+            out.push((leaf, own));
+            ord += 1;
+        }
+        out
     }
 
     pub fn seq_flat_pos(&self, dot: Dot) -> Option<usize> {
@@ -2249,10 +2323,10 @@ impl ProjectedState {
 mod tests {
     use super::*;
     use crate::LayoutDirty;
-    use editor_crdt::{Dot, LwwRegOp};
+    use editor_crdt::Dot;
     use editor_model::{
-        Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Marker, Modifier,
-        ModifierAttrOp, ModifierType, Node, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp,
+        Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Modifier, ModifierAttrOp,
+        ModifierType, Node, NodeAttr, NodeAttrOp, SpanOp,
     };
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
@@ -2552,7 +2626,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_node_marker_projects() {
+    fn apply_node_carry_projects() {
         let mut state = ProjectedState::empty();
         let para = state
             .view()
@@ -2564,16 +2638,19 @@ mod tests {
             .dot()
             .unwrap();
         state
-            .apply(EditOp::NodeMarker(NodeLwwOp {
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                 target: para,
-                op: LwwRegOp::Set {
-                    value: Some(Marker {
-                        modifiers: vec![Modifier::Bold],
-                    }),
-                },
+                modifier: Modifier::Bold,
             }))
             .unwrap();
-        assert!(state.projected().node_markers.get(&para).is_some());
+        assert_eq!(
+            state
+                .projected()
+                .node_carries
+                .get(&para)
+                .and_then(|c| c.get(&ModifierType::Bold)),
+            Some(&Modifier::Bold)
+        );
     }
 
     #[test]
@@ -3517,7 +3594,7 @@ mod tests {
     }
 
     // Mix char ins/del + spans + every node op (block modifier, node style +
-    // style registry, node marker) interleaved, then assert the incremental
+    // style registry, node carry) interleaved, then assert the incremental
     // spine converges to the cold full projection. Validates S4d's per-node-op
     // map updates + subtree effective recompute against the oracle.
     proptest::proptest! {
@@ -3526,7 +3603,6 @@ mod tests {
         fn warm_apply_with_node_ops_matches_cold(
             actions in proptest::collection::vec(arb_span_action(), 0..50),
         ) {
-            use editor_crdt::LwwRegOp;
             let mut warm = ProjectedState::empty();
             let para = warm
                 .view()
@@ -3584,16 +3660,18 @@ mod tests {
                         warm.apply(EditOp::BlockModifier(op)).unwrap();
                     }
                     14 => {
-                        let v = if b & 1 == 0 {
-                            Some(Marker { modifiers: vec![Modifier::Bold] })
+                        let op = if b & 1 == 0 {
+                            ModifierAttrOp::SetModifier {
+                                target: para,
+                                modifier: Modifier::Bold,
+                            }
                         } else {
-                            None
+                            ModifierAttrOp::ClearModifier {
+                                target: para,
+                                key: ModifierType::Bold,
+                            }
                         };
-                        warm.apply(EditOp::NodeMarker(NodeLwwOp {
-                            target: para,
-                            op: LwwRegOp::Set { value: v },
-                        }))
-                        .unwrap();
+                        warm.apply(EditOp::NodeCarry(op)).unwrap();
                     }
                     _ => {}
                 }

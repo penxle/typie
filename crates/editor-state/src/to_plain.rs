@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, Marker, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc, PlainNode,
-    PlainNodeEntry, PlainTextNode, ProjectedDoc,
+    AtomLeaf, ChildView, DocView, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc,
+    PlainNode, PlainNodeEntry, PlainTextNode, ProjectedDoc,
 };
 
 pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {
@@ -46,7 +46,7 @@ fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
         modifiers: dot
             .map(|d| block_modifiers(projected, d))
             .unwrap_or_default(),
-        marker: dot.and_then(|d| node_marker(projected, d)),
+        carry: dot.map(|d| carry_of(projected, d)).unwrap_or_default(),
         children,
     }
 }
@@ -55,7 +55,7 @@ fn emit_atom(node: PlainNode, own: Option<&BTreeMap<ModifierType, OwnModifier>>)
     PlainNodeEntry {
         node,
         modifiers: own.map(span_modifiers).unwrap_or_default(),
-        marker: None,
+        carry: Vec::new(),
         children: Vec::new(),
     }
 }
@@ -94,7 +94,7 @@ impl PendingRun {
                 text: std::mem::take(&mut self.text),
             }),
             modifiers: std::mem::take(&mut self.modifiers),
-            marker: None,
+            carry: Vec::new(),
             children: Vec::new(),
         });
         self.active = false;
@@ -113,8 +113,8 @@ fn block_modifiers(projected: &ProjectedDoc, dot: Dot) -> BTreeMap<ModifierType,
         .unwrap_or_default()
 }
 
-fn node_marker(projected: &ProjectedDoc, dot: Dot) -> Option<Marker> {
-    projected.node_markers.get(&dot).cloned().flatten()
+fn carry_of(projected: &ProjectedDoc, dot: Dot) -> Vec<Modifier> {
+    projected.carry_modifiers(dot).into_values().collect()
 }
 
 #[cfg(test)]
@@ -132,7 +132,7 @@ mod tests {
         PlainNodeEntry {
             node,
             modifiers: BTreeMap::new(),
-            marker: None,
+            carry: Vec::new(),
             children,
         }
     }
@@ -142,6 +142,36 @@ mod tests {
         let plain2 = s1.to_plain();
         let s2 = State::from_plain(&plain2).expect("load round-trip");
         crate::test_utils::assert_state_eq_impl(&s1, &s2);
+    }
+
+    fn para_with_carry(carry: Vec<Modifier>) -> PlainDoc {
+        let mut para = entry(vec![], PlainNode::Paragraph(PlainParagraphNode {}));
+        para.carry = carry;
+        let root = entry(vec![para], PlainNode::Root(PlainRootNode::default()));
+        PlainDoc { root }
+    }
+
+    fn loaded_paragraph_carry(plain: &PlainDoc) -> Vec<Modifier> {
+        let state = State::from_plain(plain).expect("load template");
+        let out = state.to_plain();
+        out.root.children[0].carry.clone()
+    }
+
+    #[test]
+    fn carry_survives_to_plain_and_load() {
+        let carry = loaded_paragraph_carry(&para_with_carry(vec![Modifier::Bold]));
+        assert_eq!(carry, vec![Modifier::Bold]);
+    }
+
+    #[test]
+    fn non_carry_kind_in_plain_carry_is_dropped() {
+        let carry = loaded_paragraph_carry(&para_with_carry(vec![Modifier::Link {
+            href: "https://e.com".to_string(),
+        }]));
+        assert!(
+            carry.is_empty(),
+            "a non-carry kind supplied via plain carry never survives the round trip"
+        );
     }
 
     #[test]

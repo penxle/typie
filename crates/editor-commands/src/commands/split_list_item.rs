@@ -1,17 +1,13 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, Modifier, NodeType, Subtree};
+use editor_model::{ChildView, NodeType, Subtree};
 use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    capture_atom_leaf_subtree_at, carryable_modifiers_at, find_enclosing_list_item_id,
+    capture_charlike_slots, continuation_paint_at, find_enclosing_list_item_id,
+    insert_charlike_slots,
 };
 use crate::{CommandError, CommandResult};
-
-enum TailSlot {
-    Char { ch: char, modifiers: Vec<Modifier> },
-    Atom { subtree: Subtree },
-}
 
 pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
@@ -56,24 +52,7 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     // drops identity, and a list_item rejects a second paragraph), so capture
     // visible content plus leaf-owned formatting and re-create them in the new
     // item's paragraph.
-    let mut tail: Vec<TailSlot> = Vec::new();
-    for (slot, c) in paragraph.children().enumerate().skip(split_index) {
-        match c {
-            ChildView::Leaf(l) => {
-                if let Some(ch) = l.as_char() {
-                    tail.push(TailSlot::Char {
-                        ch,
-                        modifiers: paragraph.leaf_own_modifiers_at(slot),
-                    });
-                } else if l.as_atom().is_some() {
-                    tail.push(TailSlot::Atom {
-                        subtree: capture_atom_leaf_subtree_at(&paragraph, slot)?,
-                    });
-                }
-            }
-            ChildView::Block(_) => {}
-        }
-    }
+    let tail = capture_charlike_slots(&tr.state().projected, &paragraph, split_index, para_len)?;
     let tail_len = para_len - split_index;
 
     let sublist_id: Option<Dot> = list_item
@@ -92,7 +71,7 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         (list.id(), idx)
     };
 
-    let carryable = carryable_modifiers_at(&view, pos, tr.pending_modifiers());
+    let paint = continuation_paint_at(&tr.state().projected, pos);
     drop(view);
 
     if tail_len > 0 {
@@ -135,30 +114,10 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
         tr.move_node(*sublist, new_list_item_id, at)?;
     }
 
-    let mut offset = 0usize;
-    let mut text = String::new();
-    let mut modifiers = Vec::new();
-    for slot in &tail {
-        match slot {
-            TailSlot::Char { ch, modifiers: m } => {
-                text.push(*ch);
-                modifiers.push(m.clone());
-            }
-            TailSlot::Atom { subtree } => {
-                flush_tail_text(tr, new_paragraph_id, &mut offset, &mut text, &mut modifiers)?;
-                tr.insert_subtree(new_paragraph_id, offset, subtree.clone())?;
-                offset += 1;
-            }
-        }
-    }
-    flush_tail_text(tr, new_paragraph_id, &mut offset, &mut text, &mut modifiers)?;
+    insert_charlike_slots(tr, new_paragraph_id, 0, &tail)?;
 
-    let marker = editor_model::Marker {
-        modifiers: carryable,
-    };
-    if !marker.is_empty() {
-        tr.set_marker(new_paragraph_id, Some(marker))?;
-    }
+    tr.replace_carry(paragraph_id, paint.clone())?;
+    tr.replace_carry(new_paragraph_id, paint)?;
 
     tr.set_selection(Some(Selection::collapsed(Position::new(
         new_paragraph_id,
@@ -166,49 +125,6 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     ))))?;
 
     Ok(true)
-}
-
-fn flush_tail_text(
-    tr: &mut Transaction,
-    paragraph_id: Dot,
-    offset: &mut usize,
-    text: &mut String,
-    modifiers: &mut Vec<Vec<Modifier>>,
-) -> Result<(), CommandError> {
-    if text.is_empty() {
-        return Ok(());
-    }
-    let start = *offset;
-    tr.insert_text(paragraph_id, start, text.as_str())?;
-    let char_dots: Vec<_> = {
-        let view = tr.view();
-        view.node(paragraph_id)
-            .map(|p| {
-                p.children()
-                    .skip(start)
-                    .take(modifiers.len())
-                    .filter_map(|c| match c {
-                        ChildView::Leaf(l) => l.as_char().map(|_| l.dot()),
-                        ChildView::Block(_) => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    if char_dots.len() != modifiers.len() {
-        return Err(CommandError::Corrupted(
-            "inserted tail text dots missing".into(),
-        ));
-    }
-    for (dot, mods) in char_dots.iter().zip(modifiers.iter()) {
-        for m in mods {
-            tr.add_span_modifier(*dot, *dot, m.clone())?;
-        }
-    }
-    *offset += modifiers.len();
-    text.clear();
-    modifiers.clear();
-    Ok(())
 }
 
 #[cfg(test)]
@@ -391,6 +307,49 @@ mod tests {
     }
 
     #[test]
+    fn split_list_item_at_start_carries_right_paint_to_both() {
+        use editor_model::ModifierType;
+        let (initial, _p1) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("Hello") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (first, second) = {
+            let view = actual.view();
+            let list = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == editor_model::NodeType::BulletList)
+                .unwrap();
+            let mut items = list.child_blocks();
+            let a = items.next().unwrap();
+            let b = items.next().unwrap();
+            let para_of = |li: &editor_model::NodeView| match li.first_child() {
+                Some(editor_model::ChildView::Block(p)) => p.id(),
+                _ => unreachable!(),
+            };
+            (para_of(&a), para_of(&b))
+        };
+        for para in [first, second] {
+            assert!(
+                actual
+                    .projected
+                    .carry_modifiers(para)
+                    .contains_key(&ModifierType::Bold),
+                "splitting at the run start carries the right neighbor's paint into both list items"
+            );
+        }
+    }
+
+    #[test]
     fn split_with_sublist_moves_sublist_to_new_item() {
         let (initial, _p1) = state! {
             doc {
@@ -415,6 +374,41 @@ mod tests {
                         list_item {
                             p2: paragraph {}
                             bullet_list { list_item { paragraph { text("sub") } } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_moves_sublist_preserving_inner_bold() {
+        let (initial, _p1) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("Hello") }
+                            bullet_list { list_item { paragraph { text("sub") [bold] } } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, _p1, _p2) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("Hello") } }
+                        list_item {
+                            p2: paragraph {}
+                            bullet_list { list_item { paragraph { text("sub") [bold] } } }
                         }
                     }
                     paragraph {}
@@ -506,8 +500,37 @@ mod tests {
             doc {
                 root {
                     bullet_list {
+                        list_item { p1: paragraph carry([bold]) { text("Hello") [bold] } }
+                        list_item { p2: paragraph carry([bold]) {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_list_item_replaces_carry_on_both() {
+        let (initial, _p1) = state! {
+            doc {
+                root {
+                    bullet_list {
                         list_item { p1: paragraph { text("Hello") [bold] } }
-                        list_item { p2: paragraph marker([bold]) {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, _p1, _p2) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph carry([bold]) { text("Hello") [bold] } }
+                        list_item { p2: paragraph carry([bold]) {} }
                     }
                     paragraph {}
                 }
@@ -535,8 +558,8 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { p1: paragraph { text("He") [bold] } }
-                        list_item { p2: paragraph marker([bold]) { text("llo") [bold] } }
+                        list_item { p1: paragraph carry([bold]) { text("He") [bold] } }
+                        list_item { p2: paragraph carry([bold]) { text("llo") [bold] } }
                     }
                     paragraph {}
                 }

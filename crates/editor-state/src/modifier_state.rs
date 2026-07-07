@@ -18,7 +18,23 @@ fn modifier_for_caret_state(
     textblock: &NodeView,
     ty: ModifierType,
 ) -> Option<Modifier> {
-    if !modifier_applies_at_caret(textblock, ty) {
+    modifier_for_caret_map(
+        caret,
+        textblock.node_type(),
+        &textblock_type_path(textblock),
+        textblock.effective(),
+        ty,
+    )
+}
+
+fn modifier_for_caret_map(
+    caret: &BTreeMap<ModifierType, Modifier>,
+    block_type: NodeType,
+    block_path: &[NodeType],
+    block_effective: &BTreeMap<ModifierType, Modifier>,
+    ty: ModifierType,
+) -> Option<Modifier> {
+    if !modifier_applies_for(block_type, block_path, ty) {
         return None;
     }
     if let Some(modifier) = caret.get(&ty) {
@@ -26,30 +42,95 @@ fn modifier_for_caret_state(
     }
     let default = text_style_default_modifier(ty)?;
     (if Schema::modifier_spec(ty).inheritable {
-        textblock.effective().get(&ty).cloned()
+        block_effective.get(&ty).cloned()
     } else {
         None
     })
     .or(Some(default))
 }
 
-fn modifier_applies_at_caret(textblock: &NodeView, ty: ModifierType) -> bool {
+fn modifier_applies_for(block_type: NodeType, block_path: &[NodeType], ty: ModifierType) -> bool {
     let target = &Schema::modifier_spec(ty).target;
     let targets = target.rightmost_node_types();
-    let block_path = textblock_type_path(textblock);
-    if targets.contains(&textblock.node_type()) && target.matches(&block_path) {
+    if targets.contains(&block_type) && target.matches(block_path) {
         return true;
     }
     targets.contains(&NodeType::Text)
-        && Schema::node_spec(textblock.node_type())
+        && Schema::node_spec(block_type)
             .content
             .matches(NodeType::Text)
+}
+
+fn virtual_paragraph_toolbar(
+    state: &ProjectedState,
+    container: &NodeView,
+) -> BTreeMap<ModifierType, Modifier> {
+    let mut container_path: Vec<(NodeType, Option<editor_crdt::Dot>)> = container
+        .ancestors()
+        .map(|n| (n.node_type(), n.dot()))
+        .collect();
+    container_path.reverse();
+
+    let empty: std::collections::HashMap<editor_crdt::Dot, BTreeMap<ModifierType, Modifier>> =
+        std::collections::HashMap::new();
+    let src = editor_model::EffectiveSources {
+        block_modifiers: state.block_modifiers(),
+        explicit_spans: &empty,
+        node_attrs: &state.projected().node_attrs,
+    };
+    let para_effective =
+        editor_model::resolve_effective(&container_path, None, NodeType::Paragraph, false, &src);
+
+    let mut para_path: Vec<NodeType> = container_path.iter().map(|(t, _)| *t).collect();
+    para_path.push(NodeType::Paragraph);
+
+    let empty_caret: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+    let mut out = BTreeMap::new();
+    for ty in ModifierType::iter() {
+        if let Some(m) = modifier_for_caret_map(
+            &empty_caret,
+            NodeType::Paragraph,
+            &para_path,
+            &para_effective,
+            ty,
+        ) {
+            out.insert(ty, m);
+        }
+    }
+    out
 }
 
 fn textblock_type_path(textblock: &NodeView) -> Vec<NodeType> {
     let mut path: Vec<_> = textblock.ancestors().map(|n| n.node_type()).collect();
     path.reverse();
     path
+}
+
+fn carry_virtual_leaves<'a>(
+    state: &ProjectedState,
+    rs: &ResolvedSelection<'a>,
+) -> Vec<(NodeView<'a>, BTreeMap<ModifierType, Modifier>)> {
+    let view = rs.view();
+    let mut out = Vec::new();
+    for b_dot in crate::carry::end_touched_textblocks(view, rs) {
+        let Some(b) = view.node(b_dot) else {
+            continue;
+        };
+        let carry = state.carry_modifiers(b_dot);
+        let block_type = b.node_type();
+        let block_path = textblock_type_path(&b);
+        let block_effective = b.effective();
+        let mut eff = BTreeMap::new();
+        for ty in ModifierType::iter().filter(|t| t.is_carry_kind()) {
+            if let Some(m) =
+                modifier_for_caret_map(&carry, block_type, &block_path, block_effective, ty)
+            {
+                eff.insert(ty, m);
+            }
+        }
+        out.push((b, eff));
+    }
+    out
 }
 
 /// Interns one type-path entry per distinct `(host, node type)` — a handful
@@ -80,7 +161,10 @@ fn intern_path(
 /// exact per-leaf slot filter. Every type's verdict then follows from counts —
 /// how many applicable nodes there are, how many carried an explicit value, and
 /// whether those explicit values agreed.
-pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState {
+pub fn resolve_modifier_state_in_range(
+    state: &ProjectedState,
+    rs: &ResolvedSelection,
+) -> ModifierState {
     struct Explicit<'a> {
         value: &'a Modifier,
         conflicting: bool,
@@ -89,6 +173,7 @@ pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState 
 
     let mut out = ModifierState::default();
     let blocks = traversal::blocks_in_range(rs);
+    let carriers = carry_virtual_leaves(state, rs);
 
     let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
     let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
@@ -145,13 +230,32 @@ pub fn resolve_modifier_state_in_range(rs: &ResolvedSelection) -> ModifierState 
         }
     }
 
+    let real_entries_len = entries.len();
+    for (b, _eff) in &carriers {
+        let mut vp: Vec<NodeType> = b.ancestors().map(|n| n.node_type()).collect();
+        vp.reverse();
+        vp.push(NodeType::Text);
+        entries.push((NodeType::Text, vp));
+    }
+    for (k, (_b, eff)) in carriers.iter().enumerate() {
+        groups.push((real_entries_len + k, eff, 1, true));
+    }
+
     let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
         .map(|ty| {
             let target = &Schema::modifier_spec(ty).target;
             let targets = target.rightmost_node_types();
             let app: Vec<bool> = entries
                 .iter()
-                .map(|(nt, path)| targets.contains(nt) && target.matches(path))
+                .enumerate()
+                .map(|(i, (nt, path))| {
+                    let base = targets.contains(nt) && target.matches(path);
+                    if i >= real_entries_len {
+                        base && ty.is_carry_kind()
+                    } else {
+                        base
+                    }
+                })
                 .collect();
             (ty, app)
         })
@@ -277,6 +381,10 @@ pub fn resolve_modifier_state(
                 }
             }
             modifiers
+        } else if let Some(container) = view.node(sel.head.node)
+            && crate::gap_cursor::gap_cursor_at(&sel.head, &view).is_some()
+        {
+            virtual_paragraph_toolbar(state, &container)
         } else {
             caret
         };
@@ -289,7 +397,7 @@ pub fn resolve_modifier_state(
         }
         Some(out)
     } else {
-        Some(resolve_modifier_state_in_range(&rs))
+        Some(resolve_modifier_state_in_range(state, &rs))
     }
 }
 
@@ -591,6 +699,12 @@ mod tests {
                 }))
                 .unwrap();
         }
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
         let s = sel((para, 0), (para, 3));
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
         assert_eq!(ms.bold, Tri::Uniform { value: () });
@@ -892,6 +1006,12 @@ mod tests {
             add_bold_span(&mut state, id);
         }
         add_bold_span(&mut state, tab);
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
         let s = sel((para, 0), (para, 3));
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
         assert_eq!(ms.bold, Tri::Uniform { value: () });
@@ -972,6 +1092,12 @@ mod tests {
                 modifier: Modifier::FontWeight { value: 700 },
             }))
             .unwrap();
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontWeight { value: 700 },
+            }))
+            .unwrap();
         let s = sel((para, 0), (para, 1));
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
         assert_eq!(
@@ -1033,23 +1159,16 @@ mod tests {
         assert_eq!(ms.effective_bold, Tri::Mixed);
     }
 
-    // §4.9: marker modifiers seed an empty paragraph caret but do not restyle
-    // existing text in a non-empty paragraph.
     #[test]
-    fn test_9_marker_bold_applies_to_empty_caret_not_existing_range() {
-        use editor_crdt::LwwRegOp;
-        use editor_model::{EditOp, Marker, NodeLwwOp};
+    fn test_9_carry_bold_applies_to_empty_caret_not_existing_range() {
+        use editor_model::{EditOp, ModifierAttrOp};
 
-        // Part A: empty paragraph with marker — collapsed caret picks it up
+        // Part A: empty paragraph with a carry — collapsed caret picks it up
         let (mut state_empty, _root_e, para_e) = simple_para_state(&[]);
         state_empty
-            .apply(EditOp::NodeMarker(NodeLwwOp {
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                 target: para_e,
-                op: LwwRegOp::Set {
-                    value: Some(Marker {
-                        modifiers: vec![Modifier::Bold],
-                    }),
-                },
+                modifier: Modifier::Bold,
             }))
             .unwrap();
         let s_collapsed_empty = collapsed(para_e, 0);
@@ -1057,28 +1176,147 @@ mod tests {
         assert_eq!(
             ms_empty.effective_bold,
             Tri::Uniform { value: () },
-            "collapsed caret in empty paragraph with marker Bold → effective_bold Uniform"
+            "collapsed caret in empty paragraph with carry Bold → effective_bold Uniform"
         );
 
-        // Part B: paragraph with 'a' + marker — marker is not part of the leaf's rendered style.
         let (mut state, _root, para) = simple_para_state(&['a']);
         state
-            .apply(EditOp::NodeMarker(NodeLwwOp {
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                 target: para,
-                op: LwwRegOp::Set {
-                    value: Some(Marker {
-                        modifiers: vec![Modifier::Bold],
-                    }),
-                },
+                modifier: Modifier::Bold,
             }))
             .unwrap();
         let s_range = sel((para, 0), (para, 1));
         let ms_range = resolve_modifier_state(&state, &s_range, &[]).unwrap();
         assert_eq!(
             ms_range.effective_bold,
-            Tri::Absent,
-            "range over existing text is not bolded by the paragraph marker"
+            Tri::Mixed,
+            "a range reaching the paragraph end lets the carry Bold participate"
         );
+        assert_eq!(ms_range.bold, Tri::Mixed);
+    }
+
+    #[test]
+    fn carry_bold_on_empty_paragraph_unit_aggregates_uniform_on() {
+        use editor_model::{EditOp, ModifierAttrOp};
+        let (mut state, root, para) = simple_para_state(&[]);
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+        let s = sel((root, 0), (root, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.effective_bold,
+            Tri::Uniform { value: () },
+            "an empty paragraph carrying Bold aggregates uniform-on"
+        );
+        assert_eq!(ms.bold, Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn carry_font_size_on_empty_paragraph_previews_in_toolbar() {
+        use editor_model::{EditOp, ModifierAttrOp};
+        let (mut state, _root, para) = simple_para_state(&[]);
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontSize { value: 1400 },
+            }))
+            .unwrap();
+        let s = collapsed(para, 0);
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_size,
+            Tri::Uniform {
+                value: editor_model::FontSizeValue { value: 1400 }
+            },
+            "an empty paragraph carrying 14pt previews 14pt in the toolbar"
+        );
+    }
+
+    #[test]
+    fn collapsed_pending_bold_previews_uniform_on() {
+        let (state, _root, para) = simple_para_state(&['a']);
+        let s = collapsed(para, 1);
+        let ms = resolve_modifier_state(
+            &state,
+            &s,
+            &[PendingModifier::Set {
+                modifier: Modifier::Bold,
+            }],
+        )
+        .unwrap();
+        assert_eq!(ms.bold, Tri::Uniform { value: () });
+        assert_eq!(ms.effective_bold, Tri::Uniform { value: () });
+    }
+
+    #[test]
+    fn absent_root_font_family_resolves_to_pretendard_code_default() {
+        let (state, _root, para) = simple_para_state(&['a']);
+        let s = sel((para, 0), (para, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_family,
+            Tri::Uniform {
+                value: editor_model::FontFamilyValue {
+                    value: "Pretendard".to_string()
+                }
+            },
+            "with no font-family recorded anywhere, resolution yields the code default"
+        );
+    }
+
+    #[test]
+    fn carry_participates_only_when_range_reaches_paragraph_end() {
+        use editor_model::{EditOp, ModifierAttrOp};
+        let (mut state, _root, para) = simple_para_state(&['H', 'e', 'l', 'l', 'o']);
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+
+        let short = sel((para, 0), (para, 3));
+        assert_eq!(
+            resolve_modifier_state(&state, &short, &[])
+                .unwrap()
+                .effective_bold,
+            Tri::Absent,
+            "a range short of the paragraph end does not reach the carry"
+        );
+
+        let full = sel((para, 0), (para, 5));
+        assert_eq!(
+            resolve_modifier_state(&state, &full, &[])
+                .unwrap()
+                .effective_bold,
+            Tri::Mixed,
+            "a range reaching the paragraph end lets the plain leaves and bold carry aggregate Mixed"
+        );
+    }
+
+    #[test]
+    fn carry_heavy_font_weight_counts_as_effective_bold() {
+        use editor_model::{EditOp, ModifierAttrOp};
+        let (mut state, root, para) = simple_para_state(&[]);
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontWeight { value: 700 },
+            }))
+            .unwrap();
+        let s = sel((root, 0), (root, 1));
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.effective_bold,
+            Tri::Uniform { value: () },
+            "a carry FontWeight >= 700 renders bold"
+        );
+        assert_eq!(ms.bold, Tri::Absent, "no Bold marker was recorded");
     }
 
     // §4.10: over-collection guard — selection inside p1, image is NOT collected
@@ -1223,6 +1461,12 @@ mod tests {
                 modifier: Modifier::Italic,
             }))
             .unwrap();
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::Italic,
+            }))
+            .unwrap();
 
         let s_collapsed = collapsed(para, 1);
         let s_range = sel((para, 0), (para, 1));
@@ -1254,6 +1498,7 @@ mod tests {
     // Reference: the per-leaf implementation the run-group aggregation replaced.
     // Kept verbatim so the equivalence proptest below pins the rewrite.
     fn reference_in_range(
+        state: &crate::projected_state::ProjectedState,
         rs: &crate::selection::ResolvedSelection,
         leaf_map: &hashbrown::HashMap<Dot, crate::projected_state::LeafTruth>,
     ) -> editor_model::ModifierState {
@@ -1350,7 +1595,7 @@ mod tests {
 
         let mut out = ModifierState::default();
         let nodes = range_nodes(rs);
-        let table = build_range_path_table(&nodes);
+        let mut table = build_range_path_table(&nodes);
 
         // Effective map per node: blocks from `block_effective` (authoritative),
         // leaves from the log-derived truth — the reference must not read the old
@@ -1368,12 +1613,39 @@ mod tests {
             })
             .collect();
 
+        let carriers = crate::modifier_state::carry_virtual_leaves(state, rs);
+        let real_entries_len = table.entries.len();
+        let mut carrier_path: Vec<usize> = Vec::new();
+        for (b, _eff) in &carriers {
+            let mut vp: Vec<NodeType> = b.ancestors().map(|n| n.node_type()).collect();
+            vp.reverse();
+            vp.push(NodeType::Text);
+            carrier_path.push(table.entries.len());
+            table.entries.push((NodeType::Text, vp));
+        }
+
         let apps: BTreeMap<ModifierType, Vec<bool>> = ModifierType::iter()
-            .map(|ty| (ty, applicability(&table, ty)))
+            .map(|ty| {
+                let gated: Vec<bool> = applicability(&table, ty)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, a)| {
+                        if i >= real_entries_len {
+                            a && ty.is_carry_kind()
+                        } else {
+                            a
+                        }
+                    })
+                    .collect();
+                (ty, gated)
+            })
             .collect();
 
         let mut path_count = vec![0usize; table.entries.len()];
         for &pi in &table.node_path {
+            path_count[pi] += 1;
+        }
+        for &pi in &carrier_path {
             path_count[pi] += 1;
         }
 
@@ -1407,6 +1679,35 @@ mod tests {
                     RangeNode::Block(_) => false,
                 };
                 if bold {
+                    bold_any = true;
+                } else {
+                    bold_all = false;
+                }
+            }
+        }
+        for (k, &pi) in carrier_path.iter().enumerate() {
+            let eff = &carriers[k].1;
+            for (ty, m) in eff {
+                if !apps.get(ty).is_some_and(|a| a[pi]) {
+                    continue;
+                }
+                explicit
+                    .entry(*ty)
+                    .and_modify(|e| {
+                        e.count += 1;
+                        if e.value != m {
+                            e.conflicting = true;
+                        }
+                    })
+                    .or_insert(Explicit {
+                        value: m,
+                        conflicting: false,
+                        count: 1,
+                    });
+            }
+            if bold_applicable[pi] {
+                bold_any_applicable = true;
+                if map_is_bold(eff) {
                     bold_any = true;
                 } else {
                     bold_all = false;
@@ -1496,6 +1797,17 @@ mod tests {
                 live.push(d);
                 count += 1;
             }
+            let mut paras: Vec<Dot> = Vec::new();
+            {
+                let view = state.view();
+                if let Some(root) = view.root() {
+                    for c in root.descendants() {
+                        if let editor_model::ChildView::Block(b) = c {
+                            paras.push(b.id());
+                        }
+                    }
+                }
+            }
             for (kind, a, b, bias) in actions {
                 let pick = |i: u8, v: &[Dot]| v[(i as usize) % v.len()];
                 let bias_s = if bias & 1 == 0 { Bias::Before } else { Bias::After };
@@ -1528,10 +1840,11 @@ mod tests {
                     }
                     3 => {
                         let pos = 1 + (a as usize) % count;
-                        state.apply(EditOp::Seq(ListOp::Ins {
+                        let d = state.apply(EditOp::Seq(ListOp::Ins {
                             pos,
                             item: SeqItem::Block { node_type: NodeType::Paragraph, parents: vec![Dot::ROOT] },
-                        })).unwrap();
+                        })).unwrap().id;
+                        paras.push(d);
                         count += 1;
                     }
                     4 => {
@@ -1553,6 +1866,23 @@ mod tests {
                                 0 => Modifier::FontWeight { value: 700 },
                                 1 => Modifier::FontSize { value: 1200 },
                                 _ => Modifier::BlockGap { value: 8 },
+                            },
+                        })).unwrap();
+                    }
+                    5 if !paras.is_empty() => {
+                        state.apply(EditOp::NodeCarry(editor_model::ModifierAttrOp::SetModifier {
+                            target: pick(a, &paras),
+                            modifier: match bias % 10 {
+                                0 => Modifier::Bold,
+                                1 => Modifier::Italic,
+                                2 => Modifier::Underline,
+                                3 => Modifier::Strikethrough,
+                                4 => Modifier::FontSize { value: 1400 },
+                                5 => Modifier::FontFamily { value: "Pretendard".to_string() },
+                                6 => Modifier::FontWeight { value: 700 },
+                                7 => Modifier::TextColor { value: "#000000".to_string() },
+                                8 => Modifier::BackgroundColor { value: "#ffffff".to_string() },
+                                _ => Modifier::LetterSpacing { value: 5 },
                             },
                         })).unwrap();
                     }
@@ -1596,8 +1926,8 @@ mod tests {
                 && !rs.is_collapsed()
             {
                 let leaf_map = state.log_derived_leaf_map();
-                let got = crate::modifier_state::resolve_modifier_state_in_range(&rs);
-                let want = reference_in_range(&rs, &leaf_map);
+                let got = crate::modifier_state::resolve_modifier_state_in_range(&state, &rs);
+                let want = reference_in_range(&state, &rs, &leaf_map);
                 proptest::prop_assert_eq!(got, want);
 
                 // leaf_groups_in_range must expand to exactly the per-leaf
@@ -1626,5 +1956,92 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn gap_cursor_previews_document_defaults() {
+        use editor_model::AtomLeaf;
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let img = match NodeType::Image.into_node() {
+            editor_model::Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img },
+                    parents: vec![root],
+                },
+            }))
+            .unwrap();
+        let state = ProjectedState::from_graph(graph).unwrap();
+        let s = {
+            let view = state.view();
+            crate::gap_cursor_selection_leading(&view).expect("leading gap cursor")
+        };
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_weight,
+            Tri::Uniform {
+                value: editor_model::FontWeightValue { value: 400 }
+            },
+            "a gap cursor previews the document default weight"
+        );
+        assert_eq!(
+            ms.font_size,
+            Tri::Uniform {
+                value: editor_model::FontSizeValue { value: 1200 }
+            },
+            "a gap cursor previews the document default size"
+        );
+        assert_eq!(
+            ms.alignment,
+            Tri::Uniform {
+                value: editor_model::AlignmentValue {
+                    value: editor_model::Alignment::Left
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn gap_cursor_reflects_root_overrides() {
+        use editor_model::AtomLeaf;
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let img = match NodeType::Image.into_node() {
+            editor_model::Node::Image(n) => n,
+            _ => unreachable!(),
+        };
+        graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img },
+                    parents: vec![root],
+                },
+            }))
+            .unwrap();
+        let mut state = ProjectedState::from_graph(graph).unwrap();
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: root,
+                modifier: Modifier::FontSize { value: 1600 },
+            }))
+            .unwrap();
+        let s = {
+            let view = state.view();
+            crate::gap_cursor_selection_leading(&view).expect("leading gap cursor")
+        };
+        let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+        assert_eq!(
+            ms.font_size,
+            Tri::Uniform {
+                value: editor_model::FontSizeValue { value: 1600 }
+            },
+            "a gap cursor previews the root's document-default override"
+        );
     }
 }

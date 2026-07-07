@@ -157,7 +157,7 @@ fn write_macro_node(
 
             write_node_attrs_macro(&node.node(), output);
             write_modifiers_macro(&explicit_block_mods(pd, node.id()), output);
-            write_node_marker_macro(node, pd, output);
+            write_node_carry_macro(node, pd, output);
 
             let children = display_children(node);
             if children.is_empty() {
@@ -192,20 +192,14 @@ fn write_macro_node(
     }
 }
 
-fn write_node_marker_macro(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
-    let Some(marker) = pd
-        .node_markers
-        .get(&node.id())
-        .and_then(|o| o.as_ref())
-        .filter(|m| !m.is_empty())
-    else {
+fn write_node_carry_macro(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
+    let carry = pd.carry_modifiers(node.id());
+    if carry.is_empty() {
         return;
-    };
-    output.push_str(" marker(");
-    let mut mods: Vec<Modifier> = marker.modifiers.clone();
-    mods.sort_by_key(|m| m.as_type());
+    }
+    output.push_str(" carry(");
     output.push('[');
-    for (i, m) in mods.iter().enumerate() {
+    for (i, m) in carry.values().enumerate() {
         if i > 0 {
             output.push_str(", ");
         }
@@ -631,29 +625,42 @@ state! {
     }
 
     #[test]
-    fn marker_with_modifiers_only() {
+    fn carry_with_modifiers_only() {
         let (state, ..) = state! {
             doc {
                 root {
-                    p1: paragraph marker([italic]) {}
+                    p1: paragraph carry([italic]) {}
                 }
             }
             selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
         assert!(
-            output.contains("paragraph marker([italic]) {}"),
+            output.contains("paragraph carry([italic]) {}"),
             "got:\n{output}"
         );
     }
 
     #[test]
-    fn marker_omitted_when_absent() {
+    fn carry_omitted_when_absent() {
         let (state, ..) = state! {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(!output.contains("marker("), "got:\n{output}");
+        assert!(!output.contains("carry("), "got:\n{output}");
+    }
+
+    #[test]
+    fn non_carry_kind_in_macro_carry_is_dropped() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph carry([line_height(200)]) {} } }
+            selection: (p1, 0)
+        };
+        let output = inspect_state_as_macro(&state);
+        assert!(
+            !output.contains("carry("),
+            "a non-carry kind supplied via the macro never reaches the projection, got:\n{output}"
+        );
     }
 }

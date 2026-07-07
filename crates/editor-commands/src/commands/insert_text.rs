@@ -1,10 +1,14 @@
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::insert_text_at_caret;
+use crate::helpers::{consume_pending_modifiers, insert_text_at_caret};
 
 pub fn insert_text(tr: &mut Transaction, text: &str) -> CommandResult {
-    insert_text_at_caret(tr, text)
+    let changed = insert_text_at_caret(tr, text, None)?;
+    if changed {
+        consume_pending_modifiers(tr)?;
+    }
+    Ok(changed)
 }
 
 #[cfg(test)]
@@ -133,23 +137,14 @@ mod tests {
     }
 
     #[test]
-    fn insert_at_start_with_different_mods_creates_node_before() {
-        // Bold has Expand::After → not inherited at start → effective = []
-        // Current mods = [Bold] → mismatch → new node before
+    fn insert_at_start_copies_right_neighbor_paint() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [bold] } } }
             selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
         let (expected, ..) = state! {
-            doc {
-                root {
-                    p1: paragraph {
-                        text("X")
-                        text("Hello") [bold]
-                    }
-                }
-            }
+            doc { root { p1: paragraph { text("XHello") [bold] } } }
             selection: (p1, 1, <)
         };
         assert_state_eq!(&actual, &expected);
@@ -181,7 +176,6 @@ mod tests {
 
     #[test]
     fn insert_at_end_of_link_creates_node_after() {
-        // Link has Expand::None → not inherited → new node after
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Click") [link(href: "https://a.com".to_string())] } } }
             selection: (p1, 5)
@@ -203,7 +197,6 @@ mod tests {
 
     #[test]
     fn insert_at_end_of_bold_stays_inline() {
-        // Bold has Expand::After → inherited at end → match → Case 1
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [bold] } } }
             selection: (p1, 5)
@@ -277,28 +270,14 @@ mod tests {
     }
 
     #[test]
-    fn insert_text_into_empty_paragraph_with_marker_consumes_marker() {
+    fn typing_before_bold_run_copies_right_neighbor_paint() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph marker([bold]) {} } }
+            doc { root { p1: paragraph carry([bold]) { text("llo") [bold] } } }
             selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("Y") [bold] } } }
-            selection: (p1, 1, <)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn insert_text_in_middle_split_state_coalesces_with_right_half() {
-        let (initial, ..) = state! {
-            doc { root { p1: paragraph marker([bold]) { text("llo") [bold] } } }
-            selection: (p1, 0)
-        };
-        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
-        let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("Yllo") [bold] } } }
+            doc { root { p1: paragraph carry([bold]) { text("Yllo") [bold] } } }
             selection: (p1, 1, <)
         };
         assert_state_eq!(&actual, &expected);
@@ -321,26 +300,258 @@ mod tests {
     #[test]
     fn insert_into_empty_paragraph_with_mixed_markers_carries_only_text_applicable() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph [line_height(220)] marker([bold]) {} } }
+            doc { root { p1: paragraph [line_height(220)] carry([bold]) {} } }
             selection: (p1, 0)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Y"));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph [line_height(220)] { text("Y") [bold] } } }
+            doc { root { p1: paragraph [line_height(220)] carry([bold]) { text("Y") [bold] } } }
             selection: (p1, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }
 
     #[test]
-    fn insert_text_clears_paragraph_marker_even_if_text_already_styled() {
+    fn typing_after_styled_text_preserves_carry() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph marker([bold]) { text("Hi") [bold] } } }
+            doc { root { p1: paragraph carry([bold]) { text("Hi") [bold] } } }
             selection: (p1, 2)
         };
         let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("HiX") [bold] } } }
+            doc { root { p1: paragraph carry([bold]) { text("HiX") [bold] } } }
+            selection: (p1, 3, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_in_empty_paragraph_reads_carry_without_consuming() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) {} } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "a"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("a") [bold] } } }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_in_empty_fold_title_does_not_consume_carry() {
+        let (initial, ft) = state! {
+            doc { root { fold {
+                ft: fold_title carry([bold]) {}
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "a"));
+        let carry = actual.projected.carry_modifiers(ft);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "typing into an empty fold title reads its carry without consuming it, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn typing_in_non_empty_paragraph_ignores_carry() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("Hi") } } }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "a"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("Hia") } } }
+            selection: (p1, 3, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_in_page_break_only_paragraph_reads_carry() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { page_break } } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "a"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("a") [bold] page_break } } }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_after_charlike_atom_inherits_its_own_modifier() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { tab [bold] } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "a"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { tab [bold] text("a") [bold] } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_after_font_sized_tab_inherits_font_size() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(1400)] } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "가"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(1400)] text("가") [font_size(1400)] } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn caret_preview_matches_typed_char_paint() {
+        use std::collections::BTreeMap;
+
+        use editor_model::{ChildView, Modifier, ModifierType};
+        use editor_state::{Affinity, Position, Selection, State, resolve_effective_modifiers_at};
+
+        let filt = |ms: Vec<Modifier>| -> BTreeMap<ModifierType, Modifier> {
+            ms.into_iter()
+                .filter(|m| m.as_type().is_text_applicable())
+                .map(|m| (m.as_type(), m))
+                .collect()
+        };
+        let check = |initial: &State, block, offset: usize| {
+            for affinity in [Affinity::Downstream, Affinity::Upstream] {
+                let pos = Position {
+                    node: block,
+                    offset,
+                    affinity,
+                };
+                let preview = filt(resolve_effective_modifiers_at(initial, &pos));
+
+                let mut tr = Transaction::new(initial);
+                tr.set_selection(Some(Selection::collapsed(pos))).unwrap();
+                assert!(insert_text(&mut tr, "Z").unwrap());
+                let (actual, ..) = tr.commit();
+
+                let typed = {
+                    let view = actual.view();
+                    let node = view.node(block).unwrap();
+                    let d = match node.child_at(offset) {
+                        Some(ChildView::Leaf(l)) => l.dot(),
+                        _ => panic!("typed char missing at offset {offset}"),
+                    };
+                    let eff = view.leaf_state_by_dot_slow(d).unwrap().eff.clone();
+                    filt(eff.values().cloned().collect())
+                };
+                assert_eq!(
+                    preview, typed,
+                    "preview and typed paint must agree at offset {offset} affinity {affinity:?}"
+                );
+            }
+        };
+
+        let (runs, r) = state! {
+            doc { root { r: paragraph { text("ab") [bold] text("c") } } }
+            selection: (r, 0)
+        };
+        for offset in 0..=3 {
+            check(&runs, r, offset);
+        }
+
+        let (empty, e) = state! {
+            doc { root { e: paragraph carry([bold]) {} } }
+            selection: (e, 0)
+        };
+        check(&empty, e, 0);
+    }
+
+    #[test]
+    fn typing_between_runs_copies_left_neighbor_paint() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("ab") [bold] text("c") } } }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("abX") [bold] text("c") } } }
+            selection: (p1, 3, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_between_font_size_and_bold_runs_copies_left_only() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("ab") [font_size(1600)] text("c") [bold] } } }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("abX") [font_size(1600)] text("c") [bold] } } }
+            selection: (p1, 3, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_between_charlike_and_page_break_copies_left() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("a") [bold] page_break } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "b"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("ab") [bold] page_break } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_inside_link_keeps_link() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("ab") [link(href: "https://a.com".to_string())] } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("aXb") [link(href: "https://a.com".to_string())] } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_at_link_boundary_drops_link() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("ab") [link(href: "https://a.com".to_string())]
+                        text("c")
+                    }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("ab") [link(href: "https://a.com".to_string())]
+                        text("Xc")
+                    }
+                }
+            }
             selection: (p1, 3, <)
         };
         assert_state_eq!(&actual, &expected);

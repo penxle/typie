@@ -1,14 +1,11 @@
-use std::collections::BTreeMap;
-
 use editor_common::Tri;
 use editor_crdt::Dot;
 use editor_model::{DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
-use editor_resource::{Resource, find_bold_target, match_weight};
-use editor_state::{
-    PendingModifier, PendingModifiers, leaf_groups_in_range, resolve_modifier_state,
-};
+use editor_resource::Resource;
+use editor_state::{PendingModifier, PendingModifiers, resolve_modifier_state};
 use editor_transaction::Transaction;
 
+use crate::helpers::{font_weight, set_font_family_range, weight_and_bold_after_family_change};
 use crate::{CommandError, CommandResult};
 
 pub fn set_font_family(tr: &mut Transaction, value: String, resource: &Resource) -> CommandResult {
@@ -27,38 +24,8 @@ pub fn set_font_family(tr: &mut Transaction, value: String, resource: &Resource)
     if selection.anchor == selection.head {
         set_collapsed(tr, family, weights)
     } else {
-        set_range(tr, family, weights)
+        set_font_family_range(tr, selection, family, weights)
     }
-}
-
-fn font_weight(effective: &BTreeMap<ModifierType, Modifier>) -> u16 {
-    match effective.get(&ModifierType::FontWeight) {
-        Some(Modifier::FontWeight { value }) => *value,
-        _ => DEFAULT_FONT_WEIGHT,
-    }
-}
-
-fn has_bold(effective: &BTreeMap<ModifierType, Modifier>) -> bool {
-    effective.contains_key(&ModifierType::Bold)
-}
-
-fn weight_and_bold_after_family_change(
-    old_weight: u16,
-    old_bold: bool,
-    available_weights: &[u16],
-) -> (u16, bool) {
-    let matched = match_weight(available_weights, old_weight).unwrap_or(old_weight);
-    if old_bold {
-        return find_bold_target(matched, available_weights)
-            .map(|target| (target, false))
-            .unwrap_or((matched, true));
-    }
-    if old_weight >= 700 && matched < 700 {
-        return find_bold_target(matched, available_weights)
-            .map(|target| (target, false))
-            .unwrap_or((matched, true));
-    }
-    (matched, false)
 }
 
 fn provided_and_override(
@@ -170,69 +137,6 @@ fn set_collapsed(
     Ok(true)
 }
 
-fn set_range(tr: &mut Transaction, family: Modifier, available_weights: &[u16]) -> CommandResult {
-    let selection = tr.selection().expect("entry caller guaranteed selection");
-    // Weight/bold normalization is uniform within a leaf group (same effective,
-    // same host), so both the scan and the emitted ops are per group — a
-    // select-all family change costs O(groups), not O(leaves).
-    let (first, last, inherited_eq, groups) = {
-        let view = tr.view();
-        let rs = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let raw_groups = leaf_groups_in_range(&rs);
-        let Some(first) = raw_groups.first().map(|g| g.first) else {
-            return Ok(false);
-        };
-        let last = raw_groups.last().expect("first group exists").last;
-        let from_block = rs.from().node();
-        let inherited = view
-            .node(from_block)
-            .and_then(|n| n.effective().get(&ModifierType::FontFamily).cloned());
-        let groups = raw_groups
-            .into_iter()
-            .map(|g| {
-                (
-                    g.first,
-                    g.last,
-                    font_weight(g.effective),
-                    view.node(g.host)
-                        .map(|node| font_weight(node.effective()))
-                        .unwrap_or(DEFAULT_FONT_WEIGHT),
-                    has_bold(g.effective),
-                )
-            })
-            .collect::<Vec<_>>();
-        (first, last, inherited.as_ref() == Some(&family), groups)
-    };
-
-    if inherited_eq {
-        tr.remove_span_modifier(first, last, family.clone())?;
-    } else {
-        tr.add_span_modifier(first, last, family.clone())?;
-    }
-
-    for (g_first, g_last, old_weight, inherited_weight, old_bold) in groups {
-        let (new_weight, new_bold) =
-            weight_and_bold_after_family_change(old_weight, old_bold, available_weights);
-
-        if old_bold && !new_bold {
-            tr.remove_span_modifier(g_first, g_last, Modifier::Bold)?;
-        } else if !old_bold && new_bold {
-            tr.add_span_modifier(g_first, g_last, Modifier::Bold)?;
-        }
-
-        if new_weight != old_weight {
-            tr.remove_span_modifier(g_first, g_last, Modifier::FontWeight { value: old_weight })?;
-            if new_weight != inherited_weight {
-                tr.add_span_modifier(g_first, g_last, Modifier::FontWeight { value: new_weight })?;
-            }
-        }
-    }
-
-    Ok(true)
-}
-
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
@@ -282,7 +186,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_family("Source".to_string()), font_weight(400)] {
-                    p1: paragraph {
+                    p1: paragraph carry([font_family("LightFont".to_string()), font_weight(300)]) {
                         text("hello") [font_weight(300), font_family("LightFont".to_string()), bold]
                     }
                 }
@@ -313,7 +217,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_family("OldFont".to_string()), font_weight(400)] {
-                    p1: paragraph {
+                    p1: paragraph carry([font_family("NewFont".to_string())]) {
                         text("hello") [font_weight(700), font_family("NewFont".to_string())]
                     }
                 }

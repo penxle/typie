@@ -1,4 +1,5 @@
 use editor_macros::ffi;
+use editor_model::Modifier;
 use serde::{Deserialize, Serialize};
 
 use editor_common::HistoryTag;
@@ -15,10 +16,21 @@ pub enum HistoryMeta {
     Skip,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MergeKind {
+    #[default]
+    Isolated,
+    Typing,
+}
+
 #[ffi]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TransactionMeta {
     pub history: HistoryMeta,
+    #[serde(default)]
+    pub composition_paint: Option<Vec<Modifier>>,
+    #[serde(skip)]
+    pub merge: MergeKind,
 }
 
 #[cfg(test)]
@@ -34,9 +46,31 @@ mod tests {
                     start: None,
                 },
             },
+            composition_paint: None,
+            merge: MergeKind::Isolated,
         };
         let json = serde_json::to_string(&meta).unwrap();
         let back: TransactionMeta = serde_json::from_str(&json).unwrap();
         assert_eq!(meta, back);
+    }
+
+    #[test]
+    fn composition_paint_roundtrip() {
+        let meta = TransactionMeta {
+            history: HistoryMeta::default(),
+            composition_paint: Some(vec![Modifier::Bold, Modifier::Italic]),
+            merge: MergeKind::Isolated,
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        let back: TransactionMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(meta, back);
+    }
+
+    #[test]
+    fn legacy_json_without_composition_paint_deserializes() {
+        let back: TransactionMeta =
+            serde_json::from_str(r#"{"history":{"type":"record"}}"#).unwrap();
+        assert_eq!(back, TransactionMeta::default());
+        assert!(back.composition_paint.is_none());
     }
 }

@@ -1,13 +1,12 @@
 use std::collections::BTreeSet;
 
 use editor_crdt::Dot;
-use editor_model::{DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
+use editor_model::{DocView, ModifierType};
+use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
-use strum::IntoEnumIterator;
 
-use crate::helpers::is_text_applicable;
-use crate::{CommandError, CommandResult};
+use crate::CommandResult;
+use crate::helpers::clear_all_modifiers_range;
 
 pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
@@ -16,35 +15,7 @@ pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
     if selection.anchor == selection.head {
         return clear_all_modifiers_collapsed(tr);
     }
-    clear_all_modifiers_range(tr)
-}
-
-fn placeholder_modifier(ty: ModifierType) -> Modifier {
-    match ty {
-        ModifierType::Bold => Modifier::Bold,
-        ModifierType::Italic => Modifier::Italic,
-        ModifierType::Underline => Modifier::Underline,
-        ModifierType::Strikethrough => Modifier::Strikethrough,
-        ModifierType::FontSize => Modifier::FontSize { value: 0 },
-        ModifierType::FontFamily => Modifier::FontFamily {
-            value: String::new(),
-        },
-        ModifierType::FontWeight => Modifier::FontWeight { value: 0 },
-        ModifierType::TextColor => Modifier::TextColor {
-            value: String::new(),
-        },
-        ModifierType::BackgroundColor => Modifier::BackgroundColor {
-            value: String::new(),
-        },
-        ModifierType::LetterSpacing => Modifier::LetterSpacing { value: 0 },
-        ModifierType::Link => Modifier::Link {
-            href: String::new(),
-        },
-        ModifierType::Ruby => Modifier::Ruby {
-            text: String::new(),
-        },
-        other => unreachable!("{other:?} is not a text-applicable inline modifier"),
-    }
+    clear_all_modifiers_range(tr, selection)
 }
 
 fn caret_own_text_types(view: &DocView, pos_node: Dot, offset: usize) -> Vec<ModifierType> {
@@ -57,7 +28,7 @@ fn caret_own_text_types(view: &DocView, pos_node: Dot, offset: usize) -> Vec<Mod
             .own
             .iter()
             .map(|(t, _)| *t)
-            .filter(|&t| is_text_applicable(t))
+            .filter(|&t| t.is_carry_kind())
             .collect(),
         None => Vec::new(),
     }
@@ -78,10 +49,10 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
 
     for pm in tr.pending_modifiers() {
         match pm {
-            PendingModifier::Set { modifier } if is_text_applicable(modifier.as_type()) => {
+            PendingModifier::Set { modifier } if modifier.as_type().is_carry_kind() => {
                 types.insert(modifier.as_type());
             }
-            PendingModifier::Unset { ty } if is_text_applicable(*ty) => {
+            PendingModifier::Unset { ty } if ty.is_carry_kind() => {
                 types.remove(ty);
             }
             _ => {}
@@ -103,27 +74,6 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
     }
 
     tr.set_pending_modifiers(pending)?;
-    Ok(true)
-}
-
-fn clear_all_modifiers_range(tr: &mut Transaction) -> CommandResult {
-    let selection = tr.selection().expect("entry caller guaranteed selection");
-
-    let (first, last) = {
-        let view = tr.view();
-        let rs = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        match leaf_span_in_range(&rs) {
-            Some((first, last)) => (first, last),
-            _ => return Ok(false),
-        }
-    };
-
-    for ty in ModifierType::iter().filter(|&t| is_text_applicable(t)) {
-        tr.remove_span_modifier(first, last, placeholder_modifier(ty))?;
-    }
-
     Ok(true)
 }
 
@@ -347,6 +297,38 @@ mod tests {
     }
 
     #[test]
+    fn collapsed_clear_all_excludes_link_and_ruby_from_pending() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("Hi") [bold, link(href: "https://a.com".to_string()), ruby(text: "x".to_string())]
+                    }
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| clear_all_modifiers(&mut tr));
+        let types: Vec<ModifierType> = actual
+            .pending_modifiers
+            .iter()
+            .map(|pm| pm.as_type())
+            .collect();
+        assert!(
+            types.contains(&ModifierType::Bold),
+            "carry-kind own is cleared into pending"
+        );
+        assert!(
+            !types.contains(&ModifierType::Link),
+            "link own must not enter pending"
+        );
+        assert!(
+            !types.contains(&ModifierType::Ruby),
+            "ruby own must not enter pending"
+        );
+    }
+
+    #[test]
     fn collapsed_clears_own_and_pending_inline_preserving_block() {
         let (initial, ..) = state! {
             doc {
@@ -384,5 +366,22 @@ mod tests {
             pending_modifiers: [!italic]
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_clear_removes_all_carry_kinds_at_paragraph_end() {
+        let (initial, p1) = state! {
+            doc { root {
+                p1: paragraph carry([bold, italic, font_size(2400)]) {
+                    text("Hello") [bold, italic]
+                }
+            } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| clear_all_modifiers(&mut tr));
+        assert!(
+            actual.projected.carry_modifiers(p1).is_empty(),
+            "clear-all at the paragraph end wipes every carry-kind record"
+        );
     }
 }

@@ -17,7 +17,7 @@ const PT_TO_PX: f32 = 96.0 / 72.0;
 const DEFAULT_FONT_SIZE_PX: f32 = DEFAULT_FONT_SIZE as f32 / 100.0 * PT_TO_PX;
 const DEFAULT_LINE_HEIGHT_RATIO: f32 = DEFAULT_LINE_HEIGHT as f32 / 100.0;
 
-/// `resolve_text_style`와 달리 ancestor 순회·Expand 필터링을 하지 않는다 — 호출자가
+/// `resolve_text_style`와 달리 ancestor 순회를 하지 않는다 — 호출자가
 /// 미리 평탄화한 effective set을 넘긴다는 계약.
 pub fn style_from_effective_modifiers(modifiers: &[Modifier]) -> ResolvedTextStyle {
     let mut font_family: Option<String> = None;

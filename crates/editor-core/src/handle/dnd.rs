@@ -263,7 +263,7 @@ fn apply_drop(
 ) -> Result<(), EditorError> {
     match payload {
         DndDropPayload::Text { text, html } => {
-            let slice = {
+            let (slice, provenance) = {
                 let resource = editor.resource.lock().unwrap();
                 slice_from_drop_text_payload(&text, html.as_deref(), &resource)
             };
@@ -274,6 +274,7 @@ fn apply_drop(
                 editor,
                 position,
                 slice,
+                provenance,
                 SelectionAfterDrop::SelectInsertedRange,
             )
         }
@@ -284,6 +285,7 @@ fn apply_drop(
             editor,
             position,
             files_slice(image_count, file_count),
+            commands::types::SliceProvenance::Formatted,
             SelectionAfterDrop::KeepCommandSelection,
         ),
         DndDropPayload::InternalSelection => {
@@ -341,13 +343,15 @@ fn drop_slice_at(
     editor: &mut Editor,
     position: Position,
     slice: Slice,
+    provenance: commands::types::SliceProvenance,
     selection: SelectionAfterDrop,
 ) -> Result<(), EditorError> {
     if !slice_content_fits_target_context(&editor.state.view(), position, &slice) {
         return Ok(());
     }
     editor.transact(|tr| {
-        let inserted_selection = commands::insert_slice_at(tr, position, slice.clone())?;
+        let inserted_selection =
+            commands::insert_slice_at(tr, position, slice.clone(), provenance)?;
         if let Some(inserted_selection) = inserted_selection
             && matches!(selection, SelectionAfterDrop::SelectInsertedRange)
             && !inserted_selection.is_collapsed()
@@ -362,15 +366,18 @@ fn slice_from_drop_text_payload(
     text: &str,
     html: Option<&str>,
     resource: &editor_resource::Resource,
-) -> Slice {
+) -> (Slice, commands::types::SliceProvenance) {
     if let Some(html) = html.filter(|html| !html.is_empty()) {
         let slice = Slice::from_html(html, resource);
         if !slice.is_empty() {
-            return slice;
+            return (slice, commands::types::SliceProvenance::Formatted);
         }
     }
 
-    Slice::from_text(text)
+    (
+        Slice::from_text(text),
+        commands::types::SliceProvenance::Plain,
+    )
 }
 
 fn drop_internal_selection_at(
@@ -412,6 +419,7 @@ fn drop_internal_selection_at(
             editor,
             position,
             slice,
+            commands::types::SliceProvenance::Formatted,
             SelectionAfterDrop::SelectInsertedRange,
         );
     }
@@ -430,8 +438,12 @@ fn drop_internal_selection_at(
         let Some(target) = resolved_target.map(|sel| sel.head) else {
             return Ok(());
         };
-        if let Some(inserted_selection) = commands::insert_slice_at(tr, target, slice.clone())?
-            && !inserted_selection.is_collapsed()
+        if let Some(inserted_selection) = commands::insert_slice_at(
+            tr,
+            target,
+            slice.clone(),
+            commands::types::SliceProvenance::Formatted,
+        )? && !inserted_selection.is_collapsed()
         {
             commands::set_selection(tr, inserted_selection)?;
         }
@@ -456,6 +468,7 @@ fn files_slice(image_count: u32, file_count: u32) -> Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
+            carry: vec![],
             children,
         },
         open_start: 0,

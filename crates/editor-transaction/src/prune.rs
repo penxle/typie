@@ -43,7 +43,7 @@ fn prune_empty(node: &NodeView) -> Vec<Step> {
         subtree: Subtree {
             node: node.node().to_plain(),
             modifiers: vec![],
-            marker: None,
+            carry: Vec::new(),
             children: vec![],
         },
     }];

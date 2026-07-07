@@ -59,7 +59,7 @@ fn dissolve_into(
         subtree: Subtree {
             node: node.node().to_plain(),
             modifiers: vec![],
-            marker: None,
+            carry: Vec::new(),
             children: vec![],
         },
     });

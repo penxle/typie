@@ -297,7 +297,7 @@ pub(crate) fn measure_table(
 mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog,
+        DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, SeqItem, SpanLog,
         project_document,
     };
     use editor_resource::Resource;
@@ -327,7 +327,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

@@ -7,15 +7,97 @@ use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
 use super::{
-    child_node_type, find_ancestor_textblock, insert_hard_break_at_caret, insert_tab_at_caret,
-    insert_text_at_caret, materialize_position_block,
+    apply_inline_modifiers, child_node_type, consume_pending_modifiers, find_ancestor_textblock,
+    insert_hard_break_at_caret, insert_tab_at_caret, insert_text_at_caret,
+    materialize_position_block, resolve_effective_modifiers,
 };
+use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
+
+enum InlineMode {
+    Formatted,
+    Plain(Vec<Modifier>),
+}
+
+impl InlineMode {
+    fn paint_for<'a>(&'a self, fragment: &'a Fragment) -> &'a [Modifier] {
+        match self {
+            InlineMode::Formatted => &fragment.modifiers,
+            InlineMode::Plain(paint) => paint,
+        }
+    }
+
+    fn plain_paint(&self) -> Option<&[Modifier]> {
+        match self {
+            InlineMode::Plain(paint) => Some(paint),
+            InlineMode::Formatted => None,
+        }
+    }
+}
+
+fn carry_from_paint(paint: &[Modifier]) -> Vec<Modifier> {
+    paint
+        .iter()
+        .filter(|m| m.as_type().is_carry_kind())
+        .cloned()
+        .collect()
+}
+
+fn build_inline_mode(
+    tr: &mut Transaction,
+    position: &Position,
+    provenance: SliceProvenance,
+) -> Result<InlineMode, CommandError> {
+    if !provenance.is_plain() {
+        return Ok(InlineMode::Formatted);
+    }
+    let pending = tr.pending_modifiers().clone();
+    let paint = resolve_effective_modifiers(
+        &tr.state().projected,
+        position.node,
+        position.offset,
+        &pending,
+    );
+    consume_pending_modifiers(tr)?;
+    Ok(InlineMode::Plain(paint))
+}
+
+pub(crate) fn paint_block_uniformly(
+    tr: &mut Transaction,
+    block: Dot,
+    paint: &[Modifier],
+) -> Result<(), CommandError> {
+    let is_textblock = {
+        let view = tr.state().view();
+        view.node(block)
+            .is_some_and(|node| node.spec().is_textblock())
+    };
+    if !is_textblock {
+        return Ok(());
+    }
+    let dots: Vec<Dot> = {
+        let view = tr.state().view();
+        match view.node(block) {
+            Some(node) => node
+                .children()
+                .filter_map(|c| match c {
+                    ChildView::Leaf(l) => Some(l.dot()),
+                    ChildView::Block(_) => None,
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    };
+    apply_inline_modifiers(tr, &dots, paint)?;
+    tr.replace_carry(block, carry_from_paint(paint))?;
+    Ok(())
+}
 
 pub(crate) fn insert_slice_at_position(
     tr: &mut Transaction,
     position: Position,
     slice: Slice,
+    provenance: SliceProvenance,
 ) -> Result<Option<Selection>, CommandError> {
     if slice.is_empty() {
         return Ok(None);
@@ -24,12 +106,13 @@ pub(crate) fn insert_slice_at_position(
     let position = materialize_position_block(tr, position)?;
     let in_textblock = position_in_textblock(tr, &position);
     if in_textblock {
+        let mode = build_inline_mode(tr, &position, provenance)?;
         if let Some(fragments) =
             inline_content_fragments_for_textblock_insert(tr, &position, &slice)
         {
-            insert_content_as_inline_at_position(tr, position, fragments)
+            insert_content_as_inline_at_position(tr, position, fragments, &mode)
         } else {
-            insert_blocks_in_textblock_at_position(tr, position, &slice)
+            insert_blocks_in_textblock_at_position(tr, position, &slice, &mode)
         }
     } else {
         insert_blocks_at_block_boundary(tr, position, &slice)
@@ -136,6 +219,7 @@ fn insert_content_as_inline_at_position(
     tr: &mut Transaction,
     position: Position,
     fragments: Vec<&Fragment>,
+    mode: &InlineMode,
 ) -> Result<Option<Selection>, CommandError> {
     let fragments: Vec<Fragment> = fragments.into_iter().cloned().collect();
     if fragments.is_empty() {
@@ -147,7 +231,7 @@ fn insert_content_as_inline_at_position(
         .selection()
         .expect("selection preserved through mutations")
         .head;
-    let inserted = insert_inline_fragments(tr, fragments)?;
+    let inserted = insert_inline_fragments(tr, &fragments, mode)?;
     if !inserted {
         return Ok(None);
     }
@@ -164,76 +248,36 @@ fn insert_blocks_in_textblock_at_position(
     tr: &mut Transaction,
     position: Position,
     slice: &Slice,
+    mode: &InlineMode,
 ) -> Result<Option<Selection>, CommandError> {
     tr.set_selection(Some(Selection::collapsed(position)))?;
-    insert_blocks_in_textblock(tr, slice)
+    insert_blocks_in_textblock(tr, slice, mode)
 }
 
-fn insert_inline_fragments(tr: &mut Transaction, fragments: Vec<Fragment>) -> CommandResult {
+fn insert_inline_fragments(
+    tr: &mut Transaction,
+    fragments: &[Fragment],
+    mode: &InlineMode,
+) -> CommandResult {
     let mut any_change = false;
     for f in fragments {
-        match f.node {
+        match &f.node {
             PlainNode::Text(t) if !t.text.is_empty() => {
-                if f.modifiers.is_empty() {
-                    insert_text_at_caret(tr, &t.text)?;
-                } else {
-                    insert_modifier_text(tr, &t.text, f.modifiers)?;
-                }
+                insert_text_at_caret(tr, &t.text, Some(mode.paint_for(f)))?;
                 any_change = true;
             }
             PlainNode::HardBreak(_) => {
-                insert_hard_break_at_caret(tr)?;
+                insert_hard_break_at_caret(tr, Some(mode.paint_for(f)))?;
                 any_change = true;
             }
             PlainNode::Tab(_) => {
-                insert_tab_at_caret(tr)?;
+                insert_tab_at_caret(tr, Some(mode.paint_for(f)))?;
                 any_change = true;
             }
             _ => {}
         }
     }
     Ok(any_change)
-}
-
-fn insert_modifier_text(
-    tr: &mut Transaction,
-    text: &str,
-    modifiers: Vec<Modifier>,
-) -> CommandResult {
-    let pos = tr
-        .selection()
-        .expect("entry caller guaranteed selection")
-        .head;
-    let block = pos.node;
-    let len = text.chars().count();
-    tr.insert_text(block, pos.offset, text)?;
-
-    let new_dots: Vec<Dot> = {
-        let view = tr.state().view();
-        let Some(node) = view.node(block) else {
-            return Ok(false);
-        };
-        (pos.offset..pos.offset + len)
-            .filter_map(|i| match node.child_at(i) {
-                Some(ChildView::Leaf(l)) => Some(l.dot()),
-                _ => None,
-            })
-            .collect()
-    };
-
-    if let (Some(first), Some(last)) = (new_dots.first(), new_dots.last()) {
-        let (first, last) = (*first, *last);
-        for modifier in modifiers {
-            tr.add_span_modifier(first, last, modifier)?;
-        }
-    }
-
-    tr.set_selection(Some(Selection::collapsed(Position {
-        node: block,
-        offset: pos.offset + len,
-        affinity: Affinity::Upstream,
-    })))?;
-    Ok(true)
 }
 
 #[derive(Clone)]
@@ -283,6 +327,7 @@ fn block_child_id(tr: &Transaction, container: Dot, index: usize) -> Option<Dot>
 fn insert_blocks_in_textblock(
     tr: &mut Transaction,
     slice: &Slice,
+    mode: &InlineMode,
 ) -> Result<Option<Selection>, CommandError> {
     let head = tr
         .selection()
@@ -349,7 +394,7 @@ fn insert_blocks_in_textblock(
             .selection()
             .expect("selection preserved through mutations")
             .head;
-        let inserted = insert_inline_fragments(tr, inline)?;
+        let inserted = insert_inline_fragments(tr, &inline, mode)?;
         let end = tr
             .selection()
             .expect("selection preserved through mutations")
@@ -373,6 +418,9 @@ fn insert_blocks_in_textblock(
         tr.insert_subtree(container_id, insert_at, subtree)?;
         if let Some(inserted_id) = block_child_id(tr, container_id, insert_at) {
             inserted_range.include_block(inserted_id);
+            if let Some(paint) = mode.plain_paint() {
+                paint_block_uniformly(tr, inserted_id, paint)?;
+            }
             // Block-level atom leaves (e.g. Image) have no inner caret; their
             // bracket selection comes from `inserted_range` instead.
             if let Ok(p) = position_at_end_of_block(tr, inserted_id) {
@@ -391,7 +439,7 @@ fn insert_blocks_in_textblock(
             .selection()
             .expect("selection preserved through mutations")
             .head;
-        let inserted = insert_inline_fragments(tr, inline)?;
+        let inserted = insert_inline_fragments(tr, &inline, mode)?;
         let end = tr
             .selection()
             .expect("selection preserved through mutations")
@@ -400,6 +448,9 @@ fn insert_blocks_in_textblock(
             inserted_range.include_position_range(start, end);
         }
         last_caret = Some(end);
+        if let Some(paint) = mode.plain_paint() {
+            tr.replace_carry(p2_id, carry_from_paint(paint))?;
+        }
     }
 
     let safe_to_remove = |tr: &Transaction, target: Dot| -> bool {
@@ -548,6 +599,7 @@ fn block_boundary_fragments(slice: &Slice, container_type: NodeType) -> Vec<Frag
         return vec![Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
+            carry: vec![],
             children: top_level.into_iter().cloned().collect(),
         }];
     }

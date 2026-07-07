@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 use editor_crdt::Dot;
-use editor_model::{DocView, Marker, Modifier, PlainNode, Subtree};
+use editor_model::{DocView, Modifier, ModifierType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
 use editor_state::{Composition, PendingModifiers, State};
+use strum::IntoEnumIterator;
 
 use crate::steps::support;
 use crate::{Effect, Step, StepEffect, StepError, StepRecord, TransactionMeta};
@@ -14,6 +17,7 @@ pub struct Transaction {
     recorded: Vec<RecordedOp>,
     effects: Vec<Effect>,
     meta: TransactionMeta,
+    keep_pending: bool,
 }
 
 #[derive(Clone)]
@@ -34,6 +38,7 @@ impl Transaction {
             recorded: Vec::new(),
             effects: Vec::new(),
             meta: TransactionMeta::default(),
+            keep_pending: false,
         }
     }
 
@@ -63,6 +68,18 @@ impl Transaction {
 
     pub fn selection_changed(&self) -> bool {
         self.steps.iter().any(|s| s.is_selection_step())
+    }
+
+    pub fn has_pending_modifiers_step(&self) -> bool {
+        self.steps.iter().any(|s| s.is_pending_modifiers_step())
+    }
+
+    pub fn keep_pending_modifiers(&mut self) {
+        self.keep_pending = true;
+    }
+
+    pub fn keeps_pending_modifiers(&self) -> bool {
+        self.keep_pending
     }
 
     pub fn step_records_len(&self) -> usize {
@@ -264,16 +281,58 @@ impl Transaction {
         })
     }
 
-    pub fn set_marker(&mut self, block: Dot, marker: Option<Marker>) -> Result<(), StepError> {
-        let old = self.state.projected.node_markers().value_of(block);
-        if old == marker {
-            return Ok(());
-        }
-        self.apply_step(Step::SetNodeMarker {
+    pub fn set_carry_modifier(&mut self, block: Dot, modifier: Modifier) -> Result<(), StepError> {
+        let ty = modifier.as_type();
+        let old = self
+            .state
+            .projected
+            .node_carries()
+            .modifiers_of(block)
+            .get(&ty)
+            .cloned();
+        self.apply_step(Step::SetNodeCarry {
             block,
+            ty,
             old,
-            new: marker,
+            new: Some(modifier),
         })
+    }
+
+    pub fn remove_carry_modifier(&mut self, block: Dot, ty: ModifierType) -> Result<(), StepError> {
+        let old = self
+            .state
+            .projected
+            .node_carries()
+            .modifiers_of(block)
+            .get(&ty)
+            .cloned();
+        self.apply_step(Step::SetNodeCarry {
+            block,
+            ty,
+            old,
+            new: None,
+        })
+    }
+
+    pub fn replace_carry(&mut self, block: Dot, modifiers: Vec<Modifier>) -> Result<(), StepError> {
+        let mut wanted: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+        for m in modifiers {
+            if m.as_type().is_carry_kind() {
+                wanted.insert(m.as_type(), m);
+            }
+        }
+        let current = self.state.projected.node_carries().modifiers_of(block);
+        for ty in ModifierType::iter().filter(|t| t.is_carry_kind()) {
+            let old = current.get(&ty).cloned();
+            let new = wanted.get(&ty).cloned();
+            self.apply_step(Step::SetNodeCarry {
+                block,
+                ty,
+                old,
+                new,
+            })?;
+        }
+        Ok(())
     }
 
     pub fn set_selection(&mut self, selection: Option<Selection>) -> Result<(), StepError> {
@@ -288,6 +347,8 @@ impl Transaction {
     }
 
     pub fn set_pending_modifiers(&mut self, modifiers: PendingModifiers) -> Result<(), StepError> {
+        let mut modifiers = modifiers;
+        modifiers.retain(|pm| pm.as_type().is_carry_kind());
         if self.state.pending_modifiers == modifiers {
             return Ok(());
         }

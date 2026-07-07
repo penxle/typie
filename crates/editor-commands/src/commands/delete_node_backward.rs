@@ -3,7 +3,10 @@ use editor_model::ChildView;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::{remove_atom_leaf, remove_subtree_full};
+use crate::helpers::{
+    apply_carry_from_selection, capture_first_charlike_paint, find_ancestor_textblock,
+    remove_atom_leaf, remove_subtree_full,
+};
 use crate::{CommandError, CommandResult};
 
 enum BackwardTarget {
@@ -40,6 +43,15 @@ pub fn delete_node_backward(tr: &mut Transaction) -> CommandResult {
         }
     };
 
+    let captured = match &target {
+        BackwardTarget::InlineAtom(_) => {
+            let view = tr.state().view();
+            find_ancestor_textblock(&view, pos.node)
+                .map(|block| capture_first_charlike_paint(tr.state(), block))
+        }
+        BackwardTarget::Block(_) => None,
+    };
+
     match target {
         BackwardTarget::InlineAtom(idx) => remove_atom_leaf(tr, pos.node, idx)?,
         BackwardTarget::Block(child) => remove_subtree_full(tr, child)?,
@@ -50,6 +62,10 @@ pub fn delete_node_backward(tr: &mut Transaction) -> CommandResult {
         offset: pos.offset - 1,
         affinity: Affinity::Downstream,
     })))?;
+
+    if let Some(captured) = &captured {
+        apply_carry_from_selection(tr, captured)?;
+    }
 
     Ok(true)
 }
@@ -159,5 +175,21 @@ mod tests {
             selection: (p1, 0)
         };
         transact_fail!(initial, |tr| delete_node_backward(&mut tr));
+    }
+
+    #[test]
+    fn backspace_over_sole_tab_records_font_size_carry() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(1600)] } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_node_backward(&mut tr));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 1600 })),
+            "got {carry:?}"
+        );
     }
 }

@@ -173,6 +173,25 @@ mod tests {
     }
 
     #[test]
+    fn escaped_paragraph_after_unit_has_empty_carry() {
+        let (initial, _r) = state! {
+            doc { r: root {
+                paragraph carry([bold]) { text("a") }
+                horizontal_rule
+                paragraph carry([italic]) { text("c") }
+            } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_paragraph_after_unit_selection(&mut tr));
+        let new_para = actual.selection.unwrap().head.node;
+        assert!(
+            actual.projected.carry_modifiers(new_para).is_empty(),
+            "a paragraph inserted after a unit block starts with no carry, got {:?}",
+            actual.projected.carry_modifiers(new_para)
+        );
+    }
+
+    #[test]
     fn collapsed_returns_false() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }

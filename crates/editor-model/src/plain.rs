@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-use crate::{Marker, Modifier, ModifierType, PlainNode, PlainRootNode};
+use crate::{Modifier, ModifierType, PlainNode, PlainRootNode};
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,7 +17,7 @@ impl Default for PlainDoc {
             root: PlainNodeEntry {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: BTreeMap::new(),
-                marker: None,
+                carry: Vec::new(),
                 children: Vec::new(),
             },
         }
@@ -30,6 +30,6 @@ pub struct PlainNodeEntry {
     pub node: PlainNode,
     pub modifiers: BTreeMap<ModifierType, Modifier>,
     #[serde(default)]
-    pub marker: Option<Marker>,
+    pub carry: Vec<Modifier>,
     pub children: Vec<PlainNodeEntry>,
 }

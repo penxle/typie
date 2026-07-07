@@ -180,6 +180,50 @@ mod tests {
         }
     }
 
+    #[test]
+    fn insert_col_preserves_existing_widths_and_new_col_is_none() {
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell(col_width: Some(300u32)) { paragraph { text("A") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("B") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("C") } }
+                    }
+                    table_row {
+                        table_cell(col_width: Some(300u32)) { paragraph { text("D") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("E") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("F") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Vertical,
+            0,
+            false
+        ));
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        for row in table.child_blocks() {
+            let widths: Vec<Option<u32>> = row
+                .child_blocks()
+                .map(|cell| match cell.node() {
+                    editor_model::Node::TableCell(n) => *n.col_width.get(),
+                    _ => panic!("expected a table cell"),
+                })
+                .collect();
+            assert_eq!(
+                widths,
+                vec![Some(300), None, Some(100), Some(100)],
+                "existing columns keep their widths, the inserted column starts with none"
+            );
+        }
+    }
+
     fn assert_empty_cell(cell: &editor_model::NodeView<'_>) {
         assert_eq!(cell.child_blocks().count(), 1, "cell should have one child");
         let para = cell.child_blocks().next().unwrap();

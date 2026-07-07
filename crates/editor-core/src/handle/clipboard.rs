@@ -25,6 +25,11 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                 Slice::from_payload(html.as_deref(), &text, &resource)
             };
             let is_html_paste = html.as_deref().is_some_and(|h| !h.is_empty());
+            let provenance = if is_html_paste {
+                commands::types::SliceProvenance::Formatted
+            } else {
+                commands::types::SliceProvenance::Plain
+            };
             let plain_text = is_html_paste.then(|| text.clone());
             let (start_flat, pre_block) = if is_html_paste {
                 let view = editor.state().view();
@@ -53,7 +58,7 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     return Ok(());
                 }
                 if is_cell_rect_selection(tr) {
-                    commands::fill_cell_rect_with_slice(tr, slice.clone())?;
+                    commands::fill_cell_rect_with_slice(tr, slice.clone(), provenance)?;
                     return Ok(());
                 }
                 commands::chain!(
@@ -61,7 +66,7 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     commands::optional!(commands::materialize_gap_paragraph()),
                     commands::optional!(commands::ensure_paragraph()),
                     commands::optional!(commands::delete_selection()),
-                    |tr| commands::insert_slice(tr, slice.clone()),
+                    |tr| commands::insert_slice(tr, slice.clone(), provenance),
                 )?;
                 Ok(())
             })?;
@@ -124,7 +129,11 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     commands::chain!(
                         tr,
                         commands::optional!(commands::delete_selection()),
-                        |tr| commands::insert_slice(tr, plain_slice.clone()),
+                        |tr| commands::insert_slice(
+                            tr,
+                            plain_slice.clone(),
+                            commands::types::SliceProvenance::Plain
+                        ),
                     )?;
                     Ok(())
                 })?;
@@ -166,7 +175,11 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     commands::optional!(commands::materialize_gap_paragraph()),
                     commands::optional!(commands::ensure_paragraph()),
                     commands::optional!(commands::delete_selection()),
-                    |tr| commands::insert_slice(tr, plain_slice.clone()),
+                    |tr| commands::insert_slice(
+                        tr,
+                        plain_slice.clone(),
+                        commands::types::SliceProvenance::Plain
+                    ),
                 )?;
                 Ok(())
             })
@@ -1664,6 +1677,162 @@ mod tests {
         assert!(
             plain_text_in_doc.contains("1. a") && plain_text_in_doc.contains("2. b"),
             "expected list marker preserved from text payload, got {plain_text_in_doc:?}"
+        );
+    }
+
+    #[test]
+    fn paste_plain_two_lines_after_bold_paints_and_carries() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("가") [bold] } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: None,
+                text: "a\nb".into(),
+            },
+        });
+        let view = editor.state().view();
+        let paras: Vec<editor_crdt::Dot> = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.id())
+            .collect();
+        assert_eq!(paras.len(), 2);
+        assert_eq!(view.node(paras[0]).unwrap().inline_text(), "가a");
+        assert_eq!(view.node(paras[1]).unwrap().inline_text(), "b");
+        assert!(
+            view.node(paras[1])
+                .unwrap()
+                .leaf_own_modifiers_at(0)
+                .iter()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "the pasted new paragraph text is painted bold"
+        );
+        let carry: Vec<editor_model::Modifier> = editor
+            .state()
+            .projected
+            .carry_modifiers(paras[1])
+            .into_values()
+            .collect();
+        assert!(
+            carry
+                .iter()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "the pasted new paragraph records bold carry, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn repaste_as_text_paints_plain_with_continuation() {
+        let (s_source, ..) = state! {
+            doc { root { p1: paragraph { text("x") [italic] } } }
+            selection: (p1, 0) -> (p1, 1)
+        };
+        let payload = Slice::extract(&s_source).unwrap().to_payload();
+
+        let (s_target, p2) = state! {
+            doc { root { p2: paragraph { text("AB") [bold] } } }
+            selection: (p2, 1)
+        };
+        let mut editor = Editor::new_test(s_target);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+
+        let view = editor.state().view();
+        let p = view.node(p2).unwrap();
+        assert_eq!(p.inline_text(), "AxB");
+        assert!(
+            p.leaf_own_modifiers_at(1)
+                .iter()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "repaste-as-text paints the plain char with the caret continuation (bold)"
+        );
+        assert!(
+            !p.leaf_own_modifiers_at(1)
+                .iter()
+                .any(|m| matches!(m, editor_model::Modifier::Italic)),
+            "the italic formatting from the html paste is dropped"
+        );
+    }
+
+    #[test]
+    fn paste_plain_into_cell_rect_paints_every_cell_with_pending() {
+        let (s, c00, c01, c10, c11) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
+                }
+                table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = {
+            let view = s.view();
+            editor_state::cell_rect_selection(c00, c11, &view).unwrap()
+        };
+        let s = editor_state::State {
+            selection: Some(sel),
+            pending_modifiers: vec![editor_state::PendingModifier::Set {
+                modifier: editor_model::Modifier::Bold,
+            }],
+            ..s
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: None,
+                text: "p\nq".into(),
+            },
+        });
+        let view = editor.state().view();
+        for cid in [c00, c01, c10, c11] {
+            let cell = view.node(cid).expect("cell survives");
+            let paras: Vec<editor_crdt::Dot> = cell.child_blocks().map(|b| b.id()).collect();
+            assert_eq!(paras.len(), 2, "each cell gets both plain lines");
+            assert_eq!(view.node(paras[0]).unwrap().inline_text(), "p");
+            assert_eq!(view.node(paras[1]).unwrap().inline_text(), "q");
+            for pid in &paras {
+                assert!(
+                    view.node(*pid)
+                        .unwrap()
+                        .leaf_own_modifiers_at(0)
+                        .iter()
+                        .any(|m| matches!(m, editor_model::Modifier::Bold)),
+                    "every pasted cell line is painted with the pending bold"
+                );
+                let carry: Vec<editor_model::Modifier> = editor
+                    .state()
+                    .projected
+                    .carry_modifiers(*pid)
+                    .into_values()
+                    .collect();
+                assert!(
+                    carry
+                        .iter()
+                        .any(|m| matches!(m, editor_model::Modifier::Bold)),
+                    "every pasted cell line records bold carry, got {carry:?}"
+                );
+            }
+        }
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "the plain cell-rect paste consumes the pending format once"
         );
     }
 }

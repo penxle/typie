@@ -205,8 +205,8 @@ mod tests {
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeMarkerLog, NodeType,
-        ProjectedDoc, SeqItem, SpanLog, project_document,
+        AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem,
+        SpanLog, project_document,
     };
 
     use crate::{Position, affinity::Affinity, selection::Selection};
@@ -230,7 +230,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

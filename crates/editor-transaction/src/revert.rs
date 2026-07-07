@@ -28,7 +28,7 @@ pub fn build_revert_transaction(state: &State, target: &State) -> Result<Transac
 fn reconcile_node(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
     reconcile_attrs(tr, target, id)?;
     reconcile_modifiers(tr, target, id)?;
-    reconcile_node_marker(tr, target, id)?;
+    reconcile_node_carry(tr, target, id)?;
     reconcile_inline_children(tr, target, id)?;
     reconcile_children(tr, target, id)?;
     Ok(())
@@ -135,7 +135,10 @@ fn reconcile_modifiers(tr: &mut Transaction, target: &State, id: Dot) -> Result<
 
 #[derive(Clone, Debug, PartialEq)]
 enum InlineLeafToken {
-    Char(char),
+    Char {
+        ch: char,
+        modifiers: Vec<Modifier>,
+    },
     Atom {
         node: PlainNode,
         modifiers: Vec<Modifier>,
@@ -157,7 +160,10 @@ fn inline_leaf_units(node: &NodeView<'_>) -> Vec<InlineLeafUnit> {
         if let Some(ch) = leaf.as_char() {
             units.push(InlineLeafUnit {
                 slot,
-                token: InlineLeafToken::Char(ch),
+                token: InlineLeafToken::Char {
+                    ch,
+                    modifiers: node.leaf_own_modifiers_at(slot),
+                },
             });
         } else if let Some(leaf_node) = leaf.node() {
             let atom_node = leaf_node.to_plain();
@@ -193,17 +199,30 @@ fn remove_inline_leaf_units(
     Ok(())
 }
 
-fn flush_insert_text(
+fn apply_run_paint(
     tr: &mut Transaction,
     id: Dot,
-    start: &mut Option<usize>,
-    text: &mut String,
+    start_slot: usize,
+    len: usize,
+    modifiers: &[Modifier],
 ) -> Result<(), StepError> {
-    if let Some(offset) = start.take()
-        && !text.is_empty()
-    {
-        tr.insert_text(id, offset, text)?;
-        text.clear();
+    if len == 0 || modifiers.is_empty() {
+        return Ok(());
+    }
+    let (first, last) = {
+        let view = tr.view();
+        let node = view.node(id).ok_or(StepError::NodeNotFound(id))?;
+        let dot_at = |slot: usize| match node.child_at(slot) {
+            Some(ChildView::Leaf(l)) => Some(l.dot()),
+            _ => None,
+        };
+        (
+            dot_at(start_slot).ok_or(StepError::NodeNotFound(id))?,
+            dot_at(start_slot + len - 1).ok_or(StepError::NodeNotFound(id))?,
+        )
+    };
+    for m in modifiers {
+        tr.add_span_modifier(first, last, m.clone())?;
     }
     Ok(())
 }
@@ -213,37 +232,47 @@ fn insert_inline_leaf_units(
     id: Dot,
     units: &[InlineLeafUnit],
 ) -> Result<(), StepError> {
-    let mut text_start = None;
-    let mut next_text_slot = 0;
-    let mut text = String::new();
-
-    for unit in units {
-        match &unit.token {
-            InlineLeafToken::Char(ch) => {
-                if text_start.is_none() || next_text_slot != unit.slot {
-                    flush_insert_text(tr, id, &mut text_start, &mut text)?;
-                    text_start = Some(unit.slot);
+    let mut i = 0;
+    while i < units.len() {
+        match &units[i].token {
+            InlineLeafToken::Char { modifiers, .. } => {
+                let start_slot = units[i].slot;
+                let run_mods = modifiers.clone();
+                let mut text = String::new();
+                let mut expected_slot = start_slot;
+                let mut j = i;
+                while let Some(unit) = units.get(j) {
+                    match &unit.token {
+                        InlineLeafToken::Char { ch, modifiers }
+                            if unit.slot == expected_slot && *modifiers == run_mods =>
+                        {
+                            text.push(*ch);
+                            expected_slot += 1;
+                            j += 1;
+                        }
+                        _ => break,
+                    }
                 }
-                text.push(*ch);
-                next_text_slot = unit.slot + 1;
+                let len = text.chars().count();
+                tr.insert_text(id, start_slot, &text)?;
+                apply_run_paint(tr, id, start_slot, len, &run_mods)?;
+                i = j;
             }
             InlineLeafToken::Atom { node, modifiers } => {
-                flush_insert_text(tr, id, &mut text_start, &mut text)?;
                 tr.insert_subtree(
                     id,
-                    unit.slot,
+                    units[i].slot,
                     Subtree {
                         node: node.clone(),
                         modifiers: modifiers.clone(),
-                        marker: None,
+                        carry: Vec::new(),
                         children: Vec::new(),
                     },
                 )?;
-                next_text_slot = unit.slot + 1;
+                i += 1;
             }
         }
     }
-    flush_insert_text(tr, id, &mut text_start, &mut text)?;
     Ok(())
 }
 
@@ -305,17 +334,25 @@ fn reconcile_attrs(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), 
     Ok(())
 }
 
-fn reconcile_node_marker(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
+fn reconcile_node_carry(tr: &mut Transaction, target: &State, id: Dot) -> Result<(), StepError> {
     let Some(dot) = block_dot(id) else {
         return Ok(());
     };
     if tr.view().node(id).is_none() {
         return Ok(());
     }
-    let target_marker = target.projected.node_markers().value_of(dot);
-    let current_marker = tr.state().projected.node_markers().value_of(dot);
-    if current_marker != target_marker {
-        tr.set_marker(id, target_marker)?;
+    let target_carry = target.projected.node_carries().modifiers_of(dot);
+    let current_carry = tr.state().projected.node_carries().modifiers_of(dot);
+
+    for (ty, m) in &target_carry {
+        if current_carry.get(ty) != Some(m) {
+            tr.set_carry_modifier(id, m.clone())?;
+        }
+    }
+    for ty in current_carry.keys() {
+        if !target_carry.contains_key(ty) {
+            tr.remove_carry_modifier(id, *ty)?;
+        }
     }
     Ok(())
 }
@@ -575,5 +612,138 @@ mod tests {
         } else {
             panic!("expected callout");
         }
+    }
+
+    fn char_dots(state: &State, block: Dot) -> Vec<Dot> {
+        let view = state.view();
+        let node = view.node(block).unwrap();
+        node.children()
+            .filter_map(|c| match c {
+                editor_model::ChildView::Leaf(l) if l.as_char().is_some() => Some(l.dot()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn slot_has_bold(state: &State, block: Dot, slot: usize) -> bool {
+        state
+            .view()
+            .node(block)
+            .unwrap()
+            .leaf_own_modifiers_at(slot)
+            .contains(&Modifier::Bold)
+    }
+
+    #[test]
+    fn reverts_inline_paint_added() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
+        let dots = char_dots(&target, p1);
+        let mut pre = Transaction::new(&target);
+        pre.add_span_modifier(dots[0], dots[1], Modifier::Bold)
+            .unwrap();
+        let (changed, ..) = pre.commit();
+        assert!(slot_has_bold(&changed, p1, 0));
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert_eq!(reverted.view().node(p1).unwrap().inline_text(), "hi");
+        assert!(
+            !slot_has_bold(&reverted, p1, 0),
+            "revert must strip a paint-only change on identical text"
+        );
+    }
+
+    #[test]
+    fn reverts_inline_paint_reinserts_painted_text() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("AB") } } }
+            selection: (p1, 0)
+        };
+        let dots = char_dots(&target, p1);
+        let mut mk = Transaction::new(&target);
+        mk.add_span_modifier(dots[0], dots[1], Modifier::Bold)
+            .unwrap();
+        let (target, ..) = mk.commit();
+        assert!(slot_has_bold(&target, p1, 0));
+
+        let mut pre = Transaction::new(&target);
+        pre.remove_text(p1, 0, 2).unwrap();
+        pre.insert_text(p1, 0, "XY").unwrap();
+        let (changed, ..) = pre.commit();
+        assert_eq!(changed.view().node(p1).unwrap().inline_text(), "XY");
+        assert!(!slot_has_bold(&changed, p1, 0));
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert_eq!(reverted.view().node(p1).unwrap().inline_text(), "AB");
+        assert!(
+            slot_has_bold(&reverted, p1, 0) && slot_has_bold(&reverted, p1, 1),
+            "re-inserted text must carry its target paint"
+        );
+    }
+
+    #[test]
+    fn reverts_node_carry_change() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("x") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.set_carry_modifier(p1, Modifier::Bold).unwrap();
+        let (changed, ..) = pre.commit();
+        assert!(
+            changed
+                .projected
+                .node_carries()
+                .modifiers_of(p1)
+                .contains_key(&ModifierType::Bold)
+        );
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert!(
+            !reverted
+                .projected
+                .node_carries()
+                .modifiers_of(p1)
+                .contains_key(&ModifierType::Bold),
+            "revert must clear a carry the target did not have"
+        );
+    }
+
+    #[test]
+    fn reverts_mixed_paint_run_end_to_end() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("abcd") } } }
+            selection: (p1, 0)
+        };
+        let dots = char_dots(&target, p1);
+        let mut mk = Transaction::new(&target);
+        mk.add_span_modifier(dots[0], dots[1], Modifier::Bold)
+            .unwrap();
+        let (target, ..) = mk.commit();
+
+        let cdots = char_dots(&target, p1);
+        let mut pre = Transaction::new(&target);
+        pre.remove_span_modifier(cdots[0], cdots[1], Modifier::Bold)
+            .unwrap();
+        pre.add_span_modifier(cdots[2], cdots[3], Modifier::Bold)
+            .unwrap();
+        let (changed, ..) = pre.commit();
+        assert!(slot_has_bold(&changed, p1, 2) && !slot_has_bold(&changed, p1, 0));
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert_eq!(reverted.view().node(p1).unwrap().inline_text(), "abcd");
+        assert!(
+            slot_has_bold(&reverted, p1, 0)
+                && slot_has_bold(&reverted, p1, 1)
+                && !slot_has_bold(&reverted, p1, 2)
+                && !slot_has_bold(&reverted, p1, 3),
+            "revert must restore the target's exact per-run paint"
+        );
     }
 }

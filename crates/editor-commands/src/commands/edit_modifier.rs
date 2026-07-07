@@ -1,35 +1,18 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, Position, leaf_span_in_range};
+use editor_state::{PendingModifier, PendingModifiers, Position};
 use editor_transaction::Transaction;
 
-use crate::helpers::is_text_applicable;
-use crate::{CommandError, CommandResult};
+use crate::CommandResult;
+use crate::helpers::{edit_modifier_range, validate_edit};
 
 pub fn edit_modifier(
     tr: &mut Transaction,
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
-    if let Some(m) = &modifier
-        && m.as_type() != modifier_type
-    {
-        return Err(CommandError::InvalidArgument(format!(
-            "modifier type mismatch: op type {:?}, modifier {:?}",
-            modifier_type,
-            m.as_type()
-        )));
-    }
-    if let Some(m) = &modifier
-        && !m.is_valid()
-    {
+    if !validate_edit(modifier_type, &modifier)? {
         return Ok(false);
-    }
-    if !is_text_applicable(modifier_type) {
-        return Err(CommandError::InvalidArgument(format!(
-            "edit_modifier is only valid for text-applicable modifiers; got {:?}",
-            modifier_type
-        )));
     }
 
     let Some(selection) = tr.selection() else {
@@ -38,7 +21,7 @@ pub fn edit_modifier(
     if selection.anchor == selection.head {
         edit_modifier_collapsed(tr, modifier_type, modifier)
     } else {
-        edit_modifier_range(tr, modifier_type, modifier)
+        edit_modifier_range(tr, selection, modifier_type, modifier)
     }
 }
 
@@ -137,46 +120,13 @@ fn edit_modifier_collapsed(
     Ok(true)
 }
 
-fn edit_modifier_range(
-    tr: &mut Transaction,
-    modifier_type: ModifierType,
-    modifier: Option<Modifier>,
-) -> CommandResult {
-    let selection = tr.selection().expect("entry caller guaranteed selection");
-
-    let (first, last, present) = {
-        let view = tr.view();
-        let rs = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = leaf_span_in_range(&rs) else {
-            return Ok(false);
-        };
-        let present = view
-            .leaf_state_by_dot_slow(first)
-            .and_then(|st| st.eff.get(&modifier_type).cloned());
-        (first, last, present)
-    };
-
-    match modifier {
-        Some(m) => {
-            tr.add_span_modifier(first, last, m)?;
-        }
-        None => {
-            if let Some(present) = present {
-                tr.remove_span_modifier(first, last, present)?;
-            }
-        }
-    }
-    Ok(true)
-}
-
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
     use editor_model::Modifier;
 
     use super::*;
+    use crate::CommandError;
     use crate::test_utils::*;
 
     #[test]
@@ -526,5 +476,46 @@ mod tests {
             selection: (p, 0) -> (p, 10)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_background_none_at_paragraph_end_clears_carry_background() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph carry([background_color("red".to_string())]) {
+                text("Hello") [background_color("red".to_string())]
+            } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            None,
+        ));
+        assert!(
+            !actual
+                .projected
+                .carry_modifiers(p1)
+                .contains_key(&ModifierType::BackgroundColor),
+            "clearing background at the paragraph end removes the carry record"
+        );
+    }
+
+    #[test]
+    fn range_link_at_paragraph_end_leaves_carry_untouched() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::Link,
+            Some(Modifier::Link {
+                href: "https://a.com".to_string()
+            })
+        ));
+        assert!(
+            actual.projected.carry_modifiers(p1).is_empty(),
+            "link is not a carry kind; carry stays untouched even at the paragraph end"
+        );
     }
 }

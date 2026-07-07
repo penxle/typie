@@ -58,6 +58,30 @@ mod tests {
     }
 
     #[test]
+    fn delete_node_sole_paragraph_records_first_charlike_paint() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { text("A") [bold] } } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_node(&mut tr, p1));
+        let scaffold = actual
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        let carry = actual.projected.carry_modifiers(scaffold);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "got {carry:?}"
+        );
+    }
+
+    #[test]
     fn deletes_table_and_moves_selection_to_following_paragraph() {
         let (initial, table, ..) = state! {
             doc { root {

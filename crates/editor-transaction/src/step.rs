@@ -1,5 +1,5 @@
 use editor_crdt::{Dot, Op};
-use editor_model::{EditOp, Marker, Modifier, PlainNode, Subtree};
+use editor_model::{EditOp, Modifier, ModifierType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::{BatchedState, Composition, PendingModifiers, State};
 use serde::{Deserialize, Serialize};
@@ -86,10 +86,11 @@ pub enum Step {
         last: Dot,
         modifier: Modifier,
     },
-    SetNodeMarker {
+    SetNodeCarry {
         block: Dot,
-        old: Option<Marker>,
-        new: Option<Marker>,
+        ty: ModifierType,
+        old: Option<Modifier>,
+        new: Option<Modifier>,
     },
     SetSelection {
         old: Option<Selection>,
@@ -199,8 +200,8 @@ impl Step {
                 last,
                 modifier,
             } => steps::remove_span_modifier::apply_to(batched, *first, *last, modifier),
-            Step::SetNodeMarker { block, new, .. } => {
-                steps::set_node_marker::apply_to(batched, *block, new.clone())
+            Step::SetNodeCarry { block, ty, new, .. } => {
+                steps::set_node_carry::apply_to(batched, *block, *ty, new.clone())
             }
             Step::SetSelection { new, .. } => steps::set_selection::apply_to(batched, *new),
             Step::SetPendingModifiers { new, .. } => {
@@ -264,9 +265,12 @@ impl Step {
                 last,
                 modifier,
             } => steps::remove_span_modifier::inverse(*first, *last, modifier.clone()),
-            Step::SetNodeMarker { block, old, new } => {
-                steps::set_node_marker::inverse(*block, old.clone(), new.clone())
-            }
+            Step::SetNodeCarry {
+                block,
+                ty,
+                old,
+                new,
+            } => steps::set_node_carry::inverse(*block, *ty, old.clone(), new.clone()),
             Step::SetSelection { old, new } => steps::set_selection::inverse(*old, *new),
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::inverse(old.clone(), new.clone())

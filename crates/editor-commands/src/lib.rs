@@ -4,6 +4,7 @@ mod commands;
 mod compose;
 mod error;
 pub(crate) mod helpers;
+pub mod types;
 
 #[cfg(test)]
 mod test_utils;

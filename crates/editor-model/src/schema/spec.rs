@@ -62,8 +62,6 @@ pub struct ModifierSpec {
     /// default) is not necessarily a selection target. A concrete positive
     /// expression (no `Not`/`Any`/`GlobStar`/`SelfRef`), never `Any`.
     pub target: ContextExpr,
-    pub expand: Expand,
-    pub overlap: bool,
     pub inheritable: bool,
 }
 
@@ -72,19 +70,9 @@ impl Default for ModifierSpec {
         Self {
             context: ContextExpr::Any,
             target: ContextExpr::Any,
-            expand: Expand::After,
-            overlap: false,
             inheritable: true,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum Expand {
-    Before,
-    After,
-    Both,
-    None,
 }
 
 #[cfg(test)]

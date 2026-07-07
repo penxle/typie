@@ -1,33 +1,10 @@
-use editor_common::Tri;
-use editor_model::{Modifier, ModifierState, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
-use editor_state::{resolve_modifier_state, resolve_modifier_state_in_range};
+use editor_model::{Modifier, ModifierType};
+use editor_state::resolve_modifier_state;
+use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 
+use crate::helpers::{modifier_from_unit_type, range_has_modifier, toggle_modifier_range};
 use crate::{CommandError, CommandResult};
-
-fn modifier_from_unit_type(modifier_type: ModifierType) -> Result<Modifier, CommandError> {
-    match modifier_type {
-        ModifierType::Italic => Ok(Modifier::Italic),
-        ModifierType::Underline => Ok(Modifier::Underline),
-        ModifierType::Strikethrough => Ok(Modifier::Strikethrough),
-        other => Err(CommandError::InvalidArgument(format!(
-            "{other:?} is not a unit modifier type"
-        ))),
-    }
-}
-
-fn range_has_modifier(ms: &ModifierState, ty: ModifierType) -> bool {
-    matches!(
-        match ty {
-            ModifierType::Italic => &ms.italic,
-            ModifierType::Underline => &ms.underline,
-            ModifierType::Strikethrough => &ms.strikethrough,
-            _ => return false,
-        },
-        Tri::Uniform { .. }
-    )
-}
 
 pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> CommandResult {
     let modifier = modifier_from_unit_type(modifier_type)?;
@@ -39,25 +16,7 @@ pub fn toggle_modifier(tr: &mut Transaction, modifier_type: ModifierType) -> Com
         return toggle_modifier_collapsed(tr, modifier_type, &modifier);
     }
 
-    let (first, last, all_have) = {
-        let view = tr.view();
-        let rs = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = leaf_span_in_range(&rs) else {
-            return Ok(false);
-        };
-        let ms = resolve_modifier_state_in_range(&rs);
-        (first, last, range_has_modifier(&ms, modifier_type))
-    };
-
-    if all_have {
-        tr.remove_span_modifier(first, last, modifier)?;
-    } else {
-        tr.add_span_modifier(first, last, modifier)?;
-    }
-
-    Ok(true)
+    toggle_modifier_range(tr, selection, modifier_type)
 }
 
 fn toggle_modifier_collapsed(
@@ -219,7 +178,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("HelloWorld") [italic] } } }
+            doc { root { p1: paragraph carry([italic]) { text("HelloWorld") [italic] } } }
             selection: (p1, 0) -> (p1, 10)
         };
         assert_state_eq!(&actual, &expected);
@@ -228,7 +187,7 @@ mod tests {
     #[test]
     fn range_toggle_italic_off() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("HelloWorld") [italic] } } }
+            doc { root { p1: paragraph carry([italic]) { text("HelloWorld") [italic] } } }
             selection: (p1, 0) -> (p1, 10)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
@@ -250,7 +209,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { root { p: paragraph { text("HelloWorld") [italic] } } }
+            doc { root { p: paragraph carry([italic]) { text("HelloWorld") [italic] } } }
             selection: (p, 0) -> (p, 10)
         };
         assert_state_eq!(&actual, &expected);
@@ -264,7 +223,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
         let (expected, ..) = state! {
-            doc { r1: root { p1: paragraph { text("Hello") [italic] } } }
+            doc { r1: root { p1: paragraph carry([italic]) { text("Hello") [italic] } } }
             selection: (r1, 0, >) -> (r1, 1, <)
         };
         assert_state_eq!(&actual, &expected);
@@ -273,7 +232,7 @@ mod tests {
     #[test]
     fn block_unit_selection_toggle_italic_off() {
         let (initial, ..) = state! {
-            doc { r1: root { p1: paragraph { text("Hello") [italic] } } }
+            doc { r1: root { p1: paragraph carry([italic]) { text("Hello") [italic] } } }
             selection: (r1, 0, >) -> (r1, 1, <)
         };
         let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
@@ -300,5 +259,21 @@ mod tests {
             selection: (p, 2) -> (p, 7)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_toggle_italic_apply_then_aggregate_uniform() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("HelloWorld") } } }
+            selection: (p1, 0) -> (p1, 10)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let ms = resolve_modifier_state(
+            &actual.projected,
+            actual.selection.as_ref().unwrap(),
+            &actual.pending_modifiers,
+        )
+        .unwrap();
+        assert_eq!(ms.italic, editor_common::Tri::Uniform { value: () });
     }
 }

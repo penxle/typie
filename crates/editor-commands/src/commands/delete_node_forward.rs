@@ -3,7 +3,10 @@ use editor_model::ChildView;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
-use crate::helpers::{remove_atom_leaf, remove_subtree_full};
+use crate::helpers::{
+    apply_carry_from_selection, capture_first_charlike_paint, find_ancestor_textblock,
+    remove_atom_leaf, remove_subtree_full,
+};
 use crate::{CommandError, CommandResult};
 
 enum ForwardTarget {
@@ -34,6 +37,15 @@ pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
         }
     };
 
+    let captured = match &target {
+        ForwardTarget::InlineAtom => {
+            let view = tr.state().view();
+            find_ancestor_textblock(&view, pos.node)
+                .map(|block| capture_first_charlike_paint(tr.state(), block))
+        }
+        ForwardTarget::Block(_) => None,
+    };
+
     match target {
         ForwardTarget::InlineAtom => remove_atom_leaf(tr, pos.node, pos.offset)?,
         ForwardTarget::Block(child) => remove_subtree_full(tr, child)?,
@@ -44,6 +56,10 @@ pub fn delete_node_forward(tr: &mut Transaction) -> CommandResult {
         offset: pos.offset,
         affinity: Affinity::Upstream,
     })))?;
+
+    if let Some(captured) = &captured {
+        apply_carry_from_selection(tr, captured)?;
+    }
 
     Ok(true)
 }
@@ -153,5 +169,21 @@ mod tests {
             selection: (p1, 1)
         };
         transact_fail!(initial, |tr| delete_node_forward(&mut tr));
+    }
+
+    #[test]
+    fn delete_forward_over_sole_tab_records_font_size_carry() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(1600)] } } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_node_forward(&mut tr));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 1600 })),
+            "got {carry:?}"
+        );
     }
 }

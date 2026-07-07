@@ -1,11 +1,11 @@
 use editor_common::HistoryTag;
 use editor_crdt::Dot;
-use editor_model::{AtomLeaf, ChildView};
+use editor_model::{AtomLeaf, ChildView, Modifier};
 use editor_resource::{CompiledPattern, Resource, TextReplacementRule};
-use editor_state::{Position, Selection};
+use editor_state::{Position, Selection, replacement_paint};
 use editor_transaction::{HistoryMeta, Transaction};
 
-use crate::helpers::insert_hard_break_at_caret;
+use crate::helpers::{apply_inline_modifiers, child_leaf_dots, insert_hard_break_at_caret};
 use crate::{CommandError, CommandResult};
 
 pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> CommandResult {
@@ -47,10 +47,27 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
         let next_search_start_byte = matched_start_byte.saturating_add(substitute.len());
 
         let original_offset_len = offset_len_for_text(&matched_text);
-        let _replaced_offset_len = offset_len_for_text(&substitute);
         let suffix_offset_len = offset_len_for_text(&suffix);
 
         let delete_count = original_offset_len + suffix_offset_len;
+
+        let (block, window_start, window_end) = {
+            let head = tr
+                .selection()
+                .expect("entry caller guaranteed selection")
+                .head;
+            (
+                head.node,
+                head.offset.saturating_sub(delete_count),
+                head.offset,
+            )
+        };
+        let paint = replacement_paint(
+            &tr.state().projected,
+            Position::new(block, window_start),
+            Position::new(block, window_end),
+        );
+
         for _ in 0..delete_count {
             delete_one_backward(tr)?;
         }
@@ -60,12 +77,17 @@ pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> Comman
         } else {
             format!("{substitute}{suffix}")
         };
-        for (i, part) in full_insert.split('\n').enumerate() {
-            if i > 0 {
-                insert_hard_break_at_caret(tr)?;
-            }
-            if !part.is_empty() {
-                insert_text_at_cursor(tr, part)?;
+
+        if full_insert.is_empty() {
+            apply_empty_replacement_carry(tr, block, paint.as_deref())?;
+        } else {
+            for (i, part) in full_insert.split('\n').enumerate() {
+                if i > 0 {
+                    insert_hard_break_at_caret(tr, paint.as_deref())?;
+                }
+                if !part.is_empty() {
+                    insert_text_at_cursor(tr, part, paint.as_deref())?;
+                }
             }
         }
 
@@ -281,7 +303,11 @@ fn delete_one_backward(tr: &mut Transaction) -> CommandResult {
     Ok(true)
 }
 
-fn insert_text_at_cursor(tr: &mut Transaction, text: &str) -> CommandResult {
+fn insert_text_at_cursor(
+    tr: &mut Transaction,
+    text: &str,
+    paint: Option<&[Modifier]>,
+) -> CommandResult {
     if text.is_empty() {
         return Ok(false);
     }
@@ -289,9 +315,46 @@ fn insert_text_at_cursor(tr: &mut Transaction, text: &str) -> CommandResult {
     let head = sel.head;
     let insert_len = text.chars().count();
     tr.insert_text(head.node, head.offset, text)?;
+    if let Some(paint) = paint {
+        let dots = child_leaf_dots(tr, head.node, head.offset, insert_len);
+        apply_inline_modifiers(tr, &dots, paint)?;
+    }
     tr.set_selection(Some(Selection::collapsed(Position::new(
         head.node,
         head.offset + insert_len,
     ))))?;
     Ok(true)
+}
+
+fn apply_empty_replacement_carry(
+    tr: &mut Transaction,
+    block: Dot,
+    paint: Option<&[Modifier]>,
+) -> Result<(), CommandError> {
+    if block.as_op_dot().is_none() {
+        return Ok(());
+    }
+    let emptied = {
+        let view = tr.view();
+        match view.node(block) {
+            Some(n) => {
+                n.spec().is_textblock()
+                    && !n
+                        .children()
+                        .any(|c| matches!(&c, ChildView::Leaf(l) if l.is_charlike()))
+            }
+            None => false,
+        }
+    };
+    if !emptied {
+        return Ok(());
+    }
+    let carry: Vec<Modifier> = paint
+        .unwrap_or_default()
+        .iter()
+        .filter(|m| m.as_type().is_carry_kind())
+        .cloned()
+        .collect();
+    tr.replace_carry(block, carry)?;
+    Ok(())
 }

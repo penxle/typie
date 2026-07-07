@@ -38,6 +38,26 @@ mod tests {
     }
 
     #[test]
+    fn deleting_all_plain_text_records_carry_tombstone() {
+        use editor_model::EditOp;
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("X") } } }
+            selection: (p1, 0) -> (p1, 1)
+        };
+        let (_state, _steps, recorded, _fx, _meta) =
+            transact!(initial, |tr| delete_selection(&mut tr));
+        let carry_ops = recorded
+            .iter()
+            .filter(|r| matches!(r.op.payload, EditOp::NodeCarry(_)))
+            .count();
+        assert_eq!(
+            carry_ops, 10,
+            "emptying a text block records a carry tombstone for all 10 carry kinds"
+        );
+    }
+
+    #[test]
     fn delete_within_text() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello World") } } }
@@ -990,7 +1010,7 @@ mod tests {
     fn cross_paragraph_range_delete_drops_trailing_page_break() {
         // `from` is the paragraph-anchored cursor at offset 2 (past p1's
         // trailing page_break), so delete_from's sibling sweep would leave
-        // the marker in place. Without the fix, merging p2 into p1 produces
+        // the carry in place. Without the fix, merging p2 into p1 produces
         // `[text("a"), page_break, text("c")]`, which violates the
         // trailing-only PageBreak rule.
         let (initial, ..) = state! {
@@ -1035,6 +1055,30 @@ mod tests {
         assert_eq!(c00n.child_blocks().next().unwrap().children().count(), 0);
         let c01n = view.node(c01).expect("c01 survives");
         assert_eq!(c01n.child_blocks().next().unwrap().children().count(), 1); // "b" intact
+    }
+
+    #[test]
+    fn cell_clear_undo_restores_inline_bold() {
+        let (state, c00, _c01) = state! {
+            doc { root { table { table_row {
+                c00: table_cell { paragraph { text("a") [bold] } }
+                c01: table_cell { paragraph { text("b") } }
+            } } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(c00, c00, &state.view()).unwrap();
+        let initial = editor_state::State {
+            selection: Some(sel),
+            ..state
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert_state_eq!(&restored, &initial);
     }
 
     #[test]
@@ -1146,41 +1190,390 @@ mod tests {
     }
 
     #[test]
-    fn delete_selection_emptying_paragraph_lifts_marker() {
+    fn delete_selection_emptying_paragraph_records_carry() {
         let (initial, p1, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [bold, font_weight(700)] } } }
             selection: (p1, 0) -> (p1, 5)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let dot = p1;
-        let marker = actual
-            .projected
-            .node_markers()
-            .value_of(dot)
-            .expect("paragraph should have a marker");
+        let carry = actual.projected.carry_modifiers(dot);
         assert!(
-            marker
-                .modifiers
-                .iter()
+            carry
+                .values()
                 .any(|m| matches!(m, editor_model::Modifier::Bold))
         );
         assert!(
-            marker
-                .modifiers
-                .iter()
+            carry
+                .values()
                 .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
         );
     }
 
     #[test]
-    fn delete_selection_partial_text_no_lift() {
+    fn delete_selection_partial_text_no_carry_change() {
         let (initial, p1, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [bold] } } }
             selection: (p1, 1) -> (p1, 3)
         };
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let dot = p1;
-        assert!(actual.projected.node_markers().value_of(dot).is_none());
+        assert!(actual.projected.carry_modifiers(dot).is_empty());
+    }
+
+    #[test]
+    fn emptying_paragraph_records_first_charlike_tab_paint() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph { tab [font_size(1600)] text("b") } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 1600 })),
+            "carry must come from the first charlike (the tab), got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn emptying_unpainted_paragraph_clears_stale_carry() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("hi") } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        assert!(
+            actual.projected.carry_modifiers(p1).is_empty(),
+            "emptying deletion must replace stale carry with the (empty) first charlike paint"
+        );
+    }
+
+    #[test]
+    fn cell_rect_replaces_each_cell_carry_with_own_first_charlike() {
+        let (state, c00, c01) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") [bold] } }
+                    c01: table_cell { paragraph { text("b") [italic] } }
+                }
+                table_row {
+                    table_cell { paragraph { text("c") } }
+                    table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(c00, c01, &state.view()).unwrap();
+        let initial = editor_state::State {
+            selection: Some(sel),
+            ..state
+        };
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let view = after.view();
+        let p00 = view.node(c00).unwrap().child_blocks().next().unwrap().id();
+        let p01 = view.node(c01).unwrap().child_blocks().next().unwrap().id();
+        assert!(
+            after
+                .projected
+                .carry_modifiers(p00)
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold))
+        );
+        assert!(
+            after
+                .projected
+                .carry_modifiers(p01)
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Italic))
+        );
+    }
+
+    #[test]
+    fn cell_rect_multiblock_cell_carry_from_first_charlike_past_empty_first_paragraph() {
+        let (state, c00, c01) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") [bold] } }
+                    c01: table_cell {
+                        paragraph {}
+                        paragraph { text("b") [font_size(2000)] }
+                    }
+                }
+                table_row {
+                    table_cell { paragraph { text("c") } }
+                    table_cell { paragraph { text("d") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = editor_state::cell_rect_selection(c00, c01, &state.view()).unwrap();
+        let initial = editor_state::State {
+            selection: Some(sel),
+            ..state
+        };
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let view = after.view();
+        let p00 = view.node(c00).unwrap().child_blocks().next().unwrap().id();
+        let p01 = view.node(c01).unwrap().child_blocks().next().unwrap().id();
+        assert!(
+            after
+                .projected
+                .carry_modifiers(p00)
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "the single-block cell keeps its own first charlike paint, got {:?}",
+            after.projected.carry_modifiers(p00)
+        );
+        assert!(
+            after
+                .projected
+                .carry_modifiers(p01)
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::FontSize { value: 2000 })),
+            "an empty first paragraph must not mask the cell's first charlike font size, got {:?}",
+            after.projected.carry_modifiers(p01)
+        );
+    }
+
+    #[test]
+    fn select_all_scaffold_records_first_charlike_paint() {
+        let (initial, _r) = state! {
+            doc { r: root {
+                paragraph { text("A") [bold] }
+                paragraph { text("B") [italic] }
+            } }
+            selection: (r, 0) -> (r, 2)
+        };
+        let (after, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let view = after.view();
+        let scaffold = view.root().unwrap().child_blocks().next().unwrap().id();
+        let carry = after.projected.carry_modifiers(scaffold);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "scaffold must inherit the first block's first charlike paint, got {carry:?}"
+        );
+        assert!(
+            !carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Italic)),
+            "scaffold must not inherit a later block's paint, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn cross_boundary_emptied_survivor_records_own_carry() {
+        let (initial, _p1, ft1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("11") }
+                fold {
+                    ft1: fold_title carry([italic]) { text("22") }
+                    fold_content {
+                        p2: paragraph { text("33") [bold] }
+                    }
+                }
+            } }
+            selection: (p1, 1) -> (p2, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let p2_carry = actual.projected.carry_modifiers(p2);
+        assert!(
+            p2_carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "the merge-blocked, emptied to-side block keeps its own first charlike paint, got {p2_carry:?}"
+        );
+        assert!(
+            actual.projected.carry_modifiers(ft1).is_empty(),
+            "the emptied intermediate fold_title must replace its stale carry with its (empty) own first charlike paint, got {:?}",
+            actual.projected.carry_modifiers(ft1)
+        );
+    }
+
+    #[test]
+    fn emptying_delete_undo_restores_content_and_carry() {
+        let (initial, p1, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("hi") } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        assert!(
+            after.projected.carry_modifiers(p1).is_empty(),
+            "emptying replaced the stale carry within the same transaction"
+        );
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert_state_eq!(&restored, &initial);
+    }
+
+    #[test]
+    fn cross_boundary_merge_keeps_front_carry() {
+        let (initial, p1, _p2) = state! {
+            doc { root {
+                p1: paragraph carry([bold]) { text("AB") }
+                p2: paragraph carry([italic]) { text("CD") }
+            } }
+            selection: (p1, 2) -> (p2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let carry = actual.projected.carry_modifiers(p1);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "the merged survivor keeps the front paragraph's carry, got {carry:?}"
+        );
+        assert!(
+            !carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Italic)),
+            "the merged-away paragraph's carry does not leak into the survivor, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn range_delete_to_paragraph_end_makes_no_merge() {
+        let (initial, _p1, p2) = state! {
+            doc { root {
+                p1: paragraph carry([bold]) { text("AB") }
+                p2: paragraph carry([italic]) { text("CD") }
+            } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let view = actual.view();
+        assert_eq!(
+            view.root().unwrap().child_blocks().count(),
+            2,
+            "a range delete that stops at the paragraph end must not merge the two blocks"
+        );
+        let carry = actual.projected.carry_modifiers(p2);
+        assert!(
+            carry
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Italic)),
+            "the untouched following paragraph keeps its own carry, got {carry:?}"
+        );
+    }
+
+    #[test]
+    fn whole_block_delete_undo_restores_carry() {
+        let (initial, _r, p1, _p2) = state! {
+            doc { r: root {
+                p1: paragraph carry([bold]) { text("A") }
+                p2: paragraph { text("B") }
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        assert!(
+            after.view().node(p1).is_none(),
+            "the whole paragraph block is removed"
+        );
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert_state_eq!(&restored, &initial);
+        let restored_first = restored
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        assert!(
+            restored
+                .projected
+                .carry_modifiers(restored_first)
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::Bold)),
+            "undo restores the removed block's carry through the captured subtree"
+        );
+    }
+
+    #[test]
+    fn cross_paragraph_delete_preserves_tail_bold() {
+        use editor_model::Modifier;
+        let (initial, ..) = state! {
+            doc { root {
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") [bold] }
+            } }
+            selection: (p1, 2) -> (p2, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let view = actual.view();
+        let paras: Vec<_> = view.root().unwrap().child_blocks().collect();
+        assert_eq!(paras.len(), 1, "the two paragraphs merge into one");
+        let para = &paras[0];
+        assert_eq!(para.inline_text(), "Held");
+        assert!(para.leaf_own_modifiers_at(0).is_empty(), "'H' stays plain");
+        assert!(para.leaf_own_modifiers_at(1).is_empty(), "'e' stays plain");
+        assert!(
+            para.leaf_own_modifiers_at(2).contains(&Modifier::Bold),
+            "'l' from the bold tail keeps its bold"
+        );
+        assert!(
+            para.leaf_own_modifiers_at(3).contains(&Modifier::Bold),
+            "'d' from the bold tail keeps its bold"
+        );
+    }
+
+    #[test]
+    fn whole_block_delete_undo_restores_inline_bold() {
+        let (initial, _r, p1, _p2) = state! {
+            doc { r: root {
+                p1: paragraph { text("A") [bold] }
+                p2: paragraph { text("B") }
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        assert!(
+            after.view().node(p1).is_none(),
+            "the bold paragraph block is removed"
+        );
+        let restored = records
+            .iter()
+            .rev()
+            .fold(after, |s, r| r.step.inverse().apply(&s).unwrap().state);
+        assert_state_eq!(&restored, &initial);
+    }
+
+    #[test]
+    fn emptying_delete_undo_redo_roundtrips_carry() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("hi") } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let mut tr = editor_transaction::Transaction::new(&initial);
+        assert!(delete_selection(&mut tr).unwrap());
+        let (after, records, ..) = tr.commit();
+        assert!(
+            after.projected.carry_modifiers(p1).is_empty(),
+            "emptying replaces the stale carry with the (empty) first charlike paint"
+        );
+        let undone = records.iter().rev().fold(after.clone(), |s, r| {
+            r.step.inverse().apply(&s).unwrap().state
+        });
+        assert_state_eq!(&undone, &initial);
+        let redone = records
+            .iter()
+            .fold(undone, |s, r| r.step.apply(&s).unwrap().state);
+        assert_state_eq!(&redone, &after);
     }
 
     #[test]

@@ -151,6 +151,70 @@ fn set_node_and_selection_combined() {
 }
 
 #[test]
+fn subtree_capture_emit_preserves_inline_runs() {
+    use editor_model::{EditOp, SpanOp};
+
+    let (state, p1, _p2) = state! {
+        doc {
+            root {
+                p1: paragraph {
+                    text("AB")
+                    text("CD") [bold]
+                }
+                p2: paragraph { text("x") }
+            }
+        }
+        selection: (p1, 0)
+    };
+
+    let root = state.view().root().unwrap().id();
+    let subtree = editor_transaction::capture_subtree(&state.projected, p1).unwrap();
+    let remove = Step::RemoveSubtree {
+        parent: root,
+        index: 0,
+        subtree,
+    };
+    let removed = remove.apply(&state).unwrap().state;
+    assert_eq!(
+        root_block_count(&removed),
+        1,
+        "the captured paragraph is removed"
+    );
+
+    let out = remove.inverse().apply(&removed).unwrap();
+    let restored = out.state;
+    let view = restored.view();
+    let para = view.root().unwrap().child_blocks().next().unwrap();
+    assert_eq!(para.inline_text(), "ABCD");
+    let own_at = |slot: usize| para.leaf_own_modifiers_at(slot);
+    assert!(
+        own_at(0).is_empty(),
+        "'A' stays plain across the round-trip"
+    );
+    assert!(
+        own_at(1).is_empty(),
+        "'B' stays plain across the round-trip"
+    );
+    assert!(
+        own_at(2).contains(&Modifier::Bold),
+        "'C' keeps its bold run across the round-trip"
+    );
+    assert!(
+        own_at(3).contains(&Modifier::Bold),
+        "'D' keeps its bold run across the round-trip"
+    );
+
+    for op in &out.ops {
+        if let EditOp::Span(SpanOp::AddSpan { modifier, .. }) = &op.payload {
+            assert!(
+                modifier.as_type().is_text_applicable(),
+                "emit recorded a span carrying a non-text modifier: {modifier:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn inline_span_modifier_bolds_range_and_inverts() {
     let (state, p1) = state! {
         doc {

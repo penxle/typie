@@ -85,7 +85,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         Anchor, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp, NodeAttrLog,
-        NodeMarkerLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
+        NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::{
         FontFamily, FontFamilySource, FontRegistry, FontWeight, PLACEHOLDER_WEIGHT,
@@ -112,7 +112,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

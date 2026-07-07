@@ -503,7 +503,7 @@ fn plain_entry_to_subtree(entry: PlainNodeEntry) -> Subtree {
     Subtree {
         node: entry.node,
         modifiers: entry.modifiers.into_values().collect(),
-        marker: entry.marker,
+        carry: entry.carry,
         children: entry
             .children
             .into_iter()

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph};
+use editor_crdt::{Dot, ListOp, OpGraph};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, EditOp, ModifierAttrOp, NodeAttrOp, NodeLwwOp, PlainDoc, PlainNode,
-    PlainNodeEntry, SeqClass, SeqItem, SpanOp, classify,
+    Anchor, AtomLeaf, Bias, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeAttrOp, PlainDoc,
+    PlainNode, PlainNodeEntry, SeqClass, SeqItem, SpanOp, classify,
 };
 
 use crate::{ProjectedState, State};
@@ -83,15 +83,19 @@ fn emit_node(
                     }))
                     .expect("local block modifier never conflicts");
             }
-            if let Some(marker) = &entry.marker {
+            let mut carry_by_type: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+            for m in &entry.carry {
+                if m.as_type().is_carry_kind() {
+                    carry_by_type.insert(m.as_type(), m.clone());
+                }
+            }
+            for modifier in carry_by_type.into_values() {
                 graph
-                    .add_mut(EditOp::NodeMarker(NodeLwwOp {
+                    .add_mut(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                         target: dot,
-                        op: LwwRegOp::Set {
-                            value: Some(marker.clone()),
-                        },
+                        modifier,
                     }))
-                    .expect("local node marker never conflicts");
+                    .expect("local node carry never conflicts");
             }
             for attr in entry.node.to_attrs() {
                 graph
@@ -184,17 +188,21 @@ fn emit_node(
 
 // ── assert_state_eq ──────────────────────────────────────────────────────────
 // Structural state equality for tests: compares the projected tree (node types,
-// inline content, effective/own modifiers, markers) ignoring the concrete
+// inline content, effective/own modifiers, carries) ignoring the concrete
 // `Dot` identities, plus selection-by-path and pending state.
 
 fn block_fingerprint(state: &State, block: &editor_model::NodeView, out: &mut Vec<String>) {
-    let marker = state.projected.node_markers().value_of(block.id());
+    let carry: Vec<editor_model::Modifier> = state
+        .projected
+        .carry_modifiers(block.id())
+        .into_values()
+        .collect();
     let mut mods: Vec<editor_model::Modifier> = block.effective().values().cloned().collect();
     mods.sort_by_key(editor_model::Modifier::as_type);
     out.push(format!(
-        "OPEN {:?} marker={:?} mods={:?}",
+        "OPEN {:?} carry={:?} mods={:?}",
         block.node_type(),
-        marker,
+        carry,
         mods
     ));
     for (slot, child) in block.children().enumerate() {

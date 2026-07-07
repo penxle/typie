@@ -4,7 +4,7 @@ use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    apply_first_text_marker_lift, capture_first_text_marker, find_enclosing_paragraph_id,
+    apply_carry_from_selection, capture_first_charlike_paint, find_ancestor_textblock,
 };
 use crate::{CommandError, CommandResult};
 
@@ -35,8 +35,8 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
             return Ok(false);
         }
 
-        let captured = find_enclosing_paragraph_id(&view, pos.node)
-            .and_then(|id| capture_first_text_marker(tr.state(), id));
+        let captured = find_ancestor_textblock(&view, pos.node)
+            .map(|block| capture_first_charlike_paint(tr.state(), block));
 
         let prev_offset = pos
             .resolve(&view)
@@ -55,8 +55,8 @@ pub fn delete_text_backward(tr: &mut Transaction, resource: &Resource) -> Comman
         affinity: Affinity::Upstream,
     })))?;
 
-    if let Some(captured) = captured {
-        apply_first_text_marker_lift(tr, &captured)?;
+    if let Some(captured) = &captured {
+        apply_carry_from_selection(tr, captured)?;
     }
 
     Ok(true)
@@ -193,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_last_char_lifts_first_text_marker_to_paragraph() {
+    fn delete_last_char_records_first_charlike_paint() {
         let (initial, p1, ..) = state! {
             doc { root { p1: paragraph { text("A") [bold] } } }
             selection: (p1, 1)
@@ -203,16 +203,12 @@ mod tests {
             &Resource::new_test()
         ));
         let dot = p1;
-        let marker = actual
-            .projected
-            .node_markers()
-            .value_of(dot)
-            .expect("paragraph should have a marker");
-        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+        let carry = actual.projected.carry_modifiers(dot);
+        assert!(carry.values().any(|m| matches!(m, Modifier::Bold)));
     }
 
     #[test]
-    fn delete_non_last_char_no_lift() {
+    fn delete_non_last_char_no_carry_change() {
         let (initial, p1, ..) = state! {
             doc { root { p1: paragraph { text("Hi") [bold] } } }
             selection: (p1, 2)
@@ -222,6 +218,69 @@ mod tests {
             &Resource::new_test()
         ));
         let dot = p1;
-        assert!(actual.projected.node_markers().value_of(dot).is_none());
+        assert!(actual.projected.carry_modifiers(dot).is_empty());
+    }
+
+    #[test]
+    fn backspace_to_empty_equals_range_delete_carry() {
+        let (bs_initial, p1, ..) = state! {
+            doc { root { p1: paragraph { text("A") [font_size(1600)] text("B") [italic] } } }
+            selection: (p1, 2)
+        };
+        let mut cur = bs_initial;
+        loop {
+            let mut tr = editor_transaction::Transaction::new(&cur);
+            let changed = delete_text_backward(&mut tr, &Resource::new_test()).unwrap();
+            cur = tr.commit().0;
+            if !changed {
+                break;
+            }
+            let empty = cur
+                .view()
+                .node(p1)
+                .map(|n| n.children().count() == 0)
+                .unwrap_or(true);
+            if empty {
+                break;
+            }
+        }
+        let bs_carry = cur.projected.carry_modifiers(p1);
+
+        let (rng_initial, rp1, ..) = state! {
+            doc { root { p1: paragraph { text("A") [font_size(1600)] text("B") [italic] } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (rng, ..) = transact!(rng_initial, |tr| crate::delete_selection(&mut tr));
+        let rng_carry = rng.projected.carry_modifiers(rp1);
+
+        assert_eq!(
+            bs_carry, rng_carry,
+            "backspace-to-empty and range-delete carry must match"
+        );
+        assert!(
+            bs_carry
+                .values()
+                .any(|m| matches!(m, Modifier::FontSize { value: 1600 }))
+        );
+    }
+
+    #[test]
+    fn emptying_fold_title_replaces_carry() {
+        let (initial, ft) = state! {
+            doc { root { fold {
+                ft: fold_title carry([italic]) { text("x") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_text_backward(
+            &mut tr,
+            &Resource::new_test()
+        ));
+        assert!(
+            actual.projected.carry_modifiers(ft).is_empty(),
+            "emptying a fold title replaces its stale carry with the (empty) first charlike paint, got {:?}",
+            actual.projected.carry_modifiers(ft)
+        );
     }
 }

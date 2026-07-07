@@ -1532,7 +1532,7 @@ mod tests {
     }
 
     #[test]
-    fn selection_op_unset_undo_restores_all_three() {
+    fn selection_op_unset_undo_restores_selection_and_dissolves_composition_and_pending() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 3)
@@ -1554,8 +1554,6 @@ mod tests {
             editor_state::undo::UndoHistory::new(editor_common::time::Duration::from_millis(300));
 
         let pre_unset_selection = editor.state().selection;
-        let pre_unset_composition = editor.state().composition;
-        let pre_unset_pending = editor.state().pending_modifiers.clone();
 
         editor.apply(Message::Selection {
             op: SelectionOp::Unset,
@@ -1578,15 +1576,13 @@ mod tests {
             pre_unset_selection,
             "selection restored"
         );
-        assert_eq!(
-            editor.state().composition,
-            pre_unset_composition,
-            "composition restored"
+        assert!(
+            editor.state().composition.is_none(),
+            "composition dissolved on undo, not restored"
         );
-        assert_eq!(
-            editor.state().pending_modifiers,
-            pre_unset_pending,
-            "pending restored"
+        assert!(
+            editor.state().pending_modifiers.is_empty(),
+            "pending dissolved on undo, not restored"
         );
     }
 }

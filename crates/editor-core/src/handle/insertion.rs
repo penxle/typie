@@ -25,25 +25,26 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
     editor.transact(|tr| {
         match &op {
             InsertionOp::Text { text } => {
+                let coalesces = tr.composition().is_none()
+                    && tr.selection().is_some_and(|s| s.anchor == s.head);
                 commands::chain!(
                     tr,
                     |tr| commands::first!(
                         tr,
                         commands::materialize_gap_paragraph(),
                         commands::insert_paragraph_after_unit_selection(),
-                        |tr| commands::chain!(
-                            tr,
-                            commands::optional!(commands::ensure_paragraph()),
-                            commands::optional!(commands::delete_selection()),
-                        ),
+                        |_tr| Ok(true),
                     ),
-                    commands::insert_text(text),
+                    commands::replace_selection_with_text(text, None),
                 )?;
+                if coalesces && tr.doc_changed() {
+                    tr.update_meta(|m| m.merge = editor_transaction::MergeKind::Typing);
+                }
             }
             InsertionOp::Break {
                 kind: Break::Paragraph,
             } => {
-                commands::first!(
+                let applied = commands::first!(
                     tr,
                     commands::materialize_gap_paragraph(),
                     commands::insert_paragraph_after_unit_selection(),
@@ -58,6 +59,9 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                         ),
                     ),
                 )?;
+                if applied {
+                    tr.clear_pending_format()?;
+                }
             }
             InsertionOp::Break { kind: Break::Line } => {
                 commands::chain!(
@@ -76,7 +80,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                 )?;
             }
             InsertionOp::Break { kind: Break::Page } => {
-                commands::chain!(
+                let applied = commands::chain!(
                     tr,
                     |tr| commands::first!(
                         tr,
@@ -91,6 +95,9 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     commands::split_paragraph(),
                     commands::insert_page_break_into_prev_paragraph(),
                 )?;
+                if applied {
+                    tr.clear_pending_format()?;
+                }
             }
             InsertionOp::Fragment { fragment } => {
                 commands::chain!(
@@ -240,6 +247,68 @@ mod tests {
             selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn range_select_enter_equals_range_delete_then_enter() {
+        let (fused_state, ..) = state! {
+            doc { root { p1: paragraph { text("abcde") [bold] } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+        let (split_state, ..) = state! {
+            doc { root { p1: paragraph { text("abcde") [bold] } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+
+        let mut fused = Editor::new_test(fused_state);
+        fused.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+
+        let mut split = Editor::new_test(split_state);
+        split.apply(Message::Deletion {
+            op: DeletionOp::Selection,
+        });
+        split.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+
+        editor_state::assert_doc_eq!(fused.state(), split.state());
+    }
+
+    #[test]
+    fn range_select_enter_equals_range_delete_then_enter_across_style_boundary() {
+        let (fused_state, ..) = state! {
+            doc { root { p1: paragraph { text("ab") [bold] text("cde") } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+        let (split_state, ..) = state! {
+            doc { root { p1: paragraph { text("ab") [bold] text("cde") } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+
+        let mut fused = Editor::new_test(fused_state);
+        fused.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+
+        let mut split = Editor::new_test(split_state);
+        split.apply(Message::Deletion {
+            op: DeletionOp::Selection,
+        });
+        split.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+
+        editor_state::assert_doc_eq!(fused.state(), split.state());
     }
 
     #[test]
@@ -400,8 +469,6 @@ mod tests {
         editor.apply(Message::Insertion {
             op: InsertionOp::Break { kind: Break::Page },
         });
-        // Unit preserved; the page break needs a paragraph host, so the inserted
-        // paragraph is split and the marker lands in the leading half.
         let (expected, ..) = state! {
             doc { root {
                 paragraph { text("a") }
@@ -686,10 +753,29 @@ mod tests {
 
         let view = editor.state().view();
         let paragraph = view.root().unwrap().child_blocks().next().unwrap();
-        // The "World" run sits after the hard-break atom; its last leaf carries the
-        // preserved font in its effective modifiers.
         let items = paragraph.inline();
-        let world_leaf = items.last().expect("text after hard_break");
+        let hard_break_index = items
+            .iter()
+            .position(|item| {
+                matches!(
+                    item.kind,
+                    editor_model::InlineKind::Atom(editor_model::NodeType::HardBreak)
+                )
+            })
+            .expect("hard break atom");
+        let hard_break = &items[hard_break_index];
+        assert!(hard_break.effective.values().any(
+            |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "KoPubBatang")
+        ));
+        assert!(
+            hard_break
+                .effective
+                .values()
+                .any(|m| matches!(m, editor_model::Modifier::FontWeight { value: 700 }))
+        );
+        let world_leaf = items
+            .get(hard_break_index + 1)
+            .expect("text after hard_break");
         assert!(world_leaf.effective.values().any(
             |m| matches!(m, editor_model::Modifier::FontFamily { value } if value == "KoPubBatang")
         ));
@@ -759,6 +845,142 @@ mod tests {
                 .effective
                 .values()
                 .any(|m| matches!(m, editor_model::Modifier::Bold))
+        );
+    }
+
+    fn type_text(editor: &mut Editor, text: &str) {
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: text.into() },
+        });
+    }
+
+    fn set_range(editor: &mut Editor, block: editor_crdt::Dot, from: usize, to: usize) {
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: editor_state::Selection::new(
+                    editor_state::Position::new(block, from),
+                    editor_state::Position::new(block, to),
+                ),
+            },
+        });
+    }
+
+    fn set_caret(editor: &mut Editor, block: editor_crdt::Dot, offset: usize) {
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: editor_state::Selection::collapsed(editor_state::Position::new(
+                    block, offset,
+                )),
+            },
+        });
+    }
+
+    #[test]
+    fn typing_within_block_coalesces_into_one_unit() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        type_text(&mut editor, "a");
+        type_text(&mut editor, "b");
+        type_text(&mut editor, "c");
+        assert_eq!(
+            editor.undo_history.undos_len(),
+            1,
+            "continuous same-block typing within the interval is one undo unit"
+        );
+    }
+
+    #[test]
+    fn range_format_between_typing_yields_three_units() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        type_text(&mut editor, "a");
+        set_range(&mut editor, p1, 0, 3);
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: editor_model::ModifierType::Bold,
+            },
+        });
+        set_caret(&mut editor, p1, 6);
+        type_text(&mut editor, "b");
+        assert_eq!(
+            editor.undo_history.undos_len(),
+            3,
+            "typing, a range bold, then typing are three units — formatting never coalesces"
+        );
+    }
+
+    #[test]
+    fn typing_in_different_paragraph_does_not_coalesce() {
+        let (state, _p1, p2) = state! {
+            doc { root { p1: paragraph { text("aa") } p2: paragraph { text("bb") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        type_text(&mut editor, "x");
+        set_caret(&mut editor, p2, 2);
+        type_text(&mut editor, "y");
+        assert_eq!(
+            editor.undo_history.undos_len(),
+            2,
+            "typing in a different block starts a fresh undo unit"
+        );
+    }
+
+    #[test]
+    fn noncontiguous_caret_in_same_block_does_not_coalesce() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        type_text(&mut editor, "x");
+        set_caret(&mut editor, p1, 4);
+        type_text(&mut editor, "y");
+        assert_eq!(
+            editor.undo_history.undos_len(),
+            2,
+            "a caret jump within the same block breaks coalescing (same block alone is not enough)"
+        );
+    }
+
+    #[test]
+    fn selection_overwrite_does_not_chain_typing_runs() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        type_text(&mut editor, "a");
+        set_range(&mut editor, p1, 0, 3);
+        type_text(&mut editor, "X");
+        type_text(&mut editor, "Y");
+        assert_eq!(
+            editor.undo_history.undos_len(),
+            3,
+            "a selection overwrite is isolated: typing does not coalesce across it"
+        );
+    }
+
+    #[test]
+    fn auto_surround_is_its_own_unit() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        type_text(&mut editor, "a");
+        set_range(&mut editor, p1, 7, 12);
+        type_text(&mut editor, "(");
+        assert_eq!(
+            editor.undo_history.undos_len(),
+            2,
+            "auto-surround wrapping does not coalesce with a preceding typing run"
         );
     }
 

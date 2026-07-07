@@ -136,6 +136,13 @@ fn block_modifiers(state: &State, nv: &NodeView) -> Vec<Modifier> {
     }
 }
 
+fn node_carry(state: &State, nv: &NodeView) -> Vec<Modifier> {
+    match nv.dot() {
+        Some(dot) => state.projected.carry_modifiers(dot).into_values().collect(),
+        None => vec![],
+    }
+}
+
 fn leaf_modifiers(own: &BTreeMap<ModifierType, OwnModifier>) -> Vec<Modifier> {
     own.values().map(|o| o.value.clone()).collect()
 }
@@ -150,6 +157,7 @@ fn flush_run(run: &mut Option<RunAccum>, out: &mut Vec<Fragment>) {
         out.push(Fragment {
             node: PlainNode::Text(PlainTextNode { text: r.text }),
             modifiers: r.modifiers,
+            carry: vec![],
             children: vec![],
         });
     }
@@ -178,6 +186,7 @@ fn push_leaf(
         out.push(Fragment {
             node: node.to_plain(),
             modifiers: own.map(leaf_modifiers).unwrap_or_default(),
+            carry: vec![],
             children: vec![],
         });
     }
@@ -202,6 +211,7 @@ fn node_to_fragment(state: &State, nv: &NodeView) -> Fragment {
     Fragment {
         node: nv.node().to_plain(),
         modifiers: block_modifiers(state, nv),
+        carry: node_carry(state, nv),
         children: out,
     }
 }
@@ -244,6 +254,7 @@ fn build_fragment(state: &State, nv: &NodeView, rs: &ResolvedSelection) -> Fragm
     Fragment {
         node: nv.node().to_plain(),
         modifiers: block_modifiers(state, nv),
+        carry: vec![],
         children: out,
     }
 }
@@ -273,18 +284,21 @@ fn extract_cell_rect(state: &State, view: &DocView, rect: &CellRect) -> Slice {
         rows.push(Fragment {
             node: row.node().to_plain(),
             modifiers: block_modifiers(state, &row),
+            carry: vec![],
             children: cells,
         });
     }
     let table_frag = Fragment {
         node: table.node().to_plain(),
         modifiers: block_modifiers(state, &table),
+        carry: vec![],
         children: rows,
     };
     Slice {
         fragment: Fragment {
             node: PlainNode::Root(PlainRootNode::default()),
             modifiers: vec![],
+            carry: vec![],
             children: vec![table_frag],
         },
         open_start: 0,
@@ -744,5 +758,80 @@ mod tests {
             !json.contains("\"style\""),
             "slice schema must not carry style refs: {json}"
         );
+    }
+
+    #[test]
+    fn extract_closed_block_fills_carry() {
+        let (s, ..) = state! {
+            doc { r: root { p1: paragraph carry([bold]) { text("X") } } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
+        let para = &slice.fragment.children[0];
+        assert!(matches!(para.node, PlainNode::Paragraph(_)));
+        assert!(
+            para.carry.iter().any(|m| matches!(m, Modifier::Bold)),
+            "a fully-contained block carries its carry modifiers into the fragment, got {:?}",
+            para.carry
+        );
+    }
+
+    #[test]
+    fn extract_open_fragment_omits_carry() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("Hello") } } }
+            selection: (p1, 1) -> (p1, 3)
+        };
+        let slice = Slice::extract(&s).expect("non-collapsed");
+        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
+        assert!(
+            slice.fragment.carry.is_empty(),
+            "an open (partial) block fragment discards carry, got {:?}",
+            slice.fragment.carry
+        );
+    }
+
+    #[test]
+    fn slice_without_carry_round_trips_and_defaults_empty() {
+        let slice = Slice {
+            fragment: Fragment {
+                node: PlainNode::Paragraph(editor_model::PlainParagraphNode::default()),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                    text: "hi".into(),
+                }))],
+            },
+            open_start: 0,
+            open_end: 0,
+        };
+        let json = serde_json::to_string(&slice).unwrap();
+        assert!(
+            !json.contains("carry"),
+            "empty carry must be omitted on the wire (old-clipboard compat): {json}"
+        );
+        let parsed: Slice = serde_json::from_str(&json).expect("carry-less JSON must deserialize");
+        assert_eq!(parsed, slice);
+    }
+
+    #[test]
+    fn payload_wire_round_trip_preserves_carry() {
+        let (s, ..) = state! {
+            doc { r: root { p1: paragraph carry([bold]) { text("X") } } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+        let original = Slice::extract(&s).expect("non-collapsed");
+        let payload = original.to_payload();
+
+        let resource = Resource::new_test();
+        let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
+        let para = &parsed.fragment.children[0];
+        assert!(
+            para.carry.iter().any(|m| matches!(m, Modifier::Bold)),
+            "carry survives the data-slice-v2 payload wire, got {:?}",
+            para.carry
+        );
+        assert_eq!(parsed, original);
     }
 }

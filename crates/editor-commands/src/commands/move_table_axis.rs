@@ -117,6 +117,71 @@ mod tests {
     }
 
     #[test]
+    fn move_row_preserves_cell_bold() {
+        use editor_model::Modifier;
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row { c0: table_cell { paragraph { text("A") [bold] } } }
+                    table_row { table_cell { paragraph { text("B") } } }
+                }
+            } }
+            selection: (c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| move_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Horizontal,
+            0,
+            1
+        ));
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        let rows: Vec<_> = table.child_blocks().collect();
+        let cell = rows[1].child_blocks().next().unwrap();
+        let para = cell.child_blocks().next().unwrap();
+        assert_eq!(para.inline_text(), "A");
+        assert!(
+            para.leaf_own_modifiers_at(0).contains(&Modifier::Bold),
+            "the moved row's cell keeps its inline bold char paint"
+        );
+    }
+
+    #[test]
+    fn move_row_preserves_cell_background() {
+        use editor_model::{Modifier, ModifierType};
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        c0: table_cell [background_color("#ffff00".to_string())] { paragraph { text("A") } }
+                    }
+                    table_row { table_cell { paragraph { text("B") } } }
+                }
+            } }
+            selection: (c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| move_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Horizontal,
+            0,
+            1
+        ));
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        let rows: Vec<_> = table.child_blocks().collect();
+        let cell = rows[1].child_blocks().next().unwrap();
+        assert_eq!(
+            cell.block_modifier(ModifierType::BackgroundColor),
+            Some(&Modifier::BackgroundColor {
+                value: "#ffff00".to_string()
+            }),
+            "the moved row's cell keeps its background color"
+        );
+    }
+
+    #[test]
     fn move_col_right() {
         let (initial, tbl, ..) = state! {
             doc { root {
@@ -147,5 +212,60 @@ mod tests {
         for row in table.child_blocks() {
             assert_eq!(row.child_blocks().count(), 3);
         }
+    }
+
+    #[test]
+    fn move_col_preserves_col_width() {
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell(col_width: Some(300u32)) { paragraph { text("A") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("B") } }
+                        table_cell(col_width: Some(200u32)) { paragraph { text("C") } }
+                    }
+                    table_row {
+                        table_cell(col_width: Some(300u32)) { paragraph { text("D") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("E") } }
+                        table_cell(col_width: Some(200u32)) { paragraph { text("F") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| move_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Vertical,
+            0,
+            2
+        ));
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        let rows: Vec<_> = table.child_blocks().collect();
+        let cols: Vec<(String, Option<u32>)> = rows[0]
+            .child_blocks()
+            .map(|cell| {
+                let text = cell
+                    .child_blocks()
+                    .next()
+                    .map(|p| p.inline_text())
+                    .unwrap_or_default();
+                let width = match cell.node() {
+                    editor_model::Node::TableCell(n) => *n.col_width.get(),
+                    _ => panic!("expected a table cell"),
+                };
+                (text, width)
+            })
+            .collect();
+        assert_eq!(
+            cols,
+            vec![
+                ("B".to_string(), Some(100)),
+                ("C".to_string(), Some(200)),
+                ("A".to_string(), Some(300)),
+            ],
+            "the moved column carries its col_width to the new position"
+        );
     }
 }

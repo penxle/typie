@@ -2,7 +2,7 @@ use editor_state::{Affinity, Selection};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::{delete_selection_range, insert_text_at_caret};
+use crate::helpers::replace_range_with_text;
 
 pub fn replace_tracked_range(
     tr: &mut Transaction,
@@ -16,11 +16,9 @@ pub fn replace_tracked_range(
         return Ok(false);
     }
 
-    tr.set_selection(Some(selection))?;
-    delete_selection_range(tr, selection)?;
+    let changed = replace_range_with_text(tr, selection, replacement, None)?;
 
-    if !replacement.is_empty() {
-        insert_text_at_caret(tr, replacement)?;
+    if changed && !replacement.is_empty() {
         // insert_text_at_caret leaves an Upstream caret (typing semantics); a
         // programmatic replace lands the caret looking at the following content.
         if let Some(mut head) = tr.selection().map(|s| s.head) {
@@ -29,7 +27,7 @@ pub fn replace_tracked_range(
         }
     }
 
-    Ok(true)
+    Ok(changed)
 }
 
 #[cfg(test)]
@@ -83,6 +81,24 @@ mod tests {
         };
         let sel = Selection::collapsed(editor_state::Position::new(p1, 2));
         transact_fail!(initial, |tr| replace_tracked_range(&mut tr, sel, "x"));
+    }
+
+    #[test]
+    fn find_replace_keeps_italic() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("가나") [italic] } } }
+            selection: (p1, 0)
+        };
+        let sel = Selection::new(
+            editor_state::Position::new(p1, 0),
+            editor_state::Position::new(p1, 2),
+        );
+        let (actual, ..) = transact!(initial, |tr| replace_tracked_range(&mut tr, sel, "다라마"));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("다라마") [italic] } } }
+            selection: (p1, 3)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]

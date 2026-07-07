@@ -250,6 +250,33 @@ mod tests {
     }
 
     #[test]
+    fn split_by_fragment_leaves_right_carry_empty_and_left_unchanged() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph carry([bold]) { text("HelloWorld") } } }
+            selection: (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
+        let view = actual.view();
+        let blocks: Vec<_> = view.root().unwrap().child_blocks().collect();
+        let left = blocks[0].id();
+        let right = blocks[1].id();
+        assert_eq!(
+            left, p1,
+            "the original paragraph is the left half of the split"
+        );
+        let left_carry = actual.projected.carry_modifiers(left);
+        assert!(
+            left_carry.values().any(|m| matches!(m, Modifier::Bold)),
+            "the original left paragraph keeps its carry, got {left_carry:?}"
+        );
+        assert!(
+            actual.projected.carry_modifiers(right).is_empty(),
+            "the split-off right paragraph has no carry (no implicit copy on a non-command split), got {:?}",
+            actual.projected.carry_modifiers(right)
+        );
+    }
+
+    #[test]
     fn rejects_when_parent_disallows_node_type() {
         let (initial, ..) = state! {
             doc { root { blockquote { p1: paragraph { text("Hello") } } } }

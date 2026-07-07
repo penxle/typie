@@ -1,7 +1,7 @@
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::commands::surround_selection;
+use crate::helpers::surround_selection;
 
 const AUTO_SURROUND_PAIRS: &[(&str, &str, &str)] = &[
     ("(", "(", ")"),

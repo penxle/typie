@@ -86,6 +86,7 @@ pub fn walk<'a>(
                         out.push(Fragment {
                             node: plain_node,
                             modifiers: new_pending,
+                            carry: vec![],
                             children: kids,
                         });
                     }

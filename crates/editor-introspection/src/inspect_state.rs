@@ -167,7 +167,7 @@ fn write_tree_node(
 
             write_node_attrs_tree(&node.node(), output);
             write_modifiers_tree(&explicit_block_mods(pd, node.id()), output);
-            write_node_marker_tree(node, pd, output);
+            write_node_carry_tree(node, pd, output);
             output.push('\n');
 
             let child_prefix = if is_last {
@@ -296,20 +296,14 @@ fn write_node_attrs_tree(node: &Node, output: &mut String) {
     }
 }
 
-fn write_node_marker_tree(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
-    let Some(marker) = pd
-        .node_markers
-        .get(&node.id())
-        .and_then(|o| o.as_ref())
-        .filter(|m| !m.is_empty())
-    else {
+fn write_node_carry_tree(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
+    let carry = pd.carry_modifiers(node.id());
+    if carry.is_empty() {
         return;
-    };
-    output.push_str(" marker=");
-    let mut mods: Vec<Modifier> = marker.modifiers.clone();
-    mods.sort_by_key(|m| m.as_type());
+    }
+    output.push_str(" carry=");
     output.push('[');
-    for (i, m) in mods.iter().enumerate() {
+    for (i, m) in carry.values().enumerate() {
         if i > 0 {
             output.push_str(", ");
         }
@@ -555,28 +549,28 @@ selection: (p1, 0, >)
     }
 
     #[test]
-    fn marker_modifiers_shown() {
+    fn carry_modifiers_shown() {
         let (state, ..) = state! {
             doc {
                 root {
-                    p1: paragraph marker([bold]) {}
+                    p1: paragraph carry([bold]) {}
                 }
             }
             selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
         let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
-        assert!(para_line.contains("marker="), "got:\n{output}");
+        assert!(para_line.contains("carry="), "got:\n{output}");
         assert!(para_line.contains("[bold]"), "got:\n{output}");
     }
 
     #[test]
-    fn marker_omitted_when_absent() {
+    fn carry_omitted_when_absent() {
         let (state, ..) = state! {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
         let output = inspect_state(&state, &opts());
-        assert!(!output.contains("marker="), "got:\n{output}");
+        assert!(!output.contains("carry="), "got:\n{output}");
     }
 }

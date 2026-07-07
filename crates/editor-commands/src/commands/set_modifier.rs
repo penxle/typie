@@ -1,11 +1,11 @@
 use editor_crdt::Dot;
 use editor_model::{DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, leaf_span_in_range};
+use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    apply_modifier_to_node, collect_applicable_targets_in_range, is_table_justify,
-    is_text_applicable, is_unit_variant, resolve_applicable_target_collapsed,
+    apply_modifier_to_node, collect_applicable_targets_in_range, is_table_justify, is_unit_variant,
+    resolve_applicable_target_collapsed, set_modifier_range_text,
 };
 use crate::{CommandError, CommandResult};
 
@@ -25,12 +25,12 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
         return Ok(false);
     };
     let collapsed = selection.anchor == selection.head;
-    let text_applicable = is_text_applicable(modifier_type);
+    let text_applicable = modifier_type.is_text_applicable();
 
     match (collapsed, text_applicable) {
         (true, true) => set_modifier_collapsed_text(tr, &modifier),
         (true, false) => set_modifier_collapsed_block(tr, &modifier),
-        (false, true) => set_modifier_range_text(tr, &modifier),
+        (false, true) => set_modifier_range_text(tr, selection, &modifier),
         (false, false) => set_modifier_range_block(tr, &modifier),
     }
 }
@@ -66,6 +66,9 @@ fn provided_and_override(
 
 fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
     let modifier_type = modifier.as_type();
+    if !modifier_type.is_carry_kind() {
+        return Ok(false);
+    }
     let pos = tr
         .selection()
         .expect("entry caller guaranteed selection")
@@ -121,33 +124,6 @@ fn set_modifier_collapsed_block(tr: &mut Transaction, modifier: &Modifier) -> Co
         return Ok(false);
     }
     apply_modifier_to_node(tr, target, modifier)?;
-    Ok(true)
-}
-
-fn set_modifier_range_text(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
-    let modifier_type = modifier.as_type();
-    let selection = tr.selection().expect("entry caller guaranteed selection");
-
-    let (first, last, inherited_eq) = {
-        let view = tr.view();
-        let rs = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let Some((first, last)) = leaf_span_in_range(&rs) else {
-            return Ok(false);
-        };
-        let from_block = rs.from().node();
-        let inherited = view
-            .node(from_block)
-            .and_then(|n| n.effective().get(&modifier_type).cloned());
-        (first, last, inherited.as_ref() == Some(modifier))
-    };
-
-    if inherited_eq {
-        tr.remove_span_modifier(first, last, modifier.clone())?;
-    } else {
-        tr.add_span_modifier(first, last, modifier.clone())?;
-    }
     Ok(true)
 }
 
@@ -291,6 +267,42 @@ mod tests {
     }
 
     #[test]
+    fn collapsed_set_link_returns_false_without_pending() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact_fail!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::Link {
+                href: "https://a.com".to_string()
+            }
+        ));
+        assert!(
+            actual.pending_modifiers.is_empty(),
+            "collapsed link must not create pending"
+        );
+    }
+
+    #[test]
+    fn collapsed_set_ruby_returns_false_without_pending() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } } }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact_fail!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::Ruby {
+                text: "x".to_string()
+            }
+        ));
+        assert!(
+            actual.pending_modifiers.is_empty(),
+            "collapsed ruby must not create pending"
+        );
+    }
+
+    #[test]
     fn collapsed_set_unit_variant_rejected() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
@@ -317,7 +329,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_size(1600)] {
-                    p1: paragraph { text("HelloWorld") [font_size(2400)] }
+                    p1: paragraph carry([font_size(2400)]) { text("HelloWorld") [font_size(2400)] }
                 }
             }
             selection: (p1, 0) -> (p1, 10)
@@ -399,7 +411,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root [font_size(1600)] {
-                    p1: paragraph { text("Hello") [font_size(3200)] }
+                    p1: paragraph carry([font_size(3200)]) { text("Hello") [font_size(3200)] }
                 }
             }
             selection: (p1, 0) -> (p1, 5)
@@ -454,7 +466,7 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    p1: paragraph {
+                    p1: paragraph carry([font_size(2400)]) {
                         text("1")
                         text("2") [font_size(2400)]
                     }
@@ -481,8 +493,8 @@ mod tests {
         ));
         let (expected, ..) = state! {
             doc { r: root {
-                paragraph { text("hello") [font_size(2400)] }
-                paragraph { text("world") [font_size(2400)] }
+                paragraph carry([font_size(2400)]) { text("hello") [font_size(2400)] }
+                paragraph carry([font_size(2400)]) { text("world") [font_size(2400)] }
             } }
             selection: (r, 0, >) -> (r, 2, <)
         };
@@ -724,5 +736,154 @@ mod tests {
             None,
             "table alignment target is skipped for justify"
         );
+    }
+
+    #[test]
+    fn cross_paragraph_records_carry_on_both_when_end_touched() {
+        let (initial, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") }
+            } }
+            selection: (p1, 2) -> (p2, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        assert_eq!(
+            actual
+                .projected
+                .carry_modifiers(p1)
+                .get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 2400 }),
+            "p1 is selected through its end (middle-block rule)"
+        );
+        assert_eq!(
+            actual
+                .projected
+                .carry_modifiers(p2)
+                .get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 2400 }),
+            "p2 end is touched"
+        );
+    }
+
+    #[test]
+    fn cross_paragraph_second_middle_leaves_its_carry_untouched() {
+        let (initial, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("Hello") }
+                p2: paragraph { text("World") }
+            } }
+            selection: (p1, 2) -> (p2, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        assert_eq!(
+            actual
+                .projected
+                .carry_modifiers(p1)
+                .get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 2400 })
+        );
+        assert!(
+            actual.projected.carry_modifiers(p2).is_empty(),
+            "selection ends in the middle of p2 → its carry is untouched"
+        );
+    }
+
+    #[test]
+    fn empty_middle_paragraph_records_carry() {
+        let (initial, _p1, p2, _p3) = state! {
+            doc { root {
+                p1: paragraph { text("Hello") }
+                p2: paragraph {}
+                p3: paragraph { text("World") }
+            } }
+            selection: (p1, 0) -> (p3, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        assert_eq!(
+            actual
+                .projected
+                .carry_modifiers(p2)
+                .get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 2400 }),
+            "an empty paragraph strictly inside the range records carry"
+        );
+    }
+
+    #[test]
+    fn range_set_to_inherited_removes_carry_at_end() {
+        let (initial, p1) = state! {
+            doc {
+                root [font_size(1600)] {
+                    p1: paragraph carry([font_size(2400)]) {
+                        text("Hello") [font_size(2400)]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 1600 }
+        ));
+        assert!(
+            !actual
+                .projected
+                .carry_modifiers(p1)
+                .contains_key(&ModifierType::FontSize),
+            "setting the block's inherited value unsets carry"
+        );
+    }
+
+    #[test]
+    fn cell_rect_records_carry_on_all_cell_paragraphs_including_empty() {
+        use editor_state::{State, cell_rect_selection};
+
+        let (initial, r0c0, pa, pb, pc, r1c1, pd) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        r0c0: table_cell { pa: paragraph { text("A") } }
+                        table_cell { pb: paragraph {} }
+                    }
+                    table_row {
+                        table_cell { pc: paragraph { text("C") } }
+                        r1c1: table_cell { pd: paragraph { text("D") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let sel = {
+            let view = initial.view();
+            cell_rect_selection(r0c0, r1c1, &view).unwrap()
+        };
+        let initial = State {
+            selection: Some(sel),
+            ..initial
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 1400 }
+        ));
+        for p in [pa, pb, pc, pd] {
+            assert_eq!(
+                actual
+                    .projected
+                    .carry_modifiers(p)
+                    .get(&ModifierType::FontSize),
+                Some(&Modifier::FontSize { value: 1400 }),
+                "every paragraph in the selected cells (empty included) records carry"
+            );
+        }
     }
 }

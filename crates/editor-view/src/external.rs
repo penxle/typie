@@ -119,7 +119,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         AtomLeaf, DocLogs, DocView, ImageNodeAttr, ModifierAttrLog, Node, NodeAttr, NodeAttrLog,
-        NodeAttrOp, NodeMarkerLog, NodeType, SeqItem, SpanLog, project_document,
+        NodeAttrOp, NodeType, SeqItem, SpanLog, project_document,
     };
     use editor_resource::Resource;
     use editor_state::{Position, Selection};
@@ -149,7 +149,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

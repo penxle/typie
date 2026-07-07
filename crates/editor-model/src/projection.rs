@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use editor_crdt::Dot;
 use editor_crdt::OpLog;
@@ -8,10 +8,7 @@ use crate::{
     BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog, ModifierType, NodeType,
     OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
-use crate::{
-    Marker, Node, NodeAttrLog, NodeMarkerLog, SeqItem, SpanLog, normalize, project_blocks,
-    validate_block_tree,
-};
+use crate::{Node, NodeAttrLog, SeqItem, SpanLog, normalize, project_blocks, validate_block_tree};
 
 #[derive(Debug)]
 pub enum ProjectionError {
@@ -26,7 +23,7 @@ pub struct DocLogs {
     pub spans: SpanLog,
     pub block_modifiers: ModifierAttrLog,
     pub node_attrs: NodeAttrLog,
-    pub node_markers: NodeMarkerLog,
+    pub node_carries: ModifierAttrLog,
 }
 
 /// A leaf's effective-modifier map, shared by reference: every leaf of a
@@ -46,7 +43,7 @@ pub struct ProjectedDoc {
     pub seg_index: crate::span::BlockSegs,
     pub block_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub node_attrs: imbl::HashMap<Dot, Node>,
-    pub node_markers: imbl::HashMap<Dot, Option<Marker>>,
+    pub node_carries: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
 }
 
 impl ProjectedDoc {
@@ -61,8 +58,24 @@ impl ProjectedDoc {
             return false;
         }
         self.node_attrs.remove(&leaf);
-        self.node_markers.remove(&leaf);
+        self.node_carries.remove(&leaf);
         true
+    }
+
+    /// Carry modifiers of `block` a caret/insert/aggregate consumer may read:
+    /// per-type LWW winners restricted to the carryable kinds and valid values.
+    /// The sole sanctioned read of `node_carries` for interpretation; structural
+    /// reproduction (revert/undo) reads the log directly.
+    pub fn carry_modifiers(&self, block: Dot) -> BTreeMap<ModifierType, Modifier> {
+        self.node_carries
+            .get(&block)
+            .map(|m| {
+                m.iter()
+                    .filter(|(ty, v)| ty.is_carry_kind() && v.is_valid())
+                    .map(|(ty, v)| (*ty, v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     // `derive_block_effective` emits an entry for every block (empty or not), so
@@ -87,7 +100,7 @@ impl PartialEq for ProjectedDoc {
             && self.block_effective == o.block_effective
             && self.block_modifiers == o.block_modifiers
             && self.node_attrs == o.node_attrs
-            && self.node_markers == o.node_markers
+            && self.node_carries == o.node_carries
             && self.seg_index == o.seg_index
     }
 }
@@ -121,10 +134,6 @@ fn collect_real_nodes(tree: &BlockTree) -> HashMap<Dot, Node> {
     out
 }
 
-fn filter_live<T: Clone>(map: imbl::HashMap<Dot, T>, live: &HashSet<Dot>) -> imbl::HashMap<Dot, T> {
-    map.into_iter().filter(|(d, _)| live.contains(d)).collect()
-}
-
 fn collect_block_modifiers(
     tree: &BlockTree,
     log: &ModifierAttrLog,
@@ -137,6 +146,47 @@ fn collect_block_modifiers(
     ) {
         if let Some(d) = anchor_dot(node.id) {
             let m = log.modifiers_of(d);
+            if !m.is_empty() {
+                out.insert(d, m);
+            }
+        }
+        for c in &node.children {
+            if let Child::Block(id) = c
+                && let Some(b) = tree.get(*id)
+            {
+                walk(tree, b, log, out);
+            }
+        }
+    }
+    let mut out = imbl::HashMap::new();
+    if let Some(r) = tree.root_node() {
+        walk(tree, r, log, &mut out);
+    }
+    out
+}
+
+/// Reflect live carry records onto their target blocks. Two kinds are silently
+/// dropped here — the projection is the final guard against carry inflow — so
+/// they never reach interpretation regardless of how the log op arrived: records
+/// of a non-carry kind, and records whose target is not a text block.
+fn collect_node_carries(
+    tree: &BlockTree,
+    log: &ModifierAttrLog,
+) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+    fn walk(
+        tree: &BlockTree,
+        node: &BlockNode,
+        log: &ModifierAttrLog,
+        out: &mut imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    ) {
+        if let Some(d) = anchor_dot(node.id)
+            && node.node_type.spec().is_textblock()
+        {
+            let m: BTreeMap<ModifierType, Modifier> = log
+                .modifiers_of(d)
+                .into_iter()
+                .filter(|(ty, _)| ty.is_carry_kind())
+                .collect();
             if !m.is_empty() {
                 out.insert(d, m);
             }
@@ -644,11 +694,10 @@ pub fn project_from_tree<R: SeqResolve>(
     logs: &DocLogs,
 ) -> ProjectedDoc {
     let node_of = collect_real_nodes(&tree);
-    let live: HashSet<Dot> = node_of.keys().copied().collect();
     let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
     let node_attrs = logs.node_attrs.project(|d| node_of.get(&d).cloned());
-    let node_markers = filter_live(logs.node_markers.project(), &live);
+    let node_carries = collect_node_carries(&tree, &logs.node_carries);
 
     let block_effective = block_effective_all(&tree, &logs.block_modifiers, &node_attrs);
 
@@ -658,7 +707,7 @@ pub fn project_from_tree<R: SeqResolve>(
         seg_index: crate::span::BlockSegs::new(),
         block_modifiers,
         node_attrs,
-        node_markers,
+        node_carries,
     };
 
     let paths = BlockPaths::from_tree(&pd.tree);
@@ -695,6 +744,8 @@ fn block_effective_all(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::{AtomLeaf, SeqItem, project_blocks};
 
@@ -783,7 +834,7 @@ mod tests {
             seg_index: crate::span::BlockSegs::new(),
             block_modifiers: imbl::HashMap::new(),
             node_attrs: imbl::HashMap::new(),
-            node_markers: imbl::HashMap::new(),
+            node_carries: imbl::HashMap::new(),
         };
         let idx = ProjectionIndexes::rebuild_from(&projected, &SpanLog::new());
         assert_eq!(idx.paths, BlockPaths::from_tree(&tree));
@@ -815,22 +866,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn filter_live_keeps_only_live_keys() {
-        let mut m: imbl::HashMap<Dot, u32> = imbl::HashMap::new();
-        m.insert(Dot::new(1, 1), 10);
-        m.insert(Dot::new(9, 9), 20);
-        let live: HashSet<Dot> = [Dot::new(1, 1)].into_iter().collect();
-        let out = filter_live(m, &live);
-        assert_eq!(out.len(), 1);
-        assert_eq!(out.get(&Dot::new(1, 1)), Some(&10));
-    }
-
     use crate::{
         Anchor, Bias, CalloutNodeAttr, CalloutVariant, ImageNodeAttr, Modifier, ModifierAttrOp,
-        ModifierType, NodeAttr, NodeAttrOp, NodeLwwOp, SpanOp,
+        ModifierType, NodeAttr, NodeAttrOp, SpanOp,
     };
-    use editor_crdt::{InputEvent, ListOp, LwwRegOp, build_oplog};
+    use editor_crdt::{InputEvent, ListOp, build_oplog};
 
     fn events(items: &[(Dot, SeqItem)]) -> Vec<InputEvent<SeqItem>> {
         let mut ev = Vec::new();
@@ -855,7 +895,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 
@@ -1030,22 +1070,21 @@ mod tests {
                 },
             )
             .unwrap();
-        l.node_markers = NodeMarkerLog::new()
+        l.node_carries = ModifierAttrLog::new()
             .apply(
                 Dot::new(2, 2),
-                NodeLwwOp {
+                ModifierAttrOp::SetModifier {
                     target: callout,
-                    op: LwwRegOp::Set {
-                        value: Some(Marker {
-                            modifiers: vec![Modifier::Bold],
-                        }),
-                    },
+                    modifier: Modifier::Bold,
                 },
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
         assert!(pd.node_attrs.contains_key(&callout));
-        assert!(pd.node_markers.get(&callout).is_some());
+        assert!(
+            !pd.node_carries.contains_key(&callout),
+            "a non-text block (callout) does not hold carry records"
+        );
     }
 
     #[test]
@@ -1402,21 +1441,17 @@ mod tests {
     fn stale_overlay_does_not_leak() {
         let (elems, _root, _para) = para_abc();
         let mut l = logs_of(&elems);
-        l.node_markers = NodeMarkerLog::new()
+        l.node_carries = ModifierAttrLog::new()
             .apply(
                 Dot::new(2, 0),
-                NodeLwwOp {
+                ModifierAttrOp::SetModifier {
                     target: Dot::new(9, 9),
-                    op: LwwRegOp::Set {
-                        value: Some(Marker {
-                            modifiers: vec![Modifier::Bold],
-                        }),
-                    },
+                    modifier: Modifier::Bold,
                 },
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
-        assert!(!pd.node_markers.contains_key(&Dot::new(9, 9)));
+        assert!(!pd.node_carries.contains_key(&Dot::new(9, 9)));
     }
 
     #[test]
@@ -1456,21 +1491,17 @@ mod tests {
             ),
         ];
         let mut l = logs_of(&elems);
-        l.node_markers = NodeMarkerLog::new()
+        l.node_carries = ModifierAttrLog::new()
             .apply(
                 Dot::new(2, 0),
-                NodeLwwOp {
+                ModifierAttrOp::SetModifier {
                     target: loser,
-                    op: LwwRegOp::Set {
-                        value: Some(Marker {
-                            modifiers: vec![Modifier::Bold],
-                        }),
-                    },
+                    modifier: Modifier::Bold,
                 },
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
-        assert!(!pd.node_markers.contains_key(&loser));
+        assert!(!pd.node_carries.contains_key(&loser));
     }
 
     #[test]
@@ -1590,7 +1621,7 @@ mod tests {
 
             let all_ids: HashSet<Dot> = live.keys().copied().collect();
             for d in pd.node_attrs.keys() { prop_assert!(all_ids.contains(d)); }
-            for d in pd.node_markers.keys() { prop_assert!(all_ids.contains(d)); }
+            for d in pd.node_carries.keys() { prop_assert!(all_ids.contains(d)); }
             for d in pd.block_modifiers.keys() { prop_assert!(all_ids.contains(d)); }
 
             fn collect_block_ids(tree: &BlockTree, node: &BlockNode, out: &mut HashSet<Dot>) {

@@ -4,13 +4,15 @@ use editor_transaction::Transaction;
 
 use crate::CommandError;
 use crate::helpers::insert_slice_at_position;
+use crate::types::SliceProvenance;
 
 pub fn insert_slice_at(
     tr: &mut Transaction,
     position: Position,
     slice: Slice,
+    provenance: SliceProvenance,
 ) -> Result<Option<Selection>, CommandError> {
-    insert_slice_at_position(tr, position, slice)
+    insert_slice_at_position(tr, position, slice, provenance)
 }
 
 #[cfg(test)]
@@ -32,6 +34,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                carry: vec![],
                 children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             },
             open_start: 0,
@@ -43,6 +46,7 @@ mod tests {
         Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
+            carry: vec![],
             children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: text.into(),
             }))],
@@ -81,10 +85,14 @@ mod tests {
         let root = initial.view().root().unwrap().id();
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection =
-            insert_slice_at(&mut tr, Position::new(root, 1), Slice::from_text("dropped"))
-                .expect("insert succeeds")
-                .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(root, 1),
+            Slice::from_text("dropped"),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -127,9 +135,14 @@ mod tests {
         let root = initial.view().root().unwrap().id();
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection = insert_slice_at(&mut tr, Position::new(root, 1), image_slice())
-            .expect("insert succeeds")
-            .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(root, 1),
+            image_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -163,9 +176,14 @@ mod tests {
         let root = initial.view().root().unwrap().id();
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection = insert_slice_at(&mut tr, Position::new(p1, 3), image_slice())
-            .expect("insert succeeds")
-            .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 3),
+            image_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -201,6 +219,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                carry: vec![],
                 children: vec![paragraph_fragment("A"), paragraph_fragment("B")],
             },
             open_start: 0,
@@ -208,9 +227,14 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection = insert_slice_at(&mut tr, Position::new(p1, 3), slice)
-            .expect("insert succeeds")
-            .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 3),
+            slice,
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -251,6 +275,7 @@ mod tests {
             fragment: Fragment {
                 node: PlainNode::Root(PlainRootNode::default()),
                 modifiers: vec![],
+                carry: vec![],
                 children: vec![paragraph_fragment("first"), paragraph_fragment("second")],
             },
             open_start: 2,
@@ -258,9 +283,14 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection = insert_slice_at(&mut tr, Position::new(p1, 5), slice)
-            .expect("insert succeeds")
-            .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 5),
+            slice,
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -296,9 +326,14 @@ mod tests {
         let root = initial.view().root().unwrap().id();
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection = insert_slice_at(&mut tr, Position::new(p, 0), image_slice())
-            .expect("insert succeeds")
-            .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(p, 0),
+            image_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -344,9 +379,14 @@ mod tests {
         );
 
         let mut tr = Transaction::new(&initial);
-        let inserted_selection = insert_slice_at(&mut tr, Position::new(synth_p, 0), image_slice())
-            .expect("insert succeeds")
-            .expect("slice inserted");
+        let inserted_selection = insert_slice_at(
+            &mut tr,
+            Position::new(synth_p, 0),
+            image_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
         let (actual, ..) = tr.commit();
 
         let view = actual.view();

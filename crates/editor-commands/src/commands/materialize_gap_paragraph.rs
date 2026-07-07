@@ -122,4 +122,40 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn gap_materialized_paragraph_has_empty_carry() {
+        let (initial, _r) = state! {
+            doc { r: root { image paragraph carry([bold]) { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| materialize_gap_paragraph(&mut tr));
+        let new_para = actual.selection.unwrap().head.node;
+        assert!(
+            actual.projected.carry_modifiers(new_para).is_empty(),
+            "a paragraph materialized at a gap starts with no carry even next to a carrying sibling, got {:?}",
+            actual.projected.carry_modifiers(new_para)
+        );
+    }
+
+    #[test]
+    fn typing_at_gap_before_unit_yields_document_default() {
+        let (initial, _r) = state! {
+            doc { r: root { image paragraph carry([bold]) { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(materialize_gap_paragraph(&mut tr).unwrap());
+        assert!(crate::commands::insert_text(&mut tr, "가").unwrap());
+        let (actual, ..) = tr.commit();
+        let (expected, ..) = state! {
+            doc { root {
+                p1: paragraph { text("가") }
+                image
+                paragraph carry([bold]) { text("b") }
+            } }
+            selection: (p1, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
 }

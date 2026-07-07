@@ -128,7 +128,7 @@ fn scaffold(node_type: NodeType) -> Subtree {
     Subtree {
         node,
         modifiers: vec![],
-        marker: None,
+        carry: Vec::new(),
         children,
     }
 }

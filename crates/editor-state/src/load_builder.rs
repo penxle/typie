@@ -1,7 +1,9 @@
-use editor_crdt::{Dot, ListOp, LwwRegOp, OpGraph};
+use std::collections::BTreeMap;
+
+use editor_crdt::{Dot, ListOp, OpGraph};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, EditOp, ModifierAttrOp, NodeAttrOp, NodeLwwOp, NodeType, PlainDoc,
-    PlainNode, PlainNodeEntry, PlainTextNode, SeqClass, SeqItem, SpanOp, classify,
+    Anchor, AtomLeaf, Bias, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeAttrOp, NodeType,
+    PlainDoc, PlainNode, PlainNodeEntry, PlainTextNode, SeqClass, SeqItem, SpanOp, classify,
 };
 
 use crate::Selection;
@@ -57,15 +59,19 @@ fn emit_node(
                     }))
                     .expect("local block modifier never conflicts");
             }
-            if let Some(marker) = &entry.marker {
+            let mut carry_by_type: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
+            for m in &entry.carry {
+                if m.as_type().is_carry_kind() {
+                    carry_by_type.insert(m.as_type(), m.clone());
+                }
+            }
+            for modifier in carry_by_type.into_values() {
                 graph
-                    .add_mut(EditOp::NodeMarker(NodeLwwOp {
+                    .add_mut(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                         target: dot,
-                        op: LwwRegOp::Set {
-                            value: Some(marker.clone()),
-                        },
+                        modifier,
                     }))
-                    .expect("local node marker never conflicts");
+                    .expect("local node carry never conflicts");
             }
             for attr in entry.node.to_attrs() {
                 graph
@@ -153,9 +159,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use editor_model::{
-        Alignment, BlockquoteVariant, Marker, Modifier, ModifierType, NodeType,
-        PlainBlockquoteNode, PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode,
-        PlainRootNode, PlainTextNode,
+        Alignment, BlockquoteVariant, Modifier, ModifierType, NodeType, PlainBlockquoteNode,
+        PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
 
     use crate::projected_state::ProjectedState;
@@ -166,7 +171,7 @@ mod tests {
         PlainNodeEntry {
             node,
             modifiers: BTreeMap::new(),
-            marker: None,
+            carry: Vec::new(),
             children,
         }
     }
@@ -235,14 +240,10 @@ mod tests {
                 value: Alignment::Center,
             },
         );
-        let marker = Marker {
-            modifiers: vec![Modifier::Bold],
-        };
-
         let para = PlainNodeEntry {
             node: PlainNode::Paragraph(PlainParagraphNode {}),
             modifiers,
-            marker: Some(marker.clone()),
+            carry: vec![Modifier::Bold],
             children: vec![],
         };
         let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
@@ -267,7 +268,13 @@ mod tests {
                 value: Alignment::Center
             })
         );
-        assert_eq!(state.node_markers().value_of(para_dot), Some(marker));
+        assert_eq!(
+            state
+                .node_carries()
+                .modifiers_of(para_dot)
+                .get(&ModifierType::Bold),
+            Some(&Modifier::Bold)
+        );
     }
 
     #[test]
@@ -280,7 +287,7 @@ mod tests {
                 text: "ab".to_string(),
             }),
             modifiers: text_mods,
-            marker: None,
+            carry: Vec::new(),
             children: vec![],
         };
         let para = block_entry(vec![text], PlainNode::Paragraph(PlainParagraphNode {}));

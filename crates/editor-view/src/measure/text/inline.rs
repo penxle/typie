@@ -207,8 +207,7 @@ mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
         Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp,
-        ModifierType, NodeAttrLog, NodeMarkerLog, NodeType, SeqItem, SpanLog, SpanOp,
-        project_document,
+        ModifierType, NodeAttrLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
 
     fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
@@ -230,7 +229,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 

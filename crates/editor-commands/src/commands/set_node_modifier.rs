@@ -159,7 +159,7 @@ mod tests {
                     .effective()
                     .get(&ModifierType::LineHeight),
                 Some(&Modifier::LineHeight { value: 200 }),
-                "a single root edit reaches every paragraph lacking its own record (SC-BLK-2)"
+                "a single root edit reaches every paragraph lacking its own record"
             );
         }
     }

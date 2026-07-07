@@ -86,6 +86,38 @@ mod tests {
     }
 
     #[test]
+    fn unwrap_callout_preserves_inline_paint() {
+        let (initial, co, ..) = state! {
+            doc {
+                root {
+                    co: callout {
+                        p1: paragraph {
+                            text("plain")
+                            text("bold") [bold]
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (co, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| unwrap_callout(&mut tr, co));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("plain")
+                        text("bold") [bold]
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn unwrap_non_callout_returns_false() {
         let (initial, bq, ..) = state! {
             doc {

@@ -509,4 +509,64 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn lift_preserves_inline_bold() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") [bold] } }
+                        list_item { paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("A") [bold] }
+                    bullet_list { list_item { paragraph { text("B") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn sink_then_lift_roundtrips_inline_bold() {
+        use crate::commands::sink_list_item::sink_list_item;
+        use editor_model::Modifier;
+
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph { text("B") [bold] } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (sunk, ..) = transact!(initial.clone(), |tr| sink_list_item(&mut tr));
+        let (lifted, ..) = transact!(sunk, |tr| lift_list_item(&mut tr));
+
+        let view = lifted.view();
+        let list = view.root().unwrap().child_blocks().next().unwrap();
+        let items: Vec<_> = list.child_blocks().collect();
+        assert_eq!(items.len(), 2, "sink+lift restores two top-level items");
+        let b_para = items[1].child_blocks().next().unwrap();
+        assert_eq!(b_para.inline_text(), "B");
+        assert!(
+            b_para.leaf_own_modifiers_at(0).contains(&Modifier::Bold),
+            "bold survives the sink+lift round-trip"
+        );
+    }
 }

@@ -1,14 +1,15 @@
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, NodeType, NodeView, PlainNode, PlainParagraphNode, PlainTextNode, Subtree,
+    ChildView, DocView, Modifier, NodeType, NodeView, PlainNode, PlainParagraphNode, PlainTextNode,
+    Subtree,
 };
 use editor_state::paragraph_break_at_end;
-use editor_state::{Affinity, Position, Selection, State};
+use editor_state::{Affinity, Position, ProjectedState, Selection};
 use editor_transaction::{Step, Transaction, fulfill};
 
 use super::{
-    apply_first_text_marker_lift, capture_first_text_marker, child_elem_id,
-    find_ancestor_textblock, find_enclosing_paragraph_id, find_lowest_common_ancestor,
+    apply_carry_from_selection, apply_carry_on_emptied, capture_first_charlike_paint,
+    cell_first_charlike_block, child_elem_id, find_ancestor_textblock, find_lowest_common_ancestor,
     is_block_container, merge_element_cross_parent, next_sibling, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
@@ -92,7 +93,7 @@ fn delete_child_slots(
                     } else if l.as_atom().is_some() {
                         slots.push(PlannedSlot::Subtree {
                             index: i,
-                            subtree: capture_atom_leaf_subtree_at(&node, i)?,
+                            subtree: capture_atom_leaf_subtree_at(&state.projected, &node, i)?,
                         });
                     }
                 }
@@ -102,8 +103,8 @@ fn delete_child_slots(
                         slots.push(PlannedSlot::Structural(id));
                     } else {
                         block_slots += 1;
-                        let subtree =
-                            capture_subtree(state, id).ok_or(CommandError::NodeNotFound(id))?;
+                        let subtree = editor_transaction::capture_subtree(&state.projected, id)
+                            .ok_or(CommandError::NodeNotFound(id))?;
                         slots.push(PlannedSlot::Subtree { index: i, subtree });
                     }
                 }
@@ -166,81 +167,41 @@ fn elem_id_of(child: &ChildView) -> Dot {
     }
 }
 
-fn text_subtree(text: String) -> Subtree {
-    Subtree::leaf(PlainNode::Text(PlainTextNode { text }))
-}
-
-/// Snapshot of a projected block's subtree, mirroring the substrate's capture so
-/// the removal step carries the data needed for its inverse. Char runs collapse
-/// into plain `Text` subtrees; atom leaves keep their own modifiers.
-fn capture_subtree(state: &State, block: Dot) -> Option<Subtree> {
-    let view = state.view();
-    let nv = view.node(block)?;
-    let node = nv.node().to_plain();
-    let dot = nv.dot();
-    let modifiers: Vec<_> = dot
-        .map(|d| {
-            state
-                .projected
-                .block_modifiers()
-                .modifiers_of(d)
-                .into_values()
-                .collect()
-        })
-        .unwrap_or_default();
-    let marker = dot.and_then(|d| state.projected.node_markers().value_of(d));
-
-    let mut children: Vec<Subtree> = Vec::new();
-    let mut pending = String::new();
-    for (slot, c) in nv.children().enumerate() {
-        match c {
-            ChildView::Leaf(l) => {
-                if let Some(ch) = l.as_char() {
-                    pending.push(ch);
-                } else if l.as_atom().is_some() {
-                    if !pending.is_empty() {
-                        children.push(text_subtree(std::mem::take(&mut pending)));
-                    }
-                    children.push(capture_atom_leaf_subtree_at(&nv, slot).ok()?);
-                }
-            }
-            ChildView::Block(b) => {
-                if !pending.is_empty() {
-                    children.push(text_subtree(std::mem::take(&mut pending)));
-                }
-                if let Some(sub) = capture_subtree(state, b.id()) {
-                    children.push(sub);
-                }
-            }
-        }
-    }
-    if !pending.is_empty() {
-        children.push(text_subtree(pending));
-    }
-
-    Some(Subtree {
-        node,
+fn text_subtree(text: String, modifiers: Vec<Modifier>) -> Subtree {
+    Subtree {
+        node: PlainNode::Text(PlainTextNode { text }),
         modifiers,
-        marker,
-        children,
-    })
+        carry: Vec::new(),
+        children: Vec::new(),
+    }
 }
 
 pub(crate) fn capture_atom_leaf_subtree_at(
+    ps: &ProjectedState,
     node: &NodeView<'_>,
     index: usize,
 ) -> Result<Subtree, CommandError> {
-    let atom = match node.child_at(index) {
-        Some(ChildView::Leaf(l)) => l
-            .as_atom()
-            .ok_or_else(|| CommandError::Corrupted("expected atom leaf".into()))?
-            .clone(),
+    let (atom, leaf_dot) = match node.child_at(index) {
+        Some(ChildView::Leaf(l)) => (
+            l.as_atom()
+                .ok_or_else(|| CommandError::Corrupted("expected atom leaf".into()))?
+                .clone(),
+            l.dot(),
+        ),
         _ => return Err(CommandError::Corrupted("expected leaf at slot".into())),
+    };
+    let modifiers = if atom.is_block_level() {
+        ps.block_modifiers()
+            .modifiers_of(leaf_dot)
+            .into_values()
+            .collect()
+    } else {
+        node.leaf_own_modifiers_at(index)
     };
     Ok(Subtree {
         node: atom.into_node().to_plain(),
-        modifiers: node.leaf_own_modifiers_at(index),
-        marker: None,
+        modifiers,
+        carry: Vec::new(),
         children: Vec::new(),
     })
 }
@@ -255,11 +216,12 @@ pub(crate) fn remove_atom_leaf(
     index: usize,
 ) -> Result<(), CommandError> {
     let subtree = {
-        let view = tr.state().view();
+        let state = tr.state();
+        let view = state.view();
         let node = view
             .node(parent)
             .ok_or(CommandError::NodeNotFound(parent))?;
-        capture_atom_leaf_subtree_at(&node, index)?
+        capture_atom_leaf_subtree_at(&state.projected, &node, index)?
     };
     tr.apply_steps(vec![Step::RemoveSubtree {
         parent,
@@ -286,8 +248,8 @@ pub(crate) fn remove_subtree_full(tr: &mut Transaction, child_id: Dot) -> Result
                     .children()
                     .position(|c| elem_id_of(&c) == child_id)
                     .ok_or_else(|| CommandError::orphan_child(child_id, parent_id))?;
-                let subtree =
-                    capture_subtree(state, child_id).ok_or(CommandError::NodeNotFound(child_id))?;
+                let subtree = editor_transaction::capture_subtree(&state.projected, child_id)
+                    .ok_or(CommandError::NodeNotFound(child_id))?;
                 (parent_id, index, subtree)
             }
             None => {
@@ -304,9 +266,9 @@ pub(crate) fn remove_subtree_full(tr: &mut Transaction, child_id: Dot) -> Result
                         && l.dot() == dot
                     {
                         let subtree = if let Some(ch) = l.as_char() {
-                            text_subtree(ch.to_string())
+                            text_subtree(ch.to_string(), parent.leaf_own_modifiers_at(i))
                         } else {
-                            capture_atom_leaf_subtree_at(&parent, i)?
+                            capture_atom_leaf_subtree_at(&state.projected, &parent, i)?
                         };
                         found = Some((i, subtree));
                         break;
@@ -432,6 +394,21 @@ pub(crate) fn selection_for_node(
 }
 
 pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection) -> CommandResult {
+    delete_selection_range_carry(tr, selection, true)
+}
+
+pub(crate) fn delete_selection_range_no_carry(
+    tr: &mut Transaction,
+    selection: Selection,
+) -> CommandResult {
+    delete_selection_range_carry(tr, selection, false)
+}
+
+fn delete_selection_range_carry(
+    tr: &mut Transaction,
+    selection: Selection,
+    write_carry: bool,
+) -> CommandResult {
     let selection = lower_exact_empty_paragraph_break_delete_range(tr, selection);
     if selection.anchor == selection.head {
         return Ok(false);
@@ -463,12 +440,32 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
             cell_ids,
             anchor_id,
         } => {
+            let captured: Vec<(Dot, _)> = {
+                let state = tr.state();
+                let view = state.view();
+                cell_ids
+                    .iter()
+                    .filter_map(|&cell_id| {
+                        let block = cell_first_charlike_block(&view, cell_id)
+                            .or_else(|| find_first_text_position(&view, cell_id).map(|p| p.node))?;
+                        Some((cell_id, capture_first_charlike_paint(state, block)))
+                    })
+                    .collect()
+            };
             tr.batch::<_, CommandError>(|tr| {
-                for cell_id in cell_ids {
-                    clear_structural_subtree(tr, cell_id)?;
+                for cell_id in &cell_ids {
+                    clear_structural_subtree(tr, *cell_id)?;
                 }
                 Ok(())
             })?;
+            if write_carry {
+                for (cell_id, cap) in &captured {
+                    let target = materialize_cell_textblock(tr, *cell_id)?;
+                    if let Some(target) = target {
+                        apply_carry_on_emptied(tr, target, cap)?;
+                    }
+                }
+            }
             let cursor = {
                 let view = tr.state().view();
                 find_first_text_position(&view, anchor_id)
@@ -477,7 +474,7 @@ pub(crate) fn delete_selection_range(tr: &mut Transaction, selection: Selection)
             tr.set_selection(Some(Selection::collapsed(cursor)))?;
             Ok(true)
         }
-        Plan::Range { from, to } => delete_resolved_range(tr, from, to),
+        Plan::Range { from, to } => delete_resolved_range(tr, from, to, write_carry),
     }
 }
 
@@ -486,14 +483,20 @@ enum Plan {
     Range { from: Position, to: Position },
 }
 
-fn delete_resolved_range(tr: &mut Transaction, from: Position, to: Position) -> CommandResult {
-    let captured = {
-        let captured_paragraph_id = {
-            let view = tr.state().view();
-            find_enclosing_paragraph_id(&view, from.node)
-        };
-        captured_paragraph_id.and_then(|id| capture_first_text_marker(tr.state(), id))
-    };
+fn delete_resolved_range(
+    tr: &mut Transaction,
+    from: Position,
+    to: Position,
+    write_carry: bool,
+) -> CommandResult {
+    let captured = write_carry
+        .then(|| {
+            let state = tr.state();
+            let view = state.view();
+            first_textblock_in_range(&view, &from)
+                .map(|block| capture_first_charlike_paint(state, block))
+        })
+        .flatten();
 
     if from.node == to.node {
         let is_container = {
@@ -522,8 +525,8 @@ fn delete_resolved_range(tr: &mut Transaction, from: Position, to: Position) -> 
                 affinity: Affinity::Downstream,
             })))?;
         }
-        if let Some(captured) = captured {
-            apply_first_text_marker_lift(tr, &captured)?;
+        if let Some(captured) = &captured {
+            apply_carry_from_selection(tr, captured)?;
         }
         return Ok(true);
     }
@@ -543,6 +546,10 @@ fn delete_resolved_range(tr: &mut Transaction, from: Position, to: Position) -> 
         to_path.push(to.offset);
         (lca_id, from_tb, to_tb, from_path, to_path)
     };
+
+    let to_captured = write_carry
+        .then(|| to_tb.map(|tb| capture_first_charlike_paint(tr.state(), tb)))
+        .flatten();
 
     let from_node_id = from.node;
     let to_node_id = to.node;
@@ -568,10 +575,56 @@ fn delete_resolved_range(tr: &mut Transaction, from: Position, to: Position) -> 
     };
     tr.set_selection(Some(selection))?;
 
-    if let Some(captured) = captured {
-        apply_first_text_marker_lift(tr, &captured)?;
+    if let Some(captured) = &captured {
+        apply_carry_from_selection(tr, captured)?;
+    }
+    if let (Some(to_tb), Some(to_captured)) = (to_tb, &to_captured) {
+        apply_carry_on_emptied(tr, to_tb, to_captured)?;
     }
     Ok(true)
+}
+
+fn materialize_cell_textblock(
+    tr: &mut Transaction,
+    cell: Dot,
+) -> Result<Option<Dot>, CommandError> {
+    let existing = {
+        let view = tr.state().view();
+        find_first_text_position(&view, cell)
+            .map(|p| p.node)
+            .filter(|d| d.as_op_dot().is_some())
+    };
+    if existing.is_some() {
+        return Ok(existing);
+    }
+    tr.insert_subtree(
+        cell,
+        0,
+        Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default())),
+    )?;
+    let materialized = {
+        let view = tr.state().view();
+        find_first_text_position(&view, cell)
+            .map(|p| p.node)
+            .filter(|d| d.as_op_dot().is_some())
+    };
+    Ok(materialized)
+}
+
+fn first_textblock_in_range(view: &DocView, from: &Position) -> Option<Dot> {
+    if let Some(block) = find_ancestor_textblock(view, from.node) {
+        return Some(block);
+    }
+    let node = view.node(from.node)?;
+    let count = node.children().count();
+    for idx in from.offset..count {
+        if let Some(ChildView::Block(b)) = node.child_at(idx)
+            && let Some(pos) = find_first_text_position(view, b.id())
+        {
+            return Some(pos.node);
+        }
+    }
+    None
 }
 
 fn lower_exact_empty_paragraph_break_delete_range(
@@ -670,10 +723,18 @@ fn ensure_selection_after_child_range_delete(
 }
 
 fn clear_structural_subtree(tr: &mut Transaction, node_id: Dot) -> Result<(), CommandError> {
-    let child_ids: Vec<Dot> = {
-        let view = tr.state().view();
+    let (child_ids, captured) = {
+        let state = tr.state();
+        let view = state.view();
         match view.node(node_id) {
-            Some(n) => n.children().map(|c| elem_id_of(&c)).collect(),
+            Some(n) => {
+                let child_ids: Vec<Dot> = n.children().map(|c| elem_id_of(&c)).collect();
+                let captured = n
+                    .spec()
+                    .is_textblock()
+                    .then(|| capture_first_charlike_paint(state, node_id));
+                (child_ids, captured)
+            }
             None => return Ok(()),
         }
     };
@@ -693,6 +754,9 @@ fn clear_structural_subtree(tr: &mut Transaction, node_id: Dot) -> Result<(), Co
         view.node(node_id).map(|n| fulfill(&n)).unwrap_or_default()
     };
     tr.apply_steps(steps)?;
+    if let Some(captured) = &captured {
+        apply_carry_on_emptied(tr, node_id, captured)?;
+    }
     Ok(())
 }
 
@@ -1237,6 +1301,36 @@ mod tests {
     use super::*;
     use editor_macros::state;
     use editor_model::{ChildView, Modifier};
+
+    #[test]
+    fn remove_subtree_full_captures_char_leaf_modifiers() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a") [bold] } } }
+            selection: (p1, 0)
+        };
+        let ch = {
+            let view = state.view();
+            let paragraph = view.node(p1).expect("paragraph exists");
+            match paragraph.child_at(0).expect("char exists") {
+                ChildView::Leaf(leaf) => leaf.dot(),
+                ChildView::Block(_) => panic!("expected char leaf"),
+            }
+        };
+
+        let mut tr = Transaction::new(&state);
+        remove_subtree_full(&mut tr, ch).unwrap();
+
+        let (_, steps, ..) = tr.commit();
+        let subtree = steps
+            .iter()
+            .find_map(|record| match &record.step {
+                Step::RemoveSubtree { subtree, .. } => Some(subtree),
+                _ => None,
+            })
+            .expect("char deletion must record RemoveSubtree");
+
+        assert_eq!(subtree.modifiers, vec![Modifier::Bold]);
+    }
 
     #[test]
     fn remove_subtree_full_captures_atom_leaf_modifiers() {

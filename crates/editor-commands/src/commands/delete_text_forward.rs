@@ -4,7 +4,7 @@ use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    apply_first_text_marker_lift, capture_first_text_marker, find_enclosing_paragraph_id,
+    apply_carry_from_selection, capture_first_charlike_paint, find_ancestor_textblock,
 };
 use crate::{CommandError, CommandResult};
 
@@ -31,8 +31,8 @@ pub fn delete_text_forward(tr: &mut Transaction, resource: &Resource) -> Command
             return Ok(false);
         }
 
-        let captured = find_enclosing_paragraph_id(&view, pos.node)
-            .and_then(|id| capture_first_text_marker(tr.state(), id));
+        let captured = find_ancestor_textblock(&view, pos.node)
+            .map(|block| capture_first_charlike_paint(tr.state(), block));
 
         let next_offset = pos
             .resolve(&view)
@@ -50,8 +50,8 @@ pub fn delete_text_forward(tr: &mut Transaction, resource: &Resource) -> Command
         affinity: Affinity::Downstream,
     })))?;
 
-    if let Some(captured) = captured {
-        apply_first_text_marker_lift(tr, &captured)?;
+    if let Some(captured) = &captured {
+        apply_carry_from_selection(tr, captured)?;
     }
 
     Ok(true)
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_last_char_forward_lifts_marker() {
+    fn delete_last_char_forward_records_carry() {
         let (initial, p1, ..) = state! {
             doc { root { p1: paragraph { text("A") [bold] } } }
             selection: (p1, 0)
@@ -198,16 +198,12 @@ mod tests {
             &Resource::new_test()
         ));
         let dot = p1;
-        let marker = actual
-            .projected
-            .node_markers()
-            .value_of(dot)
-            .expect("paragraph should have a marker");
-        assert!(marker.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
+        let carry = actual.projected.carry_modifiers(dot);
+        assert!(carry.values().any(|m| matches!(m, Modifier::Bold)));
     }
 
     #[test]
-    fn delete_non_last_char_forward_no_lift() {
+    fn delete_non_last_char_forward_no_carry_change() {
         let (initial, p1, ..) = state! {
             doc { root { p1: paragraph { text("Hi") [bold] } } }
             selection: (p1, 0)
@@ -217,6 +213,6 @@ mod tests {
             &Resource::new_test()
         ));
         let dot = p1;
-        assert!(actual.projected.node_markers().value_of(dot).is_none());
+        assert!(actual.projected.carry_modifiers(dot).is_empty());
     }
 }

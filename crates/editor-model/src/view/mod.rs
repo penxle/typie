@@ -269,6 +269,10 @@ impl<'a> LeafView<'a> {
                 .unwrap_or_else(|| atom.into_node()),
         )
     }
+
+    pub fn is_charlike(&self) -> bool {
+        self.as_char().is_some() || matches!(self.node_type(), NodeType::Tab | NodeType::HardBreak)
+    }
     pub fn parent(&self) -> Option<NodeView<'a>> {
         self.view.node(self.block)
     }
@@ -430,7 +434,7 @@ mod tests {
     use crate::projection::{DocLogs, project_document};
     use crate::{
         Anchor, Bias, Modifier, ModifierAttrLog, ModifierAttrOp, ModifierType, NodeAttr,
-        NodeAttrLog, NodeAttrOp, NodeMarkerLog, SpanLog, SpanOp, TableNodeAttr,
+        NodeAttrLog, NodeAttrOp, SpanLog, SpanOp, TableNodeAttr,
     };
     use editor_crdt::{InputEvent, ListOp, build_oplog};
 
@@ -457,7 +461,7 @@ mod tests {
             spans: SpanLog::new(),
             block_modifiers: ModifierAttrLog::new(),
             node_attrs: NodeAttrLog::new(),
-            node_markers: NodeMarkerLog::new(),
+            node_carries: ModifierAttrLog::new(),
         }
     }
 
