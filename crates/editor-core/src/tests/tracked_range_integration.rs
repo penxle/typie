@@ -94,6 +94,62 @@ fn range_does_not_expand_when_text_inserted_at_right_boundary() {
 }
 
 #[test]
+fn range_does_not_expand_when_text_inserted_at_left_boundary_at_paragraph_start() {
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 0) -> (p1, 3)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message("r", "comment", sel));
+
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("hel"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("hel"),
+        "typing at the left boundary must stay outside the comment range even at paragraph start"
+    );
+}
+
+#[test]
+fn reversed_range_does_not_expand_when_text_inserted_at_left_boundary_at_paragraph_start() {
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 3) -> (p1, 0)
+    };
+    let sel = initial.selection.unwrap();
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message("r", "comment", sel));
+
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("hel"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("hel"),
+        "typing at the left boundary must stay outside a reversed comment range"
+    );
+}
+
+#[test]
 fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
     let (initial, p1) = state! {
         doc { root { p1: paragraph { text("hello") } } }
@@ -124,6 +180,40 @@ fn frozen_range_does_not_expand_when_text_inserted_at_right_boundary() {
         located_text(&editor, "r").as_deref(),
         Some("ell"),
         "persisted frozen comment ranges must be re-lowered to exclude right-boundary typing"
+    );
+}
+
+#[test]
+fn frozen_range_does_not_expand_when_text_inserted_at_left_boundary_at_paragraph_start() {
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("hello") } } }
+        selection: (p1, 0) -> (p1, 3)
+    };
+    let sel = initial.selection.unwrap();
+    let frozen = editor_state::StableSelection::capture(&sel, &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("hel"),
+        "persisted frozen comment ranges must exclude left-boundary typing even at paragraph start"
     );
 }
 

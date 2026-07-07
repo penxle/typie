@@ -15,25 +15,26 @@ pub struct StableSelection {
 
 impl StableSelection {
     pub fn capture(sel: &Selection, view: &DocView) -> StableSelection {
-        use crate::affinity::Affinity;
         // A non-collapsed range binds its boundaries exclusively so text typed
-        // at either edge stays outside: the start edge binds left-exclusive
-        // (Downstream → following child) and the end edge right-exclusive
-        // (Upstream → preceding child). A collapsed caret keeps each endpoint's
-        // own affinity so it never splits on a boundary insertion. The stored
-        // affinity is always the endpoint's original (only the binding changes).
+        // at either edge stays outside. A collapsed caret keeps each endpoint's
+        // own affinity so it never splits on a boundary insertion.
         let anchor_is_start = match sel.resolve(view) {
             Some(rs) if !rs.is_collapsed() => Some(rs.anchor() <= rs.head()),
             _ => None,
         };
-        let (anchor_aff, head_aff) = match anchor_is_start {
-            Some(true) => (Affinity::Downstream, Affinity::Upstream),
-            Some(false) => (Affinity::Upstream, Affinity::Downstream),
-            None => (sel.anchor.affinity, sel.head.affinity),
-        };
-        StableSelection {
-            anchor: StablePosition::capture_with_bind_affinity(&sel.anchor, anchor_aff, view),
-            head: StablePosition::capture_with_bind_affinity(&sel.head, head_aff, view),
+        match anchor_is_start {
+            Some(true) => StableSelection {
+                anchor: StablePosition::capture_range_start(&sel.anchor, view),
+                head: StablePosition::capture_range_end(&sel.head, view),
+            },
+            Some(false) => StableSelection {
+                anchor: StablePosition::capture_range_end(&sel.anchor, view),
+                head: StablePosition::capture_range_start(&sel.head, view),
+            },
+            None => StableSelection {
+                anchor: StablePosition::capture(&sel.anchor, view),
+                head: StablePosition::capture(&sel.head, view),
+            },
         }
     }
 

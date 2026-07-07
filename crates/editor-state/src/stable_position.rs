@@ -36,17 +36,48 @@ fn child_elem_id(child: &ChildView) -> Dot {
 
 impl StablePosition {
     pub fn capture(pos: &Position, view: &DocView) -> StablePosition {
-        Self::capture_with_bind_affinity(pos, pos.affinity, view)
+        Self::capture_with_child_binding(pos, view, |child_count| {
+            if child_count == 0 || pos.offset == 0 {
+                None
+            } else if pos.affinity == Affinity::Downstream && pos.offset < child_count {
+                Some((pos.offset, Bind::Left))
+            } else {
+                Some((pos.offset - 1, Bind::Right))
+            }
+        })
     }
 
-    /// Like [`capture`], but chooses the boundary binding using `bind_affinity`
-    /// instead of `pos.affinity`, while still storing `pos.affinity` for the
-    /// resolved position. Lets a range bind its start edge left-exclusive and its
-    /// end edge right-exclusive regardless of the endpoints' own affinities.
-    pub(crate) fn capture_with_bind_affinity(
+    /// Captures the lower endpoint of a non-collapsed range. Text inserted at
+    /// this boundary stays outside the range, so offset 0 can bind to the first
+    /// child when the container is non-empty.
+    pub(crate) fn capture_range_start(pos: &Position, view: &DocView) -> StablePosition {
+        Self::capture_with_child_binding(pos, view, |child_count| {
+            if child_count == 0 {
+                None
+            } else if pos.offset < child_count {
+                Some((pos.offset, Bind::Left))
+            } else {
+                Some((pos.offset - 1, Bind::Right))
+            }
+        })
+    }
+
+    /// Captures the upper endpoint of a non-collapsed range. Text inserted at
+    /// this boundary stays outside the range by binding to the preceding child.
+    pub(crate) fn capture_range_end(pos: &Position, view: &DocView) -> StablePosition {
+        Self::capture_with_child_binding(pos, view, |child_count| {
+            if child_count == 0 || pos.offset == 0 {
+                None
+            } else {
+                Some((pos.offset - 1, Bind::Right))
+            }
+        })
+    }
+
+    fn capture_with_child_binding(
         pos: &Position,
-        bind_affinity: Affinity,
         view: &DocView,
+        child_binding: impl FnOnce(usize) -> Option<(usize, Bind)>,
     ) -> StablePosition {
         let host = view
             .node(pos.node)
@@ -57,27 +88,17 @@ impl StablePosition {
         // this runs on the per-keystroke selection-capture path, so a linear scan makes
         // it `O(block)` inside a large paragraph.
         let child_count = host.child_count();
-        let binding = if child_count == 0 || pos.offset == 0 {
-            StablePositionBinding::ContainerStart
-        } else if bind_affinity == Affinity::Downstream && pos.offset < child_count {
-            StablePositionBinding::Adjacent {
+        let binding = child_binding(child_count).map_or(
+            StablePositionBinding::ContainerStart,
+            |(offset, bind)| StablePositionBinding::Adjacent {
                 anchor: child_elem_id(
                     &host
-                        .child_at(pos.offset)
-                        .expect("offset < child_count is live"),
+                        .child_at(offset)
+                        .expect("child binding offset must be live"),
                 ),
-                bind: Bind::Left,
-            }
-        } else {
-            StablePositionBinding::Adjacent {
-                anchor: child_elem_id(
-                    &host
-                        .child_at(pos.offset - 1)
-                        .expect("offset-1 within a valid position is live"),
-                ),
-                bind: Bind::Right,
-            }
-        };
+                bind,
+            },
+        );
         StablePosition {
             chain,
             binding,
