@@ -43,6 +43,7 @@ import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
 import type { InteractiveOverlay, RemarkOverlay, TableOverlay, TrackedItem } from './slate';
 import type { ThemeColors } from './theme';
+import type { SelectionHandleKind } from './touch-gesture.svelte';
 import type {
   AiFeedback,
   ArchivedAsset,
@@ -74,6 +75,14 @@ function ensureInitialized(): Promise<void> {
   }
   return initPromise;
 }
+
+const selectionHandleKindFromTarget = (target: EventTarget | null): SelectionHandleKind | null => {
+  if (!(target instanceof HTMLElement)) return null;
+
+  const handle = target.closest<HTMLElement>('[data-selection-handle]');
+  const kind = handle?.dataset.selectionHandle;
+  return kind === 'from' || kind === 'to' ? kind : null;
+};
 
 export function preloadEditorWasm(): void {
   void ensureInitialized();
@@ -1355,13 +1364,18 @@ export class Editor {
   handlePointerDown(e: PointerEvent): void {
     if (!(e.target instanceof HTMLElement)) return;
 
-    if (e.target.closest('[data-pointer-capture]')) return;
+    const selectionHandleType = selectionHandleKindFromTarget(e.target);
+    if (!selectionHandleType && e.target.closest('[data-pointer-capture]')) return;
 
     const isReadOnlyTouch = this.readOnly && this.#isTouchLikePointer(e);
+    if (selectionHandleType && !isReadOnlyTouch) return;
 
     if (isReadOnlyTouch) {
+      if (selectionHandleType) {
+        e.preventDefault();
+      }
       const resolved = this.resolvePointerCoordinateFromClient(e.clientX, e.clientY);
-      if (resolved && e.button === 0) {
+      if (!selectionHandleType && resolved && e.button === 0) {
         const hit = this.#findInteractiveOverlay(resolved.pageIdx, resolved.x, resolved.y);
         if (hit?.kind === 0) {
           this.dispatch({ type: 'toggleFold', nodeId: hit.nodeId });
@@ -1369,7 +1383,7 @@ export class Editor {
         }
       }
       this.isDraggable = resolved ? this.isSelectionHit(resolved.pageIdx, resolved.x, resolved.y) : false;
-      this.touchGesture.handlePointerDown(e, resolved);
+      this.touchGesture.handlePointerDown(e, resolved, selectionHandleType);
       return;
     }
 

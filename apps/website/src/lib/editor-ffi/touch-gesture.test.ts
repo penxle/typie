@@ -219,6 +219,20 @@ describe('TouchGestureController', () => {
       extraItems: [{ label: '링크 열기', onclick: expect.any(Function) }],
     });
   });
+
+  it('routes a handle tap that never drags through the regular tap collapse path', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handleSelectionHandlePointerDown('from', makePointerEvent({ clientX: 110, clientY: 220 }));
+    controller.handleSelectionHandlePointerUp(makePointerEvent({ clientX: 110, clientY: 220 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: { type: 'set_at', page: 0, x: 120, y: 220 },
+    });
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+  });
 });
 
 describe('computeSelectionHandleVisual', () => {

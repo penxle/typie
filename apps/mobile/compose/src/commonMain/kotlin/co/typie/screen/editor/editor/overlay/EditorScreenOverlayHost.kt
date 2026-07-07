@@ -25,7 +25,6 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size as PageSize
-import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollMode
@@ -47,8 +46,6 @@ internal fun EditorScreenOverlayHost(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
-  val interactionScope = LocalEditorInteractionScope.current
-  val interactionController = interactionScope.controller
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
   val contextMenu = uiState.contextMenu
@@ -119,7 +116,6 @@ internal fun EditorScreenOverlayHost(
             uiState = uiState,
             editorRectInOverlay = editorRectInViewport,
             density = density.density,
-            interactionController = interactionController,
           )
         }
 

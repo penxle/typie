@@ -28,7 +28,9 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
   private var uiState: EditorUiState? = null
   private var visibleArea: EditorVisibleArea? = null
   private var viewportState: EditorViewportState? = null
-  private var density: Float = 0f
+  override var density: Float = 0f
+    private set
+
   private var onSelectionHaptic: (() -> Unit)? = null
   private var pointerInputEnabled: () -> Boolean = { true }
   private var tapDispatchJob: Job? = null

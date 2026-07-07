@@ -12,16 +12,26 @@ const rangeSelection = {
   head: { node: 't1', offset: 4, affinity: 'downstream' },
 } as const;
 
+type PointerTarget = Omit<
+  HTMLDivElement,
+  'setPointerCapture' | 'releasePointerCapture' | 'hasPointerCapture' | 'removeAttribute' | 'setAttribute'
+> & {
+  setPointerCapture: ReturnType<typeof vi.fn>;
+  releasePointerCapture: ReturnType<typeof vi.fn>;
+  hasPointerCapture: ReturnType<typeof vi.fn>;
+  removeAttribute: ReturnType<typeof vi.fn>;
+  setAttribute: ReturnType<typeof vi.fn>;
+};
+
 const createPointerTarget = ({ captured = false } = {}) => {
-  return {
-    tabIndex: 0,
-    hasAttribute: vi.fn(() => true),
-    setPointerCapture: vi.fn(),
-    releasePointerCapture: vi.fn(),
-    hasPointerCapture: vi.fn(() => captured),
-    removeAttribute: vi.fn(),
-    setAttribute: vi.fn(),
-  };
+  const target = document.createElement('div') as PointerTarget;
+  target.tabIndex = 0;
+  target.setPointerCapture = vi.fn();
+  target.releasePointerCapture = vi.fn();
+  target.hasPointerCapture = vi.fn(() => captured);
+  target.removeAttribute = vi.fn();
+  target.setAttribute = vi.fn();
+  return target;
 };
 
 const createPointerEvent = ({
@@ -53,6 +63,7 @@ const createPointerEvent = ({
     altKey: false,
     metaKey: false,
     timeStamp,
+    target,
     currentTarget: target,
     preventDefault: vi.fn(),
   } as unknown as PointerEvent & { currentTarget: HTMLElement };
@@ -171,6 +182,18 @@ describe('pointer native drag admission', () => {
     expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
     expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+  });
+
+  it('ignores non-touch pointer down on a selection handle marker', () => {
+    const editor = createEditor();
+    const target = createPointerTarget();
+    target.dataset.selectionHandle = 'from';
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(target.setPointerCapture).not.toHaveBeenCalled();
+    expect(editor.gesture.handlePointerDown).not.toHaveBeenCalled();
   });
 
   it('suspends toolbar sync during a regular selection interaction and resumes on pointer up', () => {

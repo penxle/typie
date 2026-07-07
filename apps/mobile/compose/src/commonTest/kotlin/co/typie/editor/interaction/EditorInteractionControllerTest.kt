@@ -658,15 +658,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val endpoints =
-        SelectionEndpoints(
-          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
-          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0, Affinity.Downstream),
-          toPosition = Position("text", 5, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -710,15 +702,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val endpoints =
-        SelectionEndpoints(
-          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
-          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0, Affinity.Downstream),
-          toPosition = Position("text", 5, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -822,15 +806,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val endpoints =
-        SelectionEndpoints(
-          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
-          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0, Affinity.Downstream),
-          toPosition = Position("text", 5, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1304,11 +1280,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { selection },
-          selectionEndpointsProvider = { selectionEndpoints() },
-        )
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1336,7 +1308,128 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `selection handle drag cannot interrupt active long press interaction`() =
+  fun `editor pointer stream uses geometry density when falling back from selection handle hit target`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+          selectionHitProvider = { _, _, _ -> false },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      host.density = 2f
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val position = Offset(84f, 60f)
+      controller.updateTapSlop(16f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = position, nowMillis = 0L))
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = position, nowMillis = 40L))
+      advanceUntilIdle()
+
+      val op = (fake.enqueued.single() as Message.Selection).op
+      assertEquals(SelectionOp.SetAt(page = 0, x = 42f, y = 30f), op)
+      assertFalse(host.scrollGestureLockActive)
+      assertTrue(host.focused)
+    }
+
+  @Test
+  fun `editor pointer stream keeps selection hit behavior from selection handle hit target`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+          selectionHitProvider = { _, _, _ -> true },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val position = Offset(42f, 30f)
+      controller.updateTapSlop(8f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = position, nowMillis = 0L))
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = position, nowMillis = 40L))
+      advanceUntilIdle()
+
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertFalse(host.scrollGestureLockActive)
+      assertTrue(host.focused)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `editor pointer stream starts selection handle drag from handle hit target`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val endpoints = selectionEndpoints()
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 20L)
+      )
+
+      val extend =
+        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+      assertEquals(endpoints.fromPosition, extend.anchor)
+      assertEquals(50f, extend.headX)
+      assertEquals(44f, extend.headY)
+      assertNull(extend.baseSelection)
+      assertFalse(extend.allowCollapse)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertEquals(Offset(50f, 44f), controller.magnifierPosition)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 40L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `editor pointer stream does not start long press from selection handle hit target`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -1348,6 +1441,38 @@ class EditorInteractionControllerTest {
           selectionProvider = { selection },
           selectionEndpointsProvider = { selectionEndpoints() },
         )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(42f, 30f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+
+      assertFalse(controller.onLongPressTimer(pointerId = 1L, position = down, nowMillis = 500L))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertTrue(host.scrollGestureLockActive)
+
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = down, nowMillis = 520L))
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `selection handle drag cannot interrupt active long press interaction`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1453,15 +1578,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val endpoints =
-        SelectionEndpoints(
-          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
-          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0, Affinity.Downstream),
-          toPosition = Position("text", 5, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1511,18 +1628,7 @@ class EditorInteractionControllerTest {
           head = Position("text", 12, Affinity.Downstream),
         )
       var currentSelection = baseSelection
-      val endpoints =
-        SelectionEndpoints(
-          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
-          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0, Affinity.Downstream),
-          toPosition = Position("text", 5, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { currentSelection },
-          selectionEndpointsProvider = { endpoints },
-        )
+      val fake = FakeFfiEditor(selectionProvider = { currentSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1563,12 +1669,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val endpoints = selectionEndpoints()
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { baseSelection },
-          selectionEndpointsProvider = { endpoints },
-        )
+      val fake = FakeFfiEditor(selectionProvider = { baseSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host =
@@ -1623,12 +1724,7 @@ class EditorInteractionControllerTest {
           anchor = Position("old", 0, Affinity.Downstream),
           head = Position("old", 0, Affinity.Downstream),
         )
-      val endpoints = selectionEndpoints()
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { currentSelection },
-          selectionEndpointsProvider = { endpoints },
-        )
+      val fake = FakeFfiEditor(selectionProvider = { currentSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1695,11 +1791,7 @@ class EditorInteractionControllerTest {
           anchor = Position("old", 0, Affinity.Downstream),
           head = Position("old", 0, Affinity.Downstream),
         )
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { currentSelection },
-          selectionEndpointsProvider = { selectionEndpoints() },
-        )
+      val fake = FakeFfiEditor(selectionProvider = { currentSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -2129,15 +2221,7 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val endpoints =
-        SelectionEndpoints(
-          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
-          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
-          fromPosition = Position("text", 0, Affinity.Downstream),
-          toPosition = Position("text", 5, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -2175,6 +2259,7 @@ class EditorInteractionControllerTest {
 
   private class TestHost(private val scope: TestScope) :
     EditorInteractionEffects, EditorInteractionGeometry {
+    override var density: Float = 1f
     var scheduledTapDispatchAtMillis: Long? = null
     var scheduledLongPressDispatchAtMillis: Long? = null
     var cancelTapDispatchCount = 0
@@ -2188,10 +2273,19 @@ class EditorInteractionControllerTest {
     var edgeAutoScrollConsumedDelta = Offset.Zero
     val requestedBringIntoViewVersions = mutableListOf<Long>()
 
-    override fun resolvePoint(positionInNode: Offset): PagePoint? =
-      point?.copy(x = positionInNode.x, y = positionInNode.y)
+    override fun resolvePoint(positionInNode: Offset): PagePoint? {
+      if (density <= 0f) {
+        return null
+      }
+      return point?.copy(x = positionInNode.x / density, y = positionInNode.y / density)
+    }
 
-    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? = Offset(x, y)
+    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? {
+      if (density <= 0f) {
+        return null
+      }
+      return Offset(x = x * density, y = y * density)
+    }
 
     override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? =
       edgeAutoScrollViewport

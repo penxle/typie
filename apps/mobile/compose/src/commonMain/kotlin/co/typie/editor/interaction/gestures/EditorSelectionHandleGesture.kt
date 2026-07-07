@@ -1,19 +1,70 @@
 package co.typie.editor.interaction.gestures
 
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.geometry.Size
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.ffi.PageRect
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.sessions.EditorSelectionHandleDragSession
+import kotlin.math.max
 
 internal enum class EditorSelectionHandleType {
   From,
   To,
+}
+
+internal const val EditorSelectionHandleRadiusDp = 8f
+internal const val EditorSelectionHandleStemWidthDp = 2f
+internal const val EditorSelectionHandleTouchTargetDp = 44f
+
+internal data class EditorSelectionHandleGeometry(
+  val touchTargetTopLeft: Offset,
+  val touchTargetSize: Size,
+  val paintTopLeftInTouchTarget: Offset,
+  val stemHeightPx: Float,
+  val radiusPx: Float,
+  val stemWidthPx: Float,
+) {
+  fun containsTouch(position: Offset): Boolean =
+    position.x >= touchTargetTopLeft.x &&
+      position.x <= touchTargetTopLeft.x + touchTargetSize.width &&
+      position.y >= touchTargetTopLeft.y &&
+      position.y <= touchTargetTopLeft.y + touchTargetSize.height
+}
+
+internal fun resolveSelectionHandleGeometry(
+  type: EditorSelectionHandleType,
+  endpointTopLeftInOverlay: Offset,
+  stemHeightPx: Float,
+  radiusPx: Float,
+  stemWidthPx: Float,
+  touchTargetPx: Float,
+): EditorSelectionHandleGeometry {
+  val totalHeightPx = radiusPx * 2f + stemHeightPx
+  val effectiveTouchHeightPx = max(totalHeightPx, touchTargetPx)
+  val customPaintTop = if (type == EditorSelectionHandleType.From) -radiusPx * 2f else 0f
+  val handleCenterY = customPaintTop + totalHeightPx / 2f
+  val touchTargetTop = handleCenterY - effectiveTouchHeightPx / 2f
+  val handleXOffset =
+    if (type == EditorSelectionHandleType.From) {
+      -stemWidthPx / 2f
+    } else {
+      stemWidthPx / 2f
+    }
+  val touchTargetLeft = handleXOffset - touchTargetPx / 2f
+
+  return EditorSelectionHandleGeometry(
+    touchTargetTopLeft = endpointTopLeftInOverlay + Offset(touchTargetLeft, touchTargetTop),
+    touchTargetSize = Size(width = touchTargetPx, height = effectiveTouchHeightPx),
+    paintTopLeftInTouchTarget =
+      Offset(x = (touchTargetPx - radiusPx * 2f) / 2f, y = customPaintTop - touchTargetTop),
+    stemHeightPx = stemHeightPx,
+    radiusPx = radiusPx,
+    stemWidthPx = stemWidthPx,
+  )
 }
 
 internal class EditorSelectionHandleGesture(
@@ -23,68 +74,82 @@ internal class EditorSelectionHandleGesture(
   val pendingDrag: Boolean
     get() = session.pendingDrag
 
+  val pendingType: EditorSelectionHandleType?
+    get() = session.pendingType
+
   val activeDrag: Boolean
     get() = session.activeDrag
 
-  suspend fun PointerInputScope.detectDrag(
-    type: EditorSelectionHandleType,
-    positionInEditor: (Offset) -> Offset,
-  ) {
-    awaitEachGesture {
-      var completed = false
-      try {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val downPosition = positionInEditor(down.position)
-        val touchSlop = viewConfiguration.touchSlop
-        if (!handleDragDown(type = type, position = downPosition)) {
-          completed = true
-          return@awaitEachGesture
-        }
-        down.consume()
+  val activeType: EditorSelectionHandleType?
+    get() = session.activeType
 
-        var dragging = false
-
-        while (true) {
-          val event = awaitPointerEvent()
-          val change = event.changes.firstOrNull { it.id == down.id } ?: continue
-          val position = positionInEditor(change.position)
-
-          if (!change.pressed) {
-            if (dragging) {
-              if (handleDragEnd(type = type)) {
-                change.consume()
-              }
-            } else {
-              cancel()
-            }
-            completed = true
-            return@awaitEachGesture
-          }
-
-          if (!dragging) {
-            change.consume()
-            if ((position - downPosition).getDistance() <= touchSlop) {
-              continue
-            }
-            if (!handleDragStart(type = type, position = position)) {
-              completed = true
-              return@awaitEachGesture
-            }
-            dragging = true
-          }
-          if (dragging && handleDragUpdate(type = type, position = position)) {
-            change.consume()
-          }
-        }
-      } finally {
-        if (!completed) {
-          cancel()
-        }
-      }
+  fun hitTest(position: Offset): EditorSelectionHandleType? {
+    val context = contextProvider()
+    val density = context.geometry.density
+    if (density <= 0f) {
+      return null
     }
+    if (context.editor.selection.isCollapsed()) {
+      return null
+    }
+    val radiusPx = EditorSelectionHandleRadiusDp * density
+    val stemWidthPx = EditorSelectionHandleStemWidthDp * density
+    val touchTargetPx = EditorSelectionHandleTouchTargetDp * density
+    val endpoints = context.editor.selectionEndpoints() ?: return null
+    return listOf(
+        EditorSelectionHandleType.To to endpoints.to,
+        EditorSelectionHandleType.From to endpoints.from,
+      )
+      .firstOrNull { (type, endpoint) ->
+        hitTestEndpoint(
+          type = type,
+          endpoint = endpoint,
+          position = position,
+          context = context,
+          radiusPx = radiusPx,
+          stemWidthPx = stemWidthPx,
+          touchTargetPx = touchTargetPx,
+        )
+      }
+      ?.first
   }
 
-  fun handleDragDown(type: EditorSelectionHandleType, position: Offset): Boolean {
+  private fun hitTestEndpoint(
+    type: EditorSelectionHandleType,
+    endpoint: PageRect,
+    position: Offset,
+    context: EditorGestureContext,
+    radiusPx: Float,
+    stemWidthPx: Float,
+    touchTargetPx: Float,
+  ): Boolean {
+    val rect = endpoint.rect
+    val topLeft =
+      context.geometry.resolvePagePosition(page = endpoint.pageIdx, x = rect.x, y = rect.y)
+        ?: return false
+    val bottom =
+      context.geometry.resolvePagePosition(
+        page = endpoint.pageIdx,
+        x = rect.x,
+        y = rect.y + rect.height,
+      ) ?: return false
+    val geometry =
+      resolveSelectionHandleGeometry(
+        type = type,
+        endpointTopLeftInOverlay = topLeft,
+        stemHeightPx = (bottom.y - topLeft.y).coerceAtLeast(0f),
+        radiusPx = radiusPx,
+        stemWidthPx = stemWidthPx,
+        touchTargetPx = touchTargetPx,
+      )
+    return geometry.containsTouch(position)
+  }
+
+  fun handleDragDown(
+    type: EditorSelectionHandleType,
+    position: Offset,
+    preserveTapDispatch: Boolean = false,
+  ): Boolean {
     val context = contextProvider()
     if (!context.mode.canApply(EditorInteractionEvent.SelectionHandleDragStart)) {
       return false
@@ -92,7 +157,9 @@ internal class EditorSelectionHandleGesture(
     if (!session.beginPending(type = type, touchPosition = position)) {
       return false
     }
-    context.effects.cancelTapDispatch()
+    if (!preserveTapDispatch) {
+      context.effects.cancelTapDispatch()
+    }
     context.effects.cancelLongPressDispatch()
     context.effects.setScrollGestureLocked(true)
     context.uiState.contextMenu.hide()

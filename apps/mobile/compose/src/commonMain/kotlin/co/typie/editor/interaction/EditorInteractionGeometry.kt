@@ -4,6 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
 
 internal interface EditorInteractionGeometry {
+  val density: Float
+
   fun resolvePoint(positionInNode: Offset): PagePoint?
 
   fun resolvePagePosition(page: Int, x: Float, y: Float): Offset?

@@ -29,10 +29,6 @@
     return getHandleVisual('to');
   });
 
-  function isTouchLikePointer(event: PointerEvent): boolean {
-    return event.pointerType === 'touch';
-  }
-
   function getHandleVisual(type: SelectionHandleKind): HandleVisual | null {
     if (!editor.readOnly || !touchEnabled) {
       return null;
@@ -112,48 +108,6 @@
     borderRadius: 'full',
     backgroundColor: 'text.default',
   });
-
-  function handlePointerDown(type: SelectionHandleKind, event: PointerEvent) {
-    if (!isTouchLikePointer(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const target = event.currentTarget as HTMLElement;
-    if (!target.hasPointerCapture(event.pointerId)) {
-      target.setPointerCapture(event.pointerId);
-    }
-
-    editor.touchGesture.handleSelectionHandlePointerDown(type, event);
-  }
-
-  function handlePointerMove(event: PointerEvent) {
-    if (!isTouchLikePointer(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    editor.touchGesture.handleSelectionHandlePointerMove(event);
-  }
-
-  function handlePointerUp(event: PointerEvent) {
-    if (!isTouchLikePointer(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const target = event.currentTarget as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-      target.releasePointerCapture(event.pointerId);
-    }
-
-    editor.touchGesture.handleSelectionHandlePointerUp(event);
-  }
 </script>
 
 {#if fromHandle}
@@ -164,11 +118,7 @@
     style:height={`${fromHandle.touchHeight}px`}
     class={handleStyle}
     aria-label="Selection start handle"
-    data-pointer-capture
-    onpointercancel={handlePointerUp}
-    onpointerdown={(event) => handlePointerDown('from', event)}
-    onpointermove={handlePointerMove}
-    onpointerup={handlePointerUp}
+    data-selection-handle="from"
     type="button"
   >
     <div
@@ -191,11 +141,7 @@
     style:height={`${toHandle.touchHeight}px`}
     class={handleStyle}
     aria-label="Selection end handle"
-    data-pointer-capture
-    onpointercancel={handlePointerUp}
-    onpointerdown={(event) => handlePointerDown('to', event)}
-    onpointermove={handlePointerMove}
-    onpointerup={handlePointerUp}
+    data-selection-handle="to"
     type="button"
   >
     <div

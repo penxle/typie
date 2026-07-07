@@ -1,6 +1,7 @@
 import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import type { InputModifiers, InteractiveHit, Position, Rect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
+import type { SelectionHandleKind } from '../gesture.svelte';
 import type { EditorEventHandler } from '../types';
 
 const DRAG_START_THRESHOLD_PX = 5;
@@ -9,6 +10,14 @@ const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <=
 
 type LocalPoint = { page: number; x: number; y: number };
 type DragPoint = LocalPoint & { clientX: number; clientY: number };
+
+const selectionHandleKindFromTarget = (target: EventTarget | null): SelectionHandleKind | null => {
+  if (!(target instanceof HTMLElement)) return null;
+
+  const handle = target.closest<HTMLElement>('[data-selection-handle]');
+  const kind = handle?.dataset.selectionHandle;
+  return kind === 'from' || kind === 'to' ? kind : null;
+};
 
 export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
   const editMode = !editor.readOnly;
@@ -26,11 +35,19 @@ export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, loc
 };
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  const selectionHandleType = selectionHandleKindFromTarget(e.target);
+  if (selectionHandleType && e.pointerType !== 'touch') {
+    return;
+  }
+
   if (e.pointerType === 'touch') {
     const local = editor.clientToLocal(e.clientX, e.clientY);
     const resolved = local ? { page: local.page, x: local.x, y: local.y } : null;
+    if (selectionHandleType) {
+      e.preventDefault();
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
-    editor.gesture.handlePointerDown(e, resolved);
+    editor.gesture.handlePointerDown(e, resolved, selectionHandleType);
     return;
   }
 

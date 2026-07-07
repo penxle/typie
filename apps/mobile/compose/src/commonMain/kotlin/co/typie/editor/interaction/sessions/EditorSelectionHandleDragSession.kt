@@ -13,8 +13,14 @@ internal class EditorSelectionHandleDragSession {
   val pendingDrag: Boolean
     get() = pendingContext != null
 
+  val pendingType: EditorSelectionHandleType?
+    get() = pendingContext?.type
+
   val activeDrag: Boolean
     get() = dragContext != null
+
+  val activeType: EditorSelectionHandleType?
+    get() = dragContext?.type
 
   fun isActiveType(type: EditorSelectionHandleType): Boolean = dragContext?.type == type
 

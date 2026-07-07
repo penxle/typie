@@ -77,7 +77,12 @@ internal class EditorInteractionGestures(
       return false
     }
 
-    if (tapEnabled) {
+    val selectionHandleType = if (tapEnabled) selectionHandle.hitTest(position) else null
+    if (selectionHandleType != null) {
+      tap.clearTapHistory()
+    }
+
+    if (tapEnabled && selectionHandleType == null) {
       longPress.primeModeAtPointerDown(position = position, context = context)
     }
 
@@ -91,7 +96,15 @@ internal class EditorInteractionGestures(
         doubleTapDrag = doubleTapDrag,
         context = context,
       )
-    if (tapEnabled && tap.hasActivePointer) {
+    val selectionHandleConsumed =
+      selectionHandleType != null &&
+        tap.hasActivePointer &&
+        selectionHandle.handleDragDown(
+          type = selectionHandleType,
+          position = position,
+          preserveTapDispatch = true,
+        )
+    if (tapEnabled && tap.hasActivePointer && !selectionHandleConsumed) {
       longPress.prepare(pointerId = pointerId)
       context.effects.scheduleLongPressDispatch(
         pointerId = pointerId,
@@ -99,7 +112,7 @@ internal class EditorInteractionGestures(
         dispatchAtMillis = nowMillis + EditorLongPressDispatchDelayMillis,
       )
     }
-    return consumed
+    return consumed || selectionHandleConsumed
   }
 
   fun handlePointerMove(
@@ -116,9 +129,24 @@ internal class EditorInteractionGestures(
       return longPress.update(position = position, context = context)
     }
 
-    if (tap.trackPointerMove(pointerId = pointerId, position = position, context = context)) {
+    val movedPastTapSlop =
+      tap.trackPointerMove(pointerId = pointerId, position = position, context = context)
+    if (movedPastTapSlop) {
       longPress.cancelPending(pointerId = pointerId)
       context.effects.cancelLongPressDispatch()
+    }
+    selectionHandle.activeType?.let { type ->
+      selectionHandle.handleDragUpdate(type = type, position = position)
+      return true
+    }
+    selectionHandle.pendingType?.let { type ->
+      if (movedPastTapSlop && !selectionHandle.activeDrag) {
+        selectionHandle.handleDragStart(type = type, position = position)
+      }
+      if (selectionHandle.activeDrag) {
+        selectionHandle.handleDragUpdate(type = type, position = position)
+      }
+      return true
     }
     return doubleTapDrag.handlePointerMove(position = position, tap = tap, context = context)
   }
@@ -150,10 +178,22 @@ internal class EditorInteractionGestures(
     }
     pinch.handlePointerUp(pointerId = pointerId, context = context)
 
+    selectionHandle.activeType?.let { type ->
+      context.effects.cancelLongPressDispatch()
+      tap.onPointerUp(
+        pointerId = pointerId,
+        position = position,
+        nowMillis = nowMillis,
+        canFinish = false,
+      )
+      return selectionHandle.handleDragEnd(type = type)
+    }
+
     if (longPress.cancelPending(pointerId = pointerId)) {
       context.effects.cancelLongPressDispatch()
     }
 
+    val pendingSelectionHandleType = selectionHandle.pendingType
     val shouldConsumeTap =
       tap.handlePointerUp(
         pointerId = pointerId,
@@ -164,7 +204,9 @@ internal class EditorInteractionGestures(
       )
     val selectionConsumed = doubleTapDrag.endDrag(context = context)
     doubleTapDrag.cleanupAfterPointerUp(tap = tap, context = context)
-    return shouldConsumeTap || selectionConsumed
+    val pendingSelectionHandleConsumed =
+      pendingSelectionHandleType?.let { selectionHandle.handleDragEnd(type = it) } ?: false
+    return shouldConsumeTap || selectionConsumed || pendingSelectionHandleConsumed
   }
 
   fun handleLongPressTimer(

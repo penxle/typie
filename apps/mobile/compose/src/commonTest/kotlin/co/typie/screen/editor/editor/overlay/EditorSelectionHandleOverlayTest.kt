@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
+import co.typie.editor.interaction.gestures.resolveSelectionHandleGeometry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

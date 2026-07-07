@@ -5,14 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -20,11 +18,13 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
-import co.typie.editor.interaction.EditorInteractionController
+import co.typie.editor.interaction.gestures.EditorSelectionHandleRadiusDp
+import co.typie.editor.interaction.gestures.EditorSelectionHandleStemWidthDp
+import co.typie.editor.interaction.gestures.EditorSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
+import co.typie.editor.interaction.gestures.resolveSelectionHandleGeometry
 import co.typie.editor.runtime.EditorUiState
 import co.typie.ui.theme.AppTheme
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 @Composable
@@ -33,7 +33,6 @@ internal fun EditorSelectionHandleOverlay(
   uiState: EditorUiState,
   editorRectInOverlay: Rect,
   density: Float,
-  interactionController: EditorInteractionController,
 ) {
   if (!uiState.focused || editor.selection.isCollapsed()) {
     return
@@ -48,14 +47,7 @@ internal fun EditorSelectionHandleOverlay(
     ) ?: return
   val color = AppTheme.colors.textDefault
 
-  placements.forEach { placement ->
-    EditorSelectionHandle(
-      placement = placement,
-      editorRectInOverlay = editorRectInOverlay,
-      color = color,
-      interactionController = interactionController,
-    )
-  }
+  placements.forEach { placement -> EditorSelectionHandle(placement = placement, color = color) }
 }
 
 internal fun resolveSelectionHandleOverlayPlacements(
@@ -121,16 +113,11 @@ private fun resolveSelectionHandleOverlayPlacement(
 }
 
 @Composable
-private fun EditorSelectionHandle(
-  placement: EditorSelectionHandleOverlayPlacement,
-  editorRectInOverlay: Rect,
-  color: Color,
-  interactionController: EditorInteractionController,
-) {
+private fun EditorSelectionHandle(placement: EditorSelectionHandleOverlayPlacement, color: Color) {
   val density = LocalDensity.current
-  val radiusPx = with(density) { SelectionHandleRadius.toPx() }
-  val stemWidthPx = with(density) { SelectionHandleStemWidth.toPx() }
-  val touchTargetPx = with(density) { SelectionHandleTouchTarget.toPx() }
+  val radiusPx = with(density) { EditorSelectionHandleRadiusDp.dp.toPx() }
+  val stemWidthPx = with(density) { EditorSelectionHandleStemWidthDp.dp.toPx() }
+  val touchTargetPx = with(density) { EditorSelectionHandleTouchTargetDp.dp.toPx() }
   val geometry =
     resolveSelectionHandleGeometry(
       type = placement.type,
@@ -140,8 +127,6 @@ private fun EditorSelectionHandle(
       stemWidthPx = stemWidthPx,
       touchTargetPx = touchTargetPx,
     )
-  val latestTouchTargetTopLeft = rememberUpdatedState(geometry.touchTargetTopLeft)
-  val latestEditorRectInOverlay = rememberUpdatedState(editorRectInOverlay)
 
   Box(
     modifier =
@@ -155,17 +140,6 @@ private fun EditorSelectionHandle(
           width = with(density) { geometry.touchTargetSize.width.toDp() },
           height = with(density) { geometry.touchTargetSize.height.toDp() },
         )
-        .pointerInput(placement.type, interactionController) {
-          with(interactionController.selectionHandleGesture) {
-            detectDrag(
-              type = placement.type,
-              positionInEditor = { localPosition ->
-                latestTouchTargetTopLeft.value + localPosition -
-                  latestEditorRectInOverlay.value.topLeft
-              },
-            )
-          }
-        }
   ) {
     Canvas(modifier = Modifier.matchParentSize()) {
       translate(
@@ -200,48 +174,3 @@ private fun EditorSelectionHandle(
     }
   }
 }
-
-internal data class EditorSelectionHandleGeometry(
-  val touchTargetTopLeft: Offset,
-  val touchTargetSize: Size,
-  val paintTopLeftInTouchTarget: Offset,
-  val stemHeightPx: Float,
-  val radiusPx: Float,
-  val stemWidthPx: Float,
-)
-
-internal fun resolveSelectionHandleGeometry(
-  type: EditorSelectionHandleType,
-  endpointTopLeftInOverlay: Offset,
-  stemHeightPx: Float,
-  radiusPx: Float,
-  stemWidthPx: Float,
-  touchTargetPx: Float,
-): EditorSelectionHandleGeometry {
-  val totalHeightPx = radiusPx * 2f + stemHeightPx
-  val effectiveTouchHeightPx = max(totalHeightPx, touchTargetPx)
-  val customPaintTop = if (type == EditorSelectionHandleType.From) -radiusPx * 2f else 0f
-  val handleCenterY = customPaintTop + totalHeightPx / 2f
-  val touchTargetTop = handleCenterY - effectiveTouchHeightPx / 2f
-  val handleXOffset =
-    if (type == EditorSelectionHandleType.From) {
-      -stemWidthPx / 2f
-    } else {
-      stemWidthPx / 2f
-    }
-  val touchTargetLeft = handleXOffset - touchTargetPx / 2f
-
-  return EditorSelectionHandleGeometry(
-    touchTargetTopLeft = endpointTopLeftInOverlay + Offset(touchTargetLeft, touchTargetTop),
-    touchTargetSize = Size(width = touchTargetPx, height = effectiveTouchHeightPx),
-    paintTopLeftInTouchTarget =
-      Offset(x = (touchTargetPx - radiusPx * 2f) / 2f, y = customPaintTop - touchTargetTop),
-    stemHeightPx = stemHeightPx,
-    radiusPx = radiusPx,
-    stemWidthPx = stemWidthPx,
-  )
-}
-
-private val SelectionHandleRadius = 8.dp
-private val SelectionHandleStemWidth = 2.dp
-private val SelectionHandleTouchTarget = 44.dp

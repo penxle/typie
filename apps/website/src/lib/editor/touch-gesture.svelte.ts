@@ -167,6 +167,7 @@ export class TouchGestureController {
   #activePointerId: number | null = $state(null);
   #lastTap: TapRecord | null = null;
   #press: PressRecord | null = null;
+  #pendingSelectionHandleType: SelectionHandleKind | null = null;
   #dragAnchor: SelectionEndpointBounds | null = null;
   #doubleTapInitialRange: { anchor: Position; head: Position } | null = null;
   #doubleTapStart: { x: number; y: number } | null = null;
@@ -393,6 +394,7 @@ export class TouchGestureController {
     this.#setPhase('idle');
     this.#activePointerId = null;
     this.#press = null;
+    this.#pendingSelectionHandleType = null;
     this.#dragAnchor = null;
     this.#doubleTapInitialRange = null;
     this.#doubleTapStart = null;
@@ -479,7 +481,7 @@ export class TouchGestureController {
     this.cancelContextMenuRequest();
   }
 
-  handlePointerDown(e: PointerEvent, resolved: ResolvedTouchPoint | null): void {
+  handlePointerDown(e: PointerEvent, resolved: ResolvedTouchPoint | null, selectionHandleType: SelectionHandleKind | null = null): void {
     if (!isTouchLikePointer(e) || !e.isPrimary) {
       return;
     }
@@ -490,6 +492,8 @@ export class TouchGestureController {
       this.cancelSession();
       return;
     }
+
+    const selectionHandles = selectionHandleType ? getOrderedSelectionHandles(this.#editor.selection) : null;
 
     this.#activePointerId = e.pointerId;
     const selectionHit = resolved ? this.#editor.isSelectionHit(resolved.pageIdx, resolved.x, resolved.y) : false;
@@ -504,6 +508,12 @@ export class TouchGestureController {
     this.#movedPastTapThreshold = false;
     this.#readOnlyDragStarted = false;
     this.#dragAnchor = null;
+    this.#pendingSelectionHandleType = selectionHandles ? selectionHandleType : null;
+    if (selectionHandleType === 'from') {
+      this.#dragAnchor = selectionHandles?.to ?? null;
+    } else if (selectionHandleType === 'to') {
+      this.#dragAnchor = selectionHandles?.from ?? null;
+    }
     this.#doubleTapInitialRange = null;
     this.#doubleTapStart = null;
     this.#setDragArmed(false);
@@ -514,6 +524,13 @@ export class TouchGestureController {
     this.#wasTouchMenuOpenOnPointerDown = this.#editor.contextMenu.isOpen && this.#editor.contextMenu.source === 'touch';
     if (this.#wasTouchMenuOpenOnPointerDown) {
       this.#editor.closeContextMenu();
+    }
+
+    if (this.#pendingSelectionHandleType) {
+      this.#lastTap = null;
+      this.#editor.closeContextMenu();
+      this.#setPhase('pressing');
+      return;
     }
 
     const isDoubleTap =
@@ -542,6 +559,20 @@ export class TouchGestureController {
     this.#lastClientPoint = { x: e.clientX, y: e.clientY };
 
     if (this.#phase === 'pressing') {
+      if (this.#pendingSelectionHandleType && this.#press) {
+        if (distance(this.#press, this.#lastClientPoint) < TOUCH_DRAG_START_DISTANCE_PX) {
+          return;
+        }
+
+        this.#movedPastTapThreshold = true;
+        this.#clearLongPressTimer();
+        this.#setPhase('handleDragging');
+        this.#dispatchDragSelectionAtCurrentPoint();
+        this.#updateAutoScroll();
+        e.preventDefault();
+        return;
+      }
+
       if (this.#press && distance(this.#press, this.#lastClientPoint) > TOUCH_LONG_PRESS_CANCEL_DISTANCE_PX) {
         this.#movedPastTapThreshold = true;
         this.#clearLongPressTimer();
@@ -650,51 +681,17 @@ export class TouchGestureController {
   }
 
   handleSelectionHandlePointerDown(type: SelectionHandleKind, e: PointerEvent): void {
-    if (!isTouchLikePointer(e)) {
-      return;
-    }
-
-    const handles = getOrderedSelectionHandles(this.#editor.selection);
-    if (!handles) {
-      return;
-    }
-
-    this.#activePointerId = e.pointerId;
-    this.#setPhase('handleDragging');
-    this.#dragAnchor = type === 'from' ? handles.to : handles.from;
-    this.#doubleTapInitialRange = null;
-    this.#suppressTapOnPointerUp = true;
-    this.#movedPastTapThreshold = true;
-    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
-    this.#clearLongPressTimer();
-    this.#stopAutoScroll();
-    this.#editor.closeContextMenu();
-    this.#setDragCandidate(false);
-    this.#setDragArmed(false);
-    this.#suppressNativeContextMenuUntil = performance.now() + 600;
-    this.#dispatchDragSelectionAtCurrentPoint();
+    const resolved = this.#editor.resolvePointerCoordinateFromClient(e.clientX, e.clientY);
+    this.handlePointerDown(e, resolved, type);
   }
 
   handleSelectionHandlePointerMove(e: PointerEvent): void {
-    if (this.#phase !== 'handleDragging' || this.#activePointerId !== e.pointerId) {
-      return;
-    }
-
-    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
-    this.#dispatchDragSelectionAtCurrentPoint();
-    this.#updateAutoScroll();
-    e.preventDefault();
+    this.handlePointerMove(e);
   }
 
   handleSelectionHandlePointerUp(e: PointerEvent): void {
-    if (this.#phase !== 'handleDragging' || this.#activePointerId !== e.pointerId) {
-      return;
-    }
-
-    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
-    this.#dispatchDragSelectionAtCurrentPoint();
-    this.#openTouchContextMenuFromSelectionDeferred();
-    this.#resetSession();
+    const resolved = this.#editor.resolvePointerCoordinateFromClient(e.clientX, e.clientY);
+    this.handlePointerUp(e, resolved);
   }
 
   handleNativeDragStart(): void {
