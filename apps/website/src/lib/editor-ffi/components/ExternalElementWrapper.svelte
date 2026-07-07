@@ -22,7 +22,6 @@
   const theme = getThemeContext();
 
   let reportedHeight = $state<number>();
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const themeVariant = $derived(theme.currentThemeVariant);
   const selectionColor = $derived(THEME_COLORS[themeVariant].selection);
@@ -35,26 +34,16 @@
 
     const observer = new ResizeObserver((entries) => {
       const height = entries[0]?.contentRect.height ?? 0;
-      if (height <= 0 || height === reportedHeight) return;
+      if (!Number.isFinite(height) || height <= 0 || height === reportedHeight) return;
 
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-
-      debounceTimer = setTimeout(() => {
-        reportedHeight = height;
-        editor.setExternalElementHeight(element.node, height);
-        debounceTimer = null;
-      }, 100);
+      reportedHeight = height;
+      editor.setExternalElementHeight(element.node, height);
     });
 
     observer.observe(node);
 
     return () => {
       observer.disconnect();
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
     };
   });
 </script>
