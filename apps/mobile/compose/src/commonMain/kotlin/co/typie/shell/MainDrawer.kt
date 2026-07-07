@@ -309,10 +309,6 @@ internal fun MainDrawerContent() {
       Spacer(Modifier.height(4.dp))
 
       Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-        DrawerActionRow(icon = Lucide.StickyNote, label = "노트") {
-          dismissAndRun { nav.navigate(Route.Notes) }
-        }
-
         DrawerActionRow(icon = Lucide.Settings, label = "설정") {
           dismissAndRun { nav.navigate(Route.Settings) }
         }

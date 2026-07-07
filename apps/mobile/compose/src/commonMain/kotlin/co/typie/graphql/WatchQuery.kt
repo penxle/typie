@@ -33,6 +33,13 @@ private constructor(
   override var state: QueryState<D> by mutableStateOf(QueryState.Loading)
     private set
 
+  /**
+   * Query represented by [state]. When `resetOnChange` is false, a new in-flight query does not
+   * replace this value until it publishes data or an error.
+   */
+  var stateQuery: Query<D>? by mutableStateOf(null)
+    private set
+
   @Suppress("UNCHECKED_CAST")
   val data: R
     get() = ((state as? QueryState.Success)?.data ?: placeholderData) as R
@@ -84,6 +91,7 @@ private constructor(
     job?.cancel()
 
     if (resetState || state !is QueryState.Success) {
+      stateQuery = query
       state = QueryState.Loading
     }
 
@@ -97,6 +105,7 @@ private constructor(
           .collect { response ->
             val data = response.data
             if (data != null) {
+              stateQuery = query
               state = QueryState.Success(data)
               if (!initialized) {
                 initialized = true
@@ -108,6 +117,7 @@ private constructor(
               val error =
                 response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
               if (error != null) {
+                stateQuery = query
                 state = QueryState.Error(error)
                 runCatching {
                   Logger.e {
@@ -121,6 +131,7 @@ private constructor(
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
+        stateQuery = query
         state = QueryState.Error(e)
         runCatching { Logger.e { "GraphQL error: ${e.message ?: "unknown error"}" } }
         runCatching { Sentry.captureException(e) }

@@ -41,11 +41,7 @@ internal class NotesViewModel : ViewModel() {
   var filterStatus by mutableStateOf(NoteStatus.OPEN)
     private set
 
-  private var requestedStatus by mutableStateOf(NoteStatus.OPEN)
-  private var liveDataStatus by mutableStateOf(NoteStatus.OPEN)
-  private val settledNotesByStatus = mutableStateMapOf<NoteStatus, List<NoteCard_note>>()
-  private val openListState = NoteListState(NoteStatus.OPEN)
-  private val resolvedListState = NoteListState(NoteStatus.RESOLVED)
+  private val sceneCache = NotesSceneCache()
 
   val query =
     Apollo.watchQuery(
@@ -61,10 +57,9 @@ internal class NotesViewModel : ViewModel() {
       snapshotFlow { query.state }
         .collect { state ->
           if (state is QueryState.Success) {
-            liveDataStatus = requestedStatus
             val notes = state.data.notes()
-            settledNotesByStatus[liveDataStatus] = notes
-            listState(liveDataStatus).sync(notes)
+            val key = queryStateKey() ?: return@collect
+            sceneCache.commitSuccess(key, notes)
 
             val activeNoteId = noteEditState.expandedNoteId ?: return@collect
             notes.firstOrNull { it.id == activeNoteId }?.let(noteEditState::commitServerSnapshot)
@@ -74,37 +69,31 @@ internal class NotesViewModel : ViewModel() {
   }
 
   fun listState(status: NoteStatus): NoteListState =
-    when (status) {
-      NoteStatus.RESOLVED -> resolvedListState
-      else -> openListState
-    }
+    sceneKey(status)?.let(sceneCache::listState) ?: sceneCache.fallbackListState(status)
 
   fun updateFilterStatus(status: NoteStatus) {
     if (status == NoteStatus.UNKNOWN__ || filterStatus == status) {
       return
     }
 
-    requestedStatus = status
     filterStatus = status
   }
 
   fun notes(status: NoteStatus): List<NoteCard_note> =
-    when {
-      status == liveDataStatus && query.state is QueryState.Success ->
-        (query.state as QueryState.Success).data.notes()
-      status in settledNotesByStatus -> settledNotesByStatus.getValue(status)
-      else -> placeholderNotes(status)
-    }
+    sceneCache.notes(
+      key = sceneKey(status),
+      queryKey = queryStateKey(),
+      queryState = queryNotesState(),
+      placeholderNotes = placeholderNotes(status),
+    )
 
   fun queryState(status: NoteStatus): QueryState<*> =
-    when {
-      status == requestedStatus &&
-        query.state is QueryState.Error &&
-        status !in settledNotesByStatus -> query.state as QueryState.Error
-      status == liveDataStatus && query.state is QueryState.Success -> QueryState.Success(Unit)
-      status in settledNotesByStatus -> QueryState.Success(Unit)
-      else -> QueryState.Loading
-    }
+    sceneCache.queryState(
+      key = sceneKey(status),
+      activeKey = sceneKey(filterStatus),
+      queryKey = queryStateKey(),
+      queryState = queryNotesState(),
+    )
 
   fun refetch() {
     if (siteId == null) {
@@ -149,7 +138,79 @@ internal class NotesViewModel : ViewModel() {
   fun savePendingNoteColor(noteId: String, color: String) {
     viewModelScope.launch { updateNoteColor(noteId = noteId, color = color) }
   }
+
+  private fun sceneKey(status: NoteStatus): NotesSceneKey? = siteId?.let {
+    NotesSceneKey(siteId = it, status = status)
+  }
+
+  private fun queryStateKey(): NotesSceneKey? =
+    (query.stateQuery as? NotesScreen_Query)?.let { query ->
+      NotesSceneKey(siteId = query.siteId, status = query.status)
+    }
+
+  private fun queryNotesState(): QueryState<List<NoteCard_note>> =
+    when (val state = query.state) {
+      is QueryState.Success -> QueryState.Success(state.data.notes())
+      is QueryState.Error -> state
+      QueryState.Loading -> QueryState.Loading
+    }
 }
+
+internal data class NotesSceneKey(val siteId: String, val status: NoteStatus)
+
+internal class NotesSceneCache {
+  private val settledNotesByKey = mutableStateMapOf<NotesSceneKey, List<NoteCard_note>>()
+  private val listStatesByKey = mutableMapOf<NotesSceneKey, NoteListState>()
+  private val fallbackListStates = mutableMapOf<NoteStatus, NoteListState>()
+
+  fun commitSuccess(key: NotesSceneKey, notes: List<NoteCard_note>) {
+    settledNotesByKey[key] = notes
+    listState(key).sync(notes)
+  }
+
+  fun listState(key: NotesSceneKey): NoteListState =
+    listStatesByKey.getOrPut(key) { NoteListState(key.status.normalizedListStatus()) }
+
+  fun fallbackListState(status: NoteStatus): NoteListState =
+    fallbackListStates.getOrPut(status.normalizedListStatus()) {
+      NoteListState(status.normalizedListStatus())
+    }
+
+  fun notes(
+    key: NotesSceneKey?,
+    queryKey: NotesSceneKey?,
+    queryState: QueryState<List<NoteCard_note>>,
+    placeholderNotes: List<NoteCard_note>,
+  ): List<NoteCard_note> =
+    when {
+      key != null && key == queryKey && queryState is QueryState.Success -> queryState.data
+      key != null && key in settledNotesByKey -> settledNotesByKey.getValue(key)
+      else -> placeholderNotes
+    }
+
+  fun queryState(
+    key: NotesSceneKey?,
+    activeKey: NotesSceneKey?,
+    queryKey: NotesSceneKey?,
+    queryState: QueryState<List<NoteCard_note>>,
+  ): QueryState<*> =
+    when {
+      key != null &&
+        key == activeKey &&
+        key == queryKey &&
+        queryState is QueryState.Error &&
+        key !in settledNotesByKey -> queryState
+      key != null && key == queryKey && queryState is QueryState.Success -> QueryState.Success(Unit)
+      key != null && key in settledNotesByKey -> QueryState.Success(Unit)
+      else -> QueryState.Loading
+    }
+}
+
+private fun NoteStatus.normalizedListStatus(): NoteStatus =
+  when (this) {
+    NoteStatus.RESOLVED -> NoteStatus.RESOLVED
+    else -> NoteStatus.OPEN
+  }
 
 private val openPlaceholderNotes = placeholderData(status = NoteStatus.OPEN).notes()
 private val resolvedPlaceholderNotes = placeholderData(status = NoteStatus.RESOLVED).notes()

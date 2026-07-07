@@ -89,6 +89,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 enum class Tab(val route: Route) {
   Home(Route.Home),
   Space(Route.Space),
+  Notes(Route.Notes),
 }
 
 class TabState(val currentTab: Tab, val onSelectTab: (Tab) -> Unit)

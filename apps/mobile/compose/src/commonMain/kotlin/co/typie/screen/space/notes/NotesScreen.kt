@@ -45,6 +45,10 @@ import co.typie.icons.Typie
 import co.typie.navigation.Nav
 import co.typie.result.Result
 import co.typie.route.Route
+import co.typie.shell.MainBottomBarPillEntry
+import co.typie.shell.MainBottomBarPillKey
+import co.typie.shell.MainDrawerTrigger
+import co.typie.shell.MainDrawerTriggerLeadingKey
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarAction
@@ -321,6 +325,8 @@ fun NotesScreen() {
   }
 
   ProvideTopBar(
+    leadingKey = MainDrawerTriggerLeadingKey,
+    leading = { MainDrawerTrigger() },
     center = { Text("노트", style = AppTheme.typography.title) },
     trailingKey = NotesFilterTopBarTrailingKey,
     trailing = {
@@ -333,11 +339,13 @@ fun NotesScreen() {
   )
 
   ProvideBottomBar(
+    pillKey = MainBottomBarPillKey,
+    pill = MainBottomBarPillEntry,
     action =
       BottomBarAction(
         icon = Typie.StickyNotePlus,
         onClick = { scope.launch { handleCreateNote() } },
-      )
+      ),
   )
 
   Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { contentPadding ->
