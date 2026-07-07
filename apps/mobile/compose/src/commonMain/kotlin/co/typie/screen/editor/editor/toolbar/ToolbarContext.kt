@@ -72,9 +72,15 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
     (selectedBlock?.node as? PlainNode.HorizontalRule)?.let { node ->
       EditorToolbarNodeTarget(id = selectedBlock.id, node = node)
     }
-  var blockquoteTarget: EditorToolbarNodeTarget<PlainNode.Blockquote>? = null
-  var calloutTarget: EditorToolbarNodeTarget<PlainNode.Callout>? = null
-  var foldTargetId: String? = null
+  var blockquoteTarget =
+    (selectedBlock?.node as? PlainNode.Blockquote)?.let { node ->
+      EditorToolbarNodeTarget(id = selectedBlock.id, node = node)
+    }
+  var calloutTarget =
+    (selectedBlock?.node as? PlainNode.Callout)?.let { node ->
+      EditorToolbarNodeTarget(id = selectedBlock.id, node = node)
+    }
+  var foldTargetId = selectedBlock?.id?.takeIf { selectedBlock.node == PlainNode.Fold }
   var tableMode: EditorToolbarTableMode? =
     if (selectedPageKey == EditorToolbarPageKey.Table) EditorToolbarTableMode.Selected else null
   val ancestorIds = blockState?.ancestors.orEmpty().mapTo(mutableSetOf()) { it.id }
@@ -191,6 +197,9 @@ private fun PlainNode.selectedToolbarPageKey(): EditorToolbarPageKey? =
     is PlainNode.Embed -> EditorToolbarPageKey.Embed
     is PlainNode.Archived -> EditorToolbarPageKey.Archived
     is PlainNode.HorizontalRule -> EditorToolbarPageKey.HorizontalRule
+    is PlainNode.Blockquote -> EditorToolbarPageKey.Blockquote
+    is PlainNode.Callout -> EditorToolbarPageKey.Callout
+    PlainNode.Fold -> EditorToolbarPageKey.Fold
     is PlainNode.Table -> EditorToolbarPageKey.Table
     else -> null
   }

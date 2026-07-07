@@ -99,6 +99,90 @@ class ToolbarContextTest {
   }
 
   @Test
+  fun selectedBlockquoteAutoTargetsBlockquote() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = singleBlockSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              nodes = listOf(block("blockquote", PlainNode.Blockquote())),
+            ),
+        )
+      )
+
+    assertEquals(
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Blockquote),
+      context.pageKeys,
+    )
+    assertEquals(EditorToolbarPageKey.Blockquote, context.autoTargetPageKey)
+    assertEquals(
+      EditorToolbarAutoTargetKey(
+        pageKey = EditorToolbarPageKey.Blockquote,
+        selectedNodeId = "blockquote",
+      ),
+      context.autoTargetKey,
+    )
+    assertEquals(
+      EditorToolbarNodeTarget(id = "blockquote", node = PlainNode.Blockquote()),
+      context.blockquoteTarget,
+    )
+  }
+
+  @Test
+  fun selectedCalloutAutoTargetsCallout() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = singleBlockSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              nodes = listOf(block("callout", PlainNode.Callout())),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Callout), context.pageKeys)
+    assertEquals(EditorToolbarPageKey.Callout, context.autoTargetPageKey)
+    assertEquals(
+      EditorToolbarAutoTargetKey(
+        pageKey = EditorToolbarPageKey.Callout,
+        selectedNodeId = "callout",
+      ),
+      context.autoTargetKey,
+    )
+    assertEquals(
+      EditorToolbarNodeTarget(id = "callout", node = PlainNode.Callout()),
+      context.calloutTarget,
+    )
+  }
+
+  @Test
+  fun selectedFoldAutoTargetsFold() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = singleBlockSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              nodes = listOf(block("fold", PlainNode.Fold)),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Fold), context.pageKeys)
+    assertEquals(EditorToolbarPageKey.Fold, context.autoTargetPageKey)
+    assertEquals(
+      EditorToolbarAutoTargetKey(pageKey = EditorToolbarPageKey.Fold, selectedNodeId = "fold"),
+      context.autoTargetKey,
+    )
+    assertEquals("fold", context.foldTargetId)
+  }
+
+  @Test
   fun ancestorContextsAreIncludedAfterText() {
     val context =
       resolveEditorToolbarContext(
@@ -343,6 +427,63 @@ class ToolbarContextTest {
     )
     assertEquals(null, context.autoTargetPageKey)
     assertEquals(EditorToolbarTableMode.InTable, context.tableMode)
+  }
+
+  @Test
+  fun cursorInsideFoldTitleKeepsFoldPageAvailableWithoutAutoTarget() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          modifierState = modifierState(inlineText = true),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("fold-title", PlainNode.FoldTitle),
+                  block("fold", PlainNode.Fold),
+                  block("root", rootNode()),
+                )
+            ),
+        )
+      )
+
+    assertEquals(
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold),
+      context.pageKeys,
+    )
+    assertEquals(null, context.autoTargetPageKey)
+    assertEquals(null, context.autoTargetKey)
+    assertEquals("fold", context.foldTargetId)
+  }
+
+  @Test
+  fun cursorInsideFoldContentKeepsFoldPageAvailableWithoutAutoTarget() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          modifierState = modifierState(inlineText = true),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("fold-content", PlainNode.FoldContent),
+                  block("fold", PlainNode.Fold),
+                  block("root", rootNode()),
+                )
+            ),
+        )
+      )
+
+    assertEquals(
+      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold),
+      context.pageKeys,
+    )
+    assertEquals(null, context.autoTargetPageKey)
+    assertEquals(null, context.autoTargetKey)
+    assertEquals("fold", context.foldTargetId)
   }
 
   private fun editorState(

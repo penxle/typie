@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeWithVelocity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.horizontalScroll
 import co.typie.icons.Lucide
@@ -1044,6 +1045,78 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
+  fun retainedManualFoldPageStaysFixedWhenTextToolbarExtentChanges() = runComposeUiTest {
+    val pageKeys =
+      mutableStateOf(
+        listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold)
+      )
+    val autoTarget = mutableStateOf<EditorToolbarPageKey?>(null)
+    val autoTargetRevision = mutableStateOf(0L)
+    val textItemWidth = mutableStateOf(80.dp)
+    lateinit var textScrollState: ScrollState
+    setContent {
+      textScrollState = rememberScrollState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys.value,
+        autoTargetPageKey = autoTarget.value,
+        autoTargetRevision = autoTargetRevision.value,
+        textItemWidth = textItemWidth.value,
+      )
+    }
+    waitForIdle()
+    goToFoldPage(textScrollState)
+    val initialTextMax = textScrollState.maxValue
+    val initialFoldLeft = pageLeft(FoldPageTag)
+
+    mainClock.autoAdvance = false
+    textItemWidth.value = 84.dp
+    mainClock.advanceTimeByFrame()
+
+    assertTrue(
+      textScrollState.maxValue > initialTextMax,
+      "test setup should increase text toolbar extent",
+    )
+    assertNear(initialFoldLeft, pageLeft(FoldPageTag), "fold page should stay in place")
+
+    mainClock.autoAdvance = true
+    waitForIdle()
+    assertPageActive(FoldPageTag)
+  }
+
+  @Test
+  fun textToolbarExtentChangeDoesNotPulseIndicator() = runComposeUiTest {
+    val textItemWidth = mutableStateOf(80.dp)
+    lateinit var pagerState: ToolbarPagerState
+    lateinit var textScrollState: ScrollState
+    setContent {
+      textScrollState = rememberScrollState()
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        pagerState = pagerState,
+        textItemWidth = textItemWidth.value,
+      )
+    }
+    waitForIdle()
+    val initialTextMax = textScrollState.maxValue
+    val initialPulse = pagerState.indicatorPulse
+
+    textItemWidth.value = 84.dp
+    waitForIdle()
+
+    assertTrue(
+      textScrollState.maxValue > initialTextMax,
+      "test setup should increase text toolbar extent",
+    )
+    assertEquals(
+      initialPulse,
+      pagerState.indicatorPulse,
+      "indicator should not pulse when only a page scroll range changes",
+    )
+  }
+
+  @Test
   fun retainedPagerStateRestoresPageAndInternalScrollAfterToolbarRecomposes() = runComposeUiTest {
     val visible = mutableStateOf(true)
     val pageKeys = mutableStateOf(DefaultPageKeys)
@@ -1372,8 +1445,14 @@ class EditorToolbarPagesDesktopTest {
     autoTargetRevision: Long = 0L,
     visible: Boolean = true,
     pagerState: ToolbarPagerState = rememberToolbarPagerState(),
+    textItemWidth: Dp = 80.dp,
   ) {
-    val pages = rememberToolbarTestPages(textScrollState = textScrollState, pageKeys = pageKeys)
+    val pages =
+      rememberToolbarTestPages(
+        textScrollState = textScrollState,
+        pageKeys = pageKeys,
+        textItemWidth = textItemWidth,
+      )
     val commandScope = rememberCoroutineScope()
     ToolbarTestTheme {
       Box(Modifier.width(360.dp).height(ToolbarStackHeight).testTag(ToolbarTag)) {
@@ -1403,7 +1482,8 @@ class EditorToolbarPagesDesktopTest {
       LocalAppColors provides LightColors,
       LocalAppShadows provides LightAppShadows,
       LocalThemeMode provides ResolvedThemeMode.Light,
-      LocalHazeBlurStyle provides HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+      LocalHazeBlurStyle provides
+        HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
       content = content,
     )
   }
@@ -1412,8 +1492,9 @@ class EditorToolbarPagesDesktopTest {
   private fun rememberToolbarTestPages(
     textScrollState: ScrollState,
     pageKeys: List<EditorToolbarPageKey>,
+    textItemWidth: Dp,
   ): List<EditorToolbarPage> =
-    remember(textScrollState, pageKeys) {
+    remember(textScrollState, pageKeys, textItemWidth) {
       pageKeys.map { key ->
         when (key) {
           EditorToolbarPageKey.Main ->
@@ -1440,7 +1521,7 @@ class EditorToolbarPagesDesktopTest {
                 ) {
                   repeat(16) { index ->
                     Box(
-                      Modifier.size(width = 80.dp, height = ToolbarButtonSize)
+                      Modifier.size(width = textItemWidth, height = ToolbarButtonSize)
                         .testTag("text-item-$index")
                     )
                   }

@@ -164,11 +164,16 @@ internal fun EditorToolbarPages(
     val validAutoTargetKey = validAutoTargetPageKey?.let { autoTargetKey ?: it }
     val pageKeysChangedInFrame =
       pagerState.previousPageKeys?.let { previousPageKeys -> previousPageKeys != pageKeys } == true
+    val pageScrollRangesChangedInFrame =
+      pagerState.previousPageScrollRanges?.let { previousPageScrollRanges ->
+        previousPageScrollRanges != pageScrollRanges
+      } == true
+    val pageLayoutChangedInFrame = pageKeysChangedInFrame || pageScrollRangesChangedInFrame
     val retainedPageIndex = pages.indexOfFirst { page -> page.key == pagerState.settledPageKey }
     val autoTargetAllowsRetainedPage =
       validAutoTargetPageKey == null || validAutoTargetPageKey == pagerState.settledPageKey
     val canRetainSettledPagePosition =
-      pageKeysChangedInFrame && retainedPageIndex >= 0 && autoTargetAllowsRetainedPage
+      pageLayoutChangedInFrame && retainedPageIndex >= 0 && autoTargetAllowsRetainedPage
     val retainedPagePosition =
       if (canRetainSettledPagePosition) {
         val retainedScrollState = pages[retainedPageIndex].scrollState
@@ -445,6 +450,7 @@ internal fun EditorToolbarPages(
       val initialized = previousPageKeys != null
       val pageKeysChanged = previousPageKeys != null && previousPageKeys != pageKeys
       pagerState.previousPageKeys = pageKeys
+      pagerState.previousPageScrollRanges = pageScrollRanges
       if (pageKeysChanged) {
         pagerState.indicatorPulse++
       }
