@@ -247,6 +247,23 @@ pub enum NodeOp {
 }
 
 #[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListKind {
+    Bullet,
+    Ordered,
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ListOp {
+    SetKind { kind: ListKind },
+    Indent,
+    Outdent,
+}
+
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewOp {
@@ -400,6 +417,9 @@ pub enum Message {
     },
     Node {
         op: NodeOp,
+    },
+    List {
+        op: ListOp,
     },
     View {
         op: ViewOp,

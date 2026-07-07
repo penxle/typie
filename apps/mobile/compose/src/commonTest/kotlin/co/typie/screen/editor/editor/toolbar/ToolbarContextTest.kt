@@ -132,6 +132,191 @@ class ToolbarContextTest {
   }
 
   @Test
+  fun collapsedCursorInsideListShowsListMode() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("list-item", PlainNode.ListItem),
+                  block("bullet-list", PlainNode.BulletList),
+                  block("root", rootNode()),
+                )
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(EditorToolbarListMode.Bullet, context.listMode)
+  }
+
+  @Test
+  fun collapsedCursorInsideNestedListUsesClosestListMode() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("child-list-item", PlainNode.ListItem),
+                  block("child-bullet-list", PlainNode.BulletList),
+                  block("parent-list-item", PlainNode.ListItem),
+                  block("parent-ordered-list", PlainNode.OrderedList),
+                  block("root", rootNode()),
+                )
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(EditorToolbarListMode.Bullet, context.listMode)
+  }
+
+  @Test
+  fun nonCollapsedRangeInsideNestedListUsesClosestListMode() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = rangeSelection(),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("child-list-item", PlainNode.ListItem),
+                  block("child-bullet-list", PlainNode.BulletList),
+                  block("parent-list-item", PlainNode.ListItem),
+                  block("parent-ordered-list", PlainNode.OrderedList),
+                  block("root", rootNode()),
+                ),
+              intersectingNodes =
+                listOf(
+                  block("parent-ordered-list", PlainNode.OrderedList),
+                  block("parent-list-item", PlainNode.ListItem),
+                  block("child-bullet-list", PlainNode.BulletList),
+                  block("child-list-item", PlainNode.ListItem),
+                  block("paragraph", PlainNode.Paragraph),
+                ),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(EditorToolbarListMode.Bullet, context.listMode)
+  }
+
+  @Test
+  fun nonCollapsedRangeAcrossNestedMixedListsShowsNoSelectedMode() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = rangeSelection(),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("parent-list-item", PlainNode.ListItem),
+                  block("parent-ordered-list", PlainNode.OrderedList),
+                  block("root", rootNode()),
+                ),
+              intersectingNodes =
+                listOf(
+                  block("parent-ordered-list", PlainNode.OrderedList),
+                  block("parent-list-item", PlainNode.ListItem),
+                  block("parent-paragraph", PlainNode.Paragraph),
+                  block("child-bullet-list", PlainNode.BulletList),
+                  block("child-list-item", PlainNode.ListItem),
+                  block("child-paragraph", PlainNode.Paragraph),
+                ),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(null, context.listMode)
+  }
+
+  @Test
+  fun nonCollapsedRangeContainingListShowsListWithoutAutoTarget() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = rangeSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              intersectingNodes =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("list-item", PlainNode.ListItem),
+                ),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(null, context.autoTargetPageKey)
+    assertEquals(null, context.listMode)
+  }
+
+  @Test
+  fun nonCollapsedUnsupportedMixedRangeContainingListStillShowsList() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = rangeSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              nodes = listOf(block("image", PlainNode.Image(id = null))),
+              intersectingNodes =
+                listOf(
+                  block("image", PlainNode.Image(id = null)),
+                  block("list-item", PlainNode.ListItem),
+                ),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(null, context.autoTargetPageKey)
+  }
+
+  @Test
+  fun nonCollapsedMixedListKindsShowListWithoutSelectedMode() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = rangeSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              nodes =
+                listOf(
+                  block("bullet-list", PlainNode.BulletList),
+                  block("ordered-list", PlainNode.OrderedList),
+                ),
+              intersectingNodes =
+                listOf(
+                  block("bullet-list", PlainNode.BulletList),
+                  block("ordered-list", PlainNode.OrderedList),
+                ),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.List), context.pageKeys)
+    assertEquals(null, context.listMode)
+  }
+
+  @Test
   fun cursorInsideTableAddsTableInModeWithoutAutoTarget() {
     val context =
       resolveEditorToolbarContext(
@@ -199,7 +384,9 @@ class ToolbarContextTest {
   private fun blockState(
     ancestors: List<Block> = emptyList(),
     nodes: List<Block> = emptyList(),
-  ): BlockState = BlockState(ancestors = ancestors, nodes = nodes)
+    intersectingNodes: List<Block> = emptyList(),
+  ): BlockState =
+    BlockState(ancestors = ancestors, nodes = nodes, intersectingNodes = intersectingNodes)
 
   private fun block(id: String, node: PlainNode): Block = Block(id = id, node = node)
 

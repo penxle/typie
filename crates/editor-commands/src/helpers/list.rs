@@ -7,7 +7,7 @@ use editor_transaction::{Transaction, fulfill};
 
 use crate::{CommandError, CommandResult};
 
-fn is_list_type(ty: NodeType) -> bool {
+pub(crate) fn is_list_type(ty: NodeType) -> bool {
     matches!(ty, NodeType::BulletList | NodeType::OrderedList)
 }
 
@@ -295,7 +295,10 @@ fn collect_list_items_in_block(
     }
 }
 
-fn list_item_own_paragraph_intersects(rs: &ResolvedSelection<'_>, item: &NodeView<'_>) -> bool {
+pub(crate) fn list_item_own_paragraph_intersects(
+    rs: &ResolvedSelection<'_>,
+    item: &NodeView<'_>,
+) -> bool {
     item.child_blocks()
         .next()
         .map(|paragraph| rs.intersects_subtree(&paragraph))

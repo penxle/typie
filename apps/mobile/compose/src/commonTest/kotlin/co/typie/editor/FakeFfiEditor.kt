@@ -50,7 +50,7 @@ internal class FakeFfiEditor(
   var rootModifiersProvider: () -> List<EditorModifier> = { emptyList() },
   var modifierStateProvider: () -> ModifierState = { EmptyModifierState },
   var blockStateProvider: () -> BlockState = {
-    BlockState(ancestors = emptyList(), nodes = emptyList())
+    BlockState(ancestors = emptyList(), nodes = emptyList(), intersectingNodes = emptyList())
   },
   var characterCountsProvider: () -> CharacterCounts = { EmptyCharacterCounts },
   var pageSizesProvider: () -> List<Size> = { emptyList() },

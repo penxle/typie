@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor.toolbar
 
 import co.typie.editor.EditorState
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ext.isSingleSlotRange
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainNode
@@ -40,10 +41,13 @@ internal enum class EditorToolbarTableMode {
 internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarContext {
   val selection = state.selection
   val blockState = state.blockState
+  val selectionCollapsed = selection.isCollapsed()
+  val nodes = blockState?.nodes.orEmpty()
+  val intersectingNodes = blockState?.intersectingNodes.orEmpty()
   val hasTextPage = state.modifierState?.hasInlineTextModifier() == true
   val selectedBlock =
     if (selection.isSingleSlotRange()) {
-      blockState?.nodes?.firstOrNull { it.node.selectedToolbarPageKey() != null }
+      nodes.firstOrNull { it.node.selectedToolbarPageKey() != null }
     } else {
       null
     }
@@ -73,42 +77,69 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
   var foldTargetId: String? = null
   var tableMode: EditorToolbarTableMode? =
     if (selectedPageKey == EditorToolbarPageKey.Table) EditorToolbarTableMode.Selected else null
+  val ancestorIds = blockState?.ancestors.orEmpty().mapTo(mutableSetOf()) { it.id }
 
   blockState?.ancestors.orEmpty().forEach { block ->
-    when (block.node) {
-      PlainNode.BulletList -> {
-        listMode = EditorToolbarListMode.Bullet
-        addPage(EditorToolbarPageKey.List)
+    val blockListMode = block.node.toolbarListMode()
+    if (blockListMode != null) {
+      if (listMode == null) {
+        listMode = blockListMode
       }
-      PlainNode.OrderedList -> {
-        listMode = EditorToolbarListMode.Ordered
-        addPage(EditorToolbarPageKey.List)
-      }
-      is PlainNode.Blockquote -> {
-        if (blockquoteTarget == null) {
-          blockquoteTarget = EditorToolbarNodeTarget(id = block.id, node = block.node)
+      addPage(EditorToolbarPageKey.List)
+    } else {
+      when (block.node) {
+        is PlainNode.Blockquote -> {
+          if (blockquoteTarget == null) {
+            blockquoteTarget = EditorToolbarNodeTarget(id = block.id, node = block.node)
+          }
+          addPage(EditorToolbarPageKey.Blockquote)
         }
-        addPage(EditorToolbarPageKey.Blockquote)
-      }
-      is PlainNode.Callout -> {
-        if (calloutTarget == null) {
-          calloutTarget = EditorToolbarNodeTarget(id = block.id, node = block.node)
+        is PlainNode.Callout -> {
+          if (calloutTarget == null) {
+            calloutTarget = EditorToolbarNodeTarget(id = block.id, node = block.node)
+          }
+          addPage(EditorToolbarPageKey.Callout)
         }
-        addPage(EditorToolbarPageKey.Callout)
-      }
-      PlainNode.Fold -> {
-        if (foldTargetId == null) {
-          foldTargetId = block.id
+        PlainNode.Fold -> {
+          if (foldTargetId == null) {
+            foldTargetId = block.id
+          }
+          addPage(EditorToolbarPageKey.Fold)
         }
-        addPage(EditorToolbarPageKey.Fold)
-      }
-      is PlainNode.Table -> {
-        if (tableMode == null) {
-          tableMode = EditorToolbarTableMode.InTable
+        is PlainNode.Table -> {
+          if (tableMode == null) {
+            tableMode = EditorToolbarTableMode.InTable
+          }
+          addPage(EditorToolbarPageKey.Table)
         }
-        addPage(EditorToolbarPageKey.Table)
+        else -> Unit
       }
-      else -> Unit
+    }
+  }
+  if (
+    !selectionCollapsed &&
+      intersectingNodes.any { block ->
+        when (block.node) {
+          PlainNode.BulletList,
+          PlainNode.OrderedList,
+          PlainNode.ListItem -> true
+          else -> false
+        }
+      }
+  ) {
+    addPage(EditorToolbarPageKey.List)
+    val mixedListMode =
+      listMode != null &&
+        intersectingNodes
+          .asSequence()
+          .filterNot { it.id in ancestorIds }
+          .mapNotNull { it.node.toolbarListMode() }
+          .any { it != listMode }
+    if (mixedListMode) {
+      listMode = null
+    }
+    if (listMode == null && !mixedListMode) {
+      listMode = nodes.mapNotNull { it.node.toolbarListMode() }.distinct().singleOrNull()
     }
   }
 
@@ -145,6 +176,13 @@ private fun ModifierState.hasInlineTextModifier(): Boolean =
     ruby.isPresent()
 
 private fun Tri<*>.isPresent(): Boolean = this !is Tri.Absent
+
+private fun PlainNode.toolbarListMode(): EditorToolbarListMode? =
+  when (this) {
+    PlainNode.BulletList -> EditorToolbarListMode.Bullet
+    PlainNode.OrderedList -> EditorToolbarListMode.Ordered
+    else -> null
+  }
 
 private fun PlainNode.selectedToolbarPageKey(): EditorToolbarPageKey? =
   when (this) {

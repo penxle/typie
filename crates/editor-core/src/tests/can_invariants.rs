@@ -77,6 +77,11 @@ fn build_corpus() -> Vec<Message> {
                 id: editor_crdt::Dot::ROOT,
             },
         },
+        Message::List {
+            op: ListOp::SetKind {
+                kind: ListKind::Bullet,
+            },
+        },
         Message::Key {
             event: KeyEvent {
                 key: Key::Backspace,
@@ -198,6 +203,7 @@ fn message_variants_are_enumerated() {
         | Message::Selection { .. }
         | Message::Modifier { .. }
         | Message::Node { .. }
+        | Message::List { .. }
         | Message::View { .. }
         | Message::Clipboard { .. }
         | Message::TextInput { .. }

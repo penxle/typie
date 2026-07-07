@@ -123,6 +123,32 @@ class KeyboardTest {
     )
   }
 
+  @Test
+  fun tabDispatchesKeyEventSoListFallbackPolicyStaysInCore() = runTest {
+    val binding =
+      createBindings(Platform.Desktop).single { it.key == ComposeKey.Tab && it.modifiers.isEmpty() }
+    val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
+
+    assertEquals(
+      listOf(Message.Key(FfiKeyEvent(FfiKey.Tab))),
+      with(binding) { editor.action(NoopClipboard) },
+    )
+  }
+
+  @Test
+  fun shiftTabDispatchesKeyEventSoListFallbackPolicyStaysInCore() = runTest {
+    val binding =
+      createBindings(Platform.Desktop).single {
+        it.key == ComposeKey.Tab && it.modifiers == setOf(KeyModifier.Shift)
+      }
+    val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
+
+    assertEquals(
+      listOf(Message.Key(FfiKeyEvent(FfiKey.Tab, InputModifiers(shift = true)))),
+      with(binding) { editor.action(NoopClipboard) },
+    )
+  }
+
   private suspend fun TestScope.assertNavigationBinding(
     key: ComposeKey,
     modifiers: Set<KeyModifier>,

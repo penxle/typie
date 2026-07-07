@@ -243,6 +243,11 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     ),
     KeyBinding(ComposeKey.Tab, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Tab))) }),
     KeyBinding(
+      ComposeKey.Tab,
+      setOf(KeyModifier.Shift),
+      action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Tab, InputModifiers(shift = true)))) },
+    ),
+    KeyBinding(
       ComposeKey.Escape,
       bringIntoViewTarget = null,
       action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Escape))) },

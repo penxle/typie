@@ -1,6 +1,6 @@
 use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{ChildView, DocView, NodeView, PlainNode, Schema};
+use editor_model::{ChildView, DocView, NodeType, NodeView, PlainNode, Schema};
 use editor_state::{ResolvedSelection, Selection, State};
 use serde::{Deserialize, Serialize};
 
@@ -16,13 +16,18 @@ pub struct Block {
 pub struct BlockState {
     pub ancestors: Vec<Block>,
     pub nodes: Vec<Block>,
+    pub intersecting_nodes: Vec<Block>,
 }
 
 pub fn resolve_block_state(state: &State) -> Option<BlockState> {
     let selection = state.selection.as_ref()?;
     let ancestors = resolve_ancestors(state, selection);
-    let nodes = resolve_nodes(state, selection);
-    Some(BlockState { ancestors, nodes })
+    let (nodes, intersecting_nodes) = resolve_range_nodes(state, selection);
+    Some(BlockState {
+        ancestors,
+        nodes,
+        intersecting_nodes,
+    })
 }
 
 fn resolve_ancestors(state: &State, selection: &Selection) -> Vec<Block> {
@@ -73,47 +78,66 @@ fn common_suffix(a: &[Block], b: &[Block]) -> Vec<Block> {
     shared_from_root
 }
 
-fn resolve_nodes(state: &State, selection: &Selection) -> Vec<Block> {
+fn resolve_range_nodes(state: &State, selection: &Selection) -> (Vec<Block>, Vec<Block>) {
     if selection.is_collapsed() {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
     let view = state.view();
     let Some(rs) = selection.resolve(&view) else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
-    let mut out = Vec::new();
-    collect_contained(&view.root().unwrap(), &rs, &mut out);
-    out
+    let mut out = RangeNodes::default();
+    collect_range_nodes(&view.root().unwrap(), &rs, &mut out);
+    (out.contained, out.intersecting)
 }
 
-/// Collect `node` itself and any descendant non-inline nodes wholly
-/// contained in `rs`, in document (preorder) order. Non-inline atom leaves
-/// (e.g. a top-level image) are leaves, not blocks, so they are matched on the
-/// child sweep rather than via recursion.
-fn collect_contained(node: &NodeView, rs: &ResolvedSelection, out: &mut Vec<Block>) {
-    if rs.contains_subtree(node) && !node.spec().inline {
-        out.push(Block {
+#[derive(Default)]
+struct RangeNodes {
+    contained: Vec<Block>,
+    intersecting: Vec<Block>,
+}
+
+/// Collect non-inline nodes touched by `rs`, in document (preorder) order.
+/// `contained` keeps the historical `nodes` contract: only nodes wholly
+/// contained in the range. `intersecting` is wider and includes nodes whose
+/// subtree merely overlaps the range; root is omitted because it would be
+/// present for every non-collapsed range.
+fn collect_range_nodes(node: &NodeView, rs: &ResolvedSelection, out: &mut RangeNodes) {
+    if !rs.intersects_subtree(node) {
+        return;
+    }
+
+    let contains = rs.contains_subtree(node);
+    if !node.spec().inline {
+        let block = Block {
             id: node.id(),
             node: node.node().to_plain(),
-        });
+        };
+        if contains {
+            out.contained.push(block.clone());
+        }
+        if node.node_type() != NodeType::Root {
+            out.intersecting.push(block);
+        }
     }
+
     // Descend even when self is wholly contained: nested non-inline children
     // (e.g., paragraphs inside a blockquote) must be enumerated too.
-    if rs.intersects_subtree(node) {
-        for (i, child) in node.children().enumerate() {
-            match child {
-                ChildView::Block(b) => collect_contained(&b, rs, out),
-                ChildView::Leaf(l) => {
-                    let Some(leaf_node) = l.node() else { continue };
-                    if Schema::node_spec(l.node_type()).inline {
-                        continue;
-                    }
-                    if rs.contains_leaf_slot(node, i) {
-                        out.push(Block {
-                            id: l.dot(),
-                            node: leaf_node.to_plain(),
-                        });
-                    }
+    for (i, child) in node.children().enumerate() {
+        match child {
+            ChildView::Block(b) => collect_range_nodes(&b, rs, out),
+            ChildView::Leaf(l) => {
+                let Some(leaf_node) = l.node() else { continue };
+                if Schema::node_spec(l.node_type()).inline {
+                    continue;
+                }
+                if rs.contains_leaf_slot(node, i) {
+                    let block = Block {
+                        id: l.dot(),
+                        node: leaf_node.to_plain(),
+                    };
+                    out.contained.push(block.clone());
+                    out.intersecting.push(block);
                 }
             }
         }
@@ -161,6 +185,7 @@ mod tests {
         };
         let bs = resolve_block_state(&state).unwrap();
         assert!(bs.nodes.is_empty());
+        assert!(bs.intersecting_nodes.is_empty());
     }
 
     #[test]
@@ -180,6 +205,60 @@ mod tests {
                 .any(|b| matches!(b.node, PlainNode::Image(_)))
         );
         assert_eq!(bs.ancestors.len(), 1);
+    }
+
+    #[test]
+    fn intersecting_nodes_include_list_when_endpoint_is_inside_list() {
+        let (state, ..) = state! {
+            doc { root {
+                p1: paragraph { text("plain") }
+                bullet_list {
+                    list_item {
+                        p2: paragraph { text("item") }
+                    }
+                }
+            } }
+            selection: (p1, 2) -> (p2, 2)
+        };
+        let bs = resolve_block_state(&state).unwrap();
+
+        assert!(bs.intersecting_nodes.iter().any(|block| matches!(
+            block.node,
+            PlainNode::BulletList(_) | PlainNode::OrderedList(_) | PlainNode::ListItem(_)
+        )));
+        assert!(!bs.nodes.iter().any(|block| matches!(
+            block.node,
+            PlainNode::BulletList(_) | PlainNode::OrderedList(_) | PlainNode::ListItem(_)
+        )));
+    }
+
+    #[test]
+    fn intersecting_nodes_include_plain_blocks_for_plain_paragraph_range() {
+        let (state, ..) = state! {
+            doc { root {
+                p1: paragraph { text("one") }
+                p2: paragraph { text("two") }
+            } }
+            selection: (p1, 1) -> (p2, 2)
+        };
+        let bs = resolve_block_state(&state).unwrap();
+
+        assert_eq!(
+            bs.intersecting_nodes
+                .iter()
+                .filter(|block| matches!(block.node, PlainNode::Paragraph(_)))
+                .count(),
+            2
+        );
+        assert!(
+            !bs.intersecting_nodes
+                .iter()
+                .any(|block| matches!(block.node, PlainNode::Root(_)))
+        );
+        assert!(!bs.intersecting_nodes.iter().any(|block| matches!(
+            block.node,
+            PlainNode::BulletList(_) | PlainNode::OrderedList(_) | PlainNode::ListItem(_)
+        )));
     }
 
     #[test]

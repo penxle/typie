@@ -240,7 +240,10 @@ fn map_type_path(
         }
         "Vec" | "imbl::Vector" => {
             let inner = extract_single_type_arg(args);
-            format!("List<{}>", map_syn_type(inner, custom_types, known_types))
+            format!(
+                "kotlin.collections.List<{}>",
+                map_syn_type(inner, custom_types, known_types)
+            )
         }
         "HashMap"
         | "imbl::HashMap"
@@ -258,7 +261,7 @@ fn map_type_path(
                 _ => panic!("expected type argument"),
             };
             format!(
-                "Map<{}, {}>",
+                "kotlin.collections.Map<{}, {}>",
                 map_syn_type(key_ty, custom_types, known_types),
                 map_syn_type(val_ty, custom_types, known_types)
             )
@@ -270,7 +273,10 @@ fn map_type_path(
         | "BTreeSet"
         | "std::collections::BTreeSet" => {
             let inner = extract_single_type_arg(args);
-            format!("Set<{}>", map_syn_type(inner, custom_types, known_types))
+            format!(
+                "kotlin.collections.Set<{}>",
+                map_syn_type(inner, custom_types, known_types)
+            )
         }
         _ => {
             // Unknown generic wrapper. If the head identifier is a known Ffi type,
@@ -649,15 +655,24 @@ mod tests {
     fn map_vec() {
         let ct = empty_custom_types();
         let kt = empty_known_types();
-        assert_eq!(map_type("Vec<u32>", &ct, &kt), "List<Int>");
-        assert_eq!(map_type("Vec<String>", &ct, &kt), "List<String>");
+        assert_eq!(
+            map_type("Vec<u32>", &ct, &kt),
+            "kotlin.collections.List<Int>"
+        );
+        assert_eq!(
+            map_type("Vec<String>", &ct, &kt),
+            "kotlin.collections.List<String>"
+        );
     }
 
     #[test]
     fn map_imbl_vector() {
         let ct = empty_custom_types();
         let kt = empty_known_types();
-        assert_eq!(map_type("imbl::Vector<Dot>", &ct, &kt), "List<Dot>");
+        assert_eq!(
+            map_type("imbl::Vector<Dot>", &ct, &kt),
+            "kotlin.collections.List<Dot>"
+        );
     }
 
     #[test]
@@ -667,7 +682,10 @@ mod tests {
         let kt = empty_known_types();
         assert_eq!(map_type("Dot", &ct, &kt), "String");
         assert_eq!(map_type("Option<Dot>", &ct, &kt), "String?");
-        assert_eq!(map_type("Vec<Dot>", &ct, &kt), "List<String>");
+        assert_eq!(
+            map_type("Vec<Dot>", &ct, &kt),
+            "kotlin.collections.List<String>"
+        );
     }
 
     #[test]
@@ -696,8 +714,14 @@ mod tests {
     fn map_nested_generic() {
         let ct = empty_custom_types();
         let kt = empty_known_types();
-        assert_eq!(map_type("Option<Vec<u32>>", &ct, &kt), "List<Int>?");
-        assert_eq!(map_type("Vec<Option<String>>", &ct, &kt), "List<String?>");
+        assert_eq!(
+            map_type("Option<Vec<u32>>", &ct, &kt),
+            "kotlin.collections.List<Int>?"
+        );
+        assert_eq!(
+            map_type("Vec<Option<String>>", &ct, &kt),
+            "kotlin.collections.List<String?>"
+        );
     }
 
     #[test]
@@ -706,19 +730,19 @@ mod tests {
         let kt = empty_known_types();
         assert_eq!(
             map_type("HashMap<String, u32>", &ct, &kt),
-            "Map<String, Int>"
+            "kotlin.collections.Map<String, Int>"
         );
         assert_eq!(
             map_type("std::collections::HashMap<String, Vec<u32>>", &ct, &kt),
-            "Map<String, List<Int>>"
+            "kotlin.collections.Map<String, kotlin.collections.List<Int>>"
         );
         assert_eq!(
             map_type("hashbrown::HashMap<String, bool>", &ct, &kt),
-            "Map<String, Boolean>"
+            "kotlin.collections.Map<String, Boolean>"
         );
         assert_eq!(
             map_type("imbl::HashMap<String, f64>", &ct, &kt),
-            "Map<String, Double>"
+            "kotlin.collections.Map<String, Double>"
         );
     }
 
@@ -728,11 +752,11 @@ mod tests {
         let kt = empty_known_types();
         assert_eq!(
             map_type("BTreeMap<String, u32>", &ct, &kt),
-            "Map<String, Int>"
+            "kotlin.collections.Map<String, Int>"
         );
         assert_eq!(
             map_type("std::collections::BTreeMap<String, Vec<u32>>", &ct, &kt),
-            "Map<String, List<Int>>"
+            "kotlin.collections.Map<String, kotlin.collections.List<Int>>"
         );
     }
 
@@ -743,11 +767,11 @@ mod tests {
         kt.insert("Modifier");
         assert_eq!(
             map_type("BTreeSet<Modifier>", &ct, &kt),
-            "Set<co.typie.editor.ffi.Modifier>"
+            "kotlin.collections.Set<co.typie.editor.ffi.Modifier>"
         );
         assert_eq!(
             map_type("std::collections::BTreeSet<String>", &ct, &kt),
-            "Set<String>"
+            "kotlin.collections.Set<String>"
         );
     }
 
@@ -948,10 +972,62 @@ mod tests {
         assert!(output.contains("sealed class EditorEvent {"));
         assert!(output.contains("@Serializable @SerialName(\"state_changed\")"));
         assert!(output.contains(
-            "data class StateChanged(@SerialName(\"fields\") val fields: List<StateField>) : EditorEvent()"
+            "data class StateChanged(@SerialName(\"fields\") val fields: kotlin.collections.List<StateField>) : EditorEvent()"
         ));
         assert!(output.contains("@Serializable @SerialName(\"render_invalidated\")"));
         assert!(output.contains("data object RenderInvalidated : EditorEvent()"));
+    }
+
+    #[test]
+    fn generated_collection_types_are_not_shadowed_by_list_variant() {
+        let meta = FfiMeta {
+            name: "Message".into(),
+            serde_rename_all: Some("snake_case".into()),
+            kind: FfiKind::Enum {
+                variants: vec![
+                    FfiVariant::Struct {
+                        name: "List".into(),
+                        fields: vec![FfiField {
+                            name: "op".into(),
+                            serde_rename: None,
+                            ty: "ListOp".into(),
+                            has_serde_default: false,
+                            ffi_default_override: None,
+                        }],
+                        serde_rename_all: None,
+                    },
+                    FfiVariant::Struct {
+                        name: "TextInput".into(),
+                        fields: vec![FfiField {
+                            name: "ops".into(),
+                            serde_rename: None,
+                            ty: "Vec<FlatImeOp>".into(),
+                            has_serde_default: false,
+                            ffi_default_override: None,
+                        }],
+                        serde_rename_all: None,
+                    },
+                ],
+                serde_tag: Some("type".into()),
+                default_variant: None,
+            },
+            generics: Vec::new(),
+        };
+        let ctx = test_context(&[]);
+        let output = generate_sealed_class(
+            &meta,
+            match &meta.kind {
+                FfiKind::Enum { variants, .. } => variants,
+                _ => unreachable!(),
+            },
+            Some("type"),
+            &ctx,
+        );
+
+        assert!(output.contains("data class List(@SerialName(\"op\") val op: ListOp) : Message()"));
+        assert!(output.contains(
+            "data class TextInput(@SerialName(\"ops\") val ops: kotlin.collections.List<FlatImeOp>) : Message()"
+        ));
     }
 
     #[test]
@@ -1296,7 +1372,9 @@ mod tests {
         );
         assert!(output.contains("sealed class EditorEvent {"));
         assert!(output.contains("@SerialName(\"doc_version\") val docVersion: Long"));
-        assert!(output.contains("@SerialName(\"fields\") val fields: List<String>"));
+        assert!(
+            output.contains("@SerialName(\"fields\") val fields: kotlin.collections.List<String>")
+        );
         assert!(!output.contains("val value:"));
         assert!(output.contains("data object RenderInvalidated : EditorEvent()"));
     }

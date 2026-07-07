@@ -917,6 +917,7 @@ impl Editor {
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
+            Message::List { op } => handle::handle_list_op(self, op)?,
             Message::View { op } => handle::handle_view_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
             Message::TextInput { ops } => handle::handle_flat_ime_ops(self, ops)?,
