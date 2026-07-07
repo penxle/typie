@@ -270,6 +270,34 @@ class EditorAwaitTest {
     }
 
   @Test
+  fun document_revision_advances_only_when_doc_field_changes() =
+    runTest(dispatcher) {
+      val events =
+        ArrayDeque(
+          listOf(
+            listOf(EditorEvent.StateChanged(listOf(StateField.Doc))),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor, StateField.Doc))),
+          )
+        )
+      val fake = FakeFfiEditor(onTick = { events.removeFirst() })
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.await { enqueue(sampleMessage) }
+      assertEquals(1L, editor.state.version)
+      assertEquals(1L, editor.state.documentRevision)
+
+      // cursor-only tick: version advances, documentRevision stays
+      editor.await { enqueue(sampleMessage) }
+      assertEquals(2L, editor.state.version)
+      assertEquals(1L, editor.state.documentRevision)
+
+      editor.await { enqueue(sampleMessage) }
+      assertEquals(3L, editor.state.version)
+      assertEquals(2L, editor.state.documentRevision)
+    }
+
+  @Test
   fun await_reports_tick_exception_without_committing() =
     runTest(dispatcher) {
       val boom = RuntimeException("boom")

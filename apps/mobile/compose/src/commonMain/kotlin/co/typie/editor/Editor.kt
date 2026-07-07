@@ -8,6 +8,7 @@ import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.BlockState
+import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
@@ -351,6 +352,19 @@ internal constructor(
 
   fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? =
     inner.interactiveHitTest(page, x, y)
+
+  suspend fun characterCounts(): CharacterCounts? =
+    withSuspendFailureNotification(defaultValue = { null }) {
+      withContext(dispatcher) {
+        mutex.withLock {
+          if (disposed.load()) {
+            null
+          } else {
+            inner.characterCounts()
+          }
+        }
+      }
+    }
 
   fun selectionEndpoints(): SelectionEndpoints? = inner.selectionEndpoints()
 

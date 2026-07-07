@@ -467,6 +467,11 @@ fun DocumentScreen(entityId: String) {
         onClick = { nav.navigate(Route.DocumentBodySettings(entityId)) },
       )
       DocumentActionRow(
+        icon = Lucide.SquareStack,
+        label = "위젯 설정",
+        onClick = { nav.navigate(Route.WidgetSettings) },
+      )
+      DocumentActionRow(
         icon = Lucide.LockKeyhole,
         label = if (document.locked) "편집 잠금 해제" else "편집 잠금",
         onClick = { showPendingAction(if (document.locked) "편집 잠금 해제" else "편집 잠금") },

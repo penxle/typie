@@ -17,6 +17,8 @@ import co.typie.editor.ffi.TrackedRangeEndpoints
 
 data class EditorState(
   val version: Long,
+  // Advances only when the document content changed (StateField.Doc), unlike [version] which
+  // advances on every tick including cursor/selection-only changes.
   val documentRevision: Long = 0L,
   val cursor: CursorMetrics?,
   val placeholder: PlaceholderMetrics? = null,

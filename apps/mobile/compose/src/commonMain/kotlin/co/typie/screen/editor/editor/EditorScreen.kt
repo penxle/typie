@@ -104,6 +104,7 @@ import co.typie.screen.editor.editor.findreplace.rememberEditorFindReplaceSessio
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
+import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
@@ -918,6 +919,11 @@ fun EditorScreen(entityId: String) {
             modifier =
               Modifier.align(Alignment.BottomStart)
                 .padding(start = 20.dp, bottom = 20.dp + visibleArea.bottomOcclusion.dp)
+          )
+          EditorCharacterCountOverlay(
+            editor = runtime.editor,
+            viewportState = screenState.viewportState,
+            visibleArea = visibleArea,
           )
         },
         overlay = {

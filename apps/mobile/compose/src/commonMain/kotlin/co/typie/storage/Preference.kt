@@ -33,6 +33,8 @@ object Preference {
   var autoSurroundEnabled by prefs("auto_surround_enabled", true)
   var searchMatchWholeWord by prefs("search_match_whole_word", false)
   var characterCountFloatingEnabled by prefs("character_count_floating_enabled", false)
+  var characterCountFloatingPositionX by prefs("character_count_floating_position_x", 0.05)
+  var characterCountFloatingPositionY by prefs("character_count_floating_position_y", 0.05)
   var widgetAutoFadeEnabled by prefs("widget_auto_fade_enabled", true)
 
   var devMode by prefs("dev_mode", false)

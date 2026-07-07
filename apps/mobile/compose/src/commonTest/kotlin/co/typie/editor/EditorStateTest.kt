@@ -8,6 +8,7 @@ class EditorStateTest {
   fun initial_has_version_zero_and_null_fields() {
     val s = EditorState.Initial
     assertEquals(0L, s.version)
+    assertEquals(0L, s.documentRevision)
     assertEquals(null, s.cursor)
     assertEquals(null, s.placeholder)
     assertEquals(null, s.selection)
