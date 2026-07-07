@@ -126,7 +126,7 @@ fn typing_run(kind: MergeKind, before: &State, after: &State) -> RecordMerge {
     }
 }
 
-type SelectionRectsCache = Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>;
+type SelectionMarkRectsCache = Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>;
 
 pub struct Editor {
     pub(crate) state: State,
@@ -153,11 +153,11 @@ pub struct Editor {
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     mode: Mode,
-    // Selection rects for the current (selection, render_epoch), shared by the
-    // per-page render signatures, the selection mark, and the endpoints query —
-    // a whole-document selection otherwise recomputes the full rect walk for
-    // each of those consumers on every frame.
-    selection_rects_cache: SelectionRectsCache,
+    // Selection mark rects for the current (selection, render_epoch), shared by
+    // the per-page render signatures and the selection mark. Interaction
+    // geometry stays separate because external elements are host-painted but
+    // still selectable.
+    selection_mark_rects_cache: SelectionMarkRectsCache,
 }
 
 struct ProbeGuard<'e> {
@@ -219,7 +219,7 @@ impl Editor {
             pending_fonts: HashMap::new(),
             composition_paint: None,
             mode: Mode::Apply,
-            selection_rects_cache: Mutex::new(None),
+            selection_mark_rects_cache: Mutex::new(None),
         }
     }
 
@@ -353,29 +353,7 @@ impl Editor {
     pub fn selection_endpoints(&self) -> Option<editor_view::SelectionEndpoints> {
         let doc = self.state.view();
         let resolved = self.state.selection.as_ref()?.resolve(&doc)?;
-        if resolved.is_collapsed() {
-            return None;
-        }
-        let rects = self.cached_selection_rects()?;
-        let first = rects.first()?;
-        let last = rects.last()?;
-        Some(editor_view::SelectionEndpoints {
-            from: PageRect::new(
-                first.page_idx,
-                editor_common::Rect::from_xywh(first.rect.x, first.rect.y, 0.0, first.rect.height),
-            ),
-            to: PageRect::new(
-                last.page_idx,
-                editor_common::Rect::from_xywh(
-                    last.rect.x + last.rect.width,
-                    last.rect.y,
-                    0.0,
-                    last.rect.height,
-                ),
-            ),
-            from_position: resolved.from().position(),
-            to_position: resolved.to().position(),
-        })
+        self.view.selection_endpoints(&resolved)
     }
 
     pub fn selection_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
@@ -786,9 +764,10 @@ impl Editor {
         }
     }
 
-    fn cached_selection_rects(&self) -> Option<Arc<Vec<PageRect>>> {
+    fn cached_selection_mark_rects(&self) -> Option<Arc<Vec<PageRect>>> {
         let sel = self.state.selection?;
-        if let Some((csel, cepoch, rects)) = self.selection_rects_cache.lock().unwrap().as_ref()
+        if let Some((csel, cepoch, rects)) =
+            self.selection_mark_rects_cache.lock().unwrap().as_ref()
             && *csel == sel
             && *cepoch == self.render_epoch
         {
@@ -801,18 +780,18 @@ impl Editor {
         }
         let rects: Arc<Vec<PageRect>> = Arc::new(
             self.view
-                .selection_rects(&resolved)
+                .selection_mark_rects(&resolved)
                 .iter()
                 .map(|r| r.without_meta())
                 .collect(),
         );
-        *self.selection_rects_cache.lock().unwrap() =
+        *self.selection_mark_rects_cache.lock().unwrap() =
             Some((sel, self.render_epoch, Arc::clone(&rects)));
         Some(rects)
     }
 
     fn selection_mark_rects(&self) -> Option<Vec<PageRect>> {
-        Some(self.cached_selection_rects()?.as_ref().clone())
+        Some(self.cached_selection_mark_rects()?.as_ref().clone())
     }
 
     #[cfg(test)]
@@ -829,7 +808,7 @@ impl Editor {
     ///   reflow), so it covers content/layout pixel changes and the
     ///   non-selection marks (composition, dnd, tracked decorations).
     /// - `focused` — the selection mark's color depends on it.
-    /// - the selection rects on this page — the only mark that moves without
+    /// - the selection mark rects on this page — the only mark that moves without
     ///   bumping the epoch (the drag hot path).
     /// - `theme.variant()` / `font_generation()` — hashed directly since
     ///   `set_theme_variant`/`set_fonts` mutate resource without bumping the epoch.
@@ -838,7 +817,7 @@ impl Editor {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.render_epoch.hash(&mut hasher);
         self.focused.hash(&mut hasher);
-        if let Some(rects) = self.cached_selection_rects() {
+        if let Some(rects) = self.cached_selection_mark_rects() {
             for r in rects.iter().filter(|r| r.page_idx == page_idx as usize) {
                 r.rect.x.to_bits().hash(&mut hasher);
                 r.rect.y.to_bits().hash(&mut hasher);
@@ -1703,7 +1682,7 @@ impl Editor {
             pending_fonts: HashMap::new(),
             composition_paint: None,
             mode: Mode::Apply,
-            selection_rects_cache: Mutex::new(None),
+            selection_mark_rects_cache: Mutex::new(None),
         };
         // Lay out the view once so the first `tick()` reconciles clean (matches the
         // production `run_initialize` path); otherwise every test's first tick would

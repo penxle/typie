@@ -951,6 +951,38 @@ mod tests {
     }
 
     #[test]
+    fn ffi_selection_endpoints_exposes_external_only_image_selection() {
+        let (initial, root) = state! {
+            doc { root: root { image } }
+            selection: (root, 0, >) -> (root, 1, <)
+        };
+        let editor = make_ffi_editor(initial);
+        let endpoints = editor
+            .selection_endpoints()
+            .expect("ffi call returns Ok")
+            .expect("external-only image selection must expose endpoints through FFI");
+
+        assert_eq!(endpoints.from_position.node, root);
+        assert_eq!(endpoints.from_position.offset, 0);
+        assert_eq!(
+            endpoints.from_position.affinity,
+            editor_state::Affinity::Downstream
+        );
+        assert_eq!(endpoints.to_position.node, root);
+        assert_eq!(endpoints.to_position.offset, 1);
+        assert_eq!(
+            endpoints.to_position.affinity,
+            editor_state::Affinity::Upstream
+        );
+        assert_eq!(endpoints.from.rect.width, 0.0);
+        assert_eq!(endpoints.to.rect.width, 0.0);
+        assert!(
+            endpoints.from.rect.height > 0.0 && endpoints.to.rect.height > 0.0,
+            "external-only endpoint handles must keep image geometry"
+        );
+    }
+
+    #[test]
     fn ffi_selection_endpoints_collapsed_is_none() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }

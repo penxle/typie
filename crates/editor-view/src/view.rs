@@ -475,6 +475,16 @@ impl View {
         crate::query::selection::selection_rects(&result.layout_index, selection)
     }
 
+    pub fn selection_mark_rects(
+        &self,
+        selection: &ResolvedSelection,
+    ) -> Vec<crate::query::selection::SelectionRect> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        crate::query::selection::selection_mark_rects(&result.layout_index, selection)
+    }
+
     pub fn selection_text_rects(
         &self,
         selection: &ResolvedSelection,

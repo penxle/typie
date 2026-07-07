@@ -12,7 +12,7 @@ use editor_common::Rect;
 use editor_macros::ffi;
 use editor_model::DocView;
 use editor_state::Affinity;
-use editor_state::{Position, ResolvedSelection};
+use editor_state::{Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
 use crate::page::{LayoutPage, PageRect};
@@ -25,6 +25,7 @@ use super::layout_index::{LayoutEntry, LayoutIndex};
 #[derive(Debug, Clone, PartialEq)]
 struct SelectionRectSets {
     pub line_box_rects: Vec<SelectionRect>,
+    pub mark_rects: Vec<SelectionRect>,
     pub text_rects: Vec<SelectionRect>,
 }
 
@@ -32,6 +33,7 @@ impl SelectionRectSets {
     fn empty() -> Self {
         Self {
             line_box_rects: Vec::new(),
+            mark_rects: Vec::new(),
             text_rects: Vec::new(),
         }
     }
@@ -39,27 +41,44 @@ impl SelectionRectSets {
     fn mirrored(rects: Vec<SelectionRect>) -> Self {
         Self {
             line_box_rects: rects.clone(),
+            mark_rects: rects.clone(),
             text_rects: rects,
         }
     }
 
     fn push_same(&mut self, rect: SelectionRect) {
         self.line_box_rects.push(rect.clone());
+        self.mark_rects.push(rect.clone());
+        self.text_rects.push(rect);
+    }
+
+    fn push_line_and_text(&mut self, line_box: SelectionRect, text: SelectionRect) {
+        self.line_box_rects.push(line_box.clone());
+        self.mark_rects.push(line_box);
+        self.text_rects.push(text);
+    }
+
+    fn push_atom(&mut self, rect: SelectionRect, mark: bool) {
+        self.line_box_rects.push(rect.clone());
+        if mark {
+            self.mark_rects.push(rect.clone());
+        }
         self.text_rects.push(rect);
     }
 
     fn sort_by_position(&mut self) {
-        let mut pairs: Vec<_> = std::mem::take(&mut self.line_box_rects)
-            .into_iter()
-            .zip(std::mem::take(&mut self.text_rects))
-            .collect();
-        pairs.sort_by(|(a, _), (b, _)| {
-            a.page_idx
-                .cmp(&b.page_idx)
-                .then_with(|| a.rect.y.total_cmp(&b.rect.y))
-                .then_with(|| a.rect.x.total_cmp(&b.rect.x))
-        });
-        (self.line_box_rects, self.text_rects) = pairs.into_iter().unzip();
+        fn sort(rects: &mut [SelectionRect]) {
+            rects.sort_by(|a, b| {
+                a.page_idx
+                    .cmp(&b.page_idx)
+                    .then_with(|| a.rect.y.total_cmp(&b.rect.y))
+                    .then_with(|| a.rect.x.total_cmp(&b.rect.x))
+            });
+        }
+
+        sort(&mut self.line_box_rects);
+        sort(&mut self.mark_rects);
+        sort(&mut self.text_rects);
     }
 }
 
@@ -73,11 +92,24 @@ pub struct SelectionEndpoints {
     pub to_position: Position,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EndpointEdge {
+    Leading,
+    Trailing,
+}
+
 pub(crate) fn selection_rects(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
     selection_rect_sets(layout_index, selection).line_box_rects
+}
+
+pub(crate) fn selection_mark_rects(
+    layout_index: &LayoutIndex,
+    selection: &ResolvedSelection<'_>,
+) -> Vec<SelectionRect> {
+    selection_rect_sets(layout_index, selection).mark_rects
 }
 
 pub(crate) fn selection_text_rects(
@@ -183,15 +215,38 @@ pub(crate) fn selection_endpoints(
     if selection.is_collapsed() {
         return None;
     }
-    let rects = selection_rects(layout_index, selection);
+
+    let from_position = selection.from().position();
+    let to_position = selection.to().position();
+    let direct_from = selection_endpoint_for_position(layout_index, &from_position);
+    let direct_to = selection_endpoint_for_position(layout_index, &to_position);
+    let (from, to) = match (direct_from, direct_to) {
+        (Some(from), Some(to)) if selection.as_cell_rect().is_none() => (from, to),
+        (direct_from, direct_to) => {
+            let fallback = selection_rect_endpoints(&selection_rects(layout_index, selection));
+            let from = direct_from.or_else(|| fallback.as_ref().map(|(from, _)| from.clone()))?;
+            let to = direct_to.or_else(|| fallback.as_ref().map(|(_, to)| to.clone()))?;
+            (from, to)
+        }
+    };
+
+    Some(SelectionEndpoints {
+        from,
+        to,
+        from_position,
+        to_position,
+    })
+}
+
+fn selection_rect_endpoints(rects: &[SelectionRect]) -> Option<(PageRect, PageRect)> {
     let first = rects.first()?;
     let last = rects.last()?;
-    Some(SelectionEndpoints {
-        from: PageRect::new(
+    Some((
+        PageRect::new(
             first.page_idx,
             Rect::from_xywh(first.rect.x, first.rect.y, 0.0, first.rect.height),
         ),
-        to: PageRect::new(
+        PageRect::new(
             last.page_idx,
             Rect::from_xywh(
                 last.rect.x + last.rect.width,
@@ -200,9 +255,93 @@ pub(crate) fn selection_endpoints(
                 last.rect.height,
             ),
         ),
-        from_position: selection.from().position(),
-        to_position: selection.to().position(),
-    })
+    ))
+}
+
+fn selection_endpoint_for_position(layout_index: &LayoutIndex, pos: &Position) -> Option<PageRect> {
+    let entry = layout_index.entry_for_position(pos)?;
+    match entry.content(layout_index)? {
+        LayoutContent::Line(line) => line_endpoint(layout_index, entry, line, pos),
+        LayoutContent::Atom(atom) => {
+            let edge = child_boundary_edge(pos, atom.attachment.parent, atom.attachment.index)?;
+            entry_edge_endpoint(layout_index, entry, edge)
+        }
+        LayoutContent::Box(bx) => {
+            let attachment = bx.attachment.as_ref()?;
+            let edge = child_boundary_edge(pos, attachment.parent, attachment.index)?;
+            entry_edge_endpoint(layout_index, entry, edge)
+        }
+        LayoutContent::Spacing(_) => None,
+    }
+}
+
+fn line_endpoint(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    line: &LayoutLine,
+    pos: &Position,
+) -> Option<PageRect> {
+    let page_rect = layout_index.page_rect(entry.rect)?;
+    let band = ruby_band(line);
+    let height = (entry.rect.height - band).max(0.0);
+    Some(PageRect::new(
+        page_rect.page_idx,
+        Rect::from_xywh(
+            entry.rect.x + grapheme::x_at_offset(line, pos),
+            page_rect.rect.y + band,
+            0.0,
+            height,
+        ),
+    ))
+}
+
+fn child_boundary_edge(
+    pos: &Position,
+    parent: editor_crdt::Dot,
+    index: usize,
+) -> Option<EndpointEdge> {
+    let (front, back) = child_slot_positions(parent, index);
+    if pos == &front {
+        return Some(EndpointEdge::Leading);
+    }
+    if pos == &back {
+        return Some(EndpointEdge::Trailing);
+    }
+    None
+}
+
+fn entry_edge_endpoint(
+    layout_index: &LayoutIndex,
+    entry: &LayoutEntry,
+    edge: EndpointEdge,
+) -> Option<PageRect> {
+    let node_top = entry.rect.y;
+    let node_bottom = entry.rect.bottom();
+    let mut trailing = None;
+
+    for (page_idx, page) in layout_index.pages().iter().enumerate() {
+        if node_bottom <= page.y_start || node_top >= page.y_end {
+            continue;
+        }
+
+        let top = node_top.max(page.y_start);
+        let bottom = node_bottom.min(page.y_end);
+        let x = match edge {
+            EndpointEdge::Leading => entry.rect.x,
+            EndpointEdge::Trailing => entry.rect.x + entry.rect.width,
+        };
+        let endpoint = PageRect::new(
+            page_idx,
+            Rect::from_xywh(x, top - page.y_start, 0.0, bottom - top),
+        );
+
+        if edge == EndpointEdge::Leading {
+            return Some(endpoint);
+        }
+        trailing = Some(endpoint);
+    }
+
+    trailing
 }
 
 pub(crate) fn selection_hit_test(
@@ -301,10 +440,7 @@ fn selected_external_atom_hit_test(
                 return false;
             };
             let view = selection.view();
-            let Some(node_ref) = view.node(atom.node) else {
-                return false;
-            };
-            if !node_ref.spec().external || !selection.contains_subtree(&node_ref) {
+            if !atom_is_external(view, atom) || !selection.contains_range(atom_slot(atom)) {
                 return false;
             }
 
@@ -320,15 +456,58 @@ fn selected_external_atom_hit_test(
         })
 }
 
+fn atom_selection_rect(pages: &[LayoutPage], rect: Rect) -> Option<SelectionRect> {
+    let page_idx = page_for_y(pages, rect.y)?;
+    Some(PageRect::with_meta(
+        page_idx,
+        Rect::from_xywh(
+            rect.x,
+            rect.y - pages[page_idx].y_start,
+            rect.width,
+            rect.height,
+        ),
+        SelectionRectKind::Atom,
+    ))
+}
+
+fn atom_slot(atom: &LayoutAtom) -> Selection {
+    child_slot_selection(atom.attachment.parent, atom.attachment.index)
+}
+
+fn child_slot_selection(parent: editor_crdt::Dot, index: usize) -> Selection {
+    let (anchor, head) = child_slot_positions(parent, index);
+    Selection::new(anchor, head)
+}
+
+fn child_slot_positions(parent: editor_crdt::Dot, index: usize) -> (Position, Position) {
+    (
+        Position {
+            node: parent,
+            offset: index,
+            affinity: Affinity::Downstream,
+        },
+        Position {
+            node: parent,
+            offset: index + 1,
+            affinity: Affinity::Upstream,
+        },
+    )
+}
+
+fn atom_is_external(view: &DocView, atom: &LayoutAtom) -> bool {
+    view.node(atom.node)
+        .is_some_and(|node| node.spec().external)
+        || view
+            .leaf(atom.node)
+            .and_then(|leaf| leaf.node())
+            .is_some_and(|node| node.spec().external)
+}
+
 fn attached(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> bool {
     match entry.content(layout_index) {
         Some(LayoutContent::Box(_)) => false,
         Some(LayoutContent::Atom(atom)) => {
-            let leading =
-                pos.offset == atom.attachment.index && pos.affinity == Affinity::Downstream;
-            let trailing =
-                pos.offset == atom.attachment.index + 1 && pos.affinity == Affinity::Upstream;
-            leading || trailing
+            child_boundary_edge(pos, atom.attachment.parent, atom.attachment.index).is_some()
         }
         _ => true,
     }
@@ -458,19 +637,20 @@ fn visit_line(
         let box_height = (node.rect.height - band).max(0.0);
         let x = node.rect.x + x_start;
         let box_top = node.rect.y + band - pages[page_idx].y_start;
-        let push = |rects: &mut Vec<SelectionRect>, top: f32, height: f32| {
-            rects.push(PageRect::with_meta(
-                page_idx,
-                Rect::from_xywh(x, top, width, height),
-                SelectionRectKind::Text,
-            ));
-        };
-
-        push(&mut rects.line_box_rects, box_top, box_height);
+        let line_box = PageRect::with_meta(
+            page_idx,
+            Rect::from_xywh(x, box_top, width, box_height),
+            SelectionRectKind::Text,
+        );
 
         let text_height = text_area_height(line);
         let text_top = box_top + (box_height - text_height).max(0.0) * 0.5;
-        push(&mut rects.text_rects, text_top, text_height);
+        let text = PageRect::with_meta(
+            page_idx,
+            Rect::from_xywh(x, text_top, width, text_height),
+            SelectionRectKind::Text,
+        );
+        rects.push_line_and_text(line_box, text);
     }
 }
 
@@ -495,19 +675,8 @@ fn visit_atom(
         return;
     }
 
-    let is_external = doc.node(atom.node).is_some_and(|n| n.spec().external);
-    if !is_external && let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        let rect = PageRect::with_meta(
-            page_idx,
-            Rect::from_xywh(
-                node.rect.x,
-                node.rect.y - pages[page_idx].y_start,
-                node.rect.width,
-                node.rect.height,
-            ),
-            SelectionRectKind::Atom,
-        );
-        rects.push_same(rect);
+    if let Some(rect) = atom_selection_rect(pages, node.rect) {
+        rects.push_atom(rect, !atom_is_external(doc, atom));
     }
 
     if is_to {
@@ -534,6 +703,7 @@ fn visit_box(
 
     let entry_phase = *phase;
     let line_box_rects_before = rects.line_box_rects.len();
+    let mark_rects_before = rects.mark_rects.len();
     let text_rects_before = rects.text_rects.len();
     let mut has_content_child = false;
     let mut content_idx = 0usize;
@@ -577,6 +747,7 @@ fn visit_box(
 
     if fully && bx.style.monolithic {
         rects.line_box_rects.truncate(line_box_rects_before);
+        rects.mark_rects.truncate(mark_rects_before);
         rects.text_rects.truncate(text_rects_before);
         let node_top = node.rect.y;
         let node_bottom = node_top + node.rect.height;
@@ -606,8 +777,8 @@ mod tests {
     use editor_common::EdgeInsets;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, NodeAttrLog, NodeType,
-        ProjectedDoc, SeqItem, SpanLog, project_document,
+        AtomLeaf, DocLogs, DocView, HorizontalRuleVariant, ModifierAttrLog, Node, NodeAttrLog,
+        NodeType, ProjectedDoc, SeqItem, SpanLog, project_document,
     };
     use editor_state::Affinity;
     use editor_state::{Position, Selection};
@@ -738,6 +909,27 @@ mod tests {
             }
         }
         None
+    }
+
+    fn atom_entry<'a>(
+        index: &'a LayoutIndex,
+        atom_id: Dot,
+    ) -> &'a crate::query::layout_index::LayoutEntry {
+        index
+            .entries()
+            .find(|entry| {
+                entry.content(index).is_some_and(
+                    |content| matches!(content, LayoutContent::Atom(atom) if atom.node == atom_id),
+                )
+            })
+            .expect("atom entry must exist")
+    }
+
+    fn assert_close(actual: f32, expected: f32, label: &str) {
+        assert!(
+            (actual - expected).abs() < 0.1,
+            "{label}: got {actual}, expected {expected}"
+        );
     }
 
     #[test]
@@ -992,6 +1184,323 @@ mod tests {
             !rects2.iter().any(|r| r.meta == SelectionRectKind::Atom),
             "selection not covering HR must not yield Atom rect, got {:?}",
             rects2
+        );
+    }
+
+    #[test]
+    fn atom_selection_endpoints_use_atom_edges() {
+        let root = Dot::ROOT;
+        let hr = Dot::new(21, 10);
+        let items = vec![(
+            hr,
+            SeqItem::BlockAtom {
+                leaf: AtomLeaf::HorizontalRule {
+                    variant: HorizontalRuleVariant::default(),
+                },
+                parents: vec![root],
+            },
+        )];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let rsel = selection
+            .resolve(&view)
+            .expect("must resolve atom selection");
+        let endpoints = selection_endpoints(&index, &rsel)
+            .expect("atom selection must expose interaction endpoints");
+        let entry = atom_entry(&index, hr);
+
+        assert_close(endpoints.from.rect.x, entry.rect.x, "from endpoint x");
+        assert_close(
+            endpoints.to.rect.x,
+            entry.rect.x + entry.rect.width,
+            "to endpoint x",
+        );
+        assert_close(endpoints.from.rect.height, entry.rect.height, "from height");
+        assert_close(endpoints.to.rect.height, entry.rect.height, "to height");
+    }
+
+    #[test]
+    fn external_atom_selection_is_host_drawn_but_hit_testable() {
+        let root = Dot::ROOT;
+        let img = Dot::new(2, 10);
+        let para = Dot::new(2, 11);
+        let image = match NodeType::Image.into_node() {
+            Node::Image(node) => node,
+            _ => unreachable!(),
+        };
+        let items = vec![
+            (
+                img,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: image },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(2, 12), SeqItem::Char('x')),
+        ];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+
+        let covering = Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let rsel = covering.resolve(&view).expect("must resolve covering");
+        let mark_rects = selection_mark_rects(&index, &rsel);
+        assert!(
+            mark_rects.iter().all(|r| r.meta != SelectionRectKind::Atom),
+            "external image selection must not produce engine Atom rects: {:?}",
+            mark_rects
+        );
+        let geometry_rects = selection_rects(&index, &rsel);
+        assert!(
+            geometry_rects
+                .iter()
+                .any(|r| r.meta == SelectionRectKind::Atom),
+            "external image selection geometry must still include the image atom: {:?}",
+            geometry_rects
+        );
+
+        let entry = index
+            .entries_on_page(0)
+            .into_iter()
+            .find(|e| {
+                e.content(&index)
+                    .is_some_and(|c| matches!(c, LayoutContent::Atom(a) if a.node == img))
+            })
+            .expect("image atom entry");
+        assert!(
+            selection_hit_test(
+                &index,
+                &rsel,
+                0,
+                entry.rect.x + entry.rect.width * 0.5,
+                entry.rect.y + entry.rect.height * 0.5,
+            ),
+            "selected external image must remain hit-testable"
+        );
+    }
+
+    #[test]
+    fn external_atom_selection_has_endpoints_without_engine_paint_rect() {
+        let root = Dot::ROOT;
+        let img = Dot::new(22, 10);
+        let image = match NodeType::Image.into_node() {
+            Node::Image(node) => node,
+            _ => unreachable!(),
+        };
+        let items = vec![(
+            img,
+            SeqItem::BlockAtom {
+                leaf: AtomLeaf::Image { node: image },
+                parents: vec![root],
+            },
+        )];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let rsel = selection
+            .resolve(&view)
+            .expect("must resolve image selection");
+
+        assert!(
+            selection_mark_rects(&index, &rsel).is_empty(),
+            "external-only selection must not produce engine paint rects"
+        );
+        assert!(
+            selection_rects(&index, &rsel)
+                .iter()
+                .any(|rect| rect.meta == SelectionRectKind::Atom),
+            "external-only selection geometry must still include the image atom"
+        );
+
+        let endpoints = selection_endpoints(&index, &rsel)
+            .expect("external-only selection must still expose interaction endpoints");
+        let entry = atom_entry(&index, img);
+
+        assert_eq!(endpoints.from.page_idx, 0);
+        assert_eq!(endpoints.to.page_idx, 0);
+        assert_eq!(endpoints.from.rect.width, 0.0);
+        assert_eq!(endpoints.to.rect.width, 0.0);
+        assert_close(endpoints.from.rect.x, entry.rect.x, "from endpoint x");
+        assert_close(
+            endpoints.to.rect.x,
+            entry.rect.x + entry.rect.width,
+            "to endpoint x",
+        );
+        assert_close(
+            endpoints.from.rect.height,
+            entry.rect.height,
+            "from endpoint height",
+        );
+        assert_close(
+            endpoints.to.rect.height,
+            entry.rect.height,
+            "to endpoint height",
+        );
+    }
+
+    #[test]
+    fn text_to_external_selection_uses_external_trailing_endpoint() {
+        let root = Dot::ROOT;
+        let para = Dot::new(23, 10);
+        let img = Dot::new(23, 11);
+        let image = match NodeType::Image.into_node() {
+            Node::Image(node) => node,
+            _ => unreachable!(),
+        };
+        let items = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(23, 12), SeqItem::Char('x')),
+            (
+                img,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: image },
+                    parents: vec![root],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: para,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let rsel = selection
+            .resolve(&view)
+            .expect("must resolve mixed selection");
+        let endpoints = selection_endpoints(&index, &rsel)
+            .expect("mixed text-to-external selection must expose endpoints");
+        let image_entry = atom_entry(&index, img);
+
+        assert_close(
+            endpoints.to.rect.x,
+            image_entry.rect.x + image_entry.rect.width,
+            "to endpoint must use external trailing edge",
+        );
+        assert_close(
+            endpoints.to.rect.height,
+            image_entry.rect.height,
+            "to endpoint must use external height",
+        );
+    }
+
+    #[test]
+    fn external_to_text_selection_uses_external_leading_endpoint() {
+        let root = Dot::ROOT;
+        let img = Dot::new(24, 10);
+        let para = Dot::new(24, 11);
+        let image = match NodeType::Image.into_node() {
+            Node::Image(node) => node,
+            _ => unreachable!(),
+        };
+        let items = vec![
+            (
+                img,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: image },
+                    parents: vec![root],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(24, 12), SeqItem::Char('x')),
+        ];
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: para,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let rsel = selection
+            .resolve(&view)
+            .expect("must resolve mixed selection");
+        let endpoints = selection_endpoints(&index, &rsel)
+            .expect("mixed external-to-text selection must expose endpoints");
+        let image_entry = atom_entry(&index, img);
+
+        assert_close(
+            endpoints.from.rect.x,
+            image_entry.rect.x,
+            "from endpoint must use external leading edge",
+        );
+        assert_close(
+            endpoints.from.rect.height,
+            image_entry.rect.height,
+            "from endpoint must use external height",
         );
     }
 
