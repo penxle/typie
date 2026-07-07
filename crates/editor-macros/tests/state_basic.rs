@@ -130,3 +130,41 @@ fn macro_selection_collapsed_yields_some() {
         .expect("selection: (p1, 0) must yield Some");
     assert!(sel.is_collapsed());
 }
+
+#[test]
+fn synthetic_placeholder_binds_projected_scaffold_without_materializing() {
+    let (state, p1) = state! {
+        doc {
+            root {
+                horizontal_rule
+                p1: synthetic paragraph {}
+            }
+        }
+        selection: (p1, 0)
+    };
+
+    let view = state.view();
+    let node = view.node(p1).expect("synthetic placeholder binds");
+    assert_eq!(node.node_type(), editor_model::NodeType::Paragraph);
+    assert!(node.id().is_synthetic());
+
+    let sel = state.selection.as_ref().unwrap();
+    assert_eq!(sel.anchor.node, p1);
+}
+
+#[test]
+fn synthetic_label_without_prefix_still_binds_real_node() {
+    let (state, synthetic) = state! {
+        doc {
+            root {
+                synthetic: paragraph {}
+            }
+        }
+        selection: (synthetic, 0)
+    };
+
+    assert!(!synthetic.is_synthetic());
+    let view = state.view();
+    let node = view.node(synthetic).expect("label binds");
+    assert_eq!(node.node_type(), editor_model::NodeType::Paragraph);
+}

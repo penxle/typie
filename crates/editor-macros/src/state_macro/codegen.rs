@@ -10,18 +10,43 @@ pub fn generate(input: &StateInput) -> TokenStream {
     let parts = doc_macro::codegen::generate_parts(&input.doc_tree);
     let root_entry = &parts.root_entry;
 
-    let binding_idents: Vec<&Ident> = parts.bindings.iter().map(|(ident, _)| ident).collect();
+    let binding_idents: Vec<&Ident> = parts
+        .bindings
+        .iter()
+        .map(|binding| &binding.ident)
+        .collect();
+    let synthetic_checks: Vec<TokenStream> = parts
+        .synthetic_checks
+        .iter()
+        .map(|check| {
+            let node_expr = gen_projected_element_id(&check.path, Some(&check.node_type), true);
+            quote! {
+                let _ = #node_expr;
+            }
+        })
+        .collect();
     let binding_resolves: Vec<TokenStream> = parts
         .bindings
         .iter()
-        .map(|(ident, path)| {
-            let path_lits: Vec<Literal> =
-                path.iter().map(|i| Literal::usize_suffixed(*i)).collect();
-            quote! {
-                let #ident = __handles
-                    .get::<[usize]>(&[#(#path_lits),*])
-                    .cloned()
-                    .expect("state! binding resolves to a projected block");
+        .map(|binding| {
+            let ident = &binding.ident;
+            if binding.projected {
+                let node_expr = gen_projected_element_id(&binding.path, None, false);
+                quote! {
+                    let #ident = #node_expr;
+                }
+            } else {
+                let path_lits: Vec<Literal> = binding
+                    .path
+                    .iter()
+                    .map(|i| Literal::usize_suffixed(*i))
+                    .collect();
+                quote! {
+                    let #ident = __handles
+                        .get::<[usize]>(&[#(#path_lits),*])
+                        .cloned()
+                        .expect("state! binding resolves to a projected block");
+                }
             }
         })
         .collect();
@@ -41,12 +66,87 @@ pub fn generate(input: &StateInput) -> TokenStream {
             let (mut state, __handles) =
                 ::editor_state::test_utils::build_state_from_plain(__plain);
 
+            #(#synthetic_checks)*
             #(#binding_resolves)*
 
             state.selection = #selection_expr;
             #pending_modifiers_expr
 
             (state, #(#binding_idents),*)
+        }
+    }
+}
+
+fn gen_projected_element_id(
+    path: &[usize],
+    expected_type: Option<&Ident>,
+    require_synthetic: bool,
+) -> TokenStream {
+    let (parent_path, last_index) = match path.split_last() {
+        Some((last, parent)) => (parent, Some(Literal::usize_suffixed(*last))),
+        None => (&[][..], None),
+    };
+    let parent_path_lits: Vec<Literal> = parent_path
+        .iter()
+        .map(|i| Literal::usize_suffixed(*i))
+        .collect();
+
+    let type_check = expected_type.map(|node_type| {
+        let variant = Ident::new(&node_type.to_string().to_pascal_case(), Span::call_site());
+        quote! {
+            assert_eq!(
+                __node_type,
+                ::editor_model::NodeType::#variant,
+                "state! synthetic placeholder resolved to an unexpected node type",
+            );
+        }
+    });
+
+    let synthetic_check = if require_synthetic {
+        quote! {
+            assert!(
+                __id.is_synthetic(),
+                "state! synthetic placeholder resolved to a real node",
+            );
+        }
+    } else {
+        quote! {}
+    };
+
+    let element_expr = match last_index {
+        Some(last_index) => quote! {
+            match __node
+                .child_at(#last_index)
+                .expect("state! synthetic placeholder path exists in projection")
+            {
+                ::editor_model::ChildView::Block(__block) => (__block.id(), __block.node_type()),
+                ::editor_model::ChildView::Leaf(__leaf) => (__leaf.dot(), __leaf.node_type()),
+            }
+        },
+        None => quote! {
+            (__node.id(), __node.node_type())
+        },
+    };
+
+    quote! {
+        {
+            let __view = state.view();
+            let mut __node = __view.root().expect("state! projected document has a root");
+            #(
+                __node = match __node
+                    .child_at(#parent_path_lits)
+                    .expect("state! synthetic placeholder path exists in projection")
+                {
+                    ::editor_model::ChildView::Block(__block) => __block,
+                    ::editor_model::ChildView::Leaf(_) => {
+                        panic!("state! synthetic placeholder path crosses a leaf")
+                    }
+                };
+            )*
+            let (__id, __node_type) = #element_expr;
+            #type_check
+            #synthetic_check
+            __id
         }
     }
 }

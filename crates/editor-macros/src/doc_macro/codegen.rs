@@ -8,17 +8,38 @@ use crate::doc_macro::parse::{
 
 pub struct CodegenParts {
     pub root_entry: TokenStream,
-    pub bindings: Vec<(Ident, Vec<usize>)>,
+    pub bindings: Vec<BindingDef>,
+    pub synthetic_checks: Vec<SyntheticCheck>,
+}
+
+pub struct BindingDef {
+    pub ident: Ident,
+    pub path: Vec<usize>,
+    pub projected: bool,
+}
+
+pub struct SyntheticCheck {
+    pub path: Vec<usize>,
+    pub node_type: Ident,
 }
 
 pub fn generate_parts(tree: &DocTree) -> CodegenParts {
     let mut bindings = Vec::new();
+    let mut synthetic_checks = Vec::new();
 
-    let root_entry = collect_node(&tree.root, &mut Vec::new(), &mut bindings);
+    let root_entry = collect_node(
+        &tree.root,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        &mut bindings,
+        &mut synthetic_checks,
+    )
+    .expect("root is never synthetic");
 
     CodegenParts {
         root_entry,
         bindings,
+        synthetic_checks,
     }
 }
 
@@ -27,26 +48,52 @@ pub fn generate_parts(tree: &DocTree) -> CodegenParts {
 // together with its child-index path from the root.
 fn collect_node(
     node: &NodeDef,
-    path: &mut Vec<usize>,
-    bindings: &mut Vec<(Ident, Vec<usize>)>,
-) -> TokenStream {
+    plain_path: &mut Vec<usize>,
+    projected_path: &mut Vec<usize>,
+    bindings: &mut Vec<BindingDef>,
+    synthetic_checks: &mut Vec<SyntheticCheck>,
+) -> Option<TokenStream> {
+    if node.synthetic {
+        collect_synthetic_node(node, projected_path, bindings, synthetic_checks);
+        return None;
+    }
+
     let is_text = node.node_type == "text";
 
     if let Some(ref binding) = node.binding {
-        bindings.push((binding.clone(), path.clone()));
+        bindings.push(BindingDef {
+            ident: binding.clone(),
+            path: plain_path.clone(),
+            projected: false,
+        });
     }
 
     let child_entries: Vec<TokenStream> = match &node.content {
-        NodeContent::Children(children) => children
-            .iter()
-            .enumerate()
-            .map(|(i, child)| {
-                path.push(i);
-                let entry = collect_node(child, path, bindings);
-                path.pop();
-                entry
-            })
-            .collect(),
+        NodeContent::Children(children) => {
+            let mut entries = Vec::new();
+            let mut plain_index = 0usize;
+            for (projected_index, child) in children.iter().enumerate() {
+                projected_path.push(projected_index);
+                if child.synthetic {
+                    collect_synthetic_node(child, projected_path, bindings, synthetic_checks);
+                } else {
+                    plain_path.push(plain_index);
+                    let entry = collect_node(
+                        child,
+                        plain_path,
+                        projected_path,
+                        bindings,
+                        synthetic_checks,
+                    )
+                    .expect("non-synthetic child emits a PlainNodeEntry");
+                    plain_path.pop();
+                    entries.push(entry);
+                    plain_index += 1;
+                }
+                projected_path.pop();
+            }
+            entries
+        }
         NodeContent::Text(_) | NodeContent::Leaf => vec![],
     };
 
@@ -72,12 +119,39 @@ fn collect_node(
 
     let carry_expr = build_carry_expr(&node.carry);
 
-    quote! {
+    Some(quote! {
         PlainNodeEntry {
             node: #plain_node_with_text,
             modifiers: #modifiers_expr,
             carry: #carry_expr,
             children: #children_expr,
+        }
+    })
+}
+
+fn collect_synthetic_node(
+    node: &NodeDef,
+    projected_path: &mut Vec<usize>,
+    bindings: &mut Vec<BindingDef>,
+    synthetic_checks: &mut Vec<SyntheticCheck>,
+) {
+    if let Some(ref binding) = node.binding {
+        bindings.push(BindingDef {
+            ident: binding.clone(),
+            path: projected_path.clone(),
+            projected: true,
+        });
+    }
+    synthetic_checks.push(SyntheticCheck {
+        path: projected_path.clone(),
+        node_type: node.node_type.clone(),
+    });
+
+    if let NodeContent::Children(children) = &node.content {
+        for (index, child) in children.iter().enumerate() {
+            projected_path.push(index);
+            collect_synthetic_node(child, projected_path, bindings, synthetic_checks);
+            projected_path.pop();
         }
     }
 }

@@ -10,6 +10,7 @@ pub struct DocTree {
 
 pub struct NodeDef {
     pub binding: Option<Ident>,
+    pub synthetic: bool,
     pub node_type: Ident,
     pub params: Vec<FieldValue>,
     pub content: NodeContent,
@@ -49,6 +50,12 @@ impl Parse for DocTree {
         if root.node_type != "root" {
             return Err(syn::Error::new(root.node_type.span(), "expected `root`"));
         }
+        if root.synthetic {
+            return Err(syn::Error::new(
+                root.node_type.span(),
+                "`root` cannot be marked synthetic",
+            ));
+        }
 
         Ok(DocTree { root })
     }
@@ -63,7 +70,7 @@ fn parse_node_list(input: ParseStream) -> Result<Vec<NodeDef>> {
 }
 
 fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
-    let (binding, node_type) = if input.peek2(Token![:]) && !input.peek2(Token![::]) {
+    let (binding, first_ident) = if input.peek2(Token![:]) && !input.peek2(Token![::]) {
         let name: Ident = input.parse()?;
         let _colon: Token![:] = input.parse()?;
         let ty: Ident = input.parse()?;
@@ -71,6 +78,15 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
     } else {
         let ty: Ident = input.parse()?;
         (None, ty)
+    };
+
+    let (synthetic, node_type) = if first_ident == "synthetic" {
+        let node_type: Ident = input.parse().map_err(|_| {
+            syn::Error::new(first_ident.span(), "expected node type after `synthetic`")
+        })?;
+        (true, node_type)
+    } else {
+        (false, first_ident)
     };
 
     let is_text = node_type == "text";
@@ -93,6 +109,7 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
         let carry = parse_optional_carry(input)?;
         Ok(NodeDef {
             binding,
+            synthetic,
             node_type,
             params: vec![],
             content: NodeContent::Text(text),
@@ -124,6 +141,7 @@ fn parse_node_def(input: ParseStream) -> Result<NodeDef> {
 
         Ok(NodeDef {
             binding,
+            synthetic,
             node_type,
             params,
             content,

@@ -158,6 +158,10 @@ fn write_tree_node(
                 write!(output, "{l}: ").unwrap();
             }
 
+            if is_synthetic_scaffold(node.id()) {
+                output.push_str("synthetic ");
+            }
+
             let type_name: &str = node.node_type().into();
             write!(output, "{type_name}").unwrap();
 
@@ -211,6 +215,10 @@ fn write_tree_node(
             output.push('\n');
         }
     }
+}
+
+fn is_synthetic_scaffold(id: editor_crdt::Dot) -> bool {
+    id.is_synthetic() && id != editor_crdt::Dot::ROOT
 }
 
 fn write_selection_tree(
@@ -515,6 +523,16 @@ selection: (p1, 0, >)
         assert!(output.starts_with("root ("));
         let para_line = output.lines().find(|l| l.contains("paragraph")).unwrap();
         assert!(para_line.contains("("));
+    }
+
+    #[test]
+    fn synthetic_scaffold_is_marked() {
+        let (state, ..) = state! {
+            doc { root { horizontal_rule } }
+            selection: none
+        };
+        let output = inspect_state(&state, &opts());
+        assert!(output.contains("synthetic paragraph"), "got:\n{output}");
     }
 
     #[test]
