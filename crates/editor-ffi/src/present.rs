@@ -35,6 +35,12 @@ pub struct Backoff {
     skip: u32,
 }
 
+impl Default for Backoff {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Backoff {
     pub const fn new() -> Self {
         Self { skip: 0 }

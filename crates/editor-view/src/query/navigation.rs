@@ -133,13 +133,12 @@ fn move_grapheme_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<S
                 }
                 if local == cp_acc
                     && let Some(next) = line.glyph_runs.get(i + 1)
+                    && let Some(g) = next.graphemes.first()
                 {
-                    if let Some(g) = next.graphemes.first() {
-                        return Some(Selection::collapsed(Position::new(
-                            line.node,
-                            next.offset_range.start + g.codepoints as usize,
-                        )));
-                    }
+                    return Some(Selection::collapsed(Position::new(
+                        line.node,
+                        next.offset_range.start + g.codepoints as usize,
+                    )));
                 }
             }
             let next = next_navigable_entry(layout_index, entry)?;

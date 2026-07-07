@@ -129,14 +129,13 @@ impl Transaction {
     }
 
     pub fn savepoint(&self) -> Savepoint {
-        let sp = Savepoint {
+        Savepoint {
             state: self.state.clone(),
             steps_len: self.steps.len(),
             step_records_len: self.step_records.len(),
             recorded_len: self.recorded.len(),
             effects_len: self.effects.len(),
-        };
-        sp
+        }
     }
 
     pub fn rollback(&mut self, sp: Savepoint) {

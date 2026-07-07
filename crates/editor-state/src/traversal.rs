@@ -141,10 +141,10 @@ pub fn leaves_in_block_range<'a>(
     let base = node_path(block);
     let mut out = Vec::new();
     for (i, child) in block.children().enumerate() {
-        if let ChildView::Leaf(l) = child {
-            if leaf_slot_is_covered(i, &base, from, to) {
-                out.push((i, l));
-            }
+        if let ChildView::Leaf(l) = child
+            && leaf_slot_is_covered(i, &base, from, to)
+        {
+            out.push((i, l));
         }
     }
     out

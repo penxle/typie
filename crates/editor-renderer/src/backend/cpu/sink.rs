@@ -9,7 +9,7 @@ const UNPREMUL_RECIP: [u32; 256] = {
     let mut t = [0u32; 256];
     let mut a = 1u64;
     while a < 256 {
-        t[a as usize] = (((255u64 << 24) + a - 1) / a) as u32;
+        t[a as usize] = (255u64 << 24).div_ceil(a) as u32;
         a += 1;
     }
     t
@@ -301,10 +301,8 @@ mod tests {
                 y1: 10,
             },
         );
-        let a = ((0 * 10 + 2) * 4) as usize;
-        let b = ((0 * 10 + 7) * 4) as usize;
-        assert_ne!(dst[a + 3], 0);
-        assert_eq!(dst[b + 3], 0);
+        assert_ne!(dst[2 * 4 + 3], 0);
+        assert_eq!(dst[7 * 4 + 3], 0);
     }
 
     #[test]
@@ -357,8 +355,8 @@ mod tests {
                 y1: 4,
             },
         );
-        assert_eq!(dst[(0 * 4 + 1) * 4 + 3], 0);
-        assert_ne!(dst[(0 * 4 + 3) * 4 + 3], 0);
+        assert_eq!(dst[4 + 3], 0);
+        assert_ne!(dst[3 * 4 + 3], 0);
     }
 
     #[test]

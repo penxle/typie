@@ -74,102 +74,14 @@ pub(crate) fn caret_modifiers(
 
 #[cfg(test)]
 mod tests {
-    use editor_crdt::{Dot, InputEvent, ListOp, OpGraph, build_oplog};
+    use editor_crdt::{Dot, ListOp, OpGraph};
     use editor_model::{
-        Alignment, Anchor, AtomLeaf, Bias, DocLogs, EditOp, Modifier, ModifierAttrLog,
-        ModifierAttrOp, ModifierType, NodeAttrLog, NodeType, SeqItem, SpanLog, SpanOp,
-        project_document,
+        Anchor, AtomLeaf, Bias, EditOp, Modifier, ModifierAttrOp, ModifierType, NodeType, SeqItem,
     };
 
     use super::*;
     use crate::affinity::Affinity;
     use crate::pending_modifier::PendingModifier;
-
-    fn block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
-        SeqItem::Block {
-            node_type,
-            parents,
-            attrs: vec![],
-        }
-    }
-
-    fn ins_only(items: &[(Dot, SeqItem)]) -> Vec<InputEvent<SeqItem>> {
-        let mut ev = Vec::new();
-        let mut prev: Option<Dot> = None;
-        for (i, (id, item)) in items.iter().enumerate() {
-            ev.push(InputEvent {
-                id: *id,
-                parents: prev.into_iter().collect(),
-                op: ListOp::Ins {
-                    pos: i,
-                    item: item.clone(),
-                },
-            });
-            prev = Some(*id);
-        }
-        ev
-    }
-
-    #[derive(Default)]
-    struct Overlays {
-        spans: SpanLog,
-        block_modifiers: ModifierAttrLog,
-        node_carries: ModifierAttrLog,
-    }
-
-    fn doclogs(items: &[(Dot, SeqItem)], o: Overlays) -> DocLogs {
-        DocLogs {
-            seq: build_oplog(&ins_only(items)),
-            spans: o.spans,
-            block_modifiers: o.block_modifiers,
-            node_attrs: NodeAttrLog::new(),
-            node_carries: o.node_carries,
-        }
-    }
-
-    fn node_carry(target: Dot, modifiers: Vec<Modifier>) -> ModifierAttrLog {
-        let mut log = ModifierAttrLog::new();
-        for (i, modifier) in modifiers.into_iter().enumerate() {
-            log = log
-                .apply(
-                    Dot::new(7, i as u64),
-                    ModifierAttrOp::SetModifier { target, modifier },
-                )
-                .unwrap();
-        }
-        log
-    }
-
-    fn block_mod(target: Dot, m: Modifier) -> ModifierAttrLog {
-        ModifierAttrLog::new()
-            .apply(
-                Dot::new(8, 0),
-                ModifierAttrOp::SetModifier {
-                    target,
-                    modifier: m,
-                },
-            )
-            .unwrap()
-    }
-
-    fn span_set(leaf: Dot, m: Modifier) -> SpanLog {
-        SpanLog::new()
-            .apply(
-                Dot::new(9, 0),
-                SpanOp::AddSpan {
-                    start: Anchor {
-                        id: leaf,
-                        bias: Bias::Before,
-                    },
-                    end: Anchor {
-                        id: leaf,
-                        bias: Bias::After,
-                    },
-                    modifier: m,
-                },
-            )
-            .unwrap()
-    }
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {

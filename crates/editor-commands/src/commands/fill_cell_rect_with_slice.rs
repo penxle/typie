@@ -327,10 +327,7 @@ mod tests {
                 block_all_inline_have(&v, *b, &bold),
                 "c00 chars use its own bold"
             );
-            assert!(
-                carry_of(&after, *b).iter().any(|m| *m == bold),
-                "c00 carry bold"
-            );
+            assert!(carry_of(&after, *b).contains(&bold), "c00 carry bold");
             assert!(
                 !block_all_inline_have(&v, *b, &fs),
                 "c00 does not inherit c01's font size"
@@ -344,10 +341,7 @@ mod tests {
                 block_all_inline_have(&v, *b, &fs),
                 "c01 chars use its own font size"
             );
-            assert!(
-                carry_of(&after, *b).iter().any(|m| *m == fs),
-                "c01 carry font size"
-            );
+            assert!(carry_of(&after, *b).contains(&fs), "c01 carry font size");
             assert!(
                 !block_all_inline_have(&v, *b, &bold),
                 "c01 does not inherit c00's bold"
@@ -384,8 +378,8 @@ mod tests {
                 "pending italic overlays c00"
             );
             let carry = carry_of(&after, b);
-            assert!(carry.iter().any(|m| *m == bold));
-            assert!(carry.iter().any(|m| *m == italic));
+            assert!(carry.contains(&bold));
+            assert!(carry.contains(&italic));
         }
         for b in cell_blocks(&v, c01) {
             assert!(
@@ -397,8 +391,8 @@ mod tests {
                 "pending italic overlays c01"
             );
             let carry = carry_of(&after, b);
-            assert!(!carry.iter().any(|m| *m == bold));
-            assert!(carry.iter().any(|m| *m == italic));
+            assert!(!carry.contains(&bold));
+            assert!(carry.contains(&italic));
         }
 
         assert!(
@@ -432,7 +426,7 @@ mod tests {
                 block_all_inline_have(&v, b, &fs),
                 "an empty cell derives paint from its existing carry record"
             );
-            assert!(carry_of(&after, b).iter().any(|m| *m == fs));
+            assert!(carry_of(&after, b).contains(&fs));
         }
     }
 
@@ -467,7 +461,7 @@ mod tests {
                 "an empty first paragraph does not mask the cell's first charlike font size"
             );
             assert!(
-                carry_of(&after, *b).iter().any(|m| *m == fs),
+                carry_of(&after, *b).contains(&fs),
                 "new paragraphs carry the first charlike font size"
             );
         }
@@ -503,7 +497,7 @@ mod tests {
                 block_all_inline_have(&v, *b, &fs),
                 "a leading unit atom does not mask the cell's first charlike font size"
             );
-            assert!(carry_of(&after, *b).iter().any(|m| *m == fs));
+            assert!(carry_of(&after, *b).contains(&fs));
         }
     }
 }

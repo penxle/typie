@@ -2044,10 +2044,10 @@ mod concurrency_proptest {
     // parents always precede it and are delivered first.
     fn deliver(registry: &[Changeset<EditOp>], state: &mut ProjectedState) {
         for cs in registry {
-            if !state.graph().contains(&cs.ops[0].id) {
-                if let Ok(next) = state.receive_changeset(cs.clone()) {
-                    *state = next;
-                }
+            if !state.graph().contains(&cs.ops[0].id)
+                && let Ok(next) = state.receive_changeset(cs.clone())
+            {
+                *state = next;
             }
         }
     }

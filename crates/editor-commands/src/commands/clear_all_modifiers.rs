@@ -26,8 +26,8 @@ fn caret_own_text_types(view: &DocView, pos_node: Dot, offset: usize) -> Vec<Mod
     match node.leaf_state_at(idx) {
         Some(st) => st
             .own
-            .iter()
-            .map(|(t, _)| *t)
+            .keys()
+            .copied()
             .filter(|&t| t.is_carry_kind())
             .collect(),
         None => Vec::new(),

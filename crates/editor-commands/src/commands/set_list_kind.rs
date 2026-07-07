@@ -115,7 +115,7 @@ fn collect_existing_lists_in_range(rs: &ResolvedSelection<'_>) -> Vec<Dot> {
     if let Some(root) = rs.view().root() {
         collect_existing_lists_in_block(rs, &root, &mut ids);
     }
-    ids.sort_by(|a, b| list_depth(rs.view(), *b).cmp(&list_depth(rs.view(), *a)));
+    ids.sort_by_key(|id| std::cmp::Reverse(list_depth(rs.view(), *id)));
     ids
 }
 

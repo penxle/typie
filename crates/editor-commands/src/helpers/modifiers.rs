@@ -751,11 +751,13 @@ pub(crate) fn toggle_modifier_range(
     Ok(true)
 }
 
+type CarryBlocksByKind = Vec<(ModifierType, Vec<Dot>)>;
+
 pub(crate) fn clear_all_modifiers_range(
     tr: &mut Transaction,
     selection: Selection,
 ) -> CommandResult {
-    let (span, companion_by_kind): (Option<(Dot, Dot)>, Vec<(ModifierType, Vec<Dot>)>) = {
+    let (span, companion_by_kind): (Option<(Dot, Dot)>, CarryBlocksByKind) = {
         let view = tr.view();
         let rs = selection
             .resolve(&view)

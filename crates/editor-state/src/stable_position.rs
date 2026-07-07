@@ -112,7 +112,7 @@ impl StablePosition {
 /// selection after a remote edit costs `O(anchors · log N)` tree lookups instead of
 /// a fresh `O(N)` whole-sequence checkout + rank map on every changeset.
 enum StableResolver<'a> {
-    Owned(BoundaryResolver),
+    Owned(Box<BoundaryResolver>),
     Live(&'a SeqCheckout),
 }
 
@@ -148,7 +148,7 @@ impl<'a> StableResolveCtx<'a> {
         let (_elems, resolver) = checkout_with_resolver(seq);
         StableResolveCtx {
             view,
-            resolver: StableResolver::Owned(resolver),
+            resolver: StableResolver::Owned(Box::new(resolver)),
         }
     }
 

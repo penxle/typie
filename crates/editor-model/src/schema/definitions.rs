@@ -146,25 +146,21 @@ impl Default for SchemaInner {
                     context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::Italic => ModifierSpec {
                     context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::Underline => ModifierSpec {
                     context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::Strikethrough => ModifierSpec {
                     context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::FontSize => ModifierSpec {
                     context: context_expr!(Root | Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
@@ -185,13 +181,11 @@ impl Default for SchemaInner {
                     context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::BackgroundColor => ModifierSpec {
                     context: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak | TableCell),
                     target: context_expr!(Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::LetterSpacing => ModifierSpec {
                     context: context_expr!(Root | Paragraph > Text | Paragraph > Tab | Paragraph > HardBreak),
@@ -202,13 +196,11 @@ impl Default for SchemaInner {
                     context: context_expr!(Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::Ruby => ModifierSpec {
                     context: context_expr!(Paragraph > Text),
                     target: context_expr!(Paragraph > Text),
                     inheritable: false,
-                    ..Default::default()
                 },
                 ModifierType::LineHeight => ModifierSpec {
                     context: context_expr!(Root | Paragraph),

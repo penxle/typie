@@ -160,7 +160,7 @@ impl RenderBuffer {
         let log = unsafe { &mut *self.damage_log.get() };
         let oldest_log_version = log.front().map(|(v, _)| *v);
 
-        let range_nonempty = w_v + 1 <= cur_v;
+        let range_nonempty = w_v < cur_v;
         let log_covers_range = match oldest_log_version {
             Some(oldest) => oldest <= w_v + 1,
             None => false,
@@ -172,7 +172,7 @@ impl RenderBuffer {
         } else {
             let mut acc: Vec<IRect> = log
                 .iter()
-                .filter(|(v, _)| *v >= w_v + 1 && *v <= cur_v)
+                .filter(|(v, _)| *v > w_v && *v <= cur_v)
                 .flat_map(|(_, rs)| rs.iter().copied())
                 .collect();
             acc.extend_from_slice(this_frame_damage);

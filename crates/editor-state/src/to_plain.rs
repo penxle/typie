@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    AtomLeaf, ChildView, DocView, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc,
-    PlainNode, PlainNodeEntry, PlainTextNode, ProjectedDoc,
+    ChildView, DocView, Modifier, ModifierType, NodeView, OwnModifier, PlainDoc, PlainNode,
+    PlainNodeEntry, PlainTextNode, ProjectedDoc,
 };
 
 pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {

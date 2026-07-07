@@ -709,7 +709,7 @@ mod tests {
                     .child_blocks()
                     .find(|b| b.node_type() == container_type)
                     .unwrap_or_else(|| panic!("{label} container"));
-                let paragraph = container
+                container
                     .descendants()
                     .filter_map(|child| match child {
                         editor_model::ChildView::Block(block)
@@ -720,8 +720,7 @@ mod tests {
                         _ => None,
                     })
                     .next()
-                    .unwrap_or_else(|| panic!("{label} synthetic paragraph"));
-                paragraph
+                    .unwrap_or_else(|| panic!("{label} synthetic paragraph"))
             };
             assert!(synth_p.is_synthetic(), "{label} paragraph is synthetic");
 

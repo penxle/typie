@@ -87,13 +87,15 @@ fn collect_subtree_nodes(tree: &BlockTree, node: &BlockNode, out: &mut Vec<Dot>)
     }
 }
 
+type BlockLeafPlan = Vec<(Dot, Vec<(Dot, Option<NodeType>)>)>;
+
 /// Plan the index/derivation entries for a freshly re-projected (nested scratch)
 /// subtree about to be grafted into the live tree.
 fn plan_subtree(
     node: &RawNode,
     parent: Dot,
     blocks: &mut Vec<(Dot, Dot, NodeType)>,
-    block_leaves: &mut Vec<(Dot, Vec<(Dot, Option<NodeType>)>)>,
+    block_leaves: &mut BlockLeafPlan,
     nodes: &mut HashSet<Dot>,
 ) {
     nodes.insert(node.id);
@@ -594,7 +596,7 @@ impl ProjectedState {
         // Normalize each window block, plan its index entries, and graft its subtree
         // into the live `nodes` map, building the flat child-reference list to splice.
         let mut plan_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
-        let mut plan_block_leaves: Vec<(Dot, Vec<(Dot, Option<NodeType>)>)> = Vec::new();
+        let mut plan_block_leaves: BlockLeafPlan = Vec::new();
         let mut new_nodes: HashSet<Dot> = HashSet::new();
         let mut new_children: Vec<Child> = Vec::new();
         // Block-level atoms (image / horizontal rule) project as a `Leaf` directly under
@@ -675,7 +677,7 @@ impl ProjectedState {
         // blocks to index.
         let scaffolded = self.repair_root_content_shallow();
         let mut s_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
-        let mut s_block_leaves: Vec<(Dot, Vec<(Dot, Option<NodeType>)>)> = Vec::new();
+        let mut s_block_leaves: BlockLeafPlan = Vec::new();
         let mut s_nodes: HashSet<Dot> = HashSet::new();
         for b in &scaffolded {
             plan_subtree(
@@ -1519,18 +1521,17 @@ impl ProjectedState {
             // The neighbor is the block marker itself: the new leaf is the first child.
             return 0;
         }
-        if let Some(cur) = self.leaf_cursor.as_ref() {
-            if cur.block == block
-                && cur.leaf == neighbor
-                && self
-                    .projected
-                    .tree
-                    .get(block)
-                    .and_then(|n| n.children.get(cur.offset))
-                    .is_some_and(|c| matches!(c, Child::Leaf { id, .. } if *id == neighbor))
-            {
-                return cur.offset + 1;
-            }
+        if let Some(cur) = self.leaf_cursor.as_ref()
+            && cur.block == block
+            && cur.leaf == neighbor
+            && self
+                .projected
+                .tree
+                .get(block)
+                .and_then(|n| n.children.get(cur.offset))
+                .is_some_and(|c| matches!(c, Child::Leaf { id, .. } if *id == neighbor))
+        {
+            return cur.offset + 1;
         }
         self.leaf_insert_offset(block, pos)
     }
@@ -2083,10 +2084,7 @@ impl ProjectedState {
     /// back to the exhaustive `O(subtree)` max if the rightmost path can't resolve.
     pub fn subtree_max_seq_pos(&self, block: Dot) -> Option<usize> {
         let mut node = block;
-        loop {
-            let Some(n) = self.projected.tree.get(node) else {
-                break;
-            };
+        while let Some(n) = self.projected.tree.get(node) {
             match n.children.last() {
                 Some(Child::Block(d)) => node = *d,
                 Some(Child::Leaf { id, .. }) => match self.seq_flat_pos(*id) {
@@ -2323,7 +2321,7 @@ impl ProjectedState {
                 .projected
                 .seg_index
                 .group_iter(bid)
-                .flat_map(|s| std::iter::repeat(s).take(s.count))
+                .flat_map(|s| std::iter::repeat_n(s, s.count))
                 .collect();
             assert_eq!(
                 expanded.len(),

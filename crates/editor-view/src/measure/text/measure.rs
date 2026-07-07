@@ -95,6 +95,7 @@ pub(crate) fn build_strut_only_line(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_segment<'a>(
     node: &NodeView<'a>,
     seg: &Segment,
@@ -372,7 +373,7 @@ pub(crate) fn measure_paragraph(
             ));
         }
     }
-    if let Some(cache) = seg_cache.as_deref_mut() {
+    if let Some(cache) = seg_cache {
         cache.prune(node_id, segments.len());
     }
 

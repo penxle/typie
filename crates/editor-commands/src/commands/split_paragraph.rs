@@ -158,7 +158,7 @@ mod tests {
             offset: 0,
             affinity: Affinity::Downstream,
         });
-        tr.set_selection(Some(selection.clone())).unwrap();
+        tr.set_selection(Some(selection)).unwrap();
         assert!(!split_paragraph(&mut tr).unwrap());
         let (actual, ..) = tr.commit();
 

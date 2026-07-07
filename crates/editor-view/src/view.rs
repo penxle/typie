@@ -127,7 +127,7 @@ impl View {
                         continue;
                     };
                     let table = if node.node_type() == NodeType::Table {
-                        Some(node.clone())
+                        Some(node)
                     } else {
                         node.ancestors().find(|a| a.node_type() == NodeType::Table)
                     };

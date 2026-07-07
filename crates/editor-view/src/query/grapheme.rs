@@ -3,9 +3,11 @@ use editor_state::Position;
 
 use crate::paginate::types::LayoutLine;
 
-fn visual_bounds(line: &LayoutLine) -> (Option<(f32, usize)>, Option<(f32, usize)>) {
-    let mut first: Option<(f32, usize)> = None;
-    let mut last: Option<(f32, usize)> = None;
+type VisualEdge = Option<(f32, usize)>;
+
+fn visual_bounds(line: &LayoutLine) -> (VisualEdge, VisualEdge) {
+    let mut first: VisualEdge = None;
+    let mut last: VisualEdge = None;
 
     for run in &line.glyph_runs {
         if first.is_none_or(|(x, _)| run.x < x) {

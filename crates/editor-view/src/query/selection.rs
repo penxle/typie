@@ -688,6 +688,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         )];
         for (i, ch) in first_text.chars().enumerate() {
@@ -698,6 +699,7 @@ mod tests {
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![root],
+                attrs: vec![],
             },
         ));
         for (i, ch) in second_text.chars().enumerate() {
