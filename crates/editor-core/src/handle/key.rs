@@ -71,6 +71,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::lift_empty_list_item(),
                     commands::merge_list_item_backward(),
                     commands::lift_first_list_item(),
+                    commands::join_paragraph_backward_into_prev_list_item(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
                     commands::lift_first_paragraph(),
@@ -92,6 +93,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::select_node_forward(),
                     commands::delete_page_break_forward(),
                     commands::merge_list_item_forward(),
+                    commands::join_next_paragraph_forward_into_list_item(),
                     commands::join_paragraph_forward(),
                     commands::lift_paragraph_forward(),
                     commands::delete_empty_paragraph_forward(),
@@ -1187,6 +1189,100 @@ mod tests {
                 }
             }
             selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_at_end_of_synthetic_last_list_item_pulls_next_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    bullet_list {
+                        synthetic list_item {
+                            p1: synthetic paragraph {}
+                        }
+                    }
+                    paragraph { text("B") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_probe_predicts_apply(state.clone(), key(Key::Delete));
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Delete));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    bullet_list {
+                        list_item { p1: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_at_paragraph_start_after_list_joins_into_last_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                    }
+                    p2: paragraph { text("B") }
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_probe_predicts_apply(state.clone(), key(Key::Backspace));
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    bullet_list {
+                        list_item { p1: paragraph { text("AB") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_at_paragraph_start_after_synthetic_empty_list_joins_into_item() {
+        let (state, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    bullet_list {
+                        synthetic list_item {
+                            p1: synthetic paragraph {}
+                        }
+                    }
+                    p2: paragraph { text("B") }
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_probe_predicts_apply(state.clone(), key(Key::Backspace));
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc {
+                root [text_color("black".to_string()), background_color("none".to_string())] {
+                    bullet_list {
+                        list_item { p1: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
