@@ -16,6 +16,7 @@ import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.LinkRect
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.MissingChangesets
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.ModifierType
@@ -182,7 +183,8 @@ internal class FakeFfiEditor(
 
   override fun changesetIds(): List<String> = emptyList()
 
-  override fun missingChangesetsTolerant(remoteHeadsPayload: ByteArray): ByteArray = ByteArray(0)
+  override fun missingChangesetsTolerant(remoteHeadsPayload: ByteArray): MissingChangesets =
+    MissingChangesets(bytes = emptyList(), withheld = 0)
 
   override fun partitionRemoteChangesets(payload: ByteArray): PartitionedChangesets =
     PartitionedChangesets(ready = emptyList(), blocked = emptyList())

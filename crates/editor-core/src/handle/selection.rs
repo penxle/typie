@@ -1,4 +1,5 @@
 use editor_commands::{self as commands};
+use editor_crdt::Dot;
 use editor_model::DocView;
 use editor_state::{
     Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,

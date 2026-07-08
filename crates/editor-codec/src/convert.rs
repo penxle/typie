@@ -46,6 +46,10 @@ pub struct Decoded {
 }
 
 impl Decoded {
+    pub fn lossless(&self) -> bool {
+        self.lossless
+    }
+
     pub fn into_graph_input(self) -> Vec<Changeset<EditOp>> {
         self.changesets
     }

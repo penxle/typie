@@ -27,33 +27,42 @@ pub(crate) fn decode_length_prefixed(data: &[u8]) -> Result<Vec<Vec<u8>>, FfiErr
     Ok(out)
 }
 
-pub(crate) fn state_from_changesets(changesets: Vec<u8>) -> EditorResult<editor_state::State> {
-    let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-        editor_codec::decode_changeset_stream(&changesets[..])
-            .map_err(|e| FfiError::Deserialization(e.to_string()))?
-            .into_graph_input();
-    build_state_tolerant(css)
+pub(crate) fn state_from_changesets(
+    changesets: Vec<u8>,
+) -> EditorResult<(editor_state::State, crate::editor::CarrierStash)> {
+    let decoded = editor_codec::decode_changeset_stream(&changesets[..])
+        .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+    let lossless = decoded.lossless();
+    let css = decoded.into_graph_input();
+    let mut stash = crate::editor::CarrierStash::default();
+    crate::editor::stash_carriers(&css, &changesets, lossless, &mut stash)?;
+    let state = build_state_tolerant(css)?;
+    Ok((state, stash))
 }
 
 pub(crate) fn state_from_changesets_with_pending(
     server: Vec<u8>,
     pending: Vec<Vec<u8>>,
-) -> EditorResult<editor_state::State> {
-    let mut all: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-        editor_codec::decode_changeset_stream(&server[..])
-            .map_err(|e| FfiError::Deserialization(e.to_string()))?
-            .into_graph_input();
+) -> EditorResult<(editor_state::State, crate::editor::CarrierStash)> {
+    let mut stash = crate::editor::CarrierStash::default();
+    let decoded = editor_codec::decode_changeset_stream(&server[..])
+        .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+    let lossless = decoded.lossless();
+    let mut all = decoded.into_graph_input();
+    crate::editor::stash_carriers(&all, &server, lossless, &mut stash)?;
     for blob in pending {
         if blob.is_empty() {
             continue;
         }
-        let mut css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_codec::decode_changeset_stream(&blob[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?
-                .into_graph_input();
+        let decoded = editor_codec::decode_changeset_stream(&blob[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let lossless = decoded.lossless();
+        let mut css = decoded.into_graph_input();
+        crate::editor::stash_carriers(&css, &blob, lossless, &mut stash)?;
         all.append(&mut css);
     }
-    build_state_tolerant(all)
+    let state = build_state_tolerant(all)?;
+    Ok((state, stash))
 }
 
 pub(crate) fn build_state_tolerant(

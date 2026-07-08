@@ -91,7 +91,10 @@ impl EditorHost {
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
 
-        Ok(into_owned(crate::editor::Editor::new(core)))
+        Ok(into_owned(crate::editor::Editor::new(
+            core,
+            crate::editor::CarrierStash::default(),
+        )))
     }
 
     pub fn create_editor_from_graph(
@@ -99,10 +102,10 @@ impl EditorHost {
         changesets: Vec<u8>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let state = crate::graph::state_from_changesets(changesets)?;
+        let (state, carrier_bytes) = crate::graph::state_from_changesets(changesets)?;
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
-        Ok(into_owned(crate::editor::Editor::new(core)))
+        Ok(into_owned(crate::editor::Editor::new(core, carrier_bytes)))
     }
 
     pub fn create_editor_from_graph_with_pending(
@@ -112,14 +115,15 @@ impl EditorHost {
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let pending = crate::graph::decode_length_prefixed(&pending_encoded)?;
-        let state = crate::graph::state_from_changesets_with_pending(server, pending)?;
+        let (state, carrier_bytes) =
+            crate::graph::state_from_changesets_with_pending(server, pending)?;
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
-        Ok(into_owned(crate::editor::Editor::new(core)))
+        Ok(into_owned(crate::editor::Editor::new(core, carrier_bytes)))
     }
 
     pub fn extract_text_from_graph(&self, changesets: Vec<u8>) -> EditorResult<String> {
-        let state = crate::graph::state_from_changesets(changesets)?;
+        let (state, _) = crate::graph::state_from_changesets(changesets)?;
         let view = state.view();
         Ok(editor_state::flat_text(
             &view,
@@ -131,7 +135,7 @@ impl EditorHost {
         &self,
         changesets: Vec<u8>,
     ) -> EditorResult<Complex<editor_model::PlainRootNode>> {
-        let state = crate::graph::state_from_changesets(changesets)?;
+        let (state, _) = crate::graph::state_from_changesets(changesets)?;
         let view = state.view();
         let root = crate::root::attrs(&view).ok_or(FfiError::NoInitialCursorPosition)?;
         Ok(root.into_ffi()?)
@@ -141,7 +145,7 @@ impl EditorHost {
         &self,
         changesets: Vec<u8>,
     ) -> EditorResult<Vec<Complex<editor_model::Modifier>>> {
-        let state = crate::graph::state_from_changesets(changesets)?;
+        let (state, _) = crate::graph::state_from_changesets(changesets)?;
         Ok(crate::root::root_default_modifiers(&state).into_ffi()?)
     }
 

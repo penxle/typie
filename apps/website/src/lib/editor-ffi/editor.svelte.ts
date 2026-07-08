@@ -1314,8 +1314,9 @@ export class Editor {
     return this.#wasm.changeset_ids();
   }
 
-  missingChangesetsFor(confirmedHeads: Uint8Array): Uint8Array {
-    return this.#wasm.missing_changesets_tolerant(confirmedHeads);
+  missingChangesetsFor(confirmedHeads: Uint8Array): { bytes: Uint8Array; withheld: number } {
+    const result = this.#wasm.missing_changesets_tolerant(confirmedHeads);
+    return { bytes: new Uint8Array(result.bytes), withheld: result.withheld };
   }
 
   partitionRemoteChangesets(payload: Uint8Array): { ready: Uint8Array; blocked: Uint8Array } {

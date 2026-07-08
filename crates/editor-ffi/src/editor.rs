@@ -9,8 +9,79 @@ use serde::{Deserialize, Serialize};
 use crate::platform::{PlatformHandle, SurfaceHandle};
 use crate::prelude::*;
 
+pub(crate) type CarrierStash = hashbrown::HashMap<editor_crdt::Dot, Vec<u8>>;
+
+pub(crate) fn stash_carriers(
+    css: &[editor_crdt::Changeset<editor_model::EditOp>],
+    payload: &[u8],
+    lossless: bool,
+    stash: &mut CarrierStash,
+) -> Result<(), FfiError> {
+    if lossless {
+        return Ok(());
+    }
+    let parts = editor_codec::split_bundle_bytes(payload)
+        .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+    debug_assert_eq!(css.len(), parts.len());
+    for (cs, part) in css.iter().zip(parts) {
+        if editor_codec::bundle_contains_unknown(&part)
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            && let Some(first) = cs.ops.first()
+        {
+            stash.insert(first.id, part);
+        }
+    }
+    Ok(())
+}
+
+fn assemble_send_payload(
+    css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
+    stash: &CarrierStash,
+) -> Result<(Vec<u8>, u32), FfiError> {
+    let mut out = Vec::new();
+    let mut run: Vec<editor_crdt::Changeset<editor_model::EditOp>> = Vec::new();
+    let total = css.len();
+    let mut emitted = 0usize;
+    let flush = |run: &mut Vec<editor_crdt::Changeset<editor_model::EditOp>>,
+                 out: &mut Vec<u8>|
+     -> Result<(), FfiError> {
+        if run.is_empty() {
+            return Ok(());
+        }
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(std::mem::take(run)),
+        )
+        .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        out.extend_from_slice(&bytes);
+        Ok(())
+    };
+    for cs in css {
+        if let Some(bytes) = cs.ops.first().and_then(|op| stash.get(&op.id)) {
+            flush(&mut run, &mut out)?;
+            out.extend_from_slice(bytes);
+            emitted += 1;
+        } else if editor_codec::changesets_contain_unknown(std::slice::from_ref(&cs)) {
+            if let Some(op) = cs.ops.first() {
+                log::error!(
+                    "carrier changeset {}:{} missing from stash; truncating send window",
+                    op.id.actor,
+                    op.id.clock
+                );
+            }
+            break;
+        } else {
+            run.push(cs);
+            emitted += 1;
+        }
+    }
+    flush(&mut run, &mut out)?;
+    let withheld = (total - emitted) as u32;
+    Ok((out, withheld))
+}
+
 struct EditorInner {
     editor: editor_core::Editor,
+    carrier_bytes: CarrierStash,
     #[cfg(not(feature = "wasm-server"))]
     surfaces: HashMap<u32, SurfaceHandle>,
     // Last render signature presented for each page. `render_surface` skips
@@ -107,6 +178,16 @@ pub struct ChangesetEntry {
     #[serde(with = "serde_bytes")]
     #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub bytes: Vec<u8>,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct MissingChangesets {
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub bytes: Vec<u8>,
+    pub withheld: u32,
 }
 
 fn public_tracked_range(
@@ -435,10 +516,11 @@ impl Editor {
 
     pub fn receive_remote_changeset(&self, payload: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-                editor_codec::decode_changeset_stream(&payload[..])
-                    .map_err(|e| FfiError::Deserialization(e.to_string()))?
-                    .into_graph_input();
+            let decoded = editor_codec::decode_changeset_stream(&payload[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+            let lossless = decoded.lossless();
+            let css = decoded.into_graph_input();
+            stash_carriers(&css, &payload, lossless, &mut inner.carrier_bytes)?;
             for changeset in css {
                 inner.editor.receive_remote_changeset(changeset);
             }
@@ -466,24 +548,14 @@ impl Editor {
     pub fn missing_changesets_tolerant(
         &self,
         remote_heads_payload: Vec<u8>,
-    ) -> EditorResult<Vec<u8>> {
+    ) -> EditorResult<Complex<MissingChangesets>> {
         self.with_inner(|inner| {
             let heads_vec = editor_codec::decode_dots(&remote_heads_payload[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
             let heads_set: hashbrown::HashSet<editor_crdt::Dot> = heads_vec.into_iter().collect();
             let css = inner.editor.missing_changesets_tolerant(&heads_set);
-            if css.is_empty() {
-                return Ok(Vec::new());
-            }
-            // Tolerant reads may surface remotely-authored ops, but in the hub-spoke
-            // topology the server never loses what it distributed, so this set is
-            // effectively local-authored. A pathological unknown carrier still fails
-            // loudly here (EncodeInvariant), never silently.
-            let bytes = editor_codec::encode_changesets(
-                editor_codec::ReencodableChangesets::from_local_ops(css),
-            )
-            .map_err(|e| FfiError::Serialization(e.to_string()))?;
-            Ok(bytes)
+            let (bytes, withheld) = assemble_send_payload(css, &inner.carrier_bytes)?;
+            Ok(MissingChangesets { bytes, withheld }.into_ffi()?)
         })
     }
 
@@ -894,10 +966,11 @@ impl Editor {
 }
 
 impl Editor {
-    pub(crate) fn new(core: editor_core::Editor) -> Self {
+    pub(crate) fn new(core: editor_core::Editor, carrier_bytes: CarrierStash) -> Self {
         Self {
             inner: Mutex::new(EditorInner {
                 editor: core,
+                carrier_bytes,
                 #[cfg(not(feature = "wasm-server"))]
                 surfaces: HashMap::new(),
                 #[cfg(not(feature = "wasm-server"))]
@@ -933,7 +1006,7 @@ mod tests {
         core.apply(editor_core::Message::System {
             event: editor_core::SystemEvent::Initialize,
         });
-        Editor::new(core)
+        Editor::new(core, CarrierStash::default())
     }
 
     #[test]
@@ -1053,9 +1126,13 @@ mod tests {
         };
         let editor = make_ffi_editor(initial);
         let empty_heads = editor_codec::encode_dots(&[]).unwrap();
-        let bytes = editor.missing_changesets_tolerant(empty_heads).unwrap();
+        let out: MissingChangesets = editor
+            .missing_changesets_tolerant(empty_heads)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
         let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_codec::decode_changeset_stream(&bytes)
+            editor_codec::decode_changeset_stream(&out.bytes)
                 .unwrap()
                 .into_graph_input();
         assert!(
@@ -1077,10 +1154,12 @@ mod tests {
             selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
-        let bytes = editor
+        let out: MissingChangesets = editor
             .missing_changesets_tolerant(editor_codec::encode_dots(&[]).unwrap())
+            .unwrap()
+            .from_ffi()
             .unwrap();
-        let entries = editor.split_changesets(bytes).unwrap();
+        let entries = editor.split_changesets(out.bytes).unwrap();
         assert!(!entries.is_empty());
     }
 
@@ -1113,25 +1192,41 @@ mod tests {
     /// Hand-assembles a single-changeset bundle whose one op is an unrecognized
     /// (v-next) op tag, using only editor-codec's public low-level primitives —
     /// mirrors editor-codec's own `vnext.rs` synth pattern (the `test-util`-gated
-    /// helpers there aren't visible from this crate).
-    fn synth_bundle_with_unknown_op() -> Vec<u8> {
-        use editor_codec::ctx::{EncCtx, write_dot, write_preamble};
+    /// helpers there aren't visible from this crate). `parents` are the changeset's
+    /// parents (empty = Genesis), so the carrier can sit on top of an existing graph.
+    fn synth_bundle_with_unknown_op(actor: u64, parents: &[editor_crdt::Dot]) -> Vec<u8> {
+        use editor_codec::ctx::{CollectCtx, EncCtx, write_dot, write_preamble};
         use editor_codec::durable::Durable;
         use editor_codec::envelope::{Envelope, PayloadKind, wrap};
         use editor_codec::framing::{UnknownPayload, write_frame};
         use editor_codec::types::DurableOp;
         use editor_codec::varint::write_varint;
 
-        let actors = [7u64];
-        let baselines = [0u64];
-        let ctx = EncCtx::from_parts(&actors, baselines.to_vec()).unwrap();
+        let id = editor_crdt::Dot::new(actor, 0);
+        let mut parents = parents.to_vec();
+        parents.sort();
+        let mut cc = CollectCtx::new();
+        cc.observe(&id);
+        for p in &parents {
+            cc.observe(p);
+        }
+        let (actors, baselines) = cc.finalize();
+        let ctx = EncCtx::from_parts(&actors, baselines.clone()).unwrap();
         let mut body = Vec::new();
         write_preamble(&actors, &baselines, &mut body).unwrap();
         write_varint(1, &mut body); // changeset_count
-        body.push(0); // cs_parents: Genesis
+        if parents.is_empty() {
+            body.push(0); // cs_parents: Genesis
+        } else {
+            body.push(2); // cs_parents: Explicit
+            write_varint(parents.len() as u64, &mut body);
+            for p in &parents {
+                write_dot(p, &ctx, &mut body).unwrap();
+            }
+        }
         write_varint(1, &mut body); // op_count
         write_frame(&mut body, |b| {
-            write_dot(&editor_crdt::Dot::new(7, 0), &ctx, b)?;
+            write_dot(&id, &ctx, b)?;
             DurableOp::Unknown(UnknownPayload {
                 tag: 12345,
                 bytes: vec![0xAB],
@@ -1142,6 +1237,542 @@ mod tests {
         wrap(&Envelope::new(PayloadKind::ChangesetBundle, body)).unwrap()
     }
 
+    fn synth_bundle_with_record_tail(
+        actor: u64,
+        parents: &[editor_crdt::Dot],
+        pos: u64,
+    ) -> Vec<u8> {
+        use editor_codec::ctx::{CollectCtx, EncCtx, write_dot, write_preamble};
+        use editor_codec::durable::Durable;
+        use editor_codec::envelope::{Envelope, PayloadKind, wrap};
+        use editor_codec::framing::write_frame;
+        use editor_codec::types::{DurableItem, DurableOp};
+        use editor_codec::varint::write_varint;
+
+        let id = editor_crdt::Dot::new(actor, 0);
+        let mut parents = parents.to_vec();
+        parents.sort();
+        let mut cc = CollectCtx::new();
+        cc.observe(&id);
+        for p in &parents {
+            cc.observe(p);
+        }
+        let (actors, baselines) = cc.finalize();
+        let ctx = EncCtx::from_parts(&actors, baselines.clone()).unwrap();
+        let mut body = Vec::new();
+        write_preamble(&actors, &baselines, &mut body).unwrap();
+        write_varint(1, &mut body); // changeset_count
+        if parents.is_empty() {
+            body.push(0); // cs_parents: Genesis
+        } else {
+            body.push(2); // cs_parents: Explicit
+            write_varint(parents.len() as u64, &mut body);
+            for p in &parents {
+                write_dot(p, &ctx, &mut body).unwrap();
+            }
+        }
+        write_varint(1, &mut body); // op_count
+        write_frame(&mut body, |b| {
+            write_dot(&id, &ctx, b)?;
+            DurableOp::SeqIns {
+                pos,
+                item: DurableItem::Char('x'),
+            }
+            .encode(&ctx, b)?;
+            b.extend_from_slice(&[0xEE, 0x07]);
+            Ok(())
+        })
+        .unwrap();
+        wrap(&Envelope::new(PayloadKind::ChangesetBundle, body)).unwrap()
+    }
+
+    #[test]
+    fn stash_carriers_registers_only_carrier_changesets_with_verbatim_bytes() {
+        let clean_cs = editor_crdt::Changeset {
+            ops: vec![editor_crdt::Op {
+                id: editor_crdt::Dot::new(50, 0),
+                parents: vec![],
+                payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
+                    pos: 0,
+                    item: editor_model::SeqItem::Char('a'),
+                }),
+            }],
+        };
+        let mut stream = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(vec![clean_cs]),
+        )
+        .unwrap();
+        stream.extend_from_slice(&synth_bundle_with_unknown_op(7, &[]));
+
+        let decoded = editor_codec::decode_changeset_stream(&stream).unwrap();
+        let lossless = decoded.lossless();
+        let css = decoded.into_graph_input();
+        assert_eq!(css.len(), 2);
+        let parts = editor_codec::split_bundle_bytes(&stream).unwrap();
+
+        let mut stash = CarrierStash::default();
+        stash_carriers(&css, &stream, lossless, &mut stash).unwrap();
+
+        assert_eq!(stash.len(), 1, "only the carrier changeset must be stashed");
+        assert!(!stash.contains_key(&editor_crdt::Dot::new(50, 0)));
+        assert_eq!(
+            stash.get(&editor_crdt::Dot::new(7, 0)).unwrap(),
+            &parts[1],
+            "stashed bytes must be the carrier's split part, byte-identical"
+        );
+    }
+
+    #[test]
+    fn stash_carriers_all_known_leaves_stash_unchanged() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let stream =
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                initial.projected.graph().changesets_as_vec(),
+            ))
+            .unwrap();
+        let decoded = editor_codec::decode_changeset_stream(&stream).unwrap();
+        let lossless = decoded.lossless();
+        let css = decoded.into_graph_input();
+        assert!(!css.is_empty());
+
+        let mut stash = CarrierStash::default();
+        stash_carriers(&css, &stream, lossless, &mut stash).unwrap();
+
+        assert!(stash.is_empty());
+    }
+
+    #[test]
+    fn stash_carriers_registers_record_tail_carrier_despite_clean_value_shape() {
+        let clean_cs = editor_crdt::Changeset {
+            ops: vec![editor_crdt::Op {
+                id: editor_crdt::Dot::new(51, 0),
+                parents: vec![],
+                payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
+                    pos: 0,
+                    item: editor_model::SeqItem::Char('a'),
+                }),
+            }],
+        };
+        let mut stream = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(vec![clean_cs]),
+        )
+        .unwrap();
+        stream.extend_from_slice(&synth_bundle_with_record_tail(8, &[], 0));
+
+        let decoded = editor_codec::decode_changeset_stream(&stream).unwrap();
+        let lossless = decoded.lossless();
+        let css = decoded.into_graph_input();
+        assert_eq!(css.len(), 2);
+        assert!(
+            !editor_codec::changesets_contain_unknown(&css),
+            "a record-tail carrier must look clean at the value level"
+        );
+        let parts = editor_codec::split_bundle_bytes(&stream).unwrap();
+
+        let mut stash = CarrierStash::default();
+        stash_carriers(&css, &stream, lossless, &mut stash).unwrap();
+
+        assert_eq!(
+            stash.len(),
+            1,
+            "only the record-tail changeset must be stashed"
+        );
+        assert!(!stash.contains_key(&editor_crdt::Dot::new(51, 0)));
+        assert_eq!(
+            stash.get(&editor_crdt::Dot::new(8, 0)).unwrap(),
+            &parts[1],
+            "stashed bytes must be the carrier's split part, byte-identical"
+        );
+    }
+
+    #[test]
+    fn assemble_send_payload_splits_runs_around_carriers_in_order() {
+        let clean = |actor: u64, ch: char| editor_crdt::Changeset {
+            ops: vec![editor_crdt::Op {
+                id: editor_crdt::Dot::new(actor, 0),
+                parents: vec![],
+                payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
+                    pos: 0,
+                    item: editor_model::SeqItem::Char(ch),
+                }),
+            }],
+        };
+        let carrier = |actor: u64| {
+            let bundle = synth_bundle_with_unknown_op(actor, &[]);
+            let part = editor_codec::split_bundle_bytes(&bundle).unwrap().remove(0);
+            let cs = editor_codec::decode_changeset_stream(&bundle)
+                .unwrap()
+                .into_graph_input()
+                .remove(0);
+            (cs, part)
+        };
+
+        let (c1, p1) = carrier(70);
+        let (c2, p2) = carrier(71);
+        let (c3, p3) = carrier(72);
+        let mut stash = CarrierStash::default();
+        for (cs, part) in [(&c1, &p1), (&c2, &p2), (&c3, &p3)] {
+            stash.insert(cs.ops[0].id, part.clone());
+        }
+
+        let css = vec![c1, c2, clean(80, 'x'), clean(81, 'y'), c3];
+        let expected_ids: Vec<editor_crdt::Dot> = css.iter().map(|cs| cs.ops[0].id).collect();
+        let (bytes, withheld) = assemble_send_payload(css, &stash).unwrap();
+        assert_eq!(withheld, 0);
+
+        let decoded = editor_codec::decode_changeset_stream(&bytes)
+            .unwrap()
+            .into_graph_input();
+        let ids: Vec<editor_crdt::Dot> = decoded.iter().map(|cs| cs.ops[0].id).collect();
+        assert_eq!(
+            ids, expected_ids,
+            "leading/consecutive/trailing carriers must keep window order"
+        );
+
+        let parts = editor_codec::split_bundle_bytes(&bytes).unwrap();
+        assert_eq!(parts[0], p1);
+        assert_eq!(parts[1], p2);
+        assert_eq!(parts[4], p3);
+    }
+
+    #[test]
+    fn ffi_send_window_emits_stashed_carrier_bytes_verbatim() {
+        use editor_core::{InsertionOp, Message};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let pre_heads = editor.current_heads().unwrap();
+
+        editor
+            .enqueue(Message::Insertion {
+                op: InsertionOp::Text { text: "a".into() },
+            })
+            .unwrap();
+        let _ = editor.tick().unwrap();
+
+        let parents = editor_codec::decode_dots(&editor.current_heads().unwrap()).unwrap();
+        let bundle = synth_bundle_with_unknown_op(900, &parents);
+        let stashed = editor_codec::split_bundle_bytes(&bundle).unwrap().remove(0);
+
+        editor.receive_remote_changeset(bundle).unwrap();
+        let _ = editor.tick().unwrap();
+        assert!(
+            editor
+                .changeset_ids()
+                .unwrap()
+                .contains(&"900:0".to_string()),
+            "carrier must enter the graph through the real receive path"
+        );
+
+        let out: MissingChangesets = editor
+            .missing_changesets_tolerant(pre_heads.clone())
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(out.withheld, 0);
+
+        let parts = editor_codec::split_bundle_bytes(&out.bytes).unwrap();
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_codec::decode_changeset_stream(&out.bytes)
+                .unwrap()
+                .into_graph_input();
+        assert_eq!(css.len(), parts.len());
+        let carrier_idx = css
+            .iter()
+            .position(|cs| cs.ops[0].id == editor_crdt::Dot::new(900, 0))
+            .expect("carrier must be in the send window");
+        assert_eq!(
+            parts[carrier_idx], stashed,
+            "carrier bytes must round-trip verbatim, not value-reencoded"
+        );
+
+        let heads_set: hashbrown::HashSet<editor_crdt::Dot> = editor_codec::decode_dots(&pre_heads)
+            .unwrap()
+            .into_iter()
+            .collect();
+        let oracle = editor
+            .with_inner(|inner| Ok(inner.editor.missing_changesets_tolerant(&heads_set)))
+            .unwrap();
+        assert_eq!(
+            css, oracle,
+            "decoded payload must equal the graph window value-for-value"
+        );
+    }
+
+    #[test]
+    fn ffi_send_window_round_trips_record_tail_carrier_bytes_verbatim() {
+        use editor_core::{InsertionOp, Message};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let pre_heads = editor.current_heads().unwrap();
+        let step = |text: &str| {
+            editor
+                .enqueue(Message::Insertion {
+                    op: InsertionOp::Text { text: text.into() },
+                })
+                .unwrap();
+            let _ = editor.tick().unwrap();
+        };
+
+        step("a");
+        let carrier_dot = editor_crdt::Dot::new(930, 0);
+        let parents = editor_codec::decode_dots(&editor.current_heads().unwrap()).unwrap();
+        let bundle = synth_bundle_with_record_tail(930, &parents, 1);
+        let carrier_envelope = editor_codec::split_bundle_bytes(&bundle).unwrap().remove(0);
+
+        let decoded = editor_codec::decode_changeset_stream(&bundle)
+            .unwrap()
+            .into_graph_input();
+        assert!(
+            matches!(
+                decoded[0].ops[0].payload,
+                editor_model::EditOp::Seq(editor_crdt::ListOp::Ins { .. })
+            ),
+            "carrier op must decode to a known shape"
+        );
+        assert!(
+            !editor_codec::changesets_contain_unknown(&decoded),
+            "a record-tail carrier must look clean at the value level"
+        );
+        assert!(editor_codec::bundle_contains_unknown(&bundle).unwrap());
+
+        editor.receive_remote_changeset(bundle).unwrap();
+        let _ = editor.tick().unwrap();
+        assert!(
+            editor
+                .changeset_ids()
+                .unwrap()
+                .contains(&"930:0".to_string()),
+            "carrier must enter the graph through the real receive path"
+        );
+
+        step("b");
+
+        let out: MissingChangesets = editor
+            .missing_changesets_tolerant(pre_heads)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(out.withheld, 0);
+
+        let parts = editor_codec::split_bundle_bytes(&out.bytes).unwrap();
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_codec::decode_changeset_stream(&out.bytes)
+                .unwrap()
+                .into_graph_input();
+        assert_eq!(css.len(), parts.len());
+        let carrier_idx = css
+            .iter()
+            .position(|cs| cs.ops[0].id == carrier_dot)
+            .expect("carrier must be in the send window");
+        assert_eq!(
+            parts[carrier_idx], carrier_envelope,
+            "record tail must survive the send round-trip byte-identically"
+        );
+
+        assert!(
+            editor
+                .inner
+                .lock()
+                .unwrap()
+                .carrier_bytes
+                .contains_key(&carrier_dot),
+            "receive must stash the record-tail carrier"
+        );
+    }
+
+    #[test]
+    fn ffi_send_window_preserves_interleaved_carrier_order() {
+        use editor_core::{InsertionOp, Message};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let pre_heads = editor.current_heads().unwrap();
+        let step = |text: &str| {
+            editor
+                .enqueue(Message::Insertion {
+                    op: InsertionOp::Text { text: text.into() },
+                })
+                .unwrap();
+            let _ = editor.tick().unwrap();
+        };
+
+        step("a");
+        let parents = editor_codec::decode_dots(&editor.current_heads().unwrap()).unwrap();
+        editor
+            .receive_remote_changeset(synth_bundle_with_unknown_op(901, &parents))
+            .unwrap();
+        let _ = editor.tick().unwrap();
+        step("b");
+
+        let heads_set: hashbrown::HashSet<editor_crdt::Dot> = editor_codec::decode_dots(&pre_heads)
+            .unwrap()
+            .into_iter()
+            .collect();
+        let oracle_ids: Vec<editor_crdt::Dot> = editor
+            .with_inner(|inner| Ok(inner.editor.missing_changesets_tolerant(&heads_set)))
+            .unwrap()
+            .iter()
+            .map(|cs| cs.ops[0].id)
+            .collect();
+        let carrier_pos = oracle_ids
+            .iter()
+            .position(|id| *id == editor_crdt::Dot::new(901, 0))
+            .expect("carrier must be in the send window");
+        assert!(
+            carrier_pos > 0 && carrier_pos + 1 < oracle_ids.len(),
+            "scenario must sandwich the carrier between clean changesets"
+        );
+
+        let out: MissingChangesets = editor
+            .missing_changesets_tolerant(pre_heads)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(out.withheld, 0);
+        let emitted_ids: Vec<editor_crdt::Dot> = editor_codec::decode_changeset_stream(&out.bytes)
+            .unwrap()
+            .into_graph_input()
+            .iter()
+            .map(|cs| cs.ops[0].id)
+            .collect();
+        assert_eq!(
+            emitted_ids, oracle_ids,
+            "payload must preserve the window's causal order"
+        );
+    }
+
+    #[test]
+    fn ffi_send_window_stash_miss_truncates_to_causal_prefix() {
+        use editor_core::{InsertionOp, Message};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let pre_heads = editor.current_heads().unwrap();
+        let step = |text: &str| {
+            editor
+                .enqueue(Message::Insertion {
+                    op: InsertionOp::Text { text: text.into() },
+                })
+                .unwrap();
+            let _ = editor.tick().unwrap();
+        };
+
+        step("a");
+        let parents = editor_codec::decode_dots(&editor.current_heads().unwrap()).unwrap();
+        editor
+            .receive_remote_changeset(synth_bundle_with_unknown_op(902, &parents))
+            .unwrap();
+        let _ = editor.tick().unwrap();
+        step("b");
+
+        editor.inner.lock().unwrap().carrier_bytes.clear();
+
+        let heads_set: hashbrown::HashSet<editor_crdt::Dot> = editor_codec::decode_dots(&pre_heads)
+            .unwrap()
+            .into_iter()
+            .collect();
+        let oracle = editor
+            .with_inner(|inner| Ok(inner.editor.missing_changesets_tolerant(&heads_set)))
+            .unwrap();
+        let carrier_pos = oracle
+            .iter()
+            .position(|cs| cs.ops[0].id == editor_crdt::Dot::new(902, 0))
+            .expect("carrier must be in the send window");
+        assert!(
+            carrier_pos + 1 < oracle.len(),
+            "scenario must have a clean changeset after the carrier"
+        );
+
+        let out: MissingChangesets = editor
+            .missing_changesets_tolerant(pre_heads)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(out.withheld as usize, oracle.len() - carrier_pos);
+        assert!(out.withheld >= 2);
+
+        let emitted = editor_codec::decode_changeset_stream(&out.bytes)
+            .unwrap()
+            .into_graph_input();
+        assert_eq!(
+            emitted.as_slice(),
+            &oracle[..carrier_pos],
+            "only the causal prefix before the miss may be emitted"
+        );
+    }
+
+    #[test]
+    fn ffi_send_window_without_carriers_matches_single_encode_bytes() {
+        use editor_core::{InsertionOp, Message};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let pre_heads = editor.current_heads().unwrap();
+        let step = |text: &str| {
+            editor
+                .enqueue(Message::Insertion {
+                    op: InsertionOp::Text { text: text.into() },
+                })
+                .unwrap();
+            let _ = editor.tick().unwrap();
+        };
+        step("a");
+        step("b");
+
+        let heads_set: hashbrown::HashSet<editor_crdt::Dot> = editor_codec::decode_dots(&pre_heads)
+            .unwrap()
+            .into_iter()
+            .collect();
+        let oracle = editor
+            .with_inner(|inner| Ok(inner.editor.missing_changesets_tolerant(&heads_set)))
+            .unwrap();
+        assert!(!oracle.is_empty());
+        let expected = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(oracle),
+        )
+        .unwrap();
+
+        let out: MissingChangesets = editor
+            .missing_changesets_tolerant(pre_heads)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(out.withheld, 0);
+        assert_eq!(
+            out.bytes, expected,
+            "carrier-free windows must stay byte-identical to a single encode"
+        );
+
+        let current = editor.current_heads().unwrap();
+        let empty: MissingChangesets = editor
+            .missing_changesets_tolerant(current)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert!(empty.bytes.is_empty());
+        assert_eq!(empty.withheld, 0);
+    }
+
     #[test]
     fn ffi_insert_template_fragment_rejects_unknown_bearing_template() {
         let (initial, ..) = state! {
@@ -1149,7 +1780,7 @@ mod tests {
             selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
-        let bytes = synth_bundle_with_unknown_op();
+        let bytes = synth_bundle_with_unknown_op(7, &[]);
         assert!(
             editor.insert_template_fragment(bytes).is_err(),
             "template carrying an op newer than this reader must be rejected at insert time"
@@ -1257,11 +1888,13 @@ mod tests {
         let mut captured = server_heads;
         let mut records: Vec<(String, Vec<u8>)> = Vec::new();
         let capture = |captured: &mut Vec<u8>, records: &mut Vec<(String, Vec<u8>)>| {
-            let fresh = editor
+            let fresh: MissingChangesets = editor
                 .missing_changesets_tolerant(captured.clone())
+                .unwrap()
+                .from_ffi()
                 .unwrap();
-            if !fresh.is_empty() {
-                for entry in editor.split_changesets(fresh).unwrap() {
+            if !fresh.bytes.is_empty() {
+                for entry in editor.split_changesets(fresh.bytes).unwrap() {
                     let entry = entry.from_ffi().unwrap();
                     match records.iter_mut().find(|(id, _)| *id == entry.id) {
                         Some((_, bytes)) => *bytes = entry.bytes,
@@ -1299,12 +1932,15 @@ mod tests {
         });
         capture(&mut captured, &mut records);
 
-        let reloaded_state = crate::graph::state_from_changesets_with_pending(
+        let (reloaded_state, _) = crate::graph::state_from_changesets_with_pending(
             server_graph,
             records.into_iter().map(|(_, bytes)| bytes).collect(),
         )
         .unwrap();
-        let reloaded = Editor::new(editor_core::Editor::new_test(reloaded_state));
+        let reloaded = Editor::new(
+            editor_core::Editor::new_test(reloaded_state),
+            CarrierStash::default(),
+        );
 
         assert_eq!(reloaded.prose_text().unwrap(), editor.prose_text().unwrap());
         let mut live_ids = editor.changeset_ids().unwrap();
@@ -1312,6 +1948,247 @@ mod tests {
         live_ids.sort();
         reloaded_ids.sort();
         assert_eq!(reloaded_ids, live_ids);
+    }
+
+    #[test]
+    fn ffi_mixed_version_window_survives_capture_fold_and_reload() {
+        use editor_core::{InsertionOp, Message};
+
+        use crate::server::{BundleStatus, CollectResult, EditorServer};
+
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let server_graph =
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                initial.projected.graph().changesets_as_vec(),
+            ))
+            .unwrap();
+        let server_heads = editor_codec::encode_dots(
+            &initial
+                .projected
+                .graph()
+                .current_heads()
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let editor = make_ffi_editor(initial);
+
+        let mut captured = server_heads.clone();
+        let mut records: Vec<(String, Vec<u8>)> = Vec::new();
+        let capture = |captured: &mut Vec<u8>, records: &mut Vec<(String, Vec<u8>)>| {
+            let fresh: MissingChangesets = editor
+                .missing_changesets_tolerant(captured.clone())
+                .unwrap()
+                .from_ffi()
+                .unwrap();
+            assert_eq!(
+                fresh.withheld, 0,
+                "capture must never withhold while the stash is intact"
+            );
+            if !fresh.bytes.is_empty() {
+                for entry in editor.split_changesets(fresh.bytes).unwrap() {
+                    let entry = entry.from_ffi().unwrap();
+                    match records.iter_mut().find(|(id, _)| *id == entry.id) {
+                        Some((_, bytes)) => *bytes = entry.bytes,
+                        None => records.push((entry.id, entry.bytes)),
+                    }
+                }
+            }
+            *captured = editor.current_heads().unwrap();
+        };
+        let step = |text: &str| {
+            editor
+                .enqueue(Message::Insertion {
+                    op: InsertionOp::Text { text: text.into() },
+                })
+                .unwrap();
+            let _ = editor.tick().unwrap();
+        };
+
+        step("one ");
+        capture(&mut captured, &mut records);
+
+        let carrier_dot = editor_crdt::Dot::new(910, 0);
+        let parents = editor_codec::decode_dots(&editor.current_heads().unwrap()).unwrap();
+        let bundle = synth_bundle_with_unknown_op(910, &parents);
+        let carrier_envelope = editor_codec::split_bundle_bytes(&bundle).unwrap().remove(0);
+        editor.receive_remote_changeset(bundle).unwrap();
+        let _ = editor.tick().unwrap();
+        assert!(
+            editor
+                .changeset_ids()
+                .unwrap()
+                .contains(&"910:0".to_string()),
+            "carrier must enter the graph through the real receive path"
+        );
+
+        step("two");
+
+        capture(&mut captured, &mut records);
+        let carrier_record = records
+            .iter()
+            .find(|(id, _)| id == "910:0")
+            .expect("capture must persist the carrier as its own record");
+        assert_eq!(
+            carrier_record.1, carrier_envelope,
+            "captured carrier record must be the original envelope bytes"
+        );
+
+        let drain: MissingChangesets = editor
+            .missing_changesets_tolerant(server_heads.clone())
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(drain.withheld, 0);
+        let drained = editor_codec::decode_changeset_stream(&drain.bytes)
+            .unwrap()
+            .into_graph_input();
+        let drain_parts = editor_codec::split_bundle_bytes(&drain.bytes).unwrap();
+        let carrier_idx = drained
+            .iter()
+            .position(|cs| cs.ops[0].id == carrier_dot)
+            .expect("carrier must be in the drain payload");
+        assert_eq!(
+            drain_parts[carrier_idx], carrier_envelope,
+            "the server must receive the carrier's original envelope bytes"
+        );
+        assert!(
+            drained
+                .iter()
+                .any(|cs| cs.ops.iter().any(|op| op.parents.contains(&carrier_dot))),
+            "the second edit must be a causal descendant of the carrier"
+        );
+
+        let server = EditorServer;
+        let mut packed = Vec::new();
+        packed.extend_from_slice(&1u32.to_le_bytes());
+        packed.extend_from_slice(&(drain.bytes.len() as u32).to_le_bytes());
+        packed.extend_from_slice(&drain.bytes);
+        let fold: CollectResult = server
+            .collect_fold(server_graph.clone(), packed)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(fold.statuses, vec![BundleStatus::Applied]);
+
+        let mut live_heads = editor_codec::decode_dots(&editor.current_heads().unwrap()).unwrap();
+        live_heads.sort();
+        let mut fold_heads = editor_codec::decode_dots(&fold.heads).unwrap();
+        fold_heads.sort();
+        assert_eq!(
+            fold_heads, live_heads,
+            "folded server heads must converge to the live client frontier"
+        );
+        assert!(
+            !fold_heads.contains(&carrier_dot),
+            "carrier must be covered by the folded frontier, not sit on it"
+        );
+        let mut incremental_heads = editor_codec::decode_dots(
+            &server
+                .update_heads(server_heads.clone(), drain.bytes.clone())
+                .unwrap(),
+        )
+        .unwrap();
+        incremental_heads.sort();
+        assert_eq!(incremental_heads, fold_heads);
+
+        let (reloaded_state, stash) = crate::graph::state_from_changesets_with_pending(
+            server_graph,
+            records.into_iter().map(|(_, bytes)| bytes).collect(),
+        )
+        .unwrap();
+        assert!(
+            stash.contains_key(&carrier_dot),
+            "load must rehydrate the carrier stash from the pending records"
+        );
+        let reloaded = Editor::new(editor_core::Editor::new_test(reloaded_state), stash);
+        assert_eq!(reloaded.prose_text().unwrap(), editor.prose_text().unwrap());
+
+        let reassembled: MissingChangesets = reloaded
+            .missing_changesets_tolerant(server_heads)
+            .unwrap()
+            .from_ffi()
+            .unwrap();
+        assert_eq!(reassembled.withheld, 0);
+        let reassembled_css = editor_codec::decode_changeset_stream(&reassembled.bytes)
+            .unwrap()
+            .into_graph_input();
+        let reassembled_parts = editor_codec::split_bundle_bytes(&reassembled.bytes).unwrap();
+        let reassembled_idx = reassembled_css
+            .iter()
+            .position(|cs| cs.ops[0].id == carrier_dot)
+            .expect("carrier must be in the reloaded send window");
+        assert_eq!(
+            reassembled_parts[reassembled_idx], carrier_envelope,
+            "reloaded send window must emit the carrier verbatim"
+        );
+    }
+
+    #[test]
+    fn ffi_reload_rehydrates_server_graph_carrier_into_send_window() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let base_heads = editor_codec::encode_dots(
+            &initial
+                .projected
+                .graph()
+                .current_heads()
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let mut server_graph =
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                initial.projected.graph().changesets_as_vec(),
+            ))
+            .unwrap();
+
+        let carrier_dot = editor_crdt::Dot::new(920, 0);
+        let parents = editor_codec::decode_dots(&base_heads).unwrap();
+        let bundle = synth_bundle_with_unknown_op(920, &parents);
+        let carrier_envelope = editor_codec::split_bundle_bytes(&bundle).unwrap().remove(0);
+        server_graph.extend_from_slice(&bundle);
+
+        let assert_carrier_sendable = |state: editor_state::State, stash: CarrierStash| {
+            assert!(
+                stash.contains_key(&carrier_dot),
+                "load must rehydrate the carrier stash from the server graph"
+            );
+            let reloaded = Editor::new(editor_core::Editor::new_test(state), stash);
+            let out: MissingChangesets = reloaded
+                .missing_changesets_tolerant(base_heads.clone())
+                .unwrap()
+                .from_ffi()
+                .unwrap();
+            assert_eq!(
+                out.withheld, 0,
+                "a server-history carrier re-entering the send window must not be withheld"
+            );
+            let css = editor_codec::decode_changeset_stream(&out.bytes)
+                .unwrap()
+                .into_graph_input();
+            let parts = editor_codec::split_bundle_bytes(&out.bytes).unwrap();
+            let idx = css
+                .iter()
+                .position(|cs| cs.ops[0].id == carrier_dot)
+                .expect("carrier must be in the send window");
+            assert_eq!(
+                parts[idx], carrier_envelope,
+                "send window must emit the server-graph carrier verbatim"
+            );
+        };
+
+        let (state, stash) = crate::graph::state_from_changesets(server_graph.clone()).unwrap();
+        assert_carrier_sendable(state, stash);
+
+        let (state, stash) =
+            crate::graph::state_from_changesets_with_pending(server_graph, Vec::new()).unwrap();
+        assert_carrier_sendable(state, stash);
     }
 
     #[test]

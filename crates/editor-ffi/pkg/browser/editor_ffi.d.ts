@@ -221,6 +221,11 @@ export interface LinkValue {
     href: string;
 }
 
+export interface MissingChangesets {
+    bytes: Uint8Array;
+    withheld: number;
+}
+
 export interface ModifierState {
     bold: Tri<undefined>;
     italic: Tri<undefined>;
@@ -671,7 +676,7 @@ declare class Editor {
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
     materialize_at(heads: Uint8Array): PlainDoc;
-    missing_changesets_tolerant(remote_heads_payload: Uint8Array): Uint8Array;
+    missing_changesets_tolerant(remote_heads_payload: Uint8Array): MissingChangesets;
     modifier_span_selection(pos: Position, modifier_type: ModifierType): Selection | undefined;
     modifier_state(): ModifierState | undefined;
     /**

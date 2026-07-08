@@ -47,6 +47,7 @@ export class Pusher {
 
   status = $state<PushStatus>('idle');
   retryAttempt = $state(0);
+  captureFailures = $state(0);
 
   constructor(opts: PusherOpts) {
     this.opts = opts;
@@ -110,14 +111,19 @@ export class Pusher {
       // ops applied while a write was in flight — they'd be past
       // `capturedHeads` without ever having been stored.
       const heads = this.opts.editor.currentHeads();
-      const fresh = this.opts.editor.missingChangesetsFor(this.capturedHeads);
+      const { bytes: fresh, withheld } = this.opts.editor.missingChangesetsFor(this.capturedHeads);
       if (fresh.length > 0) {
         for (const { id, bytes } of this.opts.editor.splitChangesets(fresh)) {
           await this.opts.store.put({ id, documentId: this.opts.documentId, changeset: bytes, createdAt: Date.now() });
         }
         this.opts.broadcast?.(fresh);
       }
-      this.capturedHeads = heads;
+      if (withheld > 0) {
+        console.error(`Pusher: ${withheld} changeset(s) withheld from persist; retrying the same window next cycle`);
+        this.opts.onEvent?.({ kind: 'persist.withheld', count: withheld });
+      } else {
+        this.capturedHeads = heads;
+      }
     });
     // The chain must survive a failed run; `capturedHeads` is untouched on
     // failure, so the next persist retries the same delta.
@@ -128,7 +134,8 @@ export class Pusher {
 
   private async drain(): Promise<void> {
     if (this.stopped) return;
-    const payload = this.opts.editor.missingChangesetsFor(this.confirmedHeads);
+    const { bytes: payload, withheld } = this.opts.editor.missingChangesetsFor(this.confirmedHeads);
+    if (withheld > 0) this.opts.onEvent?.({ kind: 'persist.withheld', count: withheld });
     if (payload.length === 0) return;
     this.opts.onEvent?.({ kind: 'push.fired', bytes: payload.length });
     const result: PushResult = await this.opts.pushFn(payload);
@@ -138,12 +145,12 @@ export class Pusher {
 
   private async prune(): Promise<void> {
     if (this.stopped) return;
+    const { bytes: missing, withheld } = this.opts.editor.missingChangesetsFor(this.durableHeads);
+    if (withheld > 0) return;
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
     const localAll = new Set(this.localChangesetIds());
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
-    const stillMissing = new Set(
-      this.opts.editor.splitChangesets(this.opts.editor.missingChangesetsFor(this.durableHeads)).map((e) => e.id),
-    );
+    const stillMissing = new Set(this.opts.editor.splitChangesets(missing).map((e) => e.id));
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
     const durableSet = new Set([...localAll].filter((id) => !stillMissing.has(id)));
     const records = await this.opts.store.load(this.opts.documentId);
@@ -187,10 +194,20 @@ export class Pusher {
     this.status = 'pushing';
     const startedAt = performance.now();
     try {
-      await this.capture();
+      let captureFailed = false;
+      let captureError: unknown;
+      try {
+        await this.capture();
+        this.captureFailures = 0;
+      } catch (err) {
+        captureFailed = true;
+        captureError = err;
+        this.captureFailures += 1;
+      }
       if (this.stopped) return;
       await this.drain();
       if (this.stopped) return;
+      if (captureFailed) throw captureError;
       this.finishSuccess(startedAt);
     } catch (err) {
       if (this.stopped) return;

@@ -5,6 +5,8 @@ export const dec = (p: Uint8Array) => [...p].toSorted((a, b) => a - b);
 
 export class FakeEditor {
   known: Set<number>;
+  withheld = 0;
+  missingCalls: number[][] = [];
   constructor(initial: number[]) {
     this.known = new Set(initial);
   }
@@ -15,9 +17,12 @@ export class FakeEditor {
     return [...this.known].toSorted((a, b) => a - b).map(String);
   }
   missingChangesetsFor(heads: Uint8Array) {
+    this.missingCalls.push(dec(heads));
     const hs = dec(heads).filter((id) => this.known.has(id));
     const eff = hs.length > 0 ? Math.max(...hs) : 0;
-    return enc(...[...this.known].filter((id) => id > eff).toSorted((a, b) => a - b));
+    const missing = [...this.known].filter((id) => id > eff).toSorted((a, b) => a - b);
+    const emitted = missing.slice(0, Math.max(0, missing.length - this.withheld));
+    return { bytes: enc(...emitted), withheld: this.withheld };
   }
   splitChangesets(p: Uint8Array) {
     return dec(p).map((n) => ({ id: String(n), bytes: enc(n) }));

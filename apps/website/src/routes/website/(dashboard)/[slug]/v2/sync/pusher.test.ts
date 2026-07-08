@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Pusher } from './pusher.svelte';
 import { dec, enc, FakeEditor, FakeStore } from './test-fakes';
-import type { PusherOpts } from './types';
+import type { PusherEvent, PusherOpts } from './types';
 
 const baseOpts = (editor: FakeEditor, store: FakeStore, pushFn: PusherOpts['pushFn']) => ({
   editor,
@@ -195,5 +195,141 @@ describe('Pusher (single-source-of-truth)', () => {
     await new Promise((r) => setTimeout(r, 0));
     const crashRecs = await store.load('doc1');
     expect(crashRecs.map((r) => r.id)).toEqual(['30']);
+  });
+
+  it('a persistently failing capture does not block the push of already-sealed changesets', async () => {
+    const editor = new FakeEditor([5]);
+    const store = new FakeStore();
+    store.put = async () => {
+      throw new Error('quota');
+    };
+    const pushed: Uint8Array[] = [];
+    const pusher = new Pusher(
+      baseOpts(editor, store, async (cs) => {
+        pushed.push(cs);
+        return { heads: enc(5), durableHeads: enc(5) };
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pushed.flatMap(dec)).toEqual([5]);
+    expect(pusher.status).toBe('retrying');
+    pusher.stop();
+  });
+
+  it('repeated capture failures are observable and reset once capture recovers', async () => {
+    const editor = new FakeEditor([5]);
+    const store = new FakeStore();
+    let failing = true;
+    const origPut = store.put.bind(store);
+    store.put = async (r) => {
+      if (failing) throw new Error('quota');
+      await origPut(r);
+    };
+    let pushes = 0;
+    const pusher = new Pusher(
+      baseOpts(editor, store, async () => {
+        pushes++;
+        return { heads: enc(5), durableHeads: enc() };
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pusher.captureFailures).toBe(1);
+    expect(pusher.status).toBe('retrying');
+
+    window.dispatchEvent(new Event('online'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pusher.captureFailures).toBe(2);
+    expect(pusher.status).toBe('retrying');
+
+    failing = false;
+    window.dispatchEvent(new Event('online'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pusher.captureFailures).toBe(0);
+    expect(pusher.status).toBe('idle');
+    expect(pushes).toBe(1);
+    const recs = await store.load('doc1');
+    expect(recs.map((r) => r.id)).toEqual(['5']);
+    pusher.stop();
+  });
+
+  it('withheld > 0 does not advance capturedHeads: the same window is re-requested and only emitted bytes are stored', async () => {
+    const editor = new FakeEditor([1, 2]);
+    const store = new FakeStore();
+    const pusher = new Pusher({
+      editor,
+      documentId: 'doc1',
+      initialServerHeads: enc(2),
+      initialDurableHeads: enc(2),
+      store,
+      pushFn: async () => ({ heads: editor.currentHeads(), durableHeads: enc(2) }),
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    editor.known.add(3);
+    editor.known.add(4);
+    editor.withheld = 1;
+    editor.missingCalls.length = 0;
+    await pusher.captureNow();
+    await pusher.captureNow();
+
+    expect(editor.missingCalls).toEqual([[2], [2]]);
+    const recs = await store.load('doc1');
+    expect(recs.map((r) => r.id)).toEqual(['3']);
+    pusher.stop();
+  });
+
+  it('withheld > 0 skips prune for the cycle: no record is deleted from the store', async () => {
+    const editor = new FakeEditor([5]);
+    const store = new FakeStore();
+    let deleteCalls = 0;
+    const origDeleteMany = store.deleteMany.bind(store);
+    store.deleteMany = async (documentId, ids) => {
+      deleteCalls++;
+      await origDeleteMany(documentId, ids);
+    };
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(5), durableHeads: enc() })));
+    await pusher.flushNow();
+    await new Promise((r) => setTimeout(r, 0));
+    const deleteCallsBefore = deleteCalls;
+
+    editor.withheld = 1;
+    pusher.setDurableHeads(enc(5));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(deleteCalls).toBe(deleteCallsBefore);
+    const recs = await store.load('doc1');
+    expect(recs.map((r) => r.id)).toEqual(['5']);
+    pusher.stop();
+  });
+
+  it('withheld > 0 still pushes the emitted prefix and surfaces the withheld signal', async () => {
+    const editor = new FakeEditor([1, 2]);
+    const store = new FakeStore();
+    const events: PusherEvent[] = [];
+    const pushed: Uint8Array[] = [];
+    const pusher = new Pusher({
+      editor,
+      documentId: 'doc1',
+      initialServerHeads: enc(2),
+      initialDurableHeads: enc(2),
+      store,
+      pushFn: async (cs) => {
+        pushed.push(cs);
+        return { heads: enc(2), durableHeads: enc(2) };
+      },
+      onEvent: (e) => {
+        events.push(e);
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    editor.known.add(3);
+    editor.known.add(4);
+    editor.withheld = 1;
+    await pusher.flushNow();
+
+    expect(pushed.flatMap(dec)).toEqual([3]);
+    expect(events.some((e) => e.kind === 'persist.withheld' && e.count === 1)).toBe(true);
+    pusher.stop();
   });
 });
