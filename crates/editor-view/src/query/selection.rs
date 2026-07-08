@@ -912,10 +912,7 @@ mod tests {
         None
     }
 
-    fn atom_entry<'a>(
-        index: &'a LayoutIndex,
-        atom_id: Dot,
-    ) -> &'a crate::query::layout_index::LayoutEntry {
+    fn atom_entry(index: &LayoutIndex, atom_id: Dot) -> &crate::query::layout_index::LayoutEntry {
         index
             .entries()
             .find(|entry| {

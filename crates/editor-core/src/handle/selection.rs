@@ -1,5 +1,4 @@
 use editor_commands::{self as commands};
-use editor_crdt::Dot;
 use editor_model::DocView;
 use editor_state::{
     Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
@@ -289,6 +288,7 @@ fn extend_drag_hit(doc: &DocView, anchor: Position, hit: Selection) -> Option<Se
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{Modifier, PlainNode};
     use editor_state::{
