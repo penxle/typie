@@ -9,6 +9,7 @@ import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CalloutVariant
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
@@ -24,6 +25,11 @@ import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.TableBorderStyle
+import co.typie.editor.ffi.TableOverlay
+import co.typie.editor.ffi.TableOverlayCellSelection
+import co.typie.editor.ffi.TableOverlayColumn
+import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
@@ -1465,6 +1471,233 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `editor pointer stream starts table cell handle drag from table handle hit target`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(60f, 60f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 20L)
+      )
+
+      val extend =
+        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, extend.anchor)
+      assertEquals(0, extend.headPage)
+      assertEquals(100f, extend.headX)
+      assertEquals(90f, extend.headY)
+      assertEquals(selection, extend.baseSelection)
+      assertFalse(extend.allowCollapse)
+      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+      assertEquals(Offset(100f, 90f), controller.magnifierPosition)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 40L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `table cell handle drag hands off to selection handle after leaving table`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(70f, 70f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(130f, 120f), nowMillis = 20L)
+      )
+
+      val extends =
+        fake.enqueued.filterIsInstance<Message.Selection>().map { it.op as SelectionOp.ExtendTo }
+      assertEquals(1, extends.size)
+      assertTrue(extends.all { extend -> extend.baseSelection == selection })
+      assertTrue(extends.all { extend -> !extend.allowCollapse })
+      assertEquals(selection.anchor, extends.single().anchor)
+      assertEquals(120f, extends.single().headX)
+      assertEquals(110f, extends.single().headY)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertEquals(Offset(120f, 110f), controller.magnifierPosition)
+
+      fake.enqueued.clear()
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(131f, 121f), nowMillis = 40L)
+      )
+      val continuedExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(121f, continuedExtend.headX)
+      assertEquals(111f, continuedExtend.headY)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(131f, 121f), nowMillis = 60L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `table cell handle edge auto-scroll dispatches with base cell selection`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 8f)
+        }
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(60f, 60f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 20L)
+      )
+      fake.enqueued.clear()
+
+      advanceTimeBy(16)
+      runCurrent()
+
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, extend.anchor)
+      assertEquals(selection, extend.baseSelection)
+      assertEquals(100f, extend.headY)
+      assertFalse(extend.allowCollapse)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 40L)
+      )
+    }
+
+  @Test
+  fun `table cell handle edge auto-scroll hands off after leaving table`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 1f)
+        }
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(60f, 60f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 20L)
+      )
+      fake.enqueued.clear()
+      host.edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 120f))
+
+      advanceTimeBy(16)
+      runCurrent()
+
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, extend.anchor)
+      assertEquals(selection, extend.baseSelection)
+      assertEquals(120f, extend.headY)
+      assertFalse(extend.allowCollapse)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertTrue(host.scrollGestureLockActive)
+
+      fake.enqueued.clear()
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(80f, 96f), nowMillis = 56L)
+      )
+      val continuedExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(121f, continuedExtend.headY)
+      assertEquals(selection, continuedExtend.baseSelection)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(80f, 96f), nowMillis = 72L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
   fun `selection handle drag cannot interrupt active long press interaction`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2399,6 +2632,38 @@ class EditorInteractionControllerTest {
         to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
         fromPosition = Position("text", 0, Affinity.Downstream),
         toPosition = Position("text", 5, Affinity.Downstream),
+      )
+
+    fun tableOverlay(
+      isFocused: Boolean = false,
+      focusedRowIndex: Int? = null,
+      focusedColIndex: Int? = null,
+      cellSelection: TableOverlayCellSelection? = null,
+    ): TableOverlay =
+      TableOverlay(
+        tableId = "table",
+        pageIdx = 0,
+        bounds = Rect(x = 10f, y = 20f, width = 100f, height = 80f),
+        borderStyle = TableBorderStyle.Solid,
+        align = Alignment.Left,
+        proportion = 1f,
+        contentWidth = 100f,
+        rows =
+          listOf(
+            TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null),
+            TableOverlayRow(index = 1, height = 40f, position = 80f, backgroundColor = null),
+          ),
+        columns =
+          listOf(
+            TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f, backgroundColor = null),
+            TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f, backgroundColor = null),
+          ),
+        rowCount = 2,
+        isLastRowFragment = true,
+        isFocused = isFocused,
+        focusedRowIndex = focusedRowIndex,
+        focusedColIndex = focusedColIndex,
+        cellSelection = cellSelection,
       )
 
     fun testEdgeAutoScrollViewport(rect: ComposeRect): EditorEdgeAutoScrollViewport =

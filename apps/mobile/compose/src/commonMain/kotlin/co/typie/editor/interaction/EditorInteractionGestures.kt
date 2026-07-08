@@ -8,6 +8,7 @@ import co.typie.editor.interaction.gestures.EditorLongPressGesture
 import co.typie.editor.interaction.gestures.EditorPanGesture
 import co.typie.editor.interaction.gestures.EditorPinchGesture
 import co.typie.editor.interaction.gestures.EditorSelectionHandleGesture
+import co.typie.editor.interaction.gestures.EditorTableHandleDragUpdate
 import co.typie.editor.interaction.gestures.EditorTableHandleGesture
 import co.typie.editor.interaction.gestures.EditorTapGesture
 import co.typie.editor.interaction.gestures.cancel
@@ -31,9 +32,14 @@ internal class EditorInteractionGestures(
   val pinch: EditorPinchGesture = EditorPinchGesture(),
   val selectionHandle: EditorSelectionHandleGesture =
     EditorSelectionHandleGesture(contextProvider = contextProvider),
-  val tableHandle: EditorTableHandleGesture = EditorTableHandleGesture(),
   val dnd: EditorDndGesture = EditorDndGesture(),
 ) {
+  val tableHandle: EditorTableHandleGesture =
+    EditorTableHandleGesture(
+      contextProvider = contextProvider,
+      onHandoffToSelectionHandle = ::handoffTableDragToSelectionHandle,
+    )
+
   val hasActivePointer: Boolean
     get() = tap.hasActivePointer
 
@@ -77,12 +83,14 @@ internal class EditorInteractionGestures(
       return false
     }
 
-    val selectionHandleType = if (tapEnabled) selectionHandle.hitTest(position) else null
-    if (selectionHandleType != null) {
+    val tableHandleHit = tapEnabled && tableHandle.hitTest(position)
+    val selectionHandleType =
+      if (tapEnabled && !tableHandleHit) selectionHandle.hitTest(position) else null
+    if (tableHandleHit || selectionHandleType != null) {
       tap.clearTapHistory()
     }
 
-    if (tapEnabled && selectionHandleType == null) {
+    if (tapEnabled && !tableHandleHit && selectionHandleType == null) {
       longPress.primeModeAtPointerDown(position = position, context = context)
     }
 
@@ -104,7 +112,11 @@ internal class EditorInteractionGestures(
           position = position,
           preserveTapDispatch = true,
         )
-    if (tapEnabled && tap.hasActivePointer && !selectionHandleConsumed) {
+    val tableHandleConsumed =
+      tableHandleHit &&
+        tap.hasActivePointer &&
+        tableHandle.handleDragDown(position = position, preserveTapDispatch = true)
+    if (tapEnabled && tap.hasActivePointer && !selectionHandleConsumed && !tableHandleConsumed) {
       longPress.prepare(pointerId = pointerId)
       context.effects.scheduleLongPressDispatch(
         pointerId = pointerId,
@@ -112,7 +124,7 @@ internal class EditorInteractionGestures(
         dispatchAtMillis = nowMillis + EditorLongPressDispatchDelayMillis,
       )
     }
-    return consumed || selectionHandleConsumed
+    return consumed || selectionHandleConsumed || tableHandleConsumed
   }
 
   fun handlePointerMove(
@@ -134,6 +146,18 @@ internal class EditorInteractionGestures(
     if (movedPastTapSlop) {
       longPress.cancelPending(pointerId = pointerId)
       context.effects.cancelLongPressDispatch()
+    }
+    if (tableHandle.activeDrag) {
+      return handleTableDragUpdate(position = position)
+    }
+    if (tableHandle.pendingDrag) {
+      if (movedPastTapSlop && !tableHandle.activeDrag) {
+        tableHandle.handleDragStart(position = position)
+      }
+      if (tableHandle.activeDrag) {
+        return handleTableDragUpdate(position = position)
+      }
+      return true
     }
     selectionHandle.activeType?.let { type ->
       selectionHandle.handleDragUpdate(type = type, position = position)
@@ -178,6 +202,17 @@ internal class EditorInteractionGestures(
     }
     pinch.handlePointerUp(pointerId = pointerId, context = context)
 
+    if (tableHandle.activeDrag) {
+      context.effects.cancelLongPressDispatch()
+      tap.onPointerUp(
+        pointerId = pointerId,
+        position = position,
+        nowMillis = nowMillis,
+        canFinish = false,
+      )
+      return tableHandle.handleDragEnd()
+    }
+
     selectionHandle.activeType?.let { type ->
       context.effects.cancelLongPressDispatch()
       tap.onPointerUp(
@@ -194,6 +229,7 @@ internal class EditorInteractionGestures(
     }
 
     val pendingSelectionHandleType = selectionHandle.pendingType
+    val pendingTableHandle = tableHandle.pendingDrag
     val shouldConsumeTap =
       tap.handlePointerUp(
         pointerId = pointerId,
@@ -204,9 +240,13 @@ internal class EditorInteractionGestures(
       )
     val selectionConsumed = doubleTapDrag.endDrag(context = context)
     doubleTapDrag.cleanupAfterPointerUp(tap = tap, context = context)
+    val pendingTableHandleConsumed = if (pendingTableHandle) tableHandle.handleDragEnd() else false
     val pendingSelectionHandleConsumed =
       pendingSelectionHandleType?.let { selectionHandle.handleDragEnd(type = it) } ?: false
-    return shouldConsumeTap || selectionConsumed || pendingSelectionHandleConsumed
+    return shouldConsumeTap ||
+      selectionConsumed ||
+      pendingTableHandleConsumed ||
+      pendingSelectionHandleConsumed
   }
 
   fun handleLongPressTimer(
@@ -260,6 +300,7 @@ internal class EditorInteractionGestures(
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
+    tableHandle.resetPointerOwnedState(context = context)
     selectionHandle.resetPointerOwnedState(context = context)
     doubleTapDrag.resetPointerOwnedState(context = context)
     longPress.reset()
@@ -282,6 +323,26 @@ internal class EditorInteractionGestures(
       mode.canApply(EditorInteractionEvent.LongPressWordStart)) &&
       !tableHandle.dragging &&
       !doubleTapDrag.active
+
+  private fun handleTableDragUpdate(position: Offset): Boolean =
+    when (val update = tableHandle.handleDragUpdate(position = position)) {
+      EditorTableHandleDragUpdate.NotConsumed -> false
+      EditorTableHandleDragUpdate.Consumed -> true
+      is EditorTableHandleDragUpdate.HandoffToSelectionHandle ->
+        handoffTableDragToSelectionHandle(update)
+    }
+
+  private fun handoffTableDragToSelectionHandle(
+    update: EditorTableHandleDragUpdate.HandoffToSelectionHandle
+  ): Boolean {
+    tableHandle.handleDragEnd()
+    return selectionHandle.adoptTableCellDrag(
+      touchPosition = update.touchPosition,
+      handlePosition = update.handlePosition,
+      anchor = update.anchor,
+      baseSelection = update.baseSelection,
+    )
+  }
 
   fun reset() {
     tap.reset()

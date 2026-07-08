@@ -213,15 +213,28 @@
 
   const isActive = $derived(isTableHovered || overlay.is_focused || menuOpen || cellBgMenuOpen || buttonHovered || resizing !== null);
   const cellSelectionButtonPosition = $derived.by(() => {
-    if (!overlay.is_cell_selection) return null;
+    const selection = overlay.cell_selection;
+    if (!selection) return null;
 
-    const colStart = overlay.cell_selection_col_start ?? 0;
-    const colEnd = overlay.cell_selection_col_end ?? 0;
-    const rowEnd = overlay.cell_selection_row_end ?? 0;
-    const leftEdge = colStart === 0 ? 0 : (overlay.columns[colStart - 1]?.position ?? 0);
-    const rightEdge = overlay.columns[colEnd]?.position ?? overlay.bounds.width;
+    const firstVisibleRow = overlay.rows.at(0)?.index;
+    const lastVisibleRow = overlay.rows.at(-1)?.index;
+    if (firstVisibleRow === undefined || lastVisibleRow === undefined) return null;
+
+    const colStart = Math.min(selection.anchor_col, selection.head_col);
+    const colEnd = Math.max(selection.anchor_col, selection.head_col);
+    const rowStart = Math.min(selection.anchor_row, selection.head_row);
+    const rowEnd = Math.max(selection.anchor_row, selection.head_row);
+    if (rowStart > lastVisibleRow || rowEnd < firstVisibleRow) return null;
+
+    const colStartIndex = overlay.columns.findIndex((column) => column.index === colStart);
+    const colEndIndex = overlay.columns.findIndex((column) => column.index === colEnd);
+    const rowEndIndex = overlay.rows.findIndex((row) => row.index === Math.min(rowEnd, lastVisibleRow));
+    if (colStartIndex === -1 || colEndIndex === -1 || rowEndIndex === -1) return null;
+
+    const leftEdge = getColLeft(colStartIndex);
+    const rightEdge = overlay.columns[colEndIndex]?.position ?? overlay.bounds.width;
     const centerX = (leftEdge + rightEdge) / 2;
-    const bottomY = overlay.rows[rowEnd]?.position ?? overlay.bounds.height;
+    const bottomY = overlay.rows[rowEndIndex]?.position ?? overlay.bounds.height;
     return { left: centerX, top: bottomY + 4 };
   });
 
@@ -1004,7 +1017,7 @@
           <li>
             <ToolbarColorGrid
               columns={8}
-              currentValue={overlay.cell_selection_background_color ?? 'none'}
+              currentValue={overlay.cell_selection?.background_color ?? 'none'}
               items={cellBackgroundColors}
               onClose={close}
               onSelect={(value) => {

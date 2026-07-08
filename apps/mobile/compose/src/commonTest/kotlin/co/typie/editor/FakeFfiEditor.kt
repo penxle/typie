@@ -55,6 +55,7 @@ internal class FakeFfiEditor(
   var characterCountsProvider: () -> CharacterCounts = { EmptyCharacterCounts },
   var pageSizesProvider: () -> List<Size> = { emptyList() },
   var externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
+  var tableOverlaysProvider: () -> List<TableOverlay> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
   var lastHistoryTagProvider: () -> HistoryTag? = { null },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
@@ -141,7 +142,7 @@ internal class FakeFfiEditor(
 
   override fun pageExternalElements(page: Int): List<ExternalElement> = emptyList()
 
-  override fun tableOverlays(): List<TableOverlay> = emptyList()
+  override fun tableOverlays(): List<TableOverlay> = tableOverlaysProvider()
 
   override fun pageTableOverlays(page: Int): List<TableOverlay> = emptyList()
 

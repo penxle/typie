@@ -39,12 +39,18 @@ pub struct TableOverlay {
     pub is_focused: bool,
     pub focused_row_index: Option<usize>,
     pub focused_col_index: Option<usize>,
-    pub is_cell_selection: bool,
-    pub cell_selection_background_color: Option<String>,
-    pub cell_selection_row_start: Option<usize>,
-    pub cell_selection_row_end: Option<usize>,
-    pub cell_selection_col_start: Option<usize>,
-    pub cell_selection_col_end: Option<usize>,
+    pub cell_selection: Option<TableOverlayCellSelection>,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TableOverlayCellSelection {
+    pub background_color: Option<String>,
+    pub anchor_row: usize,
+    pub anchor_col: usize,
+    pub head_row: usize,
+    pub head_col: usize,
 }
 
 #[ffi]
@@ -288,23 +294,36 @@ fn build_table_overlay(
 
     let visible_row_start = rows.first()?.index;
     let visible_row_end = rows.last()?.index;
-    let (cell_selection_row_start, cell_selection_row_end) = match (
+    let cell_selection = match (
+        is_table_cell_selection,
         global_cell_selection_row_start,
         global_cell_selection_row_end,
+        cell_selection_col_start,
+        cell_selection_col_end,
     ) {
-        (Some(row_start), Some(row_end))
+        (true, Some(row_start), Some(row_end), Some(col_start), Some(col_end))
             if row_start <= visible_row_end && row_end >= visible_row_start =>
         {
-            let clipped_start = row_start.max(visible_row_start);
-            let clipped_end = row_end.min(visible_row_end);
-            (
-                rows.iter().position(|row| row.index == clipped_start),
-                rows.iter().position(|row| row.index == clipped_end),
-            )
+            if let Some(rect) = cell_rect.as_ref() {
+                Some(TableOverlayCellSelection {
+                    background_color: cell_selection_background_color,
+                    anchor_row: rect.anchor_cell.parent()?.index()?,
+                    anchor_col: rect.anchor_cell.index()?,
+                    head_row: rect.head_cell.parent()?.index()?,
+                    head_col: rect.head_cell.index()?,
+                })
+            } else {
+                Some(TableOverlayCellSelection {
+                    background_color: None,
+                    anchor_row: row_start,
+                    anchor_col: col_start,
+                    head_row: row_end,
+                    head_col: col_end,
+                })
+            }
         }
-        _ => (None, None),
+        _ => None,
     };
-    let is_cell_selection = is_table_cell_selection && cell_selection_row_start.is_some();
 
     Some(TableOverlay {
         table_id,
@@ -321,12 +340,7 @@ fn build_table_overlay(
         is_focused,
         focused_row_index,
         focused_col_index,
-        is_cell_selection,
-        cell_selection_background_color,
-        cell_selection_row_start,
-        cell_selection_row_end,
-        cell_selection_col_start,
-        cell_selection_col_end,
+        cell_selection,
     })
 }
 
@@ -811,9 +825,7 @@ mod tests {
         assert_eq!(ov.rows[1].background_color, None);
 
         assert!(!ov.is_focused);
-        assert!(!ov.is_cell_selection);
-        assert_eq!(ov.cell_selection_row_start, None);
-        assert_eq!(ov.cell_selection_col_start, None);
+        assert_eq!(ov.cell_selection, None);
     }
 
     #[test]
@@ -841,33 +853,17 @@ mod tests {
         assert_eq!(overlays.len(), 1);
         let ov = &overlays[0];
 
-        assert!(
-            ov.is_cell_selection,
-            "single-cell selection is a cell selection"
-        );
-        assert_eq!(
-            ov.cell_selection_row_start,
-            Some(0),
-            "cell selection starts at row 0 (position in visible rows)"
-        );
-        assert_eq!(
-            ov.cell_selection_row_end,
-            Some(0),
-            "cell selection ends at row 0"
-        );
-        assert_eq!(
-            ov.cell_selection_col_start,
-            Some(0),
-            "cell selection starts at col 0"
-        );
-        assert_eq!(
-            ov.cell_selection_col_end,
-            Some(0),
-            "cell selection ends at col 0"
-        );
+        let cell_selection = ov
+            .cell_selection
+            .as_ref()
+            .expect("single-cell selection is a cell selection");
+        assert_eq!(cell_selection.anchor_row, 0);
+        assert_eq!(cell_selection.anchor_col, 0);
+        assert_eq!(cell_selection.head_row, 0);
+        assert_eq!(cell_selection.head_col, 0);
 
         // cell00 bg = "#fff" → cell_selection_background_color carries it
-        assert_eq!(ov.cell_selection_background_color, Some("#fff".to_string()));
+        assert_eq!(cell_selection.background_color, Some("#fff".to_string()));
 
         // anchor is inside table (row0 is an ancestor of table) → is_focused
         assert!(ov.is_focused);
@@ -902,13 +898,50 @@ mod tests {
         assert_eq!(overlays.len(), 1);
         let ov = &overlays[0];
 
-        assert!(ov.is_cell_selection);
-        assert_eq!(ov.cell_selection_row_start, Some(0));
-        assert_eq!(ov.cell_selection_row_end, Some(0));
-        assert_eq!(ov.cell_selection_col_start, Some(0));
-        assert_eq!(ov.cell_selection_col_end, Some(1));
+        let cell_selection = ov
+            .cell_selection
+            .as_ref()
+            .expect("full-row selection is a cell selection");
+        assert_eq!(cell_selection.anchor_row.min(cell_selection.head_row), 0);
+        assert_eq!(cell_selection.anchor_row.max(cell_selection.head_row), 0);
+        assert_eq!(cell_selection.anchor_col.min(cell_selection.head_col), 0);
+        assert_eq!(cell_selection.anchor_col.max(cell_selection.head_col), 1);
         // cell00 bg = "#fff", cell01 has None → mixed → common bg = None
-        assert_eq!(ov.cell_selection_background_color, None);
+        assert_eq!(cell_selection.background_color, None);
+    }
+
+    #[test]
+    fn cell_selection_reversed_carries_anchor_and_head_cells() {
+        let (pd, root, table, row0, cell00, cell01, row1, cell10, cell11) = two_by_two_table_doc();
+        let view = DocView::new(&pd);
+
+        let para00_id = elem(1, 8);
+        let para01_id = elem(1, 9);
+        let para10_id = elem(1, 10);
+        let para11_id = elem(1, 11);
+
+        let tree = table_layout_tree(
+            table, row0, cell00, cell01, row1, cell10, cell11, para00_id, para01_id, para10_id,
+            para11_id, root,
+        );
+
+        let pg = page(0.0, 200.0);
+        let fragment = build_page_fragment_tree(&tree, 0, &pg);
+
+        let sel = resolved_sel(&view, row1, 2, row0, 0);
+        let overlays = page_table_overlays(&fragment, &view, Some(&sel), 600.0);
+
+        assert_eq!(overlays.len(), 1);
+        let ov = &overlays[0];
+
+        let cell_selection = ov
+            .cell_selection
+            .as_ref()
+            .expect("reversed selection is a cell selection");
+        assert_eq!(cell_selection.anchor_row, 1);
+        assert_eq!(cell_selection.anchor_col, 1);
+        assert_eq!(cell_selection.head_row, 0);
+        assert_eq!(cell_selection.head_col, 0);
     }
 
     #[test]
@@ -945,14 +978,14 @@ mod tests {
         assert!(!ov.is_focused);
 
         // is_cross_boundary → is_table_cell_selection = true → full table range
-        assert!(
-            ov.is_cell_selection,
-            "cross-boundary selection triggers cell selection"
-        );
+        let cell_selection = ov
+            .cell_selection
+            .as_ref()
+            .expect("cross-boundary selection triggers cell selection");
         // cross-boundary: all rows 0..=row_count-1=1, all cols 0..=max_cols-1=1
-        assert_eq!(ov.cell_selection_row_start, Some(0));
-        assert_eq!(ov.cell_selection_row_end, Some(1));
-        assert_eq!(ov.cell_selection_col_start, Some(0));
-        assert_eq!(ov.cell_selection_col_end, Some(1));
+        assert_eq!(cell_selection.anchor_row, 0);
+        assert_eq!(cell_selection.anchor_col, 0);
+        assert_eq!(cell_selection.head_row, 1);
+        assert_eq!(cell_selection.head_col, 1);
     }
 }

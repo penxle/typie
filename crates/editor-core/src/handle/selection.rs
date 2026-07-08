@@ -157,20 +157,6 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
     }
 }
 
-fn drag_anchor_cell(editor: &Editor, pos: &Position) -> Option<Dot> {
-    let view = editor.state.view();
-    if let Some(resolved) = editor
-        .state
-        .selection
-        .as_ref()
-        .and_then(|selection| selection.resolve(&view))
-        && let Some(cell_rect) = resolved.as_cell_rect()
-    {
-        return Some(cell_rect.anchor_cell.id());
-    }
-    enclosing_table_cell(&view, pos.node)
-}
-
 fn resolve_select_unit_at_selection(
     editor: &Editor,
     page: usize,
@@ -210,7 +196,15 @@ fn resolve_extend_to_selection(
     allow_collapse: bool,
 ) -> Option<Selection> {
     let view = editor.state().view();
-    if let Some(anchor_cell) = drag_anchor_cell(editor, &anchor)
+    let base_cell_rect_anchor = base_selection
+        .as_ref()
+        .and_then(|selection| selection.resolve(&view))
+        .and_then(|resolved| resolved.as_cell_rect())
+        .map(|cell_rect| cell_rect.anchor_cell.id());
+    let started_from_cell_rect = base_cell_rect_anchor.is_some();
+
+    if let Some(anchor_cell) =
+        base_cell_rect_anchor.or_else(|| enclosing_table_cell(&view, anchor.node))
         && let Some(table_id) = enclosing_table(&view, anchor_cell)
     {
         let head_inside_table = editor
@@ -222,12 +216,13 @@ fn resolve_extend_to_selection(
                 .view
                 .nearest_node_box(head_page, head_x, head_y, &cells)
             {
-                let is_cell_mode = editor
-                    .state
-                    .selection
-                    .as_ref()
-                    .and_then(|selection| selection.resolve(&view))
-                    .is_some_and(|resolved| resolved.as_cell_rect().is_some());
+                let is_cell_mode = started_from_cell_rect
+                    || editor
+                        .state
+                        .selection
+                        .as_ref()
+                        .and_then(|selection| selection.resolve(&view))
+                        .is_some_and(|resolved| resolved.as_cell_rect().is_some());
                 let is_same_cell_exact_box_hit = head_cell == anchor_cell
                     && editor
                         .view
@@ -1283,6 +1278,65 @@ mod tests {
             .expect("dragging to same-cell padding should select that cell");
         assert_eq!(cell_rect.anchor_cell.id(), cell);
         assert_eq!(cell_rect.head_cell.id(), cell);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_cell_rect_uses_base_selection_shape_after_leaving_table() {
+        let (state, table, c00, _c01, c10, p2) = state! {
+            doc {
+                root {
+                    table: table {
+                        table_row {
+                            c00: table_cell { paragraph { text("a") } }
+                            _c01: table_cell { paragraph { text("b") } }
+                        }
+                        table_row {
+                            c10: table_cell { paragraph { text("c") } }
+                            table_cell { paragraph { text("d") } }
+                        }
+                    }
+                    p2: paragraph { text("after") }
+                }
+            }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let initial = {
+            let view = editor.state().view();
+            cell_rect_selection(c00, c00, &view).expect("single-cell selection builds")
+        };
+        let outside = Selection::new(initial.anchor, Position::new(p2, 2));
+        editor
+            .transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                tr.set_selection(Some(outside))?;
+                Ok(())
+            })
+            .unwrap();
+        let target_rect = editor.view.node_box_rects(&[c10])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: initial.anchor,
+                head_page: 0,
+                head_x: target_rect.x + target_rect.width / 2.0,
+                head_y: target_rect.y + target_rect.height / 2.0,
+                base_selection: Some(initial),
+                allow_collapse: false,
+            },
+        });
+
+        let view = editor.state().view();
+        let sel = editor.state().selection.expect("selection exists in test");
+        let rect = sel
+            .resolve(&view)
+            .and_then(|resolved| resolved.as_cell_rect())
+            .expect("re-entering the table should restore cell-rect selection");
+        assert_eq!(rect.table_id(), table);
+        assert_eq!(rect.anchor_cell.id(), c00);
+        assert_eq!(rect.head_cell.id(), c10);
         assert!(!editor.undo_history.can_undo());
     }
 

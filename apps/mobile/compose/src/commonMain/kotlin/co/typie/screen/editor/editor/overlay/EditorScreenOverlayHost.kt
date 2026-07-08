@@ -111,6 +111,12 @@ internal fun EditorScreenOverlayHost(
       val editor = runtime.editor
       if (editor != null) {
         if (editorRectInViewport != null) {
+          EditorTableCellSelectionOverlay(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInViewport,
+            density = density.density,
+          )
           EditorSelectionHandleOverlay(
             editor = editor,
             uiState = uiState,

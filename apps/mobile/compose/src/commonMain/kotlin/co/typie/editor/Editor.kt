@@ -29,6 +29,7 @@ import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
 import co.typie.platform.PlatformModule
@@ -70,6 +71,7 @@ internal constructor(
   val selection: Selection? by derivedStateOf { state.selection }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
   val externalElements: List<ExternalElement> by derivedStateOf { state.externalElements }
+  val tableOverlays: List<TableOverlay> by derivedStateOf { state.tableOverlays }
   val rootAttrs: PlainRootNode? by derivedStateOf { state.rootAttrs }
   val rootModifiers: List<EditorModifier>? by derivedStateOf { state.rootModifiers }
   val modifierState: ModifierState? by derivedStateOf { state.modifierState }
@@ -454,6 +456,7 @@ internal constructor(
     val documentChanged = events.hasStateChangedField(StateField.Doc)
     val placeholderChanged = events.hasStateChangedField(StateField.Placeholder)
     val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
+    val tableOverlaysChanged = events.hasStateChangedField(StateField.TableOverlays)
     val lastHistoryTagChanged = events.hasStateChangedField(StateField.LastHistoryTag)
     val placeholder =
       if (placeholderChanged || state.version == 0L) {
@@ -467,6 +470,12 @@ internal constructor(
       } else {
         state.trackedRanges
       }
+    val tableOverlays =
+      if (tableOverlaysChanged || state.version == 0L) {
+        inner.tableOverlays()
+      } else {
+        state.tableOverlays
+      }
     val selectionChanged = state.selection != selection
     return EditorState(
       version = version,
@@ -477,6 +486,7 @@ internal constructor(
       selectionEndpoints = selectionEndpoints,
       pageSizes = inner.pageSizes(),
       externalElements = inner.externalElements(),
+      tableOverlays = tableOverlays,
       rootAttrs = inner.rootAttrs(),
       rootModifiers = inner.rootModifiers(),
       modifierState = inner.modifierState(),

@@ -4,9 +4,14 @@ import co.typie.editor.Editor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 
-internal fun Editor.dispatchSelectionHandleExtension(point: PagePoint, anchor: Position): Boolean {
+internal fun Editor.dispatchSelectionHandleExtension(
+  point: PagePoint,
+  anchor: Position,
+  baseSelection: Selection? = null,
+): Boolean {
   if (point.page < 0) {
     return false
   }
@@ -17,7 +22,7 @@ internal fun Editor.dispatchSelectionHandleExtension(point: PagePoint, anchor: P
         headPage = point.page,
         headX = point.x,
         headY = point.y,
-        baseSelection = null,
+        baseSelection = baseSelection,
         allowCollapse = false,
       )
     )

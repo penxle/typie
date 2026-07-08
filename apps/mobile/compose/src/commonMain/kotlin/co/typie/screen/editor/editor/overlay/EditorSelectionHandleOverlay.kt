@@ -23,6 +23,7 @@ import co.typie.editor.interaction.gestures.EditorSelectionHandleStemWidthDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.gestures.resolveSelectionHandleGeometry
+import co.typie.editor.interaction.hasActiveTableCellSelection
 import co.typie.editor.runtime.EditorUiState
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
@@ -34,7 +35,7 @@ internal fun EditorSelectionHandleOverlay(
   editorRectInOverlay: Rect,
   density: Float,
 ) {
-  if (!uiState.focused || editor.selection.isCollapsed()) {
+  if (!uiState.focused || editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
     return
   }
 
@@ -56,7 +57,7 @@ internal fun resolveSelectionHandleOverlayPlacements(
   editorRectInOverlay: Rect,
   density: Float,
 ): List<EditorSelectionHandleOverlayPlacement>? {
-  if (density <= 0f || editor.selection.isCollapsed()) {
+  if (density <= 0f || editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
     return null
   }
 

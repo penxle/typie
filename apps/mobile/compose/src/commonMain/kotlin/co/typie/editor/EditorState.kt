@@ -12,6 +12,7 @@ import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeEndpoints
 
@@ -26,6 +27,7 @@ data class EditorState(
   val selectionEndpoints: SelectionEndpoints? = null,
   val pageSizes: List<Size>,
   val externalElements: List<ExternalElement>,
+  val tableOverlays: List<TableOverlay> = emptyList(),
   val rootAttrs: PlainRootNode?,
   val rootModifiers: List<EditorModifier>?,
   val modifierState: ModifierState? = null,
@@ -44,6 +46,7 @@ data class EditorState(
         selection = null,
         pageSizes = emptyList(),
         externalElements = emptyList(),
+        tableOverlays = emptyList(),
         rootAttrs = null,
         rootModifiers = null,
         modifierState = null,

@@ -4,10 +4,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.canApply
+import co.typie.editor.interaction.hasActiveTableCellSelection
 import co.typie.editor.interaction.sessions.EditorSelectionHandleDragSession
 import kotlin.math.max
 
@@ -90,6 +93,9 @@ internal class EditorSelectionHandleGesture(
       return null
     }
     if (context.editor.selection.isCollapsed()) {
+      return null
+    }
+    if (hasActiveTableCellSelection(context.editor)) {
       return null
     }
     val radiusPx = EditorSelectionHandleRadiusDp * density
@@ -184,6 +190,46 @@ internal class EditorSelectionHandleGesture(
       resetPointerOwnedState(context = context)
       return false
     }
+    return true
+  }
+
+  fun adoptTableCellDrag(
+    touchPosition: Offset,
+    handlePosition: Offset,
+    anchor: Position,
+    baseSelection: Selection,
+  ): Boolean {
+    val context = contextProvider()
+    if (!context.mode.canApply(EditorInteractionEvent.SelectionHandleDragStart)) {
+      resetPointerOwnedState(context = context)
+      return false
+    }
+    if (
+      !session.adoptDrag(
+        type = EditorSelectionHandleType.To,
+        touchPosition = touchPosition,
+        handlePosition = handlePosition,
+        anchor = anchor,
+        baseSelection = baseSelection,
+      )
+    ) {
+      resetPointerOwnedState(context = context)
+      return false
+    }
+
+    context.uiState.contextMenu.hide()
+    context.semantics.magnifier.hide()
+    context.effects.setScrollGestureLocked(true)
+    context.reduceMode(EditorInteractionEvent.SelectionHandleDragStart)
+    if (context.mode != EditorInteractionMode.SelectionHandleDragging) {
+      resetPointerOwnedState(context = context)
+      return false
+    }
+    session.update(
+      type = EditorSelectionHandleType.To,
+      touchPosition = touchPosition,
+      context = context,
+    )
     return true
   }
 

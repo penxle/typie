@@ -462,12 +462,15 @@ export interface TableOverlay {
     is_focused: boolean;
     focused_row_index: number | undefined;
     focused_col_index: number | undefined;
-    is_cell_selection: boolean;
-    cell_selection_background_color: string | undefined;
-    cell_selection_row_start: number | undefined;
-    cell_selection_row_end: number | undefined;
-    cell_selection_col_start: number | undefined;
-    cell_selection_col_end: number | undefined;
+    cell_selection: TableOverlayCellSelection | undefined;
+}
+
+export interface TableOverlayCellSelection {
+    background_color: string | undefined;
+    anchor_row: number;
+    anchor_col: number;
+    head_row: number;
+    head_col: number;
 }
 
 export interface TableOverlayColumn {

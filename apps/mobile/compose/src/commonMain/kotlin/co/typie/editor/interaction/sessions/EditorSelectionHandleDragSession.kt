@@ -2,6 +2,7 @@ package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.dispatchSelectionHandleExtension
@@ -68,6 +69,29 @@ internal class EditorSelectionHandleDragSession {
         startTouchPosition = startTouchPosition,
         startHandlePosition = handleCenter,
         anchor = anchor,
+        baseSelection = null,
+      )
+    return true
+  }
+
+  fun adoptDrag(
+    type: EditorSelectionHandleType,
+    touchPosition: Offset,
+    handlePosition: Offset,
+    anchor: Position,
+    baseSelection: Selection,
+  ): Boolean {
+    if (activeDrag) {
+      return false
+    }
+    pendingContext = null
+    dragContext =
+      EditorSelectionHandleDragContext(
+        type = type,
+        startTouchPosition = touchPosition,
+        startHandlePosition = handlePosition,
+        anchor = anchor,
+        baseSelection = baseSelection,
       )
     return true
   }
@@ -88,13 +112,18 @@ internal class EditorSelectionHandleDragSession {
       edgePosition = touchPosition,
       dispatchPosition = selectionPosition,
       anchor = drag.anchor,
+      baseSelection = drag.baseSelection,
       context = context,
     )
     val point = context.geometry.resolvePoint(positionInNode = selectionPosition) ?: return false
     if (point.page < 0) {
       return false
     }
-    return context.editor.dispatchSelectionHandleExtension(point = point, anchor = drag.anchor)
+    return context.editor.dispatchSelectionHandleExtension(
+      point = point,
+      anchor = drag.anchor,
+      baseSelection = drag.baseSelection,
+    )
   }
 
   fun reset() {
@@ -113,4 +142,5 @@ private data class EditorSelectionHandleDragContext(
   val startTouchPosition: Offset,
   val startHandlePosition: Offset,
   val anchor: Position,
+  val baseSelection: Selection?,
 )

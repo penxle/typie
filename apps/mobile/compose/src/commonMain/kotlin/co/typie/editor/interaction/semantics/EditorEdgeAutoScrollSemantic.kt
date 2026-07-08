@@ -3,6 +3,7 @@ package co.typie.editor.interaction.semantics
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorEdgeAutoScrollViewport
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.ext.computeEdgeAutoScrollPlan
@@ -23,13 +24,34 @@ internal class EditorEdgeAutoScrollSemantic {
     edgePosition: Offset,
     dispatchPosition: Offset,
     anchor: Position,
+    baseSelection: Selection? = null,
     context: EditorGestureContext,
   ) {
     track(
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
-      dispatch = { point -> context.editor.dispatchSelectionHandleExtension(point, anchor) },
+      dispatch = { scrolled ->
+        context.editor.dispatchSelectionHandleExtension(
+          point = scrolled.point,
+          anchor = anchor,
+          baseSelection = baseSelection,
+        )
+      },
+    )
+  }
+
+  fun trackSelectionHandle(
+    edgePosition: Offset,
+    dispatchPosition: Offset,
+    context: EditorGestureContext,
+    dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
+  ) {
+    track(
+      edgePosition = edgePosition,
+      dispatchPosition = dispatchPosition,
+      context = context,
+      dispatch = dispatch,
     )
   }
 
@@ -42,10 +64,13 @@ internal class EditorEdgeAutoScrollSemantic {
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
-      dispatch = { point ->
+      dispatch = { scrolled ->
         val selectionContext = context.semantics.selectionExpansion.context(context.editor)
         selectionContext != null &&
-          context.editor.dispatchSelectionExtension(point = point, context = selectionContext)
+          context.editor.dispatchSelectionExtension(
+            point = scrolled.point,
+            context = selectionContext,
+          )
       },
     )
   }
@@ -59,10 +84,10 @@ internal class EditorEdgeAutoScrollSemantic {
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
-      dispatch = { point ->
+      dispatch = { scrolled ->
         context.semantics.cursorMove.enqueuePrimaryClick(
           editor = context.editor,
-          point = point,
+          point = scrolled.point,
           clickCount = 1,
         )
       },
@@ -73,7 +98,7 @@ internal class EditorEdgeAutoScrollSemantic {
     edgePosition: Offset,
     dispatchPosition: Offset,
     context: EditorGestureContext,
-    dispatch: (PagePoint) -> Boolean,
+    dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
   ) {
     val viewport = context.geometry.resolveEdgeAutoScrollViewport()
     if (viewport == null || planFor(edgePosition = edgePosition, viewport = viewport).isNoOp) {
@@ -165,13 +190,22 @@ internal class EditorEdgeAutoScrollSemantic {
       x = if (horizontalBoundaryReached) rect.left else rect.left + viewport.edgeThresholdPx
     }
 
-    val point = context.geometry.resolvePoint(Offset(x = x, y = y)) ?: return
+    val position = Offset(x = x, y = y)
+    val point = context.geometry.resolvePoint(position) ?: return
     if (point.page < 0 || point == lastDispatchedPoint) {
       return
     }
     lastDispatchedPoint = point
-    if (request.dispatch(point)) {
-      context.semantics.magnifier.show(Offset(x = x, y = y))
+    if (
+      request.dispatch(
+        EditorEdgeAutoScrollDispatch(
+          edgePosition = request.edgePosition,
+          dispatchPosition = position,
+          point = point,
+        )
+      )
+    ) {
+      context.semantics.magnifier.show(position)
     }
   }
 
@@ -200,7 +234,13 @@ private fun reachedScrollBoundary(requestedDelta: Float, consumedDelta: Float): 
 private data class EditorEdgeAutoScrollRequest(
   val edgePosition: Offset,
   val dispatchPosition: Offset,
-  val dispatch: (PagePoint) -> Boolean,
+  val dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
+)
+
+internal data class EditorEdgeAutoScrollDispatch(
+  val edgePosition: Offset,
+  val dispatchPosition: Offset,
+  val point: PagePoint,
 )
 
 private val EditorEdgeAutoScrollViewport.edgeThresholdPx: Float
