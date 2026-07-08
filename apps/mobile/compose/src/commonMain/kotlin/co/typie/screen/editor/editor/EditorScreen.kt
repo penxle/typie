@@ -119,8 +119,8 @@ import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.state.resolveEditorVisibleAreas
 import co.typie.screen.editor.editor.subpane.CommentsSubPaneEnvironment
+import co.typie.screen.editor.editor.subpane.EditorSubPane
 import co.typie.screen.editor.editor.subpane.EditorSubPaneHost
-import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
 import co.typie.screen.editor.editor.subpane.EditorSubPaneState
 import co.typie.screen.editor.editor.subpane.comments.rememberEditorCommentsSession
 import co.typie.screen.editor.editor.subpane.resolveSubPaneBottomOcclusion
@@ -261,6 +261,9 @@ fun EditorScreen(entityId: String) {
   }
   val editor = runtime.editor
   val editorState = editor?.state ?: EditorState.Initial
+  LaunchedEffect(subPaneState.active, editorState.selection) {
+    subPaneState.dismissTableAxisActionsIfSelectionChanged(editorState.selection)
+  }
   val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
   val entryState =
     rememberEditorEntryStateSession(
@@ -448,10 +451,10 @@ fun EditorScreen(entityId: String) {
         documentLocked = documentLocked,
         editor = editor,
         editorState = editorState,
-        sheetActive = subPaneState.activeKey == EditorSubPaneKey.Comments,
+        sheetActive = subPaneState.active == EditorSubPane.Comments,
         bringIntoViewRequests = bringIntoViewRequests,
         hideContextMenu = { uiState.contextMenu.hide() },
-        openSheet = { subPaneState.open(EditorSubPaneKey.Comments) },
+        openSheet = { subPaneState.open(EditorSubPane.Comments) },
       )
     val pageSizes = editorState.pageSizes
     val density = LocalDensity.current.density
@@ -476,12 +479,12 @@ fun EditorScreen(entityId: String) {
     bottomPanelTransition.targetState = bottomPanelOpen
     val panelTransitionRunning =
       bottomPanelTransition.currentState != bottomPanelTransition.targetState
-    val subPaneActive = subPaneState.activeKey != null
+    val subPaneBlocksEditorInput = subPaneState.editorInputBlocked
     val screenShortcutModeActive = findReplace.active || spellcheck.active || aiFeedback.active
     val editorToolbarVisible =
-      screenState.sceneInForeground && !subPaneActive && !findReplace.active
+      screenState.sceneInForeground && !subPaneBlocksEditorInput && !findReplace.active
     val findReplaceToolbarVisible =
-      screenState.sceneInForeground && !subPaneActive && findReplace.active
+      screenState.sceneInForeground && !subPaneBlocksEditorInput && findReplace.active
     val findReplaceToolbarTransition = remember {
       MutableTransitionState(findReplaceToolbarVisible)
     }
@@ -518,7 +521,7 @@ fun EditorScreen(entityId: String) {
       EditorScreenShortcutContext(
         platform = PlatformModule.platform,
         sceneInForeground = screenState.sceneInForeground,
-        subPaneActive = subPaneActive,
+        subPaneBlocksEditorInput = subPaneBlocksEditorInput,
         editorFocused = uiState.focused,
         findReplaceActive = findReplace.active,
         spellcheckActive = spellcheck.active,
@@ -547,8 +550,8 @@ fun EditorScreen(entityId: String) {
       sheet.present { EditorTemplateSheet(editor = activeEditor) }
     }
 
-    LaunchedEffect(subPaneActive) {
-      if (subPaneActive) {
+    LaunchedEffect(subPaneBlocksEditorInput) {
+      if (subPaneBlocksEditorInput) {
         aiFeedback.close()
         spellcheck.close()
         findReplace.close()
@@ -649,7 +652,7 @@ fun EditorScreen(entityId: String) {
     val subPaneLayoutInfo = subPaneState.layoutInfo
     val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneLayoutInfo)
     val editorInputBottomOcclusion =
-      if (subPaneActive && subPaneLayoutInfo != null) {
+      if (subPaneBlocksEditorInput && subPaneLayoutInfo != null) {
         0f
       } else {
         maxOf(toolbarBottomOcclusion.value, findReplaceToolbarOcclusion).value.coerceAtLeast(0f)
@@ -814,8 +817,9 @@ fun EditorScreen(entityId: String) {
           suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
         )
       } ?: true
-    val editorTextInputSessionEnabled = toolbarTextInputSessionEnabled && !subPaneActive
-    val editorSuppressesSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard || subPaneActive
+    val editorTextInputSessionEnabled = toolbarTextInputSessionEnabled && !subPaneBlocksEditorInput
+    val editorSuppressesSoftwareKeyboard =
+      toolbarSuppressesSoftwareKeyboard || subPaneBlocksEditorInput
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
     val debugWheelZoomModifier =
       if (
@@ -935,6 +939,15 @@ fun EditorScreen(entityId: String) {
               layoutSpec = layoutSpec,
               pageSizes = pageSizes,
               displayZoom = displayZoom,
+              onTableAxisActionsRequest = { target, openedSelection ->
+                findReplace.close()
+                aiFeedback.close()
+                spellcheck.close()
+                uiState.contextMenu.hide()
+                subPaneState.open(
+                  EditorSubPane.TableAxisActions(target = target, openedSelection = openedSelection)
+                )
+              },
               showDebugOverlay = devMode && model.debugViewportOverlayVisible,
               modifier = Modifier.fillMaxSize(),
             )
@@ -1029,7 +1042,7 @@ fun EditorScreen(entityId: String) {
                   aiFeedback.close()
                   spellcheck.close()
                   uiState.contextMenu.hide()
-                  subPaneState.open(EditorSubPaneKey.RelatedNotes)
+                  subPaneState.open(EditorSubPane.RelatedNotes)
                 }
                 EditorToolbarToolAction.Comment -> {
                   findReplace.close()
@@ -1077,7 +1090,7 @@ fun EditorScreen(entityId: String) {
         modifier =
           Modifier.padding(start = startInset, end = endInset).editorScreenShortcutFocusTarget(
             active = screenShortcutModeActive,
-            enabled = screenState.sceneInForeground && !subPaneActive,
+            enabled = screenState.sceneInForeground && !subPaneBlocksEditorInput,
             editorFocused = uiState.focused,
             selection = editorState.selection,
           ) { event ->

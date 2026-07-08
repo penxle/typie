@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +31,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.ext.safeDrawing
 import co.typie.ext.safeDrawingHorizontalPadding
@@ -47,12 +49,25 @@ internal interface AnchoredSheetSurfaceScope {
   fun dismiss()
 }
 
+internal data class AnchoredSheetGeometry(val visibleHeight: Float)
+
+internal fun resolveAnchoredSheetVisibleHeight(
+  containerHeightPx: Float,
+  sheetOffsetPx: Float,
+  density: Float,
+): Float {
+  val safeDensity = density.takeIf { it > 0f } ?: 1f
+  return (containerHeightPx - sheetOffsetPx).coerceIn(0f, containerHeightPx) / safeDensity
+}
+
 @Composable
 internal fun AnchoredSheetSurface(
   stops: List<SheetStop>,
   stopPolicy: SheetStop.Policy,
   modifier: Modifier = Modifier,
   onDismissed: () -> Unit,
+  onDismissStarted: () -> Unit = {},
+  onGeometryChanged: (AnchoredSheetGeometry) -> Unit = {},
   onSettledStopChanged: (Int?) -> Unit = {},
   scrim: @Composable AnchoredSheetSurfaceScope.(alpha: Float) -> Unit = {},
   content: @Composable AnchoredSheetSurfaceScope.() -> Unit,
@@ -169,6 +184,8 @@ internal fun AnchoredSheetSurface(
     val hapticFeedback = LocalHapticFeedback.current
     val hapticFeedbackState = rememberUpdatedState(hapticFeedback)
     val onDismissedState = rememberUpdatedState(onDismissed)
+    val onDismissStartedState = rememberUpdatedState(onDismissStarted)
+    val onGeometryChangedState = rememberUpdatedState(onGeometryChanged)
     val onSettledStopChangedState = rememberUpdatedState(onSettledStopChanged)
 
     fun finishDismiss() {
@@ -180,16 +197,34 @@ internal fun AnchoredSheetSurface(
       onDismissedState.value()
     }
 
-    fun requestDismiss() {
+    fun beginDismiss() {
       if (dismissing || dismissed) {
         return
       }
 
       dismissing = true
+      onDismissStartedState.value()
+    }
+
+    fun requestDismiss() {
+      if (dismissing || dismissed) {
+        return
+      }
+
+      beginDismiss()
       coroutineScope.launch {
         anchoredState.animateTo(AnchorHidden, SheetAnimationSpec)
         finishDismiss()
       }
+    }
+
+    LaunchedEffect(anchoredState) {
+      snapshotFlow { anchoredState.targetValue }
+        .collect { targetValue ->
+          if (targetValue == AnchorHidden && hasSettledVisible) {
+            beginDismiss()
+          }
+        }
     }
 
     LaunchedEffect(anchoredState) {
@@ -201,6 +236,7 @@ internal fun AnchoredSheetSurface(
           if (nextVisibleStop != null) {
             hasSettledVisible = true
           } else if (hasSettledVisible || dismissing) {
+            beginDismiss()
             finishDismiss()
           }
           if (
@@ -236,6 +272,12 @@ internal fun AnchoredSheetSurface(
 
     val stateOffset = if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset
     val offset = if (isIntrinsic) stateOffset else stateOffset + offsetCorrection.value
+    val visibleHeight =
+      resolveAnchoredSheetVisibleHeight(
+        containerHeightPx = containerHeightPx,
+        sheetOffsetPx = offset,
+        density = density.density,
+      )
     val animatedOffsetPx = offset.roundToInt().coerceAtLeast(0)
     val intrinsicTopLimit = intrinsicTopLimitPx.roundToInt()
     val minStopHeightPx =
@@ -251,6 +293,10 @@ internal fun AnchoredSheetSurface(
         0f
       }
 
+    LaunchedEffect(visibleHeight) {
+      onGeometryChangedState.value(AnchoredSheetGeometry(visibleHeight = visibleHeight))
+    }
+
     scope.scrim(scrimAlpha)
 
     val sheetModifier =
@@ -264,21 +310,9 @@ internal fun AnchoredSheetSurface(
               maxOf((constraints.maxHeight - animatedOffsetPx).coerceAtLeast(0), minStopHeightPx)
             }
           val placeable = measurable.measure(constraints.copy(maxHeight = maxH))
-          val measuredIntrinsicOffsetPx =
-            maxOf(constraints.maxHeight - placeable.height, intrinsicTopLimit)
-          val stateVisibleOffsetPx =
-            anchoredState.anchors.positionOf(AnchorVisible).takeIf { !it.isNaN() }?.roundToInt()
-          val shouldUseMeasuredIntrinsicOffset =
-            isIntrinsic &&
-              anchoredState.settledValue == AnchorVisible &&
-              anchoredState.targetValue == AnchorVisible &&
-              stateVisibleOffsetPx != null &&
-              stateVisibleOffsetPx != measuredIntrinsicOffsetPx &&
-              animatedOffsetPx == stateVisibleOffsetPx
-          val currentOffset =
-            if (shouldUseMeasuredIntrinsicOffset) measuredIntrinsicOffsetPx else animatedOffsetPx
-          layout(placeable.width, placeable.height) { placeable.place(0, currentOffset) }
+          layout(placeable.width, placeable.height) { placeable.place(0, 0) }
         }
+        .offset { IntOffset(x = 0, y = animatedOffsetPx) }
         .thenIf(isIntrinsic) {
           onSizeChanged {
             val measuredHeightPx = it.height.toFloat()

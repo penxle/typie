@@ -34,7 +34,7 @@ internal enum class EditorScreenShortcutModifier {
 internal data class EditorScreenShortcutContext(
   val platform: Platform,
   val sceneInForeground: Boolean,
-  val subPaneActive: Boolean,
+  val subPaneBlocksEditorInput: Boolean,
   val editorFocused: Boolean,
   val findReplaceActive: Boolean,
   val spellcheckActive: Boolean,
@@ -153,7 +153,7 @@ internal fun matchesEditorShortcut(
 }
 
 private fun isEditorScreenShortcutAvailable(context: EditorScreenShortcutContext): Boolean =
-  context.sceneInForeground && !context.subPaneActive
+  context.sceneInForeground && !context.subPaneBlocksEditorInput
 
 private fun handleEscapeShortcut(
   context: EditorScreenShortcutContext,

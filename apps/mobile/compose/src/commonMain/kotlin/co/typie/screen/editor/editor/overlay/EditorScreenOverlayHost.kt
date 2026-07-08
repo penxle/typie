@@ -22,6 +22,7 @@ import co.typie.editor.Editor
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size as PageSize
@@ -32,6 +33,7 @@ import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.screen.editor.editor.subpane.EditorTableAxisActionsTarget
 import kotlin.math.roundToInt
 
 @Composable
@@ -42,6 +44,7 @@ internal fun EditorScreenOverlayHost(
   layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<PageSize>,
   displayZoom: Float,
+  onTableAxisActionsRequest: (EditorTableAxisActionsTarget, Selection?) -> Unit,
   showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
@@ -116,6 +119,14 @@ internal fun EditorScreenOverlayHost(
             uiState = uiState,
             editorRectInOverlay = editorRectInViewport,
             density = density.density,
+          )
+          EditorTableAxisSelectionOverlay(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInViewport,
+            overlaySize = overlayBounds.size,
+            density = density.density,
+            onTableAxisActionsRequest = onTableAxisActionsRequest,
           )
           EditorSelectionHandleOverlay(
             editor = editor,

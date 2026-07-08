@@ -47,4 +47,24 @@ class SheetStopTest {
       ),
     )
   }
+
+  @Test
+  fun anchoredSheetVisibleHeightUsesVisiblePortionInDp() {
+    assertEquals(
+      180f,
+      resolveAnchoredSheetVisibleHeight(
+        containerHeightPx = 1200f,
+        sheetOffsetPx = 840f,
+        density = 2f,
+      ),
+    )
+    assertEquals(
+      0f,
+      resolveAnchoredSheetVisibleHeight(
+        containerHeightPx = 1200f,
+        sheetOffsetPx = 1400f,
+        density = 2f,
+      ),
+    )
+  }
 }

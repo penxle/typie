@@ -131,7 +131,7 @@ internal class EditorToolbarInputState {
 
   fun onEnvironmentChanged(environment: ToolbarInputEnvironment): List<EditorInputEffect> {
     if (!environment.visible) {
-      reset()
+      resetInputState()
       previousIme = ImeObservation(hideEventVersion = environment.keyboardState.imeHideEventVersion)
       return emptyList()
     }
@@ -351,19 +351,21 @@ internal class EditorToolbarInputState {
   }
 
   private fun hideInput(): List<EditorInputEffect> {
-    panel = null
-    keyboardRestoreInset = null
-    rememberedKeyboardInset = 0.dp
+    resetInputState()
     lastPanelSnapshot = null
     return listOf(EditorInputEffect.HideKeyboard)
   }
 
-  private fun reset(): List<EditorInputEffect> {
+  private fun resetInputState() {
     panel = null
     keyboardRestoreInset = null
     rememberedKeyboardInset = 0.dp
     lastPanelSnapshot = null
     previousIme = ImeObservation()
+  }
+
+  private fun reset(): List<EditorInputEffect> {
+    resetInputState()
     return emptyList()
   }
 

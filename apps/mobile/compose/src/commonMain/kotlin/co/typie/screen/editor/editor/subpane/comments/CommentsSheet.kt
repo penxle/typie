@@ -40,7 +40,7 @@ import co.typie.icons.Lucide
 import co.typie.navigation.PlatformBackHandler
 import co.typie.result.Result
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
-import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
+import co.typie.screen.editor.editor.subpane.EditorSubPane
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
 import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
 import co.typie.ui.component.Text
@@ -81,9 +81,10 @@ internal fun CommentsSheet(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
+  onDismissStarted: () -> Unit,
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
-  onLayoutInfoCleared: (EditorSubPaneKey) -> Unit,
+  onLayoutInfoCleared: (EditorSubPane) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
@@ -91,9 +92,7 @@ internal fun CommentsSheet(
   val dialog = LocalDialog.current
   val latestOnLayoutInfoCleared = rememberUpdatedState(onLayoutInfoCleared)
 
-  DisposableEffect(Unit) {
-    onDispose { latestOnLayoutInfoCleared.value(EditorSubPaneKey.Comments) }
-  }
+  DisposableEffect(Unit) { onDispose { latestOnLayoutInfoCleared.value(EditorSubPane.Comments) } }
 
   EditorResizableSheetSurface(
     initialHeight = CommentsInitialHeight,
@@ -103,6 +102,7 @@ internal fun CommentsSheet(
     keyboardOcclusion = keyboardOcclusion,
     minKeyboardVisibleHeight = CommentsMinKeyboardVisibleHeight,
     canDismiss = { confirmDiscardCommentInput(state = state, dialog = dialog) },
+    onDismissStarted = onDismissStarted,
     onDismissed = {
       state.activateThread(null)
       onDismiss()
@@ -110,7 +110,7 @@ internal fun CommentsSheet(
     onGeometryChanged = { geometry ->
       onLayoutInfoChanged(
         EditorSubPaneLayoutInfo(
-          key = EditorSubPaneKey.Comments,
+          pane = EditorSubPane.Comments,
           visibleHeight = geometry.visibleHeight,
           visibleAreaMode =
             resolveResizableSubPaneVisibleAreaMode(

@@ -1,10 +1,9 @@
 use editor_common::Axis;
 use editor_crdt::Dot;
-use editor_state::cell_rect_selection;
 use editor_transaction::Transaction;
 
-use crate::helpers::cursor_pos_in_table;
-use crate::{CommandError, CommandResult};
+use crate::CommandResult;
+use crate::helpers::table_axis_selection;
 
 pub fn select_table_axis(
     tr: &mut Transaction,
@@ -12,89 +11,7 @@ pub fn select_table_axis(
     axis: Option<Axis>,
     index: Option<usize>,
 ) -> CommandResult {
-    let (anchor_cell_id, head_cell_id) = match axis {
-        None => {
-            let view = tr.view();
-            let table = view
-                .node(table_id)
-                .ok_or(CommandError::NodeNotFound(table_id))?;
-            let first_row = table
-                .child_blocks()
-                .next()
-                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
-            let anchor = first_row
-                .child_blocks()
-                .next()
-                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
-                .id();
-            let last_row = table
-                .child_blocks()
-                .last()
-                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
-            let head = last_row
-                .child_blocks()
-                .last()
-                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
-                .id();
-            (anchor, head)
-        }
-        Some(Axis::Horizontal) => {
-            let (cursor_row, _) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
-            let row_idx = index.unwrap_or(cursor_row);
-            let view = tr.view();
-            let table = view
-                .node(table_id)
-                .ok_or(CommandError::NodeNotFound(table_id))?;
-            let row = table
-                .child_blocks()
-                .nth(row_idx)
-                .ok_or_else(|| CommandError::Corrupted("row index out of range".into()))?;
-            let anchor = row
-                .child_blocks()
-                .next()
-                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
-                .id();
-            let head = row
-                .child_blocks()
-                .last()
-                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
-                .id();
-            (anchor, head)
-        }
-        Some(Axis::Vertical) => {
-            let (_, cursor_col) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
-            let col_idx = index.unwrap_or(cursor_col);
-            let view = tr.view();
-            let table = view
-                .node(table_id)
-                .ok_or(CommandError::NodeNotFound(table_id))?;
-            let first_row = table
-                .child_blocks()
-                .next()
-                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
-            let anchor = first_row
-                .child_blocks()
-                .nth(col_idx)
-                .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
-                .id();
-            let last_row = table
-                .child_blocks()
-                .last()
-                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
-            let head = last_row
-                .child_blocks()
-                .nth(col_idx)
-                .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
-                .id();
-            (anchor, head)
-        }
-    };
-
-    let selection = {
-        let view = tr.view();
-        cell_rect_selection(anchor_cell_id, head_cell_id, &view)
-            .ok_or_else(|| CommandError::Corrupted("cannot build cell rect selection".into()))?
-    };
+    let selection = table_axis_selection(tr, table_id, axis, index)?;
     tr.set_selection(Some(selection))?;
     Ok(true)
 }

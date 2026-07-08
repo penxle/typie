@@ -84,6 +84,7 @@ internal fun EditorResizableSheetSurface(
   keyboardOcclusion: Dp,
   minKeyboardVisibleHeight: Dp,
   canDismiss: suspend () -> Boolean = { true },
+  onDismissStarted: () -> Unit = {},
   onDismissed: () -> Unit,
   onGeometryChanged: (EditorResizableSheetGeometry) -> Unit,
   modifier: Modifier = Modifier,
@@ -94,6 +95,7 @@ internal fun EditorResizableSheetSurface(
     val coroutineScope = rememberCoroutineScope()
     val scrollGestureLockState = LocalScrollGestureLockState.current
     val canDismissState = rememberUpdatedState(canDismiss)
+    val onDismissStartedState = rememberUpdatedState(onDismissStarted)
     val onDismissedState = rememberUpdatedState(onDismissed)
     val onGeometryChangedState = rememberUpdatedState(onGeometryChanged)
     val presentationProgress = remember { Animatable(1f) }
@@ -198,6 +200,7 @@ internal fun EditorResizableSheetSurface(
           }
 
           dismissing = true
+          onDismissStartedState.value()
           heightAnimation.stop()
           presentationProgress.animateTo(1f, SheetAnimationSpec)
           onDismissedState.value()

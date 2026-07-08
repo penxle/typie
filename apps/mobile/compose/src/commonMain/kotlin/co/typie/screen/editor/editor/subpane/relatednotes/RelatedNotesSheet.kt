@@ -47,7 +47,7 @@ import co.typie.navigation.PlatformBackHandler
 import co.typie.result.Result
 import co.typie.route.Route
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
-import co.typie.screen.editor.editor.subpane.EditorSubPaneKey
+import co.typie.screen.editor.editor.subpane.EditorSubPane
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
 import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
 import co.typie.ui.component.Text
@@ -80,9 +80,10 @@ internal fun RelatedNotesSheet(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
+  onDismissStarted: () -> Unit,
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
-  onLayoutInfoCleared: (EditorSubPaneKey) -> Unit,
+  onLayoutInfoCleared: (EditorSubPane) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
@@ -94,7 +95,7 @@ internal fun RelatedNotesSheet(
   val toast = LocalToast.current
 
   DisposableEffect(onLayoutInfoCleared) {
-    onDispose { onLayoutInfoCleared(EditorSubPaneKey.RelatedNotes) }
+    onDispose { onLayoutInfoCleared(EditorSubPane.RelatedNotes) }
   }
   DisposableEffect(noteEditState, model) {
     onDispose {
@@ -146,11 +147,12 @@ internal fun RelatedNotesSheet(
     maxTopInset = maxTopInset,
     keyboardOcclusion = keyboardOcclusion,
     minKeyboardVisibleHeight = RelatedNotesMinKeyboardVisibleHeight,
+    onDismissStarted = onDismissStarted,
     onDismissed = onDismiss,
     onGeometryChanged = { geometry ->
       onLayoutInfoChanged(
         EditorSubPaneLayoutInfo(
-          key = EditorSubPaneKey.RelatedNotes,
+          pane = EditorSubPane.RelatedNotes,
           visibleHeight = geometry.visibleHeight,
           visibleAreaMode =
             resolveResizableSubPaneVisibleAreaMode(

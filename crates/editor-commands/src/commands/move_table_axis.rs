@@ -2,6 +2,7 @@ use editor_common::Axis;
 use editor_crdt::Dot;
 use editor_transaction::Transaction;
 
+use crate::helpers::table_axis_selection;
 use crate::{CommandError, CommandResult};
 
 pub fn move_table_axis(
@@ -14,6 +15,7 @@ pub fn move_table_axis(
     if from == to {
         return Ok(false);
     }
+    let restore_axis_selection = selected_axis_to_restore(tr, table_id, axis, from);
     match axis {
         Axis::Horizontal => {
             let row_id = {
@@ -52,15 +54,53 @@ pub fn move_table_axis(
             }
         }
     }
+    if restore_axis_selection {
+        let selection = table_axis_selection(tr, table_id, Some(axis), Some(to))?;
+        tr.set_selection(Some(selection))?;
+    }
     Ok(true)
+}
+
+fn selected_axis_to_restore(tr: &Transaction, table_id: Dot, axis: Axis, from: usize) -> bool {
+    let Some(selection) = tr.selection() else {
+        return false;
+    };
+    let view = tr.view();
+    let Some(rect) = selection.resolve(&view).and_then(|rs| rs.as_cell_rect()) else {
+        return false;
+    };
+    if rect.table_id() != table_id {
+        return false;
+    }
+    match axis {
+        Axis::Horizontal => {
+            rect.is_full_row()
+                && *rect.rows().start() == from
+                && rect.rows().start() == rect.rows().end()
+        }
+        Axis::Vertical => {
+            rect.is_full_column()
+                && *rect.cols().start() == from
+                && rect.cols().start() == rect.cols().end()
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_state::CellRect;
+    use editor_state::{Selection, cell_rect_selection};
 
     use super::*;
     use crate::test_utils::*;
+
+    fn as_cell_rect<'a>(view: &'a editor_model::DocView<'a>, sel: &Selection) -> CellRect<'a> {
+        sel.resolve(view)
+            .unwrap()
+            .as_cell_rect()
+            .expect("expected CellRect selection")
+    }
 
     #[test]
     fn move_row_same_index_is_noop() {
@@ -182,6 +222,40 @@ mod tests {
     }
 
     #[test]
+    fn move_row_keeps_selected_row_selected_at_new_index() {
+        let (initial, tbl, r0c0, r0c1, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell { paragraph { text("A") } }
+                        r0c1: table_cell { paragraph { text("B") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("C") } }
+                        table_cell { paragraph { text("D") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let selected_row = cell_rect_selection(r0c0, r0c1, &initial.view()).unwrap();
+        let mut initial = initial;
+        initial.selection = Some(selected_row);
+        let (actual, ..) = transact!(initial, |tr| move_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Horizontal,
+            0,
+            1
+        ));
+        let view = actual.view();
+        let rect = as_cell_rect(&view, actual.selection.as_ref().unwrap());
+        assert!(rect.is_full_row());
+        assert_eq!(rect.table_id(), tbl);
+        assert_eq!(rect.rows(), &(1..=1));
+    }
+
+    #[test]
     fn move_col_right() {
         let (initial, tbl, ..) = state! {
             doc { root {
@@ -267,5 +341,41 @@ mod tests {
             ],
             "the moved column carries its col_width to the new position"
         );
+    }
+
+    #[test]
+    fn move_col_keeps_selected_column_selected_at_new_index() {
+        let (initial, tbl, r0c0, r1c0, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell { paragraph { text("A") } }
+                        table_cell { paragraph { text("B") } }
+                        table_cell { paragraph { text("C") } }
+                    }
+                    table_row {
+                        r1c0: table_cell { paragraph { text("D") } }
+                        table_cell { paragraph { text("E") } }
+                        table_cell { paragraph { text("F") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let selected_col = cell_rect_selection(r0c0, r1c0, &initial.view()).unwrap();
+        let mut initial = initial;
+        initial.selection = Some(selected_col);
+        let (actual, ..) = transact!(initial, |tr| move_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Vertical,
+            0,
+            2
+        ));
+        let view = actual.view();
+        let rect = as_cell_rect(&view, actual.selection.as_ref().unwrap());
+        assert!(rect.is_full_column());
+        assert_eq!(rect.table_id(), tbl);
+        assert_eq!(rect.cols(), &(2..=2));
     }
 }

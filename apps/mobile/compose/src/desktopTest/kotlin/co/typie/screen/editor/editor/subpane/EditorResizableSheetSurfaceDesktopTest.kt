@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor.subpane
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipeWithVelocity
@@ -24,6 +26,37 @@ import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class)
 class EditorResizableSheetSurfaceDesktopTest {
+  @Test
+  fun dismissReportsStartBeforeDismissed() = runComposeUiTest {
+    val events = mutableListOf<String>()
+
+    setContent {
+      ScrollGestureLockScope {
+        Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          EditorResizableSheetSurface(
+            initialHeight = 360.dp,
+            minHeight = 240.dp,
+            dismissThreshold = 128.dp,
+            maxTopInset = 0.dp,
+            keyboardOcclusion = 320.dp,
+            minKeyboardVisibleHeight = 240.dp,
+            onDismissStarted = { events += "start" },
+            onDismissed = { events += "dismissed" },
+            onGeometryChanged = {},
+          ) {
+            Box(Modifier.testTag(DismissButtonTag).fillMaxSize().clickable { dismiss() })
+          }
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(DismissButtonTag).performClick()
+    waitForIdle()
+
+    assertEquals(listOf("start", "dismissed"), events)
+  }
+
   @Test
   fun sheetDragHandleDoesNotFlingSheetContentScroll() = runComposeUiTest {
     var scrollState: ScrollState? = null
@@ -69,6 +102,7 @@ class EditorResizableSheetSurfaceDesktopTest {
   }
 
   private companion object {
+    const val DismissButtonTag = "dismiss-button"
     const val SheetDragHandleTag = "sheet-drag-handle"
   }
 }

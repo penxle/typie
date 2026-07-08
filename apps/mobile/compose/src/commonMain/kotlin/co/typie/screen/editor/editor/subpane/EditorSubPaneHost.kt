@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
+import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.graphql.type.UserRole
-import co.typie.navigation.PlatformBackHandler
 import co.typie.screen.editor.editor.subpane.comments.CommentsSheet
 import co.typie.screen.editor.editor.subpane.comments.EditorCommentsSession
 import co.typie.screen.editor.editor.subpane.relatednotes.RelatedNotesSheet
@@ -27,34 +27,29 @@ internal fun EditorSubPaneHost(
   trustedImeBottomInset: Dp,
   modifier: Modifier = Modifier,
 ) {
-  LaunchedEffect(state.activeKey, comments.session.model) {
-    if (state.activeKey == EditorSubPaneKey.Comments && comments.session.model == null) {
+  val editor = LocalEditorRuntime.current.editor
+  val active = state.active
+
+  LaunchedEffect(active, comments.session.model) {
+    if (active == EditorSubPane.Comments && comments.session.model == null) {
       state.dismiss()
     }
   }
 
-  PlatformBackHandler(
-    enabled =
-      state.activeKey != null &&
-        state.activeKey != EditorSubPaneKey.RelatedNotes &&
-        state.activeKey != EditorSubPaneKey.Comments
-  ) {
-    state.dismiss()
-  }
-
-  when (state.activeKey) {
-    EditorSubPaneKey.RelatedNotes ->
+  when (active) {
+    EditorSubPane.RelatedNotes ->
       RelatedNotesSheet(
         entityId = entityId,
         maxTopInset = maxTopInset,
         safeBottomInset = safeBottomInset,
         trustedImeBottomInset = trustedImeBottomInset,
+        onDismissStarted = state::beginDismiss,
         onDismiss = state::dismiss,
         onLayoutInfoChanged = state::updateLayoutInfo,
         onLayoutInfoCleared = state::clearLayoutInfo,
         modifier = modifier,
       )
-    EditorSubPaneKey.Comments ->
+    EditorSubPane.Comments ->
       if (comments.session.model != null) {
         CommentsSheet(
           model = comments.session.model,
@@ -71,13 +66,27 @@ internal fun EditorSubPaneHost(
           maxTopInset = maxTopInset,
           safeBottomInset = safeBottomInset,
           trustedImeBottomInset = trustedImeBottomInset,
+          onDismissStarted = state::beginDismiss,
           onDismiss = state::dismiss,
           onLayoutInfoChanged = state::updateLayoutInfo,
           onLayoutInfoCleared = state::clearLayoutInfo,
           modifier = modifier,
         )
       }
-    EditorSubPaneKey.AiFeedback,
+    is EditorSubPane.TableAxisActions ->
+      EditorTableAxisActionsPane(
+        pane = active,
+        dismissRequestVersion = state.dismissRequestVersion,
+        onAction = { message ->
+          editor?.sync { enqueue(message) }
+          editor?.focus()
+        },
+        onDismissStarted = state::beginDismiss,
+        onDismiss = state::dismiss,
+        onLayoutInfoChanged = state::updateLayoutInfo,
+        onLayoutInfoCleared = state::clearLayoutInfo,
+        modifier = modifier,
+      )
     null -> Unit
   }
 }

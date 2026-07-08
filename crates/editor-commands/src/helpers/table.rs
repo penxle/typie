@@ -1,9 +1,10 @@
+use editor_common::Axis;
 use editor_crdt::Dot;
 use editor_model::{
     Fragment, NodeView, PlainNode, PlainParagraphNode, PlainTableCellNode, PlainTableRowNode,
     Subtree,
 };
-use editor_state::enclosing_table_cell;
+use editor_state::{Selection, cell_rect_selection, enclosing_table_cell};
 use editor_transaction::{Transaction, fulfill};
 
 use crate::CommandError;
@@ -69,6 +70,94 @@ pub(crate) fn nth_table_cell(
         .nth(col)
         .ok_or_else(|| CommandError::Corrupted(format!("cell {row},{col} missing")))?;
     Ok(cell.id())
+}
+
+pub(crate) fn table_axis_selection(
+    tr: &Transaction,
+    table_id: Dot,
+    axis: Option<Axis>,
+    index: Option<usize>,
+) -> Result<Selection, CommandError> {
+    let (anchor_cell_id, head_cell_id) = match axis {
+        None => {
+            let view = tr.state().view();
+            let table = view
+                .node(table_id)
+                .ok_or(CommandError::NodeNotFound(table_id))?;
+            let first_row = table
+                .child_blocks()
+                .next()
+                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
+            let anchor = first_row
+                .child_blocks()
+                .next()
+                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
+                .id();
+            let last_row = table
+                .child_blocks()
+                .last()
+                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
+            let head = last_row
+                .child_blocks()
+                .last()
+                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
+                .id();
+            (anchor, head)
+        }
+        Some(Axis::Horizontal) => {
+            let (cursor_row, _) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
+            let row_idx = index.unwrap_or(cursor_row);
+            let view = tr.state().view();
+            let table = view
+                .node(table_id)
+                .ok_or(CommandError::NodeNotFound(table_id))?;
+            let row = table
+                .child_blocks()
+                .nth(row_idx)
+                .ok_or_else(|| CommandError::Corrupted("row index out of range".into()))?;
+            let anchor = row
+                .child_blocks()
+                .next()
+                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
+                .id();
+            let head = row
+                .child_blocks()
+                .last()
+                .ok_or_else(|| CommandError::Corrupted("row has no cells".into()))?
+                .id();
+            (anchor, head)
+        }
+        Some(Axis::Vertical) => {
+            let (_, cursor_col) = cursor_pos_in_table(tr, table_id).unwrap_or((0, 0));
+            let col_idx = index.unwrap_or(cursor_col);
+            let view = tr.state().view();
+            let table = view
+                .node(table_id)
+                .ok_or(CommandError::NodeNotFound(table_id))?;
+            let first_row = table
+                .child_blocks()
+                .next()
+                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
+            let anchor = first_row
+                .child_blocks()
+                .nth(col_idx)
+                .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
+                .id();
+            let last_row = table
+                .child_blocks()
+                .last()
+                .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
+            let head = last_row
+                .child_blocks()
+                .nth(col_idx)
+                .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
+                .id();
+            (anchor, head)
+        }
+    };
+    let view = tr.state().view();
+    cell_rect_selection(anchor_cell_id, head_cell_id, &view)
+        .ok_or_else(|| CommandError::Corrupted("cannot build cell rect selection".into()))
 }
 
 pub(crate) fn make_empty_table_cell() -> Subtree {
