@@ -32,7 +32,6 @@ import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.render.RenderCanvas
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.shadow
 import kotlin.math.round
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -99,7 +98,7 @@ internal fun EditorPageSurface(
   val committedRenderScale = displayZoom / safeCommittedRenderZoom
   val chromeModifier =
     if (showChrome) {
-      Modifier.shadow(AppTheme.shadows.md, RectangleShape)
+      Modifier.editorPageChromeShadow(AppTheme.themeMode)
         .background(AppTheme.colors.surfaceDefault, RectangleShape)
         .border(1.dp, AppTheme.colors.borderDefault, RectangleShape)
         .clip(RectangleShape)
