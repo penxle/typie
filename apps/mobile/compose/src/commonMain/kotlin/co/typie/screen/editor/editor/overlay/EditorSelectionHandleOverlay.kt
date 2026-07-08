@@ -18,8 +18,6 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
-import co.typie.editor.interaction.EditorInteractionController
-import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.gestures.EditorSelectionHandleRadiusDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleStemWidthDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTouchTargetDp
@@ -49,17 +47,8 @@ internal fun EditorSelectionHandleOverlay(
       density = density,
     ) ?: return
   val color = AppTheme.colors.textDefault
-  val interactionController = LocalEditorInteractionScope.current.controller
 
-  placements.forEach { placement ->
-    EditorSelectionHandle(
-      placement = placement,
-      editorRectInOverlay = editorRectInOverlay,
-      density = density,
-      interactionController = interactionController,
-      color = color,
-    )
-  }
+  placements.forEach { placement -> EditorSelectionHandle(placement = placement, color = color) }
 }
 
 internal fun resolveSelectionHandleOverlayPlacements(
@@ -125,13 +114,7 @@ private fun resolveSelectionHandleOverlayPlacement(
 }
 
 @Composable
-private fun EditorSelectionHandle(
-  placement: EditorSelectionHandleOverlayPlacement,
-  editorRectInOverlay: Rect,
-  density: Float,
-  interactionController: EditorInteractionController,
-  color: Color,
-) {
+private fun EditorSelectionHandle(placement: EditorSelectionHandleOverlayPlacement, color: Color) {
   val localDensity = LocalDensity.current
   val radiusPx = with(localDensity) { EditorSelectionHandleRadiusDp.dp.toPx() }
   val stemWidthPx = with(localDensity) { EditorSelectionHandleStemWidthDp.dp.toPx() }
@@ -157,12 +140,6 @@ private fun EditorSelectionHandle(
         .size(
           width = with(localDensity) { geometry.touchTargetSize.width.toDp() },
           height = with(localDensity) { geometry.touchTargetSize.height.toDp() },
-        )
-        .editorOverlayInteractions(
-          density = density,
-          interactionController = interactionController,
-          editorRectInOverlay = editorRectInOverlay,
-          touchTargetTopLeftInOverlay = geometry.touchTargetTopLeft,
         )
   ) {
     Canvas(modifier = Modifier.matchParentSize()) {

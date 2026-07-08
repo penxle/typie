@@ -3,26 +3,19 @@ package co.typie.screen.editor.editor.overlay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.EditorTableCellSelectionBorderWidthDp
 import co.typie.editor.interaction.EditorTableCellSelectionHandleRadiusDp
-import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
-import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.resolveTableCellSelections
 import co.typie.editor.runtime.EditorUiState
 import co.typie.ui.theme.AppTheme
-import kotlin.math.roundToInt
 
 @Composable
 internal fun EditorTableCellSelectionOverlay(
@@ -46,7 +39,6 @@ internal fun EditorTableCellSelectionOverlay(
     return
   }
   val color = AppTheme.colors.textDefault
-  val interactionController = LocalEditorInteractionScope.current.controller
 
   Box(modifier = Modifier.fillMaxSize()) {
     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -60,28 +52,6 @@ internal fun EditorTableCellSelectionOverlay(
         placement.handleCenter?.let { handleCenter ->
           drawCircle(color = color, radius = placement.handleRadiusPx, center = handleCenter)
         }
-      }
-    }
-
-    placements.forEach { placement ->
-      placement.handleCenter?.let { handleCenter ->
-        val touchTargetTopLeft =
-          handleCenter -
-            Offset(x = placement.handleTouchTargetPx / 2f, y = placement.handleTouchTargetPx / 2f)
-
-        Box(
-          modifier =
-            Modifier.offset {
-                IntOffset(touchTargetTopLeft.x.roundToInt(), touchTargetTopLeft.y.roundToInt())
-              }
-              .size(EditorTableCellSelectionHandleTouchTargetDp.dp)
-              .editorOverlayInteractions(
-                density = density,
-                interactionController = interactionController,
-                editorRectInOverlay = editorRectInOverlay,
-                touchTargetTopLeftInOverlay = touchTargetTopLeft,
-              )
-        )
       }
     }
   }
@@ -123,7 +93,6 @@ internal fun resolveTableCellSelectionOverlayPlacements(
       handleCenter = handleCenter,
       borderWidthPx = EditorTableCellSelectionBorderWidthDp * density,
       handleRadiusPx = EditorTableCellSelectionHandleRadiusDp * density,
-      handleTouchTargetPx = EditorTableCellSelectionHandleTouchTargetDp * density,
     )
   }
 }
@@ -133,7 +102,6 @@ internal data class EditorTableCellSelectionOverlayPlacement(
   val handleCenter: Offset?,
   val borderWidthPx: Float,
   val handleRadiusPx: Float,
-  val handleTouchTargetPx: Float,
 )
 
 private fun resolveOutlineInOverlay(

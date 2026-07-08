@@ -51,6 +51,28 @@ internal class EditorTableHandleDragSession {
     return true
   }
 
+  fun adoptDrag(
+    touchPosition: Offset,
+    handleCenter: Offset,
+    tableId: String,
+    anchor: Position,
+    baseSelection: Selection,
+  ): Boolean {
+    if (activeDrag) {
+      return false
+    }
+    pendingContext = null
+    dragContext =
+      EditorTableHandleDragContext(
+        tableId = tableId,
+        startTouchPosition = touchPosition,
+        startHandlePosition = handleCenter,
+        anchor = anchor,
+        baseSelection = baseSelection,
+      )
+    return true
+  }
+
   fun selectionPosition(touchPosition: Offset): Offset? {
     val drag = dragContext ?: return null
     return drag.startHandlePosition + (touchPosition - drag.startTouchPosition)

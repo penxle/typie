@@ -222,11 +222,15 @@ fn resolve_extend_to_selection(
                         .as_ref()
                         .and_then(|selection| selection.resolve(&view))
                         .is_some_and(|resolved| resolved.as_cell_rect().is_some());
-                let is_same_cell_exact_box_hit = head_cell == anchor_cell
+                let is_same_cell_content_hit = head_cell == anchor_cell
+                    && !is_cell_mode
                     && editor
                         .view
-                        .node_box_contains(head_page, head_x, head_y, anchor_cell);
-                if (head_cell != anchor_cell || is_cell_mode || is_same_cell_exact_box_hit)
+                        .hit_test_extending(editor.state(), &anchor, head_page, head_x, head_y)
+                        .is_some_and(|hit| {
+                            selection_endpoints_inside_cell(&view, &hit, anchor_cell)
+                        });
+                if (head_cell != anchor_cell || is_cell_mode || !is_same_cell_content_hit)
                     && let Some(selection) = cell_rect_selection(anchor_cell, head_cell, &view)
                 {
                     return Some(selection);
@@ -249,6 +253,15 @@ fn resolve_extend_to_selection(
     let selection = selection.normalize(&view).unwrap_or(selection);
 
     (allow_collapse || !selection.is_collapsed()).then_some(selection)
+}
+
+fn selection_endpoints_inside_cell(view: &DocView, selection: &Selection, cell: Dot) -> bool {
+    let Some(resolved) = selection.resolve(view) else {
+        return false;
+    };
+    [resolved.anchor().node(), resolved.head().node()]
+        .into_iter()
+        .all(|node| enclosing_table_cell(view, node) == Some(cell))
 }
 
 fn extend_base_selection(
@@ -1239,13 +1252,13 @@ mod tests {
     }
 
     #[test]
-    fn extend_from_inside_cell_to_same_cell_padding_selects_cell() {
-        let (state, cell, p1) = state! {
+    fn extend_from_inside_cell_to_same_cell_text_stays_textual() {
+        let (state, p1) = state! {
             doc {
                 root {
                     table {
                         table_row {
-                            cell: table_cell { p1: paragraph { text("inside") } }
+                            table_cell { p1: paragraph { text("inside") } }
                             table_cell { paragraph { text("next") } }
                         }
                     }
@@ -1255,9 +1268,14 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
-        let head_x = cell_rect.x + cell_rect.width / 2.0;
-        let head_y = cell_rect.y + 4.0;
+        let text_rect = {
+            let view = editor.state().view();
+            let text_selection = Selection::new(Position::new(p1, 3), Position::new(p1, 5));
+            let resolved = text_selection.resolve(&view).unwrap();
+            editor.view.selection_rects(&resolved)[0].rect
+        };
+        let head_x = text_rect.x + text_rect.width / 2.0;
+        let head_y = text_rect.y + text_rect.height / 2.0;
 
         editor.apply(Message::Selection {
             op: SelectionOp::ExtendTo {
@@ -1273,11 +1291,106 @@ mod tests {
         let sel = editor.state().selection.expect("selection exists in test");
         let view = editor.state().view();
         let resolved = sel.resolve(&view).unwrap();
-        let cell_rect = resolved
-            .as_cell_rect()
-            .expect("dragging to same-cell padding should select that cell");
+        assert!(
+            resolved.as_cell_rect().is_none(),
+            "dragging within the same cell's text should stay textual, got {sel:?}"
+        );
+        assert!(
+            !sel.is_collapsed(),
+            "same-cell text drag collapsed to {sel:?}"
+        );
+        assert_eq!(sel.anchor, Position::new(p1, 2));
+        assert_eq!(sel.head.node, p1);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_inside_cell_to_same_cell_padding_selects_single_cell() {
+        let (state, cell, p1) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            cell: table_cell { p1: paragraph { text("inside") } }
+                            table_cell { paragraph { text("next") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("below") } }
+                            table_cell { paragraph { text("more") } }
+                        }
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let cell_rect = editor.view.node_box_rects(&[cell])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(p1, 2),
+                head_page: 0,
+                head_x: cell_rect.x + cell_rect.width / 2.0,
+                head_y: cell_rect.y + 4.0,
+                base_selection: None,
+                allow_collapse: false,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let cell_rect = sel
+            .resolve(&view)
+            .and_then(|resolved| resolved.as_cell_rect())
+            .expect("same-cell padding should select the cell, got {sel:?}");
         assert_eq!(cell_rect.anchor_cell.id(), cell);
         assert_eq!(cell_rect.head_cell.id(), cell);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_inside_cell_to_other_cell_selects_cell_rect() {
+        let (state, c00, p1, c01) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            c00: table_cell { p1: paragraph { text("inside") } }
+                            c01: table_cell { paragraph { text("next") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("below") } }
+                            table_cell { paragraph { text("more") } }
+                        }
+                    }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let c01_rect = editor.view.node_box_rects(&[c01])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(p1, 2),
+                head_page: 0,
+                head_x: c01_rect.x + c01_rect.width / 2.0,
+                head_y: c01_rect.y + c01_rect.height / 2.0,
+                base_selection: None,
+                allow_collapse: false,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let cell_rect = sel
+            .resolve(&view)
+            .and_then(|resolved| resolved.as_cell_rect())
+            .expect("dragging to another cell should select a cell rect");
+        assert_eq!(cell_rect.anchor_cell.id(), c00);
+        assert_eq!(cell_rect.head_cell.id(), c01);
         assert!(!editor.undo_history.can_undo());
     }
 

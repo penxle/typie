@@ -4,7 +4,10 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorGestureContext
+import co.typie.editor.interaction.contains
+import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandoff
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
+import co.typie.editor.interaction.resolveActiveTableCellSelection
 import co.typie.editor.interaction.semantics.dispatchSelectionHandleExtension
 
 internal class EditorSelectionHandleDragSession {
@@ -70,6 +73,7 @@ internal class EditorSelectionHandleDragSession {
         startHandlePosition = handleCenter,
         anchor = anchor,
         baseSelection = null,
+        tableId = null,
       )
     return true
   }
@@ -78,6 +82,7 @@ internal class EditorSelectionHandleDragSession {
     type: EditorSelectionHandleType,
     touchPosition: Offset,
     handlePosition: Offset,
+    tableId: String,
     anchor: Position,
     baseSelection: Selection,
   ): Boolean {
@@ -92,8 +97,46 @@ internal class EditorSelectionHandleDragSession {
         startHandlePosition = handlePosition,
         anchor = anchor,
         baseSelection = baseSelection,
+        tableId = tableId,
       )
     return true
+  }
+
+  fun tableCellHandoff(
+    type: EditorSelectionHandleType,
+    touchPosition: Offset,
+    context: EditorGestureContext,
+  ): EditorSelectionHandleTableCellHandoff? {
+    val drag = dragContext ?: return null
+    if (drag.type != type) {
+      return null
+    }
+    val selectionPosition = drag.selectionPosition(touchPosition = touchPosition)
+    val point = context.geometry.resolvePoint(positionInNode = selectionPosition) ?: return null
+    if (point.page < 0) {
+      return null
+    }
+    val activeSelection =
+      resolveActiveTableCellSelection(context.editor)?.takeIf { selection ->
+        drag.tableId == null || selection.overlay.tableId == drag.tableId
+      } ?: return null
+    if (
+      activeSelection.range.rowStart == activeSelection.range.rowEnd &&
+        activeSelection.range.colStart == activeSelection.range.colEnd
+    ) {
+      return null
+    }
+    if (!activeSelection.overlay.contains(point)) {
+      return null
+    }
+    val baseSelection = drag.baseSelection ?: context.editor.selection ?: return null
+    return EditorSelectionHandleTableCellHandoff(
+      touchPosition = touchPosition,
+      handlePosition = selectionPosition,
+      tableId = activeSelection.overlay.tableId,
+      anchor = baseSelection.anchor,
+      baseSelection = baseSelection,
+    )
   }
 
   fun update(
@@ -106,7 +149,7 @@ internal class EditorSelectionHandleDragSession {
       return false
     }
 
-    val selectionPosition = drag.startHandlePosition + (touchPosition - drag.startTouchPosition)
+    val selectionPosition = drag.selectionPosition(touchPosition = touchPosition)
     context.semantics.magnifier.show(selectionPosition)
     context.semantics.edgeAutoScroll.trackSelectionHandle(
       edgePosition = touchPosition,
@@ -143,4 +186,8 @@ private data class EditorSelectionHandleDragContext(
   val startHandlePosition: Offset,
   val anchor: Position,
   val baseSelection: Selection?,
-)
+  val tableId: String?,
+) {
+  fun selectionPosition(touchPosition: Offset): Offset =
+    startHandlePosition + (touchPosition - startTouchPosition)
+}

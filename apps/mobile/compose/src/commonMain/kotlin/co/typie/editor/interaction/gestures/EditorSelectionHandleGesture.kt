@@ -19,6 +19,14 @@ internal enum class EditorSelectionHandleType {
   To,
 }
 
+internal data class EditorSelectionHandleTableCellHandoff(
+  val touchPosition: Offset,
+  val handlePosition: Offset,
+  val tableId: String,
+  val anchor: Position,
+  val baseSelection: Selection,
+)
+
 internal const val EditorSelectionHandleRadiusDp = 8f
 internal const val EditorSelectionHandleStemWidthDp = 2f
 internal const val EditorSelectionHandleTouchTargetDp = 44f
@@ -196,6 +204,7 @@ internal class EditorSelectionHandleGesture(
   fun adoptTableCellDrag(
     touchPosition: Offset,
     handlePosition: Offset,
+    tableId: String,
     anchor: Position,
     baseSelection: Selection,
   ): Boolean {
@@ -209,6 +218,7 @@ internal class EditorSelectionHandleGesture(
         type = EditorSelectionHandleType.To,
         touchPosition = touchPosition,
         handlePosition = handlePosition,
+        tableId = tableId,
         anchor = anchor,
         baseSelection = baseSelection,
       )
@@ -233,6 +243,12 @@ internal class EditorSelectionHandleGesture(
     return true
   }
 
+  fun tableCellHandoff(
+    type: EditorSelectionHandleType,
+    position: Offset,
+  ): EditorSelectionHandleTableCellHandoff? =
+    session.tableCellHandoff(type = type, touchPosition = position, context = contextProvider())
+
   fun handleDragUpdate(type: EditorSelectionHandleType, position: Offset): Boolean {
     val context = contextProvider()
     if (context.mode != EditorInteractionMode.SelectionHandleDragging) {
@@ -243,6 +259,19 @@ internal class EditorSelectionHandleGesture(
     }
     session.update(type = type, touchPosition = position, context = context)
     return true
+  }
+
+  fun handleDragHandoff(): Boolean {
+    val context = contextProvider()
+    val wasActive = activeDrag
+    session.reset()
+    context.semantics.edgeAutoScroll.stop()
+    context.effects.setScrollGestureLocked(false)
+    context.semantics.magnifier.hide()
+    if (context.mode.canApply(EditorInteractionEvent.SelectionHandleDragEnd)) {
+      context.reduceMode(EditorInteractionEvent.SelectionHandleDragEnd)
+    }
+    return wasActive
   }
 
   fun handleDragEnd(type: EditorSelectionHandleType): Boolean {

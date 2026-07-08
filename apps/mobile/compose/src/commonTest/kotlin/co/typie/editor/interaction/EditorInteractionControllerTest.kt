@@ -12,6 +12,7 @@ import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CalloutVariant
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
@@ -25,6 +26,7 @@ import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.TableBorderStyle
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TableOverlayCellSelection
@@ -1522,6 +1524,43 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `table cell handle tap does not dispatch cell tap`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(60f, 60f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      controller.onTapTimer(nowMillis = 260L)
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = down, nowMillis = 300L))
+      runCurrent()
+
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+    }
+
+  @Test
   fun `table cell handle drag hands off to selection handle after leaving table`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -1578,6 +1617,255 @@ class EditorInteractionControllerTest {
       )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `table cell handle drag hands back after re-entering original table`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      var tableOverlay = tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0)
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.TableOverlays))) },
+          selectionProvider = { selection },
+          tableOverlaysProvider = { listOf(tableOverlay) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(70f, 70f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(130f, 120f), nowMillis = 20L)
+      )
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+
+      tableOverlay = tableOverlay(isFocused = false)
+      editor.sync {}
+      fake.enqueued.clear()
+
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(90f, 90f), nowMillis = 40L)
+      )
+      val reenteredExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, reenteredExtend.anchor)
+      assertEquals(selection, reenteredExtend.baseSelection)
+      assertEquals(80f, reenteredExtend.headX)
+      assertEquals(80f, reenteredExtend.headY)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+
+      tableOverlay =
+        tableOverlay(
+          isFocused = true,
+          cellSelection =
+            TableOverlayCellSelection(
+              backgroundColor = null,
+              anchorRow = 0,
+              anchorCol = 0,
+              headRow = 0,
+              headCol = 1,
+            ),
+        )
+      editor.sync {}
+      fake.enqueued.clear()
+
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(91f, 91f), nowMillis = 60L)
+      )
+      val continuedExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(81f, continuedExtend.headX)
+      assertEquals(81f, continuedExtend.headY)
+      assertEquals(selection, continuedExtend.baseSelection)
+      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+
+      fake.enqueued.clear()
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(101f, 101f), nowMillis = 70L)
+      )
+      val tableExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(91f, tableExtend.headX)
+      assertEquals(91f, tableExtend.headY)
+      assertEquals(selection, tableExtend.baseSelection)
+      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+
+      fake.enqueued.clear()
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(145f, 135f), nowMillis = 75L)
+      )
+      val leftAgainExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(135f, leftAgainExtend.headX)
+      assertEquals(125f, leftAgainExtend.headY)
+      assertEquals(selection, leftAgainExtend.baseSelection)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(145f, 135f), nowMillis = 80L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+    }
+
+  @Test
+  fun `selection handle drag hands off to table cell handle after cell selection appears`() =
+    runTest(StandardTestDispatcher()) {
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("cell-text", 0, Affinity.Downstream),
+          toPosition = Position("cell-text", 2, Affinity.Downstream),
+        )
+      var selection = Selection(anchor = endpoints.fromPosition, head = endpoints.toPosition)
+      var tableOverlay = tableOverlay(isFocused = true)
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.TableOverlays))) },
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { endpoints },
+          tableOverlaysProvider = { listOf(tableOverlay) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+
+      assertTrue(
+        controller.onPointerDown(pointerId = 1L, position = Offset(42f, 30f), nowMillis = 0L)
+      )
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 20L)
+      )
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+
+      selection = Selection(anchor = endpoints.fromPosition, head = endpoints.toPosition)
+      tableOverlay =
+        tableOverlay(
+          isFocused = true,
+          cellSelection =
+            TableOverlayCellSelection(
+              backgroundColor = null,
+              anchorRow = 0,
+              anchorCol = 0,
+              headRow = 0,
+              headCol = 1,
+            ),
+        )
+      editor.sync {}
+      fake.enqueued.clear()
+
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(64f, 60f), nowMillis = 40L)
+      )
+      val handoffExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, handoffExtend.anchor)
+      assertEquals(selection, handoffExtend.baseSelection)
+      assertEquals(62f, handoffExtend.headX)
+      assertEquals(54f, handoffExtend.headY)
+      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+
+      fake.enqueued.clear()
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(72f, 70f), nowMillis = 60L)
+      )
+      val tableExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection, tableExtend.baseSelection)
+      assertEquals(70f, tableExtend.headX)
+      assertEquals(64f, tableExtend.headY)
+      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(72f, 70f), nowMillis = 80L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+    }
+
+  @Test
+  fun `selection handle drag stays textual for single-cell table selection`() =
+    runTest(StandardTestDispatcher()) {
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("cell-text", 0, Affinity.Downstream),
+          toPosition = Position("cell-text", 2, Affinity.Downstream),
+        )
+      val selection = Selection(anchor = endpoints.fromPosition, head = endpoints.toPosition)
+      var tableOverlay = tableOverlay(isFocused = true)
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.TableOverlays))) },
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { endpoints },
+          tableOverlaysProvider = { listOf(tableOverlay) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+
+      assertTrue(
+        controller.onPointerDown(pointerId = 1L, position = Offset(42f, 30f), nowMillis = 0L)
+      )
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 20L)
+      )
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+
+      tableOverlay =
+        tableOverlay(
+          isFocused = true,
+          cellSelection =
+            TableOverlayCellSelection(
+              backgroundColor = null,
+              anchorRow = 0,
+              anchorCol = 0,
+              headRow = 0,
+              headCol = 0,
+            ),
+        )
+      editor.sync {}
+      fake.enqueued.clear()
+
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(62f, 60f), nowMillis = 40L)
+      )
+      val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(endpoints.fromPosition, extend.anchor)
+      assertEquals(60f, extend.headX)
+      assertEquals(54f, extend.headY)
+      assertNull(extend.baseSelection)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(62f, 60f), nowMillis = 60L)
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
     }
 
   @Test

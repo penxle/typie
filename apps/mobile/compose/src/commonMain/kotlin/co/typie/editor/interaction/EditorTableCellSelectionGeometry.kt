@@ -3,6 +3,7 @@ package co.typie.editor.interaction
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.Editor
+import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.TableOverlay
 import kotlin.math.max
@@ -51,6 +52,16 @@ internal fun resolveActiveTableCellSelection(editor: Editor): EditorTableCellSel
 
 internal fun hasActiveTableCellSelection(editor: Editor): Boolean =
   resolveTableCellSelections(editor).isNotEmpty()
+
+internal fun TableOverlay.contains(point: PagePoint): Boolean {
+  if (pageIdx != point.page) {
+    return false
+  }
+  return point.x >= bounds.x &&
+    point.x <= bounds.x + bounds.width &&
+    point.y >= bounds.y &&
+    point.y <= bounds.y + bounds.height
+}
 
 internal fun resolveTableCellSelectionRange(
   overlay: TableOverlay,

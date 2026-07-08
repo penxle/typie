@@ -8,6 +8,7 @@ import co.typie.editor.interaction.gestures.EditorLongPressGesture
 import co.typie.editor.interaction.gestures.EditorPanGesture
 import co.typie.editor.interaction.gestures.EditorPinchGesture
 import co.typie.editor.interaction.gestures.EditorSelectionHandleGesture
+import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandoff
 import co.typie.editor.interaction.gestures.EditorTableHandleDragUpdate
 import co.typie.editor.interaction.gestures.EditorTableHandleGesture
 import co.typie.editor.interaction.gestures.EditorTapGesture
@@ -113,9 +114,11 @@ internal class EditorInteractionGestures(
           preserveTapDispatch = true,
         )
     val tableHandleConsumed =
-      tableHandleHit &&
-        tap.hasActivePointer &&
-        tableHandle.handleDragDown(position = position, preserveTapDispatch = true)
+      tableHandleHit && tap.hasActivePointer && tableHandle.handleDragDown(position = position)
+    if (tableHandleConsumed) {
+      tap.markTapDispatched()
+      context.effects.cancelTapDispatch()
+    }
     if (tapEnabled && tap.hasActivePointer && !selectionHandleConsumed && !tableHandleConsumed) {
       longPress.prepare(pointerId = pointerId)
       context.effects.scheduleLongPressDispatch(
@@ -160,6 +163,9 @@ internal class EditorInteractionGestures(
       return true
     }
     selectionHandle.activeType?.let { type ->
+      selectionHandle.tableCellHandoff(type = type, position = position)?.let { handoff ->
+        return handoffSelectionDragToTableHandle(handoff)
+      }
       selectionHandle.handleDragUpdate(type = type, position = position)
       return true
     }
@@ -339,9 +345,30 @@ internal class EditorInteractionGestures(
     return selectionHandle.adoptTableCellDrag(
       touchPosition = update.touchPosition,
       handlePosition = update.handlePosition,
+      tableId = update.tableId,
       anchor = update.anchor,
       baseSelection = update.baseSelection,
     )
+  }
+
+  private fun handoffSelectionDragToTableHandle(
+    update: EditorSelectionHandleTableCellHandoff
+  ): Boolean {
+    if (!selectionHandle.handleDragHandoff()) {
+      return false
+    }
+    if (
+      !tableHandle.adoptSelectionHandleDrag(
+        touchPosition = update.touchPosition,
+        handlePosition = update.handlePosition,
+        tableId = update.tableId,
+        anchor = update.anchor,
+        baseSelection = update.baseSelection,
+      )
+    ) {
+      return false
+    }
+    return handleTableDragUpdate(position = update.touchPosition)
   }
 
   fun reset() {

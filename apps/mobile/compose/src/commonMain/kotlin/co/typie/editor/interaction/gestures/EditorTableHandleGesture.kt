@@ -4,12 +4,12 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
-import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.canApply
+import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.resolveActiveTableCellSelection
 import co.typie.editor.interaction.semantics.dispatchSelectionHandleExtension
 import co.typie.editor.interaction.sessions.EditorTableHandleDragContext
@@ -47,7 +47,7 @@ internal class EditorTableHandleGesture(
       position.y <= handleCenter.y + halfTouchTarget
   }
 
-  fun handleDragDown(position: Offset, preserveTapDispatch: Boolean = false): Boolean {
+  fun handleDragDown(position: Offset): Boolean {
     val context = contextProvider()
     if (!context.mode.canApply(EditorInteractionEvent.TableHandleDragStart)) {
       return false
@@ -58,9 +58,7 @@ internal class EditorTableHandleGesture(
     if (!session.beginPending(touchPosition = position)) {
       return false
     }
-    if (!preserveTapDispatch) {
-      context.effects.cancelTapDispatch()
-    }
+    context.effects.cancelTapDispatch()
     context.effects.cancelLongPressDispatch()
     context.effects.setScrollGestureLocked(true)
     context.uiState.contextMenu.hide()
@@ -106,6 +104,42 @@ internal class EditorTableHandleGesture(
 
     context.uiState.contextMenu.hide()
     context.semantics.magnifier.hide()
+    context.reduceMode(EditorInteractionEvent.TableHandleDragStart)
+    if (context.mode != EditorInteractionMode.TableCellHandleDragging) {
+      resetPointerOwnedState(context = context)
+      return false
+    }
+    return true
+  }
+
+  fun adoptSelectionHandleDrag(
+    touchPosition: Offset,
+    handlePosition: Offset,
+    tableId: String,
+    anchor: Position,
+    baseSelection: Selection,
+  ): Boolean {
+    val context = contextProvider()
+    if (!context.mode.canApply(EditorInteractionEvent.TableHandleDragStart)) {
+      resetPointerOwnedState(context = context)
+      return false
+    }
+    if (
+      !session.adoptDrag(
+        touchPosition = touchPosition,
+        handleCenter = handlePosition,
+        tableId = tableId,
+        anchor = anchor,
+        baseSelection = baseSelection,
+      )
+    ) {
+      resetPointerOwnedState(context = context)
+      return false
+    }
+
+    context.uiState.contextMenu.hide()
+    context.semantics.magnifier.hide()
+    context.effects.setScrollGestureLocked(true)
     context.reduceMode(EditorInteractionEvent.TableHandleDragStart)
     if (context.mode != EditorInteractionMode.TableCellHandleDragging) {
       resetPointerOwnedState(context = context)
@@ -219,6 +253,7 @@ internal class EditorTableHandleGesture(
       return EditorTableHandleDragUpdate.HandoffToSelectionHandle(
         touchPosition = touchPosition,
         handlePosition = handlePosition,
+        tableId = drag.tableId,
         anchor = drag.anchor,
         baseSelection = drag.baseSelection,
       )
@@ -241,17 +276,8 @@ internal sealed interface EditorTableHandleDragUpdate {
   data class HandoffToSelectionHandle(
     val touchPosition: Offset,
     val handlePosition: Offset,
+    val tableId: String,
     val anchor: Position,
     val baseSelection: Selection,
   ) : EditorTableHandleDragUpdate
-}
-
-private fun TableOverlay.contains(point: PagePoint): Boolean {
-  if (pageIdx != point.page) {
-    return false
-  }
-  return point.x >= bounds.x &&
-    point.x <= bounds.x + bounds.width &&
-    point.y >= bounds.y &&
-    point.y <= bounds.y + bounds.height
 }
