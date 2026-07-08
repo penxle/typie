@@ -79,6 +79,7 @@ internal fun EditorPageSurface(
   var committedPixelSize by remember { mutableStateOf(desiredPixelSize) }
   var committedRenderZoom by remember { mutableFloatStateOf(renderZoom) }
   val currentRenderZoom by rememberUpdatedState(renderZoom)
+  var renderActive by remember(editor, page) { mutableStateOf(false) }
 
   val safeCommittedRenderZoom = if (committedRenderZoom > 0f) committedRenderZoom else 1f
   val displayedWidthPxInt =
@@ -127,50 +128,53 @@ internal fun EditorPageSurface(
       modifier
         .width(displayedWidthDp)
         .height(displayedHeightDp)
+        .editorPageRenderGate { renderActive = it }
         .then(chromeModifier)
         .then(debugOverlayModifier)
   ) {
     backgroundOverlay()
 
-    Layout(
-      content = {
-        RenderCanvas(
-          modifier =
-            Modifier.graphicsLayer(
-              scaleX = committedRenderScale,
-              scaleY = committedRenderScale,
-              transformOrigin = TransformOrigin(0f, 0f),
-            ),
-          desiredPixelSize = desiredPixelSize,
-          trigger = trigger,
-          onAttach = { handle ->
-            editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
-          },
-          onDetach = { editor.detachSurface(page) },
-          onResize = {
-            editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
-            render()
-          },
-          onBitmapCommitted = { size, version ->
-            committedPixelSize = size
-            committedRenderZoom = currentRenderZoom
-            editor.onPageSettled(page, version)
-          },
-        )
-      }
-    ) { measurables, _ ->
-      val placeable =
-        measurables
-          .single()
-          .measure(
-            androidx.compose.ui.unit.Constraints.fixed(
-              width = committedPixelSize.width,
-              height = committedPixelSize.height,
-            )
+    if (renderActive) {
+      Layout(
+        content = {
+          RenderCanvas(
+            modifier =
+              Modifier.graphicsLayer(
+                scaleX = committedRenderScale,
+                scaleY = committedRenderScale,
+                transformOrigin = TransformOrigin(0f, 0f),
+              ),
+            desiredPixelSize = desiredPixelSize,
+            trigger = trigger,
+            onAttach = { handle ->
+              editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
+            },
+            onDetach = { editor.detachSurface(page) },
+            onResize = {
+              editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
+              render()
+            },
+            onBitmapCommitted = { size, version ->
+              committedPixelSize = size
+              committedRenderZoom = currentRenderZoom
+              editor.onPageSettled(page, version)
+            },
           )
+        }
+      ) { measurables, _ ->
+        val placeable =
+          measurables
+            .single()
+            .measure(
+              androidx.compose.ui.unit.Constraints.fixed(
+                width = committedPixelSize.width,
+                height = committedPixelSize.height,
+              )
+            )
 
-      layout(width = displayedWidthPxInt, height = displayedHeightPxInt) {
-        placeable.place(x = 0, y = 0)
+        layout(width = displayedWidthPxInt, height = displayedHeightPxInt) {
+          placeable.place(x = 0, y = 0)
+        }
       }
     }
 
