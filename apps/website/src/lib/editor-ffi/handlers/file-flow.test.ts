@@ -83,16 +83,13 @@ describe('v2 file upload processing', () => {
 
   it('stores inflight with original file name and size before upload resolves', async () => {
     const { deps, inflight } = createDeps();
-    let resolveUpload!: (asset: FileAsset) => void;
+    const { promise: uploadResult, resolve: resolveUpload } = Promise.withResolvers<FileAsset>();
 
     const uploadPromise = processFileUpload({
       file: createFile('report.xlsx', 'application/octet-stream', 51_200),
       nodeId: 'node-2',
       ...deps,
-      uploadFileAsFile: () =>
-        new Promise((resolve) => {
-          resolveUpload = resolve;
-        }),
+      uploadFileAsFile: () => uploadResult,
     });
 
     expect(inflight.get('node-2')).toEqual({ name: 'report.xlsx', size: 51_200 });

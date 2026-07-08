@@ -106,14 +106,8 @@
 
   $effect(() => {
     if (
-      !(
-        focused &&
-        entity &&
-        query.data &&
-        query.data.me.id === entity.user.id &&
-        entity.state === EntityState.ACTIVE &&
-        trackedEntityId !== entity.id
-      )
+      !(focused && entity && query.data && query.data.me.id === entity.user.id && entity.state === EntityState.ACTIVE) ||
+      trackedEntityId === entity.id
     ) {
       return;
     }

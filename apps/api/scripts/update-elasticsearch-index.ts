@@ -139,7 +139,7 @@ const processDeletedDocumentsInChunks = async (total: number): Promise<number> =
 
     if (deletedDocuments.length === 0) break;
 
-    const operations = deletedDocuments.flatMap((doc) => [{ delete: { _index: esIndex.documents, _id: doc.id } }]);
+    const operations = deletedDocuments.map((doc) => ({ delete: { _index: esIndex.documents, _id: doc.id } }));
     await elasticsearch.bulk({ operations });
 
     totalProcessed += deletedDocuments.length;
@@ -226,7 +226,7 @@ const processDeletedFoldersInChunks = async (total: number): Promise<number> => 
 
     if (deletedFolders.length === 0) break;
 
-    const operations = deletedFolders.flatMap((folder) => [{ delete: { _index: esIndex.folders, _id: folder.id } }]);
+    const operations = deletedFolders.map((folder) => ({ delete: { _index: esIndex.folders, _id: folder.id } }));
     await elasticsearch.bulk({ operations });
 
     totalProcessed += deletedFolders.length;

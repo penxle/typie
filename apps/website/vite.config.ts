@@ -23,7 +23,7 @@ const wasmReloadPlugin = (): Plugin => {
       server.watcher.add([editorPkgDir]);
     },
     handleHotUpdate({ file, server }) {
-      if (!(file.startsWith(editorPkgDir) && !file.endsWith('.gitignore'))) {
+      if (!file.startsWith(editorPkgDir) || file.endsWith('.gitignore')) {
         return;
       }
 

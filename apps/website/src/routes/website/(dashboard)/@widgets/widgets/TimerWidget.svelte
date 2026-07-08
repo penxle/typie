@@ -176,7 +176,7 @@
   };
 
   const pause = () => {
-    if (!(isRunning && !isPaused)) {
+    if (!isRunning || isPaused) {
       return;
     }
 

@@ -94,7 +94,7 @@
   });
 
   $effect(() => {
-    if (!((editor.layout?.pages.length ?? 0) > 0 && editor.contentReady && !initialized)) {
+    if (!((editor.layout?.pages.length ?? 0) > 0 && editor.contentReady) || initialized) {
       return;
     }
 

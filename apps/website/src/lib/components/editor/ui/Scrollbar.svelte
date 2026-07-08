@@ -135,10 +135,12 @@
       let mostVisiblePage = 0;
       let maxRatio = 0;
       for (const [page, ratio] of editor.pageVisibility) {
-        if (ratio > maxRatio) {
-          maxRatio = ratio;
-          mostVisiblePage = page;
+        if (ratio <= maxRatio) {
+          continue;
         }
+
+        maxRatio = ratio;
+        mostVisiblePage = page;
       }
       return `${mostVisiblePage + 1}/${editor.layout?.pages.length ?? 0}`;
     }

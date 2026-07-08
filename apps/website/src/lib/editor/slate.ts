@@ -660,27 +660,21 @@ function readExternalElements(view: DataView, offset: number, count: number): Ex
     pos += 4;
 
     let data: ExternalElement['data'];
+    const { value: id, end: afterId } = readStr(view, pos);
+    pos = afterId;
     if (dataTag === 0) {
-      const { value: id, end: afterId } = readStr(view, pos);
-      pos = afterId;
       const { value: uploadId, end: afterUploadId } = readStr(view, pos);
       pos = afterUploadId;
       const proportion = view.getFloat32(pos, true);
       pos += 4;
       data = { type: 'image', id: id || undefined, uploadId: uploadId || undefined, proportion };
     } else if (dataTag === 1) {
-      const { value: id, end: afterId } = readStr(view, pos);
-      pos = afterId;
       const { value: uploadId, end: afterUploadId } = readStr(view, pos);
       pos = afterUploadId;
       data = { type: 'file', id: id || undefined, uploadId: uploadId || undefined };
     } else if (dataTag === 2) {
-      const { value: id, end: afterId } = readStr(view, pos);
-      pos = afterId;
       data = { type: 'embed', id: id || undefined };
     } else {
-      const { value: id, end: afterId } = readStr(view, pos);
-      pos = afterId;
       data = { type: 'archived', id: id || undefined };
     }
 

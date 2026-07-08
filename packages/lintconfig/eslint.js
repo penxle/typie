@@ -68,6 +68,7 @@ export default defineConfig([
       'unicorn/consistent-function-scoping': 'off',
       'unicorn/filename-case': ['error', { cases: { kebabCase: true }, checkDirectories: false }],
       'unicorn/max-nested-calls': 'off',
+      'unicorn/name-replacements': 'off',
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-array-for-each': 'off',
       'unicorn/no-array-method-this-argument': 'off',

@@ -65,9 +65,7 @@
     return orderedGroups;
   });
 
-  const allGroupsCollapsed = $derived(
-    remarkGroups.length > 0 && remarkGroups.every((group) => collapsedGroupsByNodeId[group.nodeId] === true),
-  );
+  const allGroupsCollapsed = $derived(remarkGroups.length > 0 && remarkGroups.every((group) => collapsedGroupsByNodeId[group.nodeId]));
 
   function getGroupTitle(group: RemarkGroup): string {
     const primary = group.remarks[0];
@@ -107,7 +105,7 @@
   function toggleGroup(nodeId: string) {
     collapsedGroupsByNodeId = {
       ...collapsedGroupsByNodeId,
-      [nodeId]: collapsedGroupsByNodeId[nodeId] !== true,
+      [nodeId]: !collapsedGroupsByNodeId[nodeId],
     };
   }
 
@@ -200,7 +198,7 @@
       </div>
     {:else}
       {#each remarkGroups as group (group.nodeId)}
-        {@const collapsed = collapsedGroupsByNodeId[group.nodeId] === true}
+        {@const collapsed = collapsedGroupsByNodeId[group.nodeId]}
         <div class={flex({ flexDirection: 'column' })}>
           <div
             class={css({

@@ -264,7 +264,7 @@
       ondragover={handleDragOver}
       ondrop={inflight ? undefined : handleDrop}
       onkeydown={(e) => {
-        if (!(!inflight && (e.key === 'Enter' || e.key === ' '))) {
+        if (inflight || !(e.key === 'Enter' || e.key === ' ')) {
           return;
         }
 

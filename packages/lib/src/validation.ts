@@ -50,7 +50,7 @@ export const redeemCodeSchema = z
   .trim()
   .toUpperCase()
   .regex(/^[A-Z0-9-]+$/, { message: '코드 형식이 맞지 않아요' })
-  .transform((str) => str.replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1'));
+  .transform((str) => str.replaceAll('-', '').replaceAll('O', '0').replaceAll(/[IL]/g, '1'));
 
 export const bootstrapSchema = z.object({
   version: z.number().int(),

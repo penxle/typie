@@ -160,7 +160,7 @@ builder.queryFields((t) => ({
     type: CreditCode,
     args: { code: t.input.string({ validate: { schema: redeemCodeSchema } }) },
     resolve: async (_, args) => {
-      const code = args.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1');
+      const code = args.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll(/[IL]/g, '1');
 
       await delay(Math.random() * 1000);
 

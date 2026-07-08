@@ -51,10 +51,7 @@ export type TextEditingDeltaNonTextUpdate = DeltaBase & {
 };
 
 export type SyntheticTextEditingDelta =
-  | TextEditingDeltaInsertion
-  | TextEditingDeltaDeletion
-  | TextEditingDeltaReplacement
-  | TextEditingDeltaNonTextUpdate;
+  TextEditingDeltaInsertion | TextEditingDeltaDeletion | TextEditingDeltaReplacement | TextEditingDeltaNonTextUpdate;
 
 export type SyntheticInputMessage =
   | { type: 'input'; text: string }

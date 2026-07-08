@@ -79,6 +79,7 @@
 
     const observer = new ResizeObserver(syncOverlayPosition);
     observer.observe(el);
+    // eslint-disable-next-line unicorn/prefer-observer-apis -- overlay is positioned relative to window.innerHeight, which ResizeObserver does not track
     window.addEventListener('resize', syncOverlayPosition);
 
     return () => {

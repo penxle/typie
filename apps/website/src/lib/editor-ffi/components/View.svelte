@@ -103,6 +103,7 @@
 
     sync();
     window.visualViewport?.addEventListener('resize', sync);
+    // eslint-disable-next-line unicorn/prefer-observer-apis -- tracks visualViewport/window height, not element resize
     window.addEventListener('resize', sync);
     return () => {
       window.visualViewport?.removeEventListener('resize', sync);

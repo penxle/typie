@@ -19,11 +19,10 @@
     let current: number;
     let previous: number;
 
+    current = data.at(-1)?.value ?? 0;
     if (type === 'daily') {
-      current = data.at(-1)?.value ?? 0;
       previous = data.at(-2)?.value ?? 0;
     } else {
-      current = data.at(-1)?.value ?? 0;
       previous = data.at(0)?.value ?? 0;
     }
 

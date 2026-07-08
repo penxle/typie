@@ -131,11 +131,13 @@
     }));
 
     for (const change of characterCountChanges) {
-      if (change.additions > 0) {
-        const dayOfWeek = dayjs(change.date as string).day();
-        weekdayStats[dayOfWeek].totalAdditions += change.additions;
-        weekdayStats[dayOfWeek].count++;
+      if (change.additions <= 0) {
+        continue;
       }
+
+      const dayOfWeek = dayjs(change.date as string).day();
+      weekdayStats[dayOfWeek].totalAdditions += change.additions;
+      weekdayStats[dayOfWeek].count++;
     }
 
     return weekdayStats.map((stat) => ({

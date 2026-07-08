@@ -325,10 +325,12 @@ export const garbageCollectLoroDoc = (doc: LoroDoc): number => {
 
   let deletedNodes = 0;
   for (const key of nodes.keys()) {
-    if (!reachable.has(key)) {
-      nodes.delete(key);
-      deletedNodes++;
+    if (reachable.has(key)) {
+      continue;
     }
+
+    nodes.delete(key);
+    deletedNodes++;
   }
 
   return deletedNodes;

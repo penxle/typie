@@ -49,11 +49,7 @@ const header: Handle = async ({ event, resolve }) => {
     filterSerializedResponseHeaders: (name) => {
       const n = name.toLowerCase();
 
-      if (n === 'content-type') {
-        return true;
-      }
-
-      return false;
+      return n === 'content-type';
     },
   });
 };

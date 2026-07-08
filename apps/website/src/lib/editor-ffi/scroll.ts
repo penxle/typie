@@ -122,7 +122,7 @@ export function resolveKeepVisibleBottomPadding({
 }): number {
   const area = normalizeVisibleArea(visibleArea);
   const requiredPadding = area.bottomInset + Math.max(0, finiteOrZero(margin));
-  return Math.max(Math.max(0, finiteOrZero(minPadding)), requiredPadding);
+  return Math.max(0, finiteOrZero(minPadding), requiredPadding);
 }
 
 export function resolveTypewriterBottomPadding({
@@ -149,5 +149,5 @@ export function resolveTypewriterBottomPadding({
   const intrinsicSpaceBelowTargetTop = Math.max(0, finiteOrZero(trailingBottomMargin)) + safeTargetHeight;
   const requiredPadding = spaceNeededBelowTargetTop - intrinsicSpaceBelowTargetTop;
 
-  return Math.max(Math.max(0, finiteOrZero(minPadding)), requiredPadding);
+  return Math.max(0, finiteOrZero(minPadding), requiredPadding);
 }

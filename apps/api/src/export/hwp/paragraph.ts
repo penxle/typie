@@ -112,11 +112,10 @@ export function makeParagraph(
     for (const ch of seg.text) {
       if (ch === '\n') {
         textParts.push(10);
-        currentPos += 1;
       } else {
         textParts.push(ch.codePointAt(0) ?? 0);
-        currentPos += 1;
       }
+      currentPos += 1;
     }
 
     if (seg.link) {

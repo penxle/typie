@@ -1,7 +1,7 @@
 import { Button, Column, Heading, Row, Text } from 'react-email';
 import TypieEmail from './components/TypieEmail.tsx';
 
-const Email = () => {
+export default function Email() {
   return (
     <TypieEmail preview="타이피에 사전 등록해 주셔서 감사합니다. 더 편리하고 즐거운 글쓰기 경험을 선물해 드릴게요.">
       <Heading className="text-[28px] font-bold text-zinc-950 mb-[20px] tracking-[-0.02em]">사전 등록이 완료되었어요</Heading>
@@ -48,6 +48,4 @@ const Email = () => {
       </Text>
     </TypieEmail>
   );
-};
-
-export default Email;
+}

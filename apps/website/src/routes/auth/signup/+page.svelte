@@ -46,7 +46,7 @@
         email: z.string({ error: '이메일을 입력해주세요.' }).email('올바른 이메일 형식을 입력해주세요.'),
         password: z.string({ error: '비밀번호를 입력해주세요.' }).min(1, '비밀번호를 입력해주세요.'),
         confirmPassword: z.string({ error: '비밀번호 확인을 입력해주세요.' }).min(1, '비밀번호 확인을 입력해주세요.'),
-        termsAgreed: z.boolean().refine((val) => val === true, {
+        termsAgreed: z.boolean().refine((val) => val, {
           message: '이용약관 및 개인정보처리방침에 동의해주세요.',
         }),
         marketingAgreed: z.boolean().optional(),

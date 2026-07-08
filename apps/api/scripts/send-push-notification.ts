@@ -19,7 +19,6 @@ const success = await sendPushNotification({
 if (success) {
   console.log(`Sent push notification to ${userId}`);
   process.exit(0);
-} else {
-  console.error(`Failed to send push notification to ${userId}`);
-  process.exit(1);
 }
+console.error(`Failed to send push notification to ${userId}`);
+process.exit(1);

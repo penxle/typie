@@ -266,7 +266,7 @@
   });
 
   $effect(() => {
-    if (!(!active || !isPaginated)) {
+    if (active && isPaginated) {
       return;
     }
 

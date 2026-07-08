@@ -94,7 +94,7 @@ const normalize = (text: string) => {
   const removed: { pos: number; len: number }[] = [];
   let normalized = '';
 
-  for (let i = 0; i < text.length; ) {
+  for (let i = 0; i < text.length;) {
     const char = text[i];
     const code = text.codePointAt(i) || 0;
 
@@ -111,18 +111,17 @@ const normalize = (text: string) => {
 
     if (ALLOWED_CHARS.test(char)) {
       normalized += char;
-      i++;
     } else {
       removed.push({ pos: i, len: 1 });
-      i++;
     }
+    i++;
   }
 
   const map = (offset: number, isLast = false) => {
     let originalPos = 0;
     let normalizedPos = 0;
 
-    for (let i = 0; i < text.length; ) {
+    for (let i = 0; i < text.length;) {
       const isRemoved = removed.find((r) => r.pos === i);
 
       if (isRemoved) {
@@ -181,12 +180,11 @@ export const check = async (text: string, signal?: AbortSignal) => {
     if (chunk.length + (chunk ? 1 : 0) + paragraph.text.length <= MAX_CHUNK_SIZE) {
       if (chunk) {
         chunk += '\n' + paragraph.text;
-        chunkEndOffset = paragraph.end;
       } else {
         chunk = paragraph.text;
         chunkStartOffset = paragraph.start;
-        chunkEndOffset = paragraph.end;
       }
+      chunkEndOffset = paragraph.end;
     } else {
       if (chunk && chunkEndOffset > 0) {
         chunks.push({
@@ -211,7 +209,6 @@ export const check = async (text: string, signal?: AbortSignal) => {
 
           if (sentenceChunk.length + sentence.length <= MAX_CHUNK_SIZE) {
             sentenceChunk += sentence;
-            sentenceEndOffset = paragraph.start + matchEndOffset;
           } else {
             if (sentenceChunk) {
               chunks.push({
@@ -222,8 +219,8 @@ export const check = async (text: string, signal?: AbortSignal) => {
             }
             sentenceChunk = sentence;
             sentenceStartOffset = paragraph.start + endOffset;
-            sentenceEndOffset = paragraph.start + matchEndOffset;
           }
+          sentenceEndOffset = paragraph.start + matchEndOffset;
           endOffset = matchEndOffset;
         }
 
@@ -231,7 +228,6 @@ export const check = async (text: string, signal?: AbortSignal) => {
         if (remaining) {
           if (sentenceChunk.length + remaining.length <= MAX_CHUNK_SIZE) {
             sentenceChunk += remaining;
-            sentenceEndOffset = paragraph.end;
           } else {
             if (sentenceChunk) {
               chunks.push({
@@ -242,8 +238,8 @@ export const check = async (text: string, signal?: AbortSignal) => {
             }
             sentenceChunk = remaining;
             sentenceStartOffset = paragraph.start + endOffset;
-            sentenceEndOffset = paragraph.end;
           }
+          sentenceEndOffset = paragraph.end;
         }
 
         if (sentenceChunk) {

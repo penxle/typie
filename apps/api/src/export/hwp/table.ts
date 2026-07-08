@@ -119,11 +119,13 @@ export function makeTableRecords(
 function countParagraphs(records: Uint8Array[]): number {
   let count = 0;
   for (const rec of records) {
-    if (rec.byteLength >= 4) {
-      const view = new DataView(rec.buffer, rec.byteOffset, rec.byteLength);
-      const header = view.getUint32(0, true);
-      if ((header & 0x3_ff) === HWPTAG.PARA_HEADER) count++;
+    if (rec.byteLength < 4) {
+      continue;
     }
+
+    const view = new DataView(rec.buffer, rec.byteOffset, rec.byteLength);
+    const header = view.getUint32(0, true);
+    if ((header & 0x3_ff) === HWPTAG.PARA_HEADER) count++;
   }
   return count;
 }

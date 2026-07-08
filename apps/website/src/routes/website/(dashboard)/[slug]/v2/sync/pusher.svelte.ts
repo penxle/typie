@@ -151,8 +151,7 @@ export class Pusher {
     const localAll = new Set(this.localChangesetIds());
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
     const stillMissing = new Set(this.opts.editor.splitChangesets(missing).map((e) => e.id));
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
-    const durableSet = new Set([...localAll].filter((id) => !stillMissing.has(id)));
+    const durableSet = localAll.difference(stillMissing);
     const records = await this.opts.store.load(this.opts.documentId);
     const toDelete = records.filter((r) => durableSet.has(r.id)).map((r) => r.id);
     await this.opts.store.deleteMany(this.opts.documentId, toDelete);

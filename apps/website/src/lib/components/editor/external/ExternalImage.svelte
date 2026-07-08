@@ -340,7 +340,7 @@
           enlarged = true;
         }}
         onkeydown={(event) => {
-          if (!(!isEditable && (event.key === 'Enter' || event.key === ' '))) {
+          if (isEditable || !(event.key === 'Enter' || event.key === ' ')) {
             return;
           }
 

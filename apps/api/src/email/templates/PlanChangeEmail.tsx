@@ -1,7 +1,7 @@
 import { Heading, Hr, Link, Text } from 'react-email';
 import TypieEmail from './components/TypieEmail.tsx';
 
-const Email = () => {
+export default function Email() {
   return (
     <TypieEmail preview="더 나은 서비스 제공을 위해 2026년 7월 1일부터 플랜 및 구독 요금제가 변경됩니다">
       <Heading className="text-[28px] font-bold text-zinc-950 mb-[20px] tracking-[-0.02em] leading-[1.3]">
@@ -98,6 +98,4 @@ const Email = () => {
       </Text>
     </TypieEmail>
   );
-};
-
-export default Email;
+}

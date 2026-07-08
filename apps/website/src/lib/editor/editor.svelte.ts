@@ -651,7 +651,7 @@ export class Editor {
       })();
     if (!font) return;
 
-    Promise.resolve().then(async () => {
+    Promise.try(async () => {
       await ensureRequiredFont(wasm, family, font, codepoints);
       if (!this.readOnly) {
         preloadRemainingChunks(wasm, family, font);
@@ -686,16 +686,9 @@ export class Editor {
         continue;
       }
 
-      if (item.nodeId === anchor.nodeId && anchor.offset >= item.startOffset && anchor.offset <= item.endOffset) {
-        const t = target.find((v) => v.id === item.id);
-        if (t) {
-          t.active = true;
-        }
-      } else {
-        const t = target.find((v) => v.id === item.id);
-        if (t) {
-          t.active = false;
-        }
+      const t = target.find((v) => v.id === item.id);
+      if (t) {
+        t.active = item.nodeId === anchor.nodeId && anchor.offset >= item.startOffset && anchor.offset <= item.endOffset;
       }
     }
   }
@@ -1603,7 +1596,7 @@ export class Editor {
   async handlePaste(): Promise<void> {
     try {
       const items = await navigator.clipboard.read();
-      let html: string | undefined = undefined;
+      let html: string | undefined;
       let text = '';
       const imageFiles: File[] = [];
 
@@ -1647,7 +1640,7 @@ export class Editor {
   async handlePasteTextOnly(): Promise<void> {
     try {
       const items = await navigator.clipboard.read();
-      let html: string | undefined = undefined;
+      let html: string | undefined;
       let text = '';
 
       for (const item of items) {

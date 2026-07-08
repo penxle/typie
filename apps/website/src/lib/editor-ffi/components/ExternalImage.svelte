@@ -282,7 +282,7 @@
           if (!canEdit) enlarged = true;
         }}
         onkeydown={(event) => {
-          if (!(!canEdit && (event.key === 'Enter' || event.key === ' '))) {
+          if (canEdit || !(event.key === 'Enter' || event.key === ' ')) {
             return;
           }
 

@@ -139,11 +139,7 @@ User.implement({
           .where(eq(Subscriptions.userId, self.id))
           .then(first);
 
-        if (subscriptionHistory) {
-          return false;
-        }
-
-        return true;
+        return !subscriptionHistory;
       },
     }),
 
@@ -830,7 +826,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       await delay(Math.random() * 2000);
 
-      const code = input.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1');
+      const code = input.code.toUpperCase().replaceAll('-', '').replaceAll('O', '0').replaceAll(/[IL]/g, '1');
 
       return await db.transaction(async (tx) => {
         const creditCode = await tx

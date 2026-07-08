@@ -68,7 +68,7 @@
   });
 
   $effect(() => {
-    if (!(templateSlug && query.data && !query.loading)) {
+    if (!(templateSlug && query.data) || query.loading) {
       return;
     }
 

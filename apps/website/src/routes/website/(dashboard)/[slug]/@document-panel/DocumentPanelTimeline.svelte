@@ -192,10 +192,12 @@
 
         const newVersions: { id: string; version: string }[] = [];
         for (const v of result.document.versions) {
-          if (!versionCache.has(v.id)) {
-            versionCache.set(v.id, v.version);
-            newVersions.push(v);
+          if (versionCache.has(v.id)) {
+            continue;
           }
+
+          versionCache.set(v.id, v.version);
+          newVersions.push(v);
         }
 
         processVersionsCharacterCounts(newVersions);

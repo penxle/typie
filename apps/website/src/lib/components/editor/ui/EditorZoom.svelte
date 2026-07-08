@@ -340,7 +340,7 @@
 
       const teardown = $effect.root(() => {
         $effect(() => {
-          if (!(!resizing && pending)) {
+          if (resizing || !pending) {
             return;
           }
 

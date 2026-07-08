@@ -96,15 +96,17 @@ function findBestStrategy(
   const base = fontName.split('-')[0];
 
   for (const [locale, strategyName] of LOCALE_TO_STRATEGY) {
-    if (base.endsWith(locale) && Object.hasOwn(strategies, strategyName)) {
-      const groups = strategies[strategyName];
-      const strategyCps = new Set(groups.flat());
-      let overlap = 0;
-      for (const cp of fontCps) {
-        if (strategyCps.has(cp)) overlap++;
-      }
-      if (overlap >= SLICING_MIN_OVERLAP) return { name: strategyName, groups };
+    if (!(base.endsWith(locale) && Object.hasOwn(strategies, strategyName))) {
+      continue;
     }
+
+    const groups = strategies[strategyName];
+    const strategyCps = new Set(groups.flat());
+    let overlap = 0;
+    for (const cp of fontCps) {
+      if (strategyCps.has(cp)) overlap++;
+    }
+    if (overlap >= SLICING_MIN_OVERLAP) return { name: strategyName, groups };
   }
 
   let bestName: string | null = null;
@@ -118,7 +120,7 @@ function findBestStrategy(
       if (strategyCps.has(cp)) overlap++;
     }
     if (overlap < SLICING_MIN_OVERLAP) continue;
-    const unionSize = new Set([...fontCps, ...strategyCps]).size;
+    const unionSize = fontCps.union(strategyCps).size;
     const score = overlap / unionSize;
     if (score > bestScore) {
       bestScore = score;
@@ -190,10 +192,12 @@ function buildChunkMaps(chunkCps: number[][]): { chunkMap: string | null; chunkM
       let hasEntry = false;
 
       for (const [cp, idx] of bmp) {
-        if (cp >= pageStart && cp < pageStart + 256) {
-          page[cp - pageStart] = idx;
-          hasEntry = true;
+        if (!(cp >= pageStart && cp < pageStart + 256)) {
+          continue;
         }
+
+        page[cp - pageStart] = idx;
+        hasEntry = true;
       }
 
       if (hasEntry) {

@@ -57,7 +57,7 @@
     }
 
     if (event.code === 'Escape') {
-      if (paneGroup.state.current.focusedPaneId && paneGroup.findReplaceOpenByPaneId[paneGroup.state.current.focusedPaneId] === true) {
+      if (paneGroup.state.current.focusedPaneId && paneGroup.findReplaceOpenByPaneId[paneGroup.state.current.focusedPaneId]) {
         return;
       }
 
