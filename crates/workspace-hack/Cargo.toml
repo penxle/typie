@@ -16,9 +16,8 @@ js-sys = { version = "0.3" }
 litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
-phf = { version = "0.13", features = ["macros", "uncased"] }
-phf_shared = { version = "0.13", features = ["uncased"] }
-read-fonts = { version = "0.40" }
+phf_shared = { version = "0.14", default-features = false, features = ["std"] }
+read-fonts = { version = "0.41" }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
@@ -40,10 +39,8 @@ js-sys = { version = "0.3" }
 litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
-phf = { version = "0.13", features = ["macros", "uncased"] }
-phf_macros = { version = "0.13", default-features = false, features = ["uncased"] }
-phf_shared = { version = "0.13", features = ["uncased"] }
-read-fonts = { version = "0.40" }
+phf_shared = { version = "0.14", default-features = false, features = ["std"] }
+read-fonts = { version = "0.41" }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
