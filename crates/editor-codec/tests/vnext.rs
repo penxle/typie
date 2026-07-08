@@ -179,6 +179,66 @@ fn known_subset_reencodes_like_normal_encoding() {
     );
 }
 
+/// 위 오라클은 `DurableOp::SeqIns(Char)` 한 variant만 커버했다 — 그 성질(known
+/// 레코드의 프레임 인코딩은 정상 `encode_bundle` 경로와 바이트 동일)이 다른
+/// record 계열에도 성립하는지 폭을 넓혀 확인한다.
+#[test]
+fn known_subset_reencodes_like_normal_encoding_across_op_kinds() {
+    let anchor = Dot::new(5, 0);
+    let ops = [
+        DurableOp::SeqDel { pos: 0, len: 1 },
+        DurableOp::AddSpan {
+            start: DurableAnchor {
+                id: anchor,
+                bias: DurableBias::Before,
+            },
+            end: DurableAnchor {
+                id: anchor,
+                bias: DurableBias::After,
+            },
+            modifier: DurableModifier::Bold,
+            tail: UnknownTail(Vec::new()),
+        },
+        DurableOp::SetBlockModifier {
+            target: anchor,
+            modifier: DurableModifier::Bold,
+            tail: UnknownTail(Vec::new()),
+        },
+        DurableOp::AliasDots {
+            pairs: vec![DurableAliasRun {
+                old_start: anchor,
+                len: 1,
+                new_start: anchor,
+            }],
+            tail: UnknownTail(Vec::new()),
+        },
+    ];
+
+    for op in ops {
+        let solo_bytes = single_op_bundle(&[5], &[0], anchor, &op);
+        let solo_envelope = editor_codec::envelope::unwrap(&solo_bytes).unwrap();
+        let solo_frame = first_record_frame_body(&body_after_preamble(&solo_envelope.body));
+
+        let record = BundleRecord {
+            id: anchor,
+            parents: vec![],
+            payload: RecordPayload::Known(op.clone()),
+            record_tail: Vec::new(),
+        };
+        let normal_bytes = encode_bundle(&[BundleChangeset {
+            records: vec![record],
+        }])
+        .unwrap();
+        let normal_envelope = editor_codec::envelope::unwrap(&normal_bytes).unwrap();
+        let normal_frame = first_record_frame_body(&body_after_preamble(&normal_envelope.body));
+
+        assert_eq!(
+            solo_frame, normal_frame,
+            "{op:?}의 known 부분집합 재인코딩이 정상 인코딩과 달라짐"
+        );
+    }
+}
+
 fn single_op_bundle(actors: &[u64], baselines: &[u64], id: Dot, op: &DurableOp) -> Vec<u8> {
     let ctx = EncCtx::from_parts(actors, baselines.to_vec()).unwrap();
     let mut body = Vec::new();
@@ -429,9 +489,29 @@ fn unknown_init_attr_keeps_block_structure_and_child_attaches() {
     // actor 5 is present in both original and runtime-reencoded ctx; the attr
     // payload bytes for tag 99 must match byte-for-byte regardless of table shape.
     assert!(runtime_dec.actors.contains(&5));
+    // Decode the runtime re-encode again and inspect the structured attr directly
+    // (rather than scanning raw bytes for a coincidental [0x01, 0x02] window) —
+    // proves the tag-99 payload survived at its actual field, not just somewhere
+    // in the stream.
+    let decoded_reencoded = editor_codec::decode_changesets(&reencoded_runtime)
+        .unwrap()
+        .into_graph_input();
+    let EditOp::Seq(ListOp::Ins {
+        item: SeqItem::Block { attrs, .. },
+        ..
+    }) = &decoded_reencoded[0].ops[0].payload
+    else {
+        panic!(
+            "expected SeqItem::Block after runtime reencode, got {:?}",
+            decoded_reencoded[0].ops[0].payload
+        );
+    };
     assert!(
-        runtime_body.windows(2).any(|w| w == [0x01, 0x02]),
-        "재인코드 산출에 원본 attr payload 바이트가 그대로 있어야 한다"
+        matches!(
+            attrs.as_slice(),
+            [editor_model::NodeAttr::Unknown { tag: 99, bytes }] if bytes == &vec![0x01, 0x02]
+        ),
+        "재인코드 산출을 다시 디코드해도 원본 attr payload가 tag/bytes 그대로여야 한다"
     );
 }
 

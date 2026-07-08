@@ -453,7 +453,7 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
     for group in groups {
         let first_has_prev = {
             let view = tr.view();
-            view.node(group.items[0].1)
+            view.node(group.items[0])
                 .and_then(|item| item.index())
                 .map(|index| index > 0)
                 .unwrap_or(false)
@@ -463,7 +463,7 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
             continue;
         }
 
-        for (_item_index, item_id) in group.items {
+        for item_id in group.items {
             let exists = {
                 let view = tr.view();
                 view.node(item_id).is_some()
@@ -495,7 +495,7 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
 struct ListItemGroup {
     depth: usize,
     first_index: usize,
-    items: Vec<(usize, Dot)>,
+    items: Vec<Dot>,
 }
 
 fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGroup> {
@@ -505,7 +505,7 @@ fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGrou
             continue;
         };
         if let Some((_, group)) = groups.iter_mut().find(|(id, _)| *id == parent_id) {
-            group.items.push((item_index, item_id));
+            group.items.push(item_id);
             continue;
         }
         groups.push((
@@ -513,7 +513,7 @@ fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGrou
             ListItemGroup {
                 depth: list_item_depth(view, item_id),
                 first_index: item_index,
-                items: vec![(item_index, item_id)],
+                items: vec![item_id],
             },
         ));
     }

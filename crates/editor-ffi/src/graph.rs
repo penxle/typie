@@ -74,7 +74,7 @@ pub(crate) fn build_state_tolerant(
             .map(|op| format!("{}:{}", op.id.actor, op.id.clock))
             .collect();
         log::warn!(
-            "state build dropped {} causally-not-ready changeset(s): {}",
+            "state build dropped {} unapplied changeset(s) (missing parents or rejected): {}",
             dropped.len(),
             ids.join(", ")
         );

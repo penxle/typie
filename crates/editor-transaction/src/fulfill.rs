@@ -336,4 +336,91 @@ mod tests {
             }]
         );
     }
+
+    /// The two oracles above both land on `real_index == unshifted` (0 in both
+    /// cases) because their Unknown sits *after* the insertion point — a
+    /// regression that dropped the `real_indices` remap entirely (using the
+    /// filtered index directly as the real index) would slip through both
+    /// unnoticed. This oracle puts the Unknown *before* the insertion point
+    /// (`[Unknown, FoldContent, FoldTitle]`), so the real index (1, past the
+    /// Unknown) diverges from the filtered index (0, Unknown excluded) —
+    /// only the `real_indices` lookup, not the raw filtered index, produces
+    /// the expected step.
+    #[test]
+    fn fulfill_remaps_insertion_index_when_real_and_filtered_indices_diverge() {
+        use editor_crdt::Dot;
+        use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
+
+        let fold_id = Dot::new(1, 0);
+        let unknown_id = Dot::new(1, 1);
+        let content_id = Dot::new(1, 2);
+        let title_id = Dot::new(1, 3);
+
+        let mut nodes = editor_model::imbl::HashMap::new();
+        nodes.insert(
+            fold_id,
+            BlockNode {
+                id: fold_id,
+                node_type: NodeType::Fold,
+                attrs: vec![],
+                children: ChildList::from(vec![
+                    Child::Block(unknown_id),
+                    Child::Block(content_id),
+                    Child::Block(title_id),
+                ]),
+            },
+        );
+        nodes.insert(
+            unknown_id,
+            BlockNode {
+                id: unknown_id,
+                node_type: NodeType::Unknown,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+        nodes.insert(
+            content_id,
+            BlockNode {
+                id: content_id,
+                node_type: NodeType::FoldContent,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+        nodes.insert(
+            title_id,
+            BlockNode {
+                id: title_id,
+                node_type: NodeType::FoldTitle,
+                attrs: vec![],
+                children: ChildList::new(),
+            },
+        );
+
+        let doc = ProjectedDoc {
+            tree: BlockTree {
+                nodes,
+                root: fold_id,
+            },
+            block_effective: editor_model::imbl::HashMap::new(),
+            seg_index: editor_model::BlockSegs::default(),
+            block_modifiers: editor_model::imbl::HashMap::new(),
+            node_attrs: editor_model::imbl::HashMap::new(),
+            node_carries: editor_model::imbl::HashMap::new(),
+            alias_classes: editor_model::AliasClasses::default(),
+        };
+        let view = DocView::new(&doc);
+        let node = view.node(fold_id).unwrap();
+
+        let steps = fulfill(&node);
+        assert_eq!(
+            steps,
+            vec![Step::InsertSubtree {
+                parent: fold_id,
+                index: 1,
+                subtree: scaffold(NodeType::FoldTitle),
+            }]
+        );
+    }
 }

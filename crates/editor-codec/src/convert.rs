@@ -823,9 +823,6 @@ fn item_as_unknown(item: &DurableItem, enc: &EncCtx) -> CodecResult<SeqItem> {
 fn from_durable_alias_op(pairs: &[DurableAliasRun]) -> CodecResult<AliasOp> {
     let mut runtime_pairs = Vec::with_capacity(pairs.len());
     for run in pairs {
-        if run.len == 0 {
-            return Err(Corruption::InvalidAliasOp.into());
-        }
         let len = u32::try_from(run.len).map_err(|_| Corruption::VarintOverflow)?;
         runtime_pairs.push(AliasRun {
             old_start: run.old_start,
@@ -996,6 +993,17 @@ fn from_durable_op(
 
 pub fn decode_changesets(bytes: &[u8]) -> CodecResult<Decoded> {
     let (ctx, bundles) = decode_bundle_with_ctx(bytes)?;
+    changesets_from_ctx_and_bundles(ctx, bundles)
+}
+
+/// Shared by `decode_changesets` (parses `bytes` itself) and callers that
+/// already parsed the envelope for their own purposes (e.g. a stream walker
+/// that needs the envelope boundary) and would otherwise re-parse the same
+/// header a second time to reach this point.
+pub(crate) fn changesets_from_ctx_and_bundles(
+    ctx: crate::ctx::DecCtx,
+    bundles: Vec<BundleChangeset>,
+) -> CodecResult<Decoded> {
     let enc = EncCtx::from_parts(&ctx.actors, ctx.baselines.clone())?;
     let mut lossless = true;
     let changesets = bundles
@@ -1060,12 +1068,16 @@ pub fn decode_changeset_stream(bytes: &[u8]) -> CodecResult<Decoded> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::error::CodecError;
 
-    fn representative_changesets() -> Vec<Changeset<EditOp>> {
+    /// Every `EditOp` variant, chained in a single dependency line — shared by
+    /// the single-changeset and multi-changeset round-trip oracles below.
+    fn representative_ops() -> Vec<Op<EditOp>> {
         let d = |c| Dot::new(1, c);
-        let ops = vec![
+        vec![
             Op {
                 id: d(0),
                 parents: vec![],
@@ -1218,8 +1230,13 @@ mod tests {
                     }],
                 }),
             },
-        ];
-        vec![Changeset { ops }]
+        ]
+    }
+
+    fn representative_changesets() -> Vec<Changeset<EditOp>> {
+        vec![Changeset {
+            ops: representative_ops(),
+        }]
     }
 
     #[test]
@@ -1235,6 +1252,39 @@ mod tests {
                 to_durable_op(&a.payload).unwrap(),
                 to_durable_op(&b.payload).unwrap()
             );
+        }
+    }
+
+    /// `changesets_round_trip_via_durable_form`은 전 `EditOp` variant를 단일
+    /// changeset에 몰아 넣는다 — changeset 경계(cs_parents 마커·per-changeset
+    /// framing)를 넘나드는 조합은 커버하지 않는다. 같은 대표 op 목록을 두
+    /// changeset으로 쪼개(첫 changeset의 마지막 op가 둘째 changeset 첫 op의
+    /// 부모) 다중-changeset 왕복도 variant 전체에 걸쳐 성립하는지 확인한다.
+    #[test]
+    fn changesets_round_trip_via_durable_form_across_multiple_changesets() {
+        let ops = representative_ops();
+        let split = ops.len() / 2;
+        let css = vec![
+            Changeset {
+                ops: ops[..split].to_vec(),
+            },
+            Changeset {
+                ops: ops[split..].to_vec(),
+            },
+        ];
+        let bytes = encode_changesets(ReencodableChangesets::from_local_ops(css.clone())).unwrap();
+        let decoded = decode_changesets(&bytes).unwrap().into_graph_input();
+        assert_eq!(decoded.len(), css.len());
+        for (cs_a, cs_b) in css.iter().zip(&decoded) {
+            assert_eq!(cs_a.ops.len(), cs_b.ops.len());
+            for (a, b) in cs_a.ops.iter().zip(&cs_b.ops) {
+                assert_eq!(a.id, b.id);
+                assert_eq!(a.parents, b.parents);
+                assert_eq!(
+                    to_durable_op(&a.payload).unwrap(),
+                    to_durable_op(&b.payload).unwrap()
+                );
+            }
         }
     }
 
@@ -1326,6 +1376,81 @@ mod tests {
             to_durable_op(&css[0].ops[0].payload).unwrap(),
             to_durable_op(&decoded[0].ops[0].payload).unwrap()
         );
+    }
+
+    proptest! {
+        /// The example test above only exercises `ImageNode::default()`, whose
+        /// `LwwReg` ledger is already `None` on both sides — a decode that
+        /// forgot to reseed the ledger at all would still pass unnoticed. This
+        /// property gives each field a genuine non-trivial `last_set` (via a
+        /// real `LwwRegOp::Set`) and a random value, then checks both halves
+        /// of the name directly on the round-tripped runtime node: the value
+        /// survives, and the ledger is reseeded to the canonical init dot
+        /// `(0, 0)` (durable init attrs carry no dot — `from_durable_item`'s
+        /// `atom_leaf` re-applies each via `Dot::new(0, 0)`), not left as the
+        /// original dot.
+        #[test]
+        fn atom_round_trip_reseeds_ledger_to_canonical_dot_but_preserves_values(
+            id_actor in 1u64..1000,
+            id_clock in 0u64..1000,
+            id_value in "[a-zA-Z0-9]{0,16}",
+            prop_actor in 1u64..1000,
+            prop_clock in 0u64..1000,
+            proportion in 1u32..500,
+        ) {
+            let mut node = editor_model::ImageNode::default();
+            node.id = node
+                .id
+                .apply(
+                    Dot::new(id_actor, id_clock),
+                    editor_crdt::LwwRegOp::Set { value: Some(id_value.clone()) },
+                )
+                .unwrap();
+            node.proportion = node
+                .proportion
+                .apply(
+                    Dot::new(prop_actor, prop_clock),
+                    editor_crdt::LwwRegOp::Set { value: proportion },
+                )
+                .unwrap();
+
+            let leaf = AtomLeaf::Image { node };
+            let css = vec![Changeset {
+                ops: vec![Op {
+                    id: Dot::new(1, 0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::BlockAtom {
+                            leaf,
+                            parents: vec![Dot::ROOT],
+                        },
+                    }),
+                }],
+            }];
+            let bytes = encode_changesets(ReencodableChangesets::from_local_ops(css)).unwrap();
+            let decoded = decode_changesets(&bytes).unwrap().into_graph_input();
+
+            let EditOp::Seq(ListOp::Ins {
+                item:
+                    SeqItem::BlockAtom {
+                        leaf: AtomLeaf::Image { node: decoded_node },
+                        ..
+                    },
+                ..
+            }) = &decoded[0].ops[0].payload
+            else {
+                panic!(
+                    "expected an Image block-atom, got {:?}",
+                    decoded[0].ops[0].payload
+                );
+            };
+
+            prop_assert_eq!(decoded_node.id.get(), &Some(id_value));
+            prop_assert_eq!(*decoded_node.proportion.get(), proportion);
+            prop_assert_eq!(decoded_node.id.last_set(), Some(Dot::new(0, 0)));
+            prop_assert_eq!(decoded_node.proportion.last_set(), Some(Dot::new(0, 0)));
+        }
     }
 
     #[test]

@@ -1,4 +1,5 @@
-use crate::convert::{ReencodableChangesets, decode_changesets, encode_changesets};
+use crate::bundle::decode_bundle_from_envelope;
+use crate::convert::{ReencodableChangesets, changesets_from_ctx_and_bundles, encode_changesets};
 use crate::envelope::unwrap_one;
 use crate::error::{CodecError, CodecResult};
 
@@ -16,18 +17,19 @@ pub fn consolidate_stream(bytes: &[u8]) -> CodecResult<Option<Consolidation>> {
 
     while !input.is_empty() {
         let before = input;
-        match unwrap_one(&mut input) {
-            Ok(_) => {}
-            Err(CodecError::Fenced(_)) => break,
-            Err(e) => return Err(e),
-        }
-        let taken = before.len() - input.len();
-        let envelope_bytes = &before[..taken];
-        let decoded = match decode_changesets(envelope_bytes) {
-            Ok(d) => d,
+        // Decode via the envelope `unwrap_one` already parsed — avoids re-parsing
+        // the same header a second time through a bytes-based decode entry point.
+        // Once `unwrap_one` succeeds, none of the body-level decoding below can
+        // raise `Fenced` (that's an envelope-header-only error class), so only
+        // `unwrap_one` itself needs to treat it as a stream boundary.
+        let envelope = match unwrap_one(&mut input) {
+            Ok(e) => e,
             Err(CodecError::Fenced(_)) => break,
             Err(e) => return Err(e),
         };
+        let taken = before.len() - input.len();
+        let (ctx, bundles) = decode_bundle_from_envelope(&envelope)?;
+        let decoded = changesets_from_ctx_and_bundles(ctx, bundles)?;
         match decoded.into_reencodable() {
             Ok(r) => parts.push(r),
             Err(_) => break,

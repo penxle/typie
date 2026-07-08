@@ -3,7 +3,9 @@ mod common;
 mod tests {
     use editor_codec::{ReencodableChangesets, consolidate_stream, encode_changesets};
     use editor_crdt::{Changeset, Dot, ListOp, Op};
-    use editor_model::{EditOp, NodeType, SeqItem};
+    use editor_model::{
+        Anchor, AtomLeaf, Bias, EditOp, Modifier, ModifierAttrOp, NodeType, SeqItem, SpanOp,
+    };
     use proptest::prelude::*;
 
     use super::common;
@@ -129,7 +131,18 @@ mod tests {
         assert!(consolidate_stream(&s).unwrap().is_none());
     }
 
-    fn linear_char_ops(total: usize) -> Vec<Op<EditOp>> {
+    #[test]
+    fn empty_input_is_noop() {
+        assert!(consolidate_stream(&[]).unwrap().is_none());
+    }
+
+    /// A linear dependency chain mixing every `EditOp` shape consolidation
+    /// actually re-encodes (seq inserts, a block modifier, a node carry, a
+    /// span) — not just char inserts — so the "splits don't matter" property
+    /// below is exercised across op-kind diversity too, not only bundle-boundary
+    /// placement. `i == 0` is always a char insert so later ops have a real
+    /// dot ((1, 0)) to target.
+    fn diverse_ops(total: usize, kinds: &[u8]) -> Vec<Op<EditOp>> {
         (0..total)
             .map(|i| {
                 let parents = if i == 0 {
@@ -137,14 +150,47 @@ mod tests {
                 } else {
                     vec![Dot::new(1, (i - 1) as u64)]
                 };
-                let ch = char::from(b'a' + (i % 26) as u8);
+                let anchor = Dot::new(1, 0);
+                let payload = if i == 0 {
+                    EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Char('a'),
+                    })
+                } else {
+                    match kinds[i] % 5 {
+                        0 => EditOp::Seq(ListOp::Ins {
+                            pos: i,
+                            item: SeqItem::Char(char::from(b'a' + (i % 26) as u8)),
+                        }),
+                        1 => EditOp::Seq(ListOp::Ins {
+                            pos: i,
+                            item: SeqItem::Atom(AtomLeaf::HardBreak),
+                        }),
+                        2 => EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                            target: anchor,
+                            modifier: Modifier::FontSize { value: 1400 },
+                        }),
+                        3 => EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                            target: anchor,
+                            modifier: Modifier::Italic,
+                        }),
+                        _ => EditOp::Span(SpanOp::AddSpan {
+                            start: Anchor {
+                                id: anchor,
+                                bias: Bias::Before,
+                            },
+                            end: Anchor {
+                                id: anchor,
+                                bias: Bias::After,
+                            },
+                            modifier: Modifier::Bold,
+                        }),
+                    }
+                };
                 Op {
                     id: Dot::new(1, i as u64),
                     parents,
-                    payload: EditOp::Seq(ListOp::Ins {
-                        pos: i,
-                        item: SeqItem::Char(ch),
-                    }),
+                    payload,
                 }
             })
             .collect()
@@ -154,9 +200,10 @@ mod tests {
         #[test]
         fn consolidation_is_semantically_identity(
             splits in proptest::collection::vec(1usize..5, 1..6),
+            op_kinds in proptest::collection::vec(0u8..5, 20),
         ) {
             let total: usize = splits.iter().sum();
-            let ops = linear_char_ops(total);
+            let ops = diverse_ops(total, &op_kinds);
 
             let mut idx = 0;
             let mut bundles = Vec::with_capacity(splits.len());

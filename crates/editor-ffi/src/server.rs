@@ -911,6 +911,80 @@ mod tests {
         );
     }
 
+    /// The "Failed" case above is a decode failure (garbage bytes) — the outer
+    /// `decode_changeset_stream` match arm. This covers the *inner* failure
+    /// path: a bundle that decodes fine but whose op depends on a dot that is
+    /// nowhere in the graph (a real causal gap, not a malformed payload) —
+    /// `receive_remote_changesets` must reject it and `collect_fold` must
+    /// classify it as `Failed`, not silently apply a partial result.
+    #[test]
+    fn collect_fold_reports_failed_for_causally_broken_bundle() {
+        let cs_a = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(1, 0),
+                parents: vec![],
+                payload: dummy_payload(),
+            }],
+        };
+        let orphan_bundle = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(3, 0),
+                parents: vec![Dot::new(9, 99)],
+                payload: dummy_payload(),
+            }],
+        };
+        let server = EditorServer;
+        let existing = enc_css(std::slice::from_ref(&cs_a));
+        let packed = pack(&[enc_css(std::slice::from_ref(&orphan_bundle))]);
+
+        let result = server.collect_fold(existing, packed).unwrap();
+        assert_eq!(result.statuses, vec![BundleStatus::Failed]);
+        assert_eq!(
+            result.char_counts[0], result.base_char_count,
+            "a rejected bundle must not move the character count"
+        );
+    }
+
+    /// A bundle whose changeset shares its *first* dot with an already-known
+    /// changeset but is not verbatim-identical (a new second op grouped onto
+    /// it) is neither a clean apply nor an idempotent re-delivery — the graph
+    /// rejects it as `PartialDuplicate`, and `collect_fold` must surface that
+    /// as `Failed` rather than silently accepting the overlapping half.
+    #[test]
+    fn collect_fold_reports_failed_for_partial_duplicate_bundle() {
+        let cs_a = Changeset::<EditOp> {
+            ops: vec![Op {
+                id: Dot::new(1, 0),
+                parents: vec![],
+                payload: dummy_payload(),
+            }],
+        };
+        let partial_bundle = Changeset::<EditOp> {
+            ops: vec![
+                Op {
+                    id: Dot::new(1, 0),
+                    parents: vec![],
+                    payload: dummy_payload(),
+                },
+                Op {
+                    id: Dot::new(5, 0),
+                    parents: vec![Dot::new(1, 0)],
+                    payload: dummy_payload(),
+                },
+            ],
+        };
+        let server = EditorServer;
+        let existing = enc_css(std::slice::from_ref(&cs_a));
+        let packed = pack(&[enc_css(std::slice::from_ref(&partial_bundle))]);
+
+        let result = server.collect_fold(existing, packed).unwrap();
+        assert_eq!(result.statuses, vec![BundleStatus::Failed]);
+        assert_eq!(
+            result.char_counts[0], result.base_char_count,
+            "a rejected bundle must not move the character count"
+        );
+    }
+
     #[test]
     fn consolidate_merges_stream_preserving_changesets_and_heads() {
         let cs_a = Changeset::<EditOp> {

@@ -222,7 +222,7 @@ fn decode_record(
     })
 }
 
-fn decode_changesets(input: &mut &[u8], ctx: &DecCtx) -> CodecResult<Vec<BundleChangeset>> {
+fn decode_bundle_changesets(input: &mut &[u8], ctx: &DecCtx) -> CodecResult<Vec<BundleChangeset>> {
     let cs_count = read_varint(input)?;
     let mut css = Vec::new();
     let mut prev_cs_last: Option<Dot> = None;
@@ -247,7 +247,7 @@ fn decode_changesets(input: &mut &[u8], ctx: &DecCtx) -> CodecResult<Vec<BundleC
 
 fn decode_bundle_body_with_ctx(input: &mut &[u8]) -> CodecResult<(DecCtx, Vec<BundleChangeset>)> {
     let ctx = read_preamble(input)?;
-    let css = decode_changesets(input, &ctx)?;
+    let css = decode_bundle_changesets(input, &ctx)?;
     expect_consumed(input)?;
     Ok((ctx, css))
 }
@@ -256,8 +256,13 @@ pub fn decode_bundle(bytes: &[u8]) -> CodecResult<Vec<BundleChangeset>> {
     decode_bundle_with_ctx(bytes).map(|(_, css)| css)
 }
 
-pub(crate) fn decode_bundle_with_ctx(bytes: &[u8]) -> CodecResult<(DecCtx, Vec<BundleChangeset>)> {
-    let envelope = crate::envelope::unwrap(bytes)?;
+/// Body-level decode of an **already-parsed** envelope — for callers that got
+/// `envelope` from their own `unwrap`/`unwrap_one` call and would otherwise
+/// re-parse the same header a second time via `decode_bundle_with_ctx(bytes)`
+/// (e.g. a stream walker that needs the envelope boundary before it can decode).
+pub(crate) fn decode_bundle_from_envelope(
+    envelope: &Envelope,
+) -> CodecResult<(DecCtx, Vec<BundleChangeset>)> {
     if envelope.payload_kind != PayloadKind::ChangesetBundle {
         return Err(Corruption::UnexpectedPayloadKind {
             kind: envelope.payload_kind as u8,
@@ -266,6 +271,11 @@ pub(crate) fn decode_bundle_with_ctx(bytes: &[u8]) -> CodecResult<(DecCtx, Vec<B
     }
     let mut body = &envelope.body[..];
     decode_bundle_body_with_ctx(&mut body)
+}
+
+pub(crate) fn decode_bundle_with_ctx(bytes: &[u8]) -> CodecResult<(DecCtx, Vec<BundleChangeset>)> {
+    let envelope = crate::envelope::unwrap(bytes)?;
+    decode_bundle_from_envelope(&envelope)
 }
 
 pub fn decode_bundle_stream(bytes: &[u8]) -> CodecResult<Vec<BundleChangeset>> {
@@ -319,7 +329,7 @@ pub fn bundle_stream_contains_unknown(bytes: &[u8]) -> CodecResult<bool> {
         }
         let mut body = &envelope.body[..];
         let ctx = read_preamble(&mut body)?;
-        let css = decode_changesets(&mut body, &ctx)?;
+        let css = decode_bundle_changesets(&mut body, &ctx)?;
         expect_consumed(body)?;
         any |= css.iter().any(|cs| {
             cs.records.iter().any(|r| match &r.payload {
@@ -350,7 +360,7 @@ pub fn split_bundle_bytes(bytes: &[u8]) -> CodecResult<Vec<Vec<u8>>> {
         let before = body.len();
         let ctx = read_preamble(&mut body)?;
         let preamble_bytes = &envelope.body[..before - body.len()];
-        let css = decode_changesets(&mut body, &ctx)?;
+        let css = decode_bundle_changesets(&mut body, &ctx)?;
         expect_consumed(body)?;
 
         let enc_ctx = EncCtx::from_parts(&ctx.actors, ctx.baselines.clone())?;
