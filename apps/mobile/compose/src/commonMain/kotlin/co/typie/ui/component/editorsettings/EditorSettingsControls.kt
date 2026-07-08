@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.typie.editor.DefaultRootPaginatedLayout
 import co.typie.editor.EditorOption
 import co.typie.editor.EditorTheme
 import co.typie.editor.EditorValues
@@ -143,7 +144,7 @@ internal fun EditorSettingsBasicStyleSection(
   editorTheme: ResolvedEditorTheme,
   onStyleChange: suspend (EditorStyleSettings) -> Unit,
 ) {
-  EditorSettingsSection(title = "기본 스타일") {
+  EditorSettingsSection(title = "기본 서식") {
     EditorFontFamilyRow(
       style = style,
       fontFamilies = fontFamilies,
@@ -242,7 +243,7 @@ internal fun EditorSettingsLayoutSection(
         selected = currentLayoutMode,
         onSelect = { mode ->
           when (mode) {
-            "paginated" -> onLayoutChange(DefaultPaginatedLayout)
+            "paginated" -> onLayoutChange(DefaultRootPaginatedLayout)
             "continuous" -> onLayoutChange(LayoutMode.Continuous(maxWidth = 600))
           }
         },
@@ -701,13 +702,3 @@ private fun formatPointValue(value: Int): String {
   if (fraction == 0) return whole.toString()
   return "$whole.${fraction.toString().padStart(2, '0')}".trimEnd('0').trimEnd('.')
 }
-
-private val DefaultPaginatedLayout =
-  LayoutMode.Paginated(
-    pageWidth = 794,
-    pageHeight = 1123,
-    pageMarginTop = 94,
-    pageMarginBottom = 94,
-    pageMarginLeft = 94,
-    pageMarginRight = 94,
-  )

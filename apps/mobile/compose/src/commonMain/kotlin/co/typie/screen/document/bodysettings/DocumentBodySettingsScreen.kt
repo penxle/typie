@@ -26,15 +26,15 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.editor.DefaultRootPaginatedLayout
 import co.typie.editor.Editor
 import co.typie.editor.EditorScope
 import co.typie.editor.EditorTheme
 import co.typie.editor.currentEditorThemeVariant
+import co.typie.editor.enqueueRootLayoutMode
+import co.typie.editor.enqueueRootModifier
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.ModifierOp
-import co.typie.editor.ffi.NodeOp
-import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.preview.EditorPreview
@@ -111,7 +111,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
     val editorTheme = remember(editorThemeVariant) { EditorTheme.resolve(editorThemeVariant) }
     var layout by remember(document.id) { mutableStateOf<LayoutMode?>(null) }
     val resolvedBodyStyle = bodyStyle ?: EditorStyleSettings()
-    val resolvedLayout = layout ?: DefaultPaginatedLayout
+    val resolvedLayout = layout ?: DefaultRootPaginatedLayout
     val controlsEnabled = initial != null && settingsRuntime.editor != null
 
     DisposableEffect(settingsRuntime) { onDispose { settingsRuntime.clear() } }
@@ -129,7 +129,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
                 .toEditorStyleSettings(),
             layout =
               runCatching { PlatformModule.editorHost.rootAttrsFromGraph(graph).layoutMode }
-                .getOrDefault(DefaultPaginatedLayout),
+                .getOrDefault(DefaultRootPaginatedLayout),
           )
         }
       initial = nextInitial
@@ -177,9 +177,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
       if (!controlsEnabled) return
       layout = newLayout
       save {
-        enqueue(
-          Message.Node(NodeOp.SetAttrs(id = "0", attrs = PlainNode.Root(layoutMode = newLayout)))
-        )
+        enqueueRootLayoutMode(newLayout)
         enqueue(Message.System(SystemEvent.SetFocused(false)))
       }
     }
@@ -190,9 +188,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
       if (modifiers.isEmpty()) return
       bodyStyle = newStyle
       save {
-        modifiers.forEach { modifier ->
-          enqueue(Message.Modifier(ModifierOp.SetOnNode(id = "0", modifier = modifier)))
-        }
+        modifiers.forEach { modifier -> enqueueRootModifier(modifier) }
         enqueue(Message.System(SystemEvent.SetFocused(false)))
       }
     }
@@ -274,16 +270,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
     }
   }
 }
-
-private val DefaultPaginatedLayout =
-  LayoutMode.Paginated(
-    pageWidth = 794,
-    pageHeight = 1123,
-    pageMarginTop = 94,
-    pageMarginBottom = 94,
-    pageMarginLeft = 94,
-    pageMarginRight = 94,
-  )
 
 private data class DocumentBodySettingsInitialState(
   val hasText: Boolean,

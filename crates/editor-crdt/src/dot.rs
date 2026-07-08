@@ -199,11 +199,10 @@ mod tests {
     }
 
     #[test]
-    fn root_string_form_is_pinned_for_web_client() {
-        // The web client hardcodes this exact string to target the root in set_attrs
-        // messages (apps/website/src/lib/editor-ffi/root-attrs.ts, ROOT_ID). If this
-        // assertion fails the encoding changed; update that constant too, or root-only
-        // ops (layout mode) fail to deserialize with "invalid Dot".
+    fn root_string_form_is_pinned_for_ffi_clients() {
+        // FFI clients hardcode this exact string to target the implicit root in
+        // messages. If this assertion fails the encoding changed; update client
+        // constants too, or root-only ops fail to deserialize with "invalid Dot".
         assert_eq!(Dot::ROOT.to_string(), "0_AzL8n0Y58m8");
         assert_eq!("0_AzL8n0Y58m8".parse::<Dot>().unwrap(), Dot::ROOT);
     }

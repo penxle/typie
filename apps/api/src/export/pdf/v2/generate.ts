@@ -1,3 +1,4 @@
+import { EDITOR_FFI_ROOT_ID } from '@typie/lib/const';
 import { useHost } from '../../../utils/wasm-ffi-host.ts';
 import { parseVectorPageBinary } from '../../core/codec.ts';
 import { computeDesiredSize, resolveAssets } from '../../core/external.ts';
@@ -50,7 +51,7 @@ export async function generateDocumentPdfV2(params: GenerateDocumentPdfV2Params)
         type: 'node',
         op: {
           type: 'set_attrs',
-          id: '0',
+          id: EDITOR_FFI_ROOT_ID,
           attrs: {
             type: 'root',
             layout_mode: {
