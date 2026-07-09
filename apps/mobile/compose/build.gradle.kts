@@ -41,6 +41,7 @@ plugins {
   alias(libs.plugins.buildkonfig)
   alias(libs.plugins.detekt)
   alias(libs.plugins.sentry)
+  alias(libs.plugins.sqldelight)
 }
 
 val isAndroidStudioXcodeFrameworkBuild =
@@ -146,13 +147,17 @@ kotlin {
         implementation(libs.kotlinx.coroutines.playServices)
         implementation(libs.naver.oauth)
         implementation(libs.jna.map { "$it@aar" })
+        implementation(libs.sqldelight.driver.android)
       }
     }
 
     iosMain {
       kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/iosMain"))
 
-      dependencies { implementation(libs.ktor.client.darwin) }
+      dependencies {
+        implementation(libs.ktor.client.darwin)
+        implementation(libs.sqldelight.driver.native)
+      }
     }
 
     val desktopMain by getting {
@@ -163,6 +168,7 @@ kotlin {
         implementation(libs.jna)
         implementation(libs.kotlinx.coroutines.swing)
         implementation(libs.ktor.client.cio)
+        implementation(libs.sqldelight.driver.jvm)
       }
     }
 
@@ -288,6 +294,15 @@ apollo {
     pluginArgument("com.apollographql.cache.packageName", packageName.get())
 
     dataBuildersOutputDirConnection { connectToKotlinSourceSet("commonMain") }
+  }
+}
+
+sqldelight {
+  databases {
+    create("SyncDatabase") {
+      packageName.set("co.typie.sync.db")
+      dialect("app.cash.sqldelight:sqlite-3-24-dialect:${libs.versions.sqldelight.get()}")
+    }
   }
 }
 

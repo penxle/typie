@@ -32,6 +32,9 @@ query EditorScreen_Query($entityId: ID!) {
         subtitle
         state {
           graph
+          seq
+          heads
+          durableHeads
         }
         assets {
           __typename
@@ -89,12 +92,6 @@ mutation EditorScreen_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
     id
     nullableTitle
     subtitle
-  }
-}
-
-mutation EditorScreen_PushDocumentChangesets_Mutation($input: PushDocumentChangesetsInput!) {
-  pushDocumentChangesets(input: $input) {
-    heads
   }
 }
 

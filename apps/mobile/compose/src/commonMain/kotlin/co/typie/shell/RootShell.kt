@@ -6,11 +6,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.preferredFrameRate
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.typie.domain.auth.AuthService
 import co.typie.domain.auth.AuthState
 import co.typie.domain.bootstrap.BootstrapService
@@ -19,6 +25,9 @@ import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
+import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.orphanSweeper
+import co.typie.platform.connectivityRestoredFlow
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
@@ -43,6 +52,8 @@ import co.typie.ui.component.toast.ToastOverlay
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 
 private enum class RootScreen {
   Splash,
@@ -56,6 +67,36 @@ private enum class RootScreen {
 fun RootShell() {
   LaunchedEffect(Unit) { BootstrapService.launch() }
   LaunchedEffect(Unit) { PushNotificationService.launch() }
+
+  LaunchedEffect(Unit) {
+    connectivityRestoredFlow().collect {
+      ActiveSyncEngines.retryAll()
+      orphanSweeper.sweep()
+    }
+  }
+
+  LaunchedEffect(Unit) {
+    snapshotFlow { AuthService.state }
+      .filter { it is AuthState.Authenticated }
+      .collect {
+        orphanSweeper.resetPermanentFailures()
+        orphanSweeper.sweep()
+      }
+  }
+
+  val lifecycleOwner = LocalLifecycleOwner.current
+  val lifecycleScope = rememberCoroutineScope()
+  DisposableEffect(lifecycleOwner) {
+    val observer = LifecycleEventObserver { _, event ->
+      when (event) {
+        Lifecycle.Event.ON_START -> lifecycleScope.launch { orphanSweeper.sweep() }
+        Lifecycle.Event.ON_STOP -> lifecycleScope.launch { ActiveSyncEngines.flushAll() }
+        else -> {}
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+  }
 
   val toast = remember { Toast() }
   val loader = remember { Loader() }

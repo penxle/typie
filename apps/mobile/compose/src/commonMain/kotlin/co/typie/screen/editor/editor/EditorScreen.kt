@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -81,6 +82,17 @@ import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
+import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.ChangesetDeltaStore
+import co.typie.editor.sync.GraphQlSyncTransport
+import co.typie.editor.sync.RemoteChangesetPipeline
+import co.typie.editor.sync.SyncEngine
+import co.typie.editor.sync.SyncSession
+import co.typie.editor.sync.asSyncEditor
+import co.typie.editor.sync.catchingNonCancellation
+import co.typie.editor.sync.isPermanentSyncError
+import co.typie.editor.sync.orphanSweeper
+import co.typie.editor.sync.syncAppScope
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
@@ -161,12 +173,18 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
+import kotlin.time.Clock
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.decodeFromJsonElement
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalUuidApi::class)
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
@@ -391,11 +409,10 @@ fun EditorScreen(entityId: String) {
                 subtitle = model.headingSubtitle,
                 loading = loading,
                 onClick = {
-                  val activeEditor = runtime.editor
                   screenState.prepareToLeaveEditorScene(
                     runtime = runtime,
                     uiState = uiState,
-                    flushDrafts = { model.flush(activeEditor) },
+                    flushDrafts = { model.flush() },
                   )
                   nav.navigate(Route.Document(entityId))
                 },
@@ -420,13 +437,65 @@ fun EditorScreen(entityId: String) {
   }
   LaunchedEffect(entityId, editor) {
     val activeEditor = editor ?: return@LaunchedEffect
-    model.markBodySynced(activeEditor)
     EditorLocalChangesetBus.consume(entityId).forEach { activeEditor.receiveRemoteChangeset(it) }
   }
   LaunchedEffect(entityId, runtime) {
     EditorLocalChangesetBus.notifications(entityId).collectLatest {
       val activeEditor = runtime.editor ?: return@collectLatest
       EditorLocalChangesetBus.consume(entityId).forEach { activeEditor.receiveRemoteChangeset(it) }
+    }
+  }
+
+  val activeEditor = runtime.editor
+  val syncBaseline = model.syncBaseline
+  val documentId = model.documentId
+  if (activeEditor != null && syncBaseline != null && documentId != null) {
+    DisposableEffect(activeEditor) {
+      val clientId = Uuid.random().toString()
+      val transport = GraphQlSyncTransport(documentId = documentId, clientId = clientId)
+      val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+      val engine =
+        SyncEngine(
+          editor = activeEditor.asSyncEditor(),
+          documentId = documentId,
+          initialServerHeads = syncBaseline.heads,
+          initialDurableHeads = syncBaseline.durableHeads,
+          store = ChangesetDeltaStore,
+          pushFn = { transport.push(it) },
+          scope = engineScope,
+          isPermanent = ::isPermanentSyncError,
+          now = { Clock.System.now().toEpochMilliseconds() },
+        )
+      val pipeline =
+        RemoteChangesetPipeline(
+          editor = activeEditor.asSyncEditor(),
+          headsSink = engine,
+          transport = transport,
+          initialSeq = syncBaseline.seq,
+          scope = scope,
+          onNeedsReload = {
+            catchingNonCancellation { engine.captureNow() }
+            engine.stop()
+            model.refetchDocument()
+            model.bumpReloadGeneration()
+            runtime.clear(activeEditor)
+          },
+        )
+      val session = SyncSession(engine = engine, pipeline = pipeline)
+      ActiveSyncEngines.register(documentId, session)
+      pipeline.start()
+
+      val revisionJob = scope.launch {
+        snapshotFlow { activeEditor.state.documentRevision }.drop(1).collect { engine.schedule() }
+      }
+
+      onDispose {
+        revisionJob.cancel()
+        pipeline.stop()
+        engine.stop()
+        ActiveSyncEngines.unregister(documentId, session)
+        syncAppScope.launch { orphanSweeper.sweep() }
+      }
     }
   }
 
@@ -972,9 +1041,25 @@ fun EditorScreen(entityId: String) {
         },
         body = {
           val graph = model.graph
-          if (graph != null) {
+          val pending by
+            produceState<List<ByteArray>?>(
+              initialValue = null,
+              model.documentId,
+              model.reloadGeneration,
+            ) {
+              val documentId = model.documentId
+              value =
+                if (documentId == null) {
+                  emptyList()
+                } else {
+                  ChangesetDeltaStore.load(documentId).map { it.changeset }
+                }
+            }
+          val loadedPending = pending
+          if (graph != null && loadedPending != null) {
             EditorBody(
               graph = graph,
+              pending = loadedPending,
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,

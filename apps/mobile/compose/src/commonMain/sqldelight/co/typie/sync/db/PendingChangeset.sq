@@ -1,0 +1,28 @@
+CREATE TABLE pendingChangeset (
+  documentId TEXT NOT NULL,
+  id TEXT NOT NULL,
+  changeset BLOB NOT NULL,
+  createdAt INTEGER NOT NULL,
+  PRIMARY KEY (documentId, id)
+);
+
+upsert:
+INSERT INTO pendingChangeset (documentId, id, changeset, createdAt)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (documentId, id) DO UPDATE SET changeset = excluded.changeset, createdAt = excluded.createdAt;
+
+loadByDocument:
+SELECT documentId, id, changeset, createdAt
+FROM pendingChangeset
+WHERE documentId = ?
+ORDER BY createdAt ASC, rowid ASC;
+
+deleteById:
+DELETE FROM pendingChangeset
+WHERE documentId = ? AND id = ?;
+
+listDocumentIds:
+SELECT DISTINCT documentId FROM pendingChangeset;
+
+wipeAll:
+DELETE FROM pendingChangeset;

@@ -48,6 +48,7 @@ internal fun EditorView(
   viewportWidth: Float,
   viewportHeight: Float,
   modifier: Modifier = Modifier,
+  pending: List<ByteArray> = emptyList(),
   textInputSessionEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
@@ -79,8 +80,9 @@ internal fun EditorView(
       uiState.clear()
       try {
         val editor =
-          Editor.create(
+          Editor.createWithPending(
             graph = graph,
+            pending = pending,
             viewport = viewport,
             themeVariant = themeVariant,
             scope = scope,

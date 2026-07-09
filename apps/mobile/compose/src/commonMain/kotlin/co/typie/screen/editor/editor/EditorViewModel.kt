@@ -6,11 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.editor.Editor
-import co.typie.editor.EditorLocalChangesetTracker
 import co.typie.editor.FontLoader
 import co.typie.graphql.Apollo
-import co.typie.graphql.EditorScreen_PushDocumentChangesets_Mutation
 import co.typie.graphql.EditorScreen_Query
 import co.typie.graphql.EditorScreen_UpdateDocument_Mutation
 import co.typie.graphql.EditorScreen_ViewEntity_Mutation
@@ -23,11 +20,9 @@ import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.EntityType
-import co.typie.graphql.type.PushDocumentChangesetsInput
 import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.ViewEntityInput
 import co.typie.graphql.watchQuery
-import co.typie.storage.Preference
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
 import io.sentry.kotlin.multiplatform.Sentry
@@ -58,8 +53,6 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     private set
 
   private val headerSaveController = EditorHeaderSaveController(scope = viewModelScope)
-  private val bodyChangesetTracker = EditorLocalChangesetTracker()
-  private var bodySyncedEditor: Editor? = null
 
   val query =
     Apollo.watchQuery(
@@ -91,6 +84,30 @@ class EditorViewModel(val entityId: String) : ViewModel() {
         .onDocument
         ?.state
         ?.graph
+
+  data class DocumentSyncBaseline(
+    val seq: String,
+    val heads: ByteArray,
+    val durableHeads: ByteArray,
+  )
+
+  val syncBaseline: DocumentSyncBaseline?
+    get() =
+      ((query.state as? QueryState.Success)?.data ?: return null)
+        .entity
+        .node
+        .onDocument
+        ?.state
+        ?.let {
+          DocumentSyncBaseline(seq = it.seq, heads = it.heads, durableHeads = it.durableHeads)
+        }
+
+  var reloadGeneration by mutableStateOf(0)
+    private set
+
+  fun bumpReloadGeneration() {
+    reloadGeneration++
+  }
 
   val headingTitle: String
     get() = if (loadingState && serverTitle.isEmpty() && !isTitleDirty) "" else titleDraft
@@ -148,15 +165,15 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     headerSaveController.flush(saveTitle = ::saveTitleNow, saveSubtitle = ::saveSubtitleNow)
   }
 
-  suspend fun markBodySynced(editor: Editor) {
-    if (bodySyncedEditor === editor) return
-    bodyChangesetTracker.markSynced(editor)
-    bodySyncedEditor = editor
+  suspend fun flush() {
+    flushDrafts()
   }
 
-  suspend fun flush(editor: Editor?) {
-    flushDrafts()
-    flushBodyChanges(editor)
+  suspend fun refetchDocument() {
+    Apollo.query(EditorScreen_Query(entityId = entityId))
+      .fetchPolicy(FetchPolicy.NetworkOnly)
+      .execute()
+    query.refetch()
   }
 
   fun flushDraftsAsync() {
@@ -248,37 +265,6 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     }
   }
 
-  private suspend fun flushBodyChanges(editor: Editor?) {
-    val activeEditor = editor ?: return
-    val documentId = documentId ?: return
-    try {
-      val changesets = bodyChangesetTracker.collect(activeEditor) {}
-      if (changesets.isEmpty()) return
-
-      val response =
-        Apollo.executeMutation(
-          EditorScreen_PushDocumentChangesets_Mutation(
-            input =
-              PushDocumentChangesetsInput(
-                changesets = changesets,
-                clientId = Preference.deviceId,
-                documentId = documentId,
-              )
-          )
-        )
-      bodyChangesetTracker.markSynced(response.pushDocumentChangesets.heads)
-      Apollo.query(EditorScreen_Query(entityId = entityId))
-        .fetchPolicy(FetchPolicy.NetworkOnly)
-        .execute()
-      query.refetch()
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      // FIXME: 조용히 실패함...
-      Sentry.captureException(e)
-    }
-  }
-
   private fun applyServerSnapshot(snapshot: EditorHeaderSnapshot) {
     val hasLocalTitleDraft = isTitleDirty
     val hasLocalSubtitleDraft = isSubtitleDirty
@@ -301,7 +287,7 @@ class EditorViewModel(val entityId: String) : ViewModel() {
   private val isSubtitleDirty: Boolean
     get() = subtitleDraft != serverSubtitle
 
-  private val documentId: String?
+  val documentId: String?
     get() = ((query.state as? QueryState.Success)?.data ?: return null).entity.node.onDocument?.id
 }
 

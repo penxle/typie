@@ -4,6 +4,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.Konfig
+import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.catchingNonCancellation
+import co.typie.editor.sync.orphanSweeper
 import co.typie.graphql.Apollo
 import co.typie.network.Http
 import co.typie.storage.Vault
@@ -20,8 +23,10 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.http.parameters
 import io.ktor.utils.io.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -60,6 +65,14 @@ object AuthService {
   }
 
   suspend fun logout() {
+    withContext(Dispatchers.Main) {
+      catchingNonCancellation { ActiveSyncEngines.flushAll() }
+      ActiveSyncEngines.stopAll()
+      catchingNonCancellation {
+        orphanSweeper.sweep(includeOpenDocuments = true, deleteOnSuccess = true)
+      }
+    }
+
     mutex.withLock {
       val sessionToken = Vault.authTokens?.sessionToken
       if (sessionToken != null) {

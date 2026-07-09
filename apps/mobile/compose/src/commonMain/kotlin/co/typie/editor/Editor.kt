@@ -32,6 +32,11 @@ import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
+import co.typie.editor.sync.MissingBytes
+import co.typie.editor.sync.PartitionedBytes
+import co.typie.editor.sync.SplitChangeset
+import co.typie.editor.sync.encodeLengthPrefixedBlobs
+import co.typie.editor.sync.toChangesetBytes
 import co.typie.platform.PlatformModule
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
@@ -387,6 +392,45 @@ internal constructor(
     )
   }
 
+  internal suspend fun changesetIds(): List<String> =
+    withContext(dispatcher) {
+      mutex.withLock {
+        if (disposed.load()) throw CancellationException("Editor disposed")
+        inner.changesetIds()
+      }
+    }
+
+  internal suspend fun missingChangesetsFor(remoteHeads: ByteArray): MissingBytes =
+    withContext(dispatcher) {
+      mutex.withLock {
+        if (disposed.load()) throw CancellationException("Editor disposed")
+        val result = inner.missingChangesetsTolerant(remoteHeads)
+        MissingBytes(bytes = result.bytes.toChangesetBytes(), withheld = result.withheld)
+      }
+    }
+
+  internal suspend fun splitChangesets(payload: ByteArray): List<SplitChangeset> =
+    withContext(dispatcher) {
+      mutex.withLock {
+        if (disposed.load()) throw CancellationException("Editor disposed")
+        inner.splitChangesets(payload).map {
+          SplitChangeset(id = it.id, bytes = it.bytes.toChangesetBytes())
+        }
+      }
+    }
+
+  internal suspend fun partitionRemoteChangesets(payload: ByteArray): PartitionedBytes =
+    withContext(dispatcher) {
+      mutex.withLock {
+        if (disposed.load()) throw CancellationException("Editor disposed")
+        val partitioned = inner.partitionRemoteChangesets(payload)
+        PartitionedBytes(
+          ready = partitioned.ready.toChangesetBytes(),
+          blocked = partitioned.blocked.toChangesetBytes(),
+        )
+      }
+    }
+
   internal suspend fun receiveRemoteChangeset(payload: ByteArray) {
     withSuspendFailureNotification {
       val events =
@@ -588,6 +632,29 @@ internal constructor(
         dispatcher = dispatcher,
         onError = onError,
         createInner = { PlatformModule.editorHost.createEditorFromGraph(graph, viewport) },
+      )
+
+    suspend fun createWithPending(
+      graph: ByteArray,
+      pending: List<ByteArray>,
+      viewport: Viewport,
+      scope: CoroutineScope,
+      themeVariant: ThemeVariant = ThemeVariant.LightWhite,
+      dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+      onError: (Editor, Throwable) -> Unit = { _, _ -> },
+    ): Editor =
+      createInitialized(
+        scope = scope,
+        themeVariant = themeVariant,
+        dispatcher = dispatcher,
+        onError = onError,
+        createInner = {
+          PlatformModule.editorHost.createEditorFromGraphWithPending(
+            graph,
+            encodeLengthPrefixedBlobs(pending),
+            viewport,
+          )
+        },
       )
 
     suspend fun createFromDoc(

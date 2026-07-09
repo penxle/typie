@@ -12,6 +12,8 @@ import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
+import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.viewport.EditorViewportState
 import kotlin.math.max
 
@@ -56,6 +58,7 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
     runtime.editor?.enqueue(Message.System(SystemEvent.SetFocused(false)))
     runtime.deactivateScene()
     flushDrafts()
+    catchingNonCancellation { ActiveSyncEngines.flushAll() }
     withFrameNanos {}
   }
 

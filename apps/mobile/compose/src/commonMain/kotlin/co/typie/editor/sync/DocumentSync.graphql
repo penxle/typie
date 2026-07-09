@@ -1,0 +1,25 @@
+mutation DocumentSync_PushDocumentChangesets_Mutation($input: PushDocumentChangesetsInput!) {
+  pushDocumentChangesets(input: $input) {
+    heads
+    durableHeads
+  }
+}
+
+mutation DocumentSync_PullDocumentChangesets_Mutation($input: PullDocumentChangesetsInput!) {
+  pullDocumentChangesets(input: $input) {
+    changesets
+    seq
+    heads
+    durableHeads
+    needsReload
+  }
+}
+
+subscription DocumentSync_ChangesetsUpdated_Subscription($documentId: ID!, $clientId: String!, $sinceSeq: String) {
+  documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, sinceSeq: $sinceSeq) {
+    changesets
+    seq
+    heads
+    durableHeads
+  }
+}
