@@ -8,6 +8,7 @@ use editor_state::{
     resolve_word_selection_expansion, table_cell_ids,
 };
 use editor_transaction::HistoryMeta;
+use editor_view::ExtendingHitSource;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -223,14 +224,21 @@ fn resolve_extend_to_selection(
                         .as_ref()
                         .and_then(|selection| selection.resolve(&view))
                         .is_some_and(|resolved| resolved.as_cell_rect().is_some());
-                let is_same_cell_content_hit = head_cell == anchor_cell
-                    && !is_cell_mode
-                    && editor
+                let is_same_cell_content_hit = if head_cell == anchor_cell && !is_cell_mode {
+                    editor
                         .view
                         .hit_test_extending(editor.state(), &anchor, head_page, head_x, head_y)
                         .is_some_and(|hit| {
-                            selection_endpoints_inside_cell(&view, &hit, anchor_cell)
-                        });
+                            hit.source == ExtendingHitSource::Exact
+                                && selection_endpoints_inside_cell(
+                                    &view,
+                                    &hit.selection,
+                                    anchor_cell,
+                                )
+                        })
+                } else {
+                    false
+                };
                 if (head_cell != anchor_cell || is_cell_mode || !is_same_cell_content_hit)
                     && let Some(selection) = cell_rect_selection(anchor_cell, head_cell, &view)
                 {
@@ -247,9 +255,9 @@ fn resolve_extend_to_selection(
             .hit_test_extending(editor.state(), &anchor, head_page, head_x, head_y)?;
 
     let selection = if let Some(base_selection) = base_selection {
-        extend_base_selection(&view, base_selection, head_hit)?
+        extend_base_selection(&view, base_selection, head_hit.selection)?
     } else {
-        extend_drag_hit(&view, anchor, head_hit)?
+        extend_drag_hit(&view, anchor, head_hit.selection)?
     };
     let selection = selection.normalize(&view).unwrap_or(selection);
 

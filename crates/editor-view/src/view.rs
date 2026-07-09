@@ -13,6 +13,7 @@ use crate::page::LayoutPage;
 use crate::page_fragment::{PageFragmentTree, build_page_fragment_tree};
 use crate::paginate::paginator::Paginator;
 use crate::query::cursor::CursorMetrics;
+use crate::query::hit_test::ExtendingHit;
 use crate::query::layout_index::LayoutIndex;
 use crate::view_state::{GapPhantom, GroupDecoration, PendingOverlay, ViewState};
 use crate::viewport::Viewport;
@@ -317,7 +318,7 @@ impl View {
         page_idx: usize,
         x: f32,
         y: f32,
-    ) -> Option<Selection> {
+    ) -> Option<ExtendingHit> {
         let layout_index = &self.layout.as_ref()?.layout_index;
         crate::query::hit_test::hit_test_extending(
             layout_index,

@@ -18,6 +18,7 @@ pub(crate) mod visit;
 
 pub use composition::CompositionRect;
 pub use cursor::CursorMetrics;
+pub use hit_test::{ExtendingHit, ExtendingHitSource};
 pub use placeholder::PlaceholderMetrics;
 pub use pointer_style::PointerStyle;
 pub use selection::{SelectionRect, SelectionRectKind};

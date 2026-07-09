@@ -8,6 +8,34 @@ use crate::paginate::types::{
     ChildAttachment, LayoutAtom, LayoutContent, LayoutLine, LayoutNode, SpacingKind,
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExtendingHit {
+    pub selection: Selection,
+    pub source: ExtendingHitSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExtendingHitSource {
+    Exact,
+    Fallback,
+}
+
+impl ExtendingHit {
+    fn exact(selection: Selection) -> Self {
+        Self {
+            selection,
+            source: ExtendingHitSource::Exact,
+        }
+    }
+
+    fn fallback(selection: Selection) -> Self {
+        Self {
+            selection,
+            source: ExtendingHitSource::Fallback,
+        }
+    }
+}
+
 pub(crate) fn hit_test(
     layout_index: &LayoutIndex,
     page_idx: usize,
@@ -39,42 +67,53 @@ pub(crate) fn hit_test_extending(
     page_idx: usize,
     x: f32,
     y: f32,
-) -> Option<Selection> {
+) -> Option<ExtendingHit> {
     let point = layout_index.point(page_idx, x, y)?;
     let anchor = anchor.resolve(view)?;
     let scope = layout_index.container_scope(point);
 
+    drag_exact_selection_at(layout_index, view, &anchor, point, scope)
+        .map(ExtendingHit::exact)
+        .or_else(|| {
+            drag_boundary_fallback(layout_index, view, &anchor, point, scope)
+                .map(ExtendingHit::fallback)
+        })
+}
+
+fn drag_exact_selection_at(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    anchor: &ResolvedPosition,
+    point: LayoutPoint,
+    scope: Option<&LayoutEntry>,
+) -> Option<Selection> {
     let is_scoped_drag_exact_hit_entry = |entry: &LayoutEntry, node: &LayoutNode| {
         is_drag_exact_hit_entry(entry, node)
             && scope.is_none_or(|scope| layout_index.entry_is_in_scope(entry, scope))
     };
 
-    if let Some(entry) = layout_index.exact_entry(point, is_scoped_drag_exact_hit_entry) {
-        if let Some(selection) =
-            hard_break::drag_selection_for_entry(layout_index, view, entry, point)
-        {
-            return Some(selection);
-        }
-        if let Some(selection) =
-            paragraph_break::drag_selection_for_entry(layout_index, view, &anchor, entry, point)
-        {
-            return Some(selection);
-        }
-        return match entry.content(layout_index) {
-            Some(LayoutContent::Line(_) | LayoutContent::Atom(_)) => {
+    let entry = layout_index.exact_entry(point, is_scoped_drag_exact_hit_entry)?;
+    drag_exact_selection_for_entry(layout_index, view, anchor, entry, point)
+}
+
+fn drag_exact_selection_for_entry(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    anchor: &ResolvedPosition,
+    entry: &LayoutEntry,
+    point: LayoutPoint,
+) -> Option<Selection> {
+    hard_break::drag_selection_for_entry(layout_index, view, entry, point)
+        .or_else(|| {
+            paragraph_break::drag_selection_for_entry(layout_index, view, anchor, entry, point)
+        })
+        .or_else(|| match entry.content(layout_index)? {
+            LayoutContent::Line(_) | LayoutContent::Atom(_) => {
                 text_or_atom_selection_for_entry(layout_index, entry, point.x)
             }
-            Some(LayoutContent::Box(b)) if b.style.monolithic => {
-                b.attachment.as_ref().map(select_unit)
-            }
-            Some(LayoutContent::Spacing(SpacingKind::Gap { .. })) => {
-                drag_boundary_fallback(layout_index, view, &anchor, point, scope)
-            }
-            Some(LayoutContent::Box(_) | LayoutContent::Spacing(SpacingKind::Fill)) | None => None,
-        };
-    }
-
-    drag_boundary_fallback(layout_index, view, &anchor, point, scope)
+            LayoutContent::Box(b) if b.style.monolithic => b.attachment.as_ref().map(select_unit),
+            LayoutContent::Box(_) | LayoutContent::Spacing(_) => None,
+        })
 }
 
 fn is_text_or_atom_hit_entry(_entry: &LayoutEntry, node: &LayoutNode) -> bool {
@@ -751,7 +790,9 @@ mod tests {
             result.is_some(),
             "hit_test_extending must return Some over hard-break glyph"
         );
-        let result_sel = result.unwrap();
+        let result = result.unwrap();
+        assert_eq!(result.source, ExtendingHitSource::Exact);
+        let result_sel = result.selection;
         assert_eq!(
             result_sel.anchor.node, para_id,
             "selection must be within the para"
@@ -768,7 +809,39 @@ mod tests {
     }
 
     #[test]
-    fn hit_test_extending_boundary_fallback_tiebreak() {
+    fn hit_test_extending_cell_padding_is_fallback() {
+        let (pd, left_cell, left_para, _right_para, index) =
+            table_with_short_cell_and_wrapped_neighbor(180.0);
+        let view = DocView::new(&pd);
+        let cell_rect = index
+            .box_rect(&left_cell)
+            .expect("left cell must have a box");
+        let (line_entry, _) =
+            first_line_for_para(&index, &left_para).expect("left para has a line");
+        let anchor = Position {
+            node: left_para,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
+        let x = cell_rect.x + cell_rect.width / 2.0;
+        let page_y = (cell_rect.y + line_entry.rect.y) / 2.0 - index.pages()[0].y_start;
+
+        let hit = hit_test_extending(&index, &view, &anchor, 0, x, page_y)
+            .expect("cell padding must still produce an extending hit");
+
+        assert_eq!(hit.source, ExtendingHitSource::Fallback);
+        assert_eq!(
+            hit.selection.anchor, hit.selection.head,
+            "padding fallback should produce a collapsed hit"
+        );
+        assert_eq!(
+            hit.selection.anchor.node, left_para,
+            "padding fallback should stay in the scoped cell"
+        );
+    }
+
+    #[test]
+    fn hit_test_extending_gap_tiebreak_is_exact() {
         let (pd, para1_id, para2_id, index) = two_para_gap_doc(400.0);
         let view = DocView::new(&pd);
 
@@ -812,8 +885,13 @@ mod tests {
             "after-anchor drag must return Some"
         );
 
-        let sel_before = sel_with_before_anchor.unwrap();
-        let sel_after = sel_with_after_anchor.unwrap();
+        let hit_before = sel_with_before_anchor.unwrap();
+        let hit_after = sel_with_after_anchor.unwrap();
+        assert_eq!(hit_before.source, ExtendingHitSource::Exact);
+        assert_eq!(hit_after.source, ExtendingHitSource::Exact);
+
+        let sel_before = hit_before.selection;
+        let sel_after = hit_after.selection;
 
         assert_ne!(
             (
