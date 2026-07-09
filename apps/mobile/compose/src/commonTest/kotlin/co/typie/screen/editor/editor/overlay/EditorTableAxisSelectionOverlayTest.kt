@@ -28,7 +28,6 @@ class EditorTableAxisSelectionOverlayTest {
           axis = Axis.Horizontal,
           index = 1,
           count = 2,
-          backgroundColor = "row-blue",
           center = Offset(10f, 80f),
         ),
         EditorTableAxisSelector(
@@ -36,7 +35,6 @@ class EditorTableAxisSelectionOverlayTest {
           axis = Axis.Vertical,
           index = 0,
           count = 2,
-          backgroundColor = "col-gray",
           center = Offset(35f, 20f),
         ),
       ),
@@ -75,8 +73,7 @@ class EditorTableAxisSelectionOverlayTest {
     val overlay =
       tableOverlay(
         isFocused = true,
-        rows =
-          listOf(TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null)),
+        rows = listOf(TableOverlayRow(index = 0, height = 40f, position = 40f)),
         cellSelection = cellSelection(anchorRow = 1, anchorCol = 0, headRow = 1, headCol = 1),
       )
 
@@ -124,8 +121,8 @@ class EditorTableAxisSelectionOverlayTest {
     cellSelection: TableOverlayCellSelection? = null,
     rows: List<TableOverlayRow> =
       listOf(
-        TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null),
-        TableOverlayRow(index = 1, height = 40f, position = 80f, backgroundColor = "row-blue"),
+        TableOverlayRow(index = 0, height = 40f, position = 40f),
+        TableOverlayRow(index = 1, height = 40f, position = 80f),
       ),
   ): TableOverlay =
     TableOverlay(
@@ -141,13 +138,8 @@ class EditorTableAxisSelectionOverlayTest {
       rows = rows,
       columns =
         listOf(
-          TableOverlayColumn(
-            index = 0,
-            widthAsPx = 50f,
-            position = 50f,
-            backgroundColor = "col-gray",
-          ),
-          TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f, backgroundColor = null),
+          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f),
+          TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f),
         ),
       rowCount = 2,
       isLastRowFragment = true,
@@ -164,7 +156,6 @@ class EditorTableAxisSelectionOverlayTest {
     headCol: Int,
   ): TableOverlayCellSelection =
     TableOverlayCellSelection(
-      backgroundColor = null,
       anchorRow = anchorRow,
       anchorCol = anchorCol,
       headRow = headRow,

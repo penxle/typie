@@ -1,9 +1,10 @@
-use syn::{Data, DataEnum, DeriveInput, Field, Fields, Variant};
+use syn::{Data, DataEnum, DeriveInput, Field, Fields, Token, Type, Variant};
 
 pub struct ModifierStateInput {
     pub enum_ident: syn::Ident,
     pub variants: Vec<VariantInfo>,
     pub computed: Vec<syn::Ident>,
+    pub extra_fields: Vec<(syn::Ident, Type)>,
 }
 
 pub enum VariantInfo {
@@ -31,6 +32,7 @@ impl ModifierStateInput {
             .collect::<syn::Result<Vec<_>>>()?;
 
         let mut computed = Vec::new();
+        let mut extra_fields = Vec::new();
         for attr in &input.attrs {
             if !attr.path().is_ident("modifier_state") {
                 continue;
@@ -39,6 +41,14 @@ impl ModifierStateInput {
                 if meta.path.is_ident("computed") {
                     meta.parse_nested_meta(|inner| {
                         computed.push(inner.path.require_ident()?.clone());
+                        Ok(())
+                    })
+                } else if meta.path.is_ident("extra") {
+                    meta.parse_nested_meta(|inner| {
+                        let ident = inner.path.require_ident()?.clone();
+                        inner.input.parse::<Token![:]>()?;
+                        let ty = inner.input.parse::<Type>()?;
+                        extra_fields.push((ident, ty));
                         Ok(())
                     })
                 } else {
@@ -51,6 +61,7 @@ impl ModifierStateInput {
             enum_ident,
             variants,
             computed,
+            extra_fields,
         })
     }
 }

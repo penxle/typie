@@ -59,8 +59,8 @@ pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError
                 commands::set_table_axis_background_color(tr, id, axis, index, color)?;
                 Ok(())
             }
-            TableOp::SetCellSelectionBackgroundColor { color } => {
-                commands::set_table_cell_selection_background_color(tr, id, color)?;
+            TableOp::SetCellBackgroundColor { color } => {
+                commands::set_table_cell_background_color(tr, id, color)?;
                 Ok(())
             }
         },

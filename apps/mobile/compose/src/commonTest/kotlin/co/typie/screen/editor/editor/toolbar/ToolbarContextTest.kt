@@ -555,5 +555,6 @@ class ToolbarContextTest {
       paragraphIndent = Tri.Absent,
       alignment = if (alignmentOnly) Tri.Mixed else Tri.Absent,
       effectiveBold = Tri.Absent,
+      cellBackgroundColor = null,
     )
 }

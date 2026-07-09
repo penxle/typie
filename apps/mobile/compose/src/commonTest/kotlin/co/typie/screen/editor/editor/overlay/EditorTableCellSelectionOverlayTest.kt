@@ -37,17 +37,11 @@ class EditorTableCellSelectionOverlayTest {
             listOf(
               tableOverlay(
                 bounds = Rect(x = 10f, y = 20f, width = 100f, height = 40f),
-                rows =
-                  listOf(
-                    TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null)
-                  ),
+                rows = listOf(TableOverlayRow(index = 0, height = 40f, position = 40f)),
               ),
               tableOverlay(
                 bounds = Rect(x = 10f, y = 80f, width = 100f, height = 40f),
-                rows =
-                  listOf(
-                    TableOverlayRow(index = 1, height = 40f, position = 40f, backgroundColor = null)
-                  ),
+                rows = listOf(TableOverlayRow(index = 1, height = 40f, position = 40f)),
               ),
             )
           },
@@ -91,8 +85,8 @@ class EditorTableCellSelectionOverlayTest {
       rows = rows,
       columns =
         listOf(
-          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f, backgroundColor = null),
-          TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f, backgroundColor = null),
+          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f),
+          TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f),
         ),
       rowCount = 2,
       isLastRowFragment = true,
@@ -100,12 +94,6 @@ class EditorTableCellSelectionOverlayTest {
       focusedRowIndex = null,
       focusedColIndex = null,
       cellSelection =
-        TableOverlayCellSelection(
-          backgroundColor = null,
-          anchorRow = 0,
-          anchorCol = 0,
-          headRow = 1,
-          headCol = 1,
-        ),
+        TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 1, headCol = 1),
     )
 }

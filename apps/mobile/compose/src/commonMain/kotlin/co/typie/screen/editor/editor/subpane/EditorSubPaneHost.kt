@@ -76,6 +76,7 @@ internal fun EditorSubPaneHost(
     is EditorSubPane.TableAxisActions ->
       EditorTableAxisActionsPane(
         pane = active,
+        currentBackgroundColor = editor?.state?.modifierState?.cellBackgroundColor,
         dismissRequestVersion = state.dismissRequestVersion,
         onAction = { message ->
           editor?.sync { enqueue(message) }

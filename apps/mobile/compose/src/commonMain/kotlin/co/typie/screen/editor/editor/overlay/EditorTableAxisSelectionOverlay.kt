@@ -56,7 +56,6 @@ internal data class EditorTableAxisSelector(
   val axis: Axis,
   val index: Int,
   val count: Int,
-  val backgroundColor: String?,
   val center: Offset,
 )
 
@@ -153,7 +152,6 @@ private fun resolveTableRowAxisSelector(
     axis = Axis.Horizontal,
     index = rowIndex,
     count = overlay.rowCount,
-    backgroundColor = overlay.rows[localRow].backgroundColor,
     center = Offset(x = overlay.bounds.x, y = overlay.bounds.y + (top + bottom) / 2f),
   )
 }
@@ -183,7 +181,6 @@ private fun resolveTableColumnAxisSelector(
     axis = Axis.Vertical,
     index = colIndex,
     count = overlay.columns.size,
-    backgroundColor = overlay.columns[localCol].backgroundColor,
     center = Offset(x = overlay.bounds.x + (left + right) / 2f, y = overlay.bounds.y),
   )
 }
@@ -248,13 +245,7 @@ private fun EditorTableAxisSelector.tableMessage(op: TableOp): Message =
   Message.Node(NodeOp.Table(id = overlay.tableId, op = op))
 
 private fun EditorTableAxisSelector.toActionsTarget(): EditorTableAxisActionsTarget =
-  EditorTableAxisActionsTarget(
-    tableId = overlay.tableId,
-    axis = axis,
-    index = index,
-    count = count,
-    backgroundColor = backgroundColor,
-  )
+  EditorTableAxisActionsTarget(tableId = overlay.tableId, axis = axis, index = index, count = count)
 
 internal fun resolveSelectorButtonRect(
   center: Offset,

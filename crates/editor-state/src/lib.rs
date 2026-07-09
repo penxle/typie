@@ -47,7 +47,7 @@ pub use builders::{
 pub use carry::{block_accepts_carry_kind, end_touched_textblocks};
 pub use cell_selection::{
     CellRect, as_cell_rect, as_node_selection, enclosing_table, enclosing_table_cell,
-    table_cell_ids,
+    selected_table_cell_ids, table_cell_ids,
 };
 pub use composition::*;
 pub use continuation::{apply_pending, continuation_at, continuation_from_neighbors};
@@ -62,7 +62,9 @@ pub use load_builder::BuildError;
 pub use modifier_resolution::resolve_effective_modifiers_at;
 pub use modifier_span::resolve_modifier_span_selection;
 pub use modifier_state::{resolve_modifier_state, resolve_modifier_state_in_range};
-pub use normalize::{doc_start_selection, farther_endpoint, is_unit_node_selection};
+pub use normalize::{
+    doc_start_selection, farther_endpoint, is_unit_node_selection, selected_child,
+};
 pub use paragraph_break::{
     before_or_same, closest_empty_paragraph_break_end_between, paragraph_break_at_end,
 };

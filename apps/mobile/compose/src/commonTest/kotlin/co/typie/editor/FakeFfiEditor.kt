@@ -275,6 +275,7 @@ internal class FakeFfiEditor(
         paragraphIndent = Tri.Absent,
         alignment = Tri.Absent,
         effectiveBold = Tri.Absent,
+        cellBackgroundColor = null,
       )
   }
 }

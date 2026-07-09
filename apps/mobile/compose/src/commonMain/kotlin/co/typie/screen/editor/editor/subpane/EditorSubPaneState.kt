@@ -38,7 +38,6 @@ internal data class EditorTableAxisActionsTarget(
   val axis: Axis,
   val index: Int,
   val count: Int,
-  val backgroundColor: String?,
 )
 
 internal enum class EditorSubPaneVisibleAreaMode {

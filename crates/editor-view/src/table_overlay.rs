@@ -10,18 +10,6 @@ use crate::page_fragment::{PageFragmentBox, PageFragmentNode, PageFragmentTree};
 const TABLE_BORDER_WIDTH: f32 = 1.0;
 const MIN_CELL_WIDTH: f32 = 40.0;
 
-fn cell_background_color(view: &DocView, cell_id: Dot) -> Option<String> {
-    view.node(cell_id)?
-        .block_modifier(ModifierType::BackgroundColor)
-        .and_then(|m| {
-            if let Modifier::BackgroundColor { value } = m {
-                Some(value.clone())
-            } else {
-                None
-            }
-        })
-}
-
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -49,7 +37,6 @@ pub struct TableOverlay {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct TableOverlayCellSelection {
-    pub background_color: Option<String>,
     pub anchor_row: usize,
     pub anchor_col: usize,
     pub head_row: usize,
@@ -63,7 +50,6 @@ pub struct TableOverlayRow {
     pub index: usize,
     pub height: f32,
     pub position: f32,
-    pub background_color: Option<String>,
 }
 
 #[ffi]
@@ -73,13 +59,11 @@ pub struct TableOverlayColumn {
     pub index: usize,
     pub width_as_px: f32,
     pub position: f32,
-    pub background_color: Option<String>,
 }
 
 #[derive(Debug)]
 struct OverlayCell {
     index: usize,
-    node: Dot,
     rect: Rect,
 }
 
@@ -201,7 +185,6 @@ fn build_table_overlay(
                     index: cell.index,
                     width_as_px: (cell.rect.width - 2.0 * TABLE_BORDER_WIDTH).max(0.0),
                     position: cell.rect.right() - table_rect.x,
-                    background_color: cell_background_color(view, cell.node),
                 })
                 .collect()
         })
@@ -215,10 +198,6 @@ fn build_table_overlay(
             index: row.index,
             height: (row.rect.height - 2.0 * TABLE_BORDER_WIDTH).max(0.0),
             position: row.rect.bottom() - fragment_top,
-            background_color: row
-                .cells
-                .first()
-                .and_then(|cell| cell_background_color(view, cell.node)),
         })
         .collect::<Vec<_>>();
 
@@ -252,19 +231,6 @@ fn build_table_overlay(
         && selection.is_some_and(|sel| is_table_boundary_selection(sel, view, table_id));
 
     let is_table_cell_selection = cell_rect.is_some() || is_cross_boundary;
-
-    let cell_selection_background_color = cell_rect.as_ref().and_then(|rect| {
-        let mut common: Option<Option<String>> = None;
-        for cell in rect.cells() {
-            let color = cell_background_color(view, cell.id());
-            match &common {
-                None => common = Some(color),
-                Some(c) if *c != color => return None,
-                _ => {}
-            }
-        }
-        common.flatten()
-    });
 
     let (
         global_cell_selection_row_start,
@@ -311,7 +277,6 @@ fn build_table_overlay(
         {
             if let Some(rect) = cell_rect.as_ref() {
                 Some(TableOverlayCellSelection {
-                    background_color: cell_selection_background_color,
                     anchor_row: rect.anchor_cell.parent()?.index()?,
                     anchor_col: rect.anchor_cell.index()?,
                     head_row: rect.head_cell.parent()?.index()?,
@@ -319,7 +284,6 @@ fn build_table_overlay(
                 })
             } else {
                 Some(TableOverlayCellSelection {
-                    background_color: None,
                     anchor_row: row_start,
                     anchor_col: col_start,
                     head_row: row_end,
@@ -377,7 +341,6 @@ fn visible_rows(table_box: &PageFragmentBox, view: &DocView) -> Vec<OverlayRow> 
                     let cell_view = view.node(cell_box.node)?;
                     (cell_view.node_type() == NodeType::TableCell).then(|| OverlayCell {
                         index: cell_view.index().unwrap_or(0),
-                        node: cell_box.node,
                         rect: cell_node.rect,
                     })
                 })
@@ -830,16 +793,6 @@ mod tests {
         // table alignment is Center (set via block_modifiers)
         assert_eq!(ov.align, Alignment::Center);
 
-        // cell00 has background #fff; columns[0] background_color reflects cell00 bg
-        assert_eq!(ov.columns[0].background_color, Some("#fff".to_string()));
-        // cell01 has no background
-        assert_eq!(ov.columns[1].background_color, None);
-
-        // rows[0] background_color = first cell of row0 = cell00 = "#fff"
-        assert_eq!(ov.rows[0].background_color, Some("#fff".to_string()));
-        // rows[1] background_color = first cell of row1 = cell10 = no bg
-        assert_eq!(ov.rows[1].background_color, None);
-
         assert!(!ov.is_focused);
         assert_eq!(ov.cell_selection, None);
     }
@@ -877,9 +830,6 @@ mod tests {
         assert_eq!(cell_selection.anchor_col, 0);
         assert_eq!(cell_selection.head_row, 0);
         assert_eq!(cell_selection.head_col, 0);
-
-        // cell00 bg = "#fff" → cell_selection_background_color carries it
-        assert_eq!(cell_selection.background_color, Some("#fff".to_string()));
 
         // anchor is inside table (row0 is an ancestor of table) → is_focused
         assert!(ov.is_focused);
@@ -922,8 +872,6 @@ mod tests {
         assert_eq!(cell_selection.anchor_row.max(cell_selection.head_row), 0);
         assert_eq!(cell_selection.anchor_col.min(cell_selection.head_col), 0);
         assert_eq!(cell_selection.anchor_col.max(cell_selection.head_col), 1);
-        // cell00 bg = "#fff", cell01 has None → mixed → common bg = None
-        assert_eq!(cell_selection.background_color, None);
     }
 
     #[test]

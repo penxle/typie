@@ -231,7 +231,7 @@ pub enum TableOp {
         index: usize,
         color: Option<String>,
     },
-    SetCellSelectionBackgroundColor {
+    SetCellBackgroundColor {
         color: Option<String>,
     },
 }

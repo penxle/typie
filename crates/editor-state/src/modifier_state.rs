@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
 use editor_common::Tri;
+use editor_crdt::Dot;
 use editor_model::{
-    Modifier, ModifierState, ModifierType, NodeType, NodeView, Schema, text_style_default_modifier,
+    BackgroundColorValue, DocView, Modifier, ModifierState, ModifierType, NodeType, NodeView,
+    Schema, text_style_default_modifier,
 };
 use strum::IntoEnumIterator;
 
@@ -369,7 +371,8 @@ pub fn resolve_modifier_state(
 ) -> Option<ModifierState> {
     let view = state.view();
     let rs = sel.resolve(&view)?;
-    if rs.is_collapsed() {
+    let cell_background_color = cell_background_color_for_selection(&view, sel, &rs);
+    let mut out = if rs.is_collapsed() {
         let caret = caret_modifiers(state, &sel.head, pending);
         let modifiers = if let Some(node) = view.node(sel.head.node)
             && Schema::node_spec(node.node_type()).is_textblock()
@@ -395,10 +398,50 @@ pub fn resolve_modifier_state(
         if is_bold_set(modifiers.values()) {
             out.effective_bold = Tri::Uniform { value: () };
         }
-        Some(out)
+        out
     } else {
-        Some(resolve_modifier_state_in_range(state, &rs))
+        resolve_modifier_state_in_range(state, &rs)
+    };
+    out.cell_background_color = cell_background_color;
+    Some(out)
+}
+
+fn cell_background_color_for_selection(
+    view: &DocView,
+    sel: &Selection,
+    rs: &ResolvedSelection,
+) -> Option<Tri<BackgroundColorValue>> {
+    cell_background_color_for_cells(view, crate::selected_table_cell_ids(view, sel, rs)?)
+}
+
+fn cell_background_color_for_cells(
+    view: &DocView,
+    cells: impl IntoIterator<Item = Dot>,
+) -> Option<Tri<BackgroundColorValue>> {
+    let mut common: Option<Option<String>> = None;
+    for cell in cells {
+        let color = table_cell_background_color(view, cell);
+        match &common {
+            None => common = Some(color),
+            Some(existing) if *existing != color => return Some(Tri::Mixed),
+            _ => {}
+        }
     }
+    common.map(|color| match color {
+        Some(value) => Tri::Uniform {
+            value: BackgroundColorValue { value },
+        },
+        None => Tri::Absent,
+    })
+}
+
+fn table_cell_background_color(view: &DocView, cell_id: Dot) -> Option<String> {
+    view.node(cell_id)?
+        .block_modifier(ModifierType::BackgroundColor)
+        .and_then(|modifier| match modifier {
+            Modifier::BackgroundColor { value } => Some(value.clone()),
+            _ => None,
+        })
 }
 
 #[cfg(test)]
@@ -411,8 +454,8 @@ mod tests {
 
     use crate::pending_modifier::PendingModifier;
     use crate::projected_state::ProjectedState;
-    use crate::resolve_modifier_state;
     use crate::{Position, selection::Selection};
+    use crate::{cell_rect_selection, resolve_modifier_state};
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
@@ -467,6 +510,111 @@ mod tests {
         (ProjectedState::from_graph(graph).unwrap(), title)
     }
 
+    fn two_by_two_table_state() -> (ProjectedState, Dot, Dot, Dot, Dot, Dot, Dot, Dot, Dot) {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let table = graph
+            .add_mut(seq_block(0, NodeType::Table, vec![root]))
+            .unwrap()
+            .id;
+        let row0 = graph
+            .add_mut(seq_block(1, NodeType::TableRow, vec![root, table]))
+            .unwrap()
+            .id;
+        let cell00 = graph
+            .add_mut(seq_block(2, NodeType::TableCell, vec![root, table, row0]))
+            .unwrap()
+            .id;
+        let para00 = graph
+            .add_mut(seq_block(
+                3,
+                NodeType::Paragraph,
+                vec![root, table, row0, cell00],
+            ))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(4, 'a')).unwrap();
+        let cell01 = graph
+            .add_mut(seq_block(5, NodeType::TableCell, vec![root, table, row0]))
+            .unwrap()
+            .id;
+        graph
+            .add_mut(seq_block(
+                6,
+                NodeType::Paragraph,
+                vec![root, table, row0, cell01],
+            ))
+            .unwrap();
+        graph.add_mut(seq_char(7, 'b')).unwrap();
+        let row1 = graph
+            .add_mut(seq_block(8, NodeType::TableRow, vec![root, table]))
+            .unwrap()
+            .id;
+        let cell10 = graph
+            .add_mut(seq_block(9, NodeType::TableCell, vec![root, table, row1]))
+            .unwrap()
+            .id;
+        graph
+            .add_mut(seq_block(
+                10,
+                NodeType::Paragraph,
+                vec![root, table, row1, cell10],
+            ))
+            .unwrap();
+        graph.add_mut(seq_char(11, 'c')).unwrap();
+        let cell11 = graph
+            .add_mut(seq_block(12, NodeType::TableCell, vec![root, table, row1]))
+            .unwrap()
+            .id;
+        graph
+            .add_mut(seq_block(
+                13,
+                NodeType::Paragraph,
+                vec![root, table, row1, cell11],
+            ))
+            .unwrap();
+        graph.add_mut(seq_char(14, 'd')).unwrap();
+
+        (
+            ProjectedState::from_graph(graph).unwrap(),
+            table,
+            row0,
+            cell00,
+            cell01,
+            row1,
+            cell10,
+            cell11,
+            para00,
+        )
+    }
+
+    fn single_empty_table_cell_state() -> (ProjectedState, Dot, Dot) {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let table = graph
+            .add_mut(seq_block(0, NodeType::Table, vec![root]))
+            .unwrap()
+            .id;
+        let row = graph
+            .add_mut(seq_block(1, NodeType::TableRow, vec![root, table]))
+            .unwrap()
+            .id;
+        let cell = graph
+            .add_mut(seq_block(2, NodeType::TableCell, vec![root, table, row]))
+            .unwrap()
+            .id;
+        let para = graph
+            .add_mut(seq_block(
+                3,
+                NodeType::Paragraph,
+                vec![root, table, row, cell],
+            ))
+            .unwrap()
+            .id;
+
+        (ProjectedState::from_graph(graph).unwrap(), cell, para)
+    }
+
     fn sel(anchor: (Dot, usize), head: (Dot, usize)) -> Selection {
         Selection::new(
             Position::new(anchor.0, anchor.1),
@@ -491,6 +639,96 @@ mod tests {
                 }
             })
             .unwrap()
+    }
+
+    fn set_cell_background(state: &mut ProjectedState, cell: Dot, value: &str) {
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: cell,
+                modifier: Modifier::BackgroundColor {
+                    value: value.to_string(),
+                },
+            }))
+            .unwrap();
+    }
+
+    #[test]
+    fn cell_background_color_collapsed_inside_cell_uses_cell_modifier() {
+        let (mut state, _table, _row0, cell00, .., para00) = two_by_two_table_state();
+        set_cell_background(&mut state, cell00, "yellow");
+
+        assert_eq!(
+            resolve_modifier_state(&state, &collapsed(para00, 1), &[])
+                .unwrap()
+                .cell_background_color,
+            Some(Tri::Uniform {
+                value: editor_model::BackgroundColorValue {
+                    value: "yellow".to_string()
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn cell_background_color_collapsed_inside_empty_cell_uses_cell_modifier() {
+        let (mut state, cell, para) = single_empty_table_cell_state();
+        set_cell_background(&mut state, cell, "yellow");
+
+        assert_eq!(
+            resolve_modifier_state(&state, &collapsed(para, 0), &[])
+                .unwrap()
+                .cell_background_color,
+            Some(Tri::Uniform {
+                value: editor_model::BackgroundColorValue {
+                    value: "yellow".to_string()
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn cell_background_color_collapsed_inside_cell_reports_absent_for_no_background() {
+        let (state, _table, _row0, _cell00, .., para00) = two_by_two_table_state();
+
+        assert_eq!(
+            resolve_modifier_state(&state, &collapsed(para00, 1), &[])
+                .unwrap()
+                .cell_background_color,
+            Some(Tri::Absent)
+        );
+    }
+
+    #[test]
+    fn cell_background_color_cell_rect_reports_mixed_for_non_uniform_backgrounds() {
+        let (mut state, _table, _row0, cell00, cell01, ..) = two_by_two_table_state();
+        set_cell_background(&mut state, cell00, "yellow");
+        let selection = {
+            let view = state.view();
+            cell_rect_selection(cell00, cell01, &view).unwrap()
+        };
+
+        assert_eq!(
+            resolve_modifier_state(&state, &selection, &[])
+                .unwrap()
+                .cell_background_color,
+            Some(Tri::Mixed)
+        );
+    }
+
+    #[test]
+    fn cell_background_color_cell_rect_reports_absent_for_uniform_no_background() {
+        let (state, _table, _row0, cell00, cell01, ..) = two_by_two_table_state();
+        let selection = {
+            let view = state.view();
+            cell_rect_selection(cell00, cell01, &view).unwrap()
+        };
+
+        assert_eq!(
+            resolve_modifier_state(&state, &selection, &[])
+                .unwrap()
+                .cell_background_color,
+            Some(Tri::Absent)
+        );
     }
 
     // §4.1: collapsed uniform — caret inside a bold run → bold == Uniform; pending applies

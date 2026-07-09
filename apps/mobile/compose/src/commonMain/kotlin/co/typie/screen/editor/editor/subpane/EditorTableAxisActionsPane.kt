@@ -15,9 +15,11 @@ import co.typie.editor.EditorTheme
 import co.typie.editor.EditorValues
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.Axis
+import co.typie.editor.ffi.BackgroundColorValue
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.TableOp
+import co.typie.editor.ffi.Tri
 import co.typie.icons.Lucide
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.component.Divider
@@ -39,6 +41,7 @@ private val TableAxisActionsSheetRowPadding = PaddingValues(vertical = 12.dp)
 @Composable
 internal fun EditorTableAxisActionsPane(
   pane: EditorSubPane.TableAxisActions,
+  currentBackgroundColor: Tri<BackgroundColorValue>?,
   dismissRequestVersion: Int,
   onAction: (Message) -> Unit,
   onDismissStarted: () -> Unit,
@@ -76,6 +79,7 @@ internal fun EditorTableAxisActionsPane(
 
     EditorTableAxisActionsSheet(
       target = pane.target,
+      currentBackgroundColor = currentBackgroundColor,
       onAction = { message ->
         dismiss()
         onAction(message)
@@ -87,6 +91,7 @@ internal fun EditorTableAxisActionsPane(
 @Composable
 private fun EditorTableAxisActionsSheet(
   target: EditorTableAxisActionsTarget,
+  currentBackgroundColor: Tri<BackgroundColorValue>?,
   onAction: (Message) -> Unit,
 ) {
   val isRow = target.axis == Axis.Horizontal
@@ -171,6 +176,7 @@ private fun EditorTableAxisActionsSheet(
     Divider()
     EditorTableAxisBackgroundColorSection(
       target = target,
+      currentBackgroundColor = currentBackgroundColor,
       onSelect = { value ->
         onAction(
           target.tableMessage(
@@ -213,6 +219,7 @@ private fun EditorTableAxisActionsSheet(
 @Composable
 private fun EditorTableAxisBackgroundColorSection(
   target: EditorTableAxisActionsTarget,
+  currentBackgroundColor: Tri<BackgroundColorValue>?,
   onSelect: suspend (String) -> Unit,
 ) {
   val variant = currentEditorThemeVariant()
@@ -230,13 +237,21 @@ private fun EditorTableAxisBackgroundColorSection(
     )
     EditorSettingsSwatchRow(
       options = EditorValues.textBackgroundColor,
-      selected = target.backgroundColor ?: "none",
+      selected = currentBackgroundColor.currentValue() ?: "",
       onSelect = onSelect,
       theme = editorTheme,
       cornerRadius = AppShapes.sm * 2,
     )
   }
 }
+
+private fun Tri<BackgroundColorValue>?.currentValue(): String? =
+  when (this) {
+    is Tri.Uniform -> value.value
+    Tri.Absent -> "none"
+    Tri.Mixed,
+    null -> null
+  }
 
 private fun EditorTableAxisActionsTarget.tableMessage(op: TableOp): Message =
   Message.Node(NodeOp.Table(id = tableId, op = op))

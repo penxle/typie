@@ -389,20 +389,21 @@ pub(crate) fn normalize_position(pos: &Position, _view: &DocView) -> Position {
 // ── §2.5 small public helpers ─────────────────────────────────────────────────
 
 pub fn is_unit_node_selection(sel: &Selection, view: &DocView) -> bool {
+    selected_child(sel, view).is_some_and(|child| classify::child_is_unit(&child))
+}
+
+pub fn selected_child<'a>(sel: &Selection, view: &'a DocView<'a>) -> Option<ChildView<'a>> {
     if sel.anchor.node != sel.head.node {
-        return false;
+        return None;
     }
     let (lo, hi) = (
         sel.anchor.offset.min(sel.head.offset),
         sel.anchor.offset.max(sel.head.offset),
     );
     if lo.checked_add(1) != Some(hi) {
-        return false;
+        return None;
     }
-    match view.node(sel.anchor.node).and_then(|n| n.child_at(lo)) {
-        Some(child) => classify::child_is_unit(&child),
-        None => false,
-    }
+    view.node(sel.anchor.node).and_then(|n| n.child_at(lo))
 }
 
 pub fn farther_endpoint(
@@ -830,6 +831,58 @@ mod tests {
         let view2 = DocView::new(&pd2);
         let sel = Selection::new(pos(p1, 0), pos(p1, 2));
         assert!(!is_unit_node_selection(&sel, &view2));
+    }
+
+    #[test]
+    fn test_7_selected_child_returns_table_unit_block() {
+        let root = Dot::ROOT;
+        let table = Dot::new(1, 1);
+        let row = Dot::new(1, 2);
+        let cell = Dot::new(1, 3);
+        let para = Dot::new(1, 4);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                    attrs: vec![],
+                },
+            ),
+            (
+                cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        let view = DocView::new(&pd);
+        let sel = Selection::new(pos(root, 0), pos(root, 1));
+
+        match selected_child(&sel, &view) {
+            Some(ChildView::Block(node)) => assert_eq!(node.id(), table),
+            _ => panic!("expected selected table block"),
+        }
+        assert!(is_unit_node_selection(&sel, &view));
     }
 
     #[test]

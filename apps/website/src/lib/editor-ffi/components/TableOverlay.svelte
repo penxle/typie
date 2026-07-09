@@ -49,6 +49,13 @@
   const cellBackgroundColors = $derived(
     values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
   );
+  const tableCellBackgroundCurrentValue = $derived(
+    editor?.modifierState?.cell_background_color?.type === 'uniform'
+      ? editor.modifierState.cell_background_color.value.value
+      : editor?.modifierState?.cell_background_color?.type === 'absent'
+        ? 'none'
+        : undefined,
+  );
 
   let resizing = $state<{
     colIndex: number;
@@ -383,6 +390,7 @@
                   op: { type: 'select_axis', axis: 'vertical', index: colIndex },
                 },
               });
+              editor?.flush();
             }}
             ontransitionend={() => (menuOpenColIndex = null)}
             placement="bottom-start"
@@ -454,7 +462,7 @@
                 <li>
                   <ToolbarColorGrid
                     columns={8}
-                    currentValue={activeColumn.background_color ?? 'none'}
+                    currentValue={tableCellBackgroundCurrentValue}
                     items={cellBackgroundColors}
                     onClose={close}
                     onSelect={(value) => {
@@ -530,6 +538,7 @@
                   op: { type: 'select_axis', axis: 'horizontal', index: rowIndex },
                 },
               });
+              editor?.flush();
             }}
             ontransitionend={() => (menuOpenRowIndex = null)}
             placement="right-start"
@@ -601,7 +610,7 @@
                 <li>
                   <ToolbarColorGrid
                     columns={8}
-                    currentValue={activeRow.background_color ?? 'none'}
+                    currentValue={tableCellBackgroundCurrentValue}
                     items={cellBackgroundColors}
                     onClose={close}
                     onSelect={(value) => {
@@ -1029,7 +1038,7 @@
           <li>
             <ToolbarColorGrid
               columns={8}
-              currentValue={overlay.cell_selection?.background_color ?? 'none'}
+              currentValue={tableCellBackgroundCurrentValue}
               items={cellBackgroundColors}
               onClose={close}
               onSelect={(value) => {
@@ -1040,7 +1049,7 @@
                     type: 'table',
                     id: overlay.table_id,
                     op: {
-                      type: 'set_cell_selection_background_color',
+                      type: 'set_cell_background_color',
                       color: value === 'none' ? undefined : value,
                     },
                   },

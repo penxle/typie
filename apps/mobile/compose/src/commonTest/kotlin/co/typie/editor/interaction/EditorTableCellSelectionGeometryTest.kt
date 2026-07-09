@@ -67,8 +67,7 @@ class EditorTableCellSelectionGeometryTest {
     val overlay =
       tableOverlay(
         isFocused = true,
-        rows =
-          listOf(TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null)),
+        rows = listOf(TableOverlayRow(index = 0, height = 40f, position = 40f)),
         cellSelection = cellSelection(anchorRow = 0, anchorCol = 0, headRow = 1, headCol = 1),
       )
 
@@ -97,8 +96,8 @@ class EditorTableCellSelectionGeometryTest {
     cellSelection: TableOverlayCellSelection? = null,
     rows: List<TableOverlayRow> =
       listOf(
-        TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null),
-        TableOverlayRow(index = 1, height = 40f, position = 80f, backgroundColor = null),
+        TableOverlayRow(index = 0, height = 40f, position = 40f),
+        TableOverlayRow(index = 1, height = 40f, position = 80f),
       ),
   ): TableOverlay =
     TableOverlay(
@@ -114,8 +113,8 @@ class EditorTableCellSelectionGeometryTest {
       rows = rows,
       columns =
         listOf(
-          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f, backgroundColor = null),
-          TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f, backgroundColor = null),
+          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f),
+          TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f),
         ),
       rowCount = 2,
       isLastRowFragment = true,
@@ -132,7 +131,6 @@ class EditorTableCellSelectionGeometryTest {
     headCol: Int,
   ): TableOverlayCellSelection =
     TableOverlayCellSelection(
-      backgroundColor = null,
       anchorRow = anchorRow,
       anchorCol = anchorCol,
       headRow = headRow,

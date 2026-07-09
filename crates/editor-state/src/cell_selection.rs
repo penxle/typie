@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, LeafView, NodeType, NodeView};
 
-use crate::selection::ResolvedSelection;
+use crate::selection::{ResolvedSelection, Selection};
 
 fn block_child_at<'a>(node: &NodeView<'a>, i: usize) -> Option<NodeView<'a>> {
     match node.child_at(i) {
@@ -178,6 +178,18 @@ pub fn enclosing_table<'a>(view: &'a DocView<'a>, cell: Dot) -> Option<Dot> {
         .map(|n| n.id())
 }
 
+fn table_cells(table: &NodeView) -> Vec<Dot> {
+    let mut out = Vec::new();
+    for row in table.child_blocks() {
+        for cell in row.child_blocks() {
+            if cell.node_type() == NodeType::TableCell {
+                out.push(cell.id());
+            }
+        }
+    }
+    out
+}
+
 pub fn table_cell_ids<'a>(view: &'a DocView<'a>, cell: Dot) -> Vec<Dot> {
     let cell_node = view.node(cell);
     if cell_node.as_ref().map(|n| n.node_type()) != Some(NodeType::TableCell) {
@@ -191,13 +203,27 @@ pub fn table_cell_ids<'a>(view: &'a DocView<'a>, cell: Dot) -> Vec<Dot> {
         Some(t) => t,
         None => return vec![],
     };
-    let mut out = Vec::new();
-    for row in table.child_blocks() {
-        for cell_child in row.child_blocks() {
-            out.push(cell_child.id());
-        }
+    table_cells(&table)
+}
+
+pub fn selected_table_cell_ids<'a>(
+    view: &'a DocView<'a>,
+    sel: &Selection,
+    rs: &ResolvedSelection<'a>,
+) -> Option<Vec<Dot>> {
+    if let Some(rect) = as_cell_rect(rs) {
+        return Some(rect.cells().into_iter().map(|cell| cell.id()).collect());
     }
-    out
+
+    if let Some(ChildView::Block(table)) = crate::normalize::selected_child(sel, view)
+        && table.node_type() == NodeType::Table
+    {
+        return Some(table_cells(&table));
+    }
+
+    let anchor_cell = enclosing_table_cell(view, sel.anchor.node)?;
+    let head_cell = enclosing_table_cell(view, sel.head.node)?;
+    (anchor_cell == head_cell).then_some(vec![anchor_cell])
 }
 
 #[cfg(test)]

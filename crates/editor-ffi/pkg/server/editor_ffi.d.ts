@@ -291,6 +291,7 @@ export interface ModifierState {
     paragraph_indent: Tri<ParagraphIndentValue>;
     alignment: Tri<AlignmentValue>;
     effective_bold: Tri<undefined>;
+    cell_background_color: Tri<BackgroundColorValue> | undefined;
 }
 
 export interface PageRect {
@@ -478,7 +479,6 @@ export interface TableOverlay {
 }
 
 export interface TableOverlayCellSelection {
-    background_color: string | undefined;
     anchor_row: number;
     anchor_col: number;
     head_row: number;
@@ -489,14 +489,12 @@ export interface TableOverlayColumn {
     index: number;
     width_as_px: number;
     position: number;
-    background_color: string | undefined;
 }
 
 export interface TableOverlayRow {
     index: number;
     height: number;
     position: number;
-    background_color: string | undefined;
 }
 
 export interface TextColorValue {
@@ -675,7 +673,7 @@ export type TableCellNodeAttr = ({ type: "col_width" } & number | undefined) | (
 
 export type TableNodeAttr = ({ type: "border_style" } & TableBorderStyle) | ({ type: "proportion" } & number);
 
-export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined; index: number | undefined } | { type: "set_column_widths"; widths: number[] } | { type: "set_border_style"; border_style: TableBorderStyle } | { type: "set_proportion"; proportion: number } | { type: "set_axis_background_color"; axis: Axis; index: number; color: string | undefined } | { type: "set_cell_selection_background_color"; color: string | undefined };
+export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined; index: number | undefined } | { type: "set_column_widths"; widths: number[] } | { type: "set_border_style"; border_style: TableBorderStyle } | { type: "set_proportion"; proportion: number } | { type: "set_axis_background_color"; axis: Axis; index: number; color: string | undefined } | { type: "set_cell_background_color"; color: string | undefined };
 
 export type TableRowNodeAttr = void;
 

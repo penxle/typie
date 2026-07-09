@@ -121,14 +121,14 @@ class EditorTableColumnResizeOverlayTest {
       maxProportionWidth = 160f,
       rows =
         listOf(
-          TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null),
-          TableOverlayRow(index = 1, height = 40f, position = 80f, backgroundColor = null),
+          TableOverlayRow(index = 0, height = 40f, position = 40f),
+          TableOverlayRow(index = 1, height = 40f, position = 80f),
         ),
       columns =
         listOf(
-          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f, backgroundColor = null),
-          TableOverlayColumn(index = 1, widthAsPx = 70f, position = 120f, backgroundColor = null),
-          TableOverlayColumn(index = 2, widthAsPx = 60f, position = 180f, backgroundColor = null),
+          TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f),
+          TableOverlayColumn(index = 1, widthAsPx = 70f, position = 120f),
+          TableOverlayColumn(index = 2, widthAsPx = 60f, position = 180f),
         ),
       rowCount = 2,
       isLastRowFragment = true,

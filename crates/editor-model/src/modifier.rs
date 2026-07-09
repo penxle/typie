@@ -35,7 +35,10 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
 #[strum_discriminants(serde(rename_all = "snake_case"))]
 #[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[modifier_state(computed(effective_bold))]
+#[modifier_state(
+    computed(effective_bold),
+    extra(cell_background_color: Option<::editor_common::Tri<BackgroundColorValue>>)
+)]
 pub enum Modifier {
     Bold,
     Italic,

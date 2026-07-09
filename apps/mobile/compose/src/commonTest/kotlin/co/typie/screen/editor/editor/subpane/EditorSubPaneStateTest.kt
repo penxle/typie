@@ -347,7 +347,6 @@ class EditorSubPaneStateTest {
       axis = Axis.Horizontal,
       index = index,
       count = 3,
-      backgroundColor = null,
     )
 
   private fun selection(offset: Int): Selection {
