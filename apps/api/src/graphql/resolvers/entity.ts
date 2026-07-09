@@ -8,6 +8,7 @@ import { match } from 'ts-pattern';
 import {
   db,
   Documents,
+  DocumentStates,
   Entities,
   first,
   firstOrThrow,
@@ -24,7 +25,7 @@ import {
 import { env } from '#/env.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
+import { buildFreshV2Content, copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertPlanRule } from '#/utils/plan.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
@@ -42,6 +43,7 @@ import {
   SiteView,
   User,
 } from '../objects.ts';
+import type { FreshV2Content } from '#/utils/index.ts';
 
 /**
  * * Types
@@ -1218,6 +1220,34 @@ builder.mutationFields((t) => ({
         targetDepth = parentEntity.depth + 1;
       }
 
+      const descendantV2Docs = await db.execute<{ document_id: string }>(sql`
+        WITH RECURSIVE tree AS (
+          SELECT ${Entities.id}
+          FROM ${Entities}
+          WHERE ${inArray(
+            Entities.id,
+            entities.map((entity) => entity.id),
+          )}
+          UNION ALL
+          SELECT ${Entities.id}
+          FROM ${Entities}
+          JOIN tree ON ${Entities.parentId} = tree.id
+          WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+        )
+        SELECT ${Documents.id} AS document_id
+        FROM tree
+        JOIN ${Documents} ON ${Documents.entityId} = tree.id
+        JOIN ${DocumentStates} ON ${DocumentStates.documentId} = ${Documents.id}
+      `);
+
+      const v2Map = new Map<string, FreshV2Content>();
+      for (const row of descendantV2Docs) {
+        const content = await buildFreshV2Content(row.document_id);
+        if (content) {
+          v2Map.set(row.document_id, content);
+        }
+      }
+
       const newEntityIds = await db.transaction(async (tx) => {
         const ids: string[] = [];
         let lastOrder = input.lowerOrder ?? null;
@@ -1235,6 +1265,7 @@ builder.mutationFields((t) => ({
             targetDepth,
             order,
             ctx.session.userId,
+            v2Map,
           );
           ids.push(newId);
           lastOrder = order;

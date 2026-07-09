@@ -5,21 +5,26 @@ import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import {
   db,
+  DocumentBundles,
   DocumentContents,
   Documents,
+  DocumentStates,
   DocumentVersionContributors,
   DocumentVersions,
   Entities,
   Files,
+  first,
   firstOrThrow,
   Folders,
   Images,
   NoteEntities,
   Notes,
 } from '#/db/index.ts';
+import { readMergedGraph } from '#/utils/changeset.ts';
 import { compressZstd } from '#/utils/compression.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { wasm } from '#/utils/wasm.ts';
+import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import type { Modifier, PlainDoc, PlainNodeEntry, PlainRootNode } from '@typie/editor-ffi/server';
 import type { Transaction } from '#/db/index.ts';
 
@@ -438,6 +443,54 @@ export const resolveNameConflict = async (
   return `${name} (${n})`;
 };
 
+export type FreshV2Content = {
+  plain: PlainDoc;
+  graph: Uint8Array;
+  heads: Uint8Array;
+  text: string;
+  characterCount: number;
+  blobSize: number;
+};
+
+export const buildFreshV2Content = async (documentId: string): Promise<FreshV2Content | null> => {
+  const sourceState = await db
+    .select({ documentId: DocumentStates.documentId })
+    .from(DocumentStates)
+    .where(eq(DocumentStates.documentId, documentId))
+    .then(first);
+
+  if (!sourceState) {
+    return null;
+  }
+
+  const mergedGraph = await readMergedGraph(documentId);
+
+  const converted = await wasmFfi.use((host) => {
+    const plain = host.to_plain(mergedGraph);
+    const graph = host.to_graph(plain);
+    return { plain, graph, heads: host.heads(graph), text: host.extract_text(plain) };
+  });
+
+  const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(converted.plain);
+  const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
+  const characterCount = countCharacters(converted.text);
+
+  return { ...converted, characterCount, blobSize };
+};
+
+export const insertFreshV2Content = async (tx: Transaction, documentId: string, content: FreshV2Content): Promise<void> => {
+  await tx.insert(DocumentBundles).values({ documentId, seq: 1, payload: content.graph });
+  await tx.insert(DocumentStates).values({
+    documentId,
+    json: content.plain,
+    text: content.text,
+    characterCount: content.characterCount,
+    blobSize: content.blobSize,
+    heads: content.heads,
+    lastBundleSeq: 1,
+  });
+};
+
 const copyDocument = async (
   tx: Transaction,
   sourceEntityId: string,
@@ -445,6 +498,7 @@ const copyDocument = async (
   targetParentId: string | null,
   targetSiteId: string,
   userId: string,
+  v2Map: Map<string, FreshV2Content>,
 ) => {
   const sourceDoc = await tx.select().from(Documents).where(eq(Documents.entityId, sourceEntityId)).then(firstOrThrow);
 
@@ -499,6 +553,11 @@ const copyDocument = async (
     userId,
   });
 
+  const v2 = v2Map.get(sourceDoc.id) ?? (await buildFreshV2Content(sourceDoc.id));
+  if (v2) {
+    await insertFreshV2Content(tx, newDoc.id, v2);
+  }
+
   return newDoc;
 };
 
@@ -510,6 +569,7 @@ const copyFolder = async (
   targetSiteId: string,
   parentDepth: number,
   userId: string,
+  v2Map: Map<string, FreshV2Content>,
 ) => {
   const sourceFolder = await tx.select().from(Folders).where(eq(Folders.entityId, sourceEntityId)).then(firstOrThrow);
 
@@ -528,7 +588,7 @@ const copyFolder = async (
   let prevOrder: string | undefined;
   for (const child of children) {
     const childOrder = generateFractionalOrder({ lower: prevOrder, upper: undefined });
-    await copyEntityRecursive(tx, child.id, targetSiteId, newEntityId, parentDepth + 1, childOrder, userId);
+    await copyEntityRecursive(tx, child.id, targetSiteId, newEntityId, parentDepth + 1, childOrder, userId, v2Map);
     prevOrder = childOrder;
   }
 };
@@ -541,6 +601,7 @@ export const copyEntityRecursive = async (
   targetDepth: number,
   order: string,
   userId: string,
+  v2Map: Map<string, FreshV2Content>,
 ): Promise<string> => {
   const sourceEntity = await tx.select().from(Entities).where(eq(Entities.id, sourceEntityId)).then(firstOrThrow);
 
@@ -565,11 +626,11 @@ export const copyEntityRecursive = async (
     .then(firstOrThrow);
 
   if (sourceEntity.type === EntityType.DOCUMENT) {
-    await copyDocument(tx, sourceEntityId, newEntity.id, targetParentId, targetSiteId, userId);
+    await copyDocument(tx, sourceEntityId, newEntity.id, targetParentId, targetSiteId, userId, v2Map);
   } else if (sourceEntity.type === EntityType.FOLDER) {
     const sourceFolder = await tx.select().from(Folders).where(eq(Folders.entityId, sourceEntityId)).then(firstOrThrow);
     const resolvedName = await resolveNameConflict(tx, sourceFolder.name, targetParentId, targetSiteId, 'FOLDER');
-    await copyFolder(tx, sourceEntityId, newEntity.id, resolvedName, targetSiteId, targetDepth, userId);
+    await copyFolder(tx, sourceEntityId, newEntity.id, resolvedName, targetSiteId, targetDepth, userId, v2Map);
   }
 
   // Notes 복제
