@@ -26,7 +26,7 @@
     "@logtape/logtape": "^2.2.4",
     "@logtape/sentry": "^2.2.4",
     "dayjs": "^1.11.21",
-    "graphql": "^17.0.2",
+    "graphql": "^16.14.2",
     "hono": "^4.12.28",
     "ipaddr.js": "^2.4.0",
     "remeda": "^2.39.0",
