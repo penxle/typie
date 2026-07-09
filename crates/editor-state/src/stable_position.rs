@@ -12,18 +12,18 @@ use crate::bind::Bind;
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type")]
-pub enum StablePositionBinding {
-    Adjacent { anchor: Dot, bind: Bind },
-    ContainerStart,
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct StablePositionChild {
+    pub dot: Dot,
+    pub bind: Bind,
 }
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct StablePosition {
     pub chain: Vec<Dot>,
-    pub binding: StablePositionBinding,
+    pub child: Option<StablePositionChild>,
     pub affinity: Affinity,
 }
 
@@ -88,20 +88,17 @@ impl StablePosition {
         // this runs on the per-keystroke selection-capture path, so a linear scan makes
         // it `O(block)` inside a large paragraph.
         let child_count = host.child_count();
-        let binding = child_binding(child_count).map_or(
-            StablePositionBinding::ContainerStart,
-            |(offset, bind)| StablePositionBinding::Adjacent {
-                anchor: child_elem_id(
-                    &host
-                        .child_at(offset)
-                        .expect("child binding offset must be live"),
-                ),
-                bind,
-            },
-        );
+        let child = child_binding(child_count).map(|(offset, bind)| StablePositionChild {
+            dot: child_elem_id(
+                &host
+                    .child_at(offset)
+                    .expect("child binding offset must be live"),
+            ),
+            bind,
+        });
         StablePosition {
             chain,
-            binding,
+            child,
             affinity: pos.affinity,
         }
     }
@@ -168,8 +165,37 @@ impl<'a> StableResolveCtx<'a> {
     }
 }
 
-fn index_of(host: &NodeView, anchor: Dot) -> Option<usize> {
-    host.children().position(|c| child_elem_id(&c) == anchor)
+fn index_of(host: &NodeView, dot: Dot) -> Option<usize> {
+    host.children().position(|c| child_elem_id(&c) == dot)
+}
+
+fn direct_child_containing(host: &NodeView, target: Dot, ctx: &StableResolveCtx) -> Option<usize> {
+    let host_id = host.id();
+    let mut cursor = if ctx.view.node(target).is_some() {
+        Some(target)
+    } else {
+        ctx.view.block_of(target)
+    };
+
+    while let Some(id) = cursor {
+        let parent = ctx.view.parent_of(id)?;
+        if parent == host_id {
+            return index_of(host, id);
+        }
+        cursor = Some(parent);
+    }
+    None
+}
+
+fn is_inline_dot(dot: Dot, ctx: &StableResolveCtx) -> bool {
+    let dot = ctx.alias(dot);
+    ctx.view
+        .leaf(dot)
+        .is_some_and(|leaf| leaf.node_type().spec().inline)
+}
+
+fn resolves_via_child_parent(host: &NodeView, dot: Dot, ctx: &StableResolveCtx) -> bool {
+    is_inline_dot(dot, ctx) || host.spec().is_textblock()
 }
 
 fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
@@ -211,24 +237,49 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
 
 impl StablePosition {
     pub fn resolve(&self, ctx: &StableResolveCtx) -> Option<Position> {
-        if let StablePositionBinding::Adjacent { anchor, bind } = &self.binding {
-            let a = ctx.alias(*anchor);
-            let host_dot = if ctx.view.node(a).is_some() {
-                ctx.view.parent_of(a)
-            } else {
-                ctx.view.block_of(a)
-            };
-            if let Some(hd) = host_dot
-                && let Some(host) = ctx.view.node(hd)
-                && let Some(j) = index_of(&host, a)
-            {
-                return Some(Position {
-                    node: host.id(),
-                    offset: j + usize::from(*bind == Bind::Right),
-                    affinity: self.affinity,
-                });
-            }
+        if let Some(child) = &self.child
+            && is_inline_dot(child.dot, ctx)
+            && let Some(pos) = self.resolve_child_parent_boundary(ctx, child.dot, child.bind)
+        {
+            return Some(pos);
         }
+
+        let (host, next_child) = self.resolve_chain_host(ctx)?;
+        if next_child.is_none()
+            && let Some(child) = &self.child
+            && host.spec().is_textblock()
+            && let Some(pos) = self.resolve_child_parent_boundary(ctx, child.dot, child.bind)
+        {
+            return Some(pos);
+        }
+        Some(self.resolve_in_host(ctx, host, next_child))
+    }
+
+    fn resolve_child_parent_boundary(
+        &self,
+        ctx: &StableResolveCtx,
+        dot: Dot,
+        bind: Bind,
+    ) -> Option<Position> {
+        let dot = ctx.alias(dot);
+        let host_dot = if ctx.view.node(dot).is_some() {
+            ctx.view.parent_of(dot)
+        } else {
+            ctx.view.block_of(dot)
+        };
+        let host = ctx.view.node(host_dot?)?;
+        let offset = index_of(&host, dot)? + usize::from(bind == Bind::Right);
+        Some(Position {
+            node: host.id(),
+            offset,
+            affinity: self.affinity,
+        })
+    }
+
+    fn resolve_chain_host<'a>(
+        &self,
+        ctx: &'a StableResolveCtx<'a>,
+    ) -> Option<(NodeView<'a>, Option<Dot>)> {
         if self.chain.is_empty() {
             return None;
         }
@@ -246,25 +297,39 @@ impl StablePosition {
             return None;
         }
         let host = ctx.view.node(ctx.alias(self.chain[k])).unwrap();
-        let offset = if k == self.chain.len() - 1 {
-            match &self.binding {
-                StablePositionBinding::ContainerStart => 0,
-                StablePositionBinding::Adjacent { anchor, bind } => {
-                    let anchor = ctx.alias(*anchor);
-                    match index_of(&host, anchor) {
+        let next_child = (k < self.chain.len() - 1).then(|| ctx.alias(self.chain[k + 1]));
+        Some((host, next_child))
+    }
+
+    fn resolve_in_host(
+        &self,
+        ctx: &StableResolveCtx,
+        host: NodeView<'_>,
+        next_child: Option<Dot>,
+    ) -> Position {
+        let offset = if let Some(next_child) = next_child {
+            offset_within(&host, next_child, ctx)
+        } else {
+            match &self.child {
+                None => 0,
+                Some(StablePositionChild { dot, bind }) => {
+                    let aliased = ctx.alias(*dot);
+                    match index_of(&host, aliased).or_else(|| {
+                        (!resolves_via_child_parent(&host, aliased, ctx))
+                            .then(|| direct_child_containing(&host, aliased, ctx))
+                            .flatten()
+                    }) {
                         Some(j) => j + usize::from(*bind == Bind::Right),
-                        None => offset_within(&host, anchor, ctx),
+                        None => offset_within(&host, aliased, ctx),
                     }
                 }
             }
-        } else {
-            offset_within(&host, ctx.alias(self.chain[k + 1]), ctx)
         };
-        Some(Position {
+        Position {
             node: host.id(),
             offset,
             affinity: self.affinity,
-        })
+        }
     }
 }
 
@@ -331,7 +396,7 @@ mod tests {
         let (pd, para) = para_with(&[]);
         let view = DocView::new(&pd);
         let sp = StablePosition::capture(&Position::new(para, 0), &view);
-        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
+        assert!(sp.child.is_none());
         assert_eq!(sp.chain.last(), Some(&para));
         assert_eq!(sp.chain.first(), view.root().map(|r| r.id()).as_ref());
     }
@@ -341,7 +406,7 @@ mod tests {
         let (pd, para) = para_with(&[SeqItem::Char('a'), SeqItem::Char('b')]);
         let view = DocView::new(&pd);
         let sp = StablePosition::capture(&Position::new(para, 0), &view);
-        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
+        assert!(sp.child.is_none());
     }
 
     #[test]
@@ -355,11 +420,11 @@ mod tests {
         };
         let sp = StablePosition::capture(&pos, &view);
         assert_eq!(
-            sp.binding,
-            StablePositionBinding::Adjacent {
-                anchor: Dot::new(1, 3),
+            sp.child,
+            Some(StablePositionChild {
+                dot: Dot::new(1, 3),
                 bind: Bind::Left,
-            }
+            })
         );
     }
 
@@ -374,11 +439,11 @@ mod tests {
         };
         let sp = StablePosition::capture(&pos, &view);
         assert_eq!(
-            sp.binding,
-            StablePositionBinding::Adjacent {
-                anchor: Dot::new(1, 3),
+            sp.child,
+            Some(StablePositionChild {
+                dot: Dot::new(1, 3),
                 bind: Bind::Right,
-            }
+            })
         );
     }
 
@@ -393,11 +458,11 @@ mod tests {
         };
         let sp = StablePosition::capture(&pos, &view);
         assert_eq!(
-            sp.binding,
-            StablePositionBinding::Adjacent {
-                anchor: Dot::new(1, 3),
+            sp.child,
+            Some(StablePositionChild {
+                dot: Dot::new(1, 3),
                 bind: Bind::Right,
-            }
+            })
         );
     }
 
@@ -405,20 +470,30 @@ mod tests {
     fn types_construct_and_compare() {
         let sp = StablePosition {
             chain: vec![Dot::ROOT, Dot::new(1, 1)],
-            binding: StablePositionBinding::Adjacent {
-                anchor: Dot::new(1, 2),
+            child: Some(StablePositionChild {
+                dot: Dot::new(1, 2),
                 bind: Bind::Left,
-            },
+            }),
             affinity: Affinity::Downstream,
         };
         assert_eq!(sp.clone(), sp);
-        assert!(matches!(sp.binding, StablePositionBinding::Adjacent { .. }));
+        assert!(sp.child.is_some());
         let cs = StablePosition {
             chain: vec![Dot::ROOT],
-            binding: StablePositionBinding::ContainerStart,
+            child: None,
             affinity: Affinity::Upstream,
         };
         assert_ne!(sp, cs);
+    }
+
+    #[test]
+    fn old_binding_field_is_rejected() {
+        let value = serde_json::json!({
+            "chain": [Dot::ROOT],
+            "binding": { "type": "container_start" },
+            "affinity": Affinity::Downstream,
+        });
+        assert!(serde_json::from_value::<StablePosition>(value).is_err());
     }
 
     #[test]
@@ -460,7 +535,7 @@ mod tests {
         let ctx = StableResolveCtx::new(&view, &logs.seq);
         let pos = Position::new(para, 0);
         let sp = StablePosition::capture(&pos, &view);
-        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
+        assert!(sp.child.is_none());
         assert_eq!(sp.resolve(&ctx), Some(pos));
     }
 
@@ -509,6 +584,53 @@ mod tests {
             let sp = StablePosition::capture(&pos, &view);
             assert_eq!(sp.resolve(&ctx), Some(pos), "root offset {offset}");
         }
+    }
+
+    #[test]
+    fn block_container_boundary_stays_in_captured_host_when_anchor_moves_inside_wrapper() {
+        let root = Dot::ROOT;
+        let p1 = Dot::new(1, 1);
+        let p2 = Dot::new(1, 2);
+        let pre_items = vec![
+            (p1, block(NodeType::Paragraph, vec![root])),
+            (p2, block(NodeType::Paragraph, vec![root])),
+        ];
+        let pre = project_document(&doclogs(&ins_only(&pre_items))).unwrap();
+        let pre_view = DocView::new(&pre);
+        let root_id = pre_view.root().unwrap().id();
+        let captured = StablePosition::capture(
+            &Position {
+                node: root_id,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+            &pre_view,
+        );
+
+        let list = Dot::new(2, 1);
+        let item = Dot::new(2, 2);
+        let moved_p1 = Dot::new(2, 3);
+        let post_items = vec![
+            (list, block(NodeType::BulletList, vec![root])),
+            (item, block(NodeType::ListItem, vec![root, list])),
+            (moved_p1, block(NodeType::Paragraph, vec![root, list, item])),
+            (p2, block(NodeType::Paragraph, vec![root])),
+        ];
+        let mut post_logs = doclogs(&ins_only(&post_items));
+        post_logs.aliases.apply(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: p1,
+                len: 1,
+                new_start: moved_p1,
+            }],
+        });
+        let post = project_document(&post_logs).unwrap();
+        let post_view = DocView::new(&post);
+        let ctx = StableResolveCtx::new(&post_view, &post_logs.seq);
+
+        let resolved = captured.resolve(&ctx).unwrap();
+        assert_eq!(resolved.node, post_view.root().unwrap().id());
+        assert_eq!(resolved.offset, 1);
     }
 
     fn pre_post_delete_b() -> (ProjectedDoc, ProjectedDoc, DocLogs, Dot) {
@@ -711,10 +833,10 @@ mod tests {
         let ctx = StableResolveCtx::new(&view, &logs.seq);
         let sp = StablePosition {
             chain: vec![view.root().unwrap().id(), para],
-            binding: StablePositionBinding::Adjacent {
-                anchor: Dot::new(9, 9),
+            child: Some(StablePositionChild {
+                dot: Dot::new(9, 9),
                 bind: Bind::Left,
-            },
+            }),
             affinity: Affinity::Downstream,
         };
         let r = sp.resolve(&ctx).unwrap();
@@ -813,10 +935,10 @@ mod tests {
         let para_view = view.node(para).expect("paragraph survives normalize");
         let sp = StablePosition {
             chain: vec![view.root().unwrap().id(), bq, para],
-            binding: StablePositionBinding::Adjacent {
-                anchor: pb,
+            child: Some(StablePositionChild {
+                dot: pb,
                 bind: Bind::Left,
-            },
+            }),
             affinity: Affinity::Downstream,
         };
         let r = sp.resolve(&ctx).unwrap();
@@ -928,11 +1050,11 @@ mod tests {
         };
         let sp = StablePosition::capture(&pos, &pre_view);
         assert_eq!(
-            sp.binding,
-            StablePositionBinding::Adjacent {
-                anchor: a,
+            sp.child,
+            Some(StablePositionChild {
+                dot: a,
                 bind: Bind::Right,
-            }
+            })
         );
 
         let mut post_ev = ins_only(&pre_items);
@@ -993,11 +1115,11 @@ mod tests {
         };
         let sp = StablePosition::capture(&pos, &pre_view);
         assert_eq!(
-            sp.binding,
-            StablePositionBinding::Adjacent {
-                anchor: gen1,
+            sp.child,
+            Some(StablePositionChild {
+                dot: gen1,
                 bind: Bind::Right,
-            }
+            })
         );
 
         let mut ev = ins_only(&pre_items);
@@ -1064,11 +1186,11 @@ mod tests {
         };
         let sp = StablePosition::capture(&pos, &mid_view);
         assert_eq!(
-            sp.binding,
-            StablePositionBinding::Adjacent {
-                anchor: gen2,
+            sp.child,
+            Some(StablePositionChild {
+                dot: gen2,
                 bind: Bind::Right,
-            }
+            })
         );
 
         let mut post_ev = mid_ev.clone();
@@ -1112,7 +1234,7 @@ mod tests {
         let pre_view = DocView::new(&pre);
         let pos = Position::new(empty_para, 0);
         let sp = StablePosition::capture(&pos, &pre_view);
-        assert!(matches!(sp.binding, StablePositionBinding::ContainerStart));
+        assert!(sp.child.is_none());
         assert_eq!(sp.chain.last(), Some(&empty_para));
 
         let mut ev = ins_only(&pre_items);
@@ -1170,10 +1292,10 @@ mod tests {
         let root_id = view.root().unwrap().id();
         let sp = StablePosition {
             chain: vec![root_id],
-            binding: StablePositionBinding::Adjacent {
-                anchor: root_id,
+            child: Some(StablePositionChild {
+                dot: root_id,
                 bind: Bind::Left,
-            },
+            }),
             affinity: Affinity::Downstream,
         };
         let r = sp.resolve(&ctx).unwrap();

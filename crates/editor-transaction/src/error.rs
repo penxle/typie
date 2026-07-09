@@ -1,5 +1,5 @@
 use editor_crdt::Dot;
-use editor_model::ModifierType;
+use editor_model::{ModifierType, NodeType};
 use editor_state::StateError;
 
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +54,18 @@ pub enum StepError {
 
     #[error("move target {block:?} carries unknown content and cannot move losslessly")]
     UnknownBearingMove { block: Dot },
+
+    #[error("replace target {block:?} carries unknown content and cannot replace type losslessly")]
+    UnknownBearingReplace { block: Dot },
+
+    #[error(
+        "cannot replace {block:?} block type from {old_type:?} to {new_type:?} without changing its children"
+    )]
+    IncompatibleBlockTypeReplacement {
+        block: Dot,
+        old_type: NodeType,
+        new_type: NodeType,
+    },
 
     #[error(transparent)]
     State(#[from] StateError),

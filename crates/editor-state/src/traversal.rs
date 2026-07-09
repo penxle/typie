@@ -18,10 +18,6 @@ fn node_path(node: &NodeView) -> Vec<usize> {
     p
 }
 
-fn is_prefix_of(prefix: &[usize], full: &[usize]) -> bool {
-    full.starts_with(prefix)
-}
-
 fn position_before_or_at_node_start(
     pos_path: &[usize],
     pos_offset: usize,
@@ -56,39 +52,30 @@ fn position_after_or_at_node_end(
     pos_path.len() == node_path.len() && pos_offset >= node_end_offset
 }
 
-fn path_intersects_range(node_path: &[usize], from_path: &[usize], to_path: &[usize]) -> bool {
-    // Case 1: node is an ancestor of either endpoint (node_path is a prefix of from/to path)
-    if is_prefix_of(node_path, from_path) || is_prefix_of(node_path, to_path) {
-        return true;
-    }
+fn subtree_end_path(node_path: &[usize], child_count: usize) -> Vec<usize> {
+    let Some((&last, parent)) = node_path.split_last() else {
+        return vec![child_count];
+    };
+    let mut end = parent.to_vec();
+    end.push(last + 1);
+    end
+}
 
-    // Case 2: node is a sibling between the endpoints under a shared parent
-    if !node_path.is_empty() {
-        let (&node_idx, node_parent) = node_path.split_last().unwrap();
-        if is_prefix_of(node_parent, from_path) && is_prefix_of(node_parent, to_path) {
-            let from_idx = from_path.get(node_parent.len()).copied().unwrap_or(0);
-            let to_idx = to_path.get(node_parent.len()).copied().unwrap_or(0);
-            let lo = from_idx.min(to_idx);
-            let hi = from_idx.max(to_idx);
-            if lo <= node_idx && node_idx <= hi {
-                return true;
-            }
-        }
-    }
-
-    // Case 3: node lies strictly between endpoints lexicographically
-    if node_path > from_path && node_path < to_path {
-        return true;
-    }
-
-    false
+fn subtree_intersects_range(
+    node_path: &[usize],
+    child_count: usize,
+    from_path: &[usize],
+    to_path: &[usize],
+) -> bool {
+    let end_path = subtree_end_path(node_path, child_count);
+    from_path < end_path.as_slice() && node_path < to_path
 }
 
 pub fn intersects_subtree(rs: &ResolvedSelection, node: &NodeView) -> bool {
     let from_path = rs.from().path();
     let to_path = rs.to().path();
     let np = node_path(node);
-    path_intersects_range(&np, from_path, to_path)
+    subtree_intersects_range(&np, node.child_count(), from_path, to_path)
 }
 
 pub fn contains_subtree(rs: &ResolvedSelection, node: &NodeView) -> bool {
@@ -206,7 +193,7 @@ fn last_child_slot(block: &NodeView, base: &[usize], to: &[usize]) -> Option<usi
 
 fn first_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Option<Dot> {
     let base = node_path(block);
-    if !path_intersects_range(&base, from, to) {
+    if !subtree_intersects_range(&base, block.child_count(), from, to) {
         return None;
     }
 
@@ -229,7 +216,7 @@ fn first_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Opt
 
 fn last_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Option<Dot> {
     let base = node_path(block);
-    if !path_intersects_range(&base, from, to) {
+    if !subtree_intersects_range(&base, block.child_count(), from, to) {
         return None;
     }
 
@@ -570,6 +557,31 @@ mod tests {
         assert!(
             intersects_subtree(&rs_p1, &root_nv),
             "root (ancestor) intersects"
+        );
+    }
+
+    #[test]
+    fn intersects_subtree_excludes_block_at_exclusive_end_boundary() {
+        let (pd, root, _p1, p2) = two_paras();
+        let view = DocView::new(&pd);
+        let rs = Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: crate::Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 1,
+                affinity: crate::Affinity::Upstream,
+            },
+        )
+        .resolve(&view)
+        .unwrap();
+
+        assert!(
+            !intersects_subtree(&rs, &view.node(p2).unwrap()),
+            "block starting at the exclusive end boundary must not intersect"
         );
     }
 

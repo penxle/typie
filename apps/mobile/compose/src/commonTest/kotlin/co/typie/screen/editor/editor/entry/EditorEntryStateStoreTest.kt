@@ -2,7 +2,6 @@ package co.typie.screen.editor.editor.entry
 
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.StablePosition
-import co.typie.editor.ffi.StablePositionBinding
 import co.typie.editor.ffi.StableSelection
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,11 +47,6 @@ class EditorEntryStateStoreTest {
 }
 
 private fun stableSelection(): StableSelection {
-  val position =
-    StablePosition(
-      chain = emptyList(),
-      binding = StablePositionBinding.ContainerStart,
-      affinity = Affinity.Downstream,
-    )
+  val position = StablePosition(chain = emptyList(), child = null, affinity = Affinity.Downstream)
   return StableSelection(anchor = position, head = position)
 }

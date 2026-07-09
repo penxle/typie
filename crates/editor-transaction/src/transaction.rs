@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
-use editor_model::{DocView, Modifier, ModifierType, PlainNode, Subtree};
+use editor_model::{DocView, Modifier, ModifierType, NodeType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
 use editor_state::{BatchedState, Composition, PendingModifiers, State};
@@ -252,6 +252,19 @@ impl Transaction {
             block,
             old_node,
             new_node,
+        })
+    }
+
+    pub fn replace_block_type(&mut self, block: Dot, new_type: NodeType) -> Result<(), StepError> {
+        let old_type = self
+            .state
+            .projected
+            .block_node_type(block)
+            .ok_or(StepError::NodeNotFound(block))?;
+        self.apply_step(Step::ReplaceBlockType {
+            block,
+            old_type,
+            new_type,
         })
     }
 
@@ -1017,6 +1030,44 @@ mod tests {
         }
     }
 
+    fn assert_replace_type_pairs_match_content(
+        before_items: &BTreeMap<Dot, SeqItem>,
+        pd: &ProjectedState,
+        replaced: Dot,
+        new_type: NodeType,
+        pairs: &[editor_model::AliasRun],
+    ) {
+        for r in pairs {
+            for i in 0..r.len as u64 {
+                let old = Dot::new(r.old_start.actor, r.old_start.clock + i);
+                let new = Dot::new(r.new_start.actor, r.new_start.clock + i);
+                let old_item = before_items.get(&old).expect("replace 전 스냅샷에 존재");
+                let new_item = item_of(pd, new).expect("replace 후 상태에 존재");
+                match (old_item, &new_item) {
+                    (
+                        SeqItem::Block {
+                            node_type: old_type,
+                            ..
+                        },
+                        SeqItem::Block {
+                            node_type: actual_type,
+                            ..
+                        },
+                    ) if old == replaced => {
+                        assert_ne!(*old_type, new_type, "테스트 전제: root type changes");
+                        assert_eq!(*actual_type, new_type, "replaced block type mismatch");
+                    }
+                    (SeqItem::Char(a), SeqItem::Char(b)) => assert_eq!(a, b, "char 페어링 불일치"),
+                    (SeqItem::Atom(a), SeqItem::Atom(b)) => assert_eq!(a, b, "atom 페어링 불일치"),
+                    (SeqItem::Block { node_type: a, .. }, SeqItem::Block { node_type: b, .. }) => {
+                        assert_eq!(a, b, "descendant block 페어링 불일치")
+                    }
+                    (a, b) => panic!("kind 불일치 페어링: {a:?} -> {b:?}"),
+                }
+            }
+        }
+    }
+
     #[test]
     fn move_node_emits_single_alias_op_pairing_old_to_new() {
         let (state, root, p1) = state! {
@@ -1037,6 +1088,63 @@ mod tests {
         assert_eq!(total as usize, 3, "블록 1 + char 2 전부 페어링");
 
         assert_pairs_match_content(&before_items, &tr.state().projected, &alias_ops[0].pairs);
+    }
+
+    #[test]
+    fn replace_block_type_emits_alias_op_pairing_old_to_new() {
+        let (state, list, _p1) = state! {
+            doc { root {
+                list: ordered_list { list_item { p1: paragraph { text("ab") } } }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let before_items = collect_items(&state.projected, list);
+
+        let mut tr = Transaction::new(&state);
+        tr.replace_block_type(list, NodeType::BulletList).unwrap();
+
+        let view = tr.state().view();
+        assert!(view.node(list).is_none(), "old list dot is tombstoned");
+        let new_list = view
+            .alias_classes()
+            .resolve_with(list, |dot| view.node(dot).is_some());
+        assert_eq!(
+            view.node(new_list).unwrap().node_type(),
+            NodeType::BulletList
+        );
+
+        let ops = tr.ops_for_test();
+        let alias_ops = alias_ops_in(&ops);
+        assert_eq!(alias_ops.len(), 1, "replace 1회당 alias op 1개");
+        let total: u32 = alias_ops[0].pairs.iter().map(|r| r.len).sum();
+        assert_eq!(total as usize, before_items.len(), "subtree 전부 페어링");
+
+        assert_replace_type_pairs_match_content(
+            &before_items,
+            &tr.state().projected,
+            list,
+            NodeType::BulletList,
+            &alias_ops[0].pairs,
+        );
+    }
+
+    #[test]
+    fn replace_block_type_rejects_incompatible_children() {
+        let (state, list, _p1) = state! {
+            doc { root {
+                list: ordered_list { list_item { p1: paragraph { text("ab") } } }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+
+        let mut tr = Transaction::new(&state);
+        let result = tr.replace_block_type(list, NodeType::Paragraph);
+        assert!(matches!(
+            result,
+            Err(StepError::IncompatibleBlockTypeReplacement { block, .. }) if block == list
+        ));
     }
 
     #[test]

@@ -606,6 +606,39 @@ mod tests {
     }
 
     #[test]
+    fn replace_block_type_inverse_round_trip() {
+        let (state, list) = state! {
+            doc {
+                root {
+                    list: ordered_list {
+                        list_item { paragraph { text("A") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (list, 0)
+        };
+        let before = snapshot(&state);
+        let step = Step::ReplaceBlockType {
+            block: list,
+            old_type: NodeType::OrderedList,
+            new_type: NodeType::BulletList,
+        };
+        let after = step.apply(&state).unwrap().state;
+        let view = after.view();
+        let replaced = view
+            .alias_classes()
+            .resolve_with(list, |dot| view.node(dot).is_some());
+        assert_eq!(
+            view.node(replaced).unwrap().node_type(),
+            NodeType::BulletList
+        );
+
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(snapshot(&restored), before);
+    }
+
+    #[test]
     fn move_node_reorder_and_back() {
         let (state, ..) = state! {
             doc { root { paragraph { text("a") } p2: paragraph { text("b") } } }

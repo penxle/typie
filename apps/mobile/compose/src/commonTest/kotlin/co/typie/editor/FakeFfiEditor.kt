@@ -33,7 +33,6 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StablePosition
-import co.typie.editor.ffi.StablePositionBinding
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TrackedRange
@@ -235,11 +234,7 @@ internal class FakeFfiEditor(
   private companion object {
     val EmptyPosition = Position(node = "", offset = 0, affinity = Affinity.Downstream)
     val EmptyStablePosition =
-      StablePosition(
-        chain = emptyList(),
-        binding = StablePositionBinding.ContainerStart,
-        affinity = Affinity.Downstream,
-      )
+      StablePosition(chain = emptyList(), child = null, affinity = Affinity.Downstream)
     val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)
     val EmptyRootAttrs = PlainRootNode(layoutMode = LayoutMode.Continuous(maxWidth = 0))
     val EmptyPlainDoc =

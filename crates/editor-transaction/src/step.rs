@@ -1,5 +1,5 @@
 use editor_crdt::{Dot, Op};
-use editor_model::{EditOp, Modifier, ModifierType, PlainNode, Subtree};
+use editor_model::{EditOp, Modifier, ModifierType, NodeType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::{BatchedState, Composition, PendingModifiers, State};
 use serde::{Deserialize, Serialize};
@@ -83,6 +83,11 @@ pub enum Step {
         block: Dot,
         old_node: PlainNode,
         new_node: PlainNode,
+    },
+    ReplaceBlockType {
+        block: Dot,
+        old_type: NodeType,
+        new_type: NodeType,
     },
     AddModifier {
         block: Dot,
@@ -202,6 +207,11 @@ impl Step {
                 old_node,
                 new_node,
             } => steps::set_node::apply_to(batched, *block, old_node, new_node),
+            Step::ReplaceBlockType {
+                block,
+                old_type,
+                new_type,
+            } => steps::replace_block_type::apply_to(batched, *block, *old_type, *new_type),
             Step::AddModifier { block, modifier } => {
                 steps::add_modifier::apply_to(batched, *block, modifier)
             }
@@ -269,6 +279,11 @@ impl Step {
                 old_node,
                 new_node,
             } => steps::set_node::inverse(*block, old_node.clone(), new_node.clone()),
+            Step::ReplaceBlockType {
+                block,
+                old_type,
+                new_type,
+            } => steps::replace_block_type::inverse(*block, *old_type, *new_type),
             Step::AddModifier { block, modifier } => {
                 steps::add_modifier::inverse(*block, modifier.clone())
             }

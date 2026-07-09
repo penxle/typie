@@ -1,6 +1,7 @@
 use editor_commands as commands;
 use editor_macros::state;
-use editor_state::{Position, Selection, StablePositionBinding, StableResolveCtx, StableSelection};
+use editor_model::NodeType;
+use editor_state::{Position, Selection, StableResolveCtx, StableSelection};
 use editor_transaction::Transaction;
 
 use crate::editor::Editor;
@@ -112,9 +113,8 @@ fn tracked_range_locate_survives_merge_precisely() {
 #[test]
 fn tracked_range_locate_survives_container_start_block_move() {
     // p1 is empty (0 children), so its offset-0 low endpoint captures as
-    // `StablePositionBinding::ContainerStart`, not `Adjacent` — `capture_range_start`
-    // only falls back to `ContainerStart` when the container has no children to
-    // bind against. The cross-block range keeps the overall selection non-collapsed,
+    // p1 has no children, so its offset-0 low endpoint has no child dot to bind
+    // against. The cross-block range keeps the overall selection non-collapsed,
     // since `TrackedRange::locate` filters collapsed ranges out structurally.
     let (state, p1, p2) = state! {
         doc {
@@ -130,14 +130,8 @@ fn tracked_range_locate_survives_container_start_block_move() {
     let sel_from_start = Selection::new(Position::new(p1, 0), Position::new(p2, 3));
     let stable = StableSelection::capture(&sel_from_start, &view_before);
 
-    assert!(matches!(
-        stable.anchor.binding,
-        StablePositionBinding::ContainerStart
-    ));
-    assert!(matches!(
-        stable.head.binding,
-        StablePositionBinding::Adjacent { .. }
-    ));
+    assert!(stable.anchor.child.is_none());
+    assert!(stable.head.child.is_some());
 
     let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), &state);
 
@@ -214,6 +208,69 @@ fn move_undo_redo_selection_resolves_precisely_across_generations() {
     assert_ne!(
         resolved_after_redo.anchor.node, p1,
         "redo must re-apply the move onto a fresh dot, not the original"
+    );
+}
+
+#[test]
+fn replace_block_type_undo_redo_selection_resolves_precisely_across_generations() {
+    let (initial, list, p1) = state! {
+        doc {
+            root {
+                list: ordered_list {
+                    list_item { p1: paragraph { text("hello") } }
+                }
+                paragraph {}
+            }
+        }
+        selection: (p1, 0)
+    };
+    let before_view = initial.view();
+    let sel_in_p1 = Selection::new(Position::new(p1, 1), Position::new(p1, 4));
+    let captured = StableSelection::capture(&sel_in_p1, &before_view);
+
+    let mut editor = Editor::new_test(initial);
+
+    editor
+        .transact(|tr| {
+            tr.replace_block_type(list, NodeType::BulletList)?;
+            Ok(())
+        })
+        .unwrap();
+    let (text_after_replace, resolved_after_replace) = resolve_text(&editor, &captured);
+    assert_eq!(text_after_replace, "ell");
+    assert_ne!(
+        resolved_after_replace.anchor.node, p1,
+        "the replaced subtree must now live under fresh dots"
+    );
+
+    let post_replace_view = editor.state().view();
+    let recaptured = StableSelection::capture(&resolved_after_replace, &post_replace_view);
+
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    let (text_orig_via_gen1, resolved_orig) = resolve_text(&editor, &captured);
+    assert_eq!(text_orig_via_gen1, "ell");
+    assert_eq!(
+        resolved_orig.anchor.node, p1,
+        "undo must restore the original paragraph dot"
+    );
+
+    let (text_orig_via_gen2, _) = resolve_text(&editor, &recaptured);
+    assert_eq!(
+        text_orig_via_gen2, "ell",
+        "an anchor captured against the replacement dots must still resolve to the \
+         original content after undo"
+    );
+
+    editor.apply(Message::History {
+        op: HistoryOp::Redo,
+    });
+    let (text_after_redo, resolved_after_redo) = resolve_text(&editor, &captured);
+    assert_eq!(text_after_redo, "ell");
+    assert_ne!(
+        resolved_after_redo.anchor.node, p1,
+        "redo must re-apply the replacement onto fresh dots"
     );
 }
 
