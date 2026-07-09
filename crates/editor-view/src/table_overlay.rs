@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::page_fragment::{PageFragmentBox, PageFragmentNode, PageFragmentTree};
 
 const TABLE_BORDER_WIDTH: f32 = 1.0;
+const MIN_CELL_WIDTH: f32 = 40.0;
 
 fn cell_background_color(view: &DocView, cell_id: Dot) -> Option<String> {
     view.node(cell_id)?
@@ -32,6 +33,8 @@ pub struct TableOverlay {
     pub align: Alignment,
     pub proportion: f32,
     pub content_width: f32,
+    pub min_proportion_width: f32,
+    pub max_proportion_width: f32,
     pub rows: Vec<TableOverlayRow>,
     pub columns: Vec<TableOverlayColumn>,
     pub row_count: usize,
@@ -189,7 +192,7 @@ fn build_table_overlay(
         })
         .unwrap_or(Alignment::Left);
 
-    let columns = rows
+    let columns: Vec<TableOverlayColumn> = rows
         .first()
         .map(|row| {
             row.cells
@@ -203,6 +206,8 @@ fn build_table_overlay(
                 .collect()
         })
         .unwrap_or_default();
+    let min_proportion_width = min_table_width(columns.len());
+    let max_proportion_width = content_width.max(0.0);
 
     let overlay_rows = rows
         .iter()
@@ -333,6 +338,8 @@ fn build_table_overlay(
         align,
         proportion,
         content_width,
+        min_proportion_width,
+        max_proportion_width,
         rows: overlay_rows,
         columns,
         row_count,
@@ -342,6 +349,13 @@ fn build_table_overlay(
         focused_col_index,
         cell_selection,
     })
+}
+
+fn min_table_width(col_count: usize) -> f32 {
+    if col_count == 0 {
+        return TABLE_BORDER_WIDTH;
+    }
+    col_count as f32 * MIN_CELL_WIDTH + (col_count + 1) as f32 * TABLE_BORDER_WIDTH
 }
 
 fn visible_rows(table_box: &PageFragmentBox, view: &DocView) -> Vec<OverlayRow> {
@@ -810,6 +824,8 @@ mod tests {
         assert_eq!(ov.bounds.x, 0.0);
         assert_eq!(ov.bounds.width, 600.0);
         assert_eq!(ov.bounds.height, 80.0);
+        assert_eq!(ov.min_proportion_width, 83.0);
+        assert_eq!(ov.max_proportion_width, 600.0);
 
         // table alignment is Center (set via block_modifiers)
         assert_eq!(ov.align, Alignment::Center);

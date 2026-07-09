@@ -2,7 +2,9 @@ use editor_common::Axis;
 use editor_crdt::Dot;
 use editor_transaction::Transaction;
 
-use crate::helpers::table_axis_selection;
+use crate::helpers::{
+    apply_col_width_weights_to_first_row, first_row_col_width_weights, table_axis_selection,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn move_table_axis(
@@ -16,6 +18,11 @@ pub fn move_table_axis(
         return Ok(false);
     }
     let restore_axis_selection = selected_axis_to_restore(tr, table_id, axis, from);
+    let first_row_widths_to_restore = if axis == Axis::Horizontal && (from == 0 || to == 0) {
+        first_row_col_width_weights(tr, table_id)?
+    } else {
+        None
+    };
     match axis {
         Axis::Horizontal => {
             let row_id = {
@@ -53,6 +60,10 @@ pub fn move_table_axis(
                 tr.move_node(cell_id, *row_id, to)?;
             }
         }
+    }
+    if let Some(widths) = first_row_widths_to_restore {
+        let widths = widths.into_iter().map(Some).collect::<Vec<_>>();
+        apply_col_width_weights_to_first_row(tr, table_id, &widths)?;
     }
     if restore_axis_selection {
         let selection = table_axis_selection(tr, table_id, Some(axis), Some(to))?;
@@ -219,6 +230,43 @@ mod tests {
             }),
             "the moved row's cell keeps its background color"
         );
+    }
+
+    #[test]
+    fn move_row_to_first_keeps_first_row_width_weights() {
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell(col_width: Some(300u32)) { paragraph { text("A") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("B") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("C") } }
+                        table_cell { paragraph { text("D") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| move_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Horizontal,
+            1,
+            0
+        ));
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        let first_row = table.child_blocks().next().unwrap();
+        let widths: Vec<Option<u32>> = first_row
+            .child_blocks()
+            .map(|cell| match cell.node() {
+                editor_model::Node::TableCell(n) => *n.col_width.get(),
+                _ => panic!("expected a table cell"),
+            })
+            .collect();
+        assert_eq!(widths, vec![Some(300), Some(100)]);
     }
 
     #[test]

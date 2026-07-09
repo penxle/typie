@@ -124,11 +124,21 @@
     if (initialWidths.length === 0 || overlay.content_width <= 0) return 0;
 
     const currentTableWidth = overlay.bounds.width;
-    const minWidth = Math.max(minTableWidth(initialWidths.length), 0);
-    const maxWidth = Math.max(minWidth, overlay.content_width);
+    const minWidth = Math.max(minTableWidth(initialWidths.length), overlay.min_proportion_width ?? 0);
+    const maxWidth = Math.max(minWidth, overlay.max_proportion_width ?? overlay.content_width);
 
     const effectiveMinWidth = currentTableWidth <= minWidth + TABLE_RESIZE_LIMIT_EPSILON ? currentTableWidth : minWidth;
     return clamp(deltaX, effectiveMinWidth - currentTableWidth, maxWidth - currentTableWidth);
+  }
+
+  function toRatioWidths(widths: number[]): number[] {
+    if (widths.length === 0) return [];
+
+    const safe = widths.map((width) => (Number.isFinite(width) && width > 0 ? width : 0));
+    const total = safe.reduce((sum, width) => sum + width, 0);
+    if (total <= 0) return widths.map(() => 1 / widths.length);
+
+    return safe.map((width) => width / total);
   }
 
   function findOverlayIndex(boundaries: number[], value: number): number | null {
@@ -181,7 +191,8 @@
     if (targetEl instanceof Node && tableOverlayRoot.contains(targetEl)) return true;
     if (targetEl instanceof Node && !editor?.scrollContainerEl?.contains(targetEl)) return false;
     const rect = tableOverlayRoot.getBoundingClientRect();
-    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    const resizeSlop = (resizeIndicatorThickness * safeDisplayZoom) / 2;
+    return clientX >= rect.left && clientX <= rect.right + resizeSlop && clientY >= rect.top && clientY <= rect.bottom;
   }
 
   function syncHoverFromWindowPointer(clientX: number, clientY: number): void {
@@ -651,6 +662,7 @@
           pointerEvents: isActive ? 'auto' : 'none',
           opacity: isResizing ? '100' : '0',
           transition: '[opacity 0.15s]',
+          zIndex: isLastCol ? '[1]' : undefined,
           _hover: { opacity: '100', backgroundColor: 'accent.brand.default' },
         })}
         aria-label={isLastCol ? '테이블 너비 조절' : '열 너비 조절'}
@@ -693,7 +705,7 @@
                 const clampedDelta = clamp(resizing.deltaX, minDelta, maxDelta);
                 newWidths[colIndex] = resizing.initialWidths[colIndex] + clampedDelta;
                 newWidths[colIndex + 1] = resizing.initialWidths[colIndex + 1] - clampedDelta;
-                setColumnWidths(newWidths);
+                setColumnWidths(toRatioWidths(newWidths));
               }
             }
 

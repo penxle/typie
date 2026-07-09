@@ -465,6 +465,8 @@ export interface TableOverlay {
     align: Alignment;
     proportion: number;
     content_width: number;
+    min_proportion_width: number;
+    max_proportion_width: number;
     rows: TableOverlayRow[];
     columns: TableOverlayColumn[];
     row_count: number;

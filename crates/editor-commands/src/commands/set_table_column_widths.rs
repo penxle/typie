@@ -2,7 +2,7 @@ use editor_crdt::Dot;
 use editor_model::{PlainNode, PlainTableCellNode};
 use editor_transaction::Transaction;
 
-use crate::helpers::col_count_from_table;
+use crate::helpers::{col_count_from_table, column_width_weights};
 use crate::{CommandError, CommandResult};
 
 pub fn set_table_column_widths(
@@ -23,8 +23,9 @@ pub fn set_table_column_widths(
         (row_ids, n_cols)
     };
     let update_count = widths.len().min(n_cols);
+    let width_weights = column_width_weights(&widths);
     for row_id in &row_ids {
-        for (col_idx, &width) in widths.iter().enumerate().take(update_count) {
+        for (col_idx, &new_width) in width_weights.iter().enumerate().take(update_count) {
             let cell_id = {
                 let view = tr.view();
                 let row = view
@@ -34,11 +35,6 @@ pub fn set_table_column_widths(
                     .nth(col_idx)
                     .ok_or_else(|| CommandError::Corrupted("col index out of range".into()))?
                     .id()
-            };
-            let new_width = if width > 0.0 {
-                Some(width as u32)
-            } else {
-                None
             };
             tr.set_node(
                 cell_id,
@@ -94,6 +90,40 @@ mod tests {
             if let editor_model::Node::TableCell(n) = c1 {
                 assert_eq!(*n.col_width.get(), Some(200));
             }
+        }
+    }
+
+    #[test]
+    fn stores_fractional_widths_as_positive_weights() {
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell { paragraph { text("A") } }
+                        r0c1: table_cell { paragraph { text("B") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_table_column_widths(
+            &mut tr,
+            tbl,
+            vec![0.25, 0.75]
+        ));
+        let view = actual.view();
+        let table = view.node(tbl).unwrap();
+        let cells: Vec<_> = table
+            .child_blocks()
+            .next()
+            .unwrap()
+            .child_blocks()
+            .collect();
+        if let editor_model::Node::TableCell(n) = cells[0].node() {
+            assert_eq!(*n.col_width.get(), Some(2500));
+        }
+        if let editor_model::Node::TableCell(n) = cells[1].node() {
+            assert_eq!(*n.col_width.get(), Some(7500));
         }
     }
 

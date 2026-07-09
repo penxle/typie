@@ -86,6 +86,8 @@ class EditorTableCellSelectionOverlayTest {
       align = Alignment.Left,
       proportion = 1f,
       contentWidth = 100f,
+      minProportionWidth = 83f,
+      maxProportionWidth = 100f,
       rows = rows,
       columns =
         listOf(

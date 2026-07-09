@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_col_preserves_existing_widths_and_new_col_is_none() {
+    fn insert_col_rebalances_widths_on_all_rows() {
         let (initial, tbl, ..) = state! {
             doc { root {
                 tbl: table {
@@ -218,9 +218,43 @@ mod tests {
                 .collect();
             assert_eq!(
                 widths,
-                vec![Some(300), None, Some(100), Some(100)],
-                "existing columns keep their widths, the inserted column starts with none"
+                vec![Some(225), Some(125), Some(75), Some(75)],
+                "existing column weights are rebalanced and the inserted column gets its own weight"
             );
+        }
+    }
+
+    #[test]
+    fn insert_row_carries_existing_width_weights() {
+        let (initial, tbl, ..) = state! {
+            doc { root {
+                tbl: table {
+                    table_row {
+                        r0c0: table_cell(col_width: Some(300u32)) { paragraph { text("A") } }
+                        table_cell(col_width: Some(100u32)) { paragraph { text("B") } }
+                    }
+                }
+            } }
+            selection: (r0c0, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_table_axis(
+            &mut tr,
+            tbl,
+            Axis::Horizontal,
+            0,
+            true
+        ));
+        let v = actual.view();
+        let table = v.node(tbl).unwrap();
+        for row in table.child_blocks() {
+            let widths: Vec<Option<u32>> = row
+                .child_blocks()
+                .map(|cell| match cell.node() {
+                    editor_model::Node::TableCell(n) => *n.col_width.get(),
+                    _ => panic!("expected a table cell"),
+                })
+                .collect();
+            assert_eq!(widths, vec![Some(300), Some(100)]);
         }
     }
 

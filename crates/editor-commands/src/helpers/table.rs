@@ -9,6 +9,8 @@ use editor_transaction::{Transaction, fulfill};
 
 use crate::CommandError;
 
+const FRACTIONAL_COLUMN_WIDTH_WEIGHT_SCALE: f64 = 10_000.0;
+
 pub(crate) fn col_count_from_table(table: &NodeView<'_>) -> Result<usize, CommandError> {
     let first_row = table
         .child_blocks()
@@ -160,9 +162,158 @@ pub(crate) fn table_axis_selection(
         .ok_or_else(|| CommandError::Corrupted("cannot build cell rect selection".into()))
 }
 
-pub(crate) fn make_empty_table_cell() -> Subtree {
+pub(crate) fn column_width_weights(widths: &[f32]) -> Vec<Option<u32>> {
+    let scale = if widths
+        .iter()
+        .any(|width| width.is_finite() && *width > 0.0 && *width < 1.0)
+    {
+        FRACTIONAL_COLUMN_WIDTH_WEIGHT_SCALE
+    } else {
+        1.0
+    };
+    widths
+        .iter()
+        .map(|width| {
+            if !width.is_finite() || *width <= 0.0 {
+                None
+            } else {
+                Some(column_width_weight((*width as f64) * scale))
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn first_row_col_width_weights(
+    tr: &Transaction,
+    table_id: Dot,
+) -> Result<Option<Vec<u32>>, CommandError> {
+    let view = tr.state().view();
+    let table = view
+        .node(table_id)
+        .ok_or(CommandError::NodeNotFound(table_id))?;
+    let Some(first_row) = table.child_blocks().next() else {
+        return Ok(None);
+    };
+    let mut widths = Vec::new();
+    for cell in first_row.child_blocks() {
+        let editor_model::Node::TableCell(cell_node) = cell.node() else {
+            return Ok(None);
+        };
+        let Some(width) = *cell_node.col_width.get() else {
+            return Ok(None);
+        };
+        if width == 0 {
+            return Ok(None);
+        }
+        widths.push(width);
+    }
+    Ok((!widths.is_empty()).then_some(widths))
+}
+
+pub(crate) fn inserted_col_width_weights(
+    existing_widths: &[u32],
+    insert_index: usize,
+) -> Vec<Option<u32>> {
+    if existing_widths.is_empty() {
+        return vec![Some(1)];
+    }
+
+    let new_col_count = existing_widths.len() + 1;
+    let inserted_share = 1.0 / new_col_count as f64;
+    let existing_scale = 1.0 - inserted_share;
+    let existing_total: f64 = existing_widths.iter().map(|width| *width as f64).sum();
+    let insert_at = insert_index.min(existing_widths.len());
+    let mut next_widths: Vec<Option<u32>> = existing_widths
+        .iter()
+        .map(|width| Some(column_width_weight(*width as f64 * existing_scale)))
+        .collect();
+    next_widths.insert(
+        insert_at,
+        Some(column_width_weight(existing_total * inserted_share)),
+    );
+    next_widths
+}
+
+pub(crate) fn apply_col_width_weights_to_first_row(
+    tr: &mut Transaction,
+    table_id: Dot,
+    widths: &[Option<u32>],
+) -> Result<(), CommandError> {
+    let cell_ids: Vec<Dot> = {
+        let view = tr.state().view();
+        let table = view
+            .node(table_id)
+            .ok_or(CommandError::NodeNotFound(table_id))?;
+        let first_row = table
+            .child_blocks()
+            .next()
+            .ok_or_else(|| CommandError::Corrupted("table has no rows".into()))?;
+        first_row.child_blocks().map(|cell| cell.id()).collect()
+    };
+    if cell_ids.len() != widths.len() {
+        return Ok(());
+    }
+    for (cell_id, width) in cell_ids.into_iter().zip(widths.iter().copied()) {
+        set_table_cell_col_width(tr, cell_id, width)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn apply_col_width_weights_to_all_rows(
+    tr: &mut Transaction,
+    table_id: Dot,
+    widths: &[Option<u32>],
+) -> Result<(), CommandError> {
+    let row_ids: Vec<Dot> = {
+        let view = tr.state().view();
+        let table = view
+            .node(table_id)
+            .ok_or(CommandError::NodeNotFound(table_id))?;
+        table.child_blocks().map(|row| row.id()).collect()
+    };
+    for row_id in row_ids {
+        let cell_ids: Vec<Dot> = {
+            let view = tr.state().view();
+            let row = view
+                .node(row_id)
+                .ok_or(CommandError::NodeNotFound(row_id))?;
+            row.child_blocks()
+                .take(widths.len())
+                .map(|cell| cell.id())
+                .collect()
+        };
+        for (cell_id, width) in cell_ids.into_iter().zip(widths.iter().copied()) {
+            set_table_cell_col_width(tr, cell_id, width)?;
+        }
+    }
+    Ok(())
+}
+
+fn column_width_weight(width: f64) -> u32 {
+    if !width.is_finite() {
+        return 1;
+    }
+    width.round().clamp(1.0, u32::MAX as f64) as u32
+}
+
+fn set_table_cell_col_width(
+    tr: &mut Transaction,
+    cell_id: Dot,
+    col_width: Option<u32>,
+) -> Result<(), CommandError> {
+    tr.set_node(
+        cell_id,
+        PlainNode::TableCell(PlainTableCellNode {
+            col_width,
+            background_color: None,
+        }),
+    )?;
+    Ok(())
+}
+
+pub(crate) fn make_empty_table_cell(col_width: Option<u32>) -> Subtree {
     Subtree::leaf(PlainNode::TableCell(PlainTableCellNode {
-        col_width: None,
+        col_width,
         background_color: None,
     }))
     .with_children(vec![Subtree::leaf(PlainNode::Paragraph(
@@ -170,9 +321,14 @@ pub(crate) fn make_empty_table_cell() -> Subtree {
     ))])
 }
 
-fn make_empty_table_row(n_cols: usize) -> Subtree {
-    Subtree::leaf(PlainNode::TableRow(PlainTableRowNode {}))
-        .with_children((0..n_cols).map(|_| make_empty_table_cell()).collect())
+fn make_empty_table_row(n_cols: usize, col_widths: Option<&[u32]>) -> Subtree {
+    Subtree::leaf(PlainNode::TableRow(PlainTableRowNode {})).with_children(
+        (0..n_cols)
+            .map(|idx| {
+                make_empty_table_cell(col_widths.and_then(|widths| widths.get(idx)).copied())
+            })
+            .collect(),
+    )
 }
 
 /// Insert a fresh empty row at `index` in the table. The new row gets as many
@@ -189,7 +345,12 @@ pub(crate) fn insert_empty_table_row(
             .ok_or(CommandError::NodeNotFound(table_id))?;
         col_count_from_table(&table)?
     };
-    tr.insert_subtree(table_id, index, make_empty_table_row(n_cols))?;
+    let col_widths = first_row_col_width_weights(tr, table_id)?;
+    tr.insert_subtree(
+        table_id,
+        index,
+        make_empty_table_row(n_cols, col_widths.as_deref()),
+    )?;
     Ok(())
 }
 
@@ -199,6 +360,8 @@ pub(crate) fn insert_empty_table_column(
     table_id: Dot,
     index: usize,
 ) -> Result<(), CommandError> {
+    let next_widths = first_row_col_width_weights(tr, table_id)?
+        .map(|widths| inserted_col_width_weights(&widths, index));
     let row_ids: Vec<Dot> = {
         let view = tr.state().view();
         let table = view
@@ -207,7 +370,10 @@ pub(crate) fn insert_empty_table_column(
         table.child_blocks().map(|r| r.id()).collect()
     };
     for row_id in row_ids {
-        tr.insert_subtree(row_id, index, make_empty_table_cell())?;
+        tr.insert_subtree(row_id, index, make_empty_table_cell(None))?;
+    }
+    if let Some(widths) = next_widths {
+        apply_col_width_weights_to_all_rows(tr, table_id, &widths)?;
     }
     Ok(())
 }

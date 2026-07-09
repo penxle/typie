@@ -2936,6 +2936,8 @@ class EditorInteractionControllerTest {
         align = Alignment.Left,
         proportion = 1f,
         contentWidth = 100f,
+        minProportionWidth = 83f,
+        maxProportionWidth = 100f,
         rows =
           listOf(
             TableOverlayRow(index = 0, height = 40f, position = 40f, backgroundColor = null),
