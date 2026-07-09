@@ -1,27 +1,9 @@
-use editor_model::{
-    AtomLeaf, ChildView, DocView, NodeType, PlainNode, PlainParagraphNode, Subtree,
-};
-use editor_state::{Affinity, Position, Selection};
+use editor_model::{ChildView, NodeType, PlainNode, PlainParagraphNode, Subtree};
+use editor_state::{Affinity, Position, Selection, is_unit_node_selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::is_block_container;
 use crate::{CommandError, CommandResult};
-
-fn is_unit_node_selection(view: &DocView, sel: &Selection) -> bool {
-    if sel.anchor.node != sel.head.node {
-        return false;
-    }
-    let lo = sel.anchor.offset.min(sel.head.offset);
-    let hi = sel.anchor.offset.max(sel.head.offset);
-    if lo.checked_add(1) != Some(hi) {
-        return false;
-    }
-    match view.node(sel.anchor.node).and_then(|n| n.child_at(lo)) {
-        Some(ChildView::Block(b)) => b.spec().is_unit(),
-        Some(ChildView::Leaf(l)) => l.as_atom().is_some_and(AtomLeaf::is_block_level),
-        None => false,
-    }
-}
 
 pub fn insert_paragraph_after_unit_selection(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
@@ -36,7 +18,7 @@ pub fn insert_paragraph_after_unit_selection(tr: &mut Transaction) -> CommandRes
 
     {
         let view = tr.state().view();
-        if !is_unit_node_selection(&view, &selection) {
+        if !is_unit_node_selection(&selection, &view) {
             return Ok(false);
         }
         let parent = view

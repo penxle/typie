@@ -386,13 +386,13 @@ pub(crate) fn normalize_position(pos: &Position, _view: &DocView) -> Position {
     *pos
 }
 
-// ── §2.5 small public helpers ─────────────────────────────────────────────────
+// ── §2.5 small selection helpers ──────────────────────────────────────────────
 
 pub fn is_unit_node_selection(sel: &Selection, view: &DocView) -> bool {
     selected_child(sel, view).is_some_and(|child| classify::child_is_unit(&child))
 }
 
-pub fn selected_child<'a>(sel: &Selection, view: &'a DocView<'a>) -> Option<ChildView<'a>> {
+pub(crate) fn selected_child<'a>(sel: &Selection, view: &'a DocView<'a>) -> Option<ChildView<'a>> {
     if sel.anchor.node != sel.head.node {
         return None;
     }

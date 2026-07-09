@@ -749,8 +749,7 @@ mod tests {
                 // Must resolve
                 let Some(rs) = sel.resolve(&view3) else { return Ok(()); };
                 let is_cell_rect = as_cell_rect(&rs).is_some();
-                // A full-table promoted selection is a bracket of a Block (Table),
-                // which as_node_selection rejects (it only matches Leaf atoms).
+                // A full-table promoted selection brackets the table block itself.
                 // So we just check that the result resolves without any subtree violation.
                 if !is_cell_rect {
                     // Either it's the promoted table node-selection or a collapse;

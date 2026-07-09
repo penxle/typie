@@ -1,4 +1,5 @@
 use editor_clipboard::Slice;
+use editor_state::is_unit_node_selection;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -20,31 +21,11 @@ pub fn insert_slice(
     let Some(inserted) = insert_slice_at_position(tr, selection.head, slice, provenance)? else {
         return Ok(false);
     };
-    let unit = is_unit_node_selection(&tr.view(), &inserted);
+    let unit = is_unit_node_selection(&inserted, &tr.view());
     if unit {
         tr.set_selection(Some(inserted))?;
     }
     Ok(true)
-}
-
-fn is_unit_node_selection(view: &editor_model::DocView, sel: &editor_state::Selection) -> bool {
-    if sel.anchor.node != sel.head.node {
-        return false;
-    }
-    let (lo, hi) = (
-        sel.anchor.offset.min(sel.head.offset),
-        sel.anchor.offset.max(sel.head.offset),
-    );
-    if lo + 1 != hi {
-        return false;
-    }
-    match view.node(sel.anchor.node).and_then(|n| n.child_at(lo)) {
-        Some(editor_model::ChildView::Block(b)) => b.spec().is_unit(),
-        Some(editor_model::ChildView::Leaf(l)) => {
-            l.as_atom().map(|a| a.is_block_level()).unwrap_or(false)
-        }
-        None => false,
-    }
 }
 
 #[cfg(test)]

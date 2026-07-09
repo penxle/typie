@@ -1,7 +1,7 @@
 use std::ops::RangeInclusive;
 
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, LeafView, NodeType, NodeView};
+use editor_model::{ChildView, DocView, NodeType, NodeView};
 
 use crate::selection::{ResolvedSelection, Selection};
 
@@ -145,25 +145,6 @@ pub fn as_cell_rect<'a>(rs: &ResolvedSelection<'a>) -> Option<CellRect<'a>> {
     })
 }
 
-pub fn as_node_selection<'a>(rs: &ResolvedSelection<'a>) -> Option<LeafView<'a>> {
-    if rs.is_collapsed() || as_cell_rect(rs).is_some() {
-        return None;
-    }
-    let (a, h) = (rs.anchor().position(), rs.head().position());
-    if a.node != h.node {
-        return None;
-    }
-    let (lo, hi) = (a.offset.min(h.offset), a.offset.max(h.offset));
-    if hi - lo != 1 {
-        return None;
-    }
-    match rs.view().node(a.node)?.child_at(lo)? {
-        ChildView::Leaf(l) if l.as_char().is_some() => None,
-        ChildView::Leaf(l) => Some(l),
-        ChildView::Block(_) => None,
-    }
-}
-
 pub fn enclosing_table_cell<'a>(view: &'a DocView<'a>, node: Dot) -> Option<Dot> {
     view.node(node)?
         .ancestors()
@@ -231,8 +212,8 @@ mod tests {
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AliasLog, AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc,
-        SeqItem, SpanLog, project_document,
+        AliasLog, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem,
+        SpanLog, project_document,
     };
 
     use crate::{Position, affinity::Affinity, selection::Selection};
@@ -482,76 +463,6 @@ mod tests {
         assert!(cr_full_table.is_full_row());
         assert!(cr_full_table.is_full_column());
         assert!(cr_full_table.is_full_table());
-    }
-
-    fn doc_with_hardbreak_atom() -> (ProjectedDoc, Dot, Dot) {
-        let root = Dot::ROOT;
-        let para = Dot::new(1, 1);
-        let atom_dot = Dot::new(1, 2);
-        let items = vec![
-            (
-                para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
-            (atom_dot, SeqItem::Atom(AtomLeaf::HardBreak)),
-        ];
-        (project_document(&logs(&items)).unwrap(), para, atom_dot)
-    }
-
-    #[test]
-    fn test_6_as_node_selection_atom() {
-        let (pd, para, _atom_dot) = doc_with_hardbreak_atom();
-        let view = DocView::new(&pd);
-        // selection of exactly 1 atom leaf (offset 0..1 in para)
-        let a = Position {
-            node: para,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        };
-        let h = Position {
-            node: para,
-            offset: 1,
-            affinity: Affinity::Downstream,
-        };
-        let sel = Selection::new(a, h).resolve(&view).unwrap();
-        let ns = as_node_selection(&sel);
-        assert!(
-            ns.is_some(),
-            "selecting a single atom leaf should give node selection"
-        );
-        let lv = ns.unwrap();
-        assert!(lv.as_char().is_none());
-        assert!(lv.as_atom().is_some());
-    }
-
-    #[test]
-    fn test_6_as_node_selection_none_for_char() {
-        let root = Dot::ROOT;
-        let para = Dot::new(1, 1);
-        let items = vec![
-            (
-                para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
-            (Dot::new(1, 2), SeqItem::Char('a')),
-        ];
-        let pd = project_document(&logs(&items)).unwrap();
-        let view = DocView::new(&pd);
-        let a = Position::new(para, 0);
-        let h = Position::new(para, 1);
-        let sel = Selection::new(a, h).resolve(&view).unwrap();
-        assert!(
-            as_node_selection(&sel).is_none(),
-            "char leaf is not a node selection"
-        );
     }
 
     #[test]
@@ -912,95 +823,15 @@ mod tests {
         let _ = (cell02, cell10, cell11);
     }
 
-    // §4.6 — 1×1 cell-rect must NOT be reported as a node-selection
     #[test]
-    fn test_6_node_selection_none_for_1x1_cell_rect() {
+    fn test_6_cell_rect_single_cell_is_still_cell_rect() {
         let (pd, _root, _table, row0, _cell00, _cell01, _row1, _cell10) = two_by_two_table();
         let view = DocView::new(&pd);
 
-        // Single-cell selection (offset 0..1 in row0 → 1×1 rect)
         let rs = sel(&view, row0, 0, row0, 1);
         let cr = as_cell_rect(&rs);
         assert!(cr.is_some(), "this is a valid 1×1 cell rect");
         assert!(cr.unwrap().is_single());
-
-        // as_node_selection must return None because as_cell_rect gate fires first
-        assert!(
-            as_node_selection(&rs).is_none(),
-            "1×1 cell rect must NOT be reported as a node-selection (as_cell_rect gate)"
-        );
-    }
-
-    // §4.6 — bracketed Block container (e.g. a Table) → as_node_selection is None
-    #[test]
-    fn test_6_node_selection_none_for_block_container() {
-        // root > [table, paragraph]: bracket the table → offset 0..1 in root
-        let root = Dot::ROOT;
-        let table = Dot::new(1, 1);
-        let row = Dot::new(1, 2);
-        let cell = Dot::new(1, 3);
-        let para_in_cell = Dot::new(1, 4);
-        let para_after = Dot::new(1, 5);
-        let items = vec![
-            (
-                table,
-                SeqItem::Block {
-                    node_type: NodeType::Table,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
-            (
-                row,
-                SeqItem::Block {
-                    node_type: NodeType::TableRow,
-                    parents: vec![root, table],
-                    attrs: vec![],
-                },
-            ),
-            (
-                cell,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row],
-                    attrs: vec![],
-                },
-            ),
-            (
-                para_in_cell,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row, cell],
-                    attrs: vec![],
-                },
-            ),
-            (
-                para_after,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
-        ];
-        let pd = project_document(&logs(&items)).unwrap();
-        let view = DocView::new(&pd);
-
-        // Bracket the table: anchor at root offset 0, head at root offset 1
-        let a = Position::new(root, 0);
-        let h = Position::new(root, 1);
-        let rs = Selection::new(a, h).resolve(&view).unwrap();
-
-        // as_cell_rect: endpoints are in root (not a TableRow) → None
-        assert!(
-            as_cell_rect(&rs).is_none(),
-            "no cell rect for root-level bracket"
-        );
-        // as_node_selection: the child at offset 0 is a Block (Table) → None
-        assert!(
-            as_node_selection(&rs).is_none(),
-            "bracketed Block container must not be a node-selection"
-        );
     }
 
     // §4.7 — enclosing_table_cell for a node outside any table → None
@@ -1090,25 +921,16 @@ mod tests {
             // Detectors must not panic
             let gc = as_gap_cursor(&rs);
             let cr = as_cell_rect(&rs);
-            let ns = as_node_selection(&rs);
 
             // Mutual exclusion invariants:
             // 1. as_gap_cursor => selection is collapsed
             if gc.is_some() {
                 proptest::prop_assert!(rs.is_collapsed(), "as_gap_cursor implies collapsed");
             }
-            // 2. as_cell_rect / as_node_selection => non-collapsed
+            // 2. as_cell_rect => non-collapsed
             if cr.is_some() {
                 proptest::prop_assert!(!rs.is_collapsed(), "as_cell_rect implies non-collapsed");
             }
-            if ns.is_some() {
-                proptest::prop_assert!(!rs.is_collapsed(), "as_node_selection implies non-collapsed");
-            }
-            // 3. as_cell_rect and as_node_selection are never both Some
-            proptest::prop_assert!(
-                !(cr.is_some() && ns.is_some()),
-                "as_cell_rect and as_node_selection are mutually exclusive"
-            );
 
             // Suppress unused-variable warnings for doc_kind
             let _ = (doc_kind, cell00_d, cell01_d, cell10_d);
