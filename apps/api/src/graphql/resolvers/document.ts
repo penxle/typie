@@ -65,6 +65,7 @@ import {
   countCharacters,
   derivePlainRootFromPreset,
   extractAssetIdsFromPlainDoc,
+  extractPlainDocLayoutMode,
   insertFreshV2Content,
 } from '#/utils/entity.ts';
 import {
@@ -339,6 +340,16 @@ Document.implement({
     layoutMode: t.field({
       type: 'JSON',
       resolve: async (self) => {
+        const state = await db
+          .select({ json: DocumentStates.json })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, self.id))
+          .then(first);
+
+        if (state) {
+          return extractPlainDocLayoutMode(state.json as PlainDoc);
+        }
+
         const content = await db
           .select({ snapshot: DocumentContents.snapshot })
           .from(DocumentContents)

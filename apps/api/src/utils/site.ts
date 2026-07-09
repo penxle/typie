@@ -13,7 +13,7 @@ import {
   Sites,
 } from '#/db/index.ts';
 import { compressZstd } from './compression.ts';
-import { generatePermalink, generateSlug } from './entity.ts';
+import { buildFreshV2Content, generatePermalink, generateSlug, insertFreshV2Content } from './entity.ts';
 import { wasm } from './wasm.ts';
 import type { Transaction } from '#/db/index.ts';
 
@@ -94,6 +94,7 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
 
     const templateDocuments = await tx
       .select({
+        id: Documents.id,
         title: Documents.title,
         subtitle: Documents.subtitle,
         content: {
@@ -170,6 +171,11 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
         versionId: documentVersion.id,
         userId,
       });
+
+      const v2 = await buildFreshV2Content(doc.id);
+      if (v2) {
+        await insertFreshV2Content(tx, newDocument.id, v2);
+      }
     }
   }
 };

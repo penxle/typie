@@ -1,6 +1,6 @@
 import { EntityState } from '@typie/lib/enums';
 import { eq } from 'drizzle-orm';
-import { db, DocumentContents, Documents, Entities, firstOrThrow, Folders } from '#/db/index.ts';
+import { db, DocumentContents, Documents, DocumentStates, Entities, firstOrThrow, Folders } from '#/db/index.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { getAncestorEntityIds } from '#/utils/entity.ts';
 import { decompose } from '#/utils/text.ts';
@@ -16,11 +16,13 @@ export const DocumentIndexJob = defineJob('search:index:document', async (docume
       parentId: Entities.parentId,
       title: Documents.title,
       subtitle: Documents.subtitle,
-      text: DocumentContents.text,
+      contentText: DocumentContents.text,
+      stateText: DocumentStates.text,
       updatedAt: Documents.updatedAt,
     })
     .from(Documents)
     .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
+    .leftJoin(DocumentStates, eq(Documents.id, DocumentStates.documentId))
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
     .where(eq(Documents.id, documentId))
     .then(firstOrThrow);
@@ -37,7 +39,7 @@ export const DocumentIndexJob = defineJob('search:index:document', async (docume
         title_decomposed: decompose(document.title),
         subtitle: document.subtitle,
         subtitle_decomposed: decompose(document.subtitle),
-        text: document.text,
+        text: document.stateText ?? document.contentText,
         ancestor_ids: ancestorIds,
         updated_at: document.updatedAt,
       },

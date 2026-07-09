@@ -407,6 +407,40 @@ export const extractLoroDocLayoutMode = (snapshot: Uint8Array): LoroLayoutMode =
   };
 };
 
+export const extractPlainDocLayoutMode = (plain: PlainDoc): LoroLayoutMode => {
+  const node = plain.root.node;
+  if (node.type !== 'root') {
+    return {
+      type: 'paginated',
+      pageWidth: 794,
+      pageHeight: 1123,
+      pageMarginTop: 96,
+      pageMarginBottom: 96,
+      pageMarginLeft: 96,
+      pageMarginRight: 96,
+    };
+  }
+
+  const layoutMode = (node as PlainRootNode).layout_mode;
+
+  if (layoutMode.type === 'continuous') {
+    return {
+      type: 'continuous',
+      maxWidth: layoutMode.max_width,
+    };
+  }
+
+  return {
+    type: 'paginated',
+    pageWidth: layoutMode.page_width,
+    pageHeight: layoutMode.page_height,
+    pageMarginTop: layoutMode.page_margin_top,
+    pageMarginBottom: layoutMode.page_margin_bottom,
+    pageMarginLeft: layoutMode.page_margin_left,
+    pageMarginRight: layoutMode.page_margin_right,
+  };
+};
+
 export const resolveNameConflict = async (
   tx: Transaction,
   name: string,
