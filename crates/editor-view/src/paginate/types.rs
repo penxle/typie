@@ -51,6 +51,7 @@ pub(crate) struct LayoutBox {
     pub style: BoxStyle,
     pub children: Vec<LayoutNode>,
     pub attachment: Option<ChildAttachment>,
+    pub scope: bool,
 }
 
 /// A positioned line. Shares the measured payload (glyph runs, ruby, tab
@@ -124,6 +125,7 @@ mod tests {
                         content: LayoutContent::Line(line),
                     }],
                     attachment: None,
+                    scope: false,
                 }),
             },
         };

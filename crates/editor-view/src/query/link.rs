@@ -176,6 +176,7 @@ mod tests {
                 },
                 children,
                 attachment: None,
+                scope: false,
             }),
         }
     }

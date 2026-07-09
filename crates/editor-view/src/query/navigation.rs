@@ -12,6 +12,8 @@ use super::grapheme::{first_position_in_line, last_position_in_line};
 use super::layout_index::{LayoutEntry, LayoutIndex};
 use super::segmentation;
 
+mod vertical_target;
+
 pub(crate) fn resolve_movement(
     layout_index: &LayoutIndex,
     pos: &Position,
@@ -288,6 +290,10 @@ fn move_grapheme_backward(layout_index: &LayoutIndex, pos: &Position) -> Option<
     }
 }
 
+// Horizontal movement is intentionally document-order or current-line boundary
+// movement in v2. Scope-aware geometry is reserved for vertical target search,
+// where multiple table-cell scopes share a y range and document order cannot
+// identify the visually above/below target.
 fn move_line_horizontal_forward(layout_index: &LayoutIndex, pos: &Position) -> Option<Selection> {
     let entry = layout_index.entry_for_position(pos)?;
     match entry.content(layout_index)? {
@@ -315,17 +321,21 @@ fn move_line_vertical_forward(
         return (None, preferred_x);
     };
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(layout_index, entry, pos));
-    let y = entry.rect.bottom();
-    let target = navigable_below_at_x(layout_index, y, x);
+    let target = vertical_target::below(layout_index, entry, x);
     let sel = if let Some(t) = target {
-        let s = escape_empty_line_trap(
+        let mut s = escape_empty_line_trap(
             layout_index,
             navigate_to_entry(layout_index, t, x),
             Some(t),
             pos,
             true,
         );
-        Some(skip_over_when_stuck(layout_index, s, t, pos, x, true))
+        if is_empty_line_stuck(layout_index, t, &s, pos) {
+            if let Some(next) = vertical_target::below(layout_index, t, x) {
+                s = navigate_to_entry(layout_index, next, x);
+            }
+        }
+        Some(s)
     } else {
         line_end_fallback(layout_index, entry, true)
     };
@@ -341,53 +351,49 @@ fn move_line_vertical_backward(
         return (None, preferred_x);
     };
     let x = preferred_x.unwrap_or_else(|| compute_preferred_x(layout_index, entry, pos));
-    let y = entry.rect.y;
-    let target = navigable_above_at_x(layout_index, y, x);
+    let target = vertical_target::above(layout_index, entry, x);
     let sel = if let Some(t) = target {
-        let s = escape_empty_line_trap(
+        let mut s = escape_empty_line_trap(
             layout_index,
             navigate_to_entry(layout_index, t, x),
             Some(t),
             pos,
             false,
         );
-        Some(skip_over_when_stuck(layout_index, s, t, pos, x, false))
+        if is_empty_line_stuck(layout_index, t, &s, pos) {
+            if let Some(next) = vertical_target::above(layout_index, t, x) {
+                s = navigate_to_entry(layout_index, next, x);
+            }
+        }
+        Some(s)
     } else {
         line_end_fallback(layout_index, entry, false)
     };
     (sel, Some(x))
 }
 
-fn skip_over_when_stuck(
+fn is_empty_line_stuck(
     layout_index: &LayoutIndex,
-    sel: Selection,
     target: &LayoutEntry,
+    sel: &Selection,
     pos: &Position,
-    x: f32,
-    forward: bool,
-) -> Selection {
+) -> bool {
     let Some(LayoutContent::Line(line)) = target.content(layout_index) else {
-        return sel;
+        return false;
     };
     if !line.glyph_runs.is_empty() {
-        return sel;
+        return false;
     }
     let Some(range) = &line.offset_range else {
-        return sel;
+        return false;
     };
     if range.start != range.end {
-        return sel;
+        return false;
     }
     if sel.head.node != pos.node || sel.head.offset != pos.offset {
-        return sel;
+        return false;
     }
-    let next = if forward {
-        navigable_below_at_x(layout_index, target.rect.bottom(), x)
-    } else {
-        navigable_above_at_x(layout_index, target.rect.y, x)
-    };
-    next.map(|entry| navigate_to_entry(layout_index, entry, x))
-        .unwrap_or(sel)
+    true
 }
 
 fn line_end_fallback(
@@ -689,9 +695,28 @@ pub(crate) fn navigable_below_at_x(
     y_threshold: f32,
     x: f32,
 ) -> Option<&LayoutEntry> {
+    navigable_below_at_x_filtered(layout_index, y_threshold, x, |_| true)
+}
+
+pub(crate) fn navigable_above_at_x(
+    layout_index: &LayoutIndex,
+    y_threshold: f32,
+    x: f32,
+) -> Option<&LayoutEntry> {
+    navigable_above_at_x_filtered(layout_index, y_threshold, x, |_| true)
+}
+
+fn navigable_below_at_x_filtered<'a>(
+    layout_index: &'a LayoutIndex,
+    y_threshold: f32,
+    x: f32,
+    mut include: impl FnMut(&LayoutEntry) -> bool,
+) -> Option<&'a LayoutEntry> {
     let candidates: Vec<&LayoutEntry> = layout_index
         .entries()
-        .filter(|entry| is_navigable_entry(layout_index, entry) && entry.rect.y >= y_threshold)
+        .filter(|entry| {
+            is_navigable_entry(layout_index, entry) && entry.rect.y >= y_threshold && include(entry)
+        })
         .collect();
     let top = candidates.iter().copied().min_by(|a, b| {
         a.rect
@@ -706,15 +731,18 @@ pub(crate) fn navigable_below_at_x(
         .min_by(|a, b| compare_navigation_band_entry(a, b, x, true))
 }
 
-pub(crate) fn navigable_above_at_x(
-    layout_index: &LayoutIndex,
+fn navigable_above_at_x_filtered<'a>(
+    layout_index: &'a LayoutIndex,
     y_threshold: f32,
     x: f32,
-) -> Option<&LayoutEntry> {
+    mut include: impl FnMut(&LayoutEntry) -> bool,
+) -> Option<&'a LayoutEntry> {
     let candidates: Vec<&LayoutEntry> = layout_index
         .entries()
         .filter(|entry| {
-            is_navigable_entry(layout_index, entry) && entry.rect.bottom() <= y_threshold
+            is_navigable_entry(layout_index, entry)
+                && entry.rect.bottom() <= y_threshold
+                && include(entry)
         })
         .collect();
     let bottom = candidates.iter().copied().min_by(|a, b| {
@@ -1096,9 +1124,11 @@ mod tests {
                                 content: LayoutContent::Line(line),
                             }],
                             attachment: None,
+                            scope: false,
                         }),
                     }],
                     attachment: None,
+                    scope: false,
                 }),
             },
         };

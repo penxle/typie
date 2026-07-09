@@ -127,6 +127,7 @@ pub(crate) struct MeasuredBox {
     pub style: BoxStyle,
     pub children: MeasuredChildren,
     pub page_break_policy: PageBreakPolicy,
+    pub scope: bool,
 }
 
 #[derive(Debug, Clone)]

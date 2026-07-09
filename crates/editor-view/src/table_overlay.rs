@@ -455,6 +455,7 @@ mod tests {
                 style: empty_box_style(),
                 children,
                 attachment: None,
+                scope: false,
             }),
         }
     }

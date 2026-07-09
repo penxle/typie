@@ -121,6 +121,7 @@ mod tests {
                 style: empty_box_style(),
                 children,
                 attachment: None,
+                scope: false,
             }),
         }
     }
@@ -288,6 +289,7 @@ mod tests {
                 style,
                 children: vec![line_node(line_id, 10.0, 20.0)],
                 attachment: None,
+                scope: false,
             }),
         };
         let tree = LayoutTree { root };

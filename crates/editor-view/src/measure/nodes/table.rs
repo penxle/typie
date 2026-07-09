@@ -120,7 +120,7 @@ pub(crate) fn measure_table_cell(
     let mut seam = |child, w, ctx: &MeasureContext, r: &mut Resource| {
         measure_child(measurer, child, w, ctx, r)
     };
-    layout_padded(
+    let mut measured = layout_padded(
         node,
         width,
         ctx,
@@ -132,7 +132,12 @@ pub(crate) fn measure_table_cell(
             page_break_policy: PageBreakPolicy::Avoid,
         },
         &mut seam,
-    )
+    );
+    let MeasuredContent::Box(cell_box) = &mut measured.content else {
+        unreachable!()
+    };
+    cell_box.scope = true;
+    measured
 }
 
 pub(crate) fn measure_table(
@@ -165,6 +170,7 @@ pub(crate) fn measure_table(
                 },
                 children: MeasuredChildren::default(),
                 page_break_policy: PageBreakPolicy::Auto,
+                scope: false,
             }),
         };
     }
@@ -249,6 +255,7 @@ pub(crate) fn measure_table(
                 },
                 children: MeasuredChildren::from_blocks(row_children),
                 page_break_policy: PageBreakPolicy::Avoid,
+                scope: false,
             }),
         };
 
@@ -289,6 +296,7 @@ pub(crate) fn measure_table(
             },
             children: MeasuredChildren::from_blocks(row_measurements),
             page_break_policy: PageBreakPolicy::Auto,
+            scope: false,
         }),
     }
 }

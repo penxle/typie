@@ -2989,6 +2989,75 @@ mod tests {
         );
     }
 
+    #[test]
+    fn arrow_down_from_short_cell_ignores_lower_line_in_same_row_neighbor() {
+        let (state, _tc1, p2) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { tc1: paragraph { text("d") } }
+                            table_cell { paragraph { text("e") hard_break text("f") } }
+                        }
+                    }
+                    p2: paragraph { text("below") }
+                }
+            }
+            selection: (tc1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(
+            s.head.node, p2,
+            "down from the short cell must exit the row, not enter a lower line in a neighboring cell"
+        );
+    }
+
+    #[test]
+    fn arrow_up_from_cell_exits_to_cell_above_same_column_not_lower_line_in_neighbor() {
+        let (state, top_left, _top_right, _bottom_left) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { top_left: paragraph { text("a") } }
+                            table_cell { top_right: paragraph { text("b") hard_break text("c") } }
+                        }
+                        table_row {
+                            table_cell { bottom_left: paragraph { text("d") } }
+                            table_cell { paragraph { text("e") } }
+                        }
+                    }
+                }
+            }
+            selection: (bottom_left, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(
+            s.head.node, top_left,
+            "up from a cell must exit to the cell above in the same column, not a lower line in another column"
+        );
+    }
+
     // TR-199 회귀 방지: 가장자리 행 판정이 "마지막 직계 자식 서브트리"로 넓어지면서,
     // 자식이 단락 하나뿐이고 그 단락이 여러 줄로 접히는 monolithic(콜아웃 등)에서
     // 첫 줄에 있어도 가장자리로 오인될 수 있다. 첫 줄에서 down은 갭으로 나가지 말고

@@ -77,6 +77,7 @@ pub(crate) fn expand_first_line(
                                 style: b.style.clone(),
                                 children: new_children,
                                 page_break_policy: b.page_break_policy,
+                                scope: b.scope,
                             }),
                         },
                         top: running_y + expanded.top,
@@ -205,6 +206,7 @@ mod tests {
                 style,
                 children,
                 page_break_policy: PageBreakPolicy::Auto,
+                scope: false,
             }),
         }
     }
@@ -231,6 +233,7 @@ mod tests {
                 style: BoxStyle::default(),
                 children,
                 page_break_policy: PageBreakPolicy::Auto,
+                scope: false,
             }),
         };
         assert!(first_line_info(&only_spacing).is_none());

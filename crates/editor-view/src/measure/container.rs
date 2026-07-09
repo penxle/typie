@@ -172,6 +172,7 @@ pub(crate) fn layout_padded<'a>(
             },
             children,
             page_break_policy,
+            scope: false,
         }),
     }
 }

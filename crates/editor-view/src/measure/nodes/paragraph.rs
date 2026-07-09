@@ -99,6 +99,7 @@ pub(crate) fn measure_paragraph_block(
             },
             children: MeasuredChildren::from_blocks(children),
             page_break_policy: PageBreakPolicy::Auto,
+            scope: false,
         }),
     }
 }

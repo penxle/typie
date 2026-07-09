@@ -31,28 +31,55 @@ fn dnd_position(
     view: &DocView,
     point: LayoutPoint,
 ) -> Option<Position> {
-    let position = layout_index
-        .exact_entry_with(point, |entry, node| {
-            dnd_position_for_candidate(layout_index, view, entry, node, point)
-        })
-        .or_else(|| {
-            layout_index.closest_entry_with(point, |entry, node| {
-                dnd_position_for_candidate(layout_index, view, entry, node, point)
-            })
-        })
-        .map(|(_, position)| position)?;
+    let scope = layout_index.container_scope(point);
+    let position = if let Some(scope) = scope {
+        let in_scope_descendant = |entry: &LayoutEntry| {
+            layout_index.entry_is_in_scope(entry, scope) && !std::ptr::eq(entry, scope)
+        };
+        let in_scope = |entry: &LayoutEntry| layout_index.entry_is_in_scope(entry, scope);
+        exact_dnd_position(layout_index, view, point, &in_scope_descendant)
+            .or_else(|| exact_dnd_position(layout_index, view, point, &in_scope))
+            .or_else(|| closest_dnd_position(layout_index, view, point, &in_scope_descendant))
+            .or_else(|| closest_dnd_position(layout_index, view, point, &in_scope))
+    } else {
+        let all_entries = |_: &LayoutEntry| true;
+        exact_dnd_position(layout_index, view, point, &all_entries)
+            .or_else(|| closest_dnd_position(layout_index, view, point, &all_entries))
+    }?;
 
     position.resolve(view).is_some().then_some(position)
 }
 
-fn is_dnd_entry(_entry: &LayoutEntry, node: &crate::paginate::types::LayoutNode) -> bool {
-    matches!(
-        node.content,
-        LayoutContent::Line(_)
-            | LayoutContent::Atom(_)
-            | LayoutContent::Box(_)
-            | LayoutContent::Spacing(SpacingKind::Gap { .. })
-    )
+fn exact_dnd_position(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    point: LayoutPoint,
+    include: &impl Fn(&LayoutEntry) -> bool,
+) -> Option<Position> {
+    layout_index
+        .exact_entry_with(point, |entry, node| {
+            if !include(entry) {
+                return None;
+            }
+            dnd_position_for_candidate(layout_index, view, entry, node, point)
+        })
+        .map(|(_, position)| position)
+}
+
+fn closest_dnd_position(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    point: LayoutPoint,
+    include: &impl Fn(&LayoutEntry) -> bool,
+) -> Option<Position> {
+    layout_index
+        .closest_entry_with(point, |entry, node| {
+            if !include(entry) {
+                return None;
+            }
+            dnd_position_for_candidate(layout_index, view, entry, node, point)
+        })
+        .map(|(_, position)| position)
 }
 
 fn dnd_position_for_candidate(
@@ -65,6 +92,16 @@ fn dnd_position_for_candidate(
     is_dnd_entry(entry, node)
         .then(|| dnd_position_for_entry(layout_index, view, entry, point))
         .flatten()
+}
+
+fn is_dnd_entry(_entry: &LayoutEntry, node: &crate::paginate::types::LayoutNode) -> bool {
+    matches!(
+        node.content,
+        LayoutContent::Line(_)
+            | LayoutContent::Atom(_)
+            | LayoutContent::Box(_)
+            | LayoutContent::Spacing(SpacingKind::Gap { .. })
+    )
 }
 
 fn dnd_position_for_entry(
@@ -360,6 +397,76 @@ mod tests {
         logs(&items)
     }
 
+    fn table_with_short_cell_and_wrapped_neighbor() -> DocLogs {
+        let root = Dot::ROOT;
+        let table = Dot::new(15, 1);
+        let row = Dot::new(15, 2);
+        let left_cell = Dot::new(15, 3);
+        let left_para = Dot::new(15, 4);
+        let right_cell = Dot::new(15, 20);
+        let right_para = Dot::new(15, 21);
+
+        let mut items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                    attrs: vec![],
+                },
+            ),
+            (
+                left_cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                left_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, left_cell],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(15, 5), SeqItem::Char('x')),
+            (
+                right_cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                right_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, right_cell],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        for (i, ch) in "right cell text wraps onto a second visual line"
+            .chars()
+            .enumerate()
+        {
+            items.push((Dot::new(15, 22 + i as u64), SeqItem::Char(ch)));
+        }
+
+        logs(&items)
+    }
+
     #[test]
     fn drop_in_line_inline_indicator() {
         let doc = para_doc_data("Hello");
@@ -407,6 +514,104 @@ mod tests {
         );
 
         let _ = root_id;
+    }
+
+    #[test]
+    fn drop_target_side_gutter_routes_to_nearest_cell_scope_in_row() {
+        let doc = table_with_short_cell_and_wrapped_neighbor();
+        let pd = project_document(&doc).unwrap();
+        let (view, index) = build_index(&doc, 180.0, &pd);
+
+        let root = view.root().expect("root must exist");
+        let table = root.child_blocks().next().expect("table must exist");
+        let row = table.child_blocks().next().expect("row must exist");
+        let mut cells = row.child_blocks();
+        let left_cell = cells.next().expect("left cell must exist");
+        let left_para = left_cell
+            .child_blocks()
+            .next()
+            .expect("left paragraph must exist");
+        let right_cell = cells.next().expect("right cell must exist");
+        let right_para = right_cell
+            .child_blocks()
+            .next()
+            .expect("right paragraph must exist");
+
+        let left_cell_rect = index
+            .box_rect(&left_cell.id())
+            .expect("left cell must have a box");
+        let right_lines: Vec<_> = index
+            .entries()
+            .filter_map(|entry| {
+                let LayoutContent::Line(line) = entry.content(&index)? else {
+                    return None;
+                };
+                (line.node == right_para.id() && line.offset_range.is_some()).then_some(entry)
+            })
+            .collect();
+        assert!(
+            right_lines.len() >= 2,
+            "right cell text must wrap to at least two lines"
+        );
+        let second_right_line = right_lines[1];
+
+        let x = left_cell_rect.x - 0.25;
+        let page_y = second_right_line.rect.y - index.pages()[0].y_start
+            + second_right_line.rect.height / 2.0;
+
+        let target =
+            drop_target_at(&index, &view, 0, x, page_y).expect("gutter drop in row must resolve");
+
+        assert_eq!(
+            target.position.node,
+            left_para.id(),
+            "row side gutter drop must route to the nearest cell scope"
+        );
+    }
+
+    #[test]
+    fn drop_target_cell_padding_uses_cell_block_boundary() {
+        let doc = table_with_short_cell_and_wrapped_neighbor();
+        let pd = project_document(&doc).unwrap();
+        let (view, index) = build_index(&doc, 180.0, &pd);
+
+        let root = view.root().expect("root must exist");
+        let table = root.child_blocks().next().expect("table must exist");
+        let row = table.child_blocks().next().expect("row must exist");
+        let cell = row.child_blocks().next().expect("cell must exist");
+        let para = cell
+            .child_blocks()
+            .next()
+            .expect("cell paragraph must exist");
+
+        let cell_rect = index.box_rect(&cell.id()).expect("cell must have a box");
+        let para_rect = index
+            .box_rect(&para.id())
+            .expect("paragraph must have a box");
+        let x = para_rect.x + para_rect.width * 0.5;
+
+        let top_padding_y = (cell_rect.y + para_rect.y) * 0.5 - index.pages()[0].y_start;
+        let top_target = drop_target_at(&index, &view, 0, x, top_padding_y)
+            .expect("cell top padding drop must resolve");
+        assert_eq!(top_target.position.node, cell.id());
+        assert_eq!(top_target.position.offset, 0);
+        assert!(
+            matches!(top_target.indicator, DropIndicator::Block { .. }),
+            "cell padding drop should be a block boundary, got {:?}",
+            top_target.indicator
+        );
+
+        let bottom_padding_y =
+            (para_rect.bottom() + cell_rect.bottom()) * 0.5 - index.pages()[0].y_start;
+        let bottom_target = drop_target_at(&index, &view, 0, x, bottom_padding_y)
+            .expect("cell bottom padding drop must resolve");
+        assert_eq!(bottom_target.position.node, cell.id());
+        assert_eq!(bottom_target.position.offset, 1);
+        assert!(
+            matches!(bottom_target.indicator, DropIndicator::Block { .. }),
+            "cell padding drop should be a block boundary, got {:?}",
+            bottom_target.indicator
+        );
     }
 
     fn two_para_gap_doc() -> DocLogs {

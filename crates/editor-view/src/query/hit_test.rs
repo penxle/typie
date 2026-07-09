@@ -15,9 +15,20 @@ pub(crate) fn hit_test(
     y: f32,
 ) -> Option<Selection> {
     let point = layout_index.point(page_idx, x, y)?;
+    let scope = layout_index.container_scope(point);
+    let in_scope = |entry: &LayoutEntry| {
+        scope.is_none_or(|scope| layout_index.entry_is_in_scope(entry, scope))
+    };
+
     layout_index
-        .exact_entry(point, is_text_or_atom_hit_entry)
-        .or_else(|| layout_index.closest_entry(point, is_text_or_atom_hit_entry))
+        .exact_entry(point, |entry, node| {
+            in_scope(entry) && is_text_or_atom_hit_entry(entry, node)
+        })
+        .or_else(|| {
+            layout_index.closest_entry(point, |entry, node| {
+                in_scope(entry) && is_text_or_atom_hit_entry(entry, node)
+            })
+        })
         .and_then(|entry| text_or_atom_selection_for_entry(layout_index, entry, point.x))
 }
 
@@ -31,8 +42,14 @@ pub(crate) fn hit_test_extending(
 ) -> Option<Selection> {
     let point = layout_index.point(page_idx, x, y)?;
     let anchor = anchor.resolve(view)?;
+    let scope = layout_index.container_scope(point);
 
-    if let Some(entry) = layout_index.exact_entry(point, is_drag_exact_hit_entry) {
+    let is_scoped_drag_exact_hit_entry = |entry: &LayoutEntry, node: &LayoutNode| {
+        is_drag_exact_hit_entry(entry, node)
+            && scope.is_none_or(|scope| layout_index.entry_is_in_scope(entry, scope))
+    };
+
+    if let Some(entry) = layout_index.exact_entry(point, is_scoped_drag_exact_hit_entry) {
         if let Some(selection) =
             hard_break::drag_selection_for_entry(layout_index, view, entry, point)
         {
@@ -51,13 +68,13 @@ pub(crate) fn hit_test_extending(
                 b.attachment.as_ref().map(select_unit)
             }
             Some(LayoutContent::Spacing(SpacingKind::Gap { .. })) => {
-                drag_boundary_fallback(layout_index, view, &anchor, point)
+                drag_boundary_fallback(layout_index, view, &anchor, point, scope)
             }
             Some(LayoutContent::Box(_) | LayoutContent::Spacing(SpacingKind::Fill)) | None => None,
         };
     }
 
-    drag_boundary_fallback(layout_index, view, &anchor, point)
+    drag_boundary_fallback(layout_index, view, &anchor, point, scope)
 }
 
 fn is_text_or_atom_hit_entry(_entry: &LayoutEntry, node: &LayoutNode) -> bool {
@@ -96,12 +113,16 @@ fn drag_boundary_fallback(
     view: &DocView,
     anchor: &ResolvedPosition,
     point: LayoutPoint,
+    scope: Option<&LayoutEntry>,
 ) -> Option<Selection> {
     let mut inside: Option<DragFallbackCandidate> = None;
     let mut before: Option<DragFallbackCandidate> = None;
     let mut after: Option<DragFallbackCandidate> = None;
 
     for entry in layout_index.entries_on_page(point.page_idx) {
+        if scope.is_some_and(|scope| !layout_index.entry_is_in_scope(entry, scope)) {
+            continue;
+        }
         let Some(candidate) = drag_fallback_candidate(layout_index, entry, point) else {
             continue;
         };
@@ -407,6 +428,80 @@ mod tests {
         (pd, para_id, index)
     }
 
+    fn table_with_short_cell_and_wrapped_neighbor(
+        width: f32,
+    ) -> (ProjectedDoc, Dot, Dot, Dot, LayoutIndex) {
+        let root = Dot::ROOT;
+        let table = Dot::new(15, 1);
+        let row = Dot::new(15, 2);
+        let left_cell = Dot::new(15, 3);
+        let left_para = Dot::new(15, 4);
+        let right_cell = Dot::new(15, 20);
+        let right_para = Dot::new(15, 21);
+
+        let mut items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                    attrs: vec![],
+                },
+            ),
+            (
+                left_cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                left_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, left_cell],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(15, 5), SeqItem::Char('x')),
+            (
+                right_cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                right_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, right_cell],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        for (i, ch) in "right cell text wraps onto a second visual line"
+            .chars()
+            .enumerate()
+        {
+            items.push((Dot::new(15, 22 + i as u64), SeqItem::Char(ch)));
+        }
+
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, width);
+        (pd, left_cell, left_para, right_para, index)
+    }
+
     fn two_para_gap_doc(width: f32) -> (ProjectedDoc, Dot, Dot, LayoutIndex) {
         let root = Dot::ROOT;
         let p1 = Dot::new(13, 1);
@@ -466,6 +561,25 @@ mod tests {
         None
     }
 
+    fn line_entries_for_para<'a>(
+        index: &'a LayoutIndex,
+        para_id: &Dot,
+    ) -> Vec<(
+        &'a crate::query::layout_index::LayoutEntry,
+        &'a crate::paginate::types::LayoutLine,
+    )> {
+        index
+            .entries()
+            .filter_map(|entry| {
+                let node = entry.node(index)?;
+                let LayoutContent::Line(line) = &node.content else {
+                    return None;
+                };
+                (line.node == *para_id && line.offset_range.is_some()).then_some((entry, line))
+            })
+            .collect()
+    }
+
     #[test]
     fn hit_test_text_line_caret() {
         let (_pd, para_id, index) = para_doc("Hello", 400.0);
@@ -514,6 +628,62 @@ mod tests {
         assert_eq!(sel.anchor.node, para_id);
         assert_eq!(sel.anchor.offset, 2);
         assert_eq!(sel.anchor.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn hit_test_inside_short_table_cell_stays_in_that_cell_when_neighbor_wraps() {
+        let (_pd, left_cell, left_para, right_para, index) =
+            table_with_short_cell_and_wrapped_neighbor(180.0);
+
+        let left_cell_rect = index
+            .box_rect(&left_cell)
+            .expect("left cell must have a box");
+        let right_lines = line_entries_for_para(&index, &right_para);
+        assert!(
+            right_lines.len() >= 2,
+            "right cell text must wrap to at least two lines"
+        );
+        let (second_right_line, _) = right_lines[1];
+
+        let x = left_cell_rect.x + left_cell_rect.width / 2.0;
+        let page_y = second_right_line.rect.y - index.pages()[0].y_start
+            + second_right_line.rect.height / 2.0;
+
+        let sel = hit_test(&index, 0, x, page_y).expect("click inside table cell must hit");
+
+        assert_eq!(sel.anchor, sel.head);
+        assert_eq!(
+            sel.anchor.node, left_para,
+            "click inside the left cell must resolve within that cell"
+        );
+    }
+
+    #[test]
+    fn hit_test_side_gutter_routes_to_nearest_cell_scope_in_row() {
+        let (_pd, left_cell, left_para, right_para, index) =
+            table_with_short_cell_and_wrapped_neighbor(180.0);
+
+        let left_cell_rect = index
+            .box_rect(&left_cell)
+            .expect("left cell must have a box");
+        let right_lines = line_entries_for_para(&index, &right_para);
+        assert!(
+            right_lines.len() >= 2,
+            "right cell text must wrap to at least two lines"
+        );
+        let (second_right_line, _) = right_lines[1];
+
+        let x = left_cell_rect.x - 0.25;
+        let page_y = second_right_line.rect.y - index.pages()[0].y_start
+            + second_right_line.rect.height / 2.0;
+
+        let sel = hit_test(&index, 0, x, page_y).expect("gutter click in row must hit");
+
+        assert_eq!(sel.anchor, sel.head);
+        assert_eq!(
+            sel.anchor.node, left_para,
+            "row side gutter must route to the nearest cell scope, not the y-nearest neighboring cell line"
+        );
     }
 
     #[test]

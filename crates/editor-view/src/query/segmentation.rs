@@ -506,9 +506,11 @@ mod tests {
                                 content: LayoutContent::Line(line),
                             }],
                             attachment: None,
+                            scope: false,
                         }),
                     }],
                     attachment: None,
+                    scope: false,
                 }),
             },
         };

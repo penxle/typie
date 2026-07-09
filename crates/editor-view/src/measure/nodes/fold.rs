@@ -73,6 +73,7 @@ pub(crate) fn measure_fold_title(
             },
             children: MeasuredChildren::from_blocks(children),
             page_break_policy: PageBreakPolicy::Avoid,
+            scope: false,
         }),
     };
 
@@ -166,6 +167,7 @@ pub(crate) fn measure_fold(
             },
             children: MeasuredChildren::from_blocks(children),
             page_break_policy: PageBreakPolicy::Auto,
+            scope: false,
         }),
     }
 }

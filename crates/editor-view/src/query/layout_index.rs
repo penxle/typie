@@ -17,6 +17,7 @@ pub(crate) struct LayoutIndex {
     pages: Vec<LayoutPage>,
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<Dot, LayoutEntryId>,
+    scope_by_node: HashMap<Dot, LayoutEntryId>,
     entries_by_node: HashMap<Dot, Vec<LayoutEntryId>>,
     spatial_entries: Vec<SpatialEntry>,
     entries_by_page: Vec<Vec<LayoutEntryId>>,
@@ -49,6 +50,7 @@ struct LayoutIndexBuilder<'a> {
     pages: &'a [LayoutPage],
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<Dot, LayoutEntryId>,
+    scope_by_node: HashMap<Dot, LayoutEntryId>,
     entries_by_node: HashMap<Dot, Vec<LayoutEntryId>>,
     ancestors: Vec<Dot>,
     path: Vec<usize>,
@@ -62,6 +64,7 @@ impl LayoutIndex {
             pages,
             entries: Vec::new(),
             boxes_by_node_id: HashMap::new(),
+            scope_by_node: HashMap::new(),
             entries_by_node: HashMap::new(),
             ancestors: Vec::new(),
             path: Vec::new(),
@@ -74,6 +77,7 @@ impl LayoutIndex {
             pages: pages.to_vec(),
             entries: builder.entries,
             boxes_by_node_id: builder.boxes_by_node_id,
+            scope_by_node: builder.scope_by_node,
             entries_by_node: builder.entries_by_node,
             spatial_entries: builder.spatial,
             entries_by_page: builder.entries_by_page,
@@ -270,6 +274,71 @@ impl LayoutIndex {
             .is_some_and(|entry| entry.rect.contains(point.x, point.y))
     }
 
+    pub(crate) fn scope_at(&self, point: LayoutPoint) -> Option<&LayoutEntry> {
+        self.scope_entry_ids_on_page(point.page_idx)
+            .filter(|&&entry_id| {
+                let entry = &self.entries[entry_id];
+                entry.rect.contains(point.x, point.y)
+            })
+            .min_by(|&&a, &&b| {
+                rect_area(&self.entries[a].rect).total_cmp(&rect_area(&self.entries[b].rect))
+            })
+            .map(|&entry_id| &self.entries[entry_id])
+    }
+
+    pub(crate) fn nearest_scope_in_row(&self, point: LayoutPoint) -> Option<&LayoutEntry> {
+        self.scope_entry_ids_on_page(point.page_idx)
+            .filter(|&&entry_id| {
+                let rect = &self.entries[entry_id].rect;
+                point.y >= rect.y && point.y <= rect.bottom()
+            })
+            .min_by(|&&a, &&b| {
+                let a_rect = &self.entries[a].rect;
+                let b_rect = &self.entries[b].rect;
+                compare_distance_key(
+                    (
+                        axis_distance(a_rect.x, a_rect.right(), point.x),
+                        rect_area(a_rect),
+                    ),
+                    (
+                        axis_distance(b_rect.x, b_rect.right(), point.x),
+                        rect_area(b_rect),
+                    ),
+                )
+            })
+            .map(|&entry_id| &self.entries[entry_id])
+    }
+
+    pub(crate) fn container_scope(&self, point: LayoutPoint) -> Option<&LayoutEntry> {
+        self.scope_at(point)
+            .or_else(|| self.nearest_scope_in_row(point))
+    }
+
+    pub(crate) fn scope_for_entry(&self, entry: &LayoutEntry) -> Option<&LayoutEntry> {
+        let entry_id = self.entry_index(entry)?;
+        if self.is_scope_entry_id(entry_id) {
+            return Some(&self.entries[entry_id]);
+        }
+        self.containing_scope_for_entry(entry)
+    }
+
+    pub(crate) fn containing_scope_for_entry(&self, entry: &LayoutEntry) -> Option<&LayoutEntry> {
+        entry
+            .ancestors
+            .iter()
+            .rev()
+            .find_map(|node| self.scope_by_node.get(node))
+            .map(|&scope_id| &self.entries[scope_id])
+    }
+
+    pub(crate) fn entry_is_in_scope(&self, entry: &LayoutEntry, scope: &LayoutEntry) -> bool {
+        if std::ptr::eq(entry, scope) {
+            return true;
+        }
+        self.containing_scope_for_entry(entry)
+            .is_some_and(|entry_scope| std::ptr::eq(entry_scope, scope))
+    }
+
     pub(crate) fn entries_on_page(&self, page_idx: usize) -> Vec<&LayoutEntry> {
         match self.entries_by_page.get(page_idx) {
             Some(ids) => ids.iter().map(|&id| &self.entries[id]).collect(),
@@ -341,6 +410,24 @@ impl LayoutIndex {
             .iter()
             .position(|candidate| std::ptr::eq(candidate, entry))
     }
+
+    fn scope_entry_ids_on_page(
+        &self,
+        page_idx: usize,
+    ) -> impl Iterator<Item = &LayoutEntryId> + '_ {
+        self.entries_by_page
+            .get(page_idx)
+            .into_iter()
+            .flatten()
+            .filter(|&&entry_id| self.is_scope_entry_id(entry_id))
+    }
+
+    fn is_scope_entry_id(&self, entry_id: LayoutEntryId) -> bool {
+        let Some(LayoutContent::Box(b)) = self.entries[entry_id].content(self) else {
+            return false;
+        };
+        self.scope_by_node.get(&b.node) == Some(&entry_id)
+    }
 }
 
 impl LayoutEntry {
@@ -372,6 +459,9 @@ impl LayoutIndexBuilder<'_> {
             LayoutContent::Box(b) => {
                 let id = self.add_entry(node.rect);
                 self.boxes_by_node_id.insert(b.node, id);
+                if b.scope {
+                    self.scope_by_node.insert(b.node, id);
+                }
                 if let Some(attachment) = &b.attachment {
                     self.register_match_node(attachment.parent, id);
                 }
@@ -453,6 +543,7 @@ fn node_geometry_eq(a: &LayoutNode, b: &LayoutNode) -> bool {
         (LayoutContent::Box(x), LayoutContent::Box(y)) => {
             x.node == y.node
                 && x.attachment == y.attachment
+                && x.scope == y.scope
                 && x.children.len() == y.children.len()
                 && x.children
                     .iter()
@@ -722,6 +813,7 @@ mod tests {
                         content: LayoutContent::Line(line),
                     }],
                     attachment: None,
+                    scope: false,
                 }),
             },
         };

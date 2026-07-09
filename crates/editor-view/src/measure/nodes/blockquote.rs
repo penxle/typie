@@ -145,6 +145,7 @@ pub(crate) fn measure_blockquote(
                     },
                     children,
                     page_break_policy: PageBreakPolicy::Auto,
+                    scope: false,
                 }),
             }
         }
@@ -497,6 +498,7 @@ mod tests {
                 },
                 children: MeasuredChildren::from_blocks(vec![line_node]),
                 page_break_policy: crate::measure::PageBreakPolicy::Auto,
+                scope: false,
             }),
         };
 

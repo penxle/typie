@@ -262,6 +262,7 @@ impl Paginator {
                 style: measured.style.clone(),
                 children,
                 attachment: None,
+                scope: measured.scope,
             }),
         }
     }
@@ -315,6 +316,7 @@ impl Paginator {
                 style: measured.style.clone(),
                 children,
                 attachment: None,
+                scope: measured.scope,
             }),
         }
     }
@@ -591,6 +593,7 @@ fn place_node_at(
                     style: b.style.clone(),
                     children,
                     attachment,
+                    scope: b.scope,
                 }),
             }
         }
