@@ -42,7 +42,6 @@ import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.toolbar.contextual.ImageResizeSecondaryToolbar
-import co.typie.screen.editor.editor.toolbar.contextual.TextOptionMode
 import co.typie.screen.editor.editor.toolbar.contextual.TextOptionsToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -84,8 +83,6 @@ internal fun EditorToolbarHost(
     }
   }
 
-  val onTextOptionModeChange: (TextOptionMode?) -> Unit =
-    remember(sessionState) { { mode -> sessionState.activeTextOptionMode = mode } }
   val latestRunToolbarModal = rememberUpdatedState<(suspend () -> Unit) -> Unit>(::runToolbarModal)
   val runToolbarModalAction: (suspend () -> Unit) -> Unit = remember {
     { block -> latestRunToolbarModal.value(block) }
@@ -101,7 +98,6 @@ internal fun EditorToolbarHost(
       selection = editorState.selection,
       fontFamilies = fontFamilies,
       activeTextOptionMode = activeTextOptionMode,
-      onTextOptionModeChange = onTextOptionModeChange,
       runToolbarModal = runToolbarModalAction,
       commentEnabled = commentEnabled,
       onCommentRequest = onCommentRequest,
@@ -144,7 +140,7 @@ internal fun EditorToolbarHost(
     )
   val currentPageKey =
     pagerState.settledPageKey.takeIf { toolbarPresented && it in toolbarContext.pageKeys }
-  val selectedNodeId = toolbarContext.selectedNodeId
+  val currentToolbarScope = pages.firstOrNull { page -> page.key == currentPageKey }?.toolbarScope
   val secondaryToolbarVisible = toolbarPresented && activeSecondaryToolbar != null
   val fixedAction =
     fixedActionFor(
@@ -159,15 +155,20 @@ internal fun EditorToolbarHost(
       !restoringKeyboard
     }
 
+  fun syncToolbarScopedSurfaces(currentScope: EditorToolbarScope?) {
+    sessionState.clearSecondaryToolbarIfInvalid(currentScope)
+    val currentPanel = inputState.panel
+    if (currentPanel?.scope != null && currentPanel.scope != currentScope) {
+      onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, latestEnvironment.value))
+    }
+  }
+
   LaunchedEffect(environment) { onInputEffects(inputState.onEnvironmentChanged(environment)) }
-  LaunchedEffect(toolbarPresented, currentPageKey, selectedNodeId) {
+  LaunchedEffect(toolbarPresented, currentToolbarScope, panel?.scope) {
     if (!toolbarPresented) {
-      sessionState.activeSecondaryToolbar = null
+      sessionState.clearSecondaryToolbar()
     } else {
-      sessionState.clearSecondaryToolbarIfInvalid(
-        currentPageKey = currentPageKey,
-        selectedNodeId = selectedNodeId,
-      )
+      syncToolbarScopedSurfaces(currentToolbarScope)
     }
   }
   LaunchedEffect(activeSecondaryToolbar) {
@@ -250,8 +251,13 @@ internal fun EditorToolbarHost(
     onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
   }
 
-  fun toggleBottomPanel(panel: EditorToolbarBottomPanel) {
-    onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel), environment))
+  fun toggleBottomPanel(panel: EditorToolbarBottomPanel, scope: EditorToolbarScope) {
+    onInputEffects(inputState.dispatch(ToolbarIntent.OpenPanel(panel, scope), environment))
+  }
+
+  fun requestBottomPanelFromPanel(panel: EditorToolbarBottomPanel) {
+    val scope = inputState.panel?.scope ?: currentToolbarScope ?: EditorToolbarScope.Main
+    toggleBottomPanel(panel, scope)
   }
 
   AnimatedVisibility(
@@ -284,22 +290,21 @@ internal fun EditorToolbarHost(
           fixedAction = fixedAction,
           onEditorInputRequest = ::restoreEditorInput,
           onKeyboardDismissRequest = {
-            sessionState.activeSecondaryToolbar = null
+            sessionState.clearSecondaryToolbar()
             onInputEffects(inputState.dispatch(ToolbarIntent.DismissInput, environment))
           },
           onBottomPanelToggle = ::toggleBottomPanel,
           onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
           onToolAction = onToolAction,
           onCurrentPageKeyChange = { pageKey ->
-            sessionState.clearSecondaryToolbarIfInvalid(
-              currentPageKey = pageKey,
-              selectedNodeId = selectedNodeId,
-            )
+            val pageScope = pages.firstOrNull { page -> page.key == pageKey }?.toolbarScope
+            syncToolbarScopedSurfaces(pageScope)
           },
           activeSecondaryToolbar = activeSecondaryToolbar,
-          onSecondaryToolbarToggle = { secondary ->
-            sessionState.toggleSecondaryToolbar(secondary)
+          onSecondaryToolbarToggle = { secondary, scope ->
+            sessionState.toggleSecondaryToolbar(secondary, scope)
           },
+          onSecondaryToolbarClear = { sessionState.clearSecondaryToolbar() },
           secondaryToolbarVisible = secondaryToolbarVisible,
           onSecondaryToolbarInLayoutChange = { sessionState.secondaryToolbarInLayout = it },
           secondaryToolbar = {
@@ -309,7 +314,16 @@ internal fun EditorToolbarHost(
                   mode = secondary.mode,
                   editorState = editorState,
                   fontFamilies = fontFamilies,
-                  onModeChange = onTextOptionModeChange,
+                  onModeChange = { mode ->
+                    if (mode == null) {
+                      sessionState.clearSecondaryToolbar()
+                    } else {
+                      sessionState.toggleSecondaryToolbar(
+                        EditorToolbarSecondary.TextOption(mode),
+                        EditorToolbarScope(EditorToolbarPageKey.Text),
+                      )
+                    }
+                  },
                   sendMessages = ::sendEditorMessages,
                   runToolbarModal = runToolbarModalAction,
                   modifier = Modifier.fillMaxWidth(),
@@ -317,7 +331,7 @@ internal fun EditorToolbarHost(
               is EditorToolbarSecondary.ImageResize ->
                 ImageResizeSecondaryToolbar(
                   nodeId = secondary.nodeId,
-                  onClose = { sessionState.activeSecondaryToolbar = null },
+                  onClose = { sessionState.clearSecondaryToolbar() },
                   modifier = Modifier.fillMaxWidth(),
                 )
               null -> Unit
@@ -353,7 +367,7 @@ internal fun EditorToolbarHost(
                   panel = visiblePanel,
                   height = bottomPanelHeight,
                   onEditorInputRequest = ::restoreEditorInput,
-                  onBottomPanelRequest = ::toggleBottomPanel,
+                  onBottomPanelRequest = ::requestBottomPanelFromPanel,
                   onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
                   onToolAction = onToolAction,
                 )

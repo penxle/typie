@@ -44,6 +44,7 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageScope
 import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
+import co.typie.screen.editor.editor.toolbar.EditorToolbarSecondary
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
@@ -64,7 +65,6 @@ internal fun rememberTextToolbarPage(
   selection: Selection?,
   fontFamilies: List<EditorSettingsFontFamily_family>,
   activeTextOptionMode: TextOptionMode?,
-  onTextOptionModeChange: (TextOptionMode?) -> Unit,
   runToolbarModal: (suspend () -> Unit) -> Unit,
   commentEnabled: Boolean,
   onCommentRequest: () -> Unit,
@@ -76,7 +76,6 @@ internal fun rememberTextToolbarPage(
     selection,
     fontFamilies,
     activeTextOptionMode,
-    onTextOptionModeChange,
     runToolbarModal,
     commentEnabled,
     onCommentRequest,
@@ -94,7 +93,6 @@ internal fun rememberTextToolbarPage(
           selection = selection,
           fontFamilies = fontFamilies,
           activeTextOptionMode = activeTextOptionMode,
-          onTextOptionModeChange = onTextOptionModeChange,
           runToolbarModal = runToolbarModal,
           commentEnabled = commentEnabled,
           onCommentRequest = onCommentRequest,
@@ -112,7 +110,6 @@ private fun EditorTextToolbar(
   selection: Selection?,
   fontFamilies: List<EditorSettingsFontFamily_family>,
   activeTextOptionMode: TextOptionMode?,
-  onTextOptionModeChange: (TextOptionMode?) -> Unit,
   runToolbarModal: (suspend () -> Unit) -> Unit,
   commentEnabled: Boolean,
   onCommentRequest: () -> Unit,
@@ -138,12 +135,16 @@ private fun EditorTextToolbar(
   val rubyEnabled = ruby !is Tri.Mixed && (!selectionCollapsed || rubyActive)
 
   fun toggleMode(mode: TextOptionMode) {
-    onTextOptionModeChange(if (activeTextOptionMode == mode) null else mode)
+    if (activeTextOptionMode == mode) {
+      scope.clearSecondaryToolbar()
+    } else {
+      scope.toggleSecondaryToolbar(EditorToolbarSecondary.TextOption(mode))
+    }
   }
 
   fun openLinkInput() {
     if (!linkEnabled) return
-    onTextOptionModeChange(null)
+    scope.clearSecondaryToolbar()
     runToolbarModal {
       withFrameNanos {}
       val message = dialog.promptLinkMessage(linkHref)
@@ -155,7 +156,7 @@ private fun EditorTextToolbar(
 
   fun openRubyInput() {
     if (!rubyEnabled) return
-    onTextOptionModeChange(null)
+    scope.clearSecondaryToolbar()
     runToolbarModal {
       withFrameNanos {}
       val message = dialog.promptRubyMessage(rubyText)

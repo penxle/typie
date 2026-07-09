@@ -1468,7 +1468,7 @@ class EditorToolbarPagesDesktopTest {
             fixedAction = ToolbarFixedAction.DismissInput,
             onEditorInputRequest = {},
             onKeyboardDismissRequest = {},
-            onBottomPanelToggle = {},
+            onBottomPanelToggle = { _, _ -> },
             modifier = Modifier.fillMaxSize(),
           )
         }

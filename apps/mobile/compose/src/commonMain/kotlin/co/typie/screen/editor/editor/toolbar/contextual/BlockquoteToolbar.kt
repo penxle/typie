@@ -19,6 +19,7 @@ internal fun editorBlockquoteToolbarPage(
     key = EditorToolbarPageKey.Blockquote,
     icon = Lucide.Quote,
     contentDescription = "인용구 툴바",
+    ownerNodeId = target?.id,
     content = { scope ->
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(

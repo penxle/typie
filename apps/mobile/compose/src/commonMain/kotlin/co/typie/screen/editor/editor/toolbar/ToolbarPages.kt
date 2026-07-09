@@ -97,7 +97,7 @@ internal fun rememberEditorToolbarPages(
             embed = toolbarContext.selectedNode as? PlainNode.Embed,
             nodeId = toolbarContext.selectedNodeId,
           )
-        EditorToolbarPageKey.Archived -> editorArchivedToolbarPage()
+        EditorToolbarPageKey.Archived -> editorArchivedToolbarPage(toolbarContext.selectedNodeId)
         EditorToolbarPageKey.HorizontalRule ->
           editorHorizontalRuleToolbarPage(toolbarContext.horizontalRuleTarget)
         EditorToolbarPageKey.List -> editorListToolbarPage(toolbarContext.listMode)
@@ -123,12 +123,13 @@ internal fun EditorToolbarPages(
   fixedAction: ToolbarFixedAction,
   onEditorInputRequest: () -> Unit,
   onKeyboardDismissRequest: () -> Unit,
-  onBottomPanelToggle: (EditorToolbarBottomPanel) -> Unit,
+  onBottomPanelToggle: (EditorToolbarBottomPanel, EditorToolbarScope) -> Unit,
   onEditorMessage: (Message) -> Unit = {},
   onToolAction: (EditorToolbarToolAction) -> Unit = {},
   onCurrentPageKeyChange: (EditorToolbarPageKey?) -> Unit = {},
   activeSecondaryToolbar: EditorToolbarSecondary? = null,
-  onSecondaryToolbarToggle: (EditorToolbarSecondary) -> Unit = {},
+  onSecondaryToolbarToggle: (EditorToolbarSecondary, EditorToolbarScope) -> Unit = { _, _ -> },
+  onSecondaryToolbarClear: () -> Unit = {},
   secondaryToolbarVisible: Boolean = false,
   onSecondaryToolbarInLayoutChange: (Boolean) -> Unit = {},
   secondaryToolbar: @Composable () -> Unit = {},
@@ -633,13 +634,15 @@ internal fun EditorToolbarPages(
             pages.forEachIndexed { index, page ->
               val pageScope =
                 EditorToolbarPageScope(
+                  toolbarScope = page.toolbarScope,
                   activeBottomPanel = activeBottomPanel,
                   activeSecondaryToolbar = activeSecondaryToolbar,
                   commandScope = commandScope,
                   hasNextPage = index < lastPageIndex,
                   navigateToPage = ::navigateToPage,
-                  toggleSecondaryToolbar = onSecondaryToolbarToggle,
-                  toggleBottomPanel = onBottomPanelToggle,
+                  onSecondaryToolbarToggle = onSecondaryToolbarToggle,
+                  clearSecondaryToolbar = onSecondaryToolbarClear,
+                  onBottomPanelToggle = onBottomPanelToggle,
                   sendMessage = onEditorMessage,
                   performToolAction = onToolAction,
                 )

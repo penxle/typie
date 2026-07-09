@@ -6,11 +6,12 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
 import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 
-internal fun editorArchivedToolbarPage(): EditorToolbarPage =
+internal fun editorArchivedToolbarPage(nodeId: String?): EditorToolbarPage =
   EditorToolbarPage(
     key = EditorToolbarPageKey.Archived,
     icon = Lucide.Eye,
     contentDescription = "보관된 블록 툴바",
+    ownerNodeId = nodeId,
     content = { scope ->
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(icon = Lucide.Eye, contentDescription = "보관된 블록 보기", onClick = {})

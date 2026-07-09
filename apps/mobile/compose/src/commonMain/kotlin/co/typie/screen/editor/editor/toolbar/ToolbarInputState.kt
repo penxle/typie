@@ -28,7 +28,10 @@ internal data class ToolbarInputEnvironment(
 }
 
 internal sealed interface ToolbarIntent {
-  data class OpenPanel(val panel: EditorToolbarBottomPanel) : ToolbarIntent
+  data class OpenPanel(
+    val panel: EditorToolbarBottomPanel,
+    val scope: EditorToolbarScope = EditorToolbarScope.Main,
+  ) : ToolbarIntent
 
   data object RestoreEditorInput : ToolbarIntent
 
@@ -91,6 +94,7 @@ internal sealed interface PanelKeyboardSpace {
 
 internal data class PanelSession(
   val panel: EditorToolbarBottomPanel,
+  val scope: EditorToolbarScope,
   val height: Dp,
   val keyboardSpace: PanelKeyboardSpace?,
 )
@@ -241,7 +245,7 @@ internal class EditorToolbarInputState {
     environment: ToolbarInputEnvironment,
   ): List<EditorInputEffect> =
     when (intent) {
-      is ToolbarIntent.OpenPanel -> openPanel(intent.panel, environment)
+      is ToolbarIntent.OpenPanel -> openPanel(intent.panel, intent.scope, environment)
       ToolbarIntent.RestoreEditorInput -> restoreEditorInput(environment)
       ToolbarIntent.DismissInput -> dismissInput(environment)
       ToolbarIntent.HideInput -> hideInput()
@@ -250,14 +254,15 @@ internal class EditorToolbarInputState {
 
   private fun openPanel(
     nextPanel: EditorToolbarBottomPanel,
+    nextScope: EditorToolbarScope,
     environment: ToolbarInputEnvironment,
   ): List<EditorInputEffect> {
     val currentPanel = panel
     if (currentPanel != null) {
-      if (currentPanel.panel == nextPanel) {
+      if (currentPanel.panel == nextPanel && currentPanel.scope == nextScope) {
         return restoreEditorInput(environment)
       } else {
-        panel = currentPanel.copy(panel = nextPanel)
+        panel = currentPanel.copy(panel = nextPanel, scope = nextScope)
         lastPanelSnapshot = PanelSnapshot(nextPanel, currentPanel.height)
       }
       return emptyList()
@@ -292,7 +297,13 @@ internal class EditorToolbarInputState {
       } else {
         0.dp
       }
-    panel = PanelSession(panel = nextPanel, height = panelHeight, keyboardSpace = keyboardSpace)
+    panel =
+      PanelSession(
+        panel = nextPanel,
+        scope = nextScope,
+        height = panelHeight,
+        keyboardSpace = keyboardSpace,
+      )
     lastPanelSnapshot = PanelSnapshot(nextPanel, panelHeight)
 
     return if (imeVisible || currentRestoreInset != null) {

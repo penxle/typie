@@ -1,13 +1,9 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -20,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
@@ -35,27 +30,12 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
-import co.typie.ext.InteractionScope
-import co.typie.icons.Lucide
-import co.typie.screen.editor.editor.toolbar.EditorToolbarIconButton
-import co.typie.screen.editor.editor.toolbar.EditorToolbarSurfaceBackground
-import co.typie.screen.editor.editor.toolbar.ToolbarBackdropBlurRadius
-import co.typie.screen.editor.editor.toolbar.ToolbarBorderWidth
-import co.typie.screen.editor.editor.toolbar.ToolbarCapsuleShape
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionShape
 import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelTextStyle
 import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryHeight
-import co.typie.screen.editor.editor.toolbar.preserveEditorFocusOnToolbarInteraction
 import co.typie.ui.component.Slider
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.LocalHazeState
-import co.typie.ui.theme.shadow
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.roundToInt
 
 private const val IMAGE_RESIZE_HAPTIC_STEP = 5
@@ -176,26 +156,11 @@ private fun ImageResizeSecondaryToolbarSurface(
   modifier: Modifier = Modifier,
   content: @Composable RowScope.() -> Unit,
 ) {
-  val hazeState = LocalHazeState.current
-  val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
-
-  Box(
-    modifier =
-      modifier
-        .fillMaxWidth()
-        .height(ToolbarSecondaryHeight)
-        .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
-        .clip(ToolbarCapsuleShape)
-        .hazeEffect(hazeState) {
-          blurEffect {
-            backgroundColor = toolbarSurfaceColor
-            blurRadius = ToolbarBackdropBlurRadius
-          }
-        }
-        .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
-        .preserveEditorFocusOnToolbarInteraction()
+  ToolbarSecondarySurface(
+    onClose = onClose,
+    closeContentDescription = "이미지 폭 조정 닫기",
+    modifier = modifier,
   ) {
-    EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
     Row(
       modifier =
         Modifier.fillMaxSize()
@@ -210,25 +175,5 @@ private fun ImageResizeSecondaryToolbarSurface(
     ) {
       content()
     }
-    Box(modifier = Modifier.align(Alignment.CenterStart)) {
-      ImageResizeCloseButton(onClick = onClose)
-    }
-  }
-}
-
-@Composable
-private fun ImageResizeCloseButton(onClick: () -> Unit) {
-  InteractionScope {
-    EditorToolbarIconButton(
-      icon = Lucide.X,
-      contentDescription = "이미지 폭 조정 닫기",
-      onClick = onClick,
-      shape = ToolbarFixedActionShape,
-      fixedActionSurface = true,
-      inheritInteractionSource = true,
-      modifier =
-        Modifier.width(ToolbarFixedActionWidth).fillMaxHeight().padding(ToolbarFixedActionPadding),
-      iconSize = 20.dp,
-    )
   }
 }

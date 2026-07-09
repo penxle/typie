@@ -9,7 +9,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,13 +17,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -65,31 +61,19 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierState
-import co.typie.ext.InteractionScope
-import co.typie.ext.LocalInteractionSource
-import co.typie.ext.pressScale
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.graphql.type.FontState
 import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.EditorToolbarLabelButton
-import co.typie.screen.editor.editor.toolbar.EditorToolbarSurfaceBackground
-import co.typie.screen.editor.editor.toolbar.ToolbarBackdropBlurRadius
-import co.typie.screen.editor.editor.toolbar.ToolbarBorderWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarButtonShape
 import co.typie.screen.editor.editor.toolbar.ToolbarButtonSize
-import co.typie.screen.editor.editor.toolbar.ToolbarCapsuleShape
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionPressedScale
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionShape
 import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarItemGap
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelHorizontalPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelTextStyle
 import co.typie.screen.editor.editor.toolbar.ToolbarPageEndPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
-import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryHeight
 import co.typie.screen.editor.editor.toolbar.ToolbarTextOptionsSwitchMillis
-import co.typie.screen.editor.editor.toolbar.preserveEditorFocusOnToolbarInteraction
 import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Text
@@ -101,13 +85,8 @@ import co.typie.ui.component.dialog.DialogScope
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
-import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.LocalHazeState
-import co.typie.ui.theme.shadow
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.roundToInt
 
 @Composable
@@ -181,12 +160,9 @@ private fun TextOptionsContent(
         onSelect = { sendSet(sendMessages, EditorModifier.TextColor(it)) },
       )
     TextOptionMode.BackgroundColor ->
-      ColorOptions(
-        options = EditorValues.textBackgroundColor,
+      TextBackgroundColorOptions(
         currentValue = modifierState?.backgroundColor.uniformValue { it.value },
         editorTheme = editorTheme,
-        swatchShape = TextBackgroundSwatchShape,
-        showSlashForNullTheme = true,
         onSelect = { sendSet(sendMessages, EditorModifier.BackgroundColor(it)) },
       )
     TextOptionMode.FontFamily ->
@@ -236,27 +212,13 @@ private fun TextOptionsToolbarSurface(
   content: @Composable () -> Unit,
 ) {
   val scrollState = rememberScrollState()
-  val hazeState = LocalHazeState.current
-  val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
   val scrollStartPadding = ToolbarFixedActionWidth
 
-  Box(
-    modifier =
-      modifier
-        .fillMaxWidth()
-        .height(ToolbarSecondaryHeight)
-        .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
-        .clip(ToolbarCapsuleShape)
-        .hazeEffect(hazeState) {
-          blurEffect {
-            backgroundColor = toolbarSurfaceColor
-            blurRadius = ToolbarBackdropBlurRadius
-          }
-        }
-        .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
-        .preserveEditorFocusOnToolbarInteraction()
+  ToolbarSecondarySurface(
+    onClose = onClose,
+    closeContentDescription = "텍스트 옵션 닫기",
+    modifier = modifier,
   ) {
-    EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
     Row(
       modifier =
         Modifier.fillMaxSize()
@@ -272,43 +234,23 @@ private fun TextOptionsToolbarSurface(
     ) {
       content()
     }
-    Box(modifier = Modifier.align(Alignment.CenterStart)) {
-      TextOptionsCloseButton(onClick = onClose)
-    }
   }
 }
 
 @Composable
-private fun TextOptionsCloseButton(onClick: () -> Unit) {
-  InteractionScope {
-    val interactionSource =
-      LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-
-    Box(
-      modifier =
-        Modifier.width(ToolbarFixedActionWidth)
-          .fillMaxHeight()
-          .padding(ToolbarFixedActionPadding)
-          .pressScale(ToolbarFixedActionPressedScale)
-          .focusProperties { canFocus = false }
-          .semantics {
-            contentDescription = "텍스트 옵션 닫기"
-            role = Role.Button
-          }
-          .clip(ToolbarFixedActionShape)
-          .background(AppTheme.colors.surfaceDefault.copy(alpha = 0.72f), ToolbarFixedActionShape)
-          .border(ToolbarBorderWidth, AppTheme.colors.borderDefault, ToolbarFixedActionShape)
-          .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(
-        icon = Lucide.X,
-        contentDescription = null,
-        modifier = Modifier.size(20.dp),
-        tint = AppTheme.colors.textDefault,
-      )
-    }
-  }
+internal fun TextBackgroundColorOptions(
+  currentValue: String?,
+  editorTheme: ResolvedEditorTheme,
+  onSelect: (String) -> Unit,
+) {
+  ColorOptions(
+    options = EditorValues.textBackgroundColor,
+    currentValue = currentValue,
+    editorTheme = editorTheme,
+    swatchShape = TextBackgroundSwatchShape,
+    showSlashForNullTheme = true,
+    onSelect = onSelect,
+  )
 }
 
 @Composable

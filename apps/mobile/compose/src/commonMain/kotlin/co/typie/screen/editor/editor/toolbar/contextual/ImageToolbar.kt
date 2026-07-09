@@ -41,6 +41,7 @@ internal fun editorImageToolbarPage(image: PlainNode.Image?, nodeId: String?): E
     key = EditorToolbarPageKey.Image,
     icon = Lucide.Image,
     contentDescription = "이미지 툴바",
+    ownerNodeId = nodeId,
     content = { scope -> EditorImageToolbar(scope = scope, image = image, nodeId = nodeId) },
   )
 

@@ -13,49 +13,46 @@ internal fun rememberEditorToolbarSessionState(key: Any? = Unit): EditorToolbarS
   remember(key) { EditorToolbarSessionState() }
 
 internal sealed interface EditorToolbarSecondary {
-  val pageKey: EditorToolbarPageKey
-  val ownerNodeId: String?
-    get() = null
+  data class TextOption(val mode: TextOptionMode) : EditorToolbarSecondary
 
-  data class TextOption(val mode: TextOptionMode) : EditorToolbarSecondary {
-    override val pageKey = EditorToolbarPageKey.Text
-  }
-
-  data class ImageResize(val nodeId: String) : EditorToolbarSecondary {
-    override val pageKey = EditorToolbarPageKey.Image
-    override val ownerNodeId = nodeId
-  }
+  data class ImageResize(val nodeId: String) : EditorToolbarSecondary
 }
+
+internal data class SecondaryToolbarSession(
+  val toolbar: EditorToolbarSecondary,
+  val scope: EditorToolbarScope,
+)
 
 @Stable
 internal class EditorToolbarSessionState {
-  var activeSecondaryToolbar by mutableStateOf<EditorToolbarSecondary?>(null)
+  private var secondarySession by mutableStateOf<SecondaryToolbarSession?>(null)
 
-  var activeTextOptionMode: TextOptionMode?
+  val activeSecondaryToolbar: EditorToolbarSecondary?
+    get() = secondarySession?.toolbar
+
+  val activeTextOptionMode: TextOptionMode?
     get() = (activeSecondaryToolbar as? EditorToolbarSecondary.TextOption)?.mode
-    set(value) {
-      activeSecondaryToolbar = value?.let(EditorToolbarSecondary::TextOption)
-    }
 
   var modalActive by mutableStateOf(false)
   var secondaryToolbarInLayout by mutableStateOf(false)
 
-  fun toggleSecondaryToolbar(secondary: EditorToolbarSecondary) {
-    activeSecondaryToolbar =
-      if (activeSecondaryToolbar == secondary) {
+  fun toggleSecondaryToolbar(secondary: EditorToolbarSecondary, scope: EditorToolbarScope) {
+    val nextSession = SecondaryToolbarSession(toolbar = secondary, scope = scope)
+    secondarySession =
+      if (secondarySession == nextSession) {
         null
       } else {
-        secondary
+        nextSession
       }
   }
 
-  fun clearSecondaryToolbarIfInvalid(
-    currentPageKey: EditorToolbarPageKey?,
-    selectedNodeId: String?,
-  ) {
-    activeSecondaryToolbar = activeSecondaryToolbar?.takeIf { secondary ->
-      currentPageKey == secondary.pageKey &&
-        (secondary.ownerNodeId == null || secondary.ownerNodeId == selectedNodeId)
+  fun clearSecondaryToolbar() {
+    secondarySession = null
+  }
+
+  fun clearSecondaryToolbarIfInvalid(currentScope: EditorToolbarScope?) {
+    if (secondarySession?.scope != currentScope) {
+      secondarySession = null
     }
   }
 }

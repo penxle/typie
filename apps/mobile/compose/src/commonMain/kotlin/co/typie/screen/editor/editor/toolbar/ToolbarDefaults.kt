@@ -115,22 +115,44 @@ internal sealed interface BlockquoteVariantPanelTarget {
     BlockquoteVariantPanelTarget
 }
 
+internal data class EditorToolbarScope(
+  val pageKey: EditorToolbarPageKey,
+  val ownerNodeId: String? = null,
+) {
+  companion object {
+    val Main = EditorToolbarScope(EditorToolbarPageKey.Main)
+  }
+}
+
 internal class EditorToolbarPage(
   val key: EditorToolbarPageKey,
   val icon: IconData,
   val contentDescription: String,
+  val ownerNodeId: String? = null,
   val scrollState: ScrollState? = null,
   val content: @Composable (EditorToolbarPageScope) -> Unit,
-)
+) {
+  val toolbarScope: EditorToolbarScope = EditorToolbarScope(key, ownerNodeId)
+}
 
 internal class EditorToolbarPageScope(
+  val toolbarScope: EditorToolbarScope,
   val activeBottomPanel: EditorToolbarBottomPanel?,
   val activeSecondaryToolbar: EditorToolbarSecondary?,
   val commandScope: CoroutineScope,
   val hasNextPage: Boolean,
   val navigateToPage: (EditorToolbarPageKey) -> Unit,
-  val toggleSecondaryToolbar: (EditorToolbarSecondary) -> Unit,
-  val toggleBottomPanel: (EditorToolbarBottomPanel) -> Unit,
+  private val onSecondaryToolbarToggle: (EditorToolbarSecondary, EditorToolbarScope) -> Unit,
+  val clearSecondaryToolbar: () -> Unit,
+  private val onBottomPanelToggle: (EditorToolbarBottomPanel, EditorToolbarScope) -> Unit,
   val sendMessage: (Message) -> Unit,
   val performToolAction: (EditorToolbarToolAction) -> Unit,
-)
+) {
+  fun toggleSecondaryToolbar(secondary: EditorToolbarSecondary) {
+    onSecondaryToolbarToggle(secondary, toolbarScope)
+  }
+
+  fun toggleBottomPanel(panel: EditorToolbarBottomPanel) {
+    onBottomPanelToggle(panel, toolbarScope)
+  }
+}

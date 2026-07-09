@@ -41,6 +41,7 @@ internal fun editorFileToolbarPage(file: PlainNode.File?, nodeId: String?): Edit
     key = EditorToolbarPageKey.File,
     icon = Lucide.Paperclip,
     contentDescription = "파일 툴바",
+    ownerNodeId = nodeId,
     content = { scope -> EditorFileToolbar(scope = scope, file = file, nodeId = nodeId) },
   )
 

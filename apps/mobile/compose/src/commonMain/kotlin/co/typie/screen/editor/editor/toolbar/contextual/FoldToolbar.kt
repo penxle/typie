@@ -13,6 +13,7 @@ internal fun editorFoldToolbarPage(targetId: String?): EditorToolbarPage =
     key = EditorToolbarPageKey.Fold,
     icon = Lucide.ChevronsDownUp,
     contentDescription = "접기 툴바",
+    ownerNodeId = targetId,
     content = { scope ->
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(

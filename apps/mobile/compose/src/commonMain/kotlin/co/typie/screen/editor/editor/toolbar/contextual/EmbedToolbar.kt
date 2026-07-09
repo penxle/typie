@@ -58,6 +58,7 @@ internal fun editorEmbedToolbarPage(embed: PlainNode.Embed?, nodeId: String?): E
     key = EditorToolbarPageKey.Embed,
     icon = Lucide.FileUp,
     contentDescription = "임베드 툴바",
+    ownerNodeId = nodeId,
     content = { scope -> EditorEmbedToolbar(scope = scope, embed = embed, nodeId = nodeId) },
   )
 

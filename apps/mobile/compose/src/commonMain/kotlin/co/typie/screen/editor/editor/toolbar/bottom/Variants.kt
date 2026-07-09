@@ -77,7 +77,7 @@ internal fun BottomToolbarHorizontalRuleVariants(
         selected = variant == target.currentVariant,
         preview = { HorizontalRuleVariantPreview(variant = variant) },
         onClick = {
-          onEditorMessage(target.message(variant))
+          target.messageOrNull(variant)?.let(onEditorMessage)
           onEditorInputRequest()
         },
       )
@@ -99,7 +99,7 @@ internal fun BottomToolbarBlockquoteVariants(
         selected = variant == target.currentVariant,
         preview = { BlockquoteVariantPreview(variant = variant) },
         onClick = {
-          onEditorMessage(target.message(variant))
+          target.messageOrNull(variant)?.let(onEditorMessage)
           onEditorInputRequest()
         },
       )
@@ -452,6 +452,10 @@ private fun DrawScope.drawDiamondStroke(
   drawPath(path = path, color = color, style = Stroke(width = stroke))
 }
 
+internal fun HorizontalRuleVariantPanelTarget.messageOrNull(
+  variant: HorizontalRuleVariant
+): Message? = if (variant == currentVariant) null else message(variant)
+
 private fun HorizontalRuleVariantPanelTarget.message(variant: HorizontalRuleVariant): Message =
   when (this) {
     HorizontalRuleVariantPanelTarget.Insertion ->
@@ -461,6 +465,9 @@ private fun HorizontalRuleVariantPanelTarget.message(variant: HorizontalRuleVari
         NodeOp.SetAttrs(id = nodeId, attrs = PlainNode.HorizontalRule(variant = variant))
       )
   }
+
+internal fun BlockquoteVariantPanelTarget.messageOrNull(variant: BlockquoteVariant): Message? =
+  if (variant == currentVariant) null else message(variant)
 
 private fun BlockquoteVariantPanelTarget.message(variant: BlockquoteVariant): Message =
   when (this) {

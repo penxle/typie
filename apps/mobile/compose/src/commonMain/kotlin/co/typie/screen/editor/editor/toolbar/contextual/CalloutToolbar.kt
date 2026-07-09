@@ -18,6 +18,7 @@ internal fun editorCalloutToolbarPage(
     key = EditorToolbarPageKey.Callout,
     icon = Lucide.GalleryVerticalEnd,
     contentDescription = "강조 툴바",
+    ownerNodeId = target?.id,
     content = { scope ->
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(

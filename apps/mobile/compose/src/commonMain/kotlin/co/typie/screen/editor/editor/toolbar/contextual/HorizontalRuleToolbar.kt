@@ -20,6 +20,7 @@ internal fun editorHorizontalRuleToolbarPage(
     key = EditorToolbarPageKey.HorizontalRule,
     icon = Typie.HorizontalRule,
     contentDescription = "구분선 툴바",
+    ownerNodeId = target?.id,
     content = { scope ->
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(

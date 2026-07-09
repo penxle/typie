@@ -49,6 +49,7 @@ class ToolbarInputStateTest {
     assertEquals(
       PanelSession(
         panel = EditorToolbarBottomPanel.Insert,
+        scope = EditorToolbarScope.Main,
         height = 288.dp,
         keyboardSpace = PanelKeyboardSpace.FollowIme(inset = 320.dp),
       ),
@@ -105,6 +106,58 @@ class ToolbarInputStateTest {
     assertEquals(288.dp, state.panel?.height)
     assertEquals(320.dp, state.panel?.keyboardSpace?.inset)
     assertEquals(emptyList(), effects)
+  }
+
+  @Test
+  fun panel_session_keeps_opening_toolbar_scope() {
+    val state = EditorToolbarInputState()
+    val environment = toolbarInputEnvironment(imeBottom = 320.dp)
+    val blockquoteScope =
+      EditorToolbarScope(pageKey = EditorToolbarPageKey.Blockquote, ownerNodeId = "blockquote-1")
+
+    state.onEnvironmentChanged(environment)
+    state.dispatch(
+      ToolbarIntent.OpenPanel(
+        panel =
+          EditorToolbarBottomPanel.BlockquoteVariants(
+            BlockquoteVariantPanelTarget.Existing(
+              nodeId = "blockquote-1",
+              currentVariant = co.typie.editor.ffi.BlockquoteVariant.LeftLine,
+            )
+          ),
+        scope = blockquoteScope,
+      ),
+      environment,
+    )
+
+    assertEquals(blockquoteScope, state.panel?.scope)
+  }
+
+  @Test
+  fun switching_panel_replaces_session_scope() {
+    val state = EditorToolbarInputState()
+    val environment = toolbarInputEnvironment(imeBottom = 320.dp)
+    val blockquoteScope =
+      EditorToolbarScope(pageKey = EditorToolbarPageKey.Blockquote, ownerNodeId = "blockquote-1")
+
+    state.onEnvironmentChanged(environment)
+    state.dispatch(
+      ToolbarIntent.OpenPanel(
+        panel =
+          EditorToolbarBottomPanel.BlockquoteVariants(
+            BlockquoteVariantPanelTarget.Existing(
+              nodeId = "blockquote-1",
+              currentVariant = co.typie.editor.ffi.BlockquoteVariant.LeftLine,
+            )
+          ),
+        scope = blockquoteScope,
+      ),
+      environment,
+    )
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanel.Tools), environment)
+
+    assertEquals(EditorToolbarBottomPanel.Tools, state.activeBottomPanel)
+    assertEquals(EditorToolbarScope.Main, state.panel?.scope)
   }
 
   @Test
