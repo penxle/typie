@@ -42,6 +42,8 @@ import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.toolbar.contextual.ImageResizeSecondaryToolbar
+import co.typie.screen.editor.editor.toolbar.contextual.TableAlignmentSecondaryToolbar
+import co.typie.screen.editor.editor.toolbar.contextual.TableCellBackgroundSecondaryToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.TextOptionsToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -334,6 +336,28 @@ internal fun EditorToolbarHost(
                   onClose = { sessionState.clearSecondaryToolbar() },
                   modifier = Modifier.fillMaxWidth(),
                 )
+              is EditorToolbarSecondary.TableAlignment -> {
+                val target = toolbarContext.tableTarget?.takeIf { it.id == secondary.tableId }
+                if (target != null) {
+                  TableAlignmentSecondaryToolbar(
+                    target = target,
+                    onClose = { sessionState.clearSecondaryToolbar() },
+                    sendMessage = { message -> sendEditorMessages(listOf(message)) },
+                    modifier = Modifier.fillMaxWidth(),
+                  )
+                }
+              }
+              is EditorToolbarSecondary.TableCellBackground -> {
+                val target = toolbarContext.tableTarget?.takeIf { it.id == secondary.tableId }
+                if (target != null) {
+                  TableCellBackgroundSecondaryToolbar(
+                    target = target,
+                    onClose = { sessionState.clearSecondaryToolbar() },
+                    sendMessage = { message -> sendEditorMessages(listOf(message)) },
+                    modifier = Modifier.fillMaxWidth(),
+                  )
+                }
+              }
               null -> Unit
             }
           },

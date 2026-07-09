@@ -14,6 +14,7 @@ import co.typie.editor.ffi.Message
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarBlockquoteVariants
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarHorizontalRuleVariants
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarNodes
+import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarTableBorderStyles
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarTableSizeSelector
 import co.typie.screen.editor.editor.toolbar.bottom.BottomToolbarTools
 import co.typie.ui.theme.AppTheme
@@ -80,6 +81,13 @@ internal fun BottomToolbar(
         )
       is EditorToolbarBottomPanel.BlockquoteVariants ->
         BottomToolbarBlockquoteVariants(
+          target = panel.target,
+          onEditorMessage = onEditorMessage,
+          onEditorInputRequest = onEditorInputRequest,
+          modifier = Modifier.fillMaxSize(),
+        )
+      is EditorToolbarBottomPanel.TableBorderStyles ->
+        BottomToolbarTableBorderStyles(
           target = panel.target,
           onEditorMessage = onEditorMessage,
           onEditorInputRequest = onEditorInputRequest,

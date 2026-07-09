@@ -3,8 +3,11 @@ package co.typie.screen.editor.editor.toolbar
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ext.isSingleSlotRange
+import co.typie.editor.ffi.Alignment
+import co.typie.editor.ffi.BackgroundColorValue
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.Tri
 
 internal data class EditorToolbarContext(
@@ -18,10 +21,18 @@ internal data class EditorToolbarContext(
   val calloutTarget: EditorToolbarNodeTarget<PlainNode.Callout>? = null,
   val foldTargetId: String? = null,
   val listMode: EditorToolbarListMode? = null,
-  val tableMode: EditorToolbarTableMode? = null,
+  val tableTarget: EditorToolbarTableTarget? = null,
 )
 
 internal data class EditorToolbarNodeTarget<out T : PlainNode>(val id: String, val node: T)
+
+internal data class EditorToolbarTableTarget(
+  val id: String,
+  val node: PlainNode.Table,
+  val selected: Boolean,
+  val align: Alignment,
+  val cellBackgroundCurrentValue: String?,
+)
 
 internal data class EditorToolbarAutoTargetKey(
   val pageKey: EditorToolbarPageKey,
@@ -33,16 +44,12 @@ internal enum class EditorToolbarListMode {
   Ordered,
 }
 
-internal enum class EditorToolbarTableMode {
-  Selected,
-  InTable,
-}
-
 internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarContext {
   val selection = state.selection
   val blockState = state.blockState
   val selectionCollapsed = selection.isCollapsed()
   val nodes = blockState?.nodes.orEmpty()
+  val ancestors = blockState?.ancestors.orEmpty()
   val intersectingNodes = blockState?.intersectingNodes.orEmpty()
   val hasTextPage = state.modifierState?.hasInlineTextModifier() == true
   val selectedBlock =
@@ -81,11 +88,21 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
       EditorToolbarNodeTarget(id = selectedBlock.id, node = node)
     }
   var foldTargetId = selectedBlock?.id?.takeIf { selectedBlock.node == PlainNode.Fold }
-  var tableMode: EditorToolbarTableMode? =
-    if (selectedPageKey == EditorToolbarPageKey.Table) EditorToolbarTableMode.Selected else null
-  val ancestorIds = blockState?.ancestors.orEmpty().mapTo(mutableSetOf()) { it.id }
+  var tableTarget =
+    (selectedBlock?.node as? PlainNode.Table)?.let { node ->
+      val overlay = state.tableOverlays.tableOverlay(selectedBlock.id)
+      EditorToolbarTableTarget(
+        id = selectedBlock.id,
+        node = node,
+        selected = true,
+        align = overlay?.align ?: Alignment.Left,
+        cellBackgroundCurrentValue =
+          state.modifierState?.cellBackgroundColor.tableCellBackgroundCurrentValue(),
+      )
+    }
+  val ancestorIds = ancestors.mapTo(mutableSetOf()) { it.id }
 
-  blockState?.ancestors.orEmpty().forEach { block ->
+  ancestors.forEach { block ->
     val blockListMode = block.node.toolbarListMode()
     if (blockListMode != null) {
       if (listMode == null) {
@@ -113,8 +130,17 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
           addPage(EditorToolbarPageKey.Fold)
         }
         is PlainNode.Table -> {
-          if (tableMode == null) {
-            tableMode = EditorToolbarTableMode.InTable
+          if (tableTarget == null) {
+            val overlay = state.tableOverlays.tableOverlay(block.id)
+            tableTarget =
+              EditorToolbarTableTarget(
+                id = block.id,
+                node = block.node,
+                selected = false,
+                align = overlay?.align ?: Alignment.Left,
+                cellBackgroundCurrentValue =
+                  state.modifierState?.cellBackgroundColor.tableCellBackgroundCurrentValue(),
+              )
           }
           addPage(EditorToolbarPageKey.Table)
         }
@@ -163,9 +189,21 @@ internal fun resolveEditorToolbarContext(state: EditorState): EditorToolbarConte
     calloutTarget = calloutTarget,
     foldTargetId = foldTargetId,
     listMode = listMode,
-    tableMode = tableMode,
+    tableTarget = tableTarget,
   )
 }
+
+private fun List<TableOverlay>.tableOverlay(tableId: String): TableOverlay? = firstOrNull {
+  it.tableId == tableId
+}
+
+private fun Tri<BackgroundColorValue>?.tableCellBackgroundCurrentValue(): String? =
+  when (this) {
+    is Tri.Uniform -> value.value
+    Tri.Absent -> "none"
+    Tri.Mixed,
+    null -> null
+  }
 
 private fun ModifierState.hasInlineTextModifier(): Boolean =
   bold.isPresent() ||

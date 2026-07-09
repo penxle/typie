@@ -2,6 +2,8 @@ package co.typie.screen.editor.editor.toolbar
 
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.Alignment
+import co.typie.editor.ffi.BackgroundColorValue
 import co.typie.editor.ffi.Block
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.FontSizeValue
@@ -9,7 +11,10 @@ import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.TableBorderStyle
+import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.Tri
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,7 +44,11 @@ class ToolbarContextTest {
       resolveEditorToolbarContext(
         editorState(
           selection = rangeSelection(),
-          modifierState = modifierState(inlineText = true),
+          modifierState =
+            modifierState(
+              inlineText = true,
+              cellBackgroundColor = Tri.Uniform(BackgroundColorValue("yellow")),
+            ),
           blockState =
             blockState(
               ancestors = listOf(block("paragraph", PlainNode.Paragraph), block("root", rootNode()))
@@ -95,7 +104,16 @@ class ToolbarContextTest {
       EditorToolbarAutoTargetKey(pageKey = EditorToolbarPageKey.Table, selectedNodeId = "table"),
       context.autoTargetKey,
     )
-    assertEquals(EditorToolbarTableMode.Selected, context.tableMode)
+    assertEquals(
+      EditorToolbarTableTarget(
+        id = "table",
+        node = PlainNode.Table(),
+        selected = true,
+        align = Alignment.Left,
+        cellBackgroundCurrentValue = null,
+      ),
+      context.tableTarget,
+    )
   }
 
   @Test
@@ -418,6 +436,7 @@ class ToolbarContextTest {
                   block("root", rootNode()),
                 )
             ),
+          tableOverlays = listOf(tableOverlay(tableId = "table", align = Alignment.Right)),
         )
       )
 
@@ -426,7 +445,114 @@ class ToolbarContextTest {
       context.pageKeys,
     )
     assertEquals(null, context.autoTargetPageKey)
-    assertEquals(EditorToolbarTableMode.InTable, context.tableMode)
+    assertEquals(
+      EditorToolbarTableTarget(
+        id = "table",
+        node = PlainNode.Table(),
+        selected = false,
+        align = Alignment.Right,
+        cellBackgroundCurrentValue = null,
+      ),
+      context.tableTarget,
+    )
+  }
+
+  @Test
+  fun cursorInsideColoredTableCellUsesModifierStateCellBackground() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          modifierState =
+            modifierState(
+              inlineText = true,
+              cellBackgroundColor = Tri.Uniform(BackgroundColorValue("yellow")),
+            ),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("cell", PlainNode.TableCell(colWidth = null, backgroundColor = null)),
+                  block("row", PlainNode.TableRow),
+                  block("table", PlainNode.Table()),
+                  block("root", rootNode()),
+                )
+            ),
+          tableOverlays = listOf(tableOverlay(tableId = "table", align = Alignment.Right)),
+        )
+      )
+
+    assertEquals("yellow", context.tableTarget?.cellBackgroundCurrentValue)
+  }
+
+  @Test
+  fun tableCellBackgroundAbsentActivatesNoneSwatch() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          modifierState = modifierState(inlineText = true, cellBackgroundColor = Tri.Absent),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("cell", PlainNode.TableCell(colWidth = null, backgroundColor = null)),
+                  block("row", PlainNode.TableRow),
+                  block("table", PlainNode.Table()),
+                  block("root", rootNode()),
+                )
+            ),
+          tableOverlays = listOf(tableOverlay(tableId = "table", align = Alignment.Right)),
+        )
+      )
+
+    assertEquals("none", context.tableTarget?.cellBackgroundCurrentValue)
+  }
+
+  @Test
+  fun mixedTableCellBackgroundLeavesNoActiveSwatch() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = collapsedSelection(),
+          modifierState = modifierState(inlineText = true, cellBackgroundColor = Tri.Mixed),
+          blockState =
+            blockState(
+              ancestors =
+                listOf(
+                  block("paragraph", PlainNode.Paragraph),
+                  block("cell", PlainNode.TableCell(colWidth = null, backgroundColor = null)),
+                  block("row", PlainNode.TableRow),
+                  block("table", PlainNode.Table()),
+                  block("root", rootNode()),
+                )
+            ),
+          tableOverlays = listOf(tableOverlay(tableId = "table", align = Alignment.Right)),
+        )
+      )
+
+    assertEquals(null, context.tableTarget?.cellBackgroundCurrentValue)
+  }
+
+  @Test
+  fun rangeOutsideTableDoesNotCreateAmbiguousTableTarget() {
+    val context =
+      resolveEditorToolbarContext(
+        editorState(
+          selection = rangeSelection(),
+          blockState =
+            blockState(
+              ancestors = listOf(block("root", rootNode())),
+              intersectingNodes =
+                listOf(block("paragraph", PlainNode.Paragraph), block("table", PlainNode.Table())),
+            ),
+        )
+      )
+
+    assertEquals(listOf(EditorToolbarPageKey.Main), context.pageKeys)
+    assertEquals(null, context.tableTarget)
   }
 
   @Test
@@ -490,6 +616,7 @@ class ToolbarContextTest {
     selection: Selection?,
     modifierState: ModifierState? = null,
     blockState: BlockState? = null,
+    tableOverlays: List<TableOverlay> = emptyList(),
   ): EditorState =
     EditorState(
       version = 1L,
@@ -497,6 +624,7 @@ class ToolbarContextTest {
       selection = selection,
       pageSizes = emptyList(),
       externalElements = emptyList(),
+      tableOverlays = tableOverlays,
       rootAttrs = null,
       rootModifiers = null,
       modifierState = modifierState,
@@ -533,9 +661,31 @@ class ToolbarContextTest {
 
   private fun rootNode(): PlainNode.Root = PlainNode.Root(LayoutMode.Continuous(maxWidth = 640))
 
+  private fun tableOverlay(tableId: String, align: Alignment): TableOverlay =
+    TableOverlay(
+      tableId = tableId,
+      pageIdx = 0,
+      bounds = FfiRect(x = 0f, y = 0f, width = 100f, height = 80f),
+      borderStyle = TableBorderStyle.Solid,
+      align = align,
+      proportion = 1f,
+      contentWidth = 100f,
+      minProportionWidth = 80f,
+      maxProportionWidth = 160f,
+      rows = emptyList(),
+      columns = emptyList(),
+      rowCount = 0,
+      isLastRowFragment = true,
+      isFocused = true,
+      focusedRowIndex = null,
+      focusedColIndex = null,
+      cellSelection = null,
+    )
+
   private fun modifierState(
     inlineText: Boolean = false,
     alignmentOnly: Boolean = false,
+    cellBackgroundColor: Tri<BackgroundColorValue>? = null,
   ): ModifierState =
     ModifierState(
       bold = Tri.Absent,
@@ -555,6 +705,6 @@ class ToolbarContextTest {
       paragraphIndent = Tri.Absent,
       alignment = if (alignmentOnly) Tri.Mixed else Tri.Absent,
       effectiveBold = Tri.Absent,
-      cellBackgroundColor = null,
+      cellBackgroundColor = cellBackgroundColor,
     )
 }

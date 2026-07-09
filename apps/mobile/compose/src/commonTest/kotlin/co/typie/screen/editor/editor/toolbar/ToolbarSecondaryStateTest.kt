@@ -96,4 +96,40 @@ class ToolbarSecondaryStateTest {
 
     assertEquals(null, state.activeSecondaryToolbar)
   }
+
+  @Test
+  fun table_alignment_secondary_uses_table_owner() {
+    val state = EditorToolbarSessionState()
+
+    state.toggleSecondaryToolbar(
+      EditorToolbarSecondary.TableAlignment(tableId = "table-1"),
+      EditorToolbarScope(EditorToolbarPageKey.Table, "table-1"),
+    )
+    state.clearSecondaryToolbarIfInvalid(EditorToolbarScope(EditorToolbarPageKey.Table, "table-1"))
+    assertEquals(
+      EditorToolbarSecondary.TableAlignment(tableId = "table-1"),
+      state.activeSecondaryToolbar,
+    )
+
+    state.clearSecondaryToolbarIfInvalid(EditorToolbarScope(EditorToolbarPageKey.Table, "table-2"))
+    assertEquals(null, state.activeSecondaryToolbar)
+  }
+
+  @Test
+  fun table_cell_background_secondary_uses_table_owner() {
+    val state = EditorToolbarSessionState()
+
+    state.toggleSecondaryToolbar(
+      EditorToolbarSecondary.TableCellBackground(tableId = "table-1"),
+      EditorToolbarScope(EditorToolbarPageKey.Table, "table-1"),
+    )
+    state.clearSecondaryToolbarIfInvalid(EditorToolbarScope(EditorToolbarPageKey.Table, "table-1"))
+    assertEquals(
+      EditorToolbarSecondary.TableCellBackground(tableId = "table-1"),
+      state.activeSecondaryToolbar,
+    )
+
+    state.clearSecondaryToolbarIfInvalid(EditorToolbarScope(EditorToolbarPageKey.Table, "table-2"))
+    assertEquals(null, state.activeSecondaryToolbar)
+  }
 }

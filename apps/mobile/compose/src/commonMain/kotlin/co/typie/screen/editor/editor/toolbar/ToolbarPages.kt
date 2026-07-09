@@ -105,7 +105,7 @@ internal fun rememberEditorToolbarPages(
           editorBlockquoteToolbarPage(toolbarContext.blockquoteTarget)
         EditorToolbarPageKey.Callout -> editorCalloutToolbarPage(toolbarContext.calloutTarget)
         EditorToolbarPageKey.Fold -> editorFoldToolbarPage(toolbarContext.foldTargetId)
-        EditorToolbarPageKey.Table -> editorTableToolbarPage(toolbarContext.tableMode)
+        EditorToolbarPageKey.Table -> editorTableToolbarPage(toolbarContext.tableTarget)
       }
     }
   }

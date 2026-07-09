@@ -5,8 +5,11 @@ import co.typie.editor.ffi.HorizontalRuleVariant
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.ffi.TableBorderStyle
+import co.typie.editor.ffi.TableOp
 import co.typie.screen.editor.editor.toolbar.BlockquoteVariantPanelTarget
 import co.typie.screen.editor.editor.toolbar.HorizontalRuleVariantPanelTarget
+import co.typie.screen.editor.editor.toolbar.TableBorderStylePanelTarget
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -49,6 +52,23 @@ class VariantsTest {
         )
       ),
       target.messageOrNull(BlockquoteVariant.LeftQuote),
+    )
+  }
+
+  @Test
+  fun current_table_border_style_returns_no_message() {
+    val target =
+      TableBorderStylePanelTarget(tableId = "table", currentStyle = TableBorderStyle.Solid)
+
+    assertNull(target.messageOrNull(TableBorderStyle.Solid))
+    assertEquals(
+      Message.Node(
+        NodeOp.Table(
+          id = "table",
+          op = TableOp.SetBorderStyle(borderStyle = TableBorderStyle.Dashed),
+        )
+      ),
+      target.messageOrNull(TableBorderStyle.Dashed),
     )
   }
 }

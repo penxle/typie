@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.ffi.BlockquoteVariant
 import co.typie.editor.ffi.HorizontalRuleVariant
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.TableBorderStyle
 import co.typie.ui.icon.IconData
 import kotlinx.coroutines.CoroutineScope
 
@@ -91,6 +92,8 @@ internal sealed interface EditorToolbarBottomPanel {
     EditorToolbarBottomPanel
 
   data class BlockquoteVariants(val target: BlockquoteVariantPanelTarget) : EditorToolbarBottomPanel
+
+  data class TableBorderStyles(val target: TableBorderStylePanelTarget) : EditorToolbarBottomPanel
 }
 
 internal sealed interface HorizontalRuleVariantPanelTarget {
@@ -114,6 +117,11 @@ internal sealed interface BlockquoteVariantPanelTarget {
   data class Existing(val nodeId: String, override val currentVariant: BlockquoteVariant) :
     BlockquoteVariantPanelTarget
 }
+
+internal data class TableBorderStylePanelTarget(
+  val tableId: String,
+  val currentStyle: TableBorderStyle,
+)
 
 internal data class EditorToolbarScope(
   val pageKey: EditorToolbarPageKey,

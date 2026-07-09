@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorTheme
 import co.typie.editor.currentEditorThemeVariant
@@ -48,6 +49,8 @@ import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.ffi.TableBorderStyle
+import co.typie.editor.ffi.TableOp
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
@@ -55,6 +58,7 @@ import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.screen.editor.editor.toolbar.BlockquoteVariantPanelTarget
 import co.typie.screen.editor.editor.toolbar.HorizontalRuleVariantPanelTarget
+import co.typie.screen.editor.editor.toolbar.TableBorderStylePanelTarget
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelRadius
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
@@ -108,6 +112,29 @@ internal fun BottomToolbarBlockquoteVariants(
 }
 
 @Composable
+internal fun BottomToolbarTableBorderStyles(
+  target: TableBorderStylePanelTarget,
+  onEditorMessage: (Message) -> Unit,
+  onEditorInputRequest: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  VariantList(modifier = modifier) {
+    items(TableBorderStyleItems, key = { it.name }) { style ->
+      VariantRow(
+        label = style.label,
+        selected = style == target.currentStyle,
+        preview = { TableBorderStylePreview(style = style) },
+        previewWidth = TableBorderStylePreviewWidth,
+        onClick = {
+          target.messageOrNull(style)?.let(onEditorMessage)
+          onEditorInputRequest()
+        },
+      )
+    }
+  }
+}
+
+@Composable
 private fun VariantList(
   modifier: Modifier,
   content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
@@ -130,6 +157,7 @@ private fun VariantRow(
   preview: @Composable () -> Unit,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  previewWidth: Dp = VariantPreviewWidth,
 ) {
   val shape = VariantRowShape
 
@@ -167,7 +195,7 @@ private fun VariantRow(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Box(
-        modifier = Modifier.width(VariantPreviewWidth).height(VariantPreviewHeight),
+        modifier = Modifier.width(previewWidth).height(VariantPreviewHeight),
         contentAlignment = Alignment.Center,
       ) {
         preview()
@@ -452,6 +480,52 @@ private fun DrawScope.drawDiamondStroke(
   drawPath(path = path, color = color, style = Stroke(width = stroke))
 }
 
+@Composable
+private fun TableBorderStylePreview(style: TableBorderStyle) {
+  val editorThemeColors = rememberEditorThemeColors()
+  val color = editorThemeColors.getValue("ui.text.default")
+
+  if (style == TableBorderStyle.None) {
+    Icon(
+      icon = Lucide.Ban,
+      contentDescription = null,
+      tint = color,
+      modifier = Modifier.size(TableBorderStyleIconSize),
+    )
+    return
+  }
+
+  Canvas(Modifier.size(TableBorderStyleIconSize)) {
+    val stroke = 2.dp.toPx()
+    val y = size.height / 2f
+    when (style) {
+      TableBorderStyle.Solid -> drawLine(color, Offset(0f, y), Offset(size.width, y), stroke)
+      TableBorderStyle.Dashed ->
+        drawTableBorderStyleDashedLine(color = color, y = y, stroke = stroke)
+      TableBorderStyle.Dotted ->
+        drawTableBorderStyleDottedLine(color = color, y = y, stroke = stroke)
+      TableBorderStyle.None -> Unit
+    }
+  }
+}
+
+private fun DrawScope.drawTableBorderStyleDashedLine(color: Color, y: Float, stroke: Float) {
+  val dashPx = 4.dp.toPx()
+  val gapPx = 2.dp.toPx()
+  repeat(3) { index ->
+    val x = index * (dashPx + gapPx)
+    drawLine(color, Offset(x, y), Offset(x + dashPx, y), stroke)
+  }
+}
+
+private fun DrawScope.drawTableBorderStyleDottedLine(color: Color, y: Float, stroke: Float) {
+  val radius = stroke / 2f
+  val gap = size.width / 3f
+  repeat(3) { index ->
+    drawCircle(color = color, radius = radius, center = Offset(x = gap * index + gap / 2f, y = y))
+  }
+}
+
 internal fun HorizontalRuleVariantPanelTarget.messageOrNull(
   variant: HorizontalRuleVariant
 ): Message? = if (variant == currentVariant) null else message(variant)
@@ -475,6 +549,13 @@ private fun BlockquoteVariantPanelTarget.message(variant: BlockquoteVariant): Me
       fragmentInsertion(PlainNode.Blockquote(variant = variant))
     is BlockquoteVariantPanelTarget.Existing ->
       Message.Node(NodeOp.SetAttrs(id = nodeId, attrs = PlainNode.Blockquote(variant = variant)))
+  }
+
+internal fun TableBorderStylePanelTarget.messageOrNull(style: TableBorderStyle): Message? =
+  if (style == currentStyle) {
+    null
+  } else {
+    Message.Node(NodeOp.Table(id = tableId, op = TableOp.SetBorderStyle(borderStyle = style)))
   }
 
 private fun fragmentInsertion(node: PlainNode): Message.Insertion =
@@ -501,6 +582,14 @@ private val BlockquoteVariantItems =
     BlockquoteVariant.MessageReceived,
   )
 
+private val TableBorderStyleItems =
+  listOf(
+    TableBorderStyle.Solid,
+    TableBorderStyle.Dashed,
+    TableBorderStyle.Dotted,
+    TableBorderStyle.None,
+  )
+
 private val HorizontalRuleVariant.label: String
   get() =
     when (this) {
@@ -525,8 +614,19 @@ private val BlockquoteVariant.label: String
     }
 
 private val VariantPanelPadding = 12.dp
+private val TableBorderStyle.label: String
+  get() =
+    when (this) {
+      TableBorderStyle.Solid -> "실선"
+      TableBorderStyle.Dashed -> "파선"
+      TableBorderStyle.Dotted -> "점선"
+      TableBorderStyle.None -> "없음"
+    }
+
 private val VariantRowHeight = 52.dp
 private val VariantPreviewWidth = 112.dp
 private val VariantPreviewHeight = 24.dp
+private val TableBorderStylePreviewWidth = 20.dp
+private val TableBorderStyleIconSize = 16.dp
 private val VariantRowShape =
   AppShapes.rounded(maxOf(AppShapes.sm, ToolbarBottomPanelRadius - VariantPanelPadding))

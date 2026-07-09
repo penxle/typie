@@ -16,6 +16,10 @@ internal sealed interface EditorToolbarSecondary {
   data class TextOption(val mode: TextOptionMode) : EditorToolbarSecondary
 
   data class ImageResize(val nodeId: String) : EditorToolbarSecondary
+
+  data class TableAlignment(val tableId: String) : EditorToolbarSecondary
+
+  data class TableCellBackground(val tableId: String) : EditorToolbarSecondary
 }
 
 internal data class SecondaryToolbarSession(
