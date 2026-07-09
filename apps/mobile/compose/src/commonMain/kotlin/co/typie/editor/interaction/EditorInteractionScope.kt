@@ -15,14 +15,17 @@ import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.ScrollGestureLockState
+import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-internal class EditorInteractionScope(private val coroutineScope: CoroutineScope) :
-  EditorInteractionEffects, EditorInteractionGeometry {
+internal class EditorInteractionScope(
+  private val coroutineScope: CoroutineScope,
+  private val platformProvider: () -> Platform = { PlatformModule.platform },
+) : EditorInteractionEffects, EditorInteractionGeometry {
   private var editor: Editor? = null
   private var bringIntoViewRequests: EditorBringIntoViewRequests? = null
   private var uiState: EditorUiState? = null
@@ -45,7 +48,7 @@ internal class EditorInteractionScope(private val coroutineScope: CoroutineScope
       effects = this,
       geometry = this,
       semantics = semantics,
-      platformProvider = { PlatformModule.platform },
+      platformProvider = { platformProvider() },
       uiStateProvider = { checkNotNull(uiState) { "Editor interaction scope has no UI state" } },
       pointerInputEnabledProvider = { pointerInputEnabled() },
     )

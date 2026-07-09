@@ -1,7 +1,8 @@
 package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -18,7 +19,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
@@ -27,16 +30,23 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.TableOp
 import co.typie.editor.ffi.TableOverlay
+import co.typie.editor.interaction.EditorInteractionController
+import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
+import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.interaction.resolveActiveTableCellSelection
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.viewport.EditorViewportState
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private const val TableColumnResizeTouchWidthDp = 24f
+private const val TableColumnResizeDragSlopDp = 8f
 private const val TableColumnResizeVisualWidthDp = 3f
 private const val TableColumnResizeMinColumnWidth = 40f
 private const val TableColumnResizeBorderWidth = 1f
@@ -84,6 +94,7 @@ internal fun EditorTableColumnResizeOverlay(
   uiState: EditorUiState,
   editorRectInOverlay: Rect,
   density: Float,
+  viewportState: EditorViewportState,
 ) {
   if (!uiState.focused || density <= 0f) {
     return
@@ -97,9 +108,13 @@ internal fun EditorTableColumnResizeOverlay(
       density = density,
     ) ?: return
   var draft by remember { mutableStateOf<EditorTableColumnResizeDraft?>(null) }
+  var resizeHandlePressed by remember { mutableStateOf(false) }
   val currentEditor by rememberUpdatedState(editor)
+  val interactionScope = LocalEditorInteractionScope.current
+  val interactionController = interactionScope.controller
   val color = AppTheme.colors.palette.blue
   val activeDraft = draft
+  val resizeHandleActive = activeDraft != null || resizeHandlePressed
   val visualCenterX =
     activeDraft?.let { it.baseCenterX + resolveResizeDelta(it) * it.pxPerPageUnit }
       ?: placement.centerX
@@ -113,7 +128,7 @@ internal fun EditorTableColumnResizeOverlay(
       val height = (visualBottom - visualTop - verticalInset * 2f).coerceAtLeast(0f)
       if (height > 0f) {
         drawRoundRect(
-          color = color.copy(alpha = if (activeDraft != null) 0.85f else 0.35f),
+          color = color.copy(alpha = if (resizeHandleActive) 0.85f else 0.35f),
           topLeft = Offset(x = visualCenterX - visualWidth / 2f, y = visualTop + verticalInset),
           size = Size(width = visualWidth, height = height),
           cornerRadius = CornerRadius(visualWidth / 2f, visualWidth / 2f),
@@ -125,6 +140,11 @@ internal fun EditorTableColumnResizeOverlay(
       TableColumnResizeHandle(
         rect = rect,
         density = density,
+        editorRectInOverlay = editorRectInOverlay,
+        viewportState = viewportState,
+        interactionScope = interactionScope,
+        interactionController = interactionController,
+        onPressedChange = { resizeHandlePressed = it },
         onStart = {
           uiState.contextMenu.hide()
           draft = placement.toDraft()
@@ -310,6 +330,16 @@ internal fun resolveTableResizeCommittedDelta(overlay: TableOverlay, deltaX: Flo
     deltaX = deltaX,
   )
 
+internal fun resolveTableResizePreviewDelta(overlay: TableOverlay, deltaX: Float): Float =
+  resolveTableResizePreviewDelta(
+    colCount = overlay.columns.size,
+    currentTableWidth = overlay.bounds.width,
+    contentWidth = overlay.contentWidth,
+    minProportionWidth = overlay.minProportionWidth,
+    maxProportionWidth = overlay.maxProportionWidth,
+    deltaX = deltaX,
+  )
+
 internal fun dragDeltaToPageDelta(deltaPx: Float, pxPerPageUnit: Float): Float =
   if (pxPerPageUnit.isFinite() && pxPerPageUnit > 0f) {
     deltaPx / pxPerPageUnit
@@ -367,6 +397,23 @@ private fun resolveTableResizeCommittedDelta(
   }
   return contentWidth * (proportion / 100f) - currentTableWidth
 }
+
+private fun resolveTableResizePreviewDelta(
+  colCount: Int,
+  currentTableWidth: Float,
+  contentWidth: Float,
+  minProportionWidth: Float,
+  maxProportionWidth: Float,
+  deltaX: Float,
+): Float =
+  clampTableResizeDelta(
+    colCount = colCount,
+    currentTableWidth = currentTableWidth,
+    contentWidth = contentWidth,
+    minProportionWidth = minProportionWidth,
+    maxProportionWidth = maxProportionWidth,
+    deltaX = deltaX,
+  )
 
 private fun clampTableColumnResizeDelta(widths: List<Float>, colIndex: Int, deltaX: Float): Float {
   if (widths.isEmpty() || colIndex < 0 || colIndex >= widths.lastIndex) {
@@ -439,14 +486,14 @@ private fun hasWidthChange(before: List<Float>, after: List<Float>): Boolean {
 
 private fun resolveResizeDelta(draft: EditorTableColumnResizeDraft): Float =
   if (draft.isTableResize) {
-    resolveTableResizeCommittedDelta(
+    resolveTableResizePreviewDelta(
       colCount = draft.initialWidths.size,
       currentTableWidth = draft.initialTableWidth,
       contentWidth = draft.contentWidth,
       minProportionWidth = draft.minProportionWidth,
       maxProportionWidth = draft.maxProportionWidth,
       deltaX = draft.deltaX,
-    ) ?: 0f
+    )
   } else {
     clampTableColumnResizeDelta(
       widths = draft.initialWidths,
@@ -512,29 +559,87 @@ private fun Editor.commitTableResize(draft: EditorTableColumnResizeDraft) {
 private fun TableColumnResizeHandle(
   rect: Rect,
   density: Float,
+  editorRectInOverlay: Rect,
+  viewportState: EditorViewportState,
+  interactionScope: EditorInteractionScope,
+  interactionController: EditorInteractionController,
+  onPressedChange: (Boolean) -> Unit,
   onStart: () -> Unit,
   onDrag: (Float) -> Unit,
   onEnd: () -> Unit,
 ) {
+  val viewConfiguration = LocalViewConfiguration.current
   val currentOnStart by rememberUpdatedState(onStart)
   val currentOnDrag by rememberUpdatedState(onDrag)
   val currentOnEnd by rememberUpdatedState(onEnd)
+  val currentOnPressedChange by rememberUpdatedState(onPressedChange)
+  val dragSlop = min(viewConfiguration.touchSlop, TableColumnResizeDragSlopDp * density)
   Box(
     modifier =
       Modifier.offset { IntOffset(x = rect.left.roundToInt(), y = rect.top.roundToInt()) }
         .width((rect.width / density).dp)
         .height((rect.height / density).dp)
-        .pointerInput(Unit) {
-          detectDragGestures(
-            onDragStart = { currentOnStart() },
-            onDrag = { change, dragAmount ->
-              change.consume()
-              currentOnDrag(dragAmount.x)
-            },
-            onDragEnd = { currentOnEnd() },
-            onDragCancel = { currentOnEnd() },
-          )
+        .pointerInput(interactionController) {
+          awaitPointerEventScope {
+            while (true) {
+              val event = awaitPointerEvent(PointerEventPass.Initial)
+              if (event.changes.any { it.pressed && !it.previousPressed }) {
+                interactionController.clearTapHistory()
+              }
+            }
+          }
         }
+        .pointerInput(Unit) {
+          awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+            val pointerId = down.id
+            val start = down.position
+            var previous = start
+            var dragging = false
+            currentOnPressedChange(true)
+            interactionScope.cancelTapDispatch()
+            interactionScope.cancelLongPressDispatch()
+            try {
+              while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                if (!change.pressed) {
+                  break
+                }
+                val position = change.position
+                if (!dragging) {
+                  if ((position - start).getDistance() <= dragSlop) {
+                    continue
+                  }
+                  dragging = true
+                  currentOnStart()
+                }
+                currentOnDrag(position.x - previous.x)
+                previous = position
+                change.consume()
+              }
+            } finally {
+              if (dragging) {
+                currentOnEnd()
+              }
+              currentOnPressedChange(false)
+            }
+          }
+        }
+        .editorOverlayViewportWheelInput(
+          viewportState = viewportState,
+          interactionScope = interactionScope,
+          targetRectInOverlay = rect,
+        )
+        .editorInteractions(
+          density = density,
+          interactionController = interactionController,
+          coordinateResolver =
+            EditorOverlayPointerTargetCoordinateResolver(
+              editorRectInOverlay = editorRectInOverlay,
+              targetRectInOverlay = rect,
+            ),
+        )
   ) {}
 }
 

@@ -3,6 +3,9 @@ package co.typie.editor.interaction
 internal class EditorPointerOwnership {
   private val pointerIds = mutableSetOf<Long>()
 
+  val hasPointers: Boolean
+    get() = pointerIds.isNotEmpty()
+
   fun acquire(pointerId: Long) {
     pointerIds += pointerId
   }

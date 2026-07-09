@@ -1524,7 +1524,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `table cell handle tap does not dispatch cell tap`() =
+  fun `table cell handle tap dispatches a normal cell tap`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -1552,12 +1552,60 @@ class EditorInteractionControllerTest {
       val down = Offset(60f, 60f)
 
       assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
-      controller.onTapTimer(nowMillis = 260L)
+      assertNull(host.scheduledTapDispatchAtMillis)
+      assertFalse(host.scrollGestureLockActive)
       assertTrue(controller.onPointerUp(pointerId = 1L, position = down, nowMillis = 300L))
       runCurrent()
 
-      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+      assertEquals(
+        listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 60f, y = 60f))),
+        fake.enqueued.filterIsInstance<Message.Selection>(),
+      )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+    }
+
+  @Test
+  fun `table cell handle delayed drag does not dispatch a pending tap first`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(60f, 60f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertNull(host.scheduledTapDispatchAtMillis)
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 300L)
+      )
+
+      val messages = fake.enqueued.filterIsInstance<Message.Selection>().map { it.op }
+      assertEquals(1, messages.size)
+      val extend = messages.single() as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, extend.anchor)
+      assertEquals(100f, extend.headX)
+      assertEquals(90f, extend.headY)
+      assertEquals(selection, extend.baseSelection)
+      assertFalse(extend.allowCollapse)
     }
 
   @Test

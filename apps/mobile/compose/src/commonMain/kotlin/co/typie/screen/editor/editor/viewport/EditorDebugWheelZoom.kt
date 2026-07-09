@@ -29,7 +29,24 @@ internal fun rememberEditorDebugWheelZoomModifier(
   onZoom: (focalPosition: Offset, normalizedDelta: Float) -> Boolean,
   onZoomSessionEnd: () -> Unit,
 ): Modifier {
-  return Modifier.pointerInput(state) {
+  return Modifier.editorPointerSignalWheelZoom(
+    key1 = state,
+    canZoom = { state.viewport.width > 0f },
+    onZoomSessionStart = onZoomSessionStart,
+    onZoom = onZoom,
+    onZoomSessionEnd = onZoomSessionEnd,
+  )
+}
+
+internal fun Modifier.editorPointerSignalWheelZoom(
+  key1: Any?,
+  key2: Any? = Unit,
+  canZoom: () -> Boolean = { true },
+  onZoomSessionStart: () -> Boolean,
+  onZoom: (focalPosition: Offset, normalizedDelta: Float) -> Boolean,
+  onZoomSessionEnd: () -> Unit,
+): Modifier =
+  pointerInput(key1, key2) {
     coroutineScope {
       var wheelLastEventTs: Long? = null
       var wheelLowDeltaStreak = 0
@@ -70,7 +87,7 @@ internal fun rememberEditorDebugWheelZoomModifier(
             finishWheelZoomSession()
             continue
           }
-          if (!dominantDelta.isFinite() || dominantDelta == 0f || state.viewport.width <= 0f) {
+          if (!dominantDelta.isFinite() || dominantDelta == 0f || !canZoom()) {
             continue
           }
 
@@ -116,7 +133,6 @@ internal fun rememberEditorDebugWheelZoomModifier(
       }
     }
   }
-}
 
 internal class EditorDebugWheelZoomSession(
   private val scope: CoroutineScope,

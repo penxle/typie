@@ -13,7 +13,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ext.isCollapsed
@@ -88,6 +87,19 @@ internal data class EditorSelectionHandleOverlayPlacement(
   val stemHeightPx: Float,
 )
 
+internal fun resolveSelectionHandleOverlayGeometry(
+  placement: EditorSelectionHandleOverlayPlacement,
+  density: Float,
+) =
+  resolveSelectionHandleGeometry(
+    type = placement.type,
+    endpointTopLeftInOverlay = placement.endpointTopLeftInOverlay,
+    stemHeightPx = placement.stemHeightPx,
+    radiusPx = EditorSelectionHandleRadiusDp * density,
+    stemWidthPx = EditorSelectionHandleStemWidthDp * density,
+    touchTargetPx = EditorSelectionHandleTouchTargetDp * density,
+  )
+
 private fun resolveSelectionHandleOverlayPlacement(
   type: EditorSelectionHandleType,
   endpoint: PageRect,
@@ -116,18 +128,7 @@ private fun resolveSelectionHandleOverlayPlacement(
 @Composable
 private fun EditorSelectionHandle(placement: EditorSelectionHandleOverlayPlacement, color: Color) {
   val localDensity = LocalDensity.current
-  val radiusPx = with(localDensity) { EditorSelectionHandleRadiusDp.dp.toPx() }
-  val stemWidthPx = with(localDensity) { EditorSelectionHandleStemWidthDp.dp.toPx() }
-  val touchTargetPx = with(localDensity) { EditorSelectionHandleTouchTargetDp.dp.toPx() }
-  val geometry =
-    resolveSelectionHandleGeometry(
-      type = placement.type,
-      endpointTopLeftInOverlay = placement.endpointTopLeftInOverlay,
-      stemHeightPx = placement.stemHeightPx,
-      radiusPx = radiusPx,
-      stemWidthPx = stemWidthPx,
-      touchTargetPx = touchTargetPx,
-    )
+  val geometry = resolveSelectionHandleOverlayGeometry(placement, localDensity.density)
 
   Box(
     modifier =

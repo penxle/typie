@@ -119,6 +119,7 @@ internal fun EditorScreenOverlayHost(
             uiState = uiState,
             editorRectInOverlay = editorRectInViewport,
             density = density.density,
+            viewportState = viewportState,
           )
           EditorTableCellSelectionOverlay(
             editor = editor,
@@ -139,6 +140,13 @@ internal fun EditorScreenOverlayHost(
             uiState = uiState,
             editorRectInOverlay = editorRectInViewport,
             density = density.density,
+          )
+          EditorOverlayPointerRouter(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInViewport,
+            density = density.density,
+            viewportState = viewportState,
           )
         }
 

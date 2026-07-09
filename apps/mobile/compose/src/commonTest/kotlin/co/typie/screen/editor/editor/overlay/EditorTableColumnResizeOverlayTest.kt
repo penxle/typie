@@ -61,11 +61,19 @@ class EditorTableColumnResizeOverlayTest {
   }
 
   @Test
-  fun `table resize draft delta matches committed rounded proportion`() {
+  fun `table resize committed delta matches rounded proportion`() {
     val overlay = tableOverlay(bounds = FfiRect(x = 10f, y = 20f, width = 150f, height = 80f))
 
     assertEquals(0f, resolveTableResizeCommittedDelta(overlay = overlay, deltaX = 0.4f))
     assertEquals(10f, resolveTableResizeCommittedDelta(overlay = overlay, deltaX = 9.6f))
+  }
+
+  @Test
+  fun `table resize preview delta follows the pointer before rounded commit`() {
+    val overlay = tableOverlay(bounds = FfiRect(x = 10f, y = 20f, width = 150f, height = 80f))
+
+    assertEquals(0.4f, resolveTableResizePreviewDelta(overlay = overlay, deltaX = 0.4f))
+    assertEquals(9.6f, resolveTableResizePreviewDelta(overlay = overlay, deltaX = 9.6f))
   }
 
   @Test

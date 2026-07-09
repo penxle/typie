@@ -10,14 +10,17 @@ class EditorPointerOwnershipTest {
     val ownership = EditorPointerOwnership()
 
     assertFalse(ownership.owns(pointerId = 1L))
+    assertFalse(ownership.hasPointers)
 
     ownership.acquire(pointerId = 1L)
 
+    assertTrue(ownership.hasPointers)
     assertTrue(ownership.owns(pointerId = 1L))
     assertFalse(ownership.owns(pointerId = 2L))
 
     ownership.release(pointerId = 1L)
 
+    assertFalse(ownership.hasPointers)
     assertFalse(ownership.owns(pointerId = 1L))
   }
 

@@ -60,7 +60,6 @@ internal class EditorTableHandleGesture(
     }
     context.effects.cancelTapDispatch()
     context.effects.cancelLongPressDispatch()
-    context.effects.setScrollGestureLocked(true)
     context.uiState.contextMenu.hide()
     return true
   }
@@ -104,6 +103,9 @@ internal class EditorTableHandleGesture(
 
     context.uiState.contextMenu.hide()
     context.semantics.magnifier.hide()
+    context.effects.cancelTapDispatch()
+    context.effects.cancelLongPressDispatch()
+    context.effects.setScrollGestureLocked(true)
     context.reduceMode(EditorInteractionEvent.TableHandleDragStart)
     if (context.mode != EditorInteractionMode.TableCellHandleDragging) {
       resetPointerOwnedState(context = context)

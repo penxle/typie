@@ -73,6 +73,10 @@ internal class EditorInteractionController(
     gestures.updateTapSlop(tapSlopPx)
   }
 
+  fun clearTapHistory() {
+    gestures.clearTapHistory()
+  }
+
   fun canApplyModeEvent(event: EditorInteractionEvent): Boolean = mode.canApply(event)
 
   fun onPointerDown(

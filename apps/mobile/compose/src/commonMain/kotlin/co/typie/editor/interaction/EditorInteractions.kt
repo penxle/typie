@@ -76,7 +76,7 @@ private class EditorInteractionsNode(
     }
 
     if (density <= 0f) {
-      cancelInteraction()
+      cancelInteractionIfOwnedPointer()
       return
     }
 
@@ -143,12 +143,18 @@ private class EditorInteractionsNode(
   }
 
   override fun onCancelPointerInput() {
-    cancelInteraction()
+    cancelInteractionIfOwnedPointer()
   }
 
   private fun cancelInteraction() {
     pointerOwnership.reset()
     interactionController.cancel()
+  }
+
+  private fun cancelInteractionIfOwnedPointer() {
+    if (pointerOwnership.hasPointers) {
+      cancelInteraction()
+    }
   }
 
   private fun activePositionOrCancel(position: Offset): Offset? {
@@ -160,7 +166,7 @@ private class EditorInteractionsNode(
   }
 
   override fun onDetach() {
-    cancelInteraction()
+    cancelInteractionIfOwnedPointer()
     super.onDetach()
   }
 }

@@ -13,6 +13,7 @@ import co.typie.editor.EditorViewportTransform
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.EditorTableCellSelectionBorderWidthDp
 import co.typie.editor.interaction.EditorTableCellSelectionHandleRadiusDp
+import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.resolveTableCellSelections
 import co.typie.editor.runtime.EditorUiState
 import co.typie.ui.theme.AppTheme
@@ -89,6 +90,7 @@ internal fun resolveTableCellSelectionOverlayPlacements(
       }
 
     EditorTableCellSelectionOverlayPlacement(
+      tableId = activeSelection.overlay.tableId,
       outline = outline,
       handleCenter = handleCenter,
       borderWidthPx = EditorTableCellSelectionBorderWidthDp * density,
@@ -98,11 +100,26 @@ internal fun resolveTableCellSelectionOverlayPlacements(
 }
 
 internal data class EditorTableCellSelectionOverlayPlacement(
+  val tableId: String,
   val outline: Rect,
   val handleCenter: Offset?,
   val borderWidthPx: Float,
   val handleRadiusPx: Float,
 )
+
+internal fun EditorTableCellSelectionOverlayPlacement.handleTouchTargetRect(density: Float): Rect? {
+  val center = handleCenter ?: return null
+  val halfSize = EditorTableCellSelectionHandleTouchTargetDp * density / 2f
+  if (halfSize <= 0f) {
+    return null
+  }
+  return Rect(
+    left = center.x - halfSize,
+    top = center.y - halfSize,
+    right = center.x + halfSize,
+    bottom = center.y + halfSize,
+  )
+}
 
 private fun resolveOutlineInOverlay(
   activeSelection: EditorTableCellSelection,

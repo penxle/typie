@@ -51,6 +51,10 @@ internal class EditorInteractionGestures(
     tap.updateTapSlop(tapSlopPx)
   }
 
+  fun clearTapHistory() {
+    tap.clearTapHistory()
+  }
+
   fun handlePointerDown(
     pointerId: Long,
     position: Offset,
@@ -115,10 +119,6 @@ internal class EditorInteractionGestures(
         )
     val tableHandleConsumed =
       tableHandleHit && tap.hasActivePointer && tableHandle.handleDragDown(position = position)
-    if (tableHandleConsumed) {
-      tap.markTapDispatched()
-      context.effects.cancelTapDispatch()
-    }
     if (tapEnabled && tap.hasActivePointer && !selectionHandleConsumed && !tableHandleConsumed) {
       longPress.prepare(pointerId = pointerId)
       context.effects.scheduleLongPressDispatch(
