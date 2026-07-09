@@ -143,12 +143,12 @@ private fun ToolTile(item: ToolItem, onClick: () -> Unit, modifier: Modifier = M
         Icon(
           icon = item.icon,
           contentDescription = null,
-          modifier = Modifier.size(22.dp),
+          modifier = Modifier.size(ToolTileIconSize),
           tint = AppTheme.colors.textDefault,
         )
         Text(
           text = item.label,
-          style = AppTheme.typography.caption,
+          style = AppTheme.typography.body,
           color = AppTheme.colors.textDefault,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
@@ -192,4 +192,5 @@ private val ToolPanelPadding = 16.dp
 private val ToolTileShape =
   AppShapes.rounded(maxOf(AppShapes.sm, ToolbarBottomPanelRadius - ToolPanelPadding))
 private val ToolTileHeight = 64.dp
+private val ToolTileIconSize = 24.dp
 private const val ToolTilePressedScale = 0.96f

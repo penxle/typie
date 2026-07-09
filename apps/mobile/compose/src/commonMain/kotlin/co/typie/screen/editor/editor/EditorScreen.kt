@@ -170,6 +170,8 @@ import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.LocalPopoverOverlayState
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
@@ -191,6 +193,7 @@ fun EditorScreen(entityId: String) {
   val nav = Nav.current
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
+  val toast = LocalToast.current
   val model = viewModel { EditorViewModel(entityId) }
   val scope = rememberCoroutineScope()
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
@@ -1168,7 +1171,9 @@ fun EditorScreen(entityId: String) {
                 EditorToolbarToolAction.AiFeedback -> {
                   aiFeedback.openFromToolPanel()
                 }
-                EditorToolbarToolAction.Timeline -> Unit
+                EditorToolbarToolAction.Timeline -> {
+                  toast.show(ToastType.Notification, "타임라인 기능은 아직 준비 중이에요.")
+                }
                 EditorToolbarToolAction.DebugViewportOverlay -> model.toggleDebugViewportOverlay()
                 EditorToolbarToolAction.DebugBodyOverlay -> model.toggleDebugBodyOverlay()
                 EditorToolbarToolAction.DebugSurfaceOverlay -> model.toggleDebugSurfaceOverlay()
