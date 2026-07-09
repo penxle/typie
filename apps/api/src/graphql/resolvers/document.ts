@@ -1120,6 +1120,37 @@ builder.mutationFields((t) => ({
         .innerJoin(Notes, eq(NoteEntities.noteId, Notes.id))
         .where(and(eq(NoteEntities.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
 
+      const sourceState = await db
+        .select({ documentId: DocumentStates.documentId })
+        .from(DocumentStates)
+        .where(eq(DocumentStates.documentId, input.documentId))
+        .then(first);
+
+      let v2Content: {
+        plain: PlainDoc;
+        graph: Uint8Array;
+        heads: Uint8Array;
+        text: string;
+        characterCount: number;
+        blobSize: number;
+      } | null = null;
+
+      if (sourceState) {
+        const mergedGraph = await readMergedGraph(input.documentId);
+
+        const converted = await wasmFfi.use((host) => {
+          const plain = host.to_plain(mergedGraph);
+          const graph = host.to_graph(plain);
+          return { plain, graph, heads: host.heads(graph), text: host.extract_text(plain) };
+        });
+
+        const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(converted.plain);
+        const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
+        const characterCount = countCharacters(converted.text);
+
+        v2Content = { ...converted, characterCount, blobSize };
+      }
+
       const title = `(사본) ${document.title ?? '(제목 없음)'}`;
 
       const newDocument = await db.transaction(async (tx) => {
@@ -1181,6 +1212,19 @@ builder.mutationFields((t) => ({
           versionId: documentVersion.id,
           userId: ctx.session.userId,
         });
+
+        if (v2Content) {
+          await tx.insert(DocumentBundles).values({ documentId: newDocument.id, seq: 1, payload: v2Content.graph });
+          await tx.insert(DocumentStates).values({
+            documentId: newDocument.id,
+            json: v2Content.plain,
+            text: v2Content.text,
+            characterCount: v2Content.characterCount,
+            blobSize: v2Content.blobSize,
+            heads: v2Content.heads,
+            lastBundleSeq: 1,
+          });
+        }
 
         if (noteRows.length > 0) {
           let prevOrder: string | null = null;
