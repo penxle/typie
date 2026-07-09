@@ -100,6 +100,7 @@ import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.route.Route
+import co.typie.screen.document.document.DocumentCharacterCountSnapshots
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackOptInSheet
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackOverlay
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarCenter
@@ -409,12 +410,23 @@ fun EditorScreen(entityId: String) {
                 subtitle = model.headingSubtitle,
                 loading = loading,
                 onClick = {
-                  screenState.prepareToLeaveEditorScene(
-                    runtime = runtime,
-                    uiState = uiState,
-                    flushDrafts = { model.flush() },
-                  )
-                  nav.navigate(Route.Document(entityId))
+                  val activeEditor = runtime.editor
+                  val target = Route.Document(entityId)
+                  var delivered = false
+                  try {
+                    DocumentCharacterCountSnapshots.put(entityId, activeEditor?.characterCounts())
+                    screenState.prepareToLeaveEditorScene(
+                      runtime = runtime,
+                      uiState = uiState,
+                      flushDrafts = { model.flush() },
+                    )
+                    nav.navigate(target)
+                    delivered = nav.current == target
+                  } finally {
+                    if (!delivered) {
+                      DocumentCharacterCountSnapshots.remove(entityId)
+                    }
+                  }
                 },
                 modifier =
                   Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),

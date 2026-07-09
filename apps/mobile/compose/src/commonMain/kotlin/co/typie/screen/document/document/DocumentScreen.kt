@@ -94,7 +94,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 private const val DocumentExpandableMetricAnimationDurationMillis = 220
-private const val DocumentCharacterCountPlaceholder = 9999
 
 @Composable
 fun DocumentScreen(entityId: String) {
@@ -107,7 +106,10 @@ fun DocumentScreen(entityId: String) {
   val scrollState = rememberScrollState()
   val loading = model.query.state !is QueryState.Success
 
-  LaunchedEffect(entityId) { model.entityId = entityId }
+  LaunchedEffect(entityId) {
+    model.entityId = entityId
+    model.setInitialCharacterCounts(entityId, DocumentCharacterCountSnapshots.take(entityId))
+  }
 
   val entity = model.query.data.entity
   val document = entity.node.onDocument
@@ -226,6 +228,11 @@ fun DocumentScreen(entityId: String) {
       "${document.updatedAt.timeAgo()} · ${document.updatedAt.format("yyyy.MM.dd HH:mm")}"
     val netChange =
       document.characterCountChange.additions - document.characterCountChange.deletions
+    val characterCountRows =
+      documentCharacterCountRows(
+        counts = model.characterCounts,
+        fallbackWithWhitespace = document.characterCount,
+      )
 
     val openIconPicker: suspend () -> Unit = {
       if (!loading) {
@@ -390,15 +397,20 @@ fun DocumentScreen(entityId: String) {
       DocumentExpandableMetric(
         icon = Lucide.Type,
         label = "글자 수",
-        value = "${document.characterCount.comma}자",
+        value =
+          documentCharacterCountSummary(
+            counts = model.characterCounts,
+            fallbackWithWhitespace = document.characterCount,
+          ),
         expanded = characterCountExpanded,
         onToggle = { characterCountExpanded = !characterCountExpanded },
       ) {
-        DocumentInfoRow(label = "공백 포함", value = "${DocumentCharacterCountPlaceholder.comma}자")
-        Spacer(Modifier.height(8.dp))
-        DocumentInfoRow(label = "공백 미포함", value = "${DocumentCharacterCountPlaceholder.comma}자")
-        Spacer(Modifier.height(8.dp))
-        DocumentInfoRow(label = "공백/부호 미포함", value = "${DocumentCharacterCountPlaceholder.comma}자")
+        characterCountRows.forEachIndexed { index, row ->
+          if (index > 0) {
+            Spacer(Modifier.height(8.dp))
+          }
+          DocumentInfoRow(label = row.first, value = row.second)
+        }
       }
       DocumentInfoDivider()
       DocumentExpandableMetric(

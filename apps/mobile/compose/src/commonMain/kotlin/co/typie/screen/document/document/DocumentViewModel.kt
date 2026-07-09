@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.domain.entity.EntityIconPickerSheetModel
+import co.typie.editor.ffi.CharacterCounts
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
 import co.typie.graphql.DocumentActions_DuplicateDocument_Mutation
@@ -35,6 +36,10 @@ import kotlin.time.Clock
 
 class DocumentViewModel : ViewModel(), EntityIconPickerSheetModel {
   var entityId by mutableStateOf("")
+  var characterCounts by mutableStateOf<CharacterCounts?>(null)
+    private set
+
+  private var characterCountsEntityId: String? = null
 
   val query =
     Apollo.watchQuery(
@@ -48,6 +53,13 @@ class DocumentViewModel : ViewModel(), EntityIconPickerSheetModel {
   fun refetch() {
     if (entityId.isNotBlank()) {
       query.refetch()
+    }
+  }
+
+  fun setInitialCharacterCounts(entityId: String, counts: CharacterCounts?) {
+    if (characterCountsEntityId != entityId || counts != null) {
+      characterCountsEntityId = entityId
+      characterCounts = counts
     }
   }
 
