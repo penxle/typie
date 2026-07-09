@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.LocalEditorZoomController
+import co.typie.editor.SurfaceSessionHandle
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.render.RenderCanvas
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -61,13 +62,16 @@ internal fun EditorPageSurface(
   val trigger = remember {
     MutableSharedFlow<Long>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
   }
-  val render =
-    remember(editor, page) {
-      {
-        val version = editor.renderSurface(page)
+  val onPresented =
+    remember(trigger) {
+      { version: Long ->
         trigger.tryEmit(version)
+        Unit
       }
     }
+  var surfaceSession by remember(editor, page) { mutableStateOf<SurfaceSessionHandle?>(null) }
+  val render =
+    remember(editor, page, onPresented) { { surfaceSession?.requestRender(onPresented) } }
 
   val widthDouble = width.toDouble()
   val heightDouble = height.toDouble()
@@ -147,12 +151,15 @@ internal fun EditorPageSurface(
             desiredPixelSize = desiredPixelSize,
             trigger = trigger,
             onAttach = { handle ->
-              editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
+              surfaceSession =
+                editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
             },
-            onDetach = { editor.detachSurface(page) },
+            onDetach = { releaseBuffer ->
+              surfaceSession?.detach(releaseBuffer) ?: releaseBuffer()
+              surfaceSession = null
+            },
             onResize = {
-              editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
-              render()
+              surfaceSession?.requestResize(widthDouble, heightDouble, scaleFactor, onPresented)
             },
             onBitmapCommitted = { size, version ->
               committedPixelSize = size

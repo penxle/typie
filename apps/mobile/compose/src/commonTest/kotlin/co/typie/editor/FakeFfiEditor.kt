@@ -69,10 +69,19 @@ internal class FakeFfiEditor(
     },
   var renderSurfaceProvider: (Int) -> Boolean = { true },
 ) : co.typie.editor.ffi.Editor {
+  data class SurfaceResizeCall(
+    val page: Int,
+    val width: Double,
+    val height: Double,
+    val scaleFactor: Double,
+  )
+
   val enqueued = mutableListOf<Message>()
   var tickCount: Int = 0
   var renderCount: Int = 0
   var lastRenderedPage: Int? = null
+  val resizeCalls = mutableListOf<SurfaceResizeCall>()
+  val surfaceEvents = mutableListOf<String>()
   var trackedRangesCallCount: Int = 0
   var trackedRangesContainingPositionCallCount: Int = 0
   var placeholderCallCount: Int = 0
@@ -155,18 +164,24 @@ internal class FakeFfiEditor(
     height: Double,
     scaleFactor: Double,
   ) {
+    surfaceEvents += "attach:$page:$handle"
     attached += page
   }
 
   override fun detachSurface(page: Int) {
+    surfaceEvents += "detach:$page"
     attached -= page
   }
 
   override fun invalidateSurface(page: Int) = Unit
 
-  override fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) = Unit
+  override fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) {
+    surfaceEvents += "resize:$page:$width:$height:$scaleFactor"
+    resizeCalls += SurfaceResizeCall(page, width, height, scaleFactor)
+  }
 
   override fun renderSurface(page: Int): Boolean {
+    surfaceEvents += "render:$page"
     renderCount += 1
     lastRenderedPage = page
     return renderSurfaceProvider(page)

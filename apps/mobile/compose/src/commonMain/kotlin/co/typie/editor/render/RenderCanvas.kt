@@ -11,7 +11,7 @@ internal expect fun RenderCanvas(
   desiredPixelSize: IntSize,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
-  onDetach: () -> Unit,
+  onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
   onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
 )

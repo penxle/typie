@@ -93,6 +93,19 @@ internal constructor(
   private val pendingSettles: AtomicReference<PersistentList<PendingSettle>> =
     AtomicReference(persistentListOf())
   private val queued: AtomicBoolean = AtomicBoolean(false)
+  private val surfaceScheduler =
+    EditorSurfaceScheduler(
+      inner = inner,
+      scope = scope,
+      dispatcher = dispatcher,
+      mutex = mutex,
+      versionCounter = versionCounter,
+      disposed = disposed,
+      markPageAttached = { page -> attachedPages.updatePersistent { it.adding(page) } },
+      markPageDetached = { page -> markSurfacePageDetached(page) },
+      onPageSettled = { page, version -> onPageSettled(page, version) },
+      notifyFailure = { error -> notifyFailure(error) },
+    )
 
   @PublishedApi
   internal val listeners:
@@ -307,40 +320,17 @@ internal constructor(
     }
   }
 
-  fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) {
-    attachedPages.updatePersistent { it.add(page) }
-    try {
-      inner.attachSurface(page, handle, width, height, scaleFactor)
-    } catch (e: Throwable) {
-      attachedPages.updatePersistent { it.remove(page) }
-      notifyFailure(e)
-    }
-  }
+  internal fun attachSurface(
+    page: Int,
+    handle: Long,
+    width: Double,
+    height: Double,
+    scaleFactor: Double,
+  ): SurfaceSessionHandle = surfaceScheduler.attachSurface(page, handle, width, height, scaleFactor)
 
-  fun detachSurface(page: Int) {
-    attachedPages.updatePersistent { it.remove(page) }
-    withFailureNotification {
-      inner.detachSurface(page)
-      pendingSettles.load().forEach { it.markDetached(page) }
-    }
-  }
-
-  fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) =
-    withFailureNotification {
-      inner.resizeSurface(page, width, height, scaleFactor)
-    }
-
-  fun renderSurface(page: Int): Long = runBlocking {
-    withSuspendFailureNotification(defaultValue = { versionCounter.load() }) {
-      val (presented, version) =
-        mutex.withLock { inner.renderSurface(page) to versionCounter.load() }
-      if (!presented) {
-        // Skipped render: the page already shows the current state and no new frame
-        // (hence no onBitmapCommitted → onPageSettled) will arrive — settle it here.
-        onPageSettled(page, version)
-      }
-      version
-    }
+  private fun markSurfacePageDetached(page: Int) {
+    attachedPages.updatePersistent { it.removing(page) }
+    pendingSettles.load().forEach { it.markDetached(page) }
   }
 
   fun onPageSettled(page: Int, version: Long) {
@@ -487,6 +477,7 @@ internal constructor(
     pendingSettles.exchange(persistentListOf()).forEach { it.cancel() }
     listeners.store(persistentMapOf())
     attachedPages.store(persistentSetOf())
+    surfaceScheduler.dispose()
   }
 
   private fun readSnapshot(version: Long, events: List<EditorEvent>): EditorState {

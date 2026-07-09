@@ -28,7 +28,7 @@ internal actual fun RenderCanvas(
   desiredPixelSize: IntSize,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
-  onDetach: () -> Unit,
+  onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
   onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
 ) {
@@ -36,6 +36,7 @@ internal actual fun RenderCanvas(
   var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
   val currentOnAttach by rememberUpdatedState(onAttach)
+  val currentOnDetach by rememberUpdatedState(onDetach)
   val currentOnResize by rememberUpdatedState(onResize)
   val currentOnBitmapCommitted by rememberUpdatedState(onBitmapCommitted)
 
@@ -164,9 +165,8 @@ internal actual fun RenderCanvas(
     onDispose {
       val handle = bufferHandle
       if (handle != 0L) {
-        onDetach()
-        RenderBuffer.free(handle)
         bufferHandle = 0L
+        currentOnDetach { RenderBuffer.free(handle) }
       }
     }
   }

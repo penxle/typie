@@ -527,7 +527,7 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun render_skip_settles_page_and_releases_await() =
+  fun requested_render_skip_settles_page_and_releases_await() =
     runTest(dispatcher) {
       val fakeCursor =
         CursorMetrics(pageIdx = 0, caret = Rect(1f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
@@ -540,7 +540,8 @@ class EditorAwaitTest {
           renderSurfaceProvider = { false },
         )
       val editor = Editor(fake, this, dispatcher)
-      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      val surface =
+        editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
 
       var returned = false
       val job =
@@ -553,12 +554,86 @@ class EditorAwaitTest {
 
       // A skipped render presents no new frame, so no bitmap commit (and no
       // onPageSettled from the surface) will ever arrive for this page.
-      editor.renderSurface(0)
+      val presentedVersions = mutableListOf<Long>()
+      surface.requestRender { presentedVersions += it }
       dispatcher.scheduler.advanceUntilIdle()
 
       assertTrue(returned)
       assertEquals(fakeCursor, editor.cursor)
+      assertEquals(emptyList(), presentedVersions)
       job.join()
+    }
+
+  @Test
+  fun surface_render_requests_are_deferred_and_coalesced() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val firstCallbackVersions = mutableListOf<Long>()
+      val latestCallbackVersions = mutableListOf<Long>()
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      surface.requestRender { firstCallbackVersions += it }
+      surface.requestRender { latestCallbackVersions += it }
+
+      assertEquals(0, fake.renderCount)
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(1, fake.renderCount)
+      assertEquals(emptyList(), firstCallbackVersions)
+      assertEquals(listOf(0L), latestCallbackVersions)
+    }
+
+  @Test
+  fun surface_resize_request_replaces_pending_render_and_renders_latest_size() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val presentedVersions = mutableListOf<Long>()
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      surface.requestRender { presentedVersions += it }
+      surface.requestResize(width = 10.0, height = 20.0, scaleFactor = 2.0) {
+        presentedVersions += it
+      }
+      surface.requestResize(width = 12.0, height = 24.0, scaleFactor = 3.0) {
+        presentedVersions += it
+      }
+
+      assertEquals(0, fake.renderCount)
+      assertEquals(emptyList(), fake.resizeCalls)
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(
+        listOf(
+          FakeFfiEditor.SurfaceResizeCall(page = 0, width = 12.0, height = 24.0, scaleFactor = 3.0)
+        ),
+        fake.resizeCalls,
+      )
+      assertEquals(1, fake.renderCount)
+      assertEquals(listOf(0L), presentedVersions)
+    }
+
+  @Test
+  fun detach_surface_drops_pending_surface_render_request() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val presentedVersions = mutableListOf<Long>()
+
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      surface.requestRender { presentedVersions += it }
+      surface.detach()
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(0, fake.renderCount)
+      assertEquals(emptyList(), presentedVersions)
     }
 
   @Test
@@ -612,7 +687,7 @@ class EditorAwaitTest {
         FakeFfiEditor(onTick = { listOf(renderInvalidated()) }, cursorProvider = { fakeCursor })
       val editor = Editor(fake, this, dispatcher)
       editor.attachSurface(0, 0L, 0.0, 0.0, 1.0)
-      editor.attachSurface(1, 0L, 0.0, 0.0, 1.0)
+      val pageOne = editor.attachSurface(1, 1L, 0.0, 0.0, 1.0)
 
       var returned = false
       val job =
@@ -626,7 +701,7 @@ class EditorAwaitTest {
       dispatcher.scheduler.advanceUntilIdle()
       assertFalse(returned)
 
-      editor.detachSurface(1)
+      pageOne.detach()
       dispatcher.scheduler.advanceUntilIdle()
       assertTrue(returned)
       job.join()
@@ -688,19 +763,135 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun renderSurface_returns_current_version_counter() =
+  fun requested_surface_render_reports_current_version_counter_when_frame_is_presented() =
     runTest(dispatcher) {
       val fake =
         FakeFfiEditor(onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) })
       val editor = Editor(fake, this, dispatcher)
+      val presentedVersions = mutableListOf<Long>()
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
 
-      val v0 = editor.renderSurface(0)
-      assertEquals(0L, v0)
+      surface.requestRender { presentedVersions += it }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(listOf(0L), presentedVersions)
 
       editor.sync { enqueue(sampleMessage) }
-      val v1 = editor.renderSurface(0)
-      assertEquals(1L, v1)
+      surface.requestRender { presentedVersions += it }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(listOf(0L, 1L), presentedVersions)
       assertEquals(2, fake.renderCount)
+    }
+
+  @Test
+  fun stale_surface_session_does_not_present_after_reattach() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val staleVersions = mutableListOf<Long>()
+      val currentVersions = mutableListOf<Long>()
+
+      val stale =
+        editor.attachSurface(page = 0, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      stale.requestRender { staleVersions += it }
+      stale.detach()
+      val current =
+        editor.attachSurface(page = 0, handle = 2L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      current.requestRender { currentVersions += it }
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(emptyList(), staleVersions)
+      assertEquals(listOf(0L), currentVersions)
+      assertEquals(1, fake.renderCount)
+      assertEquals(0, fake.lastRenderedPage)
+    }
+
+  @Test
+  fun surface_detach_releases_buffer_after_scheduler_detaches_surface() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val surface =
+        editor.attachSurface(page = 0, handle = 11L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      dispatcher.scheduler.advanceUntilIdle()
+      surface.detach { fake.surfaceEvents += "release:11" }
+
+      assertEquals(listOf("attach:0:11"), fake.surfaceEvents)
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(listOf("attach:0:11", "detach:0", "release:11"), fake.surfaceEvents)
+    }
+
+  @Test
+  fun surface_detach_after_editor_dispose_detaches_before_releasing_buffer() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val surface =
+        editor.attachSurface(page = 0, handle = 11L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      dispatcher.scheduler.advanceUntilIdle()
+      editor.dispose()
+      surface.detach { fake.surfaceEvents += "release:11" }
+
+      assertEquals(listOf("attach:0:11"), fake.surfaceEvents)
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(listOf("attach:0:11", "detach:0", "release:11"), fake.surfaceEvents)
+    }
+
+  @Test
+  fun surface_render_failure_settles_failed_page_and_continues_remaining_pages() =
+    runTest(dispatcher) {
+      val fakeCursor =
+        CursorMetrics(pageIdx = 0, caret = Rect(1f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+      val failure = IllegalStateException("render boom")
+      val fake =
+        FakeFfiEditor(
+          onTick = {
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor)), renderInvalidated())
+          },
+          cursorProvider = { fakeCursor },
+          renderSurfaceProvider = { page ->
+            if (page == 0) throw failure
+            true
+          },
+        )
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+      val failedSurface =
+        editor.attachSurface(page = 0, handle = 10L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      val continuingSurface =
+        editor.attachSurface(page = 1, handle = 11L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      val presentedVersions = mutableListOf<Long>()
+
+      var returned = false
+      val job =
+        launch(dispatcher) {
+          editor.await { enqueue(sampleMessage) }
+          returned = true
+        }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertFalse(returned)
+
+      failedSurface.requestRender { error("failed surface should not present") }
+      continuingSurface.requestRender { presentedVersions += it }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(listOf<Throwable>(failure), reported)
+      assertEquals(listOf("attach:0:10", "attach:1:11", "render:0", "render:1"), fake.surfaceEvents)
+      assertEquals(listOf(1L), presentedVersions)
+      editor.onPageSettled(page = 1, version = 1L)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(returned)
+      assertEquals(fakeCursor, editor.cursor)
+      job.join()
     }
 
   @Test
