@@ -31,6 +31,7 @@ internal fun BottomToolbar(
   onBottomPanelRequest: (EditorToolbarBottomPanel) -> Unit,
   onEditorMessage: (Message) -> Unit,
   onToolAction: (EditorToolbarToolAction) -> Unit,
+  debugOverlays: EditorToolbarDebugOverlays?,
   modifier: Modifier = Modifier,
 ) {
   val hazeState = LocalHazeState.current
@@ -65,7 +66,11 @@ internal fun BottomToolbar(
           modifier = Modifier.fillMaxSize(),
         )
       EditorToolbarBottomPanel.Tools ->
-        BottomToolbarTools(onAction = onToolAction, modifier = Modifier.fillMaxSize())
+        BottomToolbarTools(
+          onAction = onToolAction,
+          debugOverlays = debugOverlays,
+          modifier = Modifier.fillMaxSize(),
+        )
       EditorToolbarBottomPanel.TableSizeSelector ->
         BottomToolbarTableSizeSelector(
           onEditorMessage = onEditorMessage,

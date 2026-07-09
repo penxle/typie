@@ -60,6 +60,7 @@ internal fun EditorToolbarHost(
   fontFamilies: List<EditorSettingsFontFamily_family>,
   sessionState: EditorToolbarSessionState,
   commentEnabled: Boolean,
+  debugOverlays: EditorToolbarDebugOverlays?,
   onCommentRequest: () -> Unit,
   onInputEffects: (List<EditorInputEffect>) -> Unit,
   onToolAction: (EditorToolbarToolAction) -> Unit,
@@ -394,6 +395,7 @@ internal fun EditorToolbarHost(
                   onBottomPanelRequest = ::requestBottomPanelFromPanel,
                   onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
                   onToolAction = onToolAction,
+                  debugOverlays = debugOverlays,
                 )
               }
             }

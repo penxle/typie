@@ -85,7 +85,6 @@ import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
-import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.route.Route
@@ -125,6 +124,7 @@ import co.typie.screen.editor.editor.subpane.EditorSubPaneState
 import co.typie.screen.editor.editor.subpane.comments.rememberEditorCommentsSession
 import co.typie.screen.editor.editor.subpane.resolveSubPaneBottomOcclusion
 import co.typie.screen.editor.editor.template.EditorTemplateSheet
+import co.typie.screen.editor.editor.toolbar.EditorToolbarDebugOverlays
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.toolbar.EditorToolbarToolAction
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPadding
@@ -156,10 +156,8 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.LocalPopoverOverlayState
-import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
@@ -407,7 +405,6 @@ fun EditorScreen(entityId: String) {
             }
           }
         },
-        trailing = { EditorTopBarMenu(model = model) },
         scrollOffset = null,
       )
     }
@@ -1032,6 +1029,16 @@ fun EditorScreen(entityId: String) {
             fontFamilies = model.toolbarFontFamilies,
             sessionState = toolbarSessionState,
             commentEnabled = comments.toolbarEnabled,
+            debugOverlays =
+              if (devMode) {
+                EditorToolbarDebugOverlays(
+                  viewportVisible = model.debugViewportOverlayVisible,
+                  bodyVisible = model.debugBodyOverlayVisible,
+                  surfaceVisible = model.debugSurfaceOverlayVisible,
+                )
+              } else {
+                null
+              },
             onCommentRequest = comments.requestFromTextToolbar,
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
@@ -1065,6 +1072,9 @@ fun EditorScreen(entityId: String) {
                   aiFeedback.openFromToolPanel()
                 }
                 EditorToolbarToolAction.Timeline -> Unit
+                EditorToolbarToolAction.DebugViewportOverlay -> model.toggleDebugViewportOverlay()
+                EditorToolbarToolAction.DebugBodyOverlay -> model.toggleDebugBodyOverlay()
+                EditorToolbarToolAction.DebugSurfaceOverlay -> model.toggleDebugSurfaceOverlay()
               }
             },
             modifier = Modifier,
@@ -1120,41 +1130,6 @@ internal fun enterDocumentStartFromHeader(
     }
   }
 }
-
-@Composable
-private fun EditorTopBarMenu(model: EditorViewModel) {
-  val noop = {}
-
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.PanelBottom) }) {
-    item(icon = Lucide.Search, label = "찾기", onClick = noop)
-    item(icon = Lucide.StickyNote, label = "노트", onClick = noop)
-    item(icon = Lucide.MessageSquareText, label = "코멘트", onClick = noop)
-    item(icon = Lucide.SpellCheck, label = "맞춤법 검사", onClick = noop)
-    item(icon = Lucide.Lightbulb, label = "AI 피드백", onClick = noop)
-    item(icon = Lucide.History, label = "타임라인", onClick = noop)
-    if (Preference.devMode) {
-      item(icon = Lucide.Send, label = "입력 로그 보내기", onClick = noop)
-      divider()
-      item(
-        icon = Lucide.PanelTop,
-        label = model.debugViewportOverlayVisible.debugToggleLabel("[디버그] 뷰포트 기준선"),
-        onClick = { model.toggleDebugViewportOverlay() },
-      )
-      item(
-        icon = Lucide.PanelBottom,
-        label = model.debugBodyOverlayVisible.debugToggleLabel("[디버그] 바디 영역"),
-        onClick = { model.toggleDebugBodyOverlay() },
-      )
-      item(
-        icon = Lucide.InspectionPanel,
-        label = model.debugSurfaceOverlayVisible.debugToggleLabel("[디버그] 페이지 표면"),
-        onClick = { model.toggleDebugSurfaceOverlay() },
-      )
-    }
-  }
-}
-
-private fun Boolean.debugToggleLabel(label: String): String = "$label ${if (this) "끄기" else "켜기"}"
 
 private val FindReplaceTopBarLeadingKey = Any()
 private val FindReplaceTopBarCenterKey = Any()

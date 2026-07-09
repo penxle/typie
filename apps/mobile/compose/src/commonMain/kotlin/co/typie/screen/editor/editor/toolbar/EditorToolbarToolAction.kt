@@ -7,4 +7,13 @@ internal enum class EditorToolbarToolAction {
   Spellcheck,
   AiFeedback,
   Timeline,
+  DebugViewportOverlay,
+  DebugBodyOverlay,
+  DebugSurfaceOverlay,
 }
+
+internal data class EditorToolbarDebugOverlays(
+  val viewportVisible: Boolean,
+  val bodyVisible: Boolean,
+  val surfaceVisible: Boolean,
+)
