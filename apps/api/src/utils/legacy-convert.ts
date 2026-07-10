@@ -421,7 +421,7 @@ const convertNode = (
       return [makeEntry({ type: 'hard_break' }, modifiers, [])];
     }
     case 'horizontal_rule': {
-      return [makeEntry({ type: 'horizontal_rule' }, modifiers, [])];
+      return [makeEntry({ type: 'horizontal_rule', variant: entry.variant as never }, modifiers, [])];
     }
     case 'page_break': {
       return [makeEntry({ type: 'page_break' }, modifiers, [])];

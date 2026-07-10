@@ -32,7 +32,7 @@ const buildFixture = (): LegacyDocumentJson => ({
   nodes: {
     [ROOT_ID]: {
       type: 'root',
-      children: [id(1), id(10), id(20), id(30), id(40)],
+      children: [id(1), id(10), id(20), id(25), id(30), id(40)],
       cascade_attrs: {
         'style:font_family': 'Pretendard',
         'style:font_size': 1600,
@@ -69,6 +69,7 @@ const buildFixture = (): LegacyDocumentJson => ({
     [id(13)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(12), children: [id(14)] },
     [id(14)]: { type: 'text', parent: id(13), text: [{ text: 'cell text' }] },
     [id(20)]: { type: 'image', id: 'IMG1', proportion: 0.8, parent: ROOT_ID },
+    [id(25)]: { type: 'horizontal_rule', variant: 'zigzag', parent: ROOT_ID },
     [id(30)]: { type: 'fold', parent: ROOT_ID, children: [id(31), id(32)] },
     [id(31)]: {
       type: 'fold_title',
