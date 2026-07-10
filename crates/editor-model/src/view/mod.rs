@@ -334,6 +334,9 @@ impl<'a> NodeView<'a> {
         let dot = anchor_dot(self.id)?;
         self.view.doc.block_modifiers.get(&dot)?.get(&ty)
     }
+    pub fn carry_modifiers(&self) -> BTreeMap<ModifierType, Modifier> {
+        self.view.doc.carry_modifiers(self.id)
+    }
     /// The node's run segments as `(effective modifiers, leaf count)` groups in
     /// leaf order, straight from the authoritative segment index — segments split
     /// finer than effective runs (by style/covering), but consumers that aggregate

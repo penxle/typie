@@ -302,8 +302,16 @@ pub(crate) fn measure_paragraph(
     let no_char_leaves = node
         .children()
         .all(|c| !matches!(&c, ChildView::Leaf(lv) if lv.as_char().is_some()));
-    if no_char_leaves && let Some(m) = pending {
-        apply_pending_to_style(&mut base_style, m);
+    if no_char_leaves {
+        let carry: editor_state::PendingModifiers = node
+            .carry_modifiers()
+            .into_values()
+            .map(|modifier| editor_state::PendingModifier::Set { modifier })
+            .collect();
+        apply_pending_to_style(&mut base_style, &carry);
+        if let Some(m) = pending {
+            apply_pending_to_style(&mut base_style, m);
+        }
     }
     let (text, runs, tabs) = collect_text_runs(node);
     let segments = split_segments(node);
@@ -387,8 +395,8 @@ pub(crate) fn measure_paragraph(
 mod tests {
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AliasLog, Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog,
-        NodeType, SeqItem, SpanLog, SpanOp, project_document,
+        AliasLog, Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog,
+        ModifierAttrOp, NodeAttrLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::Resource;
 
@@ -783,6 +791,65 @@ mod tests {
         assert!(
             h1 > h0,
             "strut must grow with bigger pending font-size (h0={h0}, h1={h1})"
+        );
+    }
+
+    fn with_carry(mut l: DocLogs, modifier: Modifier) -> DocLogs {
+        l.node_carries = ModifierAttrLog::new()
+            .apply(
+                Dot::new(50, 1),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::new(1, 1),
+                    modifier,
+                },
+            )
+            .unwrap();
+        l
+    }
+
+    #[test]
+    fn empty_paragraph_carry_font_size_grows_strut() {
+        let (_, h0) = measure(&build_logs(vec![]), 1.0e6);
+
+        let l = with_carry(build_logs(vec![]), Modifier::FontSize { value: 9600 });
+        let (lines, h1) = measure(&l, 1.0e6);
+        assert_eq!(lines.len(), 1);
+
+        assert!(
+            h1 > h0,
+            "strut must grow with bigger carry font-size (h0={h0}, h1={h1})"
+        );
+    }
+
+    #[test]
+    fn non_empty_paragraph_carry_font_size_gate_unchanged() {
+        let (_, h0) = measure(&build_logs(vec![ch('a')]), 1.0e6);
+
+        let l = with_carry(
+            build_logs(vec![ch('a')]),
+            Modifier::FontSize { value: 9600 },
+        );
+        let (_, h1) = measure(&l, 1.0e6);
+
+        assert!(
+            (h1 - h0).abs() < 0.01,
+            "carry must not apply to a paragraph with Char leaves (h0={h0}, h1={h1})"
+        );
+    }
+
+    #[test]
+    fn empty_paragraph_pending_overrides_carry() {
+        let l = with_carry(build_logs(vec![]), Modifier::FontSize { value: 9600 });
+        let (_, h_carry) = measure(&l, 1.0e6);
+
+        let small: editor_state::PendingModifiers = vec![editor_state::PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 1200 },
+        }];
+        let (_, h_pending) = measure_with_pending(&l, 1.0e6, Some(&small));
+
+        assert!(
+            h_pending < h_carry,
+            "pending must win over carry (carry={h_carry}, pending={h_pending})"
         );
     }
 
