@@ -285,6 +285,57 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `single tap while editor already focused requests software keyboard`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      host.focused = true
+      host.uiState.updateFocus(true)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(1, host.softwareKeyboardRequestCount)
+    }
+
+  @Test
+  fun `single tap that grants focus does not request software keyboard`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(host.focused)
+      assertEquals(0, host.softwareKeyboardRequestCount)
+    }
+
+  @Test
   fun `shift single tap dispatch extends from current selection anchor`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2817,6 +2868,7 @@ class EditorInteractionControllerTest {
     var pointerCancelCount = 0
     var launchInteractionCount = 0
     var focused = false
+    var softwareKeyboardRequestCount = 0
     val uiState = EditorUiState()
     var scrollGestureLockActive = false
     var point: PagePoint? = PagePoint(page = 0, x = 10f, y = 20f)
@@ -2875,6 +2927,10 @@ class EditorInteractionControllerTest {
       focused = true
       uiState.updateFocus(true)
       return true
+    }
+
+    override fun requestSoftwareKeyboard() {
+      softwareKeyboardRequestCount += 1
     }
 
     override fun enqueuePointerCancel() {

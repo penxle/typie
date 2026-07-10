@@ -35,6 +35,7 @@ internal class EditorInteractionScope(
     private set
 
   private var onSelectionHaptic: (() -> Unit)? = null
+  private var onRequestSoftwareKeyboard: (() -> Unit)? = null
   private var pointerInputEnabled: () -> Boolean = { true }
   private var tapDispatchJob: Job? = null
   private var longPressDispatchJob: Job? = null
@@ -64,6 +65,7 @@ internal class EditorInteractionScope(
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
     pointerInputEnabled: () -> Boolean = { true },
     onSelectionHaptic: () -> Unit,
+    onRequestSoftwareKeyboard: () -> Unit,
   ) {
     this.editor = editor
     this.bringIntoViewRequests = bringIntoViewRequests
@@ -73,6 +75,7 @@ internal class EditorInteractionScope(
     this.density = density
     this.scrollGestureLockState = scrollGestureLockState
     this.onSelectionHaptic = onSelectionHaptic
+    this.onRequestSoftwareKeyboard = onRequestSoftwareKeyboard
     this.pointerInputEnabled = pointerInputEnabled
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
@@ -118,6 +121,7 @@ internal class EditorInteractionScope(
     viewportState = null
     density = 0f
     onSelectionHaptic = null
+    onRequestSoftwareKeyboard = null
     pointerInputEnabled = { true }
     scrollGestureLockState = null
   }
@@ -222,6 +226,10 @@ internal class EditorInteractionScope(
   }
 
   override fun requestFocus(editor: Editor): Boolean = editor.focus()
+
+  override fun requestSoftwareKeyboard() {
+    onRequestSoftwareKeyboard?.invoke()
+  }
 
   override fun enqueuePointerCancel() = Unit
 

@@ -28,6 +28,7 @@ class EditorInteractionScopeTest {
         scrollGestureLockState = ScrollGestureLockState(),
         viewportZoomConfig = null,
         onSelectionHaptic = {},
+        onRequestSoftwareKeyboard = {},
       )
 
       scope.onEditorStateChanged(EditorState.Initial)

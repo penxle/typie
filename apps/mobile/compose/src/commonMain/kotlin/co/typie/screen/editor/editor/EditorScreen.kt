@@ -658,6 +658,18 @@ fun EditorScreen(entityId: String) {
     val toolbarEffectiveImeInset = effectiveImeInset(toolbarInputEnvironment)
     val imeVisible =
       isImeVisible(imeBottom = toolbarEffectiveImeInset, safeBottomInset = bottomSafeInset)
+    val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
+    val toolbarTextInputSessionEnabled =
+      toolbarPanel?.let {
+        textInputSessionEnabledForBottomPanel(
+          environment = toolbarInputEnvironment,
+          imeVisible = imeVisible,
+          suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
+        )
+      } ?: true
+    val editorTextInputSessionEnabled = toolbarTextInputSessionEnabled && !subPaneBlocksEditorInput
+    val editorSuppressesSoftwareKeyboard =
+      toolbarSuppressesSoftwareKeyboard || subPaneBlocksEditorInput
     val previousImeVisible = remember { mutableStateOf(imeVisible) }
     val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
@@ -891,23 +903,16 @@ fun EditorScreen(entityId: String) {
         viewportZoomConfig = viewportZoomConfig,
         pointerInputEnabled = { !popoverOverlayState.isOutsideDismissGestureActive },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+        onRequestSoftwareKeyboard = {
+          if (editorTextInputSessionEnabled && !editorSuppressesSoftwareKeyboard) {
+            keyboardController?.show()
+          }
+        },
       )
       interactionScope.onEditorStateChanged(editorState)
       uiState.contextMenu.onEditorStateChanged(editorState)
       uiState.contextMenu.showAfterSelectionCommitIfRequested(editorState)
     }
-    val toolbarSuppressesSoftwareKeyboard = toolbarPanel?.let(::suppressSoftwareKeyboard) ?: false
-    val toolbarTextInputSessionEnabled =
-      toolbarPanel?.let {
-        textInputSessionEnabledForBottomPanel(
-          environment = toolbarInputEnvironment,
-          imeVisible = imeVisible,
-          suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
-        )
-      } ?: true
-    val editorTextInputSessionEnabled = toolbarTextInputSessionEnabled && !subPaneBlocksEditorInput
-    val editorSuppressesSoftwareKeyboard =
-      toolbarSuppressesSoftwareKeyboard || subPaneBlocksEditorInput
     val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
     val debugWheelZoomModifier =
       if (

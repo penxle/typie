@@ -347,6 +347,9 @@ private fun EditorTapGesture.dispatchTap(
   recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
   val wasFocused = context.uiState.focused
   context.semantics.cursorMove.requestFocus(editor)
+  if (wasFocused) {
+    context.semantics.cursorMove.requestSoftwareKeyboard()
+  }
   val hitExistingSelectionAtTap =
     editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
   if (clickCount == 1 && context.platform != Platform.Android && hitExistingSelectionAtTap) {

@@ -16,6 +16,10 @@ internal class EditorCursorMoveSemantic(private val effects: EditorInteractionEf
 
   fun requestFocus(editor: Editor): Boolean = effects.requestFocus(editor)
 
+  fun requestSoftwareKeyboard() {
+    effects.requestSoftwareKeyboard()
+  }
+
   fun requestCurrentSelectionHead(version: Long) {
     effects.requestCurrentSelectionHead(version = version)
   }

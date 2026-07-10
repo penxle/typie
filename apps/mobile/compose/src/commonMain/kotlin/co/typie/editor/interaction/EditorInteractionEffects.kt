@@ -18,6 +18,8 @@ internal interface EditorInteractionEffects {
 
   fun requestFocus(editor: Editor): Boolean
 
+  fun requestSoftwareKeyboard()
+
   fun enqueuePointerCancel()
 
   fun setScrollGestureLocked(locked: Boolean)

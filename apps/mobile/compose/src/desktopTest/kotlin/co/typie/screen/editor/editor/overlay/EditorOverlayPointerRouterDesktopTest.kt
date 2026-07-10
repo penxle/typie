@@ -813,6 +813,7 @@ class EditorOverlayPointerRouterDesktopTest {
           scrollGestureLockState = scrollGestureLockState,
           viewportZoomConfig = viewportZoomConfig,
           onSelectionHaptic = {},
+          onRequestSoftwareKeyboard = {},
         )
         interactionScope.onEditorStateChanged(editor.state)
       }

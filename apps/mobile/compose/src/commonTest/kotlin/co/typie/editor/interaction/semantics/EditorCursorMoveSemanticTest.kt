@@ -168,6 +168,9 @@ class EditorCursorMoveSemanticTest {
     override fun requestFocus(editor: Editor): Boolean =
       error("Unused in direct cursor semantic dispatch tests")
 
+    override fun requestSoftwareKeyboard() =
+      error("Unused in direct cursor semantic dispatch tests")
+
     override fun enqueuePointerCancel() = error("Unused in direct cursor semantic dispatch tests")
 
     override fun setScrollGestureLocked(locked: Boolean) =
