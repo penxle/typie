@@ -106,7 +106,7 @@ class Navigator(startRoute: Route) {
 
   internal fun performPop(): Boolean {
     if (_stack.size <= 1) return false
-    val removed = _stack.removeLast()
+    val removed = _stack.removeAt(_stack.lastIndex)
     viewModelStores.remove(removed)?.clear()
     lastOperation = NavOperation.Pop
     return true
@@ -117,7 +117,7 @@ class Navigator(startRoute: Route) {
     if (index < 0) return emptyList()
     val removedRoutes = mutableListOf<Route>()
     while (_stack.size > index + 1) {
-      val removed = _stack.removeLast()
+      val removed = _stack.removeAt(_stack.lastIndex)
       viewModelStores.remove(removed)?.clear()
       removedRoutes += removed
     }
@@ -140,7 +140,7 @@ class Navigator(startRoute: Route) {
 
   fun popToRoot() {
     while (_stack.size > 1) {
-      val removed = _stack.removeLast()
+      val removed = _stack.removeAt(_stack.lastIndex)
       viewModelStores.remove(removed)?.clear()
     }
   }

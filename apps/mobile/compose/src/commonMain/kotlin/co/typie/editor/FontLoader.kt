@@ -226,7 +226,7 @@ object FontLoader {
         val item =
           mutex.withLock {
             if (inflight >= PRELOAD_CONCURRENCY || pending.isEmpty()) return
-            val item = pending.removeFirst()
+            val item = pending.removeAt(0)
             if (item.key in loaded) return@withLock null
             inflight++
             item
