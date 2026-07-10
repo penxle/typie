@@ -63,6 +63,33 @@ fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
     out
 }
 
+#[test]
+fn insert_subtree_after_root_atom_run_appears_at_requested_slot() {
+    let (state, ..) = state! {
+        doc { root {
+            paragraph {}
+            image
+            image
+        } }
+        selection: none
+    };
+    let root = root_id(&state);
+    let subtree = Subtree::leaf(PlainNode::Paragraph(PlainParagraphNode::default()));
+
+    let mut tr = Transaction::new(&state);
+    tr.insert_subtree(root, 3, subtree).unwrap();
+
+    let view = tr.state().view();
+    let ChildView::Block(inserted) = view.root().unwrap().child_at(3).unwrap() else {
+        panic!("inserted paragraph at requested slot");
+    };
+    assert_eq!(inserted.node_type(), NodeType::Paragraph);
+    assert!(
+        inserted.id().as_op_dot().is_some(),
+        "inserted paragraph must be backed by a real op"
+    );
+}
+
 mod proptests {
     use super::*;
 

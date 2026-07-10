@@ -343,11 +343,15 @@ impl ProjectedState {
         Ok(())
     }
 
-    fn top_block_of(&self, dot: Dot) -> Option<Dot> {
+    fn top_child_of(&self, dot: Dot) -> Option<Dot> {
         if !self.indexes.paths.contains(dot) {
             return None;
         }
-        let mut cur = self.indexes.paths.block_of(dot).unwrap_or(dot);
+        let mut cur = match self.indexes.paths.block_of(dot) {
+            Some(Dot::ROOT) => return Some(dot),
+            Some(block) => block,
+            None => dot,
+        };
         while let Some(p) = self.indexes.paths.parent_of(cur) {
             if p == Dot::ROOT {
                 return Some(cur);
@@ -357,47 +361,53 @@ impl ProjectedState {
         Some(cur)
     }
 
-    fn top_block_index(&self, dot: Dot) -> Option<usize> {
-        let top = self.top_block_of(dot)?;
+    fn top_child_index(&self, dot: Dot) -> Option<usize> {
+        let top = self.top_child_of(dot)?;
         self.projected
             .tree
             .root_node()?
             .children
             .iter()
-            .position(|c| matches!(c, Child::Block(b) if *b == top))
+            .position(|child| match child {
+                Child::Block(block) => *block == top,
+                Child::Leaf { id, .. } => *id == top,
+            })
     }
 
-    fn top_block_near_pos(&self, pos: usize) -> Option<usize> {
+    fn top_child_near_pos(&self, pos: usize) -> Option<usize> {
         for cand in [pos.checked_sub(1), Some(pos), pos.checked_add(1)]
             .into_iter()
             .flatten()
         {
             if let Some(d) = self.seq.dot_at_visible(&self.logs.seq, cand)
-                && let Some(idx) = self.top_block_index(d)
+                && let Some(idx) = self.top_child_index(d)
             {
                 return Some(idx);
             }
         }
         // The ±1 neighbours are all ghosts (visible in the sequence but dropped from
         // the tree, e.g. content trailing a mid-text PageBreak). Fall back to the
-        // enclosing top-level block so the op localizes to a window instead of a
+        // enclosing top-level child so the op localizes to a window instead of a
         // whole-document reprojection. This branch is reached only when the cheap ±1
         // probe fails, so the common path is untouched.
-        self.enclosing_top_block(pos)
+        self.enclosing_top_child(pos)
     }
 
-    /// The top-level block whose sequence range contains `pos`: the real block with
-    /// the greatest marker position `≤ pos`. Synthetic/scaffolded blocks (no resolvable
-    /// marker, e.g. a normalizer-inserted trailing paragraph) are skipped.
-    fn enclosing_top_block(&self, pos: usize) -> Option<usize> {
+    /// The top-level child whose sequence range contains `pos`: the real child with the
+    /// greatest marker/atom position `≤ pos`. Synthetic/scaffolded blocks (no resolvable
+    /// position, e.g. a normalizer-inserted trailing paragraph) are skipped.
+    fn enclosing_top_child(&self, pos: usize) -> Option<usize> {
         let mut best: Option<(usize, usize)> = None; // (marker_pos, child_index)
         let root = self.projected.tree.root_node()?;
         for (idx, c) in root.children.iter().enumerate() {
-            if let Child::Block(b) = c
-                && let Some(m) = self
-                    .seq
-                    .resolve_boundary(*b, Bias::Before)
-                    .map(|x| x.position)
+            let id = match c {
+                Child::Block(block) => *block,
+                Child::Leaf { id, .. } => *id,
+            };
+            if let Some(m) = self
+                .seq
+                .resolve_boundary(id, Bias::Before)
+                .map(|x| x.position)
                 && m <= pos
                 && best.is_none_or(|(bm, _)| m >= bm)
             {
@@ -407,7 +417,7 @@ impl ProjectedState {
         best.map(|(_, idx)| idx)
     }
 
-    /// The inclusive range of top-level block indices a structural op affects.
+    /// The inclusive range of top-level child indices a structural op affects.
     /// Over-approximated (±1 sibling) so block merges/splits stay inside the
     /// window. `None` ⇒ caller can't localize (rare edge / Undel) → full path.
     fn affected_range(&self, op: &Op<EditOp>) -> Option<(usize, usize)> {
@@ -418,39 +428,41 @@ impl ProjectedState {
                     .seq
                     .resolve_boundary(op.id, Bias::Before)
                     .map(|b| b.position)?;
-                idxs.push(self.top_block_near_pos(p)?);
+                idxs.push(self.top_child_near_pos(p)?);
             }
             EditOp::Seq(ListOp::Del { .. }) => {
                 let targets = self.seq.del_target_dots(&self.logs.seq, op.id);
-                // Collect the distinct top-level blocks via the O(depth) parent walk,
-                // then resolve every block index in ONE pass over the root's children —
-                // per-target `top_block_index` is an O(#blocks) scan, which makes a
-                // multi-block delete `O(#targets · #blocks)`. Positions can't localize
+                // Collect the distinct top-level children via the O(depth) parent walk,
+                // then resolve every child index in ONE pass over the root's children —
+                // per-target `top_child_index` is an O(#children) scan, which makes a
+                // multi-child delete `O(#targets · #children)`. Positions can't localize
                 // a Del the way the Undel arm below does: the op is already applied, so
                 // its targets are tombstoned and their boundary positions all collapse
                 // onto the same surviving neighbour.
-                let mut tops: HashSet<Dot> = HashSet::new();
+                let mut top_children: HashSet<Dot> = HashSet::new();
                 for t in &targets {
-                    if let Some(tb) = self.top_block_of(*t) {
-                        tops.insert(tb);
+                    if let Some(top_child) = self.top_child_of(*t) {
+                        top_children.insert(top_child);
                     }
                 }
-                if !tops.is_empty()
+                if !top_children.is_empty()
                     && let Some(root) = self.projected.tree.root_node()
                 {
                     for (idx, c) in root.children.iter().enumerate() {
-                        if let Child::Block(b) = c
-                            && tops.contains(b)
-                        {
+                        let id = match c {
+                            Child::Block(block) => block,
+                            Child::Leaf { id, .. } => id,
+                        };
+                        if top_children.contains(id) {
                             idxs.push(idx);
                         }
                     }
                 }
                 // Every target was a ghost (already absent from the tree). Localize to
-                // the top-level block around where the deleted content lived — via the
-                // in-tree neighbours of its position, then the enclosing block — rather
-                // than reprojecting the whole document. `top_block_near_pos` falls back
-                // through both, so even a ghost whose own block marker was already
+                // the top-level child around where the deleted content lived — via the
+                // in-tree neighbours of its position, then the enclosing child — rather
+                // than reprojecting the whole document. `top_child_near_pos` falls back
+                // through both, so even a ghost whose own child marker was already
                 // deleted still localizes through a surviving sibling.
                 if idxs.is_empty() {
                     for t in &targets {
@@ -458,7 +470,7 @@ impl ProjectedState {
                             .seq
                             .resolve_boundary(*t, Bias::Before)
                             .map(|b| b.position)
-                            && let Some(idx) = self.top_block_near_pos(p)
+                            && let Some(idx) = self.top_child_near_pos(p)
                         {
                             idxs.push(idx);
                             break;
@@ -471,7 +483,7 @@ impl ProjectedState {
                 // position it reappears at, via its in-tree neighbour. The window only
                 // needs to span the restored range, so localize just its min/max
                 // positions — not every restored element. Localizing all of them is
-                // `O(#targets · #blocks)` (each `top_block_near_pos` scans the root's
+                // `O(#targets · #children)` (each `top_child_near_pos` scans the root's
                 // children), which makes undoing a large delete quadratic. Resolving
                 // positions is the cheap part; the block scan is what must stay bounded.
                 let mut min_pos = usize::MAX;
@@ -488,7 +500,7 @@ impl ProjectedState {
                 }
                 if min_pos != usize::MAX {
                     for p in [min_pos, max_pos] {
-                        if let Some(idx) = self.top_block_near_pos(p) {
+                        if let Some(idx) = self.top_child_near_pos(p) {
                             idxs.push(idx);
                         }
                     }
@@ -513,7 +525,7 @@ impl ProjectedState {
         Some((lo, hi))
     }
 
-    /// Re-project only top-level blocks `[i, j]` from the live sequence and splice
+    /// Re-project only top-level children `[i, j]` from the live sequence and splice
     /// the result back, updating just those subtrees' indexes/derivations. Reuses
     /// `project_blocks` + `normalize` for correctness (all structural shapes,
     /// normalization) at O(window), never the whole document.
@@ -533,7 +545,10 @@ impl ProjectedState {
         if i > j || j >= root_children.len() {
             return self.reproject();
         }
-        let Some(&Child::Block(first)) = root_children.get(i) else {
+        let Some(first) = root_children.get(i).map(|child| match child {
+            Child::Block(block) => *block,
+            Child::Leaf { id, .. } => *id,
+        }) else {
             return self.reproject();
         };
         let Some(mut window_start) = self
@@ -575,10 +590,14 @@ impl ProjectedState {
         }
         let mut old_nodes: Vec<Dot> = Vec::new();
         for slot in i..=j {
-            if let Some(Child::Block(b)) = root_children.get(slot)
-                && let Some(node) = self.projected.tree.get(*b)
-            {
-                collect_subtree_nodes(&self.projected.tree, node, &mut old_nodes);
+            match root_children.get(slot) {
+                Some(Child::Block(block)) => {
+                    if let Some(node) = self.projected.tree.get(*block) {
+                        collect_subtree_nodes(&self.projected.tree, node, &mut old_nodes);
+                    }
+                }
+                Some(Child::Leaf { id, .. }) => old_nodes.push(*id),
+                None => {}
             }
         }
 
