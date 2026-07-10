@@ -284,8 +284,10 @@ impl Editor {
         &self,
     ) -> EditorResult<Option<Complex<editor_clipboard::ClipboardPayload>>> {
         self.with_inner(|inner| {
-            let payload = editor_clipboard::Slice::extract(inner.editor.state())
-                .map(|slice| slice.to_payload());
+            let payload = editor_clipboard::Slice::extract(inner.editor.state()).map(|slice| {
+                let resource = inner.editor.resource().lock().unwrap();
+                slice.to_payload(&resource)
+            });
             Ok(payload.into_ffi()?)
         })
     }
@@ -2309,7 +2311,7 @@ mod tests {
         };
         let payload = editor_clipboard::Slice::extract(&source)
             .unwrap()
-            .to_payload();
+            .to_payload(&editor_resource::Resource::new_test());
 
         let (initial, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }

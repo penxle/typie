@@ -98,10 +98,40 @@ mod tests {
             selection: (p1, 1) -> (p2, 3)
         };
         let original = Slice::extract(&s).unwrap();
-        let html = original.to_html();
+        let html = original.to_html(&Resource::new_test());
         let resource = Resource::new_test();
         let parsed = Slice::from_html(&html, &resource);
         assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn fallback_parse_round_trips_own_text_colors() {
+        let (s, ..) = state! {
+            doc { root {
+                p1: paragraph {
+                    text("색상이 ") [text_color("red".to_string())]
+                    text("있는 ") [text_color("green".to_string())]
+                    text("텍스트") [text_color("violet".to_string())]
+                }
+            } }
+            selection: (p1, 0) -> (p1, 10)
+        };
+        let resource = Resource::new_test();
+        let html = Slice::extract(&s).unwrap().to_html(&resource);
+        let stripped = &html[html.find("<div data-root>").unwrap()..];
+
+        let parsed = Slice::from_html(stripped, &resource);
+        let colors: Vec<String> = parsed.fragment.children[0]
+            .children
+            .iter()
+            .filter_map(|f| {
+                f.modifiers.iter().find_map(|m| match m {
+                    Modifier::TextColor { value } => Some(value.clone()),
+                    _ => None,
+                })
+            })
+            .collect();
+        assert_eq!(colors, ["red", "green", "violet"]);
     }
 
     #[test]
@@ -226,7 +256,7 @@ mod tests {
             selection: (p1, 0) -> (p1, 5)
         };
         let original = Slice::extract(&s).unwrap();
-        let html = original.to_html();
+        let html = original.to_html(&Resource::new_test());
         let legacy_html = html.replacen("data-slice-v2=", "data-slice=", 1);
 
         let slice = Slice::from_html(&legacy_html, &Resource::new_test());
@@ -443,7 +473,7 @@ mod tests {
             open_start: 0,
             open_end: 0,
         };
-        let html = original.to_html();
+        let html = original.to_html(&Resource::new_test());
         let meta_end = html.find('>').expect("meta tag closes") + 1;
         let body_only = &html[meta_end..];
         let parsed = Slice::from_html(body_only, &resource);
@@ -1354,7 +1384,7 @@ mod tests {
             Position::new(para, 3),
         )));
         let slice = Slice::extract(&s).unwrap();
-        let html = slice.to_html();
+        let html = slice.to_html(&Resource::new_test());
         assert!(
             html.contains('\t'),
             "serialized HTML must contain a tab char: {html}"

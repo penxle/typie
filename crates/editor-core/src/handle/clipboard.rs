@@ -223,6 +223,7 @@ mod tests {
     use editor_common::HistoryTag;
     use editor_macros::state;
     use editor_model::ModifierType;
+    use editor_resource::Resource;
     use editor_state::{ResolvedPositionFlatExt, Selection, assert_doc_eq, assert_state_eq};
 
     use super::*;
@@ -340,7 +341,9 @@ mod tests {
             selection: (r1, 0, >) -> (r1, 2, <)
         };
 
-        let payload = Slice::extract(&s).expect("non-collapsed").to_payload();
+        let payload = Slice::extract(&s)
+            .expect("non-collapsed")
+            .to_payload(&Resource::new_test());
 
         let mut editor = Editor::new_test(s);
         editor.apply(Message::Clipboard {
@@ -379,7 +382,9 @@ mod tests {
             }
             selection: (p2, 0, <) -> (p1, 0, >)
         };
-        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let payload = Slice::extract(&source)
+            .expect("non-collapsed")
+            .to_payload(&Resource::new_test());
         let target = editor_state::State {
             selection: Some(editor_state::Selection::collapsed(
                 editor_state::Position::new(p2, 1),
@@ -419,7 +424,9 @@ mod tests {
             doc { r: root { paragraph {} } }
             selection: (r, 0, >) -> (r, 1, <)
         };
-        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let payload = Slice::extract(&source)
+            .expect("non-collapsed")
+            .to_payload(&Resource::new_test());
         let (target, _p1) = state! {
             doc { root { p1: paragraph { text("asd") } } }
             selection: (p1, 1)
@@ -463,7 +470,9 @@ mod tests {
             selection: Some(selection),
             ..source
         };
-        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let payload = Slice::extract(&source)
+            .expect("non-collapsed")
+            .to_payload(&Resource::new_test());
 
         let (target, _p1) = state! {
             doc { root { p1: paragraph { text("asd") } } }
@@ -498,7 +507,9 @@ mod tests {
             } }
             selection: (p1, 0, >) -> (p2, 0, <)
         };
-        let payload = Slice::extract(&source).expect("non-collapsed").to_payload();
+        let payload = Slice::extract(&source)
+            .expect("non-collapsed")
+            .to_payload(&Resource::new_test());
         let (target, _p2) = state! {
             doc { root {
                 paragraph {}
@@ -641,7 +652,9 @@ mod tests {
             selection: Some(sel_src),
             ..s_src
         };
-        let payload = Slice::extract(&s_src).unwrap().to_payload();
+        let payload = Slice::extract(&s_src)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_tgt, tbl, c00t, c11t) = state! {
             doc { root { tbl: table {
@@ -706,7 +719,9 @@ mod tests {
             selection: Some(sel_src),
             ..s_src
         };
-        let payload = Slice::extract(&s_src).unwrap().to_payload();
+        let payload = Slice::extract(&s_src)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_tgt, tbl, c00, c21) = state! {
             doc { root { tbl: table {
@@ -795,7 +810,9 @@ mod tests {
             selection: Some(sel_src),
             ..s_src
         };
-        let payload = Slice::extract(&s_src).unwrap().to_payload();
+        let payload = Slice::extract(&s_src)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_tgt, tbl, _, _, ct, _, _, _, _) = state! {
             doc { root { tbl: table {
@@ -914,7 +931,9 @@ mod tests {
             selection: Some(sel_src),
             ..s_src
         };
-        let payload = Slice::extract(&s_src).unwrap().to_payload();
+        let payload = Slice::extract(&s_src)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_tgt, _tbl, c00t, c11t) = state! {
             doc { root { tbl: table {
@@ -959,7 +978,9 @@ mod tests {
             doc { root { p1: paragraph { text("source") } } }
             selection: (p1, 0) -> (p1, 6)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -985,7 +1006,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("") } } }
@@ -1044,7 +1067,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1075,7 +1100,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1122,7 +1149,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1156,7 +1185,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1205,7 +1236,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("") } } }
@@ -1235,7 +1268,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1269,7 +1304,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1301,7 +1338,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1345,7 +1384,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, p2) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1377,7 +1418,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, p2) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1436,7 +1479,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1466,7 +1511,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1496,7 +1543,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1529,7 +1578,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1592,7 +1643,9 @@ mod tests {
                 doc { root { p1: paragraph { text("hello") } } }
                 selection: (p1, 0) -> (p1, 5)
             };
-            Slice::extract(&s_source).unwrap().to_payload()
+            Slice::extract(&s_source)
+                .unwrap()
+                .to_payload(&Resource::new_test())
         };
         editor.apply(Message::Clipboard {
             op: ClipboardOp::Paste {
@@ -1617,7 +1670,9 @@ mod tests {
             doc { root { p1: paragraph { text("hello") [bold] } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
@@ -1731,7 +1786,9 @@ mod tests {
             doc { root { p1: paragraph { text("x") [italic] } } }
             selection: (p1, 0) -> (p1, 1)
         };
-        let payload = Slice::extract(&s_source).unwrap().to_payload();
+        let payload = Slice::extract(&s_source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
 
         let (s_target, p2) = state! {
             doc { root { p2: paragraph { text("AB") [bold] } } }

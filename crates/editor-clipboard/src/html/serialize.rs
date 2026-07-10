@@ -2,8 +2,9 @@ use crate::slice::Slice;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use editor_model::{Fragment, Modifier, PlainNode};
+use editor_resource::Resource;
 
-pub fn to_html(slice: &Slice) -> String {
+pub fn to_html(slice: &Slice, resource: &Resource) -> String {
     let mut out = String::new();
     let meta_json = serde_json::to_string(slice).expect("Slice serde");
     let meta_b64 = STANDARD.encode(meta_json.as_bytes());
@@ -12,46 +13,49 @@ pub fn to_html(slice: &Slice) -> String {
     ));
     out.push_str("<div data-root>");
     for child in &slice.fragment.children {
-        serialize_node(child, &mut out);
+        serialize_node(child, resource, &mut out);
     }
     out.push_str("</div>");
     out
 }
 
-fn serialize_node(fragment: &Fragment, out: &mut String) {
+fn serialize_node(fragment: &Fragment, resource: &Resource, out: &mut String) {
     match &fragment.node {
-        PlainNode::Text(t) => serialize_text(&t.text, &fragment.modifiers, out),
+        PlainNode::Text(t) => serialize_text(&t.text, &fragment.modifiers, resource, out),
         PlainNode::HardBreak(_) => out.push_str("<br>"),
         PlainNode::Tab(_) => out.push('\t'),
-        PlainNode::Paragraph(_) => wrap("p", fragment, out, None),
-        PlainNode::BulletList(_) => wrap("ul", fragment, out, None),
-        PlainNode::OrderedList(_) => wrap("ol", fragment, out, None),
-        PlainNode::ListItem(_) => wrap("li", fragment, out, None),
+        PlainNode::Paragraph(_) => wrap("p", fragment, resource, out, None),
+        PlainNode::BulletList(_) => wrap("ul", fragment, resource, out, None),
+        PlainNode::OrderedList(_) => wrap("ol", fragment, resource, out, None),
+        PlainNode::ListItem(_) => wrap("li", fragment, resource, out, None),
         PlainNode::Blockquote(b) => wrap(
             "blockquote",
             fragment,
+            resource,
             out,
             Some(format!(r#"data-variant="{}""#, variant_str(&b.variant))),
         ),
         PlainNode::Callout(c) => wrap(
             "aside",
             fragment,
+            resource,
             out,
             Some(format!(
                 r#"data-callout data-variant="{}""#,
                 variant_str(&c.variant)
             )),
         ),
-        PlainNode::Fold(_) => wrap("details", fragment, out, None),
-        PlainNode::FoldTitle(_) => wrap("summary", fragment, out, None),
+        PlainNode::Fold(_) => wrap("details", fragment, resource, out, None),
+        PlainNode::FoldTitle(_) => wrap("summary", fragment, resource, out, None),
         PlainNode::FoldContent(_) => {
             for child in &fragment.children {
-                serialize_node(child, out);
+                serialize_node(child, resource, out);
             }
         }
         PlainNode::Table(t) => wrap(
             "table",
             fragment,
+            resource,
             out,
             Some(format!(
                 r#"data-border-style="{}" data-proportion="{}""#,
@@ -59,10 +63,10 @@ fn serialize_node(fragment: &Fragment, out: &mut String) {
                 t.proportion,
             )),
         ),
-        PlainNode::TableRow(_) => wrap("tr", fragment, out, None),
+        PlainNode::TableRow(_) => wrap("tr", fragment, resource, out, None),
         PlainNode::TableCell(c) => {
             let attrs = c.col_width.map(|w| format!(r#"data-col-width="{w}""#));
-            wrap("td", fragment, out, attrs);
+            wrap("td", fragment, resource, out, attrs);
         }
         PlainNode::Image(i) => {
             out.push_str(&format!(
@@ -88,20 +92,26 @@ fn serialize_node(fragment: &Fragment, out: &mut String) {
         PlainNode::HorizontalRule(_) => out.push_str("<hr>"),
         PlainNode::Root(_) => {
             for child in &fragment.children {
-                serialize_node(child, out);
+                serialize_node(child, resource, out);
             }
         }
         PlainNode::Unknown => {}
     }
 }
 
-fn wrap(tag: &str, fragment: &Fragment, out: &mut String, attrs: Option<String>) {
+fn wrap(
+    tag: &str,
+    fragment: &Fragment,
+    resource: &Resource,
+    out: &mut String,
+    attrs: Option<String>,
+) {
     match attrs {
         Some(a) => out.push_str(&format!("<{tag} {a}>")),
         None => out.push_str(&format!("<{tag}>")),
     }
     for c in &fragment.children {
-        serialize_node(c, out);
+        serialize_node(c, resource, out);
     }
     out.push_str(&format!("</{tag}>"));
 }
@@ -114,10 +124,10 @@ fn variant_str<T: serde::Serialize>(v: &T) -> String {
         .unwrap_or_default()
 }
 
-fn serialize_text(text: &str, modifiers: &[Modifier], out: &mut String) {
+fn serialize_text(text: &str, modifiers: &[Modifier], resource: &Resource, out: &mut String) {
     let escaped = html_escape(text);
 
-    let (structural, style_pairs) = split_modifiers(modifiers);
+    let (structural, style_pairs) = split_modifiers(modifiers, resource);
     let mut open_tags: Vec<String> = Vec::new();
     let mut close_tags: Vec<String> = Vec::new();
 
@@ -153,7 +163,20 @@ fn structural_order(m: &Modifier) -> u8 {
     }
 }
 
-fn split_modifiers(mods: &[Modifier]) -> (Vec<&Modifier>, Vec<String>) {
+fn css_color(value: &str, token_prefix: &str, resource: &Resource) -> String {
+    if value == "none" {
+        return "transparent".to_string();
+    }
+    match resource.theme.try_color(&format!("{token_prefix}.{value}")) {
+        Some(c) => format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b),
+        None => value.to_string(),
+    }
+}
+
+fn split_modifiers<'m>(
+    mods: &'m [Modifier],
+    resource: &Resource,
+) -> (Vec<&'m Modifier>, Vec<String>) {
     let mut structural: Vec<&Modifier> = vec![];
     let mut style: Vec<String> = vec![];
     for m in mods {
@@ -168,8 +191,13 @@ fn split_modifiers(mods: &[Modifier]) -> (Vec<&Modifier>, Vec<String>) {
             }
             Modifier::FontFamily { value } => style.push(format!("font-family:{value}")),
             Modifier::FontWeight { value } => style.push(format!("font-weight:{value}")),
-            Modifier::TextColor { value } => style.push(format!("color:{value}")),
-            Modifier::BackgroundColor { value } => style.push(format!("background-color:{value}")),
+            Modifier::TextColor { value } => {
+                style.push(format!("color:{}", css_color(value, "text", resource)))
+            }
+            Modifier::BackgroundColor { value } => style.push(format!(
+                "background-color:{}",
+                css_color(value, "bg", resource)
+            )),
             Modifier::LetterSpacing { value } => {
                 style.push(format!("letter-spacing:{}em", *value as f32 / 100.0))
             }
@@ -220,7 +248,7 @@ mod tests {
             open_start: 0,
             open_end: 0,
         };
-        let html = to_html(&slice);
+        let html = to_html(&slice, &Resource::new_test());
         assert!(html.contains("data-slice-v2="));
         assert!(html.contains("data-version=\"1\""));
         assert!(html.contains("<div data-root>"));
@@ -234,7 +262,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let slice = Slice::extract(&s).unwrap();
-        let html = slice.to_html();
+        let html = slice.to_html(&Resource::new_test());
         assert!(html.contains("<p>Hello</p>"));
     }
 
@@ -260,7 +288,7 @@ mod tests {
             open_start: 0,
             open_end: 0,
         };
-        let html = slice.to_html();
+        let html = slice.to_html(&Resource::new_test());
         assert!(html.contains("<strong><em>bold italic</em></strong>"));
     }
 
@@ -291,9 +319,78 @@ mod tests {
             open_start: 0,
             open_end: 0,
         };
-        let html = slice.to_html();
+        let html = slice.to_html(&Resource::new_test());
         assert!(
             html.contains(r#"<span style="font-size:16pt;color:#ff0000">styled</span>"#),
+            "actual: {html}"
+        );
+    }
+
+    #[test]
+    fn serialize_palette_keys_resolve_to_theme_hex() {
+        let slice = Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![Fragment {
+                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![
+                        Fragment::leaf(PlainNode::Text(PlainTextNode {
+                            text: "colored".into(),
+                        }))
+                        .with_modifiers(vec![
+                            Modifier::TextColor {
+                                value: "red".into(),
+                            },
+                            Modifier::BackgroundColor {
+                                value: "yellow".into(),
+                            },
+                        ]),
+                    ],
+                }],
+            },
+            open_start: 0,
+            open_end: 0,
+        };
+        let html = slice.to_html(&Resource::new_test());
+        assert!(
+            html.contains(r#"<span style="color:#ef4444;background-color:#fef3c7">colored</span>"#),
+            "actual: {html}"
+        );
+    }
+
+    #[test]
+    fn serialize_background_none_resolves_to_transparent() {
+        let slice = Slice {
+            fragment: Fragment {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![Fragment {
+                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![
+                        Fragment::leaf(PlainNode::Text(PlainTextNode {
+                            text: "plain".into(),
+                        }))
+                        .with_modifiers(vec![
+                            Modifier::BackgroundColor {
+                                value: "none".into(),
+                            },
+                        ]),
+                    ],
+                }],
+            },
+            open_start: 0,
+            open_end: 0,
+        };
+        let html = slice.to_html(&Resource::new_test());
+        assert!(
+            html.contains(r#"background-color:transparent"#),
             "actual: {html}"
         );
     }
@@ -324,7 +421,7 @@ mod tests {
         };
         assert!(
             slice
-                .to_html()
+                .to_html(&Resource::new_test())
                 .contains(r#"<a href="https://example.com">click</a>"#)
         );
     }
@@ -341,7 +438,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let slice = Slice::extract(&s).unwrap();
-        let html = slice.to_html();
+        let html = slice.to_html(&Resource::new_test());
         assert!(html.contains("<ul>"));
         assert!(html.contains("<li>"));
         assert!(html.contains("<p>a</p>"));
@@ -360,7 +457,7 @@ mod tests {
             } }
             selection: (r, 0, >) -> (r, 1, <)
         };
-        let html = Slice::extract(&s).unwrap().to_html();
+        let html = Slice::extract(&s).unwrap().to_html(&Resource::new_test());
         assert!(html.contains("<table"));
         assert!(html.contains("<tr>"));
         assert!(html.contains("<td"));
@@ -379,7 +476,7 @@ mod tests {
             Position::new(root, 0),
             Position::new(root, 1),
         )));
-        let html = Slice::extract(&s).unwrap().to_html();
+        let html = Slice::extract(&s).unwrap().to_html(&Resource::new_test());
         assert!(html.contains("<img data-id"));
     }
 
@@ -396,7 +493,7 @@ mod tests {
             Position::new(root, 1),
             Position::new(root, 2),
         )));
-        let html = Slice::extract(&s).unwrap().to_html();
+        let html = Slice::extract(&s).unwrap().to_html(&Resource::new_test());
         assert!(html.contains("<hr>"));
     }
 }

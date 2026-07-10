@@ -64,8 +64,8 @@ impl Slice {
         text_parse::from_text(text)
     }
 
-    pub fn to_html(&self) -> String {
-        html_serialize::to_html(self)
+    pub fn to_html(&self, resource: &Resource) -> String {
+        html_serialize::to_html(self, resource)
     }
 
     pub fn from_html(html: &str, resource: &Resource) -> Slice {
@@ -87,9 +87,9 @@ impl Slice {
             )
     }
 
-    pub fn to_payload(&self) -> ClipboardPayload {
+    pub fn to_payload(&self, resource: &Resource) -> ClipboardPayload {
         ClipboardPayload {
-            html: self.to_html(),
+            html: self.to_html(resource),
             text: self.to_text(),
         }
     }
@@ -636,7 +636,7 @@ mod tests {
             selection: (p1, 0) -> (p1, 5)
         };
         let original = Slice::extract(&s).unwrap();
-        let payload = original.to_payload();
+        let payload = original.to_payload(&Resource::new_test());
         assert!(!payload.html.is_empty());
         assert!(!payload.text.is_empty());
 
@@ -841,7 +841,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let original = Slice::extract(&s).expect("non-collapsed");
-        let payload = original.to_payload();
+        let payload = original.to_payload(&Resource::new_test());
 
         let resource = Resource::new_test();
         let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &resource);

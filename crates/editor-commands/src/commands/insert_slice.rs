@@ -746,7 +746,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let original = Slice::extract(&source).expect("non-collapsed");
-        let payload = original.to_payload();
+        let payload = original.to_payload(&Resource::new_test());
         let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &Resource::new_test());
         assert!(
             matches!(parsed.fragment.children[0].node, PlainNode::Image(_)),

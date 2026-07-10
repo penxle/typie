@@ -32,6 +32,10 @@ impl Theme {
         self.colors.get(token).copied().unwrap_or(Color::BLACK)
     }
 
+    pub fn try_color(&self, token: &str) -> Option<Color> {
+        self.colors.get(token).copied()
+    }
+
     pub fn color_with_alpha(&self, token: &str, alpha: u8) -> Color {
         self.color(token).with_alpha(alpha)
     }

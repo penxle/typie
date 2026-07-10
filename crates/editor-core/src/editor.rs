@@ -229,6 +229,10 @@ impl Editor {
         &self.state
     }
 
+    pub fn resource(&self) -> &Arc<Mutex<Resource>> {
+        &self.resource
+    }
+
     pub fn tracked_ranges(&self) -> &TrackedRangeRegistry {
         &self.tracked_ranges
     }
