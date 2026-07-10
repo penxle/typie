@@ -27,11 +27,55 @@ use parley::style::{
 };
 use parley::{OverflowWrap, WordBreak};
 
-use crate::glyph_run::{Glyph, RubyAnnotation, Synthesis};
+use crate::glyph_run::{Glyph, RubyAnnotation, RubyGlyphRun, Synthesis};
 
 use super::extract::ExtractedLine;
 use super::inline::RubyGroup;
+use super::style_run::resolve_font_family_weight;
 use crate::glyph_run::GlyphRun;
+
+#[derive(Debug)]
+struct RubyFontRun {
+    byte_range: std::ops::Range<usize>,
+    family_id: u16,
+    weight: u16,
+}
+
+fn resolve_ruby_font_runs(
+    text: &str,
+    family: &str,
+    weight: u16,
+    resource: &mut Resource,
+) -> Vec<RubyFontRun> {
+    let requested_family_id = resource.font_registry.intern(family);
+    let mut runs: Vec<RubyFontRun> = Vec::new();
+    let mut byte_offset = 0;
+
+    for ch in text.chars() {
+        let char_byte_end = byte_offset + ch.len_utf8();
+        let (family_id, resolved_weight) = resolve_font_family_weight(
+            &resource.font_registry,
+            requested_family_id,
+            weight,
+            ch as u32,
+        );
+        if let Some(last) = runs.last_mut()
+            && last.family_id == family_id
+            && last.weight == resolved_weight
+        {
+            last.byte_range.end = char_byte_end;
+        } else {
+            runs.push(RubyFontRun {
+                byte_range: byte_offset..char_byte_end,
+                family_id,
+                weight: resolved_weight,
+            });
+        }
+        byte_offset = char_byte_end;
+    }
+
+    runs
+}
 
 pub(crate) fn build_ruby_annotations(
     line: &ExtractedLine,
@@ -47,14 +91,12 @@ pub(crate) fn build_ruby_annotations(
     }
 
     struct Pending {
-        family_id: u16,
-        weight: u16,
         font_size: f32,
         synthesis: Synthesis,
         color: String,
         ascent: f32,
         descent: f32,
-        glyphs_relative: Vec<Glyph>,
+        glyph_runs_relative: Vec<RubyGlyphRun>,
         x: f32,
         width: f32,
     }
@@ -114,25 +156,22 @@ pub(crate) fn build_ruby_annotations(
         let first = &slice[0];
         let ruby_font_size = (first.font_size * RUBY_FONT_SIZE_RATIO).max(RUBY_FONT_SIZE_MIN_PX);
 
-        let family_name = resource
-            .font_registry
-            .family_name_opt(first.family_id)
-            .unwrap_or_default()
-            .to_owned();
-
-        let ruby_style = TextStyle {
-            font_family: FontFamily::Single(FontFamilyName::Named(Cow::Owned(family_name))),
-            font_size: ruby_font_size,
-            font_weight: ParleyFontWeight::new(first.weight as f32),
-            line_height: LineHeight::FontSizeRelative(1.0),
-            brush: TextBrush { run_index: 0 },
-            font_features: FontFeatures::Source(Cow::Borrowed(
-                "\"ss05\" 1, \"cv12\" 1, \"ss18\" 1",
-            )),
-            word_break: WordBreak::BreakAll,
-            overflow_wrap: OverflowWrap::Anywhere,
-            ..TextStyle::default()
-        };
+        let font_runs = resolve_ruby_font_runs(
+            &ruby_slice,
+            &group.requested_font_family,
+            group.requested_font_weight,
+            resource,
+        );
+        let family_names = font_runs
+            .iter()
+            .map(|run| {
+                resource
+                    .font_registry
+                    .family_name_opt(run.family_id)
+                    .unwrap_or_default()
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
 
         let resource = &mut *resource;
         let mut builder = resource.layout_context.style_run_builder(
@@ -141,8 +180,24 @@ pub(crate) fn build_ruby_annotations(
             1.0,
             true,
         );
-        let idx = builder.push_style(ruby_style);
-        builder.push_style_run(idx, 0..ruby_slice.len());
+        for (run_index, (font_run, family_name)) in font_runs.iter().zip(&family_names).enumerate()
+        {
+            let ruby_style = TextStyle {
+                font_family: FontFamily::Single(FontFamilyName::Named(Cow::Borrowed(family_name))),
+                font_size: ruby_font_size,
+                font_weight: ParleyFontWeight::new(font_run.weight as f32),
+                line_height: LineHeight::FontSizeRelative(1.0),
+                brush: TextBrush { run_index },
+                font_features: FontFeatures::Source(Cow::Borrowed(
+                    "\"ss05\" 1, \"cv12\" 1, \"ss18\" 1",
+                )),
+                word_break: WordBreak::BreakAll,
+                overflow_wrap: OverflowWrap::Anywhere,
+                ..TextStyle::default()
+            };
+            let style_index = builder.push_style(ruby_style);
+            builder.push_style_run(style_index, font_run.byte_range.clone());
+        }
 
         let mut layout = builder.build(&ruby_slice);
         layout.break_all_lines(None);
@@ -159,32 +214,39 @@ pub(crate) fn build_ruby_annotations(
         let ruby_x = (base_min_x + (base_width - ruby_width) / 2.0)
             .clamp(0.0, (line_width - ruby_width).max(0.0));
 
-        let mut glyphs_relative = Vec::new();
+        let mut glyph_runs_relative = Vec::new();
         for item in ruby_line.items() {
             if let parley::PositionedLayoutItem::GlyphRun(gr) = item {
+                let font_run = &font_runs[gr.style().brush.run_index];
                 let run_x = gr.offset();
                 let mut adv = 0.0;
-                for g in gr.glyphs() {
-                    let gx = adv + g.x;
-                    adv += g.advance;
-                    glyphs_relative.push(Glyph {
-                        id: g.id,
-                        x: run_x + gx,
-                        y: g.y,
-                    });
-                }
+                let glyphs = gr
+                    .glyphs()
+                    .map(|g| {
+                        let gx = adv + g.x;
+                        adv += g.advance;
+                        Glyph {
+                            id: g.id,
+                            x: run_x + gx,
+                            y: g.y,
+                        }
+                    })
+                    .collect();
+                glyph_runs_relative.push(RubyGlyphRun {
+                    family_id: font_run.family_id,
+                    weight: font_run.weight,
+                    glyphs,
+                });
             }
         }
 
         pending.push(Pending {
-            family_id: first.family_id,
-            weight: first.weight,
             font_size: ruby_font_size,
             synthesis: first.synthesis,
             color: first.color.clone(),
             ascent: ruby_ascent,
             descent: ruby_descent,
-            glyphs_relative,
+            glyph_runs_relative,
             x: ruby_x,
             width: ruby_width,
         });
@@ -202,24 +264,24 @@ pub(crate) fn build_ruby_annotations(
     pending
         .into_iter()
         .map(|p| {
-            let glyphs: Vec<Glyph> = p
-                .glyphs_relative
+            let glyph_runs = p
+                .glyph_runs_relative
                 .into_iter()
-                .map(|g| Glyph {
-                    id: g.id,
-                    x: p.x + g.x,
-                    y: baseline_y + g.y,
+                .map(|mut run| {
+                    for glyph in &mut run.glyphs {
+                        glyph.x += p.x;
+                        glyph.y += baseline_y;
+                    }
+                    run
                 })
                 .collect();
             RubyAnnotation {
-                family_id: p.family_id,
-                weight: p.weight,
                 font_size: p.font_size,
                 synthesis: p.synthesis,
                 color: p.color,
                 ascent: p.ascent,
                 descent: p.descent,
-                glyphs,
+                glyph_runs,
                 x: p.x,
                 baseline_y,
                 width: p.width,
@@ -232,7 +294,7 @@ pub(crate) fn build_ruby_annotations(
 mod tests {
     use std::ops::Range;
 
-    use editor_resource::Resource;
+    use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource, compress_zstd};
 
     use super::*;
     use crate::glyph_run::{GraphemeSpan, TextDecoration};
@@ -285,7 +347,77 @@ mod tests {
             text: text.to_string(),
             offset_range,
             total_base_chars,
+            requested_font_family: editor_model::DEFAULT_FONT_FAMILY.to_string(),
+            requested_font_weight: editor_model::DEFAULT_FONT_WEIGHT,
         }
+    }
+
+    fn fallback_resource() -> Resource {
+        const TEST_FONT: &[u8] = include_bytes!("../../../assets/test-font.ttf");
+
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![
+            FontFamily {
+                name: "Primary".to_string(),
+                source: FontFamilySource::Default,
+                weights: vec![FontWeight {
+                    value: 400,
+                    hash: "primary".to_string(),
+                    chunks: vec![vec!['A' as u32, 'A' as u32, 'C' as u32, 'C' as u32]],
+                }],
+            },
+            FontFamily {
+                name: "Fallback".to_string(),
+                source: FontFamilySource::Fallback,
+                weights: vec![FontWeight {
+                    value: 700,
+                    hash: "fallback".to_string(),
+                    chunks: vec![vec!['B' as u32, 'B' as u32]],
+                }],
+            },
+        ]);
+
+        let font = compress_zstd(TEST_FONT);
+        let empty_chunk = compress_zstd(&0u32.to_be_bytes());
+        for (family, weight) in [("Primary", 400), ("Fallback", 700)] {
+            resource.add_font_base(family, weight, &font).unwrap();
+            resource
+                .add_font_chunk(family, weight, 0, &empty_chunk)
+                .unwrap();
+        }
+        resource
+    }
+
+    #[test]
+    fn ruby_resolves_each_character_from_group_first_requested_font() {
+        let mut resource = fallback_resource();
+        let fallback = resource.font_registry.intern_id("Fallback").unwrap();
+        let primary = resource.font_registry.intern_id("Primary").unwrap();
+        let mut base_run = make_run(0..1, "B", 0.0, 32.0, 16.0);
+        base_run.family_id = fallback;
+        base_run.weight = 700;
+        let line = make_line(vec![base_run]);
+        let groups = vec![RubyGroup {
+            text: "ABC".to_string(),
+            offset_range: 0..1,
+            total_base_chars: 1,
+            requested_font_family: "Primary".to_string(),
+            requested_font_weight: 400,
+        }];
+        let mut offsets = vec![0];
+
+        let annotations =
+            build_ruby_annotations(&line, 200.0, &groups, &mut offsets, &mut resource);
+
+        assert_eq!(annotations.len(), 1);
+        assert_eq!(
+            annotations[0]
+                .glyph_runs
+                .iter()
+                .map(|run| (run.family_id, run.weight))
+                .collect::<Vec<_>>(),
+            vec![(primary, 400), (fallback, 700), (primary, 400)]
+        );
     }
 
     #[test]

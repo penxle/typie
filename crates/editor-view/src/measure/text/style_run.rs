@@ -14,16 +14,35 @@ pub(crate) struct StyleRun {
     pub line_height: f32,
 }
 
+pub(crate) fn resolve_font_family_weight(
+    font_registry: &FontRegistry,
+    requested_family_id: u16,
+    weight: u16,
+    codepoint: u32,
+) -> (u16, u16) {
+    let placeholder_id = font_registry
+        .placeholder_family_id()
+        .expect("placeholder family must be registered before resolving style runs");
+
+    match font_registry.resolve(requested_family_id, weight, codepoint) {
+        Resolution::Ready(target) => (target.family_id, target.weight),
+        Resolution::Pending {
+            target,
+            needs_base: false,
+        } => (target.family_id, target.weight),
+        Resolution::Pending {
+            needs_base: true, ..
+        }
+        | Resolution::Missing => (placeholder_id, PLACEHOLDER_WEIGHT),
+    }
+}
+
 pub(crate) fn resolve_style_runs(
     text: &str,
     runs: &[TextRun],
     font_registry: &mut FontRegistry,
 ) -> Vec<StyleRun> {
     let mut style_runs: Vec<StyleRun> = Vec::new();
-
-    let placeholder_id = font_registry
-        .placeholder_family_id()
-        .expect("placeholder family must be registered before resolving style runs");
 
     for (run_index, run) in runs.iter().enumerate() {
         let requested_family_id = font_registry.intern(&run.style.font_family);
@@ -36,17 +55,7 @@ pub(crate) fn resolve_style_runs(
             let char_byte_end = byte_offset + ch.len_utf8();
 
             let (resolved_family, resolved_weight) =
-                match font_registry.resolve(requested_family_id, weight, ch as u32) {
-                    Resolution::Ready(target) => (target.family_id, target.weight),
-                    Resolution::Pending {
-                        target,
-                        needs_base: false,
-                    } => (target.family_id, target.weight),
-                    Resolution::Pending {
-                        needs_base: true, ..
-                    }
-                    | Resolution::Missing => (placeholder_id, PLACEHOLDER_WEIGHT),
-                };
+                resolve_font_family_weight(font_registry, requested_family_id, weight, ch as u32);
 
             let can_merge = style_runs.last().is_some_and(|last: &StyleRun| {
                 last.family == resolved_family

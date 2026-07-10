@@ -866,59 +866,60 @@ impl<'a> RenderVisitor<'a> {
 
         for ann in rubies {
             let color = self.theme.color(&ann.color);
+            for glyph_run in &ann.glyph_runs {
+                let adapter = editor_view::glyph_run::GlyphRun {
+                    family_id: glyph_run.family_id,
+                    weight: glyph_run.weight,
+                    font_size: ann.font_size,
+                    synthesis: ann.synthesis,
+                    color: ann.color.clone(),
+                    background_color: None,
+                    glyphs: glyph_run.glyphs.clone(),
+                    decoration: editor_view::glyph_run::TextDecoration::default(),
+                    offset_range: 0..0,
+                    link: None,
+                    text: String::new(),
+                    x: ann.x,
+                    width: ann.width,
+                    graphemes: Vec::<GraphemeSpan>::new(),
+                    cursor_ascent: 0.0,
+                    cursor_descent: 0.0,
+                };
 
-            let adapter = editor_view::glyph_run::GlyphRun {
-                family_id: ann.family_id,
-                weight: ann.weight,
-                font_size: ann.font_size,
-                synthesis: ann.synthesis,
-                color: ann.color.clone(),
-                background_color: None,
-                glyphs: ann.glyphs.clone(),
-                decoration: editor_view::glyph_run::TextDecoration::default(),
-                offset_range: 0..0,
-                link: None,
-                text: String::new(),
-                x: ann.x,
-                width: ann.width,
-                graphemes: Vec::<GraphemeSpan>::new(),
-                cursor_ascent: 0.0,
-                cursor_descent: 0.0,
-            };
+                if self.text_mode == TextRenderMode::VectorExport {
+                    let resource = Arc::clone(&self.renderer.resource);
+                    let fonts = resource.lock().unwrap();
+                    self.sink
+                        .draw_glyph_run(&adapter, color, base_transform, &fonts.font_registry);
+                    continue;
+                }
 
-            if self.text_mode == TextRenderMode::VectorExport {
                 let resource = Arc::clone(&self.renderer.resource);
-                let fonts = resource.lock().unwrap();
-                self.sink
-                    .draw_glyph_run(&adapter, color, base_transform, &fonts.font_registry);
-                continue;
-            }
-
-            let resource = Arc::clone(&self.renderer.resource);
-            let resource_guard = resource.lock().unwrap();
-            let font_generation = resource_guard.font_registry.font_generation();
-            let positioned = crate::glyph::rasterize(
-                &adapter,
-                &resource_guard.font_registry,
-                &mut self.renderer.scale_ctx,
-                &mut self.renderer.glyph_cache,
-                &mut self.renderer.svg_path_glyph_cache,
-                self.scale_factor,
-                base_transform,
-            );
-            drop(resource_guard);
-
-            for pg in &positioned.rasters {
-                draw_positioned_raster_glyph(
-                    self.sink,
-                    &mut self.renderer.baked_glyph_cache,
-                    pg,
-                    color,
-                    font_generation,
+                let resource_guard = resource.lock().unwrap();
+                let font_generation = resource_guard.font_registry.font_generation();
+                let positioned = crate::glyph::rasterize(
+                    &adapter,
+                    &resource_guard.font_registry,
+                    &mut self.renderer.scale_ctx,
+                    &mut self.renderer.glyph_cache,
+                    &mut self.renderer.svg_path_glyph_cache,
+                    self.scale_factor,
+                    base_transform,
                 );
-            }
-            for pg in &positioned.svg_paths {
-                draw_positioned_svg_path_glyph(self.sink, pg, color);
+                drop(resource_guard);
+
+                for pg in &positioned.rasters {
+                    draw_positioned_raster_glyph(
+                        self.sink,
+                        &mut self.renderer.baked_glyph_cache,
+                        pg,
+                        color,
+                        font_generation,
+                    );
+                }
+                for pg in &positioned.svg_paths {
+                    draw_positioned_svg_path_glyph(self.sink, pg, color);
+                }
             }
         }
     }
@@ -2332,8 +2333,8 @@ mod tests {
     }
 
     #[test]
-    fn line_with_ruby_annotation_renders_glyph_through_raster_path() {
-        use editor_view::glyph_run::{Glyph, RubyAnnotation, Synthesis};
+    fn line_with_ruby_annotation_renders_each_font_run_through_raster_path() {
+        use editor_view::glyph_run::{Glyph, RubyAnnotation, RubyGlyphRun, Synthesis};
 
         // Pretendard-Regular 'A' (U+0041) is glyph id 3, which has an outline.
         const TEST_FONT: &[u8] = include_bytes!("../../../assets/Pretendard-Regular.ttf");
@@ -2367,11 +2368,10 @@ mod tests {
 
         let mut resource = Resource::new_test();
         let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
-        let family_id = resource
-            .font_registry
-            .intern_id("test")
-            .expect("test font must be registered");
+        resource.add_font_base("first", 400, &compressed).unwrap();
+        resource.add_font_base("second", 400, &compressed).unwrap();
+        let first_family_id = resource.font_registry.intern_id("first").unwrap();
+        let second_family_id = resource.font_registry.intern_id("second").unwrap();
 
         let state = State::empty();
         let doc = state.view();
@@ -2382,18 +2382,31 @@ mod tests {
             renderer.page_visitor(&mut sink, &doc, 1.0, LayerSet::of(&[RenderLayer::Content]));
 
         let ruby = RubyAnnotation {
-            family_id,
-            weight: 400,
             font_size: 8.0,
             synthesis: Synthesis::default(),
             color: "text.black".to_string(),
             ascent: 6.0,
             descent: 2.0,
-            glyphs: vec![Glyph {
-                id: 3,
-                x: 0.0,
-                y: 0.0,
-            }], // 'A'
+            glyph_runs: vec![
+                RubyGlyphRun {
+                    family_id: first_family_id,
+                    weight: 400,
+                    glyphs: vec![Glyph {
+                        id: 3,
+                        x: 0.0,
+                        y: 0.0,
+                    }],
+                },
+                RubyGlyphRun {
+                    family_id: second_family_id,
+                    weight: 400,
+                    glyphs: vec![Glyph {
+                        id: 3,
+                        x: 10.0,
+                        y: 0.0,
+                    }],
+                },
+            ],
             x: 0.0,
             baseline_y: -8.0,
             width: 10.0,
@@ -2414,8 +2427,8 @@ mod tests {
         // SVG 테이블이 없는 Pretendard outline glyph 는 raster 경로(draw_glyph → draw_image)로
         // 렌더된다. fill_path 는 SVG 테이블 glyph 전용.
         assert!(
-            sink.image_draws > 0,
-            "ruby annotation glyph must be rendered through the raster glyph path"
+            sink.image_draws >= 2,
+            "each ruby font run must be rendered through the raster glyph path"
         );
         assert_eq!(sink.path_fills, 0);
     }

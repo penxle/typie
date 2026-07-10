@@ -47,15 +47,20 @@ pub struct GlyphRun {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RubyAnnotation {
+pub struct RubyGlyphRun {
     pub family_id: FontId,
     pub weight: u16,
+    pub glyphs: Vec<Glyph>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubyAnnotation {
     pub font_size: f32,
     pub synthesis: Synthesis,
     pub color: String,
     pub ascent: f32,
     pub descent: f32,
-    pub glyphs: Vec<Glyph>,
+    pub glyph_runs: Vec<RubyGlyphRun>,
     pub x: f32,
     pub baseline_y: f32,
     pub width: f32,

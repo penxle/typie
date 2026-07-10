@@ -153,6 +153,8 @@ pub(crate) struct RubyGroup {
     pub text: String,
     pub offset_range: Range<usize>,
     pub total_base_chars: usize,
+    pub requested_font_family: String,
+    pub requested_font_weight: u16,
 }
 
 pub(crate) fn identify_ruby_groups(node: &NodeView) -> Vec<RubyGroup> {
@@ -184,10 +186,15 @@ pub(crate) fn identify_ruby_groups(node: &NodeView) -> Vec<RubyGroup> {
                         }
                         _ => {
                             flush(&mut current, &mut groups);
+                            let style = style_from_effective_modifiers(
+                                &item.effective.values().cloned().collect::<Vec<_>>(),
+                            );
                             current = Some(RubyGroup {
                                 text: t.to_owned(),
                                 offset_range: offset..offset + 1,
                                 total_base_chars: 1,
+                                requested_font_family: style.font_family,
+                                requested_font_weight: style.font_weight,
                             });
                         }
                     },
@@ -623,8 +630,75 @@ mod tests {
                 text: "x".to_string(),
                 offset_range: 0..2,
                 total_base_chars: 2,
+                requested_font_family: editor_model::DEFAULT_FONT_FAMILY.to_string(),
+                requested_font_weight: editor_model::DEFAULT_FONT_WEIGHT,
             }]
         );
+    }
+
+    #[test]
+    fn ruby_group_keeps_first_requested_font_family_and_weight() {
+        let mut l = build_logs(vec![ch('a'), ch('b')]);
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(66, 1),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::FontFamily {
+                        value: "First".to_string(),
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(66, 2),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::FontWeight { value: 300 },
+                },
+            )
+            .unwrap();
+        l.spans = SpanLog::new()
+            .apply(
+                Dot::new(67, 1),
+                SpanOp::AddSpan {
+                    start: anc(leaf(0), Bias::Before),
+                    end: anc(leaf(1), Bias::After),
+                    modifier: Modifier::Ruby {
+                        text: "x".to_string(),
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(67, 2),
+                SpanOp::AddSpan {
+                    start: anc(leaf(1), Bias::Before),
+                    end: anc(leaf(1), Bias::After),
+                    modifier: Modifier::FontFamily {
+                        value: "Second".to_string(),
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(67, 3),
+                SpanOp::AddSpan {
+                    start: anc(leaf(1), Bias::Before),
+                    end: anc(leaf(1), Bias::After),
+                    modifier: Modifier::FontWeight { value: 700 },
+                },
+            )
+            .unwrap();
+
+        let pd = project_document(&l).unwrap();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        let groups = identify_ruby_groups(&para);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].requested_font_family, "First");
+        assert_eq!(groups[0].requested_font_weight, 300);
     }
 
     #[test]

@@ -243,8 +243,10 @@ fn measure_segment<'a>(
                 .into_iter()
                 .map(|mut a| {
                     a.baseline_y += extra_top;
-                    for g in &mut a.glyphs {
-                        g.y += extra_top;
+                    for run in &mut a.glyph_runs {
+                        for g in &mut run.glyphs {
+                            g.y += extra_top;
+                        }
                     }
                     a
                 })

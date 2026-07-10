@@ -132,8 +132,10 @@ fn expand_line(
     if delta != 0.0 {
         for ann in &mut ruby_annotations {
             ann.baseline_y += delta;
-            for g in &mut ann.glyphs {
-                g.y += delta;
+            for run in &mut ann.glyph_runs {
+                for g in &mut run.glyphs {
+                    g.y += delta;
+                }
             }
         }
     }
