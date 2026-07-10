@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { DocumentSyncType } from '@typie/lib/enums';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
@@ -28,6 +29,7 @@
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { IndexeddbPersistence } from '$lib/editor/persistence';
+  import { unwrapError } from '$lib/graphql';
   import { initWasm } from '$lib/wasm.svelte';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
@@ -344,6 +346,7 @@
   let subtitleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let persistence: IndexeddbPersistence | null = null;
   let syncPrimed = false;
+  let migratedReloadTriggered = false;
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let showOfflineBanner = $state(false);
   let lastHeartbeatAt = $state(dayjs());
@@ -616,7 +619,20 @@
     options?: { metadata?: { subscription?: { transport?: boolean } } },
     guard?: SyncGuard,
   ) {
-    const results = await syncDocument({ input }, options);
+    if (migratedReloadTriggered) return;
+
+    let results;
+    try {
+      results = await syncDocument({ input }, options);
+    } catch (err) {
+      const error = unwrapError(err);
+      if (error instanceof TypieError && error.code === 'document_migrated') {
+        migratedReloadTriggered = true;
+        location.reload();
+        return;
+      }
+      throw err;
+    }
     if (!isSyncGuardActive(guard)) return;
 
     for (const payload of results.syncDocument) {

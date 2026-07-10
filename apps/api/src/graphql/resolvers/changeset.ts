@@ -96,6 +96,16 @@ builder.mutationFields((t) => ({
 
       await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
 
+      const state = await db
+        .select({ documentId: DocumentStates.documentId })
+        .from(DocumentStates)
+        .where(eq(DocumentStates.documentId, input.documentId))
+        .then(first);
+
+      if (!state) {
+        throw new TypieError({ code: 'document_not_v2' });
+      }
+
       let opsCount: number;
       try {
         opsCount = await wasm.use((host) => host.peek_changeset_ops_count(input.changesets));

@@ -14,7 +14,8 @@
     "dev:tsdown": "tsdown --watch",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:typecheck": "tsc",
-    "start": "node --import ./src/instrumentation.ts src/main.ts"
+    "start": "node --import ./src/instrumentation.ts src/main.ts",
+    "test": "node --test src/**/*.test.ts"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

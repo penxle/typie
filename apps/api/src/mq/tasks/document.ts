@@ -10,9 +10,11 @@ import {
   DocumentCharacterCountChanges,
   DocumentContents,
   Documents,
+  DocumentStates,
   DocumentVersionContributors,
   DocumentVersions,
   Entities,
+  first,
   firstOrThrow,
 } from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
@@ -34,6 +36,21 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
   let updated = false;
 
   try {
+    const migrated = await db
+      .select({ documentId: DocumentStates.documentId })
+      .from(DocumentStates)
+      .where(eq(DocumentStates.documentId, documentId))
+      .then(first);
+
+    if (migrated) {
+      const dropped = await redis.llen(`document:sync:updates:${documentId}`);
+      if (dropped > 0) {
+        console.warn(`document:sync:collect dropped ${dropped} legacy updates for migrated document ${documentId}`);
+      }
+      await redis.del(`document:sync:updates:${documentId}`);
+      return;
+    }
+
     const updates = (await redis.rpop(`document:sync:updates:${documentId}`, 5)) ?? [];
     if (updates.length === 0) {
       return;
@@ -238,6 +255,17 @@ export const DocumentGCJob = defineJob('document:gc', async (documentId: string)
   }
 
   try {
+    const migrated = await db
+      .select({ documentId: DocumentStates.documentId })
+      .from(DocumentStates)
+      .where(eq(DocumentStates.documentId, documentId))
+      .then(first);
+
+    if (migrated) {
+      await db.update(DocumentContents).set({ compactedAt: dayjs() }).where(eq(DocumentContents.documentId, documentId));
+      return;
+    }
+
     const { snapshot } = await db
       .select({ snapshot: DocumentContents.snapshot })
       .from(DocumentContents)

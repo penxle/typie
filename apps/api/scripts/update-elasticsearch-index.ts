@@ -2,7 +2,7 @@
 
 import { EntityState } from '@typie/lib/enums';
 import { count, eq, inArray, sql } from 'drizzle-orm';
-import { db, DocumentContents, Documents, Entities, Folders } from '#/db/index.ts';
+import { db, DocumentContents, Documents, DocumentStates, Entities, Folders } from '#/db/index.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { decompose } from '#/utils/text.ts';
 
@@ -73,11 +73,13 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
         title: Documents.title,
         subtitle: Documents.subtitle,
         text: DocumentContents.text,
+        textV2: DocumentStates.text,
         updatedAt: Documents.updatedAt,
       })
       .from(Documents)
       .innerJoin(Entities, eq(Entities.id, Documents.entityId))
       .innerJoin(DocumentContents, eq(DocumentContents.documentId, Documents.id))
+      .leftJoin(DocumentStates, eq(DocumentStates.documentId, Documents.id))
       .where(
         cursor ? sql`${Entities.state} = ${EntityState.ACTIVE} AND ${Documents.id} > ${cursor}` : eq(Entities.state, EntityState.ACTIVE),
       )
@@ -98,7 +100,7 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
           title_decomposed: decompose(doc.title),
           subtitle: doc.subtitle,
           subtitle_decomposed: decompose(doc.subtitle),
-          text: doc.text,
+          text: doc.textV2 ?? doc.text,
           ancestor_ids: ancestorMap.get(doc.entityId) ?? [],
           updated_at: doc.updatedAt,
         },

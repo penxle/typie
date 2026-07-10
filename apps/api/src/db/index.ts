@@ -7,7 +7,7 @@ import * as tables from './schemas/tables.ts';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
 
 export const pg = postgres(env.DATABASE_URL, {
-  max: dev ? 20 : 50,
+  max: Number(process.env.DB_POOL_MAX ?? (dev ? 20 : 50)),
   connect_timeout: 5,
   idle_timeout: 30,
   prepare: false,

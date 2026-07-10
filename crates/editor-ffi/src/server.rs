@@ -15,6 +15,14 @@ pub struct ChunkCodepoints {
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub struct AnchorPaths {
+    pub paths: Vec<Vec<u32>>,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Materialized {
     pub plain: editor_model::PlainDoc,
     pub text: String,
@@ -58,6 +66,17 @@ pub struct ConsolidateResult {
     pub payload: Option<Vec<u8>>,
     pub consumed: u32,
     pub consumed_bytes: u32,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GraphWithAnchors {
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub graph: Vec<u8>,
+    pub anchors: Vec<editor_state::StableSelection>,
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
@@ -337,6 +356,18 @@ impl EditorServer {
         )
         .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
+    }
+
+    pub fn to_graph_with_anchors(
+        &self,
+        plain: Complex<editor_model::PlainDoc>,
+        anchor_paths: Complex<AnchorPaths>,
+    ) -> EditorResult<Complex<GraphWithAnchors>> {
+        let plain: editor_model::PlainDoc = plain.from_ffi()?;
+        let paths: AnchorPaths = anchor_paths.from_ffi()?;
+        let (graph, anchors) = crate::anchors::graph_with_anchors(&plain, &paths.paths)
+            .map_err(|e| EditorError::General { msg: e.to_string() })?;
+        Ok(GraphWithAnchors { graph, anchors }.into_ffi()?)
     }
 
     pub fn to_plain(
@@ -1167,6 +1198,52 @@ mod tests {
         let server = EditorServer;
         let result = server.extract_text(plain).unwrap();
         assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn extract_text_contract_for_migration() {
+        use std::collections::BTreeMap;
+
+        use editor_model::{
+            PlainDoc, PlainHardBreakNode, PlainNode, PlainNodeEntry, PlainParagraphNode,
+            PlainRootNode, PlainTabNode, PlainTextNode,
+        };
+
+        fn entry(node: PlainNode, children: Vec<PlainNodeEntry>) -> PlainNodeEntry {
+            PlainNodeEntry {
+                node,
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children,
+            }
+        }
+
+        let plain = PlainDoc {
+            root: entry(
+                PlainNode::Root(PlainRootNode::default()),
+                vec![
+                    entry(
+                        PlainNode::Paragraph(PlainParagraphNode {}),
+                        vec![
+                            entry(PlainNode::Text(PlainTextNode { text: "a".into() }), vec![]),
+                            entry(PlainNode::Tab(PlainTabNode {}), vec![]),
+                            entry(PlainNode::Text(PlainTextNode { text: "b".into() }), vec![]),
+                        ],
+                    ),
+                    entry(
+                        PlainNode::Paragraph(PlainParagraphNode {}),
+                        vec![
+                            entry(PlainNode::Text(PlainTextNode { text: "c".into() }), vec![]),
+                            entry(PlainNode::HardBreak(PlainHardBreakNode {}), vec![]),
+                            entry(PlainNode::Text(PlainTextNode { text: "d".into() }), vec![]),
+                        ],
+                    ),
+                ],
+            ),
+        };
+
+        let state = editor_state::State::from_plain(&plain).unwrap();
+        assert_eq!(extract_text_from_view(&state.view()), "ab\ncd");
     }
 
     #[test]

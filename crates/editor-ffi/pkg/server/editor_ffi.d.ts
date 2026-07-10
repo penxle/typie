@@ -91,6 +91,10 @@ export interface AlignmentValue {
     value: Alignment;
 }
 
+export interface AnchorPaths {
+    paths: number[][];
+}
+
 export interface BackgroundColorValue {
     value: string;
 }
@@ -215,6 +219,11 @@ export interface Fragment {
     modifiers?: Modifier[];
     carry?: Modifier[];
     children?: Fragment[];
+}
+
+export interface GraphWithAnchors {
+    graph: Uint8Array;
+    anchors: StableSelection[];
 }
 
 export interface Ime {
@@ -812,6 +821,7 @@ declare class EditorServer {
     peek_changeset_ops_count(bundle: Uint8Array): number;
     revert(graph: Uint8Array, target_heads: Uint8Array): Uint8Array;
     to_graph(plain: PlainDoc): Uint8Array;
+    to_graph_with_anchors(plain: PlainDoc, anchor_paths: AnchorPaths): GraphWithAnchors;
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
     to_plain_resolved(changeset_payloads: Uint8Array): PlainDoc;
     /**

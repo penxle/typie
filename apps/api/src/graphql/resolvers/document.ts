@@ -1,4 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
 import {
   DocumentAvailableAction,
   DocumentContentRating,
@@ -54,6 +55,7 @@ import {
 import { env } from '#/env.ts';
 import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
+import { Lock } from '#/lock.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
@@ -78,6 +80,7 @@ import {
   getKoreanAge,
   makeLoroDoc,
 } from '#/utils/index.ts';
+import { migrateDocumentToV2 } from '#/utils/migrate-v2.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription, assertPlanRule } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm.ts';
@@ -1436,6 +1439,18 @@ builder.mutationFields((t) => ({
         });
       }
 
+      if (input.type === DocumentSyncType.UPDATE || input.type === DocumentSyncType.VECTOR) {
+        const migrated = await db
+          .select({ documentId: DocumentStates.documentId })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, input.documentId))
+          .then(first);
+
+        if (migrated || (await redis.exists(`document:v2migrating:${input.documentId}`)) > 0) {
+          throw new TypieError({ code: 'document_migrated' });
+        }
+      }
+
       const { snapshot, version } = await db
         .select({
           snapshot: DocumentContents.snapshot,
@@ -1495,6 +1510,62 @@ builder.mutationFields((t) => ({
       }
 
       return [];
+    },
+  }),
+
+  convertDocumentToV2: t.withAuth({ session: true }).fieldWithInput({
+    type: Document,
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ siteId: Entities.siteId, entityId: Entities.id })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({ userId: ctx.session.userId, siteId: document.siteId });
+
+      const lock = new Lock(`document:${input.documentId}`);
+      const acquired = await lock.acquire();
+      if (!acquired) {
+        throw new TypieError({ code: 'document_busy' });
+      }
+
+      try {
+        await redis.set(`document:v2migrating:${input.documentId}`, '1', 'EX', 900);
+        await setTimeout(750);
+
+        const pending = await redis.llen(`document:sync:updates:${input.documentId}`);
+        if (pending > 0) {
+          throw new TypieError({ code: 'document_busy' });
+        }
+
+        const result = await migrateDocumentToV2(input.documentId);
+        if (result.status === 'skipped') {
+          throw new TypieError({ code: 'already_migrated' });
+        }
+        if (result.status === 'failed') {
+          throw new TypieError({ code: 'migration_failed', message: result.error });
+        }
+
+        const late = await redis.llen(`document:sync:updates:${input.documentId}`);
+        if (late > 0) {
+          console.warn(`convertDocumentToV2: ${late} legacy updates slipped in during migration of ${input.documentId}`);
+        }
+      } finally {
+        await redis.del(`document:v2migrating:${input.documentId}`);
+        await lock.release();
+      }
+
+      pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
+
+      await enqueueJob('search:index:document', input.documentId);
+      await enqueueJob('document:preview:invalidate', input.documentId);
+
+      return await db.select().from(Documents).where(eq(Documents.id, input.documentId)).then(firstOrThrow);
     },
   }),
 

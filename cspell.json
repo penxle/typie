@@ -25,6 +25,8 @@
     "*.py",
     "*.sh",
     "*.bak",
+    "*.test.ts",
+    "*.spec.ts",
     "**/.run/**",
     "justfile",
     "**/vendor/**",

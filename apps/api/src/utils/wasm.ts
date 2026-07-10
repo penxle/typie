@@ -6,7 +6,7 @@ const base = import.meta.resolve!('@typie/editor');
 const WASM_PATH = new URL('editor_bg.wasm', base).pathname;
 const GLUE_PATH = new URL('editor.js', base).pathname;
 
-const POOL_SIZE = 10;
+const POOL_SIZE = Number(process.env.WASM_POOL_SIZE ?? 10);
 
 const glueSource = await readFile(GLUE_PATH, 'utf8');
 const isolatedSource = glueSource

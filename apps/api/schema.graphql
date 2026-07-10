@@ -71,6 +71,10 @@ input CheckSpellingDocumentV2Input {
   text: String!
 }
 
+input ConvertDocumentToV2Input {
+  documentId: ID!
+}
+
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -841,6 +845,7 @@ type Mutation {
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
+  convertDocumentToV2(input: ConvertDocumentToV2Input!): Document!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
