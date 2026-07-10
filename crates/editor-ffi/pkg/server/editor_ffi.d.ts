@@ -715,7 +715,7 @@ declare class Editor {
     external_elements(): ExternalElement[];
     find_matches(query: string, options?: SearchOptions | null): Selection[];
     freeze_selection(selection: Selection): StableSelection | undefined;
-    ime(before_limit: number, after_limit: number): Ime;
+    ime(before_limit: number, after_limit: number): Ime | undefined;
     insert_template_fragment(changesets: Uint8Array): void;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;

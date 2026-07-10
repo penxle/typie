@@ -341,7 +341,7 @@ internal constructor(
 
   fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
 
-  fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
+  fun ime(beforeLimit: Int, afterLimit: Int): Ime? = inner.ime(beforeLimit, afterLimit)
 
   fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
 
@@ -526,7 +526,7 @@ internal constructor(
       rootModifiers = inner.rootModifiers(),
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),
-      ime = selection?.let { inner.ime(Int.MAX_VALUE, Int.MAX_VALUE) },
+      ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE),
       lastHistoryTag =
         if (lastHistoryTagChanged || state.version == 0L) {
           inner.lastHistoryTag()

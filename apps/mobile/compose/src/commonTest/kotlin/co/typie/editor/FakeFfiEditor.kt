@@ -56,7 +56,7 @@ internal class FakeFfiEditor(
   var pageSizesProvider: () -> List<Size> = { emptyList() },
   var externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
   var tableOverlaysProvider: () -> List<TableOverlay> = { emptyList() },
-  var imeProvider: (Int, Int) -> Ime = { _, _ -> EmptyIme },
+  var imeProvider: (Int, Int) -> Ime? = { _, _ -> EmptyIme },
   var lastHistoryTagProvider: () -> HistoryTag? = { null },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
@@ -156,7 +156,7 @@ internal class FakeFfiEditor(
 
   override fun pageTableOverlays(page: Int): List<TableOverlay> = emptyList()
 
-  override fun ime(beforeLimit: Int, afterLimit: Int): Ime = imeProvider(beforeLimit, afterLimit)
+  override fun ime(beforeLimit: Int, afterLimit: Int): Ime? = imeProvider(beforeLimit, afterLimit)
 
   override fun attachSurface(
     page: Int,

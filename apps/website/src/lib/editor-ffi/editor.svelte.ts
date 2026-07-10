@@ -1156,7 +1156,7 @@ export class Editor {
     return this.#wasm.modifier_span_selection(pos, modifierType);
   }
 
-  ime(beforeLimit: number, afterLimit: number): Ime {
+  ime(beforeLimit: number, afterLimit: number): Ime | undefined {
     return this.#wasm.ime(beforeLimit, afterLimit);
   }
 

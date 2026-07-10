@@ -33,11 +33,8 @@
   const readEditorImeContext = (): ImeContext | null => {
     if (!editor) return null;
 
-    try {
-      return normalizeImeContext(editor.ime(IME_CONTEXT_BEFORE_LIMIT, IME_CONTEXT_AFTER_LIMIT));
-    } catch {
-      return null;
-    }
+    const ime = editor.ime(IME_CONTEXT_BEFORE_LIMIT, IME_CONTEXT_AFTER_LIMIT);
+    return ime ? normalizeImeContext(ime) : null;
   };
 
   const inputAdapter = new ImeInputAdapter({

@@ -510,7 +510,7 @@ impl Editor {
         &self,
         before_limit: usize,
         after_limit: usize,
-    ) -> EditorResult<Complex<editor_core::Ime>> {
+    ) -> EditorResult<Option<Complex<editor_core::Ime>>> {
         self.with_inner(|inner| Ok(inner.editor.ime(before_limit, after_limit)?.into_ffi()?))
     }
 

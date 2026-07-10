@@ -124,15 +124,11 @@ class EditorAwaitTest {
   @Test
   fun cursor_exit_with_no_selection_clears_ime_and_delivers_event() =
     runTest(dispatcher) {
-      var imeCalls = 0
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.CursorExitedDocumentStart) },
           selectionProvider = { null },
-          imeProvider = { _, _ ->
-            imeCalls += 1
-            error("IME should not be read without an active selection")
-          },
+          imeProvider = { _, _ -> null },
         )
       val reported = mutableListOf<Throwable>()
       val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
@@ -145,7 +141,6 @@ class EditorAwaitTest {
       assertEquals(emptyList(), reported)
       assertEquals(null, editor.selection)
       assertEquals(null, editor.ime)
-      assertEquals(0, imeCalls)
       assertEquals(1, cursorExited)
     }
 

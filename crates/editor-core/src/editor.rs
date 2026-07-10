@@ -504,14 +504,14 @@ impl Editor {
             .pointer_style_at(&self.state, page_idx, x, y, read_only)
     }
 
-    pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Ime, EditorError> {
+    pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Option<Ime>, EditorError> {
         let state = self.state();
         let doc = state.view();
         let doc_size = editor_state::flat_size(&doc);
 
-        let sel = state.selection.ok_or_else(|| EditorError::General {
-            msg: "IME requires an active selection".into(),
-        })?;
+        let Some(sel) = state.selection else {
+            return Ok(None);
+        };
         let anchor_flat = sel
             .anchor
             .resolve(&doc)
@@ -539,7 +539,7 @@ impl Editor {
             end: c.end,
         });
 
-        Ok(Ime {
+        Ok(Some(Ime {
             text,
             window_start,
             selection: ImeRange {
@@ -547,7 +547,7 @@ impl Editor {
                 end: sel_end,
             },
             composing,
-        })
+        }))
     }
 
     pub fn enqueue(&mut self, msg: Message) {
@@ -2268,13 +2268,23 @@ mod tests {
     }
 
     #[test]
+    fn input_context_without_selection_returns_none() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: none
+        };
+        let editor = Editor::new_test(state);
+        assert!(editor.ime(usize::MAX, usize::MAX).unwrap().is_none());
+    }
+
+    #[test]
     fn input_context_full_window_returns_whole_doc() {
         let (state, _p1) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap();
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
         // flat: O(p)=0, "hello"=1..6, C(p)=6 → flat_size=7
         // (p1,2) → flat 3; window covers full doc [0,7)
         assert_eq!(ctx.text, "\u{2028}hello\u{2029}");
@@ -2291,7 +2301,7 @@ mod tests {
             selection: (p1, 6)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.ime(3, 3).unwrap();
+        let ctx = editor.ime(3, 3).unwrap().unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
         // (p1,6) → flat 7; window [7-3, 7+3) = [4, 10) → "lo wor"
         assert_eq!(ctx.window_start, 4);
@@ -2307,7 +2317,7 @@ mod tests {
             selection: (p1, 2) -> (p1, 8)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap();
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
         // (p1,2)→flat 3, (p1,8)→flat 9; window covers full doc [0,13)
         assert_eq!(ctx.text, "\u{2028}hello world\u{2029}");
@@ -2322,7 +2332,7 @@ mod tests {
             selection: (p1, 0)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.ime(100, 100).unwrap();
+        let ctx = editor.ime(100, 100).unwrap().unwrap();
         assert!(
             !ctx.text.is_empty(),
             "IME buffer must not be empty for empty blockquote"
