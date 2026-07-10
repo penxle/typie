@@ -9,8 +9,7 @@ use editor_model::{
 use editor_resource::{Resource, find_bold_target, find_unbold_target, match_weight};
 use editor_state::{
     PendingModifiers, Position, ProjectedState, ResolvedSelection, Selection, apply_pending,
-    continuation_at, continuation_from_neighbors, leaf_groups_in_range, leaf_span_in_range,
-    resolve_modifier_state_in_range,
+    continuation_at, leaf_groups_in_range, leaf_span_in_range, resolve_modifier_state_in_range,
 };
 use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
@@ -175,9 +174,8 @@ pub(crate) fn apply_modifier_to_node(
 }
 
 pub(crate) fn continuation_paint_at(state: &ProjectedState, pos: Position) -> Vec<Modifier> {
-    continuation_from_neighbors(state, pos.node, pos.offset)
+    continuation_at(state, pos.node, pos.offset)
         .into_iter()
-        .flatten()
         .filter(|(ty, _)| ty.is_carry_kind())
         .map(|(_, m)| m)
         .collect()

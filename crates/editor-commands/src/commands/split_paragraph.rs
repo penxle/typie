@@ -558,6 +558,35 @@ mod tests {
     }
 
     #[test]
+    fn split_empty_paragraph_preserves_carry() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph carry([font_size(2400), font_family("RIDIBatang".to_string())]) {
+                        text("1") [font_size(2400), font_family("RIDIBatang".to_string())]
+                    }
+                    p1: paragraph carry([font_size(2400), font_family("RIDIBatang".to_string())]) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph carry([font_size(2400), font_family("RIDIBatang".to_string())]) {
+                        text("1") [font_size(2400), font_family("RIDIBatang".to_string())]
+                    }
+                    paragraph carry([font_size(2400), font_family("RIDIBatang".to_string())]) {}
+                    p2: paragraph carry([font_size(2400), font_family("RIDIBatang".to_string())]) {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn split_carry_excludes_pending() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
