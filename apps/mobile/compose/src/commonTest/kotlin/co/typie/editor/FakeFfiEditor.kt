@@ -67,6 +67,7 @@ internal class FakeFfiEditor(
     { _, _ ->
       emptyList()
     },
+  var detachSurfaceProvider: (Int) -> Unit = {},
   var renderSurfaceProvider: (Int) -> Boolean = { true },
 ) : co.typie.editor.ffi.Editor {
   data class SurfaceResizeCall(
@@ -169,6 +170,7 @@ internal class FakeFfiEditor(
   }
 
   override fun detachSurface(page: Int) {
+    detachSurfaceProvider(page)
     surfaceEvents += "detach:$page"
     attached -= page
   }

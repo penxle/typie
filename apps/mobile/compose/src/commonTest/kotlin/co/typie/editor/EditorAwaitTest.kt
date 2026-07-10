@@ -827,6 +827,27 @@ class EditorAwaitTest {
     }
 
   @Test
+  fun surface_detach_failure_still_releases_buffer() =
+    runTest(dispatcher) {
+      val failure = IllegalStateException("detach boom")
+      val fake = FakeFfiEditor(detachSurfaceProvider = { throw failure })
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+      val surface =
+        editor.attachSurface(page = 0, handle = 11L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      dispatcher.scheduler.advanceUntilIdle()
+      surface.detach { fake.surfaceEvents += "release:11" }
+
+      assertEquals(listOf("attach:0:11"), fake.surfaceEvents)
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(listOf<Throwable>(failure), reported)
+      assertEquals(listOf("attach:0:11", "release:11"), fake.surfaceEvents)
+    }
+
+  @Test
   fun surface_detach_after_editor_dispose_detaches_before_releasing_buffer() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor()

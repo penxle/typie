@@ -386,8 +386,16 @@ internal class EditorSurfaceScheduler(
 
   private suspend fun flushDetach(command: SurfaceDetachCommand) {
     removePendingAttach(SurfaceSessionKey(command.page, command.sessionId))
-    detachAttachedSession(command.page, command.sessionId)
-    invokeDetached(command.onDetached)
+    try {
+      detachAttachedSession(command.page, command.sessionId)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      removeAttachedSession(command.page, command.sessionId)
+      notifyFailure(e)
+    } finally {
+      invokeDetached(command.onDetached)
+    }
   }
 
   private suspend fun detachAttachedSession(page: Int, sessionId: Long) {
