@@ -9,6 +9,7 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.PresetSettingsScreen_Query
 import co.typie.graphql.PresetSettingsScreen_UpdatePreferences_Mutation
+import co.typie.graphql.QueryState
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
@@ -25,28 +26,29 @@ import kotlinx.serialization.json.encodeToJsonElement
 
 internal class PresetSettingsViewModel : ViewModel() {
   val query =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      placeholderData = placeholderData(),
-      onInitialData = { data ->
-        FontLoader.loadFonts(
-          data.me.documentFontFamilies
-            .filter { it.editorSettingsFontFamily_family.state == FontFamilyState.ACTIVE }
-            .map { family ->
-              val activeFontIds =
-                family.editorSettingsFontFamily_family.fonts
-                  .filter { it.state == FontState.ACTIVE }
-                  .map { it.id }
-                  .toSet()
-              family.fontLoader_FontFamily.copy(
-                fonts = family.fontLoader_FontFamily.fonts.filter { it.id in activeFontIds }
-              )
-            }
-        )
-      },
-    ) {
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       PresetSettingsScreen_Query()
     }
+
+  init {
+    FontLoader.watchFonts(viewModelScope) {
+      (query.state as? QueryState.Success)
+        ?.data
+        ?.me
+        ?.documentFontFamilies
+        ?.filter { it.editorSettingsFontFamily_family.state == FontFamilyState.ACTIVE }
+        ?.map { family ->
+          val activeFontIds =
+            family.editorSettingsFontFamily_family.fonts
+              .filter { it.state == FontState.ACTIVE }
+              .map { it.id }
+              .toSet()
+          family.fontLoader_FontFamily.copy(
+            fonts = family.fontLoader_FontFamily.fonts.filter { it.id in activeFontIds }
+          )
+        }
+    }
+  }
 
   val preset by derivedStateOf {
     json.decodeFromJsonElement<PresetPreferences>(query.data.me.preferences).template ?: Preset()

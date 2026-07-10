@@ -58,17 +58,23 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
-      onInitialData = { data ->
-        viewEntity(data.entity.site.id)
-        FontLoader.loadFonts(
-          data.entity.node.onDocument!!.fontLoader_Document.fontFamilies.map {
-            it.fontLoader_FontFamily
-          }
-        )
-      },
+      onInitialData = { data -> viewEntity(data.entity.site.id) },
     ) {
       EditorScreen_Query(entityId = entityId)
     }
+
+  init {
+    FontLoader.watchFonts(viewModelScope) {
+      (query.state as? QueryState.Success)
+        ?.data
+        ?.entity
+        ?.node
+        ?.onDocument
+        ?.fontLoader_Document
+        ?.fontFamilies
+        ?.map { it.fontLoader_FontFamily }
+    }
+  }
 
   val toolbarFontFamilies by derivedStateOf {
     query.data.entity.node.onDocument?.toolbarFontFamilies.orEmpty().map {

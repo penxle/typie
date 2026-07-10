@@ -167,6 +167,15 @@
   });
 
   $effect(() => {
+    const families = document.data.editorFontFamilies;
+    untrack(() => {
+      if (readyFired) {
+        loadFonts(families);
+      }
+    });
+  });
+
+  $effect(() => {
     ctx.editor?.setThemeVariant(theme.currentThemeVariant);
   });
 </script>

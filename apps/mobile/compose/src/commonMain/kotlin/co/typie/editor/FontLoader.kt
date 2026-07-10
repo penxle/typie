@@ -1,5 +1,6 @@
 package co.typie.editor
 
+import androidx.compose.runtime.snapshotFlow
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FontData
 import co.typie.editor.ffi.FontFamily
@@ -22,6 +23,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,6 +58,12 @@ object FontLoader {
         editor.enqueue(Message.System(SystemEvent.FontsChanged))
       }
     }
+
+  fun watchFonts(scope: CoroutineScope, families: () -> List<FontLoader_FontFamily>?) {
+    scope.launch {
+      snapshotFlow(families).filterNotNull().distinctUntilChanged().collect { loadFonts(it) }
+    }
+  }
 
   private fun updateFontPaths(families: List<FontLoader_FontFamily>) {
     for (family in families) {

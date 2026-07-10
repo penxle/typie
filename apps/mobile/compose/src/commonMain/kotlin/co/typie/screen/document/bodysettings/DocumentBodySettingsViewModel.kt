@@ -13,6 +13,7 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentBodySettingsScreen_PushDocumentChangesets_Mutation
 import co.typie.graphql.DocumentBodySettingsScreen_Query
 import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.QueryState
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
@@ -33,29 +34,31 @@ internal class DocumentBodySettingsViewModel(private val entityId: String) : Vie
   private val changesetTracker = EditorLocalChangesetTracker()
 
   val query =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      placeholderData = placeholderData(),
-      onInitialData = { data ->
-        val document = data.entity.node.onDocument ?: return@watchQuery
-        FontLoader.loadFonts(
-          document.bodySettingsFontFamilies
-            .filter { it.editorSettingsFontFamily_family.state == FontFamilyState.ACTIVE }
-            .map { family ->
-              val activeFontIds =
-                family.editorSettingsFontFamily_family.fonts
-                  .filter { it.state == FontState.ACTIVE }
-                  .map { it.id }
-                  .toSet()
-              family.fontLoader_FontFamily.copy(
-                fonts = family.fontLoader_FontFamily.fonts.filter { it.id in activeFontIds }
-              )
-            }
-        )
-      },
-    ) {
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       DocumentBodySettingsScreen_Query(entityId = entityId)
     }
+
+  init {
+    FontLoader.watchFonts(viewModelScope) {
+      (query.state as? QueryState.Success)
+        ?.data
+        ?.entity
+        ?.node
+        ?.onDocument
+        ?.bodySettingsFontFamilies
+        ?.filter { it.editorSettingsFontFamily_family.state == FontFamilyState.ACTIVE }
+        ?.map { family ->
+          val activeFontIds =
+            family.editorSettingsFontFamily_family.fonts
+              .filter { it.state == FontState.ACTIVE }
+              .map { it.id }
+              .toSet()
+          family.fontLoader_FontFamily.copy(
+            fonts = family.fontLoader_FontFamily.fonts.filter { it.id in activeFontIds }
+          )
+        }
+    }
+  }
 
   val fontFamilies by derivedStateOf {
     query.data.entity.node.onDocument?.bodySettingsFontFamilies.orEmpty().map { family ->
