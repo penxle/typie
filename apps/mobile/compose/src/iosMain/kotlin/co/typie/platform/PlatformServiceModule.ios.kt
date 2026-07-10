@@ -6,6 +6,7 @@ import kotlin.coroutines.resume
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -88,14 +89,16 @@ internal class IOSClipboard : Clipboard {
   override suspend fun paste(): ClipboardReadPayload? =
     withContext(Dispatchers.Default) {
       runCatching {
-          val pasteboard = UIPasteboard.generalPasteboard
-          val html = pasteboard.valueForPasteboardType(UTI_HTML) as? String
-          val text =
-            (pasteboard.valueForPasteboardType(UTI_PLAIN_TEXT) as? String)
-              ?: pasteboard.string
-              ?: return@runCatching null
-          ClipboardReadPayload(html = html, text = text)
-        }
+        val pasteboard = UIPasteboard.generalPasteboard
+        val html =
+          (pasteboard.valueForPasteboardType(UTI_HTML) as? String)
+            ?: pasteboard.dataForPasteboardType(UTI_HTML)?.decodeUtf8()
+        val text =
+          (pasteboard.valueForPasteboardType(UTI_PLAIN_TEXT) as? String)
+            ?: pasteboard.string
+            ?: return@runCatching null
+        ClipboardReadPayload(html = html, text = text)
+      }
         .getOrNull()
     }
 }
@@ -163,6 +166,8 @@ private fun ByteArray.toUIImage(): UIImage {
 private fun ByteArray.toNSData(): NSData {
   return usePinned { pinned -> NSData.create(bytes = pinned.addressOf(0), length = size.toULong()) }
 }
+
+private fun NSData.decodeUtf8(): String? = bytes?.readBytes(length.toInt())?.decodeToString()
 
 internal class IOSShare : Share {
   override suspend fun share(bytes: ByteArray, mimeType: String): Boolean =
