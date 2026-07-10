@@ -14,11 +14,11 @@ pub(crate) struct Paginator {
     paginated: bool,
     page_width: f32,
     page_height: f32,
-    content_width: f32,
     content_height: f32,
     margins: EdgeInsets,
     accumulated_y: f32,
     current_x: f32,
+    current_width: f32,
     page_content_top: f32,
     page_content_bottom: f32,
     pages: Vec<LayoutPage>,
@@ -32,11 +32,11 @@ impl Paginator {
             paginated: true,
             page_width,
             page_height,
-            content_width,
             content_height,
             margins,
             accumulated_y: margins.top,
             current_x: margins.left,
+            current_width: content_width,
             page_content_top: margins.top,
             page_content_bottom: margins.top + content_height,
             pages: vec![],
@@ -49,11 +49,11 @@ impl Paginator {
             paginated: false,
             page_width,
             page_height: 0.0,
-            content_width,
             content_height: max_content_height,
             margins,
             accumulated_y: margins.top,
             current_x: margins.left,
+            current_width: content_width,
             page_content_top: margins.top,
             page_content_bottom: margins.top + max_content_height,
             pages: vec![],
@@ -165,6 +165,12 @@ impl Paginator {
 
         let old_x = self.current_x;
         self.current_x = box_x + lead_border_left + measured.style.padding.left;
+        let old_width = self.current_width;
+        self.current_width = width
+            - measured.style.padding.left
+            - measured.style.padding.right
+            - measured.style.border.left
+            - measured.style.border.right;
 
         let mut children = Vec::new();
         let mut prev_border_bottom: Option<f32> = None;
@@ -247,6 +253,7 @@ impl Paginator {
         }
 
         self.current_x = old_x;
+        self.current_width = old_width;
         let trail_border_bottom = if collapse {
             0.0
         } else {
@@ -337,8 +344,8 @@ impl Paginator {
         let base_x = self.current_x;
         match measured.style.alignment {
             Alignment::Start => base_x,
-            Alignment::Center => base_x + (self.content_width - width) / 2.0,
-            Alignment::End => base_x + self.content_width - width,
+            Alignment::Center => base_x + (self.current_width - width) / 2.0,
+            Alignment::End => base_x + self.current_width - width,
         }
     }
 
@@ -1089,5 +1096,107 @@ mod tests {
             Paginator::continuous(400.0, 100_000.0, EdgeInsets::all(10.0)).paginate(tree_c);
         assert_eq!(continuous.pages.len(), 1);
         assert!(!has_fill(&continuous.tree.root));
+    }
+
+    fn find_box(node: &LayoutNode, id: Dot) -> Option<&LayoutNode> {
+        match &node.content {
+            LayoutContent::Box(b) => {
+                if b.node == id {
+                    return Some(node);
+                }
+                b.children.iter().find_map(|c| find_box(c, id))
+            }
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn container_child_alignment_uses_container_inner_width() {
+        let root = Dot::ROOT;
+        let callout_center = Dot::new(1, 1);
+        let para_center = Dot::new(1, 2);
+        let callout_right = Dot::new(1, 4);
+        let para_right = Dot::new(1, 5);
+        let items = vec![
+            (
+                callout_center,
+                SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para_center,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, callout_center],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('x')),
+            (
+                callout_right,
+                SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para_right,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, callout_right],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 6), SeqItem::Char('y')),
+        ];
+        let mut doc = logs(&items);
+        doc.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(2, 1),
+                SetModifier {
+                    target: para_center,
+                    modifier: Modifier::Alignment {
+                        value: editor_model::Alignment::Center,
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                Dot::new(2, 2),
+                SetModifier {
+                    target: para_right,
+                    modifier: Modifier::Alignment {
+                        value: editor_model::Alignment::Right,
+                    },
+                },
+            )
+            .unwrap();
+
+        let (_, layout) = paginate_continuous(&doc, 400.0);
+        let root_node = &layout.tree.root;
+
+        for (callout, para, label) in [
+            (callout_center, para_center, "center"),
+            (callout_right, para_right, "right"),
+        ] {
+            let c = find_box(root_node, callout).unwrap();
+            let p = find_box(root_node, para).unwrap();
+            let inner_left = c.rect.x + 40.0;
+            assert!(
+                (p.rect.x - inner_left).abs() < 0.5,
+                "{label} para box_x = {}, expected container inner left {inner_left}",
+                p.rect.x
+            );
+            assert!(
+                p.rect.x + p.rect.width <= c.rect.x + c.rect.width + 0.5,
+                "{label} para right edge {} exceeds container right edge {}",
+                p.rect.x + p.rect.width,
+                c.rect.x + c.rect.width
+            );
+        }
     }
 }
