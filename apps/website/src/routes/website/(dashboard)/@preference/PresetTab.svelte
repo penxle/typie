@@ -5,7 +5,6 @@
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon, SearchableDropdown, SegmentButtons, Select, TextInput } from '@typie/ui/components';
-  import { getThemeContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
@@ -17,7 +16,6 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import FileIcon from '~icons/lucide/file';
   import FileTextIcon from '~icons/lucide/file-text';
-  import PaletteIcon from '~icons/lucide/palette';
   import PanelBottomIcon from '~icons/lucide/panel-bottom';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PanelRightIcon from '~icons/lucide/panel-right';
@@ -27,15 +25,12 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
-  import { ToolbarColorGrid } from '$lib/components/editor/toolbar';
   import { familySpecimenFallbacks, weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { getRepresentativeFont } from '$lib/editor/fonts';
-  import { THEME_COLORS } from '$lib/editor/theme';
   import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
   import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel, resolveFontWeightForFamily } from '$lib/font-weight';
   import { graphql } from '$mearie';
-  import type { ThemeVariant } from '$lib/editor/theme';
   import type { PageLayoutPreset } from '$lib/editor/utils';
   import type { DashboardLayout_PreferenceModal_PresetTab_user$key } from '$mearie';
 
@@ -44,12 +39,6 @@
   };
 
   let { user$key }: Props = $props();
-
-  const theme = getThemeContext();
-  const themeVariant = $derived(
-    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
-  );
-  const tc = $derived(THEME_COLORS[themeVariant]);
 
   const user = createFragment(
     graphql(`
@@ -92,8 +81,6 @@
     fontFamily?: string;
     fontSize?: number;
     fontWeight?: number;
-    textColor?: string;
-    backgroundColor?: string;
     letterSpacing?: number;
     lineHeight?: number;
     layout?:
@@ -135,8 +122,6 @@
 
   const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
 
-  const textColor = $derived(template.textColor ?? defaultValues.textColor);
-  const backgroundColor = $derived(template.backgroundColor ?? defaultValues.backgroundColor);
   const letterSpacing = $derived(template.letterSpacing ?? defaultValues.letterSpacing);
   const lineHeight = $derived(template.lineHeight ?? defaultValues.lineHeight);
   const layout = $derived<NonNullable<PresetPreference['layout']>>(
@@ -144,11 +129,6 @@
   );
   const paragraphIndent = $derived(template.paragraphIndent ?? defaultValues.paragraphIndent);
   const blockGap = $derived(template.blockGap ?? defaultValues.blockGap);
-
-  const textColorItems = $derived(values.textColor.map((c) => ({ label: c.label, value: c.value, color: tc[c.themeKey] })));
-  const bgColorItems = $derived(
-    values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
-  );
 
   const updateTemplate = async (updates: Partial<PresetPreference>) => {
     const newTemplate = { ...template, ...updates };
@@ -178,25 +158,6 @@
 
     mixpanel.track('reset_document_template');
   };
-
-  let textColorOpened = $state(false);
-  let bgColorOpened = $state(false);
-
-  const { anchor: textColorAnchorAction, floating: textColorFloatingAction } = createFloatingActions({
-    placement: 'bottom-start',
-    offset: 8,
-    onClickOutside: () => {
-      textColorOpened = false;
-    },
-  });
-
-  const { anchor: bgColorAnchorAction, floating: bgColorFloatingAction } = createFloatingActions({
-    placement: 'bottom-start',
-    offset: 8,
-    onClickOutside: () => {
-      bgColorOpened = false;
-    },
-  });
 
   let fontSizeAnchorElement: HTMLDivElement | undefined = $state();
   let fontSizeFloatingElement: HTMLDivElement | undefined = $state();
@@ -587,143 +548,6 @@
       </SettingsRow>
 
       <SettingsDivider />
-
-      <SettingsRow>
-        {#snippet label()}
-          <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글자 색</div>
-          </div>
-        {/snippet}
-        {#snippet value()}
-          <button
-            class={flex({
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: '6px',
-              paddingX: '8px',
-              paddingY: '4px',
-              height: '28px',
-              _hover: { backgroundColor: 'surface.muted' },
-            })}
-            onclick={() => (textColorOpened = !textColorOpened)}
-            type="button"
-            use:textColorAnchorAction
-          >
-            <div
-              style:background-color={textColorItems.find(({ value }) => value === textColor)?.color}
-              class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
-            ></div>
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {textColorItems.find(({ value }) => value === textColor)?.label ?? textColor}
-            </span>
-          </button>
-          {#if textColorOpened}
-            <div
-              class={css({
-                borderWidth: '1px',
-                borderColor: 'border.subtle',
-                borderRadius: '4px',
-                backgroundColor: 'surface.default',
-                zIndex: 'tooltip',
-                boxShadow: 'small',
-                overflow: 'hidden',
-              })}
-              use:textColorFloatingAction
-              in:fly={{ y: -5, duration: 150 }}
-            >
-              <ToolbarColorGrid
-                columns={11}
-                currentValue={textColor}
-                items={textColorItems}
-                onClose={() => (textColorOpened = false)}
-                onSelect={(value) => {
-                  updateTemplate({ textColor: value });
-                  textColorOpened = false;
-                }}
-                opened={textColorOpened}
-              />
-            </div>
-          {/if}
-        {/snippet}
-      </SettingsRow>
-
-      <SettingsDivider />
-
-      <SettingsRow>
-        {#snippet label()}
-          <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>배경 색</div>
-          </div>
-        {/snippet}
-        {#snippet value()}
-          <button
-            class={flex({
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: '6px',
-              paddingX: '8px',
-              paddingY: '4px',
-              height: '28px',
-              _hover: { backgroundColor: 'surface.muted' },
-            })}
-            onclick={() => (bgColorOpened = !bgColorOpened)}
-            type="button"
-            use:bgColorAnchorAction
-          >
-            <div
-              style:background-color={bgColorItems.find(({ value }) => value === backgroundColor)?.color ?? 'transparent'}
-              class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
-            >
-              {#if backgroundColor === 'none'}
-                <div
-                  class={css({
-                    position: 'absolute',
-                    inset: '0',
-                    margin: 'auto',
-                    width: '1px',
-                    height: '12px',
-                    backgroundColor: 'text.disabled',
-                    transform: 'rotate(45deg)',
-                  })}
-                ></div>
-              {/if}
-            </div>
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {bgColorItems.find(({ value }) => value === backgroundColor)?.label ?? backgroundColor}
-            </span>
-          </button>
-          {#if bgColorOpened}
-            <div
-              class={css({
-                borderWidth: '1px',
-                borderColor: 'border.subtle',
-                borderRadius: '4px',
-                backgroundColor: 'surface.default',
-                zIndex: 'tooltip',
-                boxShadow: 'small',
-                overflow: 'hidden',
-              })}
-              use:bgColorFloatingAction
-              in:fly={{ y: -5, duration: 150 }}
-            >
-              <ToolbarColorGrid
-                columns={8}
-                currentValue={backgroundColor}
-                items={bgColorItems}
-                onClose={() => (bgColorOpened = false)}
-                onSelect={(value) => {
-                  updateTemplate({ backgroundColor: value });
-                  bgColorOpened = false;
-                }}
-                opened={bgColorOpened}
-                shape="square"
-              />
-            </div>
-          {/if}
-        {/snippet}
-      </SettingsRow>
     </SettingsCard>
   </div>
 

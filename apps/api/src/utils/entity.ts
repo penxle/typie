@@ -219,8 +219,6 @@ export const derivePlainRootFromPreset = (preset?: TemplatePreset): { root: Plai
     { type: 'font_family', value: r.fontFamily },
     { type: 'font_size', value: r.fontSize },
     { type: 'font_weight', value: r.fontWeight },
-    { type: 'text_color', value: r.textColor },
-    { type: 'background_color', value: r.backgroundColor },
     { type: 'letter_spacing', value: r.letterSpacing },
     { type: 'line_height', value: r.lineHeight },
     { type: 'paragraph_indent', value: r.paragraphIndent },
