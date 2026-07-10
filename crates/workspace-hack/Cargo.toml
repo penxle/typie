@@ -17,7 +17,7 @@ litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
 phf_shared = { version = "0.14", default-features = false, features = ["std"] }
-read-fonts = { version = "0.41" }
+read-fonts = { version = "0.40", features = ["experimental_font_api"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
@@ -40,7 +40,7 @@ litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
 phf_shared = { version = "0.14", default-features = false, features = ["std"] }
-read-fonts = { version = "0.41" }
+read-fonts = { version = "0.40", features = ["experimental_font_api"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
