@@ -377,13 +377,21 @@ pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
         return lift_list_item_inner(tr, list_item_id);
     }
 
-    let mut items = {
+    let items = {
         let view = tr.view();
         let resolved = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
         collect_list_items_in_selection(&resolved)
     };
+    lift_list_items(tr, items)
+}
+
+pub(crate) fn lift_list_items(tr: &mut Transaction, mut items: Vec<Dot>) -> CommandResult {
+    let Some(selection) = tr.selection() else {
+        return Ok(false);
+    };
+
     if items.is_empty() {
         return Ok(false);
     }

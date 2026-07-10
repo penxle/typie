@@ -23,7 +23,7 @@
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { blockquoteVariants, horizontalRuleVariants } from '$lib/editor-ffi/components/values';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { createBlockquoteVariantMessage, createHorizontalRuleVariantMessage } from '$lib/editor-ffi/handlers/variant-flow';
+  import { createHorizontalRuleVariantMessage } from '$lib/editor-ffi/handlers/variant-flow';
   import TableSizeSelector from './TableSizeSelector.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -142,7 +142,7 @@
             <DropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                enqueue(createBlockquoteVariantMessage(blockState, variant));
+                enqueue({ type: 'block', op: { type: 'toggle_blockquote', variant } });
                 close();
               }}
             >
@@ -156,14 +156,14 @@
     <ToolbarButton
       icon={GalleryVerticalEndIcon}
       label="강조"
-      onclick={() => enqueue(insertFragment({ node: { type: 'callout', variant: 'info' } }))}
+      onclick={() => enqueue({ type: 'block', op: { type: 'toggle_callout' } })}
       size={toolbarSize}
     />
 
     <ToolbarButton
       icon={ChevronsDownUpIcon}
       label="접기"
-      onclick={() => enqueue(insertFragment({ node: { type: 'fold' } }))}
+      onclick={() => enqueue({ type: 'block', op: { type: 'wrap_fold' } })}
       size={toolbarSize}
     />
 
@@ -191,7 +191,7 @@
         <DropdownMenu>
           <DropdownMenuItem
             onclick={() => {
-              enqueue(insertFragment({ node: { type: 'bullet_list' } }));
+              enqueue({ type: 'list', op: { type: 'toggle_kind', kind: 'bullet' } });
               close();
             }}
           >
@@ -203,7 +203,7 @@
 
           <DropdownMenuItem
             onclick={() => {
-              enqueue(insertFragment({ node: { type: 'ordered_list' } }));
+              enqueue({ type: 'list', op: { type: 'toggle_kind', kind: 'ordered' } });
               close();
             }}
           >

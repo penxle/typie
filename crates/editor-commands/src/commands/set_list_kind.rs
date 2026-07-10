@@ -3,7 +3,9 @@ use editor_model::{ChildView, DocView, NodeType, NodeView, Subtree};
 use editor_state::{ResolvedSelection, Selection, StableResolveCtx, StableSelection};
 use editor_transaction::Transaction;
 
-use crate::helpers::{is_list_type, list_item_own_paragraph_intersects};
+use crate::helpers::{
+    is_list_type, list_item_own_paragraph_intersects, resolve_selected_block_run,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn set_list_kind(tr: &mut Transaction, target_list_type: NodeType) -> CommandResult {
@@ -30,11 +32,36 @@ fn set_collapsed_list_kind(
         let view = tr.view();
         find_enclosing_list_id(&view, cursor_node)
     };
-    let Some(list_id) = list_id else {
+    if let Some(list_id) = list_id {
+        return set_existing_list_kind(tr, list_id, target_list_type);
+    }
+
+    let Some(run) = resolve_selected_block_run(tr)? else {
         return Ok(false);
     };
-
-    set_existing_list_kind(tr, list_id, target_list_type)
+    if run.blocks.len() != 1 || run.blocks[0].node_type != NodeType::Paragraph {
+        return Ok(false);
+    }
+    {
+        let view = tr.view();
+        let parent = view
+            .node(run.parent_id)
+            .ok_or(CommandError::NodeNotFound(run.parent_id))?;
+        if parent.node_type() == NodeType::ListItem
+            || !parent.spec().content.matches(target_list_type)
+        {
+            return Ok(false);
+        }
+    }
+    let run = ListableWrapRun {
+        parent_id: run.parent_id,
+        first_child_id: run.blocks[0].id,
+        children: vec![ListableRunChild {
+            id: run.blocks[0].id,
+            node_type: NodeType::Paragraph,
+        }],
+    };
+    wrap_run_into_list(tr, &run, target_list_type)
 }
 
 fn set_range_list_kind(
@@ -49,10 +76,6 @@ fn set_range_list_kind(
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
         collect_existing_lists_in_range(&resolved)
     };
-    if list_ids.is_empty() {
-        return Ok(false);
-    }
-
     let mut changed = false;
 
     for list_id in list_ids {
@@ -541,12 +564,22 @@ mod tests {
     }
 
     #[test]
-    fn collapsed_outside_list_returns_false() {
+    fn collapsed_plain_paragraph_becomes_one_item_list() {
         let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("A") } } }
+            doc { root { p1: paragraph { text("A") } paragraph {} } }
             selection: (p1, 0)
         };
-        transact_fail!(initial, |tr| set_list_kind(&mut tr, NodeType::BulletList));
+        let (actual, ..) = transact!(initial, |tr| set_list_kind(&mut tr, NodeType::BulletList));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -1082,7 +1115,7 @@ mod tests {
     }
 
     #[test]
-    fn pure_paragraph_range_returns_false() {
+    fn pure_paragraph_range_becomes_flat_list() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -1092,6 +1125,18 @@ mod tests {
             }
             selection: (p1, 0) -> (p2, 1)
         };
-        transact_fail!(initial, |tr| set_list_kind(&mut tr, NodeType::BulletList));
+        let (actual, ..) = transact!(initial, |tr| set_list_kind(&mut tr, NodeType::BulletList));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                        list_item { p2: paragraph { text("B") } }
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 }

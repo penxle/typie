@@ -94,7 +94,13 @@ pub(crate) fn seq_insert_pos(ps: &ProjectedState, block: Dot, offset: usize) -> 
 }
 
 pub(crate) fn subtree_dots(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> {
-    ps.is_block(block).then(|| ps.subtree_real_dots(block))
+    if ps.is_block(block) {
+        return Some(ps.subtree_real_dots(block));
+    }
+    ps.view()
+        .leaf(block)
+        .and_then(|leaf| leaf.as_atom())
+        .map(|_| vec![block])
 }
 
 pub(crate) fn insert_text_ops(
@@ -399,6 +405,11 @@ pub(crate) fn node_carry_clear(target: Dot, key: ModifierType) -> EditOp {
 /// carrying that run's own modifiers; a paint change starts a new run. Atom
 /// leaves keep their own modifiers. Nested blocks recurse.
 pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
+    if let Some(leaf) = ps.view().leaf(block)
+        && let Some(atom) = leaf.as_atom()
+    {
+        return Some(atom_leaf_subtree(ps, block, atom.clone()));
+    }
     let node = ps.block_node(block)?.to_plain();
     let dot = editor_model::anchor_dot(block);
     let modifiers: Vec<Modifier> = dot
@@ -542,6 +553,9 @@ fn atom_leaf_subtree(ps: &ProjectedState, dot: Dot, atom: AtomLeaf) -> Subtree {
 /// run against the live projection, not a captured `Subtree` — capture already
 /// drops unknown content, so by then it's undetectable.
 pub(crate) fn subtree_has_unknown(ps: &ProjectedState, block: Dot) -> bool {
+    if let Some(leaf) = ps.view().leaf(block) {
+        return leaf.item().is_unknown_bearing();
+    }
     if block_node_type(ps, block) == Some(NodeType::Unknown) {
         return true;
     }
@@ -732,14 +746,9 @@ mod tests {
         assert_eq!(runs[1].new_start, p(9, 102));
     }
 
-    /// A block-level atom leaf (e.g. a top-level image) can't be moved through
-    /// `Transaction::move_node` — it addresses `child_block_dots` only, and the
-    /// leaf isn't a block. Its projected `Child` item is `SeqItem::Atom` (the
-    /// tree form drops `BlockAtom`'s `parents`, implicit once nested) with
-    /// `AtomLeaf::is_block_level() == true`, so `atom_leaf_subtree` takes the
-    /// block-modifier branch. Exercise `capture_subtree`'s helper and
-    /// `emit_subtree`'s Atom-arm pairing directly against `support`, since
-    /// `Transaction::move_node` can never reach this leaf.
+    /// A block-level atom leaf (e.g. a top-level image) is represented as a
+    /// projected leaf rather than a block. Exercise its capture and emit
+    /// pairing directly against `support`, including the block-modifier branch.
     #[test]
     fn emit_subtree_pairs_block_atom_source_dot() {
         let (state, root) = state! {

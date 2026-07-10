@@ -25,12 +25,12 @@ internal fun editorListToolbarPage(mode: EditorToolbarListMode?): EditorToolbarP
       val canSetBullet by
         produceState(initialValue = false, editor, editorVersion) {
           value = false
-          value = editor?.can(Message.List(ListOp.SetKind(ListKind.Bullet))) == true
+          value = editor?.can(Message.List(ListOp.ToggleKind(ListKind.Bullet))) == true
         }
       val canSetOrdered by
         produceState(initialValue = false, editor, editorVersion) {
           value = false
-          value = editor?.can(Message.List(ListOp.SetKind(ListKind.Ordered))) == true
+          value = editor?.can(Message.List(ListOp.ToggleKind(ListKind.Ordered))) == true
         }
       val canIndent by
         produceState(initialValue = false, editor, editorVersion) {
@@ -48,14 +48,14 @@ internal fun editorListToolbarPage(mode: EditorToolbarListMode?): EditorToolbarP
           contentDescription = "글머리 목록",
           selected = mode == EditorToolbarListMode.Bullet,
           enabled = mode == EditorToolbarListMode.Bullet || canSetBullet,
-          onClick = { scope.sendMessage(Message.List(ListOp.SetKind(ListKind.Bullet))) },
+          onClick = { scope.sendMessage(Message.List(ListOp.ToggleKind(ListKind.Bullet))) },
         )
         EditorToolbarButton(
           icon = Lucide.Hash,
           contentDescription = "번호 목록",
           selected = mode == EditorToolbarListMode.Ordered,
           enabled = mode == EditorToolbarListMode.Ordered || canSetOrdered,
-          onClick = { scope.sendMessage(Message.List(ListOp.SetKind(ListKind.Ordered))) },
+          onClick = { scope.sendMessage(Message.List(ListOp.ToggleKind(ListKind.Ordered))) },
         )
         EditorToolbarDivider()
         EditorToolbarButton(

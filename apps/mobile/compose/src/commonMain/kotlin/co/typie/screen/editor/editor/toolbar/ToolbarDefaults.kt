@@ -110,7 +110,7 @@ internal sealed interface HorizontalRuleVariantPanelTarget {
 internal sealed interface BlockquoteVariantPanelTarget {
   val currentVariant: BlockquoteVariant?
 
-  data object Insertion : BlockquoteVariantPanelTarget {
+  data object Selection : BlockquoteVariantPanelTarget {
     override val currentVariant: BlockquoteVariant? = null
   }
 

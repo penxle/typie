@@ -78,8 +78,13 @@ fn build_corpus() -> Vec<Message> {
             },
         },
         Message::List {
-            op: ListOp::SetKind {
+            op: ListOp::ToggleKind {
                 kind: ListKind::Bullet,
+            },
+        },
+        Message::Block {
+            op: BlockOp::ToggleBlockquote {
+                variant: editor_model::BlockquoteVariant::LeftLine,
             },
         },
         Message::Key {
@@ -203,6 +208,7 @@ fn message_variants_are_enumerated() {
         | Message::Selection { .. }
         | Message::Modifier { .. }
         | Message::Node { .. }
+        | Message::Block { .. }
         | Message::List { .. }
         | Message::View { .. }
         | Message::Clipboard { .. }

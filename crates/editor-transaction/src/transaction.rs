@@ -212,9 +212,9 @@ impl Transaction {
         })
     }
 
-    /// Moves a block node to `new_parent` at `new_index`, counted in the same
-    /// full child-slot index domain as `insert_subtree` and `remove_subtree`.
-    /// Leaf siblings such as image atoms are included in this index domain.
+    /// Moves a block node or atom leaf to `new_parent` at `new_index`, counted
+    /// in the same full child-slot index domain as `insert_subtree` and
+    /// `remove_subtree`. Character leaves are handled by text operations.
     pub fn move_node(
         &mut self,
         block: Dot,
@@ -1359,5 +1359,42 @@ mod tests {
         );
 
         assert_pairs_match_content(&before_items, &tr.state().projected, &alias_ops[0].pairs);
+    }
+
+    #[test]
+    fn move_node_moves_inline_atom_slot() {
+        let (state, p1) = state! {
+            doc { root {
+                p1: paragraph { text("a") tab text("b") }
+            } }
+            selection: (p1, 0)
+        };
+        let tab = state
+            .projected
+            .block_children(p1)
+            .unwrap()
+            .into_iter()
+            .find_map(|child| match child {
+                Child::Leaf {
+                    id,
+                    item: SeqItem::Atom(AtomLeaf::Tab),
+                } => Some(id),
+                _ => None,
+            })
+            .expect("tab atom");
+
+        let mut tr = Transaction::new(&state);
+        tr.move_node(tab, p1, 0).unwrap();
+
+        let children = tr.state().projected.block_children(p1).unwrap();
+        assert!(matches!(
+            children.first(),
+            Some(Child::Leaf {
+                item: SeqItem::Atom(AtomLeaf::Tab),
+                ..
+            })
+        ));
+        assert_eq!(block_text(tr.state(), &p1), "ab");
+        assert_eq!(alias_ops_in(&tr.ops_for_test()).len(), 1);
     }
 }

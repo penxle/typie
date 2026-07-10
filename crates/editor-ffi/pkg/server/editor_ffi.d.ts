@@ -556,6 +556,8 @@ export type ArchivedNodeAttr = { type: "id" } & string | undefined;
 
 export type Axis = "horizontal" | "vertical";
 
+export type BlockOp = { type: "toggle_blockquote"; variant: BlockquoteVariant } | { type: "toggle_callout" } | { type: "wrap_fold" };
+
 export type BlockquoteNodeAttr = { type: "variant" } & BlockquoteVariant;
 
 export type BlockquoteVariant = "left_line" | "left_quote" | "message_sent" | "message_received";
@@ -632,9 +634,9 @@ export type ListItemNodeAttr = void;
 
 export type ListKind = "bullet" | "ordered";
 
-export type ListOp = { type: "set_kind"; kind: ListKind } | { type: "indent" } | { type: "outdent" };
+export type ListOp = { type: "toggle_kind"; kind: ListKind } | { type: "indent" } | { type: "outdent" };
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "list"; op: ListOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "tracked_range"; op: TrackedRangeOp };
+export type Message = { type: "key"; event: KeyEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "selection"; op: SelectionOp } | { type: "modifier"; op: ModifierOp } | { type: "node"; op: NodeOp } | { type: "block"; op: BlockOp } | { type: "list"; op: ListOp } | { type: "view"; op: ViewOp } | { type: "clipboard"; op: ClipboardOp } | { type: "text_input"; ops: FlatImeOp[] } | { type: "dnd"; op: DndOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "tracked_range"; op: TrackedRangeOp };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number } | { type: "alignment"; value: Alignment };
 

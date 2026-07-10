@@ -8,8 +8,17 @@ use crate::message::*;
 pub fn handle_list_op(editor: &mut Editor, op: ListOp) -> Result<(), EditorError> {
     editor.transact(|tr| {
         match op {
-            ListOp::SetKind { kind } => {
-                commands::set_list_kind(tr, list_kind_to_node_type(kind))?;
+            ListOp::ToggleKind { kind } => {
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::materialize_gap_paragraph()),
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::lift_list_items_of_kind(list_kind_to_node_type(kind)),
+                        commands::set_list_kind(list_kind_to_node_type(kind)),
+                    ),
+                )?;
             }
             ListOp::Indent => {
                 commands::sink_list_item(tr)?;
@@ -43,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn set_kind_converts_ordered_list_to_bullet() {
+    fn toggle_kind_converts_ordered_list_to_bullet() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -54,7 +63,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(initial);
-        editor.apply(list_message(ListOp::SetKind {
+        editor.apply(list_message(ListOp::ToggleKind {
             kind: ListKind::Bullet,
         }));
 
@@ -143,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_predicts_set_kind_apply() {
+    fn probe_predicts_toggle_kind_apply() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -155,14 +164,14 @@ mod tests {
         };
         assert_probe_predicts_apply(
             state,
-            list_message(ListOp::SetKind {
+            list_message(ListOp::ToggleKind {
                 kind: ListKind::Bullet,
             }),
         );
     }
 
     #[test]
-    fn can_set_kind_for_full_document_range_with_list() {
+    fn can_toggle_kind_for_full_document_range_with_list() {
         let (mut state, ..) = state! {
             doc {
                 root {
@@ -189,7 +198,7 @@ mod tests {
 
         assert!(
             editor
-                .can(list_message(ListOp::SetKind {
+                .can(list_message(ListOp::ToggleKind {
                     kind: ListKind::Bullet,
                 }))
                 .unwrap()
@@ -197,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn set_kind_cannot_apply_to_pure_paragraph_range() {
+    fn toggle_kind_can_apply_to_pure_paragraph_range() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -210,11 +219,34 @@ mod tests {
         let mut editor = Editor::new_test(state);
 
         assert!(
-            !editor
-                .can(list_message(ListOp::SetKind {
+            editor
+                .can(list_message(ListOp::ToggleKind {
                     kind: ListKind::Bullet,
                 }))
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn toggle_kind_lifts_same_kind_item() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph { text("A") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(list_message(ListOp::ToggleKind {
+            kind: ListKind::Bullet,
+        }));
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("A") } paragraph {} } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 }

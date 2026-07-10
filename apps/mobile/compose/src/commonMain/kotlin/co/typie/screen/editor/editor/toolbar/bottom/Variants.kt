@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorTheme
 import co.typie.editor.currentEditorThemeVariant
+import co.typie.editor.ffi.BlockOp
 import co.typie.editor.ffi.BlockquoteVariant
 import co.typie.editor.ffi.Fragment
 import co.typie.editor.ffi.HorizontalRuleVariant
@@ -545,8 +546,8 @@ internal fun BlockquoteVariantPanelTarget.messageOrNull(variant: BlockquoteVaria
 
 private fun BlockquoteVariantPanelTarget.message(variant: BlockquoteVariant): Message =
   when (this) {
-    BlockquoteVariantPanelTarget.Insertion ->
-      fragmentInsertion(PlainNode.Blockquote(variant = variant))
+    BlockquoteVariantPanelTarget.Selection ->
+      Message.Block(BlockOp.ToggleBlockquote(variant = variant))
     is BlockquoteVariantPanelTarget.Existing ->
       Message.Node(NodeOp.SetAttrs(id = nodeId, attrs = PlainNode.Blockquote(variant = variant)))
   }

@@ -1,3 +1,4 @@
+mod block_selection;
 mod carry;
 mod carry_replace;
 mod charlike;
@@ -16,6 +17,7 @@ mod table;
 mod tree;
 mod unwrap;
 
+pub(crate) use block_selection::*;
 pub(crate) use carry::*;
 pub(crate) use carry_replace::*;
 pub(crate) use charlike::*;

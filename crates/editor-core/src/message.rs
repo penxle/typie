@@ -1,7 +1,9 @@
 pub use editor_common::{Axis, DecorationStyle, Direction, Movement};
 use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{Fragment, Modifier, ModifierType, PlainNode, TableBorderStyle};
+use editor_model::{
+    BlockquoteVariant, Fragment, Modifier, ModifierType, PlainNode, TableBorderStyle,
+};
 use editor_state::{Position, Selection, StableSelection};
 use serde::{Deserialize, Serialize};
 
@@ -258,8 +260,17 @@ pub enum ListKind {
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub enum BlockOp {
+    ToggleBlockquote { variant: BlockquoteVariant },
+    ToggleCallout,
+    WrapFold,
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ListOp {
-    SetKind { kind: ListKind },
+    ToggleKind { kind: ListKind },
     Indent,
     Outdent,
 }
@@ -418,6 +429,9 @@ pub enum Message {
     },
     Node {
         op: NodeOp,
+    },
+    Block {
+        op: BlockOp,
     },
     List {
         op: ListOp,

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ext.isSingleSlotRange
+import co.typie.editor.ffi.BlockOp
 import co.typie.editor.ffi.Break
 import co.typie.editor.ffi.Fragment
 import co.typie.editor.ffi.InputModifiers
@@ -37,6 +38,8 @@ import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.LayoutMode
+import co.typie.editor.ffi.ListKind
+import co.typie.editor.ffi.ListOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Selection
@@ -226,19 +229,19 @@ internal fun editorToolbarNodeInsertItems(
         action =
           EditorToolbarNodeInsertAction.OpenPanel(
             EditorToolbarBottomPanel.BlockquoteVariants(
-              target = BlockquoteVariantPanelTarget.Insertion
+              target = BlockquoteVariantPanelTarget.Selection
             )
           ),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.GalleryVerticalEnd,
         label = "강조",
-        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Callout())),
+        action = EditorToolbarNodeInsertAction.SendMessage(Message.Block(BlockOp.ToggleCallout)),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.ChevronsDownUp,
         label = "접기",
-        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.Fold)),
+        action = EditorToolbarNodeInsertAction.SendMessage(Message.Block(BlockOp.WrapFold)),
       ),
       EditorToolbarNodeInsertItem(
         icon = Lucide.Table,
@@ -248,7 +251,10 @@ internal fun editorToolbarNodeInsertItems(
       EditorToolbarNodeInsertItem(
         icon = Lucide.List,
         label = "목록",
-        action = EditorToolbarNodeInsertAction.SendMessage(fragmentInsertion(PlainNode.BulletList)),
+        action =
+          EditorToolbarNodeInsertAction.SendMessage(
+            Message.List(ListOp.ToggleKind(ListKind.Bullet))
+          ),
       ),
       if (showPageBreak) {
         EditorToolbarNodeInsertItem(

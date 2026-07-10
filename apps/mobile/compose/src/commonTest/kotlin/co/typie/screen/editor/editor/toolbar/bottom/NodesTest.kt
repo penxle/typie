@@ -59,7 +59,7 @@ class NodesTest {
   }
 
   @Test
-  fun blockquoteInsertOpensInsertionVariantPanel() {
+  fun blockquoteActionOpensSelectionVariantPanel() {
     val item =
       editorToolbarNodeInsertItems(showPageBreak = false, hasUnitSelection = false).single {
         it.label == "인용구"
@@ -67,7 +67,7 @@ class NodesTest {
 
     val action = assertIs<EditorToolbarNodeInsertAction.OpenPanel>(item.action)
     assertEquals(
-      EditorToolbarBottomPanel.BlockquoteVariants(target = BlockquoteVariantPanelTarget.Insertion),
+      EditorToolbarBottomPanel.BlockquoteVariants(target = BlockquoteVariantPanelTarget.Selection),
       action.panel,
     )
   }

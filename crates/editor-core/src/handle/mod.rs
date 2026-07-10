@@ -1,3 +1,4 @@
+mod block;
 mod clipboard;
 mod deletion;
 mod dnd;
@@ -15,6 +16,7 @@ mod text_input;
 mod tracked_range;
 mod view;
 
+pub use block::handle_block_op;
 pub use clipboard::handle_clipboard_op;
 pub use deletion::handle_deletion_op;
 #[cfg(test)]
