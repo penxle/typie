@@ -49,13 +49,18 @@ suspend fun Dialog.confirm(
     )
   }
 
-suspend fun Dialog.error(nav: Navigator, onRetry: () -> Unit) {
+suspend fun Dialog.error(
+  nav: Navigator,
+  title: String = "문제가 발생했어요",
+  message: String = "잠시 후 다시 시도해주세요.",
+  onRetry: () -> Unit,
+) {
   val canPop = nav.canPop
 
   present(dismissible = false) {
     DialogLayout(
-      title = "문제가 발생했어요",
-      message = "잠시 후 다시 시도해주세요.",
+      title = title,
+      message = message,
       icon = {
         Box(
           modifier =
