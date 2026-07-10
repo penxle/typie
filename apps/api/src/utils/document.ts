@@ -176,7 +176,7 @@ function loadFallbackFontFamilies(): DocumentFontFamily[] {
         id: v.id,
         weight: v.weight,
         subfamilyDisplayName: null,
-        url: '',
+        url: `https://cdn.typie.net/editor/fonts/${v.path}`,
         state: FontState.ACTIVE,
         path: v.path,
         hash: v.hash,

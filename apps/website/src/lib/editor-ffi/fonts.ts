@@ -3,7 +3,6 @@ import { snapshot } from './registry';
 import type { FontFamilySource } from '$mearie';
 import type { EditorEventListener } from './types';
 
-const CDN_BASE = 'https://cdn.typie.net/editor/fonts';
 const CACHE_NAME = 'typie-fonts';
 const PRELOAD_CONCURRENCY = 4;
 const REQUIRED_LOAD_ATTEMPTS = 3;
@@ -15,10 +14,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 type FontFamily = { familyName: string; source: FontFamilySource; fonts: readonly Font[] };
-type Font = { weight: number; path: string; hash: string; chunks: unknown };
+type Font = { weight: number; url: string; hash: string; chunks: unknown };
 type FontData = { type: 'base' } | { type: 'chunk'; id: number };
 
-type FontPathEntry = { path: string; hash: string };
+type FontPathEntry = { url: string; hash: string };
 const fontPaths = new Map<string, FontPathEntry>();
 
 function fontKey(family: string, weight: number): string {
@@ -28,7 +27,7 @@ function fontKey(family: string, weight: number): string {
 export function loadFonts(families: readonly FontFamily[]): void {
   for (const family of families) {
     for (const font of family.fonts) {
-      fontPaths.set(fontKey(family.familyName, font.weight), { path: font.path, hash: font.hash });
+      fontPaths.set(fontKey(family.familyName, font.weight), { url: font.url, hash: font.hash });
     }
   }
 
@@ -205,7 +204,7 @@ export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = 
     console.warn(`No font path registered for ${family}:${weight}`);
     return;
   }
-  const baseUrl = `${CDN_BASE}/${info.path}/${info.hash}`;
+  const baseUrl = `${info.url}/${info.hash}`;
 
   const baseRequired = required.filter((fd): fd is Extract<FontData, { type: 'base' }> => fd.type === 'base');
   const chunkRequired = required.filter((fd): fd is Extract<FontData, { type: 'chunk' }> => fd.type === 'chunk');

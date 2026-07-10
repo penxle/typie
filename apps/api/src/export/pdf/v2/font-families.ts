@@ -1,8 +1,6 @@
 import { FontFamilySource } from '@typie/lib/enums';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 
-const CDN_BASE = 'https://cdn.typie.net/editor/fonts';
-
 export type EditorFontFamily = {
   name: string;
   source: 'DEFAULT' | 'USER' | 'FALLBACK';
@@ -23,7 +21,7 @@ export async function buildEditorFontFamilies(userId: string): Promise<EditorFon
       value: font.weight,
       hash: font.hash,
       chunks: font.chunks,
-      baseUrl: `${CDN_BASE}/${font.path}/${font.hash}`,
+      baseUrl: `${font.url}/${font.hash}`,
     })),
   }));
 }

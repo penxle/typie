@@ -451,7 +451,10 @@ builder.mutationFields((t) => ({
       });
 
       const fontName = postScriptName;
-      const { hash, coverages, base, chunks } = await processFont(fontName, buffer);
+      const [{ hash, coverages, base, chunks }, legacy] = await Promise.all([
+        processFont(fontName, buffer),
+        processFontLegacy(fontName, buffer),
+      ]);
 
       const s3Base = `fonts/${filePath}`;
       const compressed = await compressZstd(buffer);
@@ -481,6 +484,35 @@ builder.mutationFields((t) => ({
               Bucket: 'typie-usercontents',
               Key: `${s3Base}/${hash}/chunks/${id}`,
               Body: data,
+              ContentType: 'application/octet-stream',
+              Tagging: tagging,
+            }),
+          ),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/manifest.json`,
+            Body: JSON.stringify(legacy.manifest),
+            ContentType: 'application/json',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/${legacy.manifest.hash}/base.bin`,
+            Body: legacy.base,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        ...legacy.chunks.map((chunk, i) =>
+          aws.s3.send(
+            new PutObjectCommand({
+              Bucket: 'typie-usercontents',
+              Key: `${s3Base}/${legacy.manifest.hash}/chunks/${i}.bin`,
+              Body: chunk,
               ContentType: 'application/octet-stream',
               Tagging: tagging,
             }),

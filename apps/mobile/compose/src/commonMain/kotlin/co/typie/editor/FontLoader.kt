@@ -28,13 +28,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.decodeFromJsonElement
 
-private const val CDN_BASE = "https://cdn.typie.net/editor/fonts"
 private const val PRELOAD_CONCURRENCY = 4
 private const val REQUIRED_LOAD_ATTEMPTS = 3
 private const val PREFETCH_LOAD_ATTEMPTS = 1
 private const val LOAD_RETRY_BASE_MS = 200L
 
-private data class FontPathEntry(val cdnPath: String, val hash: String)
+private data class FontPathEntry(val url: String, val hash: String)
 
 object FontLoader {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -60,7 +59,7 @@ object FontLoader {
   private fun updateFontPaths(families: List<FontLoader_FontFamily>) {
     for (family in families) {
       for (font in family.fonts) {
-        fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.path, font.hash)
+        fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.url, font.hash)
       }
     }
   }
@@ -77,7 +76,7 @@ object FontLoader {
     prefetch: List<FontData>,
   ) {
     val info = fontPaths[fontKey(family, weight)] ?: return
-    val baseUrl = "$CDN_BASE/${info.cdnPath}/${info.hash}"
+    val baseUrl = "${info.url}/${info.hash}"
 
     editor.scope.launch(Dispatchers.Default) {
       val hasBase = required.any { it is FontData.Base }

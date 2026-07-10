@@ -65,7 +65,7 @@
           fonts {
             id
             weight
-            path
+            url
             hash
             chunks
           }
