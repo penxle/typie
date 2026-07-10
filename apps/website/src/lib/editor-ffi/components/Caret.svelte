@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '../editor.svelte';
+  import { isCaretVisible } from './caret-visibility';
 
   const { editor } = getEditorContext();
 
@@ -8,7 +9,9 @@
   let point = $state<{ x: number; y: number } | null>(null);
 
   const cursor = $derived(editor?.cursor);
-  const visible = $derived(!!cursor && !!point && !!editor?.focused);
+  const visible = $derived(
+    !!editor && isCaretVisible({ hasCursor: !!cursor, hasPoint: !!point, focused: editor.focused, readOnly: editor.readOnly }),
+  );
 
   const resetAnimation = () => {
     for (const a of element?.getAnimations() ?? []) {

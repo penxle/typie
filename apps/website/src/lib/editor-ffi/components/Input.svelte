@@ -131,5 +131,6 @@
       if (editor.readOnly) return;
       handlePaste(editor, e);
     }}
+    readonly={editor.readOnly}
     spellcheck={false}></textarea>
 {/if}
