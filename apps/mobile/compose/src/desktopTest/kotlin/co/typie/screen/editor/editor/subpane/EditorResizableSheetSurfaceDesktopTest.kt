@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -23,6 +24,7 @@ import co.typie.ext.ScrollGestureLockScope
 import co.typie.ext.verticalScroll
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class EditorResizableSheetSurfaceDesktopTest {
@@ -101,8 +103,84 @@ class EditorResizableSheetSurfaceDesktopTest {
     assertEquals(beforeDrag, checkNotNull(scrollState).value)
   }
 
+  @Test
+  fun incrementalTouchMovesResizeSheet() = runComposeUiTest {
+    var geometry: EditorResizableSheetGeometry? = null
+
+    setContent {
+      ScrollGestureLockScope {
+        Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          EditorResizableSheetSurface(
+            initialHeight = 360.dp,
+            minHeight = 240.dp,
+            dismissThreshold = 128.dp,
+            maxTopInset = 0.dp,
+            keyboardOcclusion = 0.dp,
+            minKeyboardVisibleHeight = 0.dp,
+            onDismissed = {},
+            onGeometryChanged = { geometry = it },
+          ) {
+            Box(
+              Modifier.testTag(IncrementalDragHandleTag)
+                .fillMaxWidth()
+                .height(72.dp)
+                .sheetDragHandle()
+            )
+          }
+        }
+      }
+    }
+    waitForIdle()
+
+    val beforeDrag = checkNotNull(geometry).sheetHeight
+
+    onNodeWithTag(IncrementalDragHandleTag).performTouchInput {
+      val start = center
+      down(start)
+      repeat(10) { step -> moveTo(start + Offset(x = 0f, y = (step + 1) * 4f)) }
+      up()
+    }
+    waitForIdle()
+
+    val afterDrag = checkNotNull(geometry).sheetHeight
+    assertTrue(afterDrag < beforeDrag, "sheet should resize after incremental touch movement")
+  }
+
+  @Test
+  fun sheetSurfaceBlocksPointerInputBehind() = runComposeUiTest {
+    var backgroundClicks = 0
+
+    setContent {
+      ScrollGestureLockScope {
+        Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          Box(Modifier.fillMaxSize().clickable { backgroundClicks += 1 })
+          EditorResizableSheetSurface(
+            initialHeight = 360.dp,
+            minHeight = 240.dp,
+            dismissThreshold = 128.dp,
+            maxTopInset = 0.dp,
+            keyboardOcclusion = 0.dp,
+            minKeyboardVisibleHeight = 0.dp,
+            onDismissed = {},
+            onGeometryChanged = {},
+          ) {
+            Box(Modifier.testTag(SheetSurfaceTag).fillMaxSize())
+          }
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(SheetSurfaceTag).performTouchInput { click(center) }
+    waitForIdle()
+
+    assertEquals(0, backgroundClicks)
+  }
+
   private companion object {
     const val DismissButtonTag = "dismiss-button"
+    const val IncrementalDragHandleTag = "incremental-drag-handle"
     const val SheetDragHandleTag = "sheet-drag-handle"
+    const val SheetSurfaceTag = "sheet-surface"
   }
 }

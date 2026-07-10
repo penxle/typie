@@ -25,7 +25,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -257,23 +256,11 @@ internal fun EditorResizableSheetSurface(
           .align(Alignment.BottomCenter)
           .offset { IntOffset(x = 0, y = hiddenOffsetPx.roundToInt()) }
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
-          .consumeSheetPointerInput()
+          .blockPointerInputBehind()
     ) {
       scope.content()
     }
   }
 }
 
-private fun Modifier.consumeSheetPointerInput(): Modifier =
-  pointerInput(Unit) {
-    awaitPointerEventScope {
-      while (true) {
-        val event = awaitPointerEvent(PointerEventPass.Final)
-        event.changes.forEach { change ->
-          if (change.pressed) {
-            change.consume()
-          }
-        }
-      }
-    }
-  }
+private fun Modifier.blockPointerInputBehind(): Modifier = pointerInput(Unit) {}
