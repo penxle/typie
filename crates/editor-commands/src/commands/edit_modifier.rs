@@ -168,6 +168,56 @@ mod tests {
     }
 
     #[test]
+    fn cell_rect_edit_text_color_applies_to_rect_cells_only() {
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph { text("2") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("3") } }
+                        table_cell { paragraph { text("4") } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::TextColor,
+            Some(Modifier::TextColor {
+                value: "#ff0000".to_string()
+            })
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell {
+                            paragraph carry([text_color("#ff0000".to_string())]) {
+                                text("1") [text_color("#ff0000".to_string())]
+                            }
+                        }
+                        table_cell { paragraph { text("2") } }
+                    }
+                    tr2: table_row {
+                        table_cell {
+                            paragraph carry([text_color("#ff0000".to_string())]) {
+                                text("3") [text_color("#ff0000".to_string())]
+                            }
+                        }
+                        table_cell { paragraph { text("4") } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn range_set_link_inserts_on_plain_text() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }

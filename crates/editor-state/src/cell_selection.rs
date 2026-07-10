@@ -78,6 +78,34 @@ impl<'a> CellRect<'a> {
         self.rows.contains(&r) && self.cols.contains(&c)
     }
 
+    /// Whether `node` is one of the rect's cells or sits anywhere inside one.
+    /// Checks table identity so a nested table's cells never match an outer
+    /// rect by row/column indices alone.
+    pub fn covers(&self, node: &NodeView) -> bool {
+        let table_id = self.table.id();
+        node.ancestors().any(|n| {
+            n.node_type() == NodeType::TableCell
+                && n.parent()
+                    .and_then(|row| row.parent())
+                    .is_some_and(|t| t.id() == table_id)
+                && self.contains(&n)
+        })
+    }
+
+    /// Whether `node`'s subtree overlaps the rect at all: covered by a cell,
+    /// or an ancestor of one (the table's ancestor chain and the rect's rows).
+    pub fn intersects(&self, node: &NodeView) -> bool {
+        if self.covers(node) {
+            return true;
+        }
+        if self.table.ancestors().any(|a| a.id() == node.id()) {
+            return true;
+        }
+        node.node_type() == NodeType::TableRow
+            && node.parent().is_some_and(|t| t.id() == self.table.id())
+            && node.index().is_some_and(|r| self.rows.contains(&r))
+    }
+
     pub fn is_single(&self) -> bool {
         self.rows.start() == self.rows.end() && self.cols.start() == self.cols.end()
     }

@@ -75,6 +75,105 @@ fn select_node_backward_inside_a_cell_is_not_a_cell_rect() {
 }
 
 #[test]
+fn cell_rect_contains_subtree_covers_rect_cells_only() {
+    let (state, tr1, c00, p00, c01, tr2) = state! {
+        doc { root { table {
+            tr1: table_row {
+                c00: table_cell { p00: paragraph { text("1") } }
+                c01: table_cell { paragraph { text("2") } }
+            }
+            tr2: table_row {
+                table_cell { paragraph { text("3") } }
+                table_cell { paragraph { text("4") } }
+            }
+        } } }
+        selection: (tr1, 0, >) -> (tr2, 1, <)
+    };
+    let view = state.view();
+    let rs = state.selection.as_ref().unwrap().resolve(&view).unwrap();
+    assert!(rs.as_cell_rect().is_some(), "selection must be a cell rect");
+
+    assert!(
+        rs.contains_subtree(&view.node(c00).unwrap()),
+        "rect-column cell is contained"
+    );
+    assert!(
+        rs.contains_subtree(&view.node(p00).unwrap()),
+        "paragraph inside a rect cell is contained"
+    );
+    assert!(
+        !rs.contains_subtree(&view.node(c01).unwrap()),
+        "cell outside the rect's columns is not contained"
+    );
+    assert!(
+        !rs.contains_subtree(&view.node(tr1).unwrap()),
+        "a partially covered row is not contained"
+    );
+}
+
+#[test]
+fn cell_rect_intersects_subtree_follows_rect_not_flat_range() {
+    let (state, table, tr1, c01, tr2) = state! {
+        doc { root { table: table {
+            tr1: table_row {
+                table_cell { paragraph { text("1") } }
+                c01: table_cell { paragraph { text("2") } }
+            }
+            tr2: table_row {
+                table_cell { paragraph { text("3") } }
+                table_cell { paragraph { text("4") } }
+            }
+        } } }
+        selection: (tr1, 0, >) -> (tr2, 1, <)
+    };
+    let view = state.view();
+    let rs = state.selection.as_ref().unwrap().resolve(&view).unwrap();
+    assert!(rs.as_cell_rect().is_some(), "selection must be a cell rect");
+
+    assert!(
+        rs.intersects_subtree(&view.node(table).unwrap()),
+        "table holds rect cells"
+    );
+    assert!(
+        rs.intersects_subtree(&view.node(tr1).unwrap()),
+        "rect row holds a rect cell"
+    );
+    assert!(
+        !rs.intersects_subtree(&view.node(c01).unwrap()),
+        "cell outside the rect's columns does not intersect"
+    );
+}
+
+#[test]
+fn cell_rect_contains_leaf_slot_follows_rect_not_flat_range() {
+    let (state, tr1, p00, p01, tr2) = state! {
+        doc { root { table {
+            tr1: table_row {
+                table_cell { p00: paragraph { text("1") } }
+                table_cell { p01: paragraph { text("2") } }
+            }
+            tr2: table_row {
+                table_cell { paragraph { text("3") } }
+                table_cell { paragraph { text("4") } }
+            }
+        } } }
+        selection: (tr1, 0, >) -> (tr2, 1, <)
+    };
+    let view = state.view();
+    let rs = state.selection.as_ref().unwrap().resolve(&view).unwrap();
+    assert!(rs.as_cell_rect().is_some(), "selection must be a cell rect");
+
+    assert!(
+        rs.contains_leaf_slot(&view.node(p00).unwrap(), 0),
+        "leaf inside a rect cell is covered"
+    );
+    assert!(
+        !rs.contains_leaf_slot(&view.node(p01).unwrap(), 0),
+        "leaf in a cell outside the rect's columns is not covered"
+    );
+}
+
+#[test]
 fn normalized_cross_cell_text_range_is_not_a_cell_rect() {
     let (state, p1, p2) = state! {
         doc { root { table { table_row {

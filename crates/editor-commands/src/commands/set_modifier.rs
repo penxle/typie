@@ -845,6 +845,92 @@ mod tests {
     }
 
     #[test]
+    fn cell_rect_set_font_size_applies_to_rect_cells_only() {
+        let (initial, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    table {
+                        tr1: table_row {
+                            table_cell { paragraph { text("1") } }
+                            table_cell { paragraph { text("2") } }
+                        }
+                        tr2: table_row {
+                            table_cell { paragraph { text("3") } }
+                            table_cell { paragraph { text("4") } }
+                        }
+                    }
+                }
+            }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root [font_size(1600)] {
+                    table {
+                        tr1: table_row {
+                            table_cell {
+                                paragraph carry([font_size(2400)]) { text("1") [font_size(2400)] }
+                            }
+                            table_cell { paragraph { text("2") } }
+                        }
+                        tr2: table_row {
+                            table_cell {
+                                paragraph carry([font_size(2400)]) { text("3") [font_size(2400)] }
+                            }
+                            table_cell { paragraph { text("4") } }
+                        }
+                    }
+                }
+            }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn cell_rect_set_line_height_applies_to_rect_cell_paragraphs_only() {
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph { text("2") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("3") } }
+                        table_cell { paragraph { text("4") } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::LineHeight { value: 180 }
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph [line_height(180)] { text("1") } }
+                        table_cell { paragraph { text("2") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph [line_height(180)] { text("3") } }
+                        table_cell { paragraph { text("4") } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn cell_rect_records_carry_on_all_cell_paragraphs_including_empty() {
         use editor_state::{State, cell_rect_selection};
 

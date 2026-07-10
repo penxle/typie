@@ -9,7 +9,7 @@ use editor_model::{
 use editor_resource::{Resource, find_bold_target, find_unbold_target, match_weight};
 use editor_state::{
     PendingModifiers, Position, ProjectedState, ResolvedSelection, Selection, apply_pending,
-    continuation_at, leaf_groups_in_range, leaf_span_in_range, resolve_modifier_state_in_range,
+    continuation_at, leaf_groups_in_range, leaf_spans_in_range, resolve_modifier_state_in_range,
 };
 use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
@@ -72,6 +72,25 @@ pub(crate) fn collect_applicable_targets_in_range(
     let target = &Schema::modifier_spec(modifier_type).target;
     let targets = target.rightmost_node_types();
     let mut out = Vec::new();
+    if let Some(rect) = resolved.as_cell_rect() {
+        for cell in rect.cells() {
+            let blocks = std::iter::once(cell).chain(cell.descendants().filter_map(|d| match d {
+                ChildView::Block(b) => Some(b),
+                ChildView::Leaf(_) => None,
+            }));
+            for node in blocks {
+                if !targets.contains(&node.node_type()) {
+                    continue;
+                }
+                let mut path: Vec<NodeType> = node.ancestors().map(|a| a.node_type()).collect();
+                path.reverse();
+                if target.matches(&path) {
+                    out.push(node.id());
+                }
+            }
+        }
+        return out;
+    }
     let Some(root) = view.root() else {
         return out;
     };
@@ -242,13 +261,13 @@ pub(crate) fn edit_modifier_range(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
-    let (span, present, end_touched) = {
+    let (spans, present, end_touched) = {
         let view = tr.view();
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let span = leaf_span_in_range(&rs);
-        let present = span.and_then(|(first, _)| {
+        let spans = leaf_spans_in_range(&rs);
+        let present = spans.first().and_then(|&(first, _)| {
             view.leaf_state_by_dot_slow(first)
                 .and_then(|st| st.eff.get(&modifier_type).cloned())
         });
@@ -256,16 +275,16 @@ pub(crate) fn edit_modifier_range(
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, modifier_type))
             .collect();
-        (span, present, end_touched)
+        (spans, present, end_touched)
     };
 
-    if let Some((first, last)) = span {
+    for &(first, last) in &spans {
         match &modifier {
             Some(m) => {
                 tr.add_span_modifier(first, last, m.clone())?;
             }
             None => {
-                if let Some(present) = present {
+                if let Some(present) = present.clone() {
                     tr.remove_span_modifier(first, last, present)?;
                 }
             }
@@ -277,7 +296,7 @@ pub(crate) fn edit_modifier_range(
         None => companion_unset(tr, &end_touched, modifier_type)?,
     }
 
-    if span.is_none() && end_touched.is_empty() {
+    if spans.is_empty() && end_touched.is_empty() {
         return Ok(false);
     }
     Ok(true)
@@ -580,13 +599,13 @@ pub(crate) fn toggle_bold_range(
     selection: Selection,
     resource: &Resource,
 ) -> CommandResult {
-    let (span, is_bold, leaf_ctx, end_touched) = {
+    let (spans, is_bold, leaf_ctx, end_touched) = {
         let view = tr.view();
         let state = &tr.state().projected;
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let span = leaf_span_in_range(&rs);
+        let spans = leaf_spans_in_range(&rs);
         let end_touched: Vec<Dot> = end_touched_textblocks(&view, &rs)
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, ModifierType::Bold))
@@ -595,7 +614,7 @@ pub(crate) fn toggle_bold_range(
             resolve_modifier_state_in_range(state, &rs).effective_bold,
             Tri::Uniform { .. }
         );
-        let leaf_ctx = span.map(|(first, last)| {
+        let leaf_ctx = (!spans.is_empty()).then(|| {
             let from_block = rs.from().node();
             let inherited_weight = block_weight(&view, from_block).unwrap_or(DEFAULT_FONT_WEIGHT);
             let current_weight = leaf_uniform_font_weight(&rs).unwrap_or(inherited_weight);
@@ -607,8 +626,6 @@ pub(crate) fn toggle_bold_range(
                 .any(|g| has_bold(g.effective));
             let weight_bold = range_has_heavy_weight(&rs);
             (
-                first,
-                last,
                 current_weight,
                 font_family,
                 inherited_weight,
@@ -616,68 +633,67 @@ pub(crate) fn toggle_bold_range(
                 weight_bold,
             )
         });
-        (span, is_bold, leaf_ctx, end_touched)
+        (spans, is_bold, leaf_ctx, end_touched)
     };
 
-    if let Some((
-        first,
-        last,
-        current_weight,
-        font_family,
-        inherited_weight,
-        synthetic_bold,
-        weight_bold,
-    )) = leaf_ctx
+    if let Some((current_weight, font_family, inherited_weight, synthetic_bold, weight_bold)) =
+        leaf_ctx
     {
         let available = resource.font_registry.weights(&font_family).unwrap_or(&[]);
 
-        if is_bold {
-            if synthetic_bold {
-                tr.remove_span_modifier(first, last, Modifier::Bold)?;
-            }
-            if weight_bold {
-                let unbold = find_unbold_target(current_weight, available);
-                tr.remove_span_modifier(
-                    first,
-                    last,
-                    Modifier::FontWeight {
-                        value: current_weight,
-                    },
-                )?;
-                if unbold != inherited_weight {
-                    tr.add_span_modifier(first, last, Modifier::FontWeight { value: unbold })?;
+        for &(first, last) in &spans {
+            if is_bold {
+                if synthetic_bold {
+                    tr.remove_span_modifier(first, last, Modifier::Bold)?;
                 }
-            } else {
-                tr.remove_span_modifier(
-                    first,
-                    last,
-                    Modifier::FontWeight {
-                        value: current_weight,
-                    },
-                )?;
-            }
-        } else {
-            match find_bold_target(current_weight, available) {
-                Some(target) => {
-                    if tr.state().projected.span_of_type_overlaps(
+                if weight_bold {
+                    let unbold = find_unbold_target(current_weight, available);
+                    tr.remove_span_modifier(
                         first,
                         last,
-                        ModifierType::FontWeight,
-                    ) {
-                        tr.remove_span_modifier(
+                        Modifier::FontWeight {
+                            value: current_weight,
+                        },
+                    )?;
+                    if unbold != inherited_weight {
+                        tr.add_span_modifier(first, last, Modifier::FontWeight { value: unbold })?;
+                    }
+                } else {
+                    tr.remove_span_modifier(
+                        first,
+                        last,
+                        Modifier::FontWeight {
+                            value: current_weight,
+                        },
+                    )?;
+                }
+            } else {
+                match find_bold_target(current_weight, available) {
+                    Some(target) => {
+                        if tr.state().projected.span_of_type_overlaps(
                             first,
                             last,
-                            Modifier::FontWeight {
-                                value: current_weight,
-                            },
-                        )?;
+                            ModifierType::FontWeight,
+                        ) {
+                            tr.remove_span_modifier(
+                                first,
+                                last,
+                                Modifier::FontWeight {
+                                    value: current_weight,
+                                },
+                            )?;
+                        }
+                        if target != inherited_weight {
+                            tr.add_span_modifier(
+                                first,
+                                last,
+                                Modifier::FontWeight { value: target },
+                            )?;
+                        }
                     }
-                    if target != inherited_weight {
-                        tr.add_span_modifier(first, last, Modifier::FontWeight { value: target })?;
+                    None => {
+                        tr.add_span_modifier(first, last, Modifier::Bold)?;
                     }
-                }
-                None => {
-                    tr.add_span_modifier(first, last, Modifier::Bold)?;
                 }
             }
         }
@@ -700,7 +716,7 @@ pub(crate) fn toggle_bold_range(
         companion_set(tr, &end_touched, &Modifier::Bold)?;
     }
 
-    if span.is_none() && end_touched.is_empty() {
+    if spans.is_empty() && end_touched.is_empty() {
         return Ok(false);
     }
     Ok(true)
@@ -713,23 +729,23 @@ pub(crate) fn toggle_modifier_range(
 ) -> CommandResult {
     let modifier = modifier_from_unit_type(modifier_type)?;
 
-    let (span, all_have, end_touched) = {
+    let (spans, all_have, end_touched) = {
         let view = tr.view();
         let state = &tr.state().projected;
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let span = leaf_span_in_range(&rs);
+        let spans = leaf_spans_in_range(&rs);
         let all_have =
             range_has_modifier(&resolve_modifier_state_in_range(state, &rs), modifier_type);
         let end_touched: Vec<_> = end_touched_textblocks(&view, &rs)
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, modifier_type))
             .collect();
-        (span, all_have, end_touched)
+        (spans, all_have, end_touched)
     };
 
-    if let Some((first, last)) = span {
+    for &(first, last) in &spans {
         if all_have {
             tr.remove_span_modifier(first, last, modifier.clone())?;
         } else {
@@ -743,7 +759,7 @@ pub(crate) fn toggle_modifier_range(
         companion_set(tr, &end_touched, &modifier)?;
     }
 
-    if span.is_none() && end_touched.is_empty() {
+    if spans.is_empty() && end_touched.is_empty() {
         return Ok(false);
     }
     Ok(true)
@@ -755,7 +771,7 @@ pub(crate) fn clear_all_modifiers_range(
     tr: &mut Transaction,
     selection: Selection,
 ) -> CommandResult {
-    let (span, companion_by_kind): (Option<(Dot, Dot)>, CarryBlocksByKind) = {
+    let (spans, companion_by_kind): (Vec<(Dot, Dot)>, CarryBlocksByKind) = {
         let view = tr.view();
         let rs = selection
             .resolve(&view)
@@ -772,10 +788,10 @@ pub(crate) fn clear_all_modifiers_range(
                 (ty, blocks)
             })
             .collect();
-        (leaf_span_in_range(&rs), companion_by_kind)
+        (leaf_spans_in_range(&rs), companion_by_kind)
     };
 
-    if let Some((first, last)) = span {
+    for &(first, last) in &spans {
         for ty in ModifierType::iter().filter(|&t| t.is_text_applicable()) {
             tr.remove_span_modifier(first, last, placeholder_modifier(ty))?;
         }
@@ -787,7 +803,7 @@ pub(crate) fn clear_all_modifiers_range(
         companion_unset(tr, blocks, *ty)?;
     }
 
-    if span.is_none() && !touched_any_carry {
+    if spans.is_empty() && !touched_any_carry {
         return Ok(false);
     }
     Ok(true)

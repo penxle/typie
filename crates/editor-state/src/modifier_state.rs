@@ -174,6 +174,7 @@ pub fn resolve_modifier_state_in_range(
     }
 
     let mut out = ModifierState::default();
+    let rect = rs.as_cell_rect();
     let blocks = traversal::blocks_in_range(rs);
     let carriers = carry_virtual_leaves(state, rs);
 
@@ -193,10 +194,13 @@ pub fn resolve_modifier_state_in_range(
         if b.leaf_child_count() == 0 {
             continue;
         }
+        let covered = match &rect {
+            Some(rect) => rect.covers(b),
+            None => traversal::contains_subtree(rs, b),
+        };
         // The bulk path pairs run segments with leaf types from the child list;
         // it is sound only when the segments cover exactly the block's leaves.
-        let bulk = traversal::contains_subtree(rs, b)
-            && b.run_groups().map(|(_, n)| n).sum::<usize>() == b.leaf_child_count();
+        let bulk = covered && b.run_groups().map(|(_, n)| n).sum::<usize>() == b.leaf_child_count();
         if bulk {
             let mut types = b
                 .children()

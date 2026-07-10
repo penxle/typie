@@ -262,6 +262,137 @@ mod tests {
     }
 
     #[test]
+    fn cell_rect_toggle_italic_applies_to_rect_cells_only() {
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph { text("2") } }
+                        table_cell { paragraph { text("3") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("4") } }
+                        table_cell { paragraph { text("5") } }
+                        table_cell { paragraph { text("6") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("7") } }
+                        table_cell { paragraph { text("8") } }
+                        table_cell { paragraph { text("9") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("10") } }
+                        table_cell { paragraph { text("11") } }
+                        table_cell { paragraph { text("12") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let (expected, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph carry([italic]) { text("1") [italic] } }
+                        table_cell { paragraph { text("2") } }
+                        table_cell { paragraph { text("3") } }
+                    }
+                    table_row {
+                        table_cell { paragraph carry([italic]) { text("4") [italic] } }
+                        table_cell { paragraph { text("5") } }
+                        table_cell { paragraph { text("6") } }
+                    }
+                    table_row {
+                        table_cell { paragraph carry([italic]) { text("7") [italic] } }
+                        table_cell { paragraph { text("8") } }
+                        table_cell { paragraph { text("9") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph carry([italic]) { text("10") [italic] } }
+                        table_cell { paragraph { text("11") } }
+                        table_cell { paragraph { text("12") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn cell_rect_toggle_italic_twice_roundtrips() {
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph { text("2") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("3") } }
+                        table_cell { paragraph { text("4") } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (once, ..) = transact!(initial.clone(), |tr| toggle_modifier(
+            &mut tr,
+            ModifierType::Italic
+        ));
+        let (twice, ..) = transact!(once, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        // The second toggle must read the rect (uniform italic) and remove it,
+        // not see the unselected cells as mixed and add italic again.
+        assert_state_eq!(&twice, &initial);
+    }
+
+    #[test]
+    fn cell_rect_covers_rect_columns_outside_flat_path_range() {
+        // Column 1 via offsets (2, >) -> (1, <): tr1's column-1 cell precedes
+        // the flat from-path (tr1, 2), so only the rect interpretation covers it.
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph { text("2") } }
+                        table_cell { paragraph { text("3") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("4") } }
+                        table_cell { paragraph { text("5") } }
+                        table_cell { paragraph { text("6") } }
+                    }
+                }
+            } }
+            selection: (tr1, 2, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+        let (expected, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph carry([italic]) { text("2") [italic] } }
+                        table_cell { paragraph { text("3") } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("4") } }
+                        table_cell { paragraph carry([italic]) { text("5") [italic] } }
+                        table_cell { paragraph { text("6") } }
+                    }
+                }
+            } }
+            selection: (tr1, 2, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn range_toggle_italic_apply_then_aggregate_uniform() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("HelloWorld") } } }

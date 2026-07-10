@@ -364,6 +364,51 @@ mod tests {
         )));
     }
 
+    #[test]
+    fn cell_rect_toggle_bold_applies_to_rect_cells_only() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    table {
+                        tr1: table_row {
+                            table_cell { paragraph { text("1") } }
+                            table_cell { paragraph { text("2") } }
+                        }
+                        tr2: table_row {
+                            table_cell { paragraph { text("3") } }
+                            table_cell { paragraph { text("4") } }
+                        }
+                    }
+                }
+            }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    table {
+                        tr1: table_row {
+                            table_cell {
+                                paragraph carry([bold]) { text("1") [font_weight(700)] }
+                            }
+                            table_cell { paragraph { text("2") } }
+                        }
+                        tr2: table_row {
+                            table_cell {
+                                paragraph carry([bold]) { text("3") [font_weight(700)] }
+                            }
+                            table_cell { paragraph { text("4") } }
+                        }
+                    }
+                }
+            }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
     // On a document whose range carries no FontWeight span at all, the
     // cancel-to-absent RemoveSpan is a provable no-op — bolding must emit only
     // the AddSpan, not a second whole-range op.

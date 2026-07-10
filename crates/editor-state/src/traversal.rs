@@ -72,6 +72,13 @@ fn subtree_intersects_range(
 }
 
 pub fn intersects_subtree(rs: &ResolvedSelection, node: &NodeView) -> bool {
+    if let Some(rect) = rs.as_cell_rect() {
+        return rect.intersects(node);
+    }
+    intersects_subtree_flat(rs, node)
+}
+
+fn intersects_subtree_flat(rs: &ResolvedSelection, node: &NodeView) -> bool {
     let from_path = rs.from().path();
     let to_path = rs.to().path();
     let np = node_path(node);
@@ -79,6 +86,9 @@ pub fn intersects_subtree(rs: &ResolvedSelection, node: &NodeView) -> bool {
 }
 
 pub fn contains_subtree(rs: &ResolvedSelection, node: &NodeView) -> bool {
+    if let Some(rect) = rs.as_cell_rect() {
+        return rect.covers(node);
+    }
     let from = rs.from();
     let to = rs.to();
 
@@ -101,6 +111,32 @@ pub fn contains_subtree(rs: &ResolvedSelection, node: &NodeView) -> bool {
 
 pub fn blocks_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<NodeView<'a>> {
     let mut out = Vec::new();
+    if let Some(rect) = rs.as_cell_rect() {
+        // A cell-rect selection covers whole cells; document order between the
+        // endpoints also crosses cells outside the rect's columns, so coverage
+        // comes from the rect, not the flat path range.
+        let mut chain: Vec<NodeView<'a>> = rect.table.ancestors().collect();
+        chain.reverse();
+        out.extend(chain);
+        for (r, child) in rect.table.children().enumerate() {
+            let ChildView::Block(row) = child else {
+                continue;
+            };
+            if !rect.rows().contains(&r) {
+                continue;
+            }
+            out.push(row);
+            for (c, child) in row.children().enumerate() {
+                let ChildView::Block(cell) = child else {
+                    continue;
+                };
+                if rect.cols().contains(&c) {
+                    walk_subtree_blocks(&cell, &mut out);
+                }
+            }
+        }
+        return out;
+    }
     if let Some(root) = rs.view().root() {
         walk_blocks(&root, rs, &mut out);
     }
@@ -108,11 +144,20 @@ pub fn blocks_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<NodeView<'a>> {
 }
 
 fn walk_blocks<'a>(node: &NodeView<'a>, rs: &ResolvedSelection<'a>, out: &mut Vec<NodeView<'a>>) {
-    if intersects_subtree(rs, node) {
+    // Only reached for flat selections — blocks_in_range handles rects above —
+    // so skip the per-node rect dispatch.
+    if intersects_subtree_flat(rs, node) {
         out.push(*node);
         for child in node.child_blocks() {
             walk_blocks(&child, rs, out);
         }
+    }
+}
+
+fn walk_subtree_blocks<'a>(node: &NodeView<'a>, out: &mut Vec<NodeView<'a>>) {
+    out.push(*node);
+    for child in node.child_blocks() {
+        walk_subtree_blocks(&child, out);
     }
 }
 
@@ -123,6 +168,19 @@ pub fn leaves_in_block_range<'a>(
     rs: &ResolvedSelection<'a>,
     block: &NodeView<'a>,
 ) -> Vec<(usize, editor_model::LeafView<'a>)> {
+    if let Some(rect) = rs.as_cell_rect() {
+        if !rect.covers(block) {
+            return Vec::new();
+        }
+        return block
+            .children()
+            .enumerate()
+            .filter_map(|(i, child)| match child {
+                ChildView::Leaf(l) => Some((i, l)),
+                ChildView::Block(_) => None,
+            })
+            .collect();
+    }
     let from = rs.from().path();
     let to = rs.to().path();
     let base = node_path(block);
@@ -140,6 +198,9 @@ pub fn leaves_in_block_range<'a>(
 pub(crate) fn contains_leaf_slot(rs: &ResolvedSelection, block: &NodeView, slot: usize) -> bool {
     if !matches!(block.child_at(slot), Some(ChildView::Leaf(_))) {
         return false;
+    }
+    if let Some(rect) = rs.as_cell_rect() {
+        return rect.covers(block);
     }
     // A leaf fills the half-open content slot [slot, slot + 1). It is inside the
     // selection iff its extent lies within [from, to] by path, so the leaf at
@@ -237,15 +298,57 @@ fn last_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Opti
     None
 }
 
-/// The first and last leaf dots fully covered by the selection.
-pub fn leaf_span_in_range(rs: &ResolvedSelection) -> Option<(Dot, Dot)> {
+/// The (first, last) leaf-dot spans fully covered by the selection, in
+/// document order. A flat range yields at most one span; a cell-rect selection
+/// yields one span per cell so span ops never leak into cells that merely sit
+/// between the rect's rows in document order.
+pub fn leaf_spans_in_range(rs: &ResolvedSelection) -> Vec<(Dot, Dot)> {
+    if let Some(rect) = rs.as_cell_rect() {
+        return rect
+            .cells()
+            .iter()
+            .filter_map(|cell| Some((first_leaf_dot(cell)?, last_leaf_dot(cell)?)))
+            .collect();
+    }
     let from = rs.from().path();
     let to = rs.to().path();
-    let root = rs.view().root()?;
-    let first = first_covered_leaf_dot(&root, from, to)?;
-    let last = last_covered_leaf_dot(&root, from, to)?;
+    let Some(root) = rs.view().root() else {
+        return Vec::new();
+    };
+    let first = first_covered_leaf_dot(&root, from, to);
+    let last = last_covered_leaf_dot(&root, from, to);
+    match (first, last) {
+        (Some(first), Some(last)) => vec![(first, last)],
+        _ => Vec::new(),
+    }
+}
 
-    Some((first, last))
+fn first_leaf_dot(node: &NodeView) -> Option<Dot> {
+    for child in node.children() {
+        match child {
+            ChildView::Leaf(l) => return Some(l.dot()),
+            ChildView::Block(b) => {
+                if let Some(dot) = first_leaf_dot(&b) {
+                    return Some(dot);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn last_leaf_dot(node: &NodeView) -> Option<Dot> {
+    for slot in (0..node.child_count()).rev() {
+        match node.child_at(slot)? {
+            ChildView::Leaf(l) => return Some(l.dot()),
+            ChildView::Block(b) => {
+                if let Some(dot) = last_leaf_dot(&b) {
+                    return Some(dot);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// A maximal stretch of covered leaves sharing one host block, leaf type, and
@@ -266,17 +369,22 @@ pub struct LeafGroup<'a> {
 /// aggregate or emit ops per uniform stretch instead of per leaf. Boundary
 /// blocks keep the exact per-leaf slot filter, merging adjacent equal leaves.
 pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>> {
+    let rect = rs.as_cell_rect();
     let mut out: Vec<LeafGroup<'a>> = Vec::new();
     for b in blocks_in_range(rs) {
         if b.leaf_child_count() == 0 {
             continue;
         }
+        let covered = match &rect {
+            Some(rect) => rect.covers(&b),
+            None => contains_subtree(rs, &b),
+        };
         // The bulk path pairs run segments with leaf dots/types from the child
         // list; it is sound only when the segments cover exactly the block's
         // leaves. Each segment is already uniform in leaf type, effective, own,
         // and style, so it maps to one group.
-        let bulk = contains_subtree(rs, &b)
-            && b.seg_groups().map(|s| s.count).sum::<usize>() == b.leaf_child_count();
+        let bulk =
+            covered && b.seg_groups().map(|s| s.count).sum::<usize>() == b.leaf_child_count();
         if bulk {
             let mut leaves = b.children().filter_map(|c| match c {
                 ChildView::Leaf(l) => Some(l),
@@ -308,6 +416,11 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
                 });
             }
         } else {
+            // Under a cell rect a block is covered whole or not at all; only a
+            // flat range needs the per-slot filter.
+            if rect.is_some() && !covered {
+                continue;
+            }
             let from = rs.from().path();
             let to = rs.to().path();
             let base = node_path(&b);
@@ -315,7 +428,7 @@ pub fn leaf_groups_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<LeafGroup<'a>
                 let ChildView::Leaf(l) = child else {
                     continue;
                 };
-                if !leaf_slot_is_covered(i, &base, from, to) {
+                if rect.is_none() && !leaf_slot_is_covered(i, &base, from, to) {
                     continue;
                 }
                 let ty = l.node_type();
@@ -761,24 +874,28 @@ mod tests {
     }
 
     #[test]
-    fn test_5_leaf_span_in_range_ends_at_empty_paragraph_start() {
+    fn test_5_leaf_spans_in_range_ends_at_empty_paragraph_start() {
         let (pd, p1, p2) = text_para_then_empty_para();
         let view = DocView::new(&pd);
         let rs = sel(&view, (p1, 1), (p2, 0));
 
-        let (first, last) = leaf_span_in_range(&rs).expect("selection covers one leaf");
+        let [(first, last)] = leaf_spans_in_range(&rs)[..] else {
+            panic!("flat selection yields exactly one span");
+        };
 
         assert_eq!(view.leaf(first).and_then(|l| l.as_char()), Some('2'));
         assert_eq!(view.leaf(last).and_then(|l| l.as_char()), Some('2'));
     }
 
     #[test]
-    fn test_5_leaf_span_in_range_uses_document_order_across_root_leaf() {
+    fn test_5_leaf_spans_in_range_uses_document_order_across_root_leaf() {
         let (pd, _root, p1, _image_dot, p2) = p1_image_p2_doc();
         let view = DocView::new(&pd);
         let rs = sel(&view, (p1, 0), (p2, 1));
 
-        let (first, last) = leaf_span_in_range(&rs).expect("selection covers leaves");
+        let [(first, last)] = leaf_spans_in_range(&rs)[..] else {
+            panic!("flat selection yields exactly one span");
+        };
 
         assert_eq!(view.leaf(first).and_then(|l| l.as_char()), Some('a'));
         assert_eq!(view.leaf(last).and_then(|l| l.as_char()), Some('x'));

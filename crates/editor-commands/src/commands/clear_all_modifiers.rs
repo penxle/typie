@@ -85,6 +85,42 @@ mod tests {
     use crate::test_utils::*;
 
     #[test]
+    fn cell_rect_clears_rect_cells_only() {
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") [italic] } }
+                        table_cell { paragraph { text("2") [italic] } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("3") [italic] } }
+                        table_cell { paragraph { text("4") [italic] } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| clear_all_modifiers(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                table {
+                    tr1: table_row {
+                        table_cell { paragraph { text("1") } }
+                        table_cell { paragraph { text("2") [italic] } }
+                    }
+                    tr2: table_row {
+                        table_cell { paragraph { text("3") } }
+                        table_cell { paragraph { text("4") [italic] } }
+                    }
+                }
+            } }
+            selection: (tr1, 0, >) -> (tr2, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn range_clears_inline_on_single_node() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [italic] } } }

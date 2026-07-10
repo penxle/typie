@@ -82,5 +82,5 @@ pub use state::*;
 pub use to_plain::to_plain;
 pub use traversal::{
     LeafGroup, blocks_in_range, first_cursor_position, last_cursor_position, leaf_groups_in_range,
-    leaf_span_in_range, leaves_in_block_range,
+    leaf_spans_in_range, leaves_in_block_range,
 };
