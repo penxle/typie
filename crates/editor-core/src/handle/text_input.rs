@@ -673,6 +673,11 @@ fn analyze_delta(
 }
 
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
+    let mut delete_paint = if editor.is_probing() {
+        editor.ime_delete_paint.clone()
+    } else {
+        editor.ime_delete_paint.take()
+    };
     let commit_as_is = ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs));
 
     let committed_insert = (|| -> Result<bool, EditorError> {
@@ -696,6 +701,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             .and_then(|rs| as_gap_cursor(&rs))
             .is_some();
         let (initial, reduced) = if initial.text != reduced.state.text && started_at_gap {
+            delete_paint = None;
             let before_materialize = initial.clone();
             editor.transact(|tr| {
                 tr.keep_pending_modifiers();
@@ -756,6 +762,27 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         let has_structural_seams = delta.start_tokens > 0 || delta.end_tokens > 0;
 
         let sidecar_before = editor.composition_paint.clone();
+
+        let next_delete_paint = if !del.is_empty()
+            && text_change.insert.is_empty()
+            && !del.iter().any(|c| is_token(*c))
+            && result.comp.is_none()
+            && editor.state().composition.is_none()
+            && sidecar_before.is_none()
+        {
+            selection_from_flat_range(
+                &editor.state().view(),
+                text_change.replace_start,
+                text_change.replace_end,
+            )
+            .ok()
+            .and_then(|sel| {
+                editor_state::replacement_paint(&editor.state().projected, sel.anchor, sel.head)
+            })
+            .map(|paint| (text_change.replace_start, paint))
+        } else {
+            None
+        };
 
         if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
             editor.transact(|tr| {
@@ -858,12 +885,16 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                             delta.replace_start,
                             delta.replace_end,
                         )?;
-                        commands::replace_range_with_text(
-                            tr,
-                            sel,
-                            &delta.ins_text,
-                            sidecar_before.clone(),
-                        )?;
+                        let paint = sidecar_before.clone().or_else(|| {
+                            delete_paint
+                                .as_ref()
+                                .filter(|(flat, _)| {
+                                    text_change.replace_start == text_change.replace_end
+                                        && text_change.replace_start == *flat
+                                })
+                                .map(|(_, paint)| paint.clone())
+                        });
+                        commands::replace_range_with_text(tr, sel, &delta.ins_text, paint)?;
                     }
                 }
 
@@ -915,6 +946,10 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
                 Ok(())
             })?;
+        }
+
+        if !editor.is_probing() {
+            editor.ime_delete_paint = next_delete_paint;
         }
 
         Ok(!text_change.insert.is_empty() && result.comp.is_none())
@@ -3881,5 +3916,172 @@ mod tests {
             selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    fn paint_at(editor: &Editor, p: editor_crdt::Dot, slot: usize) -> Vec<Modifier> {
+        editor_state::replacement_paint(
+            &editor.state().projected,
+            Position::new(p, slot),
+            Position::new(p, slot + 1),
+        )
+        .unwrap_or_default()
+    }
+
+    #[test]
+    fn ime_single_message_delete_then_insert_preserves_deleted_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("가") } } }
+            selection: (p1, 1)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 1), vec![Modifier::Bold], "ㅇ bold");
+
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::ReplaceSelection { text: "아".into() },
+            ],
+        });
+        assert_eq!(paint_at(&editor, p1, 1), vec![Modifier::Bold], "아 bold");
+    }
+
+    #[test]
+    fn ime_split_messages_delete_then_insert_preserves_deleted_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("가") } } }
+            selection: (p1, 1)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 1), vec![Modifier::Bold], "ㅇ bold");
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 0,
+            }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "아".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 1), vec![Modifier::Bold], "아 bold");
+    }
+
+    #[test]
+    fn ime_single_message_utf16_delete_then_insert_preserves_deleted_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("가") } } }
+            selection: (p1, 1)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurroundingUtf16 {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::ReplaceSelection { text: "아".into() },
+            ],
+        });
+        assert_eq!(paint_at(&editor, p1, 1), vec![Modifier::Bold], "아 bold");
+    }
+
+    #[test]
+    fn ime_single_message_recompose_sole_char_preserves_deleted_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurroundingUtf16 {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::ReplaceSelection { text: "아".into() },
+            ],
+        });
+        assert_eq!(paint_at(&editor, p1, 0), vec![Modifier::Bold], "아 bold");
+    }
+
+    #[test]
+    fn ime_split_delete_paint_invalidated_by_intervening_message() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("가") } } }
+            selection: (p1, 1)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                before: 1,
+                after: 0,
+            }],
+        });
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+                extend: false,
+            },
+        });
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: false,
+            },
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "아".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 1), vec![], "아 unstyled");
+    }
+
+    #[test]
+    fn ime_split_messages_recompose_sole_char_preserves_deleted_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                before: 1,
+                after: 0,
+            }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "아".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 0), vec![Modifier::Bold], "아 bold");
     }
 }

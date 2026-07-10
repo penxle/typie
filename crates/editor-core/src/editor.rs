@@ -152,6 +152,7 @@ pub struct Editor {
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
+    pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
     mode: Mode,
     // Selection mark rects for the current (selection, render_epoch), shared by
     // the per-page render signatures and the selection mark. Interaction
@@ -218,6 +219,7 @@ impl Editor {
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             composition_paint: None,
+            ime_delete_paint: None,
             mode: Mode::Apply,
             selection_mark_rects_cache: Mutex::new(None),
         }
@@ -569,6 +571,7 @@ impl Editor {
         while let Some(msg) = iter.next() {
             match msg {
                 Message::Remote { changeset } => {
+                    self.ime_delete_paint = None;
                     let mut batch = vec![changeset];
                     while matches!(iter.peek(), Some(Message::Remote { .. })) {
                         if let Some(Message::Remote { changeset }) = iter.next() {
@@ -596,6 +599,7 @@ impl Editor {
                     self.process_message(Message::TextInput { ops: batch })?;
                 }
                 other => {
+                    self.ime_delete_paint = None;
                     self.process_message(other)?;
                 }
             }
@@ -1364,6 +1368,7 @@ impl Editor {
                 });
                 self.state.composition = None;
                 self.composition_paint = None;
+                self.ime_delete_paint = None;
                 self.state.pending_modifiers.clear();
                 self.pending_ops.extend(ops);
                 true
@@ -1461,6 +1466,7 @@ impl Editor {
     pub fn set_doc(&mut self, plain: editor_model::PlainDoc) {
         self.state = State::from_plain(&plain).expect("set_doc template must build");
         self.composition_paint = None;
+        self.ime_delete_paint = None;
         crate::font::reresolve_fonts(self).ok();
         self.view.layout(&self.state);
         self.push_event(EditorEvent::StateChanged {
@@ -1681,6 +1687,7 @@ impl Editor {
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             composition_paint: None,
+            ime_delete_paint: None,
             mode: Mode::Apply,
             selection_mark_rects_cache: Mutex::new(None),
         };
