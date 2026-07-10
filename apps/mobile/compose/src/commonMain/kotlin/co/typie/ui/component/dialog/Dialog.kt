@@ -16,10 +16,7 @@ class Dialog {
 
   suspend fun <R> present(
     dismissible: Boolean = true,
-    content:
-      @Composable
-      context(DialogScope<R>)
-      () -> Unit,
+    content: @Composable context(DialogScope<R>) () -> Unit,
   ): DialogResult<R> = suspendCancellableCoroutine { continuation ->
     val entry =
       DialogEntry(
@@ -40,9 +37,6 @@ class Dialog {
 
 class DialogEntry<R>(
   val dismissible: Boolean,
-  val content:
-    @Composable
-    context(DialogScope<R>)
-    () -> Unit,
+  val content: @Composable context(DialogScope<R>) () -> Unit,
   val onResult: (DialogResult<R>) -> Unit,
 )

@@ -15,10 +15,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
-import co.typie.ext.pointerIgnore
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppTheme
 
@@ -74,16 +74,19 @@ fun DialogOverlay(state: Dialog) {
               pendingResult = DialogResult.Dismissed
               visible = false
             }
-          else Modifier
+          else Modifier.pointerInput(Unit) {}
         )
     )
 
     Box(
       modifier =
-        Modifier.align(Alignment.Center).width(280.dp).pointerIgnore().graphicsLayer {
-          alpha = progress
-          translationY = (1f - progress) * offsetPx
-        }
+        Modifier.align(Alignment.Center)
+          .width(280.dp)
+          .pointerInput(Unit) {}
+          .graphicsLayer {
+            alpha = progress
+            translationY = (1f - progress) * offsetPx
+          }
     ) {
       @Suppress("UNCHECKED_CAST") val typedEntry = entry as DialogEntry<Any?>
       context(scope) { typedEntry.content() }

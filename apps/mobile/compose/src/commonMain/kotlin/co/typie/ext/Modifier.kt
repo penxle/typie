@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import co.touchlab.kermit.Logger
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
@@ -64,7 +66,13 @@ fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Mo
       enabled = enabled,
       interactionSource = interactionSource,
       indication = null,
-      onClick = { scope.launch { onClick() } },
+      onClick = {
+        if (scope.isActive) {
+          scope.launch { onClick() }
+        } else {
+          Logger.w { "clickable onClick dropped: coroutine scope is cancelled" }
+        }
+      },
     )
 }
 
@@ -83,7 +91,9 @@ fun Modifier.combinedClickable(
       interactionSource = interactionSource,
       indication = null,
       onClick = {
-        if (!handling) {
+        if (!scope.isActive) {
+          Logger.w { "combinedClickable onClick dropped: coroutine scope is cancelled" }
+        } else if (!handling) {
           handling = true
           scope.launch {
             try {
@@ -95,7 +105,9 @@ fun Modifier.combinedClickable(
         }
       },
       onLongClick = {
-        if (!handling) {
+        if (!scope.isActive) {
+          Logger.w { "combinedClickable onLongClick dropped: coroutine scope is cancelled" }
+        } else if (!handling) {
           handling = true
           scope.launch {
             try {

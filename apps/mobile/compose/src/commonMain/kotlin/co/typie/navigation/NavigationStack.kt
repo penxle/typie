@@ -157,6 +157,8 @@ fun NavigationStack(
         progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
         navigator.performPop()
         navigator.consumePopRequest()
+        // 드래그 중 pop()/popTo()가 걸어둔 transitionCompletion 해제
+        navigator.completeTransition()
         visibleRoute = navigator.current
         topBarState.clearRoute(poppedRoute)
         exitTopBarState.clearRoute(poppedRoute)
@@ -235,11 +237,13 @@ fun NavigationStack(
     }
   }
 
-  // requestPop: 애니메이션 먼저, 그 다음 상태 변경
+  // requestPop: 애니메이션 먼저, 그 다음 상태 변경. 요청 시점에 전환/드래그 중이면
+  // 버리지 않고 보류했다가 Idle 복귀 시 처리한다 (드래그 커밋은 finishPopDrag가
+  // 직접 pop을 수행하고 요청을 소비하므로 여기로 오지 않는다).
   LaunchedEffect(Unit) {
-    snapshotFlow { navigator.popRequested }
-      .collect { requested ->
-        if (requested && animState == AnimState.Idle) {
+    snapshotFlow { navigator.popRequested to animState }
+      .collect { (requested, currentAnimState) ->
+        if (requested && currentAnimState == AnimState.Idle) {
           val popTarget = navigator.peekPopTarget()
           val targetRoute = popTarget ?: navigator.previous
           if (targetRoute == null) {

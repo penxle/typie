@@ -275,8 +275,8 @@ fun EditorScreen(entityId: String) {
     dialog.error(nav) { runtime.clearError() }
   }
   val legacyDocument = !loading && document != null && document.state == null
-  LaunchedEffect(legacyDocument) {
-    if (!legacyDocument) return@LaunchedEffect
+  LaunchedEffect(legacyDocument, nav.isTransitioning) {
+    if (!legacyDocument || nav.isTransitioning) return@LaunchedEffect
     dialog.error(nav = nav, title = "문서를 열 수 없어요", message = "구버전 문서는 지원하지 않아요.") {
       model.query.refetch()
     }
