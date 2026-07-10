@@ -69,7 +69,11 @@
   };
 
   const currentTextColor = $derived(
-    ctx.editor?.modifierState?.text_color?.type === 'uniform' ? ctx.editor.modifierState.text_color.value.value : undefined,
+    ctx.editor?.modifierState?.text_color?.type === 'uniform'
+      ? ctx.editor.modifierState.text_color.value.value
+      : ctx.editor?.modifierState?.text_color?.type === 'absent'
+        ? 'black'
+        : undefined,
   );
 
   const currentTextBackgroundColor = $derived(

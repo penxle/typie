@@ -24,6 +24,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorValues
 import co.typie.editor.ffi.Alignment as FfiAlignment
+import co.typie.editor.ffi.BackgroundColorValue
+import co.typie.editor.ffi.TextColorValue
 import co.typie.editor.ffi.Tri
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.graphql.type.FontFamilySource
@@ -54,6 +56,22 @@ internal inline fun <T, R> Tri<T>?.uniformValue(transform: (T) -> R): R? =
   when (this) {
     is Tri.Uniform -> transform(value)
     else -> null
+  }
+
+internal fun Tri<TextColorValue>?.textColorCurrentValue(): String? =
+  when (this) {
+    is Tri.Uniform -> value.value
+    Tri.Absent -> "black"
+    Tri.Mixed,
+    null -> null
+  }
+
+internal fun Tri<BackgroundColorValue>?.backgroundColorCurrentValue(): String? =
+  when (this) {
+    is Tri.Uniform -> value.value
+    Tri.Absent -> "none"
+    Tri.Mixed,
+    null -> null
   }
 
 internal fun Tri<*>?.hasUniformValue(): Boolean = this is Tri.Uniform<*>

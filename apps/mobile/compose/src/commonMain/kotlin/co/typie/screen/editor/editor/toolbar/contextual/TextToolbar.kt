@@ -118,8 +118,8 @@ private fun EditorTextToolbar(
   val dialog = LocalDialog.current
   val variant = currentEditorThemeVariant()
   val editorTheme = remember(variant) { EditorTheme.resolve(variant) }
-  val textColor = modifierState?.textColor.uniformValue { it.value }
-  val backgroundColor = modifierState?.backgroundColor.uniformValue { it.value }
+  val textColor = modifierState?.textColor.textColorCurrentValue()
+  val backgroundColor = modifierState?.backgroundColor.backgroundColorCurrentValue()
   val fontFamily = modifierState?.fontFamily.uniformValue { it.value }
   val fontWeight = modifierState?.fontWeight.uniformValue { it.value }
   val fontSize = modifierState?.fontSize.uniformValue { it.value }

@@ -153,7 +153,7 @@ private fun TextOptionsContent(
     TextOptionMode.TextColor ->
       ColorOptions(
         options = EditorValues.textColor,
-        currentValue = modifierState?.textColor.uniformValue { it.value },
+        currentValue = modifierState?.textColor.textColorCurrentValue(),
         editorTheme = editorTheme,
         swatchShape = ToolbarButtonShape,
         showSlashForNullTheme = false,
@@ -161,7 +161,7 @@ private fun TextOptionsContent(
       )
     TextOptionMode.BackgroundColor ->
       TextBackgroundColorOptions(
-        currentValue = modifierState?.backgroundColor.uniformValue { it.value },
+        currentValue = modifierState?.backgroundColor.backgroundColorCurrentValue(),
         editorTheme = editorTheme,
         onSelect = { sendSet(sendMessages, EditorModifier.BackgroundColor(it)) },
       )
