@@ -256,10 +256,9 @@
       <EditorZoom {active} editor={ctx.editor} {isPaginated} {pageWidth} viewportWidth={clientWidth ?? 0}>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-          bind:this={ctx.editor.surfaceEl}
+          bind:this={ctx.editor.extensionAreaEl}
           style:cursor
           style:min-width={editorMinWidth}
-          style:max-width={continuousMaxFrameWidth}
           style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
           class={css({
             position: 'relative',
@@ -268,7 +267,6 @@
             alignItems: 'center',
             flexGrow: '1',
             width: 'full',
-            marginX: 'auto',
             userSelect: 'none',
             ...(isPaginated && {
               rowGap: 'var(--page-gap)',

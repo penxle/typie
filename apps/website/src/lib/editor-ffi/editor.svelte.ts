@@ -489,7 +489,7 @@ export class Editor {
 
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
-  surfaceEl = $state<HTMLDivElement>();
+  extensionAreaEl = $state<HTMLDivElement>();
   scrollContainerEl = $state<HTMLDivElement>();
   scrollViewport = $state<ScrollViewport>();
   scrollRootEl = $state<HTMLElement | null>();

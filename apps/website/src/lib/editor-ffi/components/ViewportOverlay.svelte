@@ -43,7 +43,7 @@
     if (!editor) return;
 
     const scrollContainer = editor.scrollContainerEl;
-    const surface = editor.surfaceEl;
+    const extensionAreaEl = editor.extensionAreaEl;
     const visualViewport = window.visualViewport;
     const passive = { passive: true } as AddEventListenerOptions;
     const passiveCapture = { passive: true, capture: true } as AddEventListenerOptions;
@@ -55,7 +55,7 @@
     visualViewport?.addEventListener('scroll', overlay.requestSync, passive);
     visualViewport?.addEventListener('resize', overlay.requestSync, passive);
     if (scrollContainer) resizeObserver?.observe(scrollContainer);
-    if (surface) resizeObserver?.observe(surface);
+    if (extensionAreaEl) resizeObserver?.observe(extensionAreaEl);
 
     overlay.requestSync();
 
