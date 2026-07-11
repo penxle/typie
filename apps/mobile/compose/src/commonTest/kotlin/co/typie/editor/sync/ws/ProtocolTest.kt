@@ -151,4 +151,15 @@ class ProtocolTest {
     check(compareStreamSeq("10-2", "10-10") < 0)
     assertEquals(0, compareStreamSeq("10-1", "10-1"))
   }
+
+  @OptIn(ExperimentalStdlibApi::class)
+  @Test
+  fun helloAlwaysEncodesCapabilities() {
+    val hex =
+      encodeClientMessage(WsClientMessage.Hello(ticket = "TK", clientId = "C1")).toHexString()
+    assertEquals(
+      "bf61746568656c6c6f667469636b657462544b68636c69656e7449646243316c6361706162696c69746965739fffff",
+      hex,
+    )
+  }
 }

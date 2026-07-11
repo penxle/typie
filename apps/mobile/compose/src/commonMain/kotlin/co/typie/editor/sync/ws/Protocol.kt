@@ -27,7 +27,7 @@ sealed interface WsClientMessage {
     @EncodeDefault(EncodeDefault.Mode.ALWAYS) val t: String = "hello",
     val ticket: String,
     val clientId: String,
-    val capabilities: List<String> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val capabilities: List<String> = emptyList(),
   ) : WsClientMessage
 
   @Serializable

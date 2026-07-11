@@ -114,3 +114,16 @@ test('Kotlin 계약 벡터: kotlinx-serialization-cbor이 인코드한 push가 �
   assert.equal(result.message.documentId, 'D1');
   assert.deepEqual(new Uint8Array(result.message.changesets), Uint8Array.of(1, 2, 3));
 });
+
+const KOTLIN_HELLO_HEX = 'bf61746568656c6c6f667469636b657462544b68636c69656e7449646243316c6361706162696c69746965739fffff';
+
+test('Kotlin 계약 벡터: kotlinx-serialization-cbor이 인코드한 hello가 디코드된다 (capabilities 생략 회귀)', () => {
+  const bytes = Uint8Array.from(Buffer.from(KOTLIN_HELLO_HEX, 'hex'));
+  const result = decodeClientMessage(bytes);
+  assert.ok(result.ok);
+  assert.equal(result.message.t, 'hello');
+  if (result.message.t !== 'hello') return;
+  assert.equal(result.message.ticket, 'TK');
+  assert.equal(result.message.clientId, 'C1');
+  assert.deepEqual(result.message.capabilities, []);
+});
