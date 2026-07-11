@@ -19,10 +19,10 @@ private val HomeIndicatorSafeBottom = BezelThickness + 34.dp
 actual val WindowInsets.Companion.statusBars: WindowInsets
   @Composable get() = WindowInsets(top = DynamicIslandSafeTop)
 
-actual val WindowInsets.Companion.navigationBars: WindowInsets
+internal actual val WindowInsets.Companion.platformNavigationBars: WindowInsets
   @Composable get() = WindowInsets(bottom = HomeIndicatorSafeBottom)
 
-actual val WindowInsets.Companion.safeDrawing: WindowInsets
+internal actual val WindowInsets.Companion.platformSafeDrawing: WindowInsets
   @Composable
   get() =
     WindowInsets(

@@ -10,10 +10,10 @@ import androidx.compose.runtime.Composable
 actual val WindowInsets.Companion.statusBars: WindowInsets
   @Composable get() = foundationStatusBars
 
-actual val WindowInsets.Companion.navigationBars: WindowInsets
+internal actual val WindowInsets.Companion.platformNavigationBars: WindowInsets
   @Composable get() = foundationNavigationBars
 
-actual val WindowInsets.Companion.safeDrawing: WindowInsets
+internal actual val WindowInsets.Companion.platformSafeDrawing: WindowInsets
   @Composable get() = foundationSafeDrawing
 
 actual val WindowInsets.Companion.ime: WindowInsets
