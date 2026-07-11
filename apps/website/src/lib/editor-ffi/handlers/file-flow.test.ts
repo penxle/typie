@@ -17,13 +17,16 @@ const createDeps = () => {
   const inflight = new Map<string, { name: string; size: number }>();
   const assets = new Map<string, FileAsset>();
   const focus = vi.fn();
+  let commitSawInflight = false;
 
   return {
     deps: {
       setInflightFile: (nodeId: string, data: { name: string; size: number }) => inflight.set(nodeId, data),
       deleteInflightFile: (nodeId: string) => inflight.delete(nodeId),
       setFileAsset: (asset: FileAsset) => assets.set(asset.id, asset),
-      enqueue: (message: Message) => {
+      isCurrent: () => true,
+      commit: (message: Message) => {
+        commitSawInflight = inflight.has('node-1');
         messages.push(message);
       },
       focus,
@@ -32,6 +35,7 @@ const createDeps = () => {
     inflight,
     assets,
     focus,
+    commitSawInflight: () => commitSawInflight,
   };
 };
 
@@ -62,8 +66,8 @@ describe('v2 file flow messages', () => {
 });
 
 describe('v2 file upload processing', () => {
-  it('stores inflight state, persists uploaded file id, and calls focus', async () => {
-    const { deps, messages, inflight, assets, focus } = createDeps();
+  it('keeps inflight state through local commit and clears it afterwards', async () => {
+    const { deps, messages, inflight, assets, focus, commitSawInflight } = createDeps();
     const file = createFile('document.pdf', 'application/pdf', 204_800);
     const asset = createAsset('file-1');
 
@@ -75,10 +79,33 @@ describe('v2 file upload processing', () => {
     });
 
     expect(result).toBe('uploaded');
+    expect(commitSawInflight()).toBe(true);
     expect(inflight.has('node-1')).toBe(false);
     expect(assets.get('file-1')).toEqual(asset);
     expect(messages).toEqual([createSetFileAttrsMessage('node-1', 'file-1')]);
     expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it('does not cache or commit an upload that is no longer current', async () => {
+    const { deps, messages, inflight, assets } = createDeps();
+    const { promise, resolve } = Promise.withResolvers<FileAsset>();
+    let current = true;
+
+    const upload = processFileUpload({
+      file: createFile('document.pdf', 'application/pdf'),
+      nodeId: 'node-1',
+      ...deps,
+      isCurrent: () => current,
+      uploadFileAsFile: () => promise,
+    });
+
+    current = false;
+    resolve(createAsset('file-1'));
+
+    await expect(upload).resolves.toBe('cancelled');
+    expect(assets.size).toBe(0);
+    expect(messages).toEqual([]);
+    expect(inflight.has('node-1')).toBe(false);
   });
 
   it('stores inflight with original file name and size before upload resolves', async () => {

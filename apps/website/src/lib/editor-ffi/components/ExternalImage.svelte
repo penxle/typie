@@ -95,31 +95,45 @@
     }
   });
 
-  $effect(() => {
-    if (asset && inflight) {
-      const url = inflight.url;
-      ctx.editor?.inflightImages.delete(element.node);
-      URL.revokeObjectURL(url);
-    }
-  });
-
   const deleteNode = () => {
-    ctx.editor?.enqueue(deleteNodeMessage(element.node));
-    ctx.editor?.focus();
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    const pending = editor.inflightImages.get(element.node);
+    if (pending) {
+      editor.inflightImages.delete(element.node);
+      URL.revokeObjectURL(pending.url);
+    }
+    editor.enqueue(deleteNodeMessage(element.node));
+    editor.focus();
   };
 
   const processFile = async (file: File) => {
     const editor = ctx.editor;
     if (!editor || !imageData) return;
+    const uploadId = crypto.randomUUID();
+    const isCurrent = () =>
+      ctx.editor === editor &&
+      !editor.destroyed &&
+      !editor.readOnly &&
+      editor.inflightImages.get(element.node)?.uploadId === uploadId &&
+      editor.externalElements.some((external) => external.node === element.node && external.data.type === 'image' && !external.data.id);
 
     const result = await processImageUpload({
       file,
       nodeId: element.node,
       getProportion: () => proportion,
-      setInflightImage: (nodeId, image) => editor.inflightImages.set(nodeId, image),
-      deleteInflightImage: (nodeId) => editor.inflightImages.delete(nodeId),
+      setInflightImage: (nodeId, image) => editor.inflightImages.set(nodeId, { ...image, uploadId }),
+      deleteInflightImage: (nodeId) => {
+        if (editor.inflightImages.get(nodeId)?.uploadId === uploadId) editor.inflightImages.delete(nodeId);
+      },
       setImageAsset: (asset) => editor.imageAssets.set(asset.id, asset),
-      enqueue: (message) => editor.enqueue(message),
+      isCurrent,
+      commit: (message) => {
+        if (!isCurrent()) throw new Error('Image upload is no longer current');
+        editor.enqueue(message);
+        editor.flush();
+      },
       focus: () => editor.focus(),
       createObjectUrl: (file) => URL.createObjectURL(file),
       revokeObjectUrl: (url) => URL.revokeObjectURL(url),

@@ -30,13 +30,16 @@ const createDeps = () => {
   const inflight = new Map<string, { url: string; width: number; height: number }>();
   const assets = new Map<string, ImageAsset>();
   const focus = vi.fn();
+  let commitSawInflight = false;
 
   return {
     deps: {
       setInflightImage: (nodeId: string, image: { url: string; width: number; height: number }) => inflight.set(nodeId, image),
       deleteInflightImage: (nodeId: string) => inflight.delete(nodeId),
       setImageAsset: (asset: ImageAsset) => assets.set(asset.id, asset),
-      enqueue: (message: Message) => {
+      isCurrent: () => true,
+      commit: (message: Message) => {
+        commitSawInflight = inflight.has('node-1');
         messages.push(message);
       },
       focus,
@@ -45,6 +48,7 @@ const createDeps = () => {
     inflight,
     assets,
     focus,
+    commitSawInflight: () => commitSawInflight,
   };
 };
 
@@ -203,8 +207,8 @@ describe('v2 image picker flow', () => {
 });
 
 describe('v2 image upload processing', () => {
-  it('stores inflight preview, persists uploaded image id, and cleans up object url', async () => {
-    const { deps, messages, inflight, assets, focus } = createDeps();
+  it('keeps the preview pending through local commit and clears it afterwards', async () => {
+    const { deps, messages, inflight, assets, focus, commitSawInflight } = createDeps();
     const revokeObjectUrl = vi.fn();
 
     const result = await processImageUpload({
@@ -221,9 +225,38 @@ describe('v2 image upload processing', () => {
     expect(result).toBe('uploaded');
     expect(assets.get('image-1')).toEqual(createAsset('image-1'));
     expect(messages).toEqual([setImageAttrsMessage('node-1', 'image-1', 100)]);
-    expect(inflight.get('node-1')).toEqual({ url: 'blob:image', width: 320, height: 240 });
-    expect(revokeObjectUrl).not.toHaveBeenCalled();
+    expect(commitSawInflight()).toBe(true);
+    expect(inflight.has('node-1')).toBe(false);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:image');
     expect(focus).toHaveBeenCalled();
+  });
+
+  it('does not cache or commit an upload that is no longer current', async () => {
+    const { deps, messages, inflight, assets } = createDeps();
+    const revokeObjectUrl = vi.fn();
+    const { promise, resolve } = Promise.withResolvers<ImageAsset>();
+    let current = true;
+
+    const upload = processImageUpload({
+      file: createFile('image.png', 'image/png'),
+      nodeId: 'node-1',
+      getProportion: () => 100,
+      ...deps,
+      isCurrent: () => current,
+      createObjectUrl: () => 'blob:image',
+      revokeObjectUrl,
+      readImageDimensions: async () => ({ width: 320, height: 240 }),
+      uploadImageFile: () => promise,
+    });
+
+    current = false;
+    resolve(createAsset('image-1'));
+
+    await expect(upload).resolves.toBe('cancelled');
+    expect(assets.size).toBe(0);
+    expect(messages).toEqual([]);
+    expect(inflight.has('node-1')).toBe(false);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:image');
   });
 
   it('업로드가 실패하면 미리보기를 정리하고 빈 노드를 삭제한다', async () => {
@@ -235,6 +268,7 @@ describe('v2 image upload processing', () => {
       nodeId: 'node-1',
       getProportion: () => 100,
       ...deps,
+      isCurrent: () => inflight.has('node-1'),
       createObjectUrl: () => 'blob:image',
       revokeObjectUrl,
       readImageDimensions: async () => ({ width: 320, height: 240 }),

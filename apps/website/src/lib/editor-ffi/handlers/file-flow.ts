@@ -44,7 +44,8 @@ export const processFileUpload = async ({
   setInflightFile,
   deleteInflightFile,
   setFileAsset,
-  enqueue,
+  isCurrent,
+  commit,
   focus,
   uploadFileAsFile,
 }: {
@@ -53,17 +54,22 @@ export const processFileUpload = async ({
   setInflightFile: (nodeId: string, inflight: { name: string; size: number }) => void;
   deleteInflightFile: (nodeId: string) => void;
   setFileAsset: (asset: FileAsset) => void;
-  enqueue: (message: Message) => void;
+  isCurrent: () => boolean;
+  commit: (message: Message) => void;
   focus: () => void;
   uploadFileAsFile: UploadFileAsFile;
-}): Promise<'uploaded' | 'failed'> => {
+}): Promise<'uploaded' | 'failed' | 'cancelled'> => {
   setInflightFile(nodeId, { name: file.name, size: file.size });
 
   try {
     const uploaded = await uploadFileAsFile(file);
-    deleteInflightFile(nodeId);
+    if (!isCurrent()) {
+      deleteInflightFile(nodeId);
+      return 'cancelled';
+    }
     setFileAsset(uploaded);
-    enqueue(createSetFileAttrsMessage(nodeId, uploaded.id));
+    commit(createSetFileAttrsMessage(nodeId, uploaded.id));
+    deleteInflightFile(nodeId);
     focus();
     return 'uploaded';
   } catch {

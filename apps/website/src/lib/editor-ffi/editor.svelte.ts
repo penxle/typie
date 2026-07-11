@@ -500,7 +500,7 @@ export class Editor {
   protectContent = $state(false);
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
-  inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
+  inflightImages = $state(new SvelteMap<string, { uploadId: string; url: string; width: number; height: number }>());
 
   contextMenu = $state({
     isOpen: false,
@@ -511,7 +511,7 @@ export class Editor {
     extraItems: [] as ContextMenuItem[],
   });
 
-  inflightFiles = $state(new SvelteMap<string, { name: string; size: number }>());
+  inflightFiles = $state(new SvelteMap<string, { uploadId: string; name: string; size: number }>());
 
   spellcheckErrors = $state<SpellcheckError[]>([]);
   trackedRanges = $state<TrackedRange[]>([]);
@@ -525,6 +525,7 @@ export class Editor {
   requestCommentCompose: (() => void) | null = null;
 
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
+  inflightEmbeds = $state(new SvelteMap<string, { uploadId: string; url: string }>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
 
   characterCounts = $state({

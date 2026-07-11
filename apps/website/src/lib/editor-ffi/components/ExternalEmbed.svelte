@@ -11,6 +11,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$mearie';
   import { getEditorContext } from '../editor.svelte';
+  import { createDeleteEmbedNodeMessage, processEmbedUpload } from '../handlers/embed-flow';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
@@ -25,10 +26,10 @@
   const embedData = $derived(element.data.type === 'embed' ? element.data : undefined);
   const embedId = $derived(embedData?.id || undefined);
   const asset = $derived(embedId ? ctx.editor?.embedAssets.get(embedId) : undefined);
+  const inflight = $derived(ctx.editor?.inflightEmbeds.get(element.node));
   const canEdit = $derived(!ctx.editor?.readOnly);
 
   let inflightUrl = $state('');
-  let inflight = $state(false);
   let error = $state(false);
 
   const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
@@ -59,42 +60,62 @@
   );
 
   const handleSubmit = async () => {
-    if (!inflightUrl || !ctx.editor) return;
+    const editor = ctx.editor;
+    if (!inflightUrl || !editor) return;
 
     error = false;
-    inflight = true;
+    const url = inflightUrl;
+    const uploadId = crypto.randomUUID();
+    const isCurrent = () =>
+      ctx.editor === editor &&
+      !editor.destroyed &&
+      !editor.readOnly &&
+      editor.inflightEmbeds.get(element.node)?.uploadId === uploadId &&
+      editor.externalElements.some((external) => external.node === element.node && external.data.type === 'embed' && !external.data.id);
 
-    try {
-      const url = /^[^:]+:\/\//.test(inflightUrl) ? inflightUrl : `https://${inflightUrl}`;
-      const result = await unfurlEmbed({ input: { url } });
+    const result = await processEmbedUpload({
+      url,
+      nodeId: element.node,
+      setPending: () => editor.inflightEmbeds.set(element.node, { uploadId, url }),
+      clearPending: () => {
+        if (editor.inflightEmbeds.get(element.node)?.uploadId === uploadId) editor.inflightEmbeds.delete(element.node);
+      },
+      isCurrent,
+      unfurl: async (normalizedUrl) => {
+        const result = await unfurlEmbed({ input: { url: normalizedUrl } });
+        return {
+          id: result.unfurlEmbed.id,
+          url: result.unfurlEmbed.url,
+          title: result.unfurlEmbed.title ?? null,
+          description: result.unfurlEmbed.description ?? null,
+          thumbnailUrl: result.unfurlEmbed.thumbnailUrl ?? null,
+          html: result.unfurlEmbed.html ?? null,
+        };
+      },
+      setEmbedAsset: (value) => editor.embedAssets.set(value.id, value),
+      commit: (message) => {
+        if (!isCurrent()) throw new Error('Embed upload is no longer current');
+        editor.enqueue(message);
+        editor.flush();
+      },
+    });
 
-      ctx.editor.embedAssets.set(result.unfurlEmbed.id, {
-        id: result.unfurlEmbed.id,
-        url: result.unfurlEmbed.url,
-        title: result.unfurlEmbed.title ?? null,
-        description: result.unfurlEmbed.description ?? null,
-        thumbnailUrl: result.unfurlEmbed.thumbnailUrl ?? null,
-        html: result.unfurlEmbed.html ?? null,
-      });
-
-      ctx.editor.enqueue({
-        type: 'node',
-        op: { type: 'set_attrs', id: element.node, attrs: { type: 'embed', id: result.unfurlEmbed.id } },
-      });
-
-      ctx.editor.focus();
-    } catch {
+    if (result === 'uploaded') {
+      editor.focus();
+    } else if (result === 'failed') {
       error = true;
       Toast.error('링크를 임베드할 수 없습니다.');
-    } finally {
-      inflight = false;
-      inflightUrl = '';
     }
+    inflightUrl = '';
   };
 
   const deleteNode = () => {
-    ctx.editor?.enqueue({ type: 'node', op: { type: 'delete', id: element.node } });
-    ctx.editor?.focus();
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    editor.inflightEmbeds.delete(element.node);
+    editor.enqueue(createDeleteEmbedNodeMessage(element.node));
+    editor.focus();
   };
 </script>
 

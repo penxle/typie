@@ -22,7 +22,9 @@
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/editor-ffi/components';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
+  import { cache, mearieClient } from '$lib/graphql';
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
@@ -205,6 +207,47 @@
     `),
   );
 
+  const assetsByIdsQuery = graphql(`
+    query DocumentEditorV2_AssetsByIds_Query($slug: String!, $ids: [ID!]!) {
+      document(slug: $slug) {
+        id
+        assetsByIds(ids: $ids) {
+          __typename
+
+          ... on Image {
+            id
+            url
+            originalUrl
+            width
+            height
+            placeholder
+          }
+
+          ... on File {
+            id
+            url
+            name
+            size
+          }
+
+          ... on Embed {
+            id
+            url
+            title
+            description
+            thumbnailUrl
+            html
+          }
+
+          ... on DocumentArchivedNode {
+            id
+            content
+          }
+        }
+      }
+    }
+  `);
+
   graphql(`
     fragment EditorContextV2_user on User {
       id
@@ -244,6 +287,42 @@
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
   const title = $derived(document?.title ?? '');
   const assets = $derived(document?.assets);
+
+  type DocumentAsset = NonNullable<typeof assets>[number];
+
+  const putAsset = (editor: Editor, asset: DocumentAsset) => {
+    if (asset.__typename === 'Image') {
+      editor.imageAssets.set(asset.id, {
+        id: asset.id,
+        url: asset.url,
+        originalUrl: asset.originalUrl,
+        width: asset.width,
+        height: asset.height,
+        placeholder: asset.placeholder,
+      });
+    } else if (asset.__typename === 'File') {
+      ctx.fileAssets.set(asset.id, {
+        id: asset.id,
+        url: asset.url,
+        name: asset.name,
+        size: asset.size,
+      });
+    } else if (asset.__typename === 'Embed') {
+      editor.embedAssets.set(asset.id, {
+        id: asset.id,
+        url: asset.url,
+        title: asset.title ?? null,
+        description: asset.description ?? null,
+        thumbnailUrl: asset.thumbnailUrl ?? null,
+        html: asset.html ?? null,
+      });
+    } else if (asset.__typename === 'DocumentArchivedNode') {
+      editor.archivedAssets.set(asset.id, {
+        id: asset.id,
+        content: asset.content,
+      });
+    }
+  };
 
   const fontFamilies = $derived(document?.fontFamilies ?? []);
 
@@ -351,41 +430,55 @@
 
     if (assets) {
       for (const asset of assets) {
-        if (asset.__typename === 'Image') {
-          editor.imageAssets.set(asset.id, {
-            id: asset.id,
-            url: asset.url,
-            originalUrl: asset.originalUrl,
-            width: asset.width,
-            height: asset.height,
-            placeholder: asset.placeholder,
-          });
-        } else if (asset.__typename === 'File') {
-          ctx.fileAssets.set(asset.id, {
-            id: asset.id,
-            url: asset.url,
-            name: asset.name,
-            size: asset.size,
-          });
-        } else if (asset.__typename === 'Embed') {
-          editor.embedAssets.set(asset.id, {
-            id: asset.id,
-            url: asset.url,
-            title: asset.title ?? null,
-            description: asset.description ?? null,
-            thumbnailUrl: asset.thumbnailUrl ?? null,
-            html: asset.html ?? null,
-          });
-        } else if (asset.__typename === 'DocumentArchivedNode') {
-          editor.archivedAssets.set(asset.id, {
-            id: asset.id,
-            content: asset.content,
-          });
-        }
+        putAsset(editor, asset);
       }
     }
   });
 
+  $effect(() => {
+    const editor = ctx.editor;
+    const slug = entity?.slug;
+    const currentDocumentId = documentId;
+    if (!editor || !slug || !currentDocumentId) return;
+
+    const hydrator = createAssetHydrator<DocumentAsset>({
+      hasAsset: (id) => editor.imageAssets.has(id) || ctx.fileAssets.has(id) || editor.embedAssets.has(id) || editor.archivedAssets.has(id),
+      fetchAssets: async (ids) => {
+        await cache.invalidate({ __typename: 'Document', id: currentDocumentId, $field: 'assetsByIds', $args: { ids } });
+        const result = await mearieClient.query(assetsByIdsQuery, { slug, ids });
+        return result.document.assetsByIds;
+      },
+      putAsset: (asset) => putAsset(editor, asset),
+    });
+
+    let hydrationQueued = false;
+    let stopped = false;
+    const updateReferences = () => {
+      hydrationQueued = false;
+      if (stopped) return;
+      void hydrator.update(editor.externalElements.flatMap(({ data }) => (data.id ? [data.id] : [])));
+    };
+    const scheduleHydration = () => {
+      if (hydrationQueued) return;
+      hydrationQueued = true;
+      // Editor invalidates the lazy external-elements cache after emitting state_changed.
+      queueMicrotask(updateReferences);
+    };
+
+    scheduleHydration();
+    const offStateChanged = editor.on('state_changed', (_, { fields }) => {
+      if (fields.includes('doc')) scheduleHydration();
+    });
+    const retry = () => void hydrator.retry();
+    window.addEventListener('online', retry);
+
+    return () => {
+      stopped = true;
+      offStateChanged();
+      window.removeEventListener('online', retry);
+      hydrator.destroy();
+    };
+  });
   let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let subtitleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let pusher = $state<Pusher | null>(null);

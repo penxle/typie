@@ -125,7 +125,8 @@ export const processImageUpload = async ({
   setInflightImage,
   deleteInflightImage,
   setImageAsset,
-  enqueue,
+  isCurrent,
+  commit,
   focus,
   createObjectUrl,
   revokeObjectUrl,
@@ -138,30 +139,47 @@ export const processImageUpload = async ({
   setInflightImage: (nodeId: string, image: { url: string; width: number; height: number }) => void;
   deleteInflightImage: (nodeId: string) => void;
   setImageAsset: (asset: ImageAsset) => void;
-  enqueue: (message: Message) => void;
+  isCurrent: () => boolean;
+  commit: (message: Message) => void;
   focus: () => void;
   createObjectUrl: (file: File) => string;
   revokeObjectUrl: (url: string) => void;
   readImageDimensions: ReadImageDimensions;
   uploadImageFile: UploadImageFile;
-}): Promise<'uploaded' | 'failed'> => {
+}): Promise<'uploaded' | 'failed' | 'cancelled'> => {
   const objectUrl = createObjectUrl(file);
   setInflightImage(nodeId, { url: objectUrl, width: 0, height: 0 });
 
+  const cancel = (): 'cancelled' => {
+    deleteInflightImage(nodeId);
+    revokeObjectUrl(objectUrl);
+    return 'cancelled';
+  };
+
   try {
     const { width, height } = await readImageDimensions(objectUrl);
+    if (!isCurrent()) return cancel();
     setInflightImage(nodeId, { url: objectUrl, width, height });
 
     const uploaded = await uploadImageFile(file);
+    if (!isCurrent()) return cancel();
     setImageAsset(uploaded);
-    enqueue(setImageAttrsMessage(nodeId, uploaded.id, getProportion()));
+    commit(setImageAttrsMessage(nodeId, uploaded.id, getProportion()));
+    deleteInflightImage(nodeId);
+    revokeObjectUrl(objectUrl);
     focus();
 
     return 'uploaded';
   } catch {
+    if (isCurrent()) {
+      try {
+        commit(deleteNodeMessage(nodeId));
+      } catch {
+        // The original commit failure is already represented by the failed result.
+      }
+    }
     deleteInflightImage(nodeId);
     revokeObjectUrl(objectUrl);
-    enqueue(deleteNodeMessage(nodeId));
     focus();
     return 'failed';
   }

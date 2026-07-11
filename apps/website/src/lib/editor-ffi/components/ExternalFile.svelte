@@ -53,8 +53,12 @@
   });
 
   const deleteNode = () => {
-    ctx.editor?.enqueue(createDeleteNodeMessage(element.node));
-    ctx.editor?.focus();
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    editor.inflightFiles.delete(element.node);
+    editor.enqueue(createDeleteNodeMessage(element.node));
+    editor.focus();
   };
 
   const handleUpload = () => {
@@ -85,14 +89,28 @@
   const processFile = async (file: File) => {
     const editor = ctx.editor;
     if (!editor) return;
+    const uploadId = crypto.randomUUID();
+    const isCurrent = () =>
+      ctx.editor === editor &&
+      !editor.destroyed &&
+      !editor.readOnly &&
+      editor.inflightFiles.get(element.node)?.uploadId === uploadId &&
+      editor.externalElements.some((external) => external.node === element.node && external.data.type === 'file' && !external.data.id);
 
     const result = await processFileUpload({
       file,
       nodeId: element.node,
-      setInflightFile: (nodeId, data) => editor.inflightFiles.set(nodeId, data),
-      deleteInflightFile: (nodeId) => editor.inflightFiles.delete(nodeId),
+      setInflightFile: (nodeId, data) => editor.inflightFiles.set(nodeId, { ...data, uploadId }),
+      deleteInflightFile: (nodeId) => {
+        if (editor.inflightFiles.get(nodeId)?.uploadId === uploadId) editor.inflightFiles.delete(nodeId);
+      },
       setFileAsset: (a) => ctx.fileAssets.set(a.id, a),
-      enqueue: (message) => editor.enqueue(message),
+      isCurrent,
+      commit: (message) => {
+        if (!isCurrent()) throw new Error('File upload is no longer current');
+        editor.enqueue(message);
+        editor.flush();
+      },
       focus: () => editor.focus(),
       uploadFileAsFile,
     });
