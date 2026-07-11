@@ -7,24 +7,38 @@ use editor_model::{
 };
 
 pub fn to_plain(projected: &ProjectedDoc) -> PlainDoc {
+    to_plain_impl(projected, false)
+}
+
+/// Like [`to_plain`] but omits synthetic scaffold blocks (e.g. the normalizer's
+/// trailing paragraph), reproducing authored content only.
+#[cfg(any(test, feature = "test-utils"))]
+pub(crate) fn to_plain_authored(projected: &ProjectedDoc) -> PlainDoc {
+    to_plain_impl(projected, true)
+}
+
+fn to_plain_impl(projected: &ProjectedDoc, authored_only: bool) -> PlainDoc {
     let view = DocView::new(projected);
     let root = match view.root() {
-        Some(root) => emit_block(projected, &root),
+        Some(root) => emit_block(projected, &root, authored_only),
         None => PlainDoc::default().root,
     };
 
     PlainDoc { root }
 }
 
-fn emit_block(projected: &ProjectedDoc, nv: &NodeView) -> PlainNodeEntry {
+fn emit_block(projected: &ProjectedDoc, nv: &NodeView, authored_only: bool) -> PlainNodeEntry {
     let mut children: Vec<PlainNodeEntry> = Vec::new();
     let mut run = PendingRun::default();
 
     for (slot, child) in nv.children().enumerate() {
         match child {
             ChildView::Block(b) => {
+                if authored_only && b.id().is_synthetic() {
+                    continue;
+                }
                 run.flush(&mut children);
-                children.push(emit_block(projected, &b));
+                children.push(emit_block(projected, &b, authored_only));
             }
             ChildView::Leaf(l) => {
                 let own = nv.leaf_state_at(slot).map(|s| s.own);
@@ -155,6 +169,34 @@ mod tests {
         let state = State::from_plain(plain).expect("load template");
         let out = state.to_plain();
         out.root.children[0].carry.clone()
+    }
+
+    #[test]
+    fn authored_to_plain_skips_trailing_scaffold() {
+        let bq_text = entry(
+            vec![],
+            PlainNode::Text(PlainTextNode {
+                text: "Yo".to_string(),
+            }),
+        );
+        let bq_para = entry(vec![bq_text], PlainNode::Paragraph(PlainParagraphNode {}));
+        let bq = entry(
+            vec![bq_para],
+            PlainNode::Blockquote(PlainBlockquoteNode::default()),
+        );
+        let root = entry(vec![bq], PlainNode::Root(PlainRootNode::default()));
+        let plain = PlainDoc { root };
+        let s1 = State::from_plain(&plain).expect("load template");
+        assert_ne!(
+            s1.to_plain(),
+            plain,
+            "plain to_plain includes the normalizer's trailing scaffold paragraph"
+        );
+        assert_eq!(
+            crate::to_plain::to_plain_authored(s1.projected.projected()),
+            plain,
+            "authored to_plain reproduces exactly the authored content"
+        );
     }
 
     #[test]

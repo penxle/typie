@@ -670,15 +670,23 @@ state! {
     }
 
     #[test]
-    fn non_carry_kind_in_macro_carry_is_dropped() {
-        let (state, ..) = state! {
-            doc { root { p1: paragraph carry([line_height(200)]) {} } }
+    fn non_carry_kind_in_carry_log_is_not_echoed() {
+        use editor_model::{EditOp, Modifier, ModifierAttrOp};
+
+        let (mut state, p1) = state! {
+            doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
+        std::sync::Arc::make_mut(&mut state.projected)
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: p1,
+                modifier: Modifier::LineHeight { value: 200 },
+            }))
+            .unwrap();
         let output = inspect_state_as_macro(&state);
         assert!(
             !output.contains("carry("),
-            "a non-carry kind supplied via the macro never reaches the projection, got:\n{output}"
+            "a non-carry kind in the carry log never reaches the inspect output, got:\n{output}"
         );
     }
 }

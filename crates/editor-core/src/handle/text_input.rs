@@ -1338,15 +1338,17 @@ mod tests {
         let (state, ..) = state! {
             doc {
                 root {
-                    p1: paragraph { text("a") image {} text("b") }
+                    p1: paragraph { text("a") }
+                    image
+                    paragraph { text("b") }
                 }
             }
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        // Range 1..3 crosses the image atom
+        // O(p1)=0, a=1, C(p1)=2, img=3 — range 3..4 covers the image atom
         editor.apply(Message::TextInput {
-            ops: vec![FlatImeOp::SetComposition { start: 1, end: 3 }],
+            ops: vec![FlatImeOp::SetComposition { start: 3, end: 4 }],
         });
         assert_eq!(editor.state().composition, None);
     }
@@ -2682,9 +2684,7 @@ mod tests {
         let (s, ..) = state! {
             doc { root {
                 callout {
-                    blockquote {
-                        p1: paragraph { text("aa") }
-                    }
+                    p1: paragraph { text("aa") }
                 }
                 table(proportion: 21) {
                     table_row {
@@ -2707,18 +2707,17 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 callout {
-                    blockquote {
-                        p1: paragraph { text("aaㅎcc") }
-                    }
+                    p1: paragraph { text("aaㅎcc") }
                 }
                 paragraph {}
             } }
             selection: (p1, 3)
         };
         assert_state_eq!(editor.state(), &expected);
+        // O(callout)=0, O(p1)=1, a=2, a=3, ㅎ=4
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 6, end: 7 })
+            Some(Composition { start: 4, end: 5 })
         );
     }
 

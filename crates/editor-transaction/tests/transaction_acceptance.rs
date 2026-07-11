@@ -966,6 +966,21 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "does not survive projection")]
+    fn state_macro_rejects_schema_invalid_content() {
+        // A page break must be the last leaf of its paragraph; projection drops
+        // the trailing char, so the fixture no longer says what it built.
+        let _ = state! {
+            doc {
+                root {
+                    p1: paragraph { page_break text("가") }
+                }
+            }
+            selection: (p1, 0)
+        };
+    }
+
+    #[test]
     fn atom_tab_survives_build_and_move() {
         // build_state_from_plain must emit inline atoms (state! with bare `tab`).
         let (state, p1, _p2) = state! {

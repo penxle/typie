@@ -40,7 +40,41 @@ pub fn build_state_from_plain_with_actor(
 
     graph.commit_mut();
     let projected = ProjectedState::from_graph(graph).expect("template always projects");
+
+    let mut want = plain;
+    canonicalize_entry(&mut want.root);
+    let got = crate::to_plain::to_plain_authored(projected.projected());
+    assert_eq!(
+        got, want,
+        "plain template does not survive projection — schema-invalid content was dropped or normalized"
+    );
+
     (State::new(projected, None), handles)
+}
+
+/// Rewrites a template entry into the canonical shape `to_plain` emits — empty
+/// text entries dropped, adjacent equal-modifier text entries merged, carry
+/// sorted by type — so the round-trip check flags only real content loss.
+fn canonicalize_entry(entry: &mut PlainNodeEntry) {
+    entry.carry.sort_by_key(Modifier::as_type);
+    let mut out: Vec<PlainNodeEntry> = Vec::new();
+    for mut child in std::mem::take(&mut entry.children) {
+        canonicalize_entry(&mut child);
+        if let PlainNode::Text(t) = &child.node {
+            if t.text.is_empty() {
+                continue;
+            }
+            if let Some(prev) = out.last_mut()
+                && let PlainNode::Text(prev_text) = &mut prev.node
+                && prev.modifiers == child.modifiers
+            {
+                prev_text.text.push_str(&t.text);
+                continue;
+            }
+        }
+        out.push(child);
+    }
+    entry.children = out;
 }
 
 fn emit_node(
@@ -307,8 +341,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use editor_model::{
-        CalloutVariant, EditOp, Node, NodeAttrOp, NodeType, PlainCalloutNode, PlainDoc, PlainNode,
-        PlainNodeEntry, PlainParagraphNode, PlainRootNode,
+        AtomLeaf, CalloutVariant, EditOp, Node, NodeAttrOp, NodeType, PlainCalloutNode, PlainDoc,
+        PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
     };
 
     use super::build_state_from_plain_with_actor;
@@ -320,6 +354,21 @@ mod tests {
             carry: Vec::new(),
             children,
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "does not survive projection")]
+    fn rejects_content_dropped_by_projection() {
+        let pb = block_entry(vec![], AtomLeaf::PageBreak.into_node().to_plain());
+        let text = block_entry(
+            vec![],
+            PlainNode::Text(PlainTextNode {
+                text: "가".to_string(),
+            }),
+        );
+        let para = block_entry(vec![pb, text], PlainNode::Paragraph(PlainParagraphNode {}));
+        let root = block_entry(vec![para], PlainNode::Root(PlainRootNode::default()));
+        build_state_from_plain_with_actor(PlainDoc { root }, 1);
     }
 
     #[test]
