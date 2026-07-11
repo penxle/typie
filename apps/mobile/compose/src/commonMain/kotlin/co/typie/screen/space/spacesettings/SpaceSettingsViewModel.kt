@@ -106,12 +106,7 @@ class SpaceSettingsViewModel : ViewModel() {
   fun uploadLogo(file: PickedFile): Task<Unit, Unit, Nothing> = task {
     emit(Unit)
 
-    val path =
-      BlobService.uploadBytes(
-        bytes = file.bytes,
-        filename = file.filename,
-        mimeType = file.mimeType,
-      )
+    val path = BlobService.upload(file)
 
     val image =
       Apollo.executeMutation(

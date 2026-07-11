@@ -68,7 +68,6 @@ private fun EditorImageToolbar(
 
   val picker =
     rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { result ->
-      val selectedNodeId = nodeId ?: return@rememberFilePicker
       val files =
         when (result) {
           FilePickerResult.Cancelled -> return@rememberFilePicker
@@ -83,8 +82,19 @@ private fun EditorImageToolbar(
             result.files
           }
         }
+      val selectedNodeId =
+        nodeId
+          ?: run {
+            files.forEach { it.close() }
+            return@rememberFilePicker
+          }
       val imageUploads = files.mapNotNull { file ->
-        val upload = file.toImageUploadOrNull() ?: return@mapNotNull null
+        val upload =
+          file.toImageUploadOrNull()
+            ?: run {
+              file.close()
+              return@mapNotNull null
+            }
         file to upload
       }
       if (imageUploads.isEmpty()) {
@@ -95,94 +105,100 @@ private fun EditorImageToolbar(
       val (selectedImage, selectedUpload) = imageUploads.first()
       val restUploads = imageUploads.drop(1)
 
-      scope.commandScope.launch {
-        imageState.uploads[selectedNodeId] = selectedUpload
+      val uploadJob =
+        scope.commandScope.launch {
+          imageState.uploads[selectedNodeId] = selectedUpload
 
-        val restNodeIds =
-          try {
-            insertImagePlaceholders(
-              editor = runtime.editor,
-              bringIntoViewRequests = bringIntoViewRequests,
-              count = restUploads.size,
-            )
-          } catch (error: CancellationException) {
-            throw error
-          } catch (_: Throwable) {
-            toast.error("이미지 업로드에 실패했어요.")
-            emptyList()
-          }
-
-        if (skippedImageCount > 0 || restNodeIds.size < restUploads.size) {
-          toast.error("일부 이미지를 삽입하지 못했어요.")
-        }
-
-        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
-          imageState.uploads[newNodeId] = pending.second
-        }
-
-        fun launchUpload(
-          targetNodeId: String,
-          file: PickedFile,
-          upload: EditorImageUpload,
-          proportion: Int,
-        ) {
-          launch {
+          val restNodeIds =
             try {
-              // TODO(TR-38): Check restrictedBlob before starting image uploads and surface the
-              // plan upgrade flow instead of letting the upload proceed.
-              completeAttachmentOperation(
-                persist = { uploadImageAsset(file) },
-                isCurrent = { imageState.uploads[targetNodeId] === upload },
-                cache = externalElementState::put,
-                commit = { uploaded ->
-                  val editor = checkNotNull(runtime.editor) { "No active editor is available" }
-                  val committedState =
-                    editor.syncWithBringIntoView(bringIntoViewRequests) {
-                      if (editor.ime?.composing != null) {
-                        enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
-                      }
-                      enqueue(
-                        Message.Node(
-                          NodeOp.SetAttrs(
-                            id = targetNodeId,
-                            attrs = PlainNode.Image(id = uploaded.id, proportion = proportion),
-                          )
-                        )
-                      )
-                      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
-                    }
-                  checkNotNull(committedState) { "Editor image attrs did not commit" }
-                },
-                clearPending = {
-                  if (imageState.uploads[targetNodeId] === upload) {
-                    imageState.uploads.remove(targetNodeId)
-                  }
-                },
+              insertImagePlaceholders(
+                editor = runtime.editor,
+                bringIntoViewRequests = bringIntoViewRequests,
+                count = restUploads.size,
               )
             } catch (error: CancellationException) {
               throw error
-            } catch (error: Throwable) {
-              reportAttachmentFailure(AttachmentKind.Image, error)
+            } catch (_: Throwable) {
               toast.error("이미지 업로드에 실패했어요.")
+              emptyList()
             }
+
+          if (skippedImageCount > 0 || restNodeIds.size < restUploads.size) {
+            toast.error("일부 이미지를 삽입하지 못했어요.")
+          }
+
+          restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+            imageState.uploads[newNodeId] = pending.second
+          }
+
+          fun launchUpload(
+            targetNodeId: String,
+            file: PickedFile,
+            upload: EditorImageUpload,
+            proportion: Int,
+          ) {
+            val job = launch {
+              try {
+                // TODO(TR-38): Check restrictedBlob before starting image uploads and
+                // surface the
+                // plan upgrade flow instead of letting the upload proceed.
+                completeAttachmentOperation(
+                  persist = { uploadImageAsset(file) },
+                  isCurrent = { imageState.uploads[targetNodeId] === upload },
+                  cache = externalElementState::put,
+                  commit = { uploaded ->
+                    val editor = checkNotNull(runtime.editor) { "No active editor is available" }
+                    val committedState =
+                      editor.syncWithBringIntoView(bringIntoViewRequests) {
+                        if (editor.ime?.composing != null) {
+                          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+                        }
+                        enqueue(
+                          Message.Node(
+                            NodeOp.SetAttrs(
+                              id = targetNodeId,
+                              attrs = PlainNode.Image(id = uploaded.id, proportion = proportion),
+                            )
+                          )
+                        )
+                        beforeCommit {
+                          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                        }
+                      }
+                    checkNotNull(committedState) { "Editor image attrs did not commit" }
+                  },
+                  clearPending = {
+                    if (imageState.uploads[targetNodeId] === upload) {
+                      imageState.uploads.remove(targetNodeId)
+                    }
+                  },
+                )
+              } catch (error: CancellationException) {
+                throw error
+              } catch (error: Throwable) {
+                reportAttachmentFailure(AttachmentKind.Image, error)
+                toast.error("이미지 업로드에 실패했어요.")
+              }
+            }
+            job.invokeOnCompletion { file.close() }
+          }
+
+          launchUpload(
+            targetNodeId = selectedNodeId,
+            file = selectedImage,
+            upload = selectedUpload,
+            proportion = image?.proportion ?: 100,
+          )
+          restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+            launchUpload(
+              targetNodeId = newNodeId,
+              file = pending.first,
+              upload = pending.second,
+              proportion = 100,
+            )
           }
         }
-
-        launchUpload(
-          targetNodeId = selectedNodeId,
-          file = selectedImage,
-          upload = selectedUpload,
-          proportion = image?.proportion ?: 100,
-        )
-        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
-          launchUpload(
-            targetNodeId = newNodeId,
-            file = pending.first,
-            upload = pending.second,
-            proportion = 100,
-          )
-        }
-      }
+      uploadJob.invokeOnCompletion { imageUploads.forEach { (file) -> file.close() } }
     }
 
   EditorToolbarRow(scope = scope, modifier = modifier) {
@@ -224,7 +240,12 @@ private fun PickedFile.toImageUploadOrNull(): EditorImageUpload? {
     return null
   }
 
-  return EditorImageUpload(bytes = bytes, name = filename, width = width, height = height)
+  return EditorImageUpload(
+    previewModel = previewModel,
+    name = filename,
+    width = width,
+    height = height,
+  )
 }
 
 private suspend fun insertImagePlaceholders(
@@ -255,7 +276,7 @@ private fun Editor.imageExternalNodeIds(): List<String> = externalElements.mapNo
 }
 
 private suspend fun uploadImageAsset(file: PickedFile): EditorImageAsset {
-  val path = BlobService.uploadBytes(file.bytes, filename = file.filename, mimeType = file.mimeType)
+  val path = BlobService.upload(file)
   val uploaded =
     Apollo.executeMutation(
         EditorScreen_PersistBlobAsImage_Mutation(input = PersistBlobAsImageInput(path = path))

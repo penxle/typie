@@ -1,14 +1,32 @@
 package co.typie.platform
 
 import androidx.compose.runtime.Composable
+import kotlinx.io.Source
 
-data class PickedFile(
-  val bytes: ByteArray,
+class PickedFile
+internal constructor(
   val filename: String,
   val mimeType: String?,
+  val size: Long?,
+  internal val previewModel: Any,
   val imageWidth: Int? = null,
   val imageHeight: Int? = null,
-)
+  private val openSource: () -> Source,
+  private val release: () -> Unit = {},
+) {
+  private var released = false
+
+  internal fun openSource(): Source {
+    check(!released) { "Picked file has already been released" }
+    return openSource.invoke()
+  }
+
+  internal fun close() {
+    if (released) return
+    released = true
+    release()
+  }
+}
 
 enum class FilePickerSelectionMode {
   Single,

@@ -99,12 +99,7 @@ class FolderViewModel :
     if (folderIds.isEmpty()) {
       return@result FolderThumbnailResult(id = "", url = "")
     }
-    val path =
-      blobService.uploadBytes(
-        bytes = file.bytes,
-        filename = file.filename,
-        mimeType = file.mimeType,
-      )
+    val path = blobService.upload(file)
 
     val image =
       Apollo.executeMutation(

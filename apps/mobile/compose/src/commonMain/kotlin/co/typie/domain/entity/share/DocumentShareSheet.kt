@@ -457,7 +457,10 @@ internal fun DocumentShareSheet(
   }
 
   val filePicker = rememberFilePicker { result ->
-    if (loading) return@rememberFilePicker
+    if (loading) {
+      (result as? FilePickerResult.Selected)?.files?.forEach { it.close() }
+      return@rememberFilePicker
+    }
     val file =
       when (result) {
         FilePickerResult.Cancelled -> return@rememberFilePicker
@@ -467,26 +470,33 @@ internal fun DocumentShareSheet(
         }
         is FilePickerResult.Selected -> result.files.first()
       }
-    if (isUploadingThumbnail || isRemovingThumbnail) return@rememberFilePicker
+    if (isUploadingThumbnail || isRemovingThumbnail) {
+      file.close()
+      return@rememberFilePicker
+    }
 
     isUploadingThumbnail = true
-    scope.launch {
-      model
-        .uploadDocumentsThumbnail(documentIds = documentIds, file = file)
-        .withDefaultExceptionHandler(toast)
-        .onOk { thumbnailResult ->
-          hasMixedThumbnail = false
-          committedHasMixedThumbnail = false
-          form.thumbnailUrl.setValue(thumbnailResult.url)
-          form.thumbnailUrl.commit()
-          onUpdated()
-        }
-        .onException {
-          hasMixedThumbnail = committedHasMixedThumbnail
-          form.thumbnailUrl.rollback()
-        }
-      isUploadingThumbnail = false
+    val uploadJob = scope.launch {
+      try {
+        model
+          .uploadDocumentsThumbnail(documentIds = documentIds, file = file)
+          .withDefaultExceptionHandler(toast)
+          .onOk { thumbnailResult ->
+            hasMixedThumbnail = false
+            committedHasMixedThumbnail = false
+            form.thumbnailUrl.setValue(thumbnailResult.url)
+            form.thumbnailUrl.commit()
+            onUpdated()
+          }
+          .onException {
+            hasMixedThumbnail = committedHasMixedThumbnail
+            form.thumbnailUrl.rollback()
+          }
+      } finally {
+        isUploadingThumbnail = false
+      }
     }
+    uploadJob.invokeOnCompletion { file.close() }
   }
 
   SheetLayout(

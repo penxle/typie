@@ -5,10 +5,12 @@ import co.typie.graphql.BlobService_IssueBlobUploadUrl_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.IssueBlobUploadUrlInput
 import co.typie.network.Http
+import co.typie.platform.PickedFile
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headers
+import io.ktor.http.quote
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -23,13 +25,13 @@ internal class BlobUploadException(val stage: BlobUploadStage, cause: Throwable)
   RuntimeException("Blob upload failed at $stage", cause)
 
 object BlobService {
-  suspend fun uploadBytes(bytes: ByteArray, filename: String, mimeType: String?): String {
-    val resolvedMimeType = mimeType ?: "application/octet-stream"
+  suspend fun upload(file: PickedFile): String {
+    val resolvedMimeType = file.mimeType ?: "application/octet-stream"
     val result =
       withBlobUploadStage(BlobUploadStage.IssueUploadUrl) {
         Apollo.executeMutation(
           BlobService_IssueBlobUploadUrl_Mutation(
-            input = IssueBlobUploadUrlInput(filename = filename)
+            input = IssueBlobUploadUrlInput(filename = file.filename)
           )
         )
       }
@@ -45,14 +47,15 @@ object BlobService {
 
             append("Content-Type", resolvedMimeType)
 
-            append(
+            appendInput(
               key = "file",
-              value = bytes,
               headers =
                 headers {
                   append(HttpHeaders.ContentType, resolvedMimeType)
-                  append(HttpHeaders.ContentDisposition, """filename="$filename"""")
+                  append(HttpHeaders.ContentDisposition, "filename=${file.filename.quote()}")
                 },
+              size = file.size,
+              block = file::openSource,
             )
           },
       )

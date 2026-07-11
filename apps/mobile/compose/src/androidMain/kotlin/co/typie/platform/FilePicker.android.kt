@@ -10,6 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.io.asSource
+import kotlinx.io.buffered
 
 @Composable
 actual fun rememberFilePicker(
@@ -51,31 +53,52 @@ actual fun rememberFilePicker(
 }
 
 private fun Context.readPlatformFile(uri: Uri): PickedFile {
-  val bytes =
-    contentResolver.openInputStream(uri)?.use { it.readBytes() }
-      ?: error("Unable to open selected file")
   val mimeType = contentResolver.getType(uri)
-  val imageSize = bytes.decodeImageSizeIfNeeded(mimeType)
-  val filename =
-    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-      cursor ->
-      if (cursor.moveToFirst()) cursor.getString(0) else null
-    }
+  val metadata = queryMetadata(uri)
+  val imageSize = decodeImageSizeIfNeeded(uri, mimeType)
+
+  if (mimeType?.substringBefore('/') != "image") {
+    contentResolver.openInputStream(uri)?.close() ?: error("Unable to open selected file")
+  }
 
   return PickedFile(
-    bytes = bytes,
-    filename = pickedFilename(filename, mimeType),
+    filename = pickedFilename(metadata.filename, mimeType),
     mimeType = mimeType,
+    size = metadata.size,
+    previewModel = uri,
     imageWidth = imageSize?.first,
     imageHeight = imageSize?.second,
+    openSource = {
+      contentResolver.openInputStream(uri)?.asSource()?.buffered()
+        ?: error("Unable to open selected file")
+    },
   )
 }
 
-private fun ByteArray.decodeImageSizeIfNeeded(mimeType: String?): Pair<Int, Int>? {
+private data class FileMetadata(val filename: String?, val size: Long?)
+
+private fun Context.queryMetadata(uri: Uri): FileMetadata {
+  return contentResolver
+    .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
+    ?.use { cursor ->
+      if (!cursor.moveToFirst()) return@use FileMetadata(filename = null, size = null)
+      val filenameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+      val filename =
+        if (filenameIndex >= 0 && !cursor.isNull(filenameIndex)) cursor.getString(filenameIndex)
+        else null
+      val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+      val size =
+        if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else null
+      FileMetadata(filename = filename, size = size)
+    } ?: FileMetadata(filename = null, size = null)
+}
+
+private fun Context.decodeImageSizeIfNeeded(uri: Uri, mimeType: String?): Pair<Int, Int>? {
   return when (mimeType?.substringBefore('/')) {
     "image" -> {
       val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-      BitmapFactory.decodeByteArray(this, 0, size, options)
+      contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        ?: error("Unable to open selected image")
       val width = options.outWidth
       val height = options.outHeight
       if (width <= 0 || height <= 0) null else width to height

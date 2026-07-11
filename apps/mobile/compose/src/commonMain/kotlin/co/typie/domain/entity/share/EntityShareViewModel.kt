@@ -67,12 +67,7 @@ internal class EntityShareViewModel(
       return@result ShareThumbnailResult(id = "", url = "")
     }
 
-    val path =
-      blobService.uploadBytes(
-        bytes = file.bytes,
-        filename = file.filename,
-        mimeType = file.mimeType,
-      )
+    val path = blobService.upload(file)
     val image =
       Apollo.executeMutation(
           EntityShareFolder_PersistBlobAsImage_Mutation(
@@ -205,12 +200,7 @@ internal class EntityShareViewModel(
       return@result ShareThumbnailResult(id = "", url = "")
     }
 
-    val path =
-      blobService.uploadBytes(
-        bytes = file.bytes,
-        filename = file.filename,
-        mimeType = file.mimeType,
-      )
+    val path = blobService.upload(file)
     val image =
       Apollo.executeMutation(
           DocumentShare_PersistBlobAsImage_Mutation(input = PersistBlobAsImageInput(path = path))

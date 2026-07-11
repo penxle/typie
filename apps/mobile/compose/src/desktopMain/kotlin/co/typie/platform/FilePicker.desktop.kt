@@ -6,10 +6,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.image.BufferedImage
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
+import kotlinx.io.asSource
+import kotlinx.io.buffered
 
 @Composable
 actual fun rememberFilePicker(
@@ -51,18 +52,19 @@ actual fun rememberFilePicker(
           aggregateSelectedFiles(
             selectedFiles.map { file ->
               runCatching {
-                val bytes = file.readBytes()
                 val image =
                   when (contentType) {
-                    "image" -> bytes.decodeImageOrNull()
+                    "image" -> file.decodeImageOrNull()
                     else -> null
                   }
                 PickedFile(
-                  bytes = bytes,
                   filename = file.name,
                   mimeType = file.probeContentType(),
+                  size = file.length(),
+                  previewModel = file,
                   imageWidth = image?.width,
                   imageHeight = image?.height,
+                  openSource = { file.inputStream().asSource().buffered() },
                 )
               }
             }
@@ -77,5 +79,5 @@ private fun File.probeContentType(): String? {
   return runCatching { Files.probeContentType(toPath()) }.getOrNull()
 }
 
-private fun ByteArray.decodeImageOrNull(): BufferedImage? =
-  runCatching { ImageIO.read(ByteArrayInputStream(this)) }.getOrNull()
+private fun File.decodeImageOrNull(): BufferedImage? =
+  runCatching { ImageIO.read(this) }.getOrNull()

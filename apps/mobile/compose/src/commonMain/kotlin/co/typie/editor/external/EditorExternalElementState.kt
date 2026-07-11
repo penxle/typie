@@ -111,7 +111,7 @@ internal data class EditorEmbedAsset(
 internal class EditorEmbedUnfurl
 
 internal class EditorImageUpload(
-  val bytes: ByteArray,
+  val previewModel: Any,
   val name: String,
   val width: Int,
   val height: Int,

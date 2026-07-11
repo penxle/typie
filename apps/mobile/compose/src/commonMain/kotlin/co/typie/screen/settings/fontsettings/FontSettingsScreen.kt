@@ -91,7 +91,7 @@ fun FontSettingsScreen() {
           }
         }
 
-      scope.launch {
+      val uploadJob = scope.launch {
         model
           .uploadFonts(files)
           .collect(
@@ -112,6 +112,7 @@ fun FontSettingsScreen() {
             },
           )
       }
+      uploadJob.invokeOnCompletion { files.forEach { it.close() } }
     }
 
   suspend fun uploadFonts() {

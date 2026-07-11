@@ -118,7 +118,7 @@ fun SpaceSettingsScreen() {
         }
         is FilePickerResult.Selected -> result.files.first()
       }
-    scope.launch {
+    val uploadJob = scope.launch {
       model
         .uploadLogo(file)
         .collect(
@@ -130,6 +130,7 @@ fun SpaceSettingsScreen() {
           },
         )
     }
+    uploadJob.invokeOnCompletion { file.close() }
   }
 
   ProvideTopBar(

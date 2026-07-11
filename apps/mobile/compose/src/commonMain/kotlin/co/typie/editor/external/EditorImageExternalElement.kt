@@ -150,7 +150,7 @@ internal fun EditorImageExternalElement(
         }
         upload != null -> {
           AsyncImage(
-            model = upload.bytes,
+            model = upload.previewModel,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,

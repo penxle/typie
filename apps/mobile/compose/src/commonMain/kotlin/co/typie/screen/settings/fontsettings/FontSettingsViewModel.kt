@@ -63,12 +63,7 @@ class FontSettingsViewModel : ViewModel() {
         emit(FontUploadProgress(current = index + 1, total = files.size))
 
         try {
-          val path =
-            BlobService.uploadBytes(
-              bytes = file.bytes,
-              filename = file.filename,
-              mimeType = file.mimeType,
-            )
+          val path = BlobService.upload(file)
 
           val response =
             Apollo.executeMutation(

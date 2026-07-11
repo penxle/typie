@@ -69,7 +69,7 @@ fun UpdateProfileScreen() {
         is FilePickerResult.Selected -> result.files.first()
       }
 
-    scope.launch {
+    val uploadJob = scope.launch {
       model
         .uploadAvatar(file)
         .collect(
@@ -79,6 +79,7 @@ fun UpdateProfileScreen() {
           },
         )
     }
+    uploadJob.invokeOnCompletion { file.close() }
   }
 
   fun submit() {
