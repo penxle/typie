@@ -7,6 +7,8 @@ import {
   collectPlainTextChars,
   convertLegacyDocumentJson,
   deriveExpectedTextFromPlain,
+  firstTextDiff,
+  plainStructureDiff,
   plainStructureEquals,
 } from '#/utils/legacy-convert.ts';
 import { wasm } from '#/utils/wasm.ts';
@@ -50,18 +52,22 @@ export const migrateDocumentToV2 = async (documentId: string, options?: { dryRun
     });
 
     if (!plainStructureEquals(plain, roundtrip)) {
-      return { status: 'failed', documentId, error: 'structure-mismatch: graph roundtrip altered the document' };
+      return { status: 'failed', documentId, error: `structure-mismatch: ${plainStructureDiff(plain, roundtrip).join(' | ')}` };
     }
 
     const expectedText = deriveExpectedTextFromPlain(plain);
     if (text !== expectedText) {
-      return { status: 'failed', documentId, error: 'text-mismatch: extract_text != expected' };
+      return { status: 'failed', documentId, error: `text-mismatch: extract_text != expected, ${firstTextDiff(text, expectedText)}` };
     }
 
     const plainChars = collectPlainTextChars(plain);
     const legacyChars = collectLegacyTextChars(legacyJson);
     if (plainChars !== legacyChars) {
-      return { status: 'failed', documentId, error: 'text-mismatch: converter dropped or duplicated characters' };
+      return {
+        status: 'failed',
+        documentId,
+        error: `text-mismatch: converter dropped or duplicated characters, ${firstTextDiff(plainChars, legacyChars)}`,
+      };
     }
 
     if (anchors.length !== remarkAnchors.length) {

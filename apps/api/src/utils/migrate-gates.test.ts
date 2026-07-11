@@ -7,6 +7,7 @@ import {
   collectPlainTextChars,
   convertLegacyDocumentJson,
   deriveExpectedTextFromPlain,
+  plainStructureDiff,
   plainStructureEquals,
 } from './legacy-convert.ts';
 import type { PlainNodeEntry } from '@typie/editor-ffi/server';
@@ -32,7 +33,7 @@ const buildFixture = (): LegacyDocumentJson => ({
   nodes: {
     [ROOT_ID]: {
       type: 'root',
-      children: [id(1), id(10), id(20), id(25), id(30), id(40)],
+      children: [id(1), id(10), id(20), id(25), id(30), id(50), id(40)],
       cascade_attrs: {
         'style:font_family': 'Pretendard',
         'style:font_size': 1600,
@@ -70,7 +71,7 @@ const buildFixture = (): LegacyDocumentJson => ({
     [id(14)]: { type: 'text', parent: id(13), text: [{ text: 'cell text' }] },
     [id(20)]: { type: 'image', id: 'IMG1', proportion: 0.8, parent: ROOT_ID },
     [id(25)]: { type: 'horizontal_rule', variant: 'zigzag', parent: ROOT_ID },
-    [id(30)]: { type: 'fold', parent: ROOT_ID, children: [id(31), id(32)] },
+    [id(30)]: { type: 'fold', parent: ROOT_ID, children: [id(31), id(32)], cascade_attrs: { 'style:bold': true } },
     [id(31)]: {
       type: 'fold_title',
       parent: id(30),
@@ -83,6 +84,16 @@ const buildFixture = (): LegacyDocumentJson => ({
     [id(32)]: { type: 'fold_content', parent: id(30), children: [id(34)] },
     [id(34)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(32), children: [] },
     [id(40)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [] },
+    [id(50)]: {
+      type: 'blockquote',
+      variant: 'left_line',
+      parent: ROOT_ID,
+      children: [id(51), id(53)],
+      cascade_attrs: { 'style:font_size': 2400, 'style:text_color': '#ff0000', 'paragraph:line_height': 200 },
+    },
+    [id(51)]: { type: 'paragraph', align: 'left', line_height: 200, parent: id(50), children: [id(52)] },
+    [id(52)]: { type: 'text', parent: id(51), text: [{ text: 'styled ' }, { text: 'sized', styles: [{ type: 'font_size', size: 1400 }] }] },
+    [id(53)]: { type: 'paragraph', align: 'left', line_height: 200, parent: id(50), children: [] },
   },
 });
 
@@ -101,6 +112,27 @@ test('마이그레이션 게이트 체인: convert -> verify_plain -> to_graph_w
 
   assert.deepEqual(warnings, ['link/ruby dropped from tab: v2 schema does not allow them on tab nodes']);
   assert.equal(remarkAnchors.length, 2);
+
+  const fold = plain.root.children.at(4);
+  const blockquote = plain.root.children.at(5);
+  assert.ok(fold && blockquote);
+  assert.equal(blockquote.node.type, 'blockquote');
+  assert.deepEqual(blockquote.modifiers, {});
+  const [styledPara, emptyPara] = blockquote.children;
+  assert.deepEqual(styledPara.modifiers, {});
+  const [run1, run2] = styledPara.children;
+  assert.deepEqual(run1.modifiers, { font_size: { type: 'font_size', value: 2400 }, text_color: { type: 'text_color', value: '#ff0000' } });
+  assert.deepEqual(run2.modifiers, { font_size: { type: 'font_size', value: 1400 }, text_color: { type: 'text_color', value: '#ff0000' } });
+  assert.deepEqual(emptyPara.carry, [
+    { type: 'font_size', value: 2400 },
+    { type: 'text_color', value: '#ff0000' },
+  ]);
+
+  assert.equal(fold.node.type, 'fold');
+  const [foldTitle] = fold.children;
+  for (const run of foldTitle.children) {
+    assert.deepEqual(run.modifiers, {});
+  }
 
   const { anchors, heads, text, roundtrip } = await wasmFfi.use((host) => {
     host.verify_plain(plain);
@@ -125,4 +157,74 @@ test('마이그레이션 게이트 체인: convert -> verify_plain -> to_graph_w
   target.node.text += '_mutated';
 
   assert.equal(plainStructureEquals(roundtrip, mutated), false);
+
+  const diffs = plainStructureDiff(roundtrip, mutated);
+  assert.ok(diffs.length > 0);
+  assert.ok(diffs[0].includes('_mutated'));
+  assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
+});
+
+test('validate를 통과하지 못하는 과거 데이터: fold_title 내 스타일 마크도 게이트를 통과한다', async () => {
+  const json: LegacyDocumentJson = await (async () => {
+    const fixture: LegacyDocumentJson = {
+      settings: baseSettings,
+      nodes: {
+        [ROOT_ID]: { type: 'root', children: [id(1), id(4)] },
+        [id(1)]: { type: 'fold', parent: ROOT_ID, children: [id(2), id(3)] },
+        [id(2)]: {
+          type: 'text',
+          parent: id(1),
+          text: [],
+        },
+        [id(3)]: { type: 'fold_content', parent: id(1), children: [id(5)] },
+        [id(5)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(3), children: [] },
+        [id(4)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [] },
+      },
+    };
+    fixture.nodes[id(2)] = {
+      type: 'fold_title',
+      parent: id(1),
+      children: [id(6)],
+    };
+    fixture.nodes[id(6)] = {
+      type: 'text',
+      parent: id(2),
+      text: [
+        { text: 'plain ' },
+        {
+          text: 'legacy styled',
+          styles: [
+            { type: 'font_family', family: 'Iropke Batang OTF' },
+            { type: 'font_size', size: 1000 },
+            { type: 'text_color', color: 'black' },
+          ],
+        },
+      ],
+    };
+    const snapshot = await wasm.jsonToSnapshot(fixture);
+    return await wasm.snapshotToJson(snapshot);
+  })();
+
+  const { plain, remarkAnchors, warnings } = convertLegacyDocumentJson(json);
+
+  assert.equal(
+    warnings.some((w) => w.includes('fold_title')),
+    false,
+  );
+
+  const [foldNode] = plain.root.children;
+  const [foldTitle] = foldNode.children;
+  assert.equal(foldTitle.node.type, 'fold_title');
+  for (const run of foldTitle.children) {
+    assert.deepEqual(run.modifiers, {});
+  }
+
+  const { text, roundtrip } = await wasmFfi.use((host) => {
+    host.verify_plain(plain);
+    const result = host.to_graph_with_anchors(plain, { paths: remarkAnchors.map((anchor) => anchor.path) });
+    return { text: host.extract_text(plain), roundtrip: host.to_plain(result.graph) };
+  });
+
+  assert.equal(text, deriveExpectedTextFromPlain(plain));
+  assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
 });

@@ -57,6 +57,7 @@ test('빈 문단 하나짜리 문서가 v2 트리로 변환된다', async () => 
   assert.equal(plain.root.modifiers.block_gap?.type === 'block_gap' && plain.root.modifiers.block_gap.value, 100);
   assert.equal(plain.root.modifiers.paragraph_indent?.type === 'paragraph_indent' && plain.root.modifiers.paragraph_indent.value, 100);
   assert.equal('background_color' in plain.root.modifiers, false);
+  assert.equal('text_color' in plain.root.modifiers, false);
   assert.deepEqual(remarkAnchors, []);
   assert.deepEqual(warnings, []);
 });
@@ -309,4 +310,82 @@ test('expectedText가 extract_text 계약을 미러링한다', async () => {
   const { plain } = convertLegacyDocumentJson(json);
   assert.equal(deriveExpectedTextFromPlain(plain), 'ab\ncd');
   assert.equal(collectLegacyTextChars(json), 'abcd');
+});
+
+test('상속 동일값 스타일은 런과 carry에 주입되지 않는다 (v2 상속 정규형)', async () => {
+  const json = await canonicalize({
+    settings: baseSettings,
+    nodes: {
+      [ROOT_ID]: {
+        type: 'root',
+        children: [id(1), id(4), id(6)],
+        cascade_attrs: { 'style:font_family': 'Pretendard', 'style:font_size': 1600, 'style:font_weight': 400, 'style:letter_spacing': 0 },
+      },
+      [id(1)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [id(2)] },
+      [id(2)]: {
+        type: 'text',
+        parent: id(1),
+        text: [
+          {
+            text: 'pinned-but-equal',
+            styles: [
+              { type: 'font_size', size: 1600 },
+              { type: 'font_weight', weight: 400 },
+              { type: 'font_family', family: 'Iropke Batang OTF' },
+              { type: 'bold' },
+              { type: 'text_color', color: '#000000' },
+            ],
+          },
+        ],
+      },
+      [id(4)]: {
+        type: 'blockquote',
+        variant: 'left_line',
+        parent: ROOT_ID,
+        children: [id(5), id(7)],
+        cascade_attrs: { 'style:font_size': 2400 },
+      },
+      [id(5)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(4), children: [id(8)] },
+      [id(8)]: { type: 'text', parent: id(5), text: [{ text: 'back to root size', styles: [{ type: 'font_size', size: 1600 }] }] },
+      [id(7)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(4), children: [] },
+      [id(6)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [] },
+    },
+  });
+
+  const { plain } = convertLegacyDocumentJson(json);
+
+  const [para, blockquote] = plain.root.children;
+  const [run] = para.children;
+  assert.deepEqual(run.modifiers, {
+    font_family: { type: 'font_family', value: 'Iropke Batang OTF' },
+    bold: { type: 'bold' },
+  });
+
+  const [bqPara, bqEmpty] = blockquote.children;
+  const [bqRun] = bqPara.children;
+  assert.deepEqual(bqRun.modifiers, {});
+  assert.deepEqual(bqEmpty.carry, [{ type: 'font_size', value: 2400 }]);
+});
+
+test('문서 기본 색은 v2에 없음: root 색상 cascade는 배치하지 않고 비기본값은 경고와 함께 유실된다', async () => {
+  const json = await canonicalize({
+    settings: baseSettings,
+    nodes: {
+      [ROOT_ID]: {
+        type: 'root',
+        children: [id(1)],
+        cascade_attrs: { 'style:text_color': '#333333', 'style:background_color': '#fff8dc' },
+      },
+      [id(1)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [] },
+    },
+  });
+
+  const { plain, warnings } = convertLegacyDocumentJson(json);
+
+  assert.equal('text_color' in plain.root.modifiers, false);
+  assert.equal('background_color' in plain.root.modifiers, false);
+  assert.equal(warnings.filter((w) => w.includes('document default')).length, 2);
+
+  const [paragraph] = plain.root.children;
+  assert.deepEqual(paragraph.carry, []);
 });

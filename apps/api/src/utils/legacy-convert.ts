@@ -125,20 +125,54 @@ type WalkCtx = {
   nodes: Record<string, LegacyNodeEntry>;
   remarkAnchors: RemarkAnchor[];
   warnings: string[];
+  rootEffective: Partial<Record<ModifierType, Modifier>>;
 };
 
-const CASCADE_KEYS: Record<string, { type: ModifierType; kind: 'inheritable' | 'text_run' }> = {
-  'style:font_family': { type: 'font_family', kind: 'inheritable' },
-  'style:font_size': { type: 'font_size', kind: 'inheritable' },
-  'style:font_weight': { type: 'font_weight', kind: 'inheritable' },
-  'style:letter_spacing': { type: 'letter_spacing', kind: 'inheritable' },
-  'paragraph:line_height': { type: 'line_height', kind: 'inheritable' },
-  'style:bold': { type: 'bold', kind: 'text_run' },
-  'style:italic': { type: 'italic', kind: 'text_run' },
-  'style:underline': { type: 'underline', kind: 'text_run' },
-  'style:strikethrough': { type: 'strikethrough', kind: 'text_run' },
-  'style:text_color': { type: 'text_color', kind: 'text_run' },
-  'style:background_color': { type: 'background_color', kind: 'text_run' },
+const INHERITABLE_RUN_KINDS = ['font_family', 'font_size', 'font_weight', 'letter_spacing'] as const;
+
+const INHERITABLE_TEXT_DEFAULTS: Partial<Record<ModifierType, Modifier>> = {
+  font_family: { type: 'font_family', value: 'Pretendard' },
+  font_size: { type: 'font_size', value: 1200 },
+  font_weight: { type: 'font_weight', value: 400 },
+  letter_spacing: { type: 'letter_spacing', value: 0 },
+};
+
+const isDefaultTextColor = (modifier: Modifier): boolean => {
+  if (modifier.type !== 'text_color') return false;
+  const value = modifier.value.toLowerCase();
+  return value === 'black' || value === '#000000';
+};
+
+const dropInheritedEquals = (modifiers: Partial<Record<ModifierType, Modifier>>, ctx: WalkCtx): void => {
+  if (modifiers.text_color && isDefaultTextColor(modifiers.text_color)) {
+    delete modifiers.text_color;
+  }
+  if (modifiers.font_family && JSON.stringify(modifiers.font_family) === JSON.stringify(ctx.rootEffective.font_family)) {
+    delete modifiers.font_family;
+  }
+  if (modifiers.font_size && JSON.stringify(modifiers.font_size) === JSON.stringify(ctx.rootEffective.font_size)) {
+    delete modifiers.font_size;
+  }
+  if (modifiers.font_weight && JSON.stringify(modifiers.font_weight) === JSON.stringify(ctx.rootEffective.font_weight)) {
+    delete modifiers.font_weight;
+  }
+  if (modifiers.letter_spacing && JSON.stringify(modifiers.letter_spacing) === JSON.stringify(ctx.rootEffective.letter_spacing)) {
+    delete modifiers.letter_spacing;
+  }
+};
+
+const CASCADE_KEYS: Record<string, { type: ModifierType }> = {
+  'style:font_family': { type: 'font_family' },
+  'style:font_size': { type: 'font_size' },
+  'style:font_weight': { type: 'font_weight' },
+  'style:letter_spacing': { type: 'letter_spacing' },
+  'paragraph:line_height': { type: 'line_height' },
+  'style:bold': { type: 'bold' },
+  'style:italic': { type: 'italic' },
+  'style:underline': { type: 'underline' },
+  'style:strikethrough': { type: 'strikethrough' },
+  'style:text_color': { type: 'text_color' },
+  'style:background_color': { type: 'background_color' },
 };
 
 const modifierFromCascade = (key: ModifierType, raw: unknown, warnings: string[]): Modifier | null => {
@@ -190,11 +224,8 @@ const modifierFromCascade = (key: ModifierType, raw: unknown, warnings: string[]
   }
 };
 
-type CascadeSplit = { modifiers: Partial<Record<ModifierType, Modifier>>; textRun: Modifier[] };
-
-const splitCascade = (entry: LegacyNodeEntry, isRoot: boolean, warnings: string[]): CascadeSplit => {
-  const modifiers: Partial<Record<ModifierType, Modifier>> = {};
-  const textRun: Modifier[] = [];
+const readCascade = (entry: LegacyNodeEntry, warnings: string[]): Partial<Record<ModifierType, Modifier>> => {
+  const out: Partial<Record<ModifierType, Modifier>> = {};
   for (const [rawKey, rawValue] of Object.entries(entry.cascade_attrs ?? {})) {
     const mapping = CASCADE_KEYS[rawKey];
     if (!mapping) {
@@ -202,11 +233,15 @@ const splitCascade = (entry: LegacyNodeEntry, isRoot: boolean, warnings: string[
       continue;
     }
     const modifier = modifierFromCascade(mapping.type, rawValue, warnings);
-    if (!modifier) continue;
-    if (mapping.kind === 'inheritable' || isRoot) modifiers[mapping.type] = modifier;
-    else textRun.push(modifier);
+    if (modifier) out[mapping.type] = modifier;
   }
-  return { modifiers, textRun };
+  return out;
+};
+
+type Inherited = {
+  lineHeight: number;
+  styles: Partial<Record<ModifierType, Modifier>>;
+  stylesAllowed: boolean;
 };
 
 const collectRemarks = (nodeId: string, entry: LegacyNodeEntry, path: number[], ctx: WalkCtx) => {
@@ -225,12 +260,12 @@ const makeEntry = (
   carry: Modifier[] = [],
 ): PlainNodeEntry => ({ node, modifiers: modifiers as PlainNodeEntry['modifiers'], carry, children });
 
-const convertChildren = (entry: LegacyNodeEntry, path: number[], inheritedLineHeight: number, ctx: WalkCtx): PlainNodeEntry[] => {
+const convertChildren = (entry: LegacyNodeEntry, path: number[], inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
   const out: PlainNodeEntry[] = [];
   for (const childId of entry.children ?? []) {
     const child = ctx.nodes[childId];
     if (!child) throw new Error(`dangling child: ${childId}`);
-    out.push(...convertNode(childId, child, [...path, out.length], inheritedLineHeight, ctx));
+    out.push(...convertNode(childId, child, [...path, out.length], inherited, ctx));
   }
   return out;
 };
@@ -288,10 +323,11 @@ const segmentModifiers = (segment: LegacySegment, warnings: string[]): Partial<R
   return modifiers;
 };
 
-const convertTextNode = (entry: LegacyNodeEntry, ctx: WalkCtx): PlainNodeEntry[] => {
+const convertTextNode = (entry: LegacyNodeEntry, ctx: WalkCtx, inherited: Inherited): PlainNodeEntry[] => {
   const out: PlainNodeEntry[] = [];
   for (const segment of entry.text ?? []) {
-    const modifiers = segmentModifiers(segment, ctx.warnings);
+    const modifiers = inherited.stylesAllowed ? { ...inherited.styles, ...segmentModifiers(segment, ctx.warnings) } : {};
+    dropInheritedEquals(modifiers, ctx);
     let tabModifiers: Partial<Record<ModifierType, Modifier>> | null = null;
     let buffer = '';
     const flush = () => {
@@ -321,53 +357,51 @@ const convertTextNode = (entry: LegacyNodeEntry, ctx: WalkCtx): PlainNodeEntry[]
   return out;
 };
 
-const convertNode = (
-  nodeId: string,
-  entry: LegacyNodeEntry,
-  path: number[],
-  inheritedLineHeight: number,
-  ctx: WalkCtx,
-): PlainNodeEntry[] => {
+const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
   collectRemarks(nodeId, entry, path, ctx);
 
-  const { modifiers, textRun } = splitCascade(entry, false, ctx.warnings);
-  const cascadeLineHeight = modifiers.line_height?.type === 'line_height' ? modifiers.line_height.value : null;
-  const childInherited = cascadeLineHeight ?? inheritedLineHeight;
-
-  const isEmptyTextblock = (entry.type === 'paragraph' || entry.type === 'fold_title') && (entry.children ?? []).length === 0;
-  const carry = isEmptyTextblock ? sortCarry(textRun) : [];
-  if (!isEmptyTextblock && textRun.length > 0) {
-    ctx.warnings.push(`dropped text-run cascade on non-empty ${entry.type}: ${nodeId}`);
-  }
+  const cascade = readCascade(entry, ctx.warnings);
+  const cascadeLineHeight = cascade.line_height?.type === 'line_height' ? cascade.line_height.value : null;
+  const cascadeStyles: Partial<Record<ModifierType, Modifier>> = { ...cascade };
+  delete cascadeStyles.line_height;
+  const childInherited: Inherited = {
+    lineHeight: cascadeLineHeight ?? inherited.lineHeight,
+    styles: { ...inherited.styles, ...cascadeStyles },
+    stylesAllowed: inherited.stylesAllowed,
+  };
 
   switch (entry.type) {
     case 'paragraph': {
+      const modifiers: Partial<Record<ModifierType, Modifier>> = {};
       const align = String(entry.align ?? 'left');
       if (align !== 'left') {
         modifiers.alignment = { type: 'alignment', value: align as 'left' | 'center' | 'right' | 'justify' };
       }
-      if (!isEmptyTextblock || cascadeLineHeight == null) {
-        const lineHeight = clamp(Number(entry.line_height ?? childInherited), 50, 400);
-        if (lineHeight !== childInherited) {
+      const isEmpty = (entry.children ?? []).length === 0;
+      if (isEmpty && cascadeLineHeight != null) {
+        if (cascadeLineHeight !== inherited.lineHeight) {
+          modifiers.line_height = { type: 'line_height', value: cascadeLineHeight };
+        }
+      } else {
+        const lineHeight = clamp(Number(entry.line_height ?? childInherited.lineHeight), 50, 400);
+        if (lineHeight !== childInherited.lineHeight) {
           modifiers.line_height = { type: 'line_height', value: lineHeight };
         }
       }
+      const carrySource = { ...childInherited.styles };
+      dropInheritedEquals(carrySource, ctx);
+      const carry = isEmpty && inherited.stylesAllowed ? sortCarry(Object.values(carrySource)) : [];
       return [makeEntry({ type: 'paragraph' }, modifiers, mergeAdjacentTextRuns(convertChildren(entry, path, childInherited, ctx)), carry)];
     }
     case 'blockquote': {
-      return [
-        makeEntry({ type: 'blockquote', variant: entry.variant as never }, modifiers, convertChildren(entry, path, childInherited, ctx)),
-      ];
+      return [makeEntry({ type: 'blockquote', variant: entry.variant as never }, {}, convertChildren(entry, path, childInherited, ctx))];
     }
     case 'callout': {
-      return [
-        makeEntry({ type: 'callout', variant: entry.variant as never }, modifiers, convertChildren(entry, path, childInherited, ctx)),
-      ];
+      return [makeEntry({ type: 'callout', variant: entry.variant as never }, {}, convertChildren(entry, path, childInherited, ctx))];
     }
     case 'fold_title': {
-      return [
-        makeEntry({ type: 'fold_title' }, modifiers, mergeAdjacentTextRuns(convertChildren(entry, path, childInherited, ctx)), carry),
-      ];
+      const inner: Inherited = { lineHeight: childInherited.lineHeight, styles: {}, stylesAllowed: false };
+      return [makeEntry({ type: 'fold_title' }, {}, mergeAdjacentTextRuns(convertChildren(entry, path, inner, ctx)), [])];
     }
     case 'bullet_list':
     case 'ordered_list':
@@ -375,9 +409,10 @@ const convertNode = (
     case 'fold':
     case 'fold_content':
     case 'table_row': {
-      return [makeEntry({ type: entry.type }, modifiers, convertChildren(entry, path, childInherited, ctx))];
+      return [makeEntry({ type: entry.type }, {}, convertChildren(entry, path, childInherited, ctx))];
     }
     case 'table': {
+      const modifiers: Partial<Record<ModifierType, Modifier>> = {};
       const tableAlign = String(entry.align ?? 'left');
       if (tableAlign !== 'left') {
         modifiers.alignment = { type: 'alignment', value: tableAlign as 'left' | 'center' | 'right' };
@@ -391,43 +426,46 @@ const convertNode = (
       ];
     }
     case 'table_cell': {
+      const modifiers: Partial<Record<ModifierType, Modifier>> = {};
+      const background = childInherited.styles.background_color;
+      if (background) {
+        modifiers.background_color = background;
+      }
+      const cellInherited: Inherited = { ...childInherited, styles: { ...childInherited.styles } };
+      delete cellInherited.styles.background_color;
       return [
         makeEntry(
           { type: 'table_cell', col_width: toColWidth(entry.col_width), background_color: undefined },
           modifiers,
-          convertChildren(entry, path, childInherited, ctx),
+          convertChildren(entry, path, cellInherited, ctx),
         ),
       ];
     }
     case 'image': {
       return [
-        makeEntry(
-          { type: 'image', id: (entry.id as string | undefined) ?? undefined, proportion: toProportion(entry.proportion) },
-          modifiers,
-          [],
-        ),
+        makeEntry({ type: 'image', id: (entry.id as string | undefined) ?? undefined, proportion: toProportion(entry.proportion) }, {}, []),
       ];
     }
     case 'file': {
-      return [makeEntry({ type: 'file', id: (entry.id as string | undefined) ?? undefined }, modifiers, [])];
+      return [makeEntry({ type: 'file', id: (entry.id as string | undefined) ?? undefined }, {}, [])];
     }
     case 'embed': {
-      return [makeEntry({ type: 'embed', id: (entry.id as string | undefined) ?? undefined }, modifiers, [])];
+      return [makeEntry({ type: 'embed', id: (entry.id as string | undefined) ?? undefined }, {}, [])];
     }
     case 'archived': {
-      return [makeEntry({ type: 'archived', id: (entry.id as string | undefined) ?? undefined }, modifiers, [])];
+      return [makeEntry({ type: 'archived', id: (entry.id as string | undefined) ?? undefined }, {}, [])];
     }
     case 'hard_break': {
-      return [makeEntry({ type: 'hard_break' }, modifiers, [])];
+      return [makeEntry({ type: 'hard_break' }, {}, [])];
     }
     case 'horizontal_rule': {
-      return [makeEntry({ type: 'horizontal_rule', variant: entry.variant as never }, modifiers, [])];
+      return [makeEntry({ type: 'horizontal_rule', variant: entry.variant as never }, {}, [])];
     }
     case 'page_break': {
-      return [makeEntry({ type: 'page_break' }, modifiers, [])];
+      return [makeEntry({ type: 'page_break' }, {}, [])];
     }
     case 'text': {
-      return convertTextNode(entry, ctx);
+      return convertTextNode(entry, ctx, childInherited);
     }
     default: {
       throw new Error(`unknown legacy node type: ${entry.type} (${nodeId})`);
@@ -436,14 +474,29 @@ const convertNode = (
 };
 
 export const convertLegacyDocumentJson = (json: LegacyDocumentJson): ConvertResult => {
-  const ctx: WalkCtx = { nodes: json.nodes, remarkAnchors: [], warnings: [] };
+  const ctx: WalkCtx = { nodes: json.nodes, remarkAnchors: [], warnings: [], rootEffective: {} };
 
   const root = json.nodes[ROOT_ID];
   if (!root || root.type !== 'root') throw new Error('missing root node');
 
   collectRemarks(ROOT_ID, root, [], ctx);
 
-  const { modifiers } = splitCascade(root, true, ctx.warnings);
+  const modifiers = readCascade(root, ctx.warnings);
+  for (const ty of INHERITABLE_RUN_KINDS) {
+    ctx.rootEffective[ty] = modifiers[ty] ?? INHERITABLE_TEXT_DEFAULTS[ty];
+  }
+  if (modifiers.text_color) {
+    if (!isDefaultTextColor(modifiers.text_color)) {
+      ctx.warnings.push(`document default text_color dropped: v2 has no document-level color (${JSON.stringify(modifiers.text_color)})`);
+    }
+    delete modifiers.text_color;
+  }
+  if (modifiers.background_color) {
+    ctx.warnings.push(
+      `document default background_color dropped: v2 has no document-level color (${JSON.stringify(modifiers.background_color)})`,
+    );
+    delete modifiers.background_color;
+  }
   if (json.settings.block_gap != null) {
     modifiers.block_gap = { type: 'block_gap', value: clamp(json.settings.block_gap, 0, 400) };
   }
@@ -454,7 +507,7 @@ export const convertLegacyDocumentJson = (json: LegacyDocumentJson): ConvertResu
   const inheritedLineHeight = modifiers.line_height?.type === 'line_height' ? modifiers.line_height.value : 160;
   const layoutMode = roundLayoutMode(json.settings.layout_mode ?? { type: 'continuous', max_width: 600 });
 
-  const children = convertChildren(root, [], inheritedLineHeight, ctx);
+  const children = convertChildren(root, [], { lineHeight: inheritedLineHeight, styles: {}, stylesAllowed: true }, ctx);
 
   const plain: PlainDoc = {
     root: makeEntry({ type: 'root', layout_mode: layoutMode }, modifiers, children),
@@ -533,3 +586,55 @@ export const canonical = (value: unknown): unknown => {
 };
 
 export const plainStructureEquals = (a: PlainDoc, b: PlainDoc): boolean => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+const DIFF_LIMIT = 5;
+
+const truncate = (value: unknown): string => {
+  const s = JSON.stringify(value) ?? 'undefined';
+  return s.length > 80 ? `${s.slice(0, 77)}...` : s;
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const collectDiffs = (a: unknown, b: unknown, path: string, out: string[]): void => {
+  if (out.length >= DIFF_LIMIT) return;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) {
+      out.push(`${path}: array length ${a.length} != ${b.length}`);
+      return;
+    }
+    for (const [i, item] of a.entries()) collectDiffs(item, b[i], `${path}[${i}]`, out);
+    return;
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (out.length >= DIFF_LIMIT) return;
+      const av = a[key];
+      const bv = b[key];
+      if (av === undefined || bv === undefined) {
+        out.push(`${path}.${key}: ${truncate(av)} != ${truncate(bv)}`);
+      } else {
+        collectDiffs(av, bv, `${path}.${key}`, out);
+      }
+    }
+    return;
+  }
+  if (JSON.stringify(a) !== JSON.stringify(b)) {
+    out.push(`${path}: ${truncate(a)} != ${truncate(b)}`);
+  }
+};
+
+export const plainStructureDiff = (a: PlainDoc, b: PlainDoc): string[] => {
+  const out: string[] = [];
+  collectDiffs(canonical(a), canonical(b), 'doc', out);
+  return out;
+};
+
+export const firstTextDiff = (a: string, b: string): string => {
+  const max = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < max && a[i] === b[i]) i += 1;
+  const from = Math.max(0, i - 15);
+  return `at ${i}: ${JSON.stringify(a.slice(from, i + 25))} != ${JSON.stringify(b.slice(from, i + 25))} (len ${a.length}/${b.length})`;
+};
