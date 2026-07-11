@@ -39,11 +39,13 @@ import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.preview.EditorPreview
 import co.typie.editor.runtime.EditorRuntime
+import co.typie.editor.sync.ws.loadDocumentSnapshotBytes
 import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.platform.PlatformModule
 import co.typie.result.onOk
+import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -87,8 +89,12 @@ fun DocumentBodySettingsScreen(entityId: String) {
   ) { contentPadding ->
     val data = (model.query.state as? QueryState.Success)?.data ?: return@Screen
     val document = data.entity.node.onDocument ?: return@Screen
-    val state = document.state ?: return@Screen
-    val graph = state.graph
+    var graph by remember(document.id) { mutableStateOf<ByteArray?>(null) }
+    LaunchedEffect(document.id) {
+      result<ByteArray, Nothing> { loadDocumentSnapshotBytes(document.id) }
+        .withDefaultExceptionHandler(toast)
+        .onOk { graph = it }
+    }
 
     val colors = AppTheme.colors
     val layoutDirection = LocalLayoutDirection.current
@@ -96,12 +102,12 @@ fun DocumentBodySettingsScreen(entityId: String) {
     val previewHeight = 200.dp
     val previewContainerHeight = topBarClearance + previewHeight
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
-    val graphKey = remember(graph) { graph.size to graph.contentHashCode() }
+    val graphKey = remember(graph) { graph?.let { it.size to it.contentHashCode() } }
     var initial by
       remember(document.id, graphKey) { mutableStateOf<DocumentBodySettingsInitialState?>(null) }
     val settingsRuntime = remember(document.id) { EditorRuntime(uiScope = scope) }
     val previewRuntime = remember(document.id) { EditorRuntime(uiScope = scope) }
-    val previewGraph = initial?.let { graph.takeIf { _ -> it.hasText } }
+    val previewGraph = if (initial?.hasText == true) graph else null
     val pendingPreviewChangesets =
       remember(if (previewGraph == null) null else graphKey) {
         mutableStateOf<List<ByteArray>>(emptyList())
@@ -117,18 +123,21 @@ fun DocumentBodySettingsScreen(entityId: String) {
     DisposableEffect(settingsRuntime) { onDispose { settingsRuntime.clear() } }
 
     LaunchedEffect(graphKey) {
+      val currentGraph = graph ?: return@LaunchedEffect
       val nextInitial =
         withContext(Dispatchers.Default) {
           DocumentBodySettingsInitialState(
             hasText =
-              runCatching { PlatformModule.editorHost.extractTextFromGraph(graph).isNotBlank() }
+              runCatching {
+                  PlatformModule.editorHost.extractTextFromGraph(currentGraph).isNotBlank()
+                }
                 .getOrDefault(true),
             style =
-              runCatching { PlatformModule.editorHost.rootModifiersFromGraph(graph) }
+              runCatching { PlatformModule.editorHost.rootModifiersFromGraph(currentGraph) }
                 .getOrDefault(emptyList())
                 .toEditorStyleSettings(),
             layout =
-              runCatching { PlatformModule.editorHost.rootAttrsFromGraph(graph).layoutMode }
+              runCatching { PlatformModule.editorHost.rootAttrsFromGraph(currentGraph).layoutMode }
                 .getOrDefault(DefaultRootPaginatedLayout),
           )
         }
@@ -138,10 +147,11 @@ fun DocumentBodySettingsScreen(entityId: String) {
     }
 
     LaunchedEffect(settingsRuntime, graphKey, editorThemeVariant) {
+      val currentGraph = graph ?: return@LaunchedEffect
       if (!settingsRuntime.canCreateEditor) return@LaunchedEffect
       settingsRuntime.attach(
         Editor.create(
-          graph = graph,
+          graph = currentGraph,
           viewport = Viewport(width = 1f, height = 1f, scaleFactor = 1.0),
           scope = scope,
           themeVariant = editorThemeVariant,

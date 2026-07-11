@@ -27,11 +27,6 @@
 
             ... on Document {
               id
-              state {
-                graph
-                updatedAt
-              }
-
               title
               nullableTitle
               subtitle

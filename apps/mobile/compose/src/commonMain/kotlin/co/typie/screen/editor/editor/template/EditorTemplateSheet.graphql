@@ -15,9 +15,6 @@ query EditorTemplateSheet_Query($siteId: ID!) {
 query EditorTemplateSheet_TemplateGraph_Query($slug: String!) {
   document(slug: $slug) @catch(to: THROW) {
     id
-    state {
-      graph
-    }
   }
 }
 

@@ -1,8 +1,7 @@
 package co.typie.editor.sync
 
 import co.touchlab.kermit.Logger
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
+import co.typie.editor.sync.ws.SyncWs
 import kotlinx.coroutines.sync.Mutex
 import okio.ByteString.Companion.toByteString
 
@@ -53,14 +52,10 @@ class OrphanSweeper(
   }
 }
 
-@OptIn(ExperimentalUuidApi::class)
 val orphanSweeper: OrphanSweeper by lazy {
   OrphanSweeper(
     store = ChangesetDeltaStore,
-    pushFn = { documentId, payload ->
-      GraphQlSyncTransport(documentId = documentId, clientId = Uuid.random().toString())
-        .push(payload)
-    },
+    pushFn = { documentId, payload -> SyncWs.connection.push(documentId, payload) },
     openDocumentIds = { ActiveSyncEngines.openDocumentIds() },
   )
 }

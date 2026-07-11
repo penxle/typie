@@ -45,6 +45,7 @@ import co.typie.domain.subscription.PlanUpgradeBenefit
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.editor.Editor
+import co.typie.editor.EditorGraphSource
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
 import co.typie.editor.LocalEditorZoomController
@@ -59,6 +60,7 @@ import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.GraphIngest
 import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
@@ -82,15 +84,22 @@ import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.sync.ActiveSyncEngines
 import co.typie.editor.sync.ChangesetDeltaStore
-import co.typie.editor.sync.GraphQlSyncTransport
 import co.typie.editor.sync.RemoteChangesetPipeline
 import co.typie.editor.sync.SyncEngine
+import co.typie.editor.sync.SyncHeadsSink
 import co.typie.editor.sync.SyncSession
 import co.typie.editor.sync.asSyncEditor
 import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.isPermanentSyncError
 import co.typie.editor.sync.orphanSweeper
 import co.typie.editor.sync.syncAppScope
+import co.typie.editor.sync.ws.AttachEvent
+import co.typie.editor.sync.ws.DocumentGraphLoader
+import co.typie.editor.sync.ws.DocumentGraphLoaderEvent
+import co.typie.editor.sync.ws.DocumentSyncBaseline
+import co.typie.editor.sync.ws.SyncWs
+import co.typie.editor.sync.ws.SyncWsException
+import co.typie.editor.sync.ws.WsSyncTransport
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
@@ -176,17 +185,16 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
 import kotlin.time.Clock
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.decodeFromJsonElement
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalUuidApi::class)
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
@@ -467,14 +475,93 @@ fun EditorScreen(entityId: String) {
   }
 
   val activeEditor = runtime.editor
-  val syncBaseline = model.syncBaseline
   val documentId = model.documentId
+
+  var editorGraphHandleState by remember(entityId) { mutableStateOf<GraphIngest?>(null) }
+  var syncBaselineState by remember(entityId) { mutableStateOf<DocumentSyncBaseline?>(null) }
+  var activeSyncHeadsSinkState by remember(entityId) { mutableStateOf<SyncHeadsSink?>(null) }
+
+  LaunchedEffect(documentId) {
+    val currentDocumentId = documentId ?: return@LaunchedEffect
+    val channel = SyncWs.channel(currentDocumentId)
+    val loader = DocumentGraphLoader(beginIngest = { PlatformModule.editorHost.beginGraphIngest() })
+    val pendingChangesets = mutableListOf<AttachEvent.ChangesetsEvent>()
+
+    try {
+      launch {
+        snapshotFlow { runtime.editor }
+          .filterNotNull()
+          .collect { readyEditor ->
+            if (pendingChangesets.isEmpty()) return@collect
+            val queued = pendingChangesets.toList()
+            pendingChangesets.clear()
+            var latestHeads: ByteArray? = null
+            var latestDurableHeads: ByteArray? = null
+            for (event in queued) {
+              for (bundle in event.bundles) {
+                if (bundle.isNotEmpty()) readyEditor.receiveRemoteChangeset(bundle)
+              }
+              latestHeads = event.heads
+              latestDurableHeads = event.durableHeads
+            }
+            val heads = latestHeads
+            val durableHeads = latestDurableHeads
+            if (heads != null && durableHeads != null) {
+              syncBaselineState =
+                syncBaselineState?.copy(heads = heads, durableHeads = durableHeads)
+              activeSyncHeadsSinkState?.let { sink ->
+                sink.setConfirmedHeads(heads)
+                sink.setDurableHeads(durableHeads)
+              }
+            }
+          }
+      }
+
+      channel.freshSubscribe().collect { event ->
+        if (event is AttachEvent.ChangesetsEvent && runtime.editor == null) {
+          pendingChangesets.add(event)
+        }
+        when (val outcome = loader.handle(event)) {
+          is DocumentGraphLoaderEvent.Loaded -> {
+            pendingChangesets.clear()
+            runtime.clear()
+            editorGraphHandleState = outcome.handle
+            syncBaselineState = outcome.baseline
+          }
+          is DocumentGraphLoaderEvent.Failed ->
+            runtime.reportError(SyncWsException(outcome.code, permanent = true))
+          null -> {}
+        }
+      }
+    } finally {
+      loader.cancel()
+    }
+  }
+
+  val syncBaseline = syncBaselineState
   if (activeEditor != null && syncBaseline != null && documentId != null) {
     DisposableEffect(activeEditor) {
-      val clientId = Uuid.random().toString()
-      val transport = GraphQlSyncTransport(documentId = documentId, clientId = clientId)
+      val graphHandleAtAttach = editorGraphHandleState
+      lateinit var engine: SyncEngine
+      val handleNeedsReload: suspend () -> Unit = {
+        catchingNonCancellation { engine.captureNow() }
+        engine.stop()
+        model.refetchDocument()
+        model.bumpReloadGeneration()
+        if (editorGraphHandleState === graphHandleAtAttach) editorGraphHandleState = null
+        runtime.clear(activeEditor)
+      }
+      val channel = SyncWs.channel(documentId)
+      val transport =
+        WsSyncTransport(
+          channel = channel,
+          connection = SyncWs.connection,
+          documentId = documentId,
+          onReload = handleNeedsReload,
+          scope = scope,
+        )
       val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-      val engine =
+      engine =
         SyncEngine(
           editor = activeEditor.asSyncEditor(),
           documentId = documentId,
@@ -486,6 +573,7 @@ fun EditorScreen(entityId: String) {
           isPermanent = ::isPermanentSyncError,
           now = { Clock.System.now().toEpochMilliseconds() },
         )
+      activeSyncHeadsSinkState = engine
       val pipeline =
         RemoteChangesetPipeline(
           editor = activeEditor.asSyncEditor(),
@@ -493,13 +581,7 @@ fun EditorScreen(entityId: String) {
           transport = transport,
           initialSeq = syncBaseline.seq,
           scope = scope,
-          onNeedsReload = {
-            catchingNonCancellation { engine.captureNow() }
-            engine.stop()
-            model.refetchDocument()
-            model.bumpReloadGeneration()
-            runtime.clear(activeEditor)
-          },
+          onNeedsReload = handleNeedsReload,
         )
       val session = SyncSession(engine = engine, pipeline = pipeline)
       ActiveSyncEngines.register(documentId, session)
@@ -514,6 +596,7 @@ fun EditorScreen(entityId: String) {
         pipeline.stop()
         engine.stop()
         ActiveSyncEngines.unregister(documentId, session)
+        if (activeSyncHeadsSinkState === engine) activeSyncHeadsSinkState = null
         syncAppScope.launch { orphanSweeper.sweep() }
       }
     }
@@ -1065,7 +1148,7 @@ fun EditorScreen(entityId: String) {
           }
         },
         body = {
-          val graph = model.graph
+          val editorGraphHandle = editorGraphHandleState
           val pending by
             produceState<List<ByteArray>?>(
               initialValue = null,
@@ -1081,10 +1164,10 @@ fun EditorScreen(entityId: String) {
                 }
             }
           val loadedPending = pending
-          if (graph != null && loadedPending != null) {
+          if (editorGraphHandle != null && loadedPending != null) {
             EditorBody(
-              graph = graph,
-              pending = loadedPending,
+              source =
+                EditorGraphSource.Ingest(handle = editorGraphHandle, pending = loadedPending),
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,

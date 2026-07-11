@@ -12,6 +12,7 @@ import { deriveContext } from '#/context.ts';
 import { env } from '#/env.ts';
 import { graphql } from '#/graphql/index.ts';
 import { rest } from '#/rest/index.ts';
+import { attachSyncServer } from '#/sync/index.ts';
 
 const log = logger.getChild('main');
 
@@ -64,7 +65,7 @@ app.onError((error, c) => {
 
 const wss = new WebSocketServer({ noServer: true });
 
-serve(
+const server = serve(
   {
     fetch: app.fetch,
     hostname: '0.0.0.0',
@@ -75,3 +76,5 @@ serve(
     log.info('Listening {*}', { hostname: info.address, port: info.port });
   },
 );
+
+attachSyncServer(server as import('node:http').Server);

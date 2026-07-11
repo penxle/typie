@@ -30,6 +30,7 @@ buildx
 bullmq
 bunx
 bytea
+cbor
 cdylib
 cinterop
 cnpg

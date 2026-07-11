@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { createFragment, createQuery } from '@mearie/svelte';
+  import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
+  import { getDocumentChannels, loadDocumentSnapshot } from '$lib/sync';
   import { graphql } from '$mearie';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentTemplateModalV2_site$key } from '$mearie';
@@ -26,32 +27,10 @@
         documentTemplates {
           id
           title
-
-          entity {
-            id
-            slug
-          }
         }
       }
     `),
     () => site$key,
-  );
-
-  let templateSlug = $state<string | null>(null);
-
-  const query = createQuery(
-    graphql(`
-      query DocumentTemplateModalV2_Query($slug: String!) {
-        document(slug: $slug) {
-          id
-          state {
-            graph
-          }
-        }
-      }
-    `),
-    () => ({ slug: templateSlug ?? '' }),
-    () => ({ skip: !templateSlug }),
   );
 
   let open = $state(false);
@@ -70,22 +49,16 @@
     };
   });
 
-  $effect(() => {
-    if (templateSlug && query.data && !query.loading) {
-      const graph = query.data.document.state?.graph;
-      if (graph) {
-        editor?.insertTemplateFragment(Uint8Array.fromBase64(graph));
-      } else {
-        Toast.error('이 템플릿은 아직 사용할 수 없어요.');
-      }
-      editor?.focus();
-      templateSlug = null;
-      open = false;
+  const loadTemplate = async (documentId: string) => {
+    try {
+      const graph = await loadDocumentSnapshot(getDocumentChannels(), documentId);
+      editor?.insertTemplateFragment(graph);
+    } catch {
+      Toast.error('이 템플릿은 아직 사용할 수 없어요.');
     }
-  });
 
-  const loadTemplate = (slug: string) => {
-    templateSlug = slug;
+    editor?.focus();
+    open = false;
   };
 </script>
 
@@ -115,7 +88,7 @@
             _hover: { backgroundColor: 'surface.muted' },
           }),
         )}
-        onclick={() => loadTemplate(template.entity.slug)}
+        onclick={() => void loadTemplate(template.id)}
         type="button"
       >
         <div class={flex({ alignItems: 'center', gap: '4px' })}>

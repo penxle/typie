@@ -197,6 +197,7 @@ kotlin {
     implementation(libs.kotlinx.collections.immutable)
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.cbor)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.websockets)
     implementation(libs.ktor.client.content.negotiation)

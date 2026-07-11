@@ -43,12 +43,11 @@ import kotlinx.coroutines.CancellationException
 
 @Composable
 internal fun EditorView(
-  graph: ByteArray,
+  source: EditorGraphSource,
   layoutSpec: EditorDocumentLayoutSpec,
   viewportWidth: Float,
   viewportHeight: Float,
   modifier: Modifier = Modifier,
-  pending: List<ByteArray> = emptyList(),
   textInputSessionEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
@@ -80,9 +79,8 @@ internal fun EditorView(
       uiState.clear()
       try {
         val editor =
-          Editor.createWithPending(
-            graph = graph,
-            pending = pending,
+          Editor.createFromSource(
+            source = source,
             viewport = viewport,
             themeVariant = themeVariant,
             scope = scope,

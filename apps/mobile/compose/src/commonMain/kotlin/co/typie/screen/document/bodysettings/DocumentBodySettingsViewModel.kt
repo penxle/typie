@@ -9,23 +9,20 @@ import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorLocalChangesetTracker
 import co.typie.editor.EditorScope
 import co.typie.editor.FontLoader
+import co.typie.editor.sync.ws.SyncWs
 import co.typie.graphql.Apollo
-import co.typie.graphql.DocumentBodySettingsScreen_PushDocumentChangesets_Mutation
 import co.typie.graphql.DocumentBodySettingsScreen_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.QueryState
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
-import co.typie.graphql.executeMutation
 import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.FontFamilyState
 import co.typie.graphql.type.FontState
-import co.typie.graphql.type.PushDocumentChangesetsInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.storage.Preference
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -75,18 +72,8 @@ internal class DocumentBodySettingsViewModel(private val entityId: String) : Vie
       val changesets = changesetTracker.collect(editor = editor, block = block)
       if (changesets.isEmpty()) return@withLock null
 
-      val response =
-        Apollo.executeMutation(
-          DocumentBodySettingsScreen_PushDocumentChangesets_Mutation(
-            input =
-              PushDocumentChangesetsInput(
-                changesets = changesets,
-                clientId = Preference.deviceId,
-                documentId = documentId,
-              )
-          )
-        )
-      changesetTracker.markSynced(response.pushDocumentChangesets.heads)
+      val response = SyncWs.connection.push(documentId, changesets)
+      changesetTracker.markSynced(response.heads)
       EditorLocalChangesetBus.publish(entityId = entityId, changesets = changesets)
       changesets
     }

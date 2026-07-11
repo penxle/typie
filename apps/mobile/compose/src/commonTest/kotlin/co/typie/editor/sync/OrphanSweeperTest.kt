@@ -1,5 +1,6 @@
 package co.typie.editor.sync
 
+import co.typie.editor.sync.ws.SyncWsException
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -176,12 +177,7 @@ class OrphanSweeperTest {
         store = store,
         pushFn = { _, _ ->
           attempts++
-          throw com.apollographql.apollo.exception.ApolloHttpException(
-            statusCode = 403,
-            headers = emptyList(),
-            body = null,
-            message = "",
-          )
+          throw SyncWsException("forbidden", true)
         },
         openDocumentIds = { emptySet() },
       )

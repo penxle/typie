@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Pusher } from './pusher.svelte';
+import { SyncRequestError } from '$lib/sync/protocol';
+import { isPermanentForTest, Pusher } from './pusher.svelte';
 import { dec, enc, FakeEditor, FakeStore } from './test-fakes';
 import type { PusherEvent, PusherOpts } from './types';
 
@@ -331,5 +332,10 @@ describe('Pusher (single-source-of-truth)', () => {
     expect(pushed.flatMap(dec)).toEqual([3]);
     expect(events.some((e) => e.kind === 'persist.withheld' && e.count === 1)).toBe(true);
     pusher.stop();
+  });
+
+  it('SyncRequestError는 permanent 플래그를 그대로 따른다', () => {
+    expect(isPermanentForTest(new SyncRequestError('forbidden', true))).toBe(true);
+    expect(isPermanentForTest(new SyncRequestError('connection_lost', false))).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { isAggregatedError, isExchangeError, isGraphQLError } from '@mearie/svelte';
+import { SyncRequestError } from '$lib/sync/protocol';
 import type { PusherOpts, PushResult, PushStatus } from './types';
 
 const IDLE_MS = 500;
@@ -7,21 +7,12 @@ const BACKOFF_BASE_MS = 2000;
 const BACKOFF_CAP_MS = 30_000;
 const DORMANT_ADOPT_LIMIT = 8;
 
-const PERMANENT_CODES = new Set(['invalid_changeset_payload']);
-
 function isPermanent(err: unknown): boolean {
-  if (!isAggregatedError(err)) return false;
-  for (const e of err.errors) {
-    if (isGraphQLError(e)) {
-      const code = e.extensions?.code;
-      if (typeof code === 'string' && PERMANENT_CODES.has(code)) return true;
-    } else if (isExchangeError(e, 'http')) {
-      const status = e.extensions?.statusCode;
-      if (typeof status === 'number' && status >= 400 && status < 500) return true;
-    }
-  }
+  if (err instanceof SyncRequestError) return err.permanent;
   return false;
 }
+
+export const isPermanentForTest = isPermanent;
 
 export class Pusher {
   private readonly opts: PusherOpts;

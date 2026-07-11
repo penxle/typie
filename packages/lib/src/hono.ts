@@ -1,29 +1,30 @@
 import { getConnInfo } from '@hono/node-server/conninfo';
 import IPAddr from 'ipaddr.js';
 import * as R from 'remeda';
+import type { IncomingMessage } from 'node:http';
 import type { Context } from 'hono';
 
 const proxies = process.env.TRUSTED_PROXIES?.split(',').map((v) => IPAddr.parseCIDR(v)) ?? [];
 
-export const getClientAddress = (c: Context) => {
+const resolveClientAddress = (header: (name: string) => string | undefined, remoteAddress: () => string | undefined): string => {
   try {
-    const cf = c.req.header('CloudFront-Viewer-Address');
+    const cf = header('cloudfront-viewer-address');
     if (cf) {
       const [ip] = cf.split(/:\d+$/);
       return IPAddr.parse(ip).toString();
     }
 
-    const sveltekit = c.req.header('X-Client-IP');
+    const sveltekit = header('x-client-ip');
     if (sveltekit) {
       return IPAddr.parse(sveltekit).toString();
     }
 
-    const envoy = c.req.header('X-Envoy-External-Address');
+    const envoy = header('x-envoy-external-address');
     if (envoy) {
       return IPAddr.parse(envoy).toString();
     }
 
-    const xff = c.req.header('X-Forwarded-For');
+    const xff = header('x-forwarded-for');
     if (xff) {
       const ip = R.pipe(
         xff,
@@ -41,7 +42,7 @@ export const getClientAddress = (c: Context) => {
       }
     }
 
-    const ip = getConnInfo(c).remote.address;
+    const ip = remoteAddress();
     if (ip) {
       return IPAddr.parse(ip).toString();
     }
@@ -51,3 +52,18 @@ export const getClientAddress = (c: Context) => {
 
   return '0.0.0.0';
 };
+
+export const getClientAddress = (c: Context) =>
+  resolveClientAddress(
+    (name) => c.req.header(name),
+    () => getConnInfo(c).remote.address,
+  );
+
+export const getClientAddressFromIncoming = (request: IncomingMessage) =>
+  resolveClientAddress(
+    (name) => {
+      const value = request.headers[name];
+      return Array.isArray(value) ? value[0] : value;
+    },
+    () => request.socket.remoteAddress,
+  );

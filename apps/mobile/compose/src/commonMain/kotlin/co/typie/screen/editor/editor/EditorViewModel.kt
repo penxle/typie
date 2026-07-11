@@ -84,32 +84,6 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     }
   }
 
-  val graph: ByteArray?
-    get() =
-      ((query.state as? QueryState.Success)?.data ?: return null)
-        .entity
-        .node
-        .onDocument
-        ?.state
-        ?.graph
-
-  data class DocumentSyncBaseline(
-    val seq: String,
-    val heads: ByteArray,
-    val durableHeads: ByteArray,
-  )
-
-  val syncBaseline: DocumentSyncBaseline?
-    get() =
-      ((query.state as? QueryState.Success)?.data ?: return null)
-        .entity
-        .node
-        .onDocument
-        ?.state
-        ?.let {
-          DocumentSyncBaseline(seq = it.seq, heads = it.heads, durableHeads = it.durableHeads)
-        }
-
   var reloadGeneration by mutableStateOf(0)
     private set
 

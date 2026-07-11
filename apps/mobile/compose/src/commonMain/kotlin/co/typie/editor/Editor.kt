@@ -60,6 +60,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+sealed interface EditorGraphSource {
+  data class Bytes(val graph: ByteArray, val pending: List<ByteArray>) : EditorGraphSource
+
+  data class Ingest(val handle: co.typie.editor.ffi.GraphIngest, val pending: List<ByteArray>) :
+    EditorGraphSource
+}
+
 @OptIn(ExperimentalAtomicApi::class)
 class Editor
 internal constructor(
@@ -647,6 +654,37 @@ internal constructor(
           )
         },
       )
+
+    suspend fun createFromSource(
+      source: EditorGraphSource,
+      viewport: Viewport,
+      scope: CoroutineScope,
+      themeVariant: ThemeVariant = ThemeVariant.LightWhite,
+      dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+      onError: (Editor, Throwable) -> Unit = { _, _ -> },
+    ): Editor =
+      when (source) {
+        is EditorGraphSource.Bytes ->
+          createWithPending(
+            graph = source.graph,
+            pending = source.pending,
+            viewport = viewport,
+            scope = scope,
+            themeVariant = themeVariant,
+            dispatcher = dispatcher,
+            onError = onError,
+          )
+        is EditorGraphSource.Ingest ->
+          createInitialized(
+            scope = scope,
+            themeVariant = themeVariant,
+            dispatcher = dispatcher,
+            onError = onError,
+            createInner = {
+              source.handle.finishWithPending(encodeLengthPrefixedBlobs(source.pending), viewport)
+            },
+          )
+      }
 
     suspend fun createFromDoc(
       doc: PlainDoc,

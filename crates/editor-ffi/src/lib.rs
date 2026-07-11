@@ -15,6 +15,8 @@ pub mod editor;
 mod error;
 mod graph;
 pub mod host;
+#[cfg(not(feature = "wasm"))]
+pub mod ingest;
 #[cfg(not(feature = "wasm-server"))]
 mod platform;
 mod prelude;

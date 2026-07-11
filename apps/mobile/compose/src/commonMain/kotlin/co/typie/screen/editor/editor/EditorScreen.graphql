@@ -31,10 +31,7 @@ query EditorScreen_Query($entityId: ID!) {
         nullableTitle
         subtitle
         state {
-          graph
-          seq
-          heads
-          durableHeads
+          updatedAt
         }
         assets {
           ...EditorExternalAsset_asset

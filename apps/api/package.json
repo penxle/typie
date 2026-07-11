@@ -49,6 +49,7 @@
     "apple-signin-auth": "^2.0.0",
     "argon2": "^0.44.0",
     "bullmq": "^5.79.3",
+    "cbor-x": "^1.6.4",
     "dataloader": "^2.2.3",
     "dayjs": "^1.11.21",
     "dedent": "^1.7.2",

@@ -1,6 +1,6 @@
 package co.typie.editor.sync
 
-import com.apollographql.apollo.exception.SubscriptionOperationException
+import co.typie.editor.sync.ws.SyncWsException
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -250,8 +250,7 @@ class RemoteChangesetPipelineTest {
   @Test
   fun permanentSubscriptionErrorStopsReconnectLoop() = runTest {
     val (_, transport, _, pipeline) = harness(initialSeq = "s1")
-    transport.subscribeError =
-      SubscriptionOperationException("DocumentSync_ChangesetsUpdated_Subscription", null)
+    transport.subscribeError = SyncWsException("forbidden", true)
     pipeline.start()
     runCurrent()
     advanceTimeBy(60_000)

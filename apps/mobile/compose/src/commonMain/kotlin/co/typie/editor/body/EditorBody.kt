@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import co.typie.editor.EditorGraphSource
 import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.runtime.LocalEditorUiState
@@ -33,12 +34,11 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 
 @Composable
 internal fun EditorBody(
-  graph: ByteArray,
+  source: EditorGraphSource,
   geometry: EditorBodyGeometry,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
-  pending: List<ByteArray> = emptyList(),
   textInputSessionEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
@@ -102,12 +102,11 @@ internal fun EditorBody(
                 }
             ) {
               EditorView(
-                graph = graph,
+                source = source,
                 layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
-                pending = pending,
                 textInputSessionEnabled = textInputSessionEnabled,
                 suppressSoftwareKeyboard = suppressSoftwareKeyboard,
                 showDebugSurfaceOverlay = showDebugSurfaceOverlay,

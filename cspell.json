@@ -27,6 +27,7 @@
     "*.bak",
     "*.test.ts",
     "*.spec.ts",
+    "**/*Test/**",
     "**/.run/**",
     "justfile",
     "**/vendor/**",

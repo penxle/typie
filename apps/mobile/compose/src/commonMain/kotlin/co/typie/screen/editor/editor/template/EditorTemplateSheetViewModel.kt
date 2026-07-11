@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.editor.sync.ws.loadDocumentSnapshotBytes
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorTemplateSheet_Query
 import co.typie.graphql.EditorTemplateSheet_TemplateGraph_Query
@@ -51,11 +52,13 @@ internal class EditorTemplateSheetViewModel : ViewModel() {
         .fetchPolicy(FetchPolicy.NetworkOnly)
         .execute()
     val graphError = response.errors?.firstOrNull()
-    return when {
-      response.exception != null -> throw response.exception!!
-      graphError != null -> throw Exception(graphError.message)
-      else -> response.data?.document?.state?.graph ?: error("missing template graph")
-    }
+    val templateDocumentId =
+      when {
+        response.exception != null -> throw response.exception!!
+        graphError != null -> throw Exception(graphError.message)
+        else -> response.data?.document?.id ?: error("missing template document")
+      }
+    return loadDocumentSnapshotBytes(templateDocumentId)
   }
 }
 

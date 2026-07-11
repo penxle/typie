@@ -58,7 +58,7 @@ fn init_logger() {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct EditorHost {
-    resource: Arc<Mutex<editor_resource::Resource>>,
+    pub(crate) resource: Arc<Mutex<editor_resource::Resource>>,
 }
 
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
@@ -227,6 +227,13 @@ impl EditorHost {
     {
         let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut resource)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_test() -> Self {
+        Self {
+            resource: Arc::new(Mutex::new(editor_resource::Resource::new_test())),
+        }
     }
 }
 

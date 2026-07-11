@@ -253,13 +253,6 @@ enum DocumentBundleKind {
   PUSHED
 }
 
-type DocumentChangesetsUpdatedEvent {
-  changesets: [Binary!]!
-  durableHeads: Binary!
-  heads: Binary!
-  seq: String!
-}
-
 type DocumentComment {
   content: String!
   createdAt: DateTime!
@@ -400,11 +393,7 @@ type DocumentSpellingErrorV2 {
 type DocumentState {
   blobSize: BigInt!
   characterCount: Int!
-  durableHeads: Binary!
-  graph: Binary!
-  heads: Binary!
   json: JSON!
-  seq: String!
   text: String!
   updatedAt: DateTime!
 }
@@ -889,10 +878,8 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsFontLegacy(input: PersistBlobAsFontLegacyInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
-  pullDocumentChangesets(input: PullDocumentChangesetsInput!): PullDocumentChangesetsPayload!
   purchasePaywall(input: PurchasePaywallInput!): Boolean!
   purgeEntities(input: PurgeEntitiesInput!): Site!
-  pushDocumentChangesets(input: PushDocumentChangesetsInput!): PushDocumentChangesetsPayload!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
@@ -1165,19 +1152,6 @@ enum PreorderPaymentState {
   PENDING
 }
 
-input PullDocumentChangesetsInput {
-  documentId: ID!
-  sinceSeq: String
-}
-
-type PullDocumentChangesetsPayload {
-  changesets: [Binary!]!
-  durableHeads: Binary!
-  heads: Binary!
-  needsReload: Boolean!
-  seq: String!
-}
-
 input PurchasePaywallInput {
   nodeId: String!
   postId: ID!
@@ -1185,17 +1159,6 @@ input PurchasePaywallInput {
 
 input PurgeEntitiesInput {
   entityIds: [ID!]!
-}
-
-input PushDocumentChangesetsInput {
-  changesets: Binary!
-  clientId: String!
-  documentId: ID!
-}
-
-type PushDocumentChangesetsPayload {
-  durableHeads: Binary!
-  heads: Binary!
 }
 
 type Query {
@@ -1429,7 +1392,6 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
-  documentChangesetsUpdated(clientId: String!, documentId: ID!, sinceSeq: String): DocumentChangesetsUpdatedEvent!
   documentCommentStream(clientId: String!, documentId: ID!): DocumentCommentThread!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!

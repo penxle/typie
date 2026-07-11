@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
-    "@sentry/sveltekit": "^10.63.0"
+    "@sentry/sveltekit": "^10.63.0",
+    "cbor-x": "^1.6.4"
   },
   "devDependencies": {
     "@floating-ui/dom": "^1.7.6",

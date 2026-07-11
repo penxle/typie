@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
@@ -23,6 +23,7 @@
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
+  import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
@@ -127,13 +128,6 @@
               characterCount
               createdAt
               updatedAt
-
-              state {
-                graph
-                seq
-                heads
-                durableHeads
-              }
 
               assets {
                 __typename
@@ -259,44 +253,95 @@
   let editorServerHeads: Uint8Array = new Uint8Array();
   let editorServerDurableHeads: Uint8Array = new Uint8Array();
 
+  let channelUnsubscribe: (() => void) | null = null;
+  let pendingLiveEvents: { seq: string; bundles: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array }[] = [];
+
+  const applyChangesets = (event: { seq: string; bundles: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array }) => {
+    const editor = ctx.liveEditor;
+    if (!editor) return;
+    let applied = false;
+    for (const payload of event.bundles) {
+      if (payload.length === 0) continue;
+      editor.receiveRemoteChangeset(payload);
+      applied = true;
+    }
+    if (applied) editor.flush();
+    if (event.seq) syncSeq = event.seq;
+    pusher?.setConfirmedHeads(event.heads);
+    pusher?.setDurableHeads(event.durableHeads);
+  };
+
   $effect(() => {
     const doc = document;
-    if (!doc || liveEditorCreated) return;
+    const currentDocumentId = documentId;
+    if (!doc || !currentDocumentId || liveEditorCreated) return;
 
     liveEditorCreated = true;
-    const graph = doc.state ? Uint8Array.fromBase64(doc.state.graph) : new Uint8Array();
-    const currentDocumentId = documentId;
 
-    untrack(async () => {
-      try {
-        const store = new IndexeddbDeltaStore();
-        const pendingRecords = currentDocumentId ? await store.load(currentDocumentId) : [];
-        const pending = pendingRecords.map((r) => r.changeset);
-        const serverDurableHeads = doc.state?.durableHeads ? Uint8Array.fromBase64(doc.state.durableHeads) : new Uint8Array();
+    channelUnsubscribe = getDocumentChannels().subscribe(currentDocumentId, {
+      onSnapshot: (graph, meta) => {
+        untrack(async () => {
+          try {
+            const store = new IndexeddbDeltaStore();
+            const pendingRecords = await store.load(currentDocumentId);
+            const pending = pendingRecords.map((r) => r.changeset);
 
-        editorStore = store;
-        editorServerDurableHeads = serverDurableHeads;
-        syncSeq = doc.state?.seq ?? '';
+            editorStore = store;
+            editorServerDurableHeads = meta.durableHeads;
+            syncSeq = meta.seq;
 
-        const liveEditor = await Editor.createWithPending(
-          graph,
-          pending,
-          { width: 1, height: 1, scale_factor: browserScaleFactor() },
-          theme.currentThemeVariant,
-        );
+            const liveEditor = await Editor.createWithPending(
+              graph,
+              pending,
+              { width: 1, height: 1, scale_factor: browserScaleFactor() },
+              theme.currentThemeVariant,
+            );
 
-        if (destroyed) {
-          liveEditor.destroy();
-          store.destroy();
+            if (destroyed) {
+              liveEditor.destroy();
+              store.destroy();
+              return;
+            }
+
+            const queued = pendingLiveEvents;
+            pendingLiveEvents = [];
+            let latestHeads = meta.heads;
+            let latestDurableHeads = meta.durableHeads;
+            let queuedApplied = false;
+            for (const event of queued) {
+              for (const payload of event.bundles) {
+                if (payload.length === 0) continue;
+                liveEditor.receiveRemoteChangeset(payload);
+                queuedApplied = true;
+              }
+              if (event.seq) syncSeq = event.seq;
+              latestHeads = event.heads;
+              latestDurableHeads = event.durableHeads;
+            }
+            if (queuedApplied) liveEditor.flush();
+
+            editorServerHeads = latestHeads;
+            editorServerDurableHeads = latestDurableHeads;
+            ctx.editor = liveEditor;
+            ctx.liveEditor = liveEditor;
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      },
+      onChangesets: (event) => {
+        if (!ctx.liveEditor) {
+          pendingLiveEvents.push(event);
           return;
         }
-
-        editorServerHeads = doc.state?.heads ? Uint8Array.fromBase64(doc.state.heads) : new Uint8Array();
-        ctx.editor = liveEditor;
-        ctx.liveEditor = liveEditor;
-      } catch (err) {
-        console.error(err);
-      }
+        applyChangesets(event);
+      },
+      onReload: () => {
+        location.reload();
+      },
+      onPermanentError: (code) => {
+        console.error(`document sync permanently failed: ${code}`);
+      },
     });
   });
 
@@ -341,83 +386,12 @@
     }
   });
 
-  const clientId = crypto.randomUUID();
   let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let subtitleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let pusher = $state<Pusher | null>(null);
-  let lastConfirmedHeads = $state<Uint8Array | null>(null);
   // Sync cursor: the last Redis-Stream id this client has fully caught up to.
   // Non-reactive — pull/subscription read and advance it without re-subscribing.
   let syncSeq = '';
-
-  const hasHeads = $derived(!!lastConfirmedHeads);
-
-  const [pushDocumentChangesets] = createMutation(
-    graphql(`
-      mutation DocumentEditorV2_PushChangesets($input: PushDocumentChangesetsInput!) {
-        pushDocumentChangesets(input: $input) {
-          heads
-          durableHeads
-        }
-      }
-    `),
-  );
-
-  const [pullDocumentChangesets] = createMutation(
-    graphql(`
-      mutation DocumentEditorV2_PullChangesets($input: PullDocumentChangesetsInput!) {
-        pullDocumentChangesets(input: $input) {
-          changesets
-          seq
-          heads
-          durableHeads
-          needsReload
-        }
-      }
-    `),
-  );
-
-  createSubscription(
-    graphql(`
-      subscription DocumentEditorV2_ChangesetsUpdated($documentId: ID!, $clientId: String!, $sinceSeq: String) {
-        documentChangesetsUpdated(documentId: $documentId, clientId: $clientId, sinceSeq: $sinceSeq) {
-          changesets
-          seq
-          heads
-          durableHeads
-        }
-      }
-    `),
-    () => ({
-      documentId: documentId ?? '',
-      clientId,
-      sinceSeq: untrack(() => syncSeq) || null,
-    }),
-    () => ({
-      skip: ctx.liveEditor === undefined || !hasHeads || !documentId,
-      onData: (data) => {
-        const editor = ctx.liveEditor;
-        if (!editor) return;
-        const event = data.documentChangesetsUpdated;
-        let applied = false;
-        for (const c of event.changesets) {
-          const payload = Uint8Array.fromBase64(c);
-          if (payload.length > 0) {
-            editor.receiveRemoteChangeset(payload);
-            applied = true;
-          }
-        }
-        if (applied) editor.flush();
-        // Delivery within a live connection is ordered; a reconnect re-catches
-        // up from this cursor, so advancing it here is safe.
-        if (event.seq) syncSeq = event.seq;
-        const merged = Uint8Array.fromBase64(event.heads);
-        lastConfirmedHeads = merged;
-        pusher?.setConfirmedHeads(merged);
-        pusher?.setDurableHeads(Uint8Array.fromBase64(event.durableHeads));
-      },
-    }),
-  );
 
   $effect(() => {
     const editor = ctx.liveEditor;
@@ -428,8 +402,6 @@
 
     const serverHeads = editorServerHeads;
     const serverDurableHeads = editorServerDurableHeads;
-
-    lastConfirmedHeads = serverHeads;
 
     const currentDocumentId = documentId;
     if (!currentDocumentId) return;
@@ -445,29 +417,22 @@
     const refetchFromServer = async () => {
       const ed = ctx.liveEditor;
       if (!ed) return;
-      const result = await pullDocumentChangesets({
-        input: { documentId: currentDocumentId, sinceSeq: syncSeq || null },
-      });
-      const payload = result.pullDocumentChangesets;
-      if (payload.needsReload) {
+      const result = await getSyncConnection().pull(currentDocumentId, syncSeq || null);
+      if (result.needsReload) {
         reloadDocument();
         return;
       }
       // O(missing) tail: each entry is a standalone bundle blob.
       let applied = false;
-      for (const c of payload.changesets) {
-        const bytes = Uint8Array.fromBase64(c);
-        if (bytes.length > 0) {
-          ed.receiveRemoteChangeset(bytes);
-          applied = true;
-        }
+      for (const bytes of result.changesets) {
+        if (bytes.length === 0) continue;
+        ed.receiveRemoteChangeset(bytes);
+        applied = true;
       }
       if (applied) ed.flush();
-      if (payload.seq) syncSeq = payload.seq;
-      const merged = Uint8Array.fromBase64(payload.heads);
-      lastConfirmedHeads = merged;
-      pusher?.setConfirmedHeads(merged);
-      pusher?.setDurableHeads(Uint8Array.fromBase64(payload.durableHeads));
+      if (result.seq) syncSeq = result.seq;
+      pusher?.setConfirmedHeads(result.heads);
+      pusher?.setDurableHeads(result.durableHeads);
     };
 
     const gap = new GapBuffer({
@@ -490,16 +455,7 @@
       initialDurableHeads: serverDurableHeads,
       store,
       pushFn: async (changesets) => {
-        const result = await pushDocumentChangesets({
-          input: {
-            documentId: currentDocumentId,
-            clientId,
-            changesets: changesets.toBase64(),
-          },
-        });
-        const heads = Uint8Array.fromBase64(result.pushDocumentChangesets.heads);
-        lastConfirmedHeads = heads;
-        return { heads, durableHeads: Uint8Array.fromBase64(result.pushDocumentChangesets.durableHeads) };
+        return getSyncConnection().push(currentDocumentId, changesets);
       },
       broadcast: (cs) => peer.post(cs),
     });
@@ -768,6 +724,8 @@
 
   onDestroy(() => {
     destroyed = true;
+    channelUnsubscribe?.();
+    channelUnsubscribe = null;
     pusher?.stop();
     flushTitleUpdate();
     flushSubtitleUpdate();

@@ -10,6 +10,7 @@ allowBuilds:
   '@firebase/util': false
   '@sentry/cli': false
   argon2: true
+  cbor-extract: false
   es5-ext: false
   esbuild: true
   msgpackr-extract: false
