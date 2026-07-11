@@ -181,7 +181,6 @@ internal class EditorInputConnection(
   override fun sendKeyEvent(event: KeyEvent?): Boolean {
     if (event == null) return false
     recordCall("sendKeyEvent", "keyCode=${event.keyCode}, action=${event.action}")
-    if (event.action != KeyEvent.ACTION_DOWN) return false
     val key =
       when (event.keyCode) {
         KeyEvent.KEYCODE_DEL -> Key.Backspace
@@ -189,8 +188,9 @@ internal class EditorInputConnection(
         KeyEvent.KEYCODE_ENTER -> Key.Enter
         KeyEvent.KEYCODE_TAB -> Key.Tab
         KeyEvent.KEYCODE_ESCAPE -> Key.Escape
-        else -> return false
+        else -> return view.dispatchKeyEvent(event)
       }
+    if (event.action != KeyEvent.ACTION_DOWN) return false
     batch.enqueue(Message.Key(FfiKeyEvent(key)))
     return true
   }
