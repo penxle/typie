@@ -306,7 +306,6 @@ enum DocumentExportFormat {
 }
 
 type DocumentFont {
-  chunks: JSON!
   hash: String!
   id: ID!
   path: String!

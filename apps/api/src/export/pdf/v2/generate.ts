@@ -5,7 +5,7 @@ import { computeDesiredSize, resolveAssets } from '../../core/external.ts';
 import { createPdfFromVectorPages } from '../index.ts';
 import { mapExternalElement } from './external.ts';
 import { buildEditorFontFamilies } from './font-families.ts';
-import { handleFontDataMissing, registerFonts } from './fonts.ts';
+import { handleFontDataMissing, manifestEscalationKey, registerFonts } from './fonts.ts';
 import type { Editor, EditorEvent } from '@typie/editor-ffi/server';
 import type { VectorPage } from '../../core/codec.ts';
 
@@ -31,7 +31,7 @@ export async function generateDocumentPdfV2(params: GenerateDocumentPdfV2Params)
   const families = await buildEditorFontFamilies(userId);
 
   return useHost(async (host) => {
-    const reg = registerFonts(host, families);
+    const reg = await registerFonts(host, families);
     const viewport = { width: layout.pageWidth, height: layout.pageHeight, scale_factor: 1 };
 
     let editor: Editor;
@@ -71,6 +71,12 @@ export async function generateDocumentPdfV2(params: GenerateDocumentPdfV2Params)
       for (let round = 0; round < MAX_FONT_PASSES; round++) {
         const events = editor.tick();
         const missing = events.filter((e): e is Extract<EditorEvent, { type: 'font_data_missing' }> => e.type === 'font_data_missing');
+        for (const e of missing) {
+          const key = manifestEscalationKey(e, reg.failedManifests);
+          if (key) {
+            throw new Error(`[pdf-v2] manifest unavailable for used font ${key}`);
+          }
+        }
         if (missing.length === 0) {
           loadedThisRound = false;
           break;

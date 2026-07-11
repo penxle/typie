@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::prelude::*;
 
+const FONT_CHUNK_MAX_BYTES: usize = 32 * 1024 * 1024;
+
 #[cfg(feature = "wasm")]
 struct WasmFilteredLogger;
 
@@ -160,8 +162,9 @@ impl EditorHost {
     }
 
     pub fn add_font_base(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {
+        let prepared = editor_resource::prepare_font_base(&data)?;
         self.with_resource(|resource| {
-            resource.add_font_base(&family, weight, &data)?;
+            resource.insert_font_base(&family, weight, prepared)?;
             Ok(())
         })
     }
@@ -173,8 +176,23 @@ impl EditorHost {
         chunk_id: u16,
         data: Vec<u8>,
     ) -> EditorResult<()> {
+        let payload = editor_resource::decompress_zstd_capped(&data, FONT_CHUNK_MAX_BYTES)?;
         self.with_resource(|resource| {
-            resource.add_font_chunk(&family, weight, chunk_id, &data)?;
+            resource.add_font_chunk(&family, weight, chunk_id, &payload)?;
+            Ok(())
+        })
+    }
+
+    pub fn add_font_manifest(
+        &self,
+        family: String,
+        weight: u16,
+        data: Vec<u8>,
+    ) -> EditorResult<()> {
+        let bytes = editor_resource::decompress_zstd_capped(&data, 1024 * 1024)?;
+        let manifest = editor_resource::FontManifest::from_bytes(&bytes)?;
+        self.with_resource(|resource| {
+            resource.add_font_manifest(&family, weight, manifest)?;
             Ok(())
         })
     }

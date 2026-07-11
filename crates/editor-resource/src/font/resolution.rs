@@ -9,6 +9,7 @@ pub struct Target {
 pub enum Resolution {
     Ready(Target),
     Pending { target: Target, needs_base: bool },
+    AwaitingManifest { family_id: u16, weight: u16 },
     Missing,
 }
 

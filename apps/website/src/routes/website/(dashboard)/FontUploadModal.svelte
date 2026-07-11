@@ -46,6 +46,7 @@
 
   const errorMap = {
     invalid_font_style: '폰트가 기울어져 있어요.',
+    unsupported_font_format: '지원하지 않는 폰트 형식이에요. TrueType(glyf) 폰트만 업로드할 수 있어요.',
   };
 
   const processFiles = async (files: FileList | null) => {

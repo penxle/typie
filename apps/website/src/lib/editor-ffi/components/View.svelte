@@ -67,7 +67,6 @@
             weight
             url
             hash
-            chunks
           }
         }
       }

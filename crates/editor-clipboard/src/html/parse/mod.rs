@@ -371,12 +371,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -408,7 +406,6 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "h_p400".into(),
-                chunks: vec![],
             }],
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:700">x</span></p>"#;
@@ -440,12 +437,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -501,12 +496,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_a400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_a700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -763,7 +756,6 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: format!("h_{name}"),
-                chunks: vec![],
             }],
         }]);
     }
@@ -821,12 +813,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -942,12 +932,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -979,7 +967,6 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "h_p400".into(),
-                chunks: vec![],
             }],
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong>x</strong></span></p>"#;
@@ -1028,12 +1015,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1058,17 +1043,14 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 900,
                     hash: "h_p900".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1093,12 +1075,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1123,12 +1103,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1185,7 +1163,6 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "h_p400".into(),
-                chunks: vec![],
             }],
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong><span style="font-weight:normal">x</span></strong></span></p>"#;
@@ -1212,7 +1189,6 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "h_p400".into(),
-                chunks: vec![],
             }],
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong><span style="font-family:Calibri;font-weight:normal">x</span></strong></span></p>"#;
@@ -1240,12 +1216,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1270,12 +1244,10 @@ mod tests {
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1300,17 +1272,14 @@ mod tests {
                 FontWeight {
                     value: 300,
                     hash: "h_p300".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 400,
                     hash: "h_p400".into(),
-                    chunks: vec![],
                 },
                 FontWeight {
                     value: 700,
                     hash: "h_p700".into(),
-                    chunks: vec![],
                 },
             ],
         }]);
@@ -1335,7 +1304,6 @@ mod tests {
                 weights: vec![FontWeight {
                     value: 400,
                     hash: "h_l400".into(),
-                    chunks: vec![],
                 }],
             },
             FontFamily {
@@ -1345,17 +1313,14 @@ mod tests {
                     FontWeight {
                         value: 400,
                         hash: "h_h400".into(),
-                        chunks: vec![],
                     },
                     FontWeight {
                         value: 700,
                         hash: "h_h700".into(),
-                        chunks: vec![],
                     },
                     FontWeight {
                         value: 900,
                         hash: "h_h900".into(),
-                        chunks: vec![],
                     },
                 ],
             },

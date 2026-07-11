@@ -294,7 +294,9 @@ pub(crate) fn build_ruby_annotations(
 mod tests {
     use std::ops::Range;
 
-    use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource, compress_zstd};
+    use editor_resource::{
+        FontFamily, FontFamilySource, FontManifest, FontWeight, Resource, compress_zstd,
+    };
 
     use super::*;
     use crate::glyph_run::{GraphemeSpan, TextDecoration};
@@ -363,7 +365,6 @@ mod tests {
                 weights: vec![FontWeight {
                     value: 400,
                     hash: "primary".to_string(),
-                    chunks: vec![vec!['A' as u32, 'A' as u32, 'C' as u32, 'C' as u32]],
                 }],
             },
             FontFamily {
@@ -372,13 +373,24 @@ mod tests {
                 weights: vec![FontWeight {
                     value: 700,
                     hash: "fallback".to_string(),
-                    chunks: vec![vec!['B' as u32, 'B' as u32]],
                 }],
             },
         ]);
+        let primary_id = resource.font_registry.intern_id("Primary").unwrap();
+        resource.font_registry.set_manifest(
+            primary_id,
+            400,
+            FontManifest::from_coverages(&[vec!['A' as u32, 'A' as u32, 'C' as u32, 'C' as u32]]),
+        );
+        let fallback_id = resource.font_registry.intern_id("Fallback").unwrap();
+        resource.font_registry.set_manifest(
+            fallback_id,
+            700,
+            FontManifest::from_coverages(&[vec!['B' as u32, 'B' as u32]]),
+        );
 
         let font = compress_zstd(TEST_FONT);
-        let empty_chunk = compress_zstd(&0u32.to_be_bytes());
+        let empty_chunk = 0u32.to_be_bytes();
         for (family, weight) in [("Primary", 400), ("Fallback", 700)] {
             resource.add_font_base(family, weight, &font).unwrap();
             resource

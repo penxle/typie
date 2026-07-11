@@ -1,10 +1,11 @@
+import { wasm } from '#/utils/wasm-ffi.ts';
 import type { Editor, EditorHost } from '@typie/editor-ffi/server';
 import type { EditorFontFamily } from './font-families.ts';
 
 const REQUIRED_LOAD_ATTEMPTS = 3;
 const LOAD_RETRY_BASE_MS = 200;
 
-type FontData = { type: 'base' } | { type: 'chunk'; id: number };
+type FontData = { type: 'manifest' } | { type: 'base' } | { type: 'chunk'; id: number };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -32,9 +33,20 @@ function getOrFetch(url: string): Promise<Uint8Array> {
 
 export type FontRegistration = {
   baseUrlOf: (family: string, weight: number) => string | undefined;
+  failedManifests: ReadonlySet<string>;
 };
 
-export function registerFonts(host: EditorHost, families: readonly EditorFontFamily[]): FontRegistration {
+export function manifestEscalationKey(
+  ev: { family: string; weight: number; required: FontData[] },
+  failedManifests: ReadonlySet<string>,
+): string | null {
+  const requiresManifest = ev.required.some((fd) => fd.type === 'manifest');
+  if (!requiresManifest) return null;
+  const key = `${ev.family}:${ev.weight}`;
+  return failedManifests.has(key) ? key : null;
+}
+
+export async function registerFonts(host: EditorHost, families: readonly EditorFontFamily[]): Promise<FontRegistration> {
   const baseUrls = new Map<string, string>();
   for (const fam of families) {
     for (const w of fam.weights) {
@@ -46,14 +58,34 @@ export function registerFonts(host: EditorHost, families: readonly EditorFontFam
     families.map((fam) => ({
       name: fam.name,
       source: fam.source,
-      weights: fam.weights.map((w) => ({ value: w.value, hash: w.hash, chunks: w.chunks })),
+      weights: fam.weights.map((w) => ({ value: w.value, hash: w.hash })),
     })),
   );
 
-  return { baseUrlOf: (family, weight) => baseUrls.get(`${family}:${weight}`) };
+  const failedManifests = new Set<string>();
+  for (const fam of families) {
+    for (const w of fam.weights) {
+      try {
+        const manifest = await wasm.build_font_manifest({ chunks: w.chunks });
+        host.add_font_manifest(fam.name, w.value, manifest);
+      } catch (err) {
+        failedManifests.add(`${fam.name}:${w.value}`);
+        console.warn(`[pdf-v2] manifest registration failed for ${fam.name}:${w.value}`, err);
+      }
+    }
+  }
+
+  return { baseUrlOf: (family, weight) => baseUrls.get(`${family}:${weight}`), failedManifests };
 }
 
-async function loadOne(host: EditorHost, editor: Editor, family: string, weight: number, fd: FontData, baseUrl: string): Promise<void> {
+async function loadOne(
+  host: EditorHost,
+  editor: Editor,
+  family: string,
+  weight: number,
+  fd: Exclude<FontData, { type: 'manifest' }>,
+  baseUrl: string,
+): Promise<void> {
   const url = fd.type === 'base' ? `${baseUrl}/base` : `${baseUrl}/chunks/${fd.id}`;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= REQUIRED_LOAD_ATTEMPTS; attempt++) {
@@ -86,8 +118,8 @@ export async function handleFontDataMissing(
     console.warn(`[pdf-v2] no font path registered for ${ev.family}:${ev.weight}`);
     return;
   }
-  const bases = ev.required.filter((fd) => fd.type === 'base');
-  const chunks = ev.required.filter((fd) => fd.type === 'chunk');
+  const bases = ev.required.filter((fd): fd is Extract<FontData, { type: 'base' }> => fd.type === 'base');
+  const chunks = ev.required.filter((fd): fd is Extract<FontData, { type: 'chunk' }> => fd.type === 'chunk');
   await Promise.allSettled(bases.map((fd) => loadOne(host, editor, ev.family, ev.weight, fd, baseUrl)));
   await Promise.allSettled(chunks.map((fd) => loadOne(host, editor, ev.family, ev.weight, fd, baseUrl)));
 }

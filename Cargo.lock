@@ -987,6 +987,7 @@ dependencies = [
  "parley",
  "phf 0.14.0",
  "proc-macro2",
+ "proptest",
  "quote",
  "ruzstd",
  "serde",

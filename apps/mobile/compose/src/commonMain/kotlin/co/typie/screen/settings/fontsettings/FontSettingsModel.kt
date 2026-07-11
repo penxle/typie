@@ -3,6 +3,7 @@ package co.typie.screen.settings.fontsettings
 internal enum class FontUploadError {
   Generic,
   InvalidFontStyle,
+  UnsupportedFontFormat,
 }
 
 internal data class FontUploadProgress(val current: Int, val total: Int)

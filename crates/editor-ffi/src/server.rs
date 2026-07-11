@@ -121,6 +121,15 @@ impl EditorServer {
             .map_err(Into::into)
     }
 
+    #[cfg(feature = "wasm-server")]
+    pub fn build_font_manifest(
+        &self,
+        coverages: Complex<ChunkCodepoints>,
+    ) -> EditorResult<Vec<u8>> {
+        let coverages = coverages.from_ffi()?;
+        Ok(editor_server::font::build_font_manifest(&coverages.chunks)?)
+    }
+
     pub fn extract_text(&self, doc: Complex<editor_model::PlainDoc>) -> EditorResult<String> {
         let plain: editor_model::PlainDoc = doc.from_ffi()?;
         let state = editor_state::State::from_plain(&plain).map_err(|e| EditorError::General {

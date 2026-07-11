@@ -62,6 +62,7 @@ fstype
 futureor
 genai
 getenv
+glyf
 googleid
 graphqls
 healthz
@@ -211,6 +212,7 @@ uniffi
 unplugin
 unpushed
 unresolve
+unsplittable
 unstub
 unsubscriber
 usize

@@ -145,7 +145,6 @@ mod tests {
                     .map(|w| FontWeight {
                         value: w,
                         hash: format!("h_{}_{}", name, w),
-                        chunks: vec![vec![0x0000, 0xFFFF]],
                     })
                     .collect(),
             })

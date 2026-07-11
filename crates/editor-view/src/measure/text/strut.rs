@@ -27,6 +27,7 @@ pub fn compute_strut(resource: &mut Resource, style: &ResolvedTextStyle) -> Opti
             Resolution::Pending {
                 needs_base: true, ..
             }
+            | Resolution::AwaitingManifest { .. }
             | Resolution::Missing => (placeholder_id, PLACEHOLDER_WEIGHT),
         };
 

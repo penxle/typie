@@ -18,11 +18,9 @@ pub struct FontFamily {
     pub weights: Vec<FontWeight>,
 }
 
-/// chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
 #[ffi]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FontWeight {
     pub value: u16,
     pub hash: String,
-    pub chunks: Vec<Vec<u32>>,
 }

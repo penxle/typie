@@ -9,6 +9,7 @@ use crate::state_field::StateField;
 pub enum FontData {
     Base,
     Chunk { id: u16 },
+    Manifest,
 }
 
 #[ffi]

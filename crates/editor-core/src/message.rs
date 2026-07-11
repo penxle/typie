@@ -330,6 +330,10 @@ pub enum SystemEvent {
         weight: u16,
         chunk_id: u16,
     },
+    FontManifestLoaded {
+        family: String,
+        weight: u16,
+    },
     SetExternalHeight {
         node_id: Dot,
         height: f32,

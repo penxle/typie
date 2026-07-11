@@ -1726,12 +1726,10 @@ mod tests {
                     editor_resource::FontWeight {
                         value: 400,
                         hash: "pretendard_400".into(),
-                        chunks: vec![vec![0x0000, 0xFFFF]],
                     },
                     editor_resource::FontWeight {
                         value: 700,
                         hash: "pretendard_700".into(),
-                        chunks: vec![vec![0x0000, 0xFFFF]],
                     },
                 ],
             }]);

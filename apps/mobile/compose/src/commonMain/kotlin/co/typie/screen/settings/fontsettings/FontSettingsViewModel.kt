@@ -83,6 +83,7 @@ class FontSettingsViewModel : ViewModel() {
           val error =
             when (e.code) {
               "invalid_font_style" -> FontUploadError.InvalidFontStyle
+              "unsupported_font_format" -> FontUploadError.UnsupportedFontFormat
               else -> FontUploadError.Generic
             }
           failures += FontUploadFailure(name = file.filename, error = error)

@@ -192,7 +192,7 @@ for (const family of FONTS) {
     const ttfData = new Uint8Array(await readFile(ttfPath));
 
     console.log(`[${done}/${total}] Processing ${font.path}...`);
-    const { hash, strategy, coverages, base, chunks } = await processFont(font.path, ttfData);
+    const { hash, strategy, coverages, base, chunks, manifest } = await processFont(font.path, ttfData);
 
     const totalKB = ((base.length + chunks.reduce((s, c) => s + c.length, 0)) / 1024).toFixed(1);
     console.log(`  ${chunks.length} chunks: ${totalKB}KB, strategy: ${strategy ?? 'sequential'}`);
@@ -251,6 +251,17 @@ for (const family of FONTS) {
       } else {
         console.log(`  UPLOAD ${key}`);
         await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: chunk, ContentType: 'application/octet-stream' }));
+        uploaded++;
+      }
+    }
+    {
+      const key = `${hashBase}/manifest.v1`;
+      if (existingKeys.has(key)) {
+        console.log(`  SKIP ${key}`);
+        skipped++;
+      } else {
+        console.log(`  UPLOAD ${key}`);
+        await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: manifest, ContentType: 'application/octet-stream' }));
         uploaded++;
       }
     }

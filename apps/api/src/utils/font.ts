@@ -68,7 +68,12 @@ export type ProcessedFont = {
   coverages: number[][];
   base: Uint8Array;
   chunks: Uint8Array[];
+  manifest: Uint8Array;
 };
+
+export const isUnsupportedFontFormat = (err: unknown): boolean => err instanceof Error && err.message.includes('unsplittable font');
+
+export const isNonEmptyHead = (head: { ContentLength?: number } | null): boolean => head !== null && (head.ContentLength ?? 0) > 0;
 
 function findBestStrategy(
   fontName: string,
@@ -114,7 +119,17 @@ function findBestStrategy(
   return bestName && bestGroups && bestScore >= SLICING_MIN_JACCARD ? { name: bestName, groups: bestGroups } : null;
 }
 
-function chunkCodepoints(
+const MAX_CHUNKS = 255;
+
+function sliceSorted(codepoints: number[], size: number): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i < codepoints.length; i += size) {
+    out.push(codepoints.slice(i, i + size));
+  }
+  return out;
+}
+
+export function chunkCodepoints(
   fontName: string,
   codepoints: number[],
   strategies: Record<string, number[][]>,
@@ -125,7 +140,6 @@ function chunkCodepoints(
   if (matched) {
     const covered = new Set<number>();
     const chunks: number[][] = [];
-
     for (const group of matched.groups) {
       const chunk = group.filter((cp) => fontCps.has(cp));
       if (chunk.length > 0) {
@@ -135,16 +149,26 @@ function chunkCodepoints(
     }
 
     const remaining = codepoints.filter((cp) => !covered.has(cp)).toSorted((a, b) => a - b);
-    for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
-      chunks.push(remaining.slice(i, i + CHUNK_SIZE));
+    if (chunks.length <= MAX_CHUNKS && remaining.length === 0) {
+      return { chunks, strategy: matched.name };
     }
-    return { chunks, strategy: matched.name };
+    if (chunks.length < MAX_CHUNKS) {
+      const budget = MAX_CHUNKS - chunks.length;
+      const size = Math.max(CHUNK_SIZE, Math.ceil(remaining.length / budget));
+      chunks.push(...sliceSorted(remaining, size));
+      if (chunks.length > MAX_CHUNKS) {
+        throw new Error(`chunk budget exceeded: ${chunks.length}`);
+      }
+      return { chunks, strategy: matched.name };
+    }
+    // strategy 청크만으로 예산 초과(그리고 remaining 존재) — 전체 순차 분할로 fallback
   }
 
   const sorted = codepoints.toSorted((a, b) => a - b);
-  const chunks: number[][] = [];
-  for (let i = 0; i < sorted.length; i += CHUNK_SIZE) {
-    chunks.push(sorted.slice(i, i + CHUNK_SIZE));
+  const size = Math.max(CHUNK_SIZE, Math.ceil(sorted.length / MAX_CHUNKS));
+  const chunks = sliceSorted(sorted, size);
+  if (chunks.length > MAX_CHUNKS) {
+    throw new Error(`chunk budget exceeded: ${chunks.length}`);
   }
   return { chunks, strategy: null };
 }
@@ -160,6 +184,7 @@ export async function processFont(name: string, ttfData: Uint8Array): Promise<Pr
     coverages: output.coverage,
     base: output.base,
     chunks: output.chunks,
+    manifest: output.manifest,
   };
 }
 

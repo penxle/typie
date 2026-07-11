@@ -15,11 +15,12 @@ port.on('message', async (message: { target: BackfillTarget } | { done: true }) 
   }
 
   const { row } = message.target;
-  const result: BackfillResult = { id: row.id, path: row.path, error: null };
+  let result: BackfillResult;
   try {
-    await backfillFont(message.target);
+    const { status, reason } = await backfillFont(message.target);
+    result = { id: row.id, path: row.path, status, reason: reason ?? null };
   } catch (err) {
-    result.error = err instanceof Error ? err.message : String(err);
+    result = { id: row.id, path: row.path, status: 'failed', reason: err instanceof Error ? err.message : String(err) };
   }
   port.postMessage(result);
 });

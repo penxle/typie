@@ -25,6 +25,9 @@ pub struct BuiltFont {
     pub base: Vec<u8>,
     #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array[]"))]
     pub chunks: Vec<serde_bytes::ByteBuf>,
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub manifest: Vec<u8>,
 }
 
 pub fn get_font_codepoints(ttf_data: &[u8]) -> Result<Vec<u32>, ServerError> {
@@ -44,6 +47,12 @@ pub fn build_font(
     let has_glyf = font.glyf().is_ok();
     let has_cbdt = font.table_data(Tag::new(b"CBDT")).is_some()
         && font.table_data(Tag::new(b"CBLC")).is_some();
+
+    if !has_glyf && !has_cbdt {
+        return Err(ServerError::InvalidFont(
+            "unsplittable font: no glyf/CBDT table (CFF/CFF2 unsupported)".into(),
+        ));
+    }
 
     let charmap = font.charmap();
     let mut cp_to_gid: HashMap<u32, u16> = HashMap::new();
@@ -210,6 +219,8 @@ pub fn build_font(
         .map(|cps| codepoints_to_ranges(cps))
         .collect();
 
+    let manifest = build_font_manifest(&coverage)?;
+
     let base = compress_zstd(&base_data);
     let chunks: Vec<serde_bytes::ByteBuf> = chunks
         .iter()
@@ -221,7 +232,58 @@ pub fn build_font(
         coverage,
         base,
         chunks,
+        manifest,
     })
+}
+
+const MANIFEST_MAX_BYTES: usize = 1024 * 1024;
+
+pub fn build_font_manifest(coverages: &[Vec<u32>]) -> Result<Vec<u8>, ServerError> {
+    if coverages.len() > 255 {
+        return Err(ServerError::InvalidFont(format!(
+            "too many chunks: {}",
+            coverages.len()
+        )));
+    }
+    const MAX_TOTAL_CODEPOINTS: u64 = 300_000;
+    let mut total: u64 = 0;
+    for ranges in coverages {
+        if ranges.len() % 2 != 0 {
+            return Err(ServerError::InvalidFont("coverage odd tail".into()));
+        }
+        for pair in ranges.chunks_exact(2) {
+            if pair[0] > pair[1] || pair[1] > 0x10FFFF {
+                return Err(ServerError::InvalidFont(format!(
+                    "invalid coverage range: {}..={}",
+                    pair[0], pair[1]
+                )));
+            }
+            if pair[0] <= 0xDFFF && pair[1] >= 0xD800 {
+                return Err(ServerError::InvalidFont(format!(
+                    "coverage overlaps surrogate range: {}..={}",
+                    pair[0], pair[1]
+                )));
+            }
+            total = total
+                .checked_add(u64::from(pair[1] - pair[0]) + 1)
+                .ok_or_else(|| ServerError::InvalidFont("coverage size overflow".into()))?;
+            if total > MAX_TOTAL_CODEPOINTS {
+                return Err(ServerError::InvalidFont(format!(
+                    "coverage too large: {total} codepoints"
+                )));
+            }
+        }
+    }
+    let bytes = editor_resource::FontManifest::from_coverages(coverages).to_bytes();
+    if bytes.len() > MANIFEST_MAX_BYTES {
+        return Err(ServerError::InvalidFont(format!(
+            "manifest too large: {}",
+            bytes.len()
+        )));
+    }
+    editor_resource::FontManifest::from_bytes(&bytes)
+        .map_err(|e| ServerError::InvalidFont(format!("manifest self-validation failed: {e:?}")))?;
+    Ok(compress_zstd(&bytes))
 }
 
 fn build_chunk_binary(entries: &[(usize, &[u8])]) -> Vec<u8> {
@@ -462,6 +524,7 @@ mod tests {
         for cov in &encoded.coverage {
             assert!(cov.len() % 2 == 0, "coverage must be flat pairs");
         }
+        assert!(!encoded.manifest.is_empty());
     }
 
     #[test]
@@ -494,5 +557,66 @@ mod tests {
         let a = build_font(&data, &cp_groups).unwrap();
         let b = build_font(&data, &cp_groups).unwrap();
         assert_eq!(a.hash, b.hash);
+    }
+
+    #[test]
+    fn build_font_manifest_matches_from_coverages() {
+        let coverages = vec![vec![0x41, 0x43], vec![0xAC00, 0xAC02]];
+        let bytes = build_font_manifest(&coverages).unwrap();
+        let decompressed = editor_resource::decompress_zstd(&bytes).unwrap();
+        let manifest = editor_resource::FontManifest::from_bytes(&decompressed).unwrap();
+        assert_eq!(manifest.chunk_id(0x42), Some(0));
+        assert_eq!(manifest.chunk_id(0xAC01), Some(1));
+        assert_eq!(manifest.chunk_id(0x9999), None);
+    }
+
+    #[test]
+    fn build_font_manifest_rejects_over_255_chunks() {
+        let coverages: Vec<Vec<u32>> = (0..256u32).map(|i| vec![i, i]).collect();
+        assert!(build_font_manifest(&coverages).is_err());
+    }
+
+    #[test]
+    fn build_font_manifest_rejects_over_1mb_serialized_size() {
+        let coverages = vec![vec![0x10000, 0x10000 + 140_000 - 1]];
+        let result = build_font_manifest(&coverages);
+        assert!(
+            matches!(&result, Err(ServerError::InvalidFont(msg)) if msg.starts_with("manifest too large")),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn build_font_manifest_rejects_invalid_coverage_input() {
+        assert!(build_font_manifest(&[vec![0x41]]).is_err(), "odd tail");
+        assert!(
+            build_font_manifest(&[vec![0x120000, 0x120000]]).is_err(),
+            "out of unicode range"
+        );
+        assert!(
+            build_font_manifest(&[vec![0xD000, 0xE000]]).is_err(),
+            "overlaps surrogates"
+        );
+        assert!(
+            build_font_manifest(&[vec![0x0, 0xD7FF], vec![0xE000, 0x10FFFF]]).is_err(),
+            "total codepoints over cap — 팽창 전 사전 거부(임시 벡터 미생성)"
+        );
+    }
+
+    #[test]
+    fn build_font_rejects_cff_font_without_glyf_or_cbdt() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let mut font = data.clone();
+        let num_tables = u16::from_be_bytes([font[4], font[5]]);
+        for i in 0..num_tables {
+            let off = 12 + (i as usize) * 16;
+            if &font[off..off + 4] == b"glyf" {
+                font[off..off + 4].copy_from_slice(b"CFF ");
+            }
+        }
+        let result = build_font(&font, &[vec![0x41]]);
+        assert!(result.is_err());
     }
 }

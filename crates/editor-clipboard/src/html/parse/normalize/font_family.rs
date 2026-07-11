@@ -46,7 +46,6 @@ mod tests {
                 weights: vec![FontWeight {
                     value: 400,
                     hash: format!("h_{name}"),
-                    chunks: vec![],
                 }],
             })
             .collect();

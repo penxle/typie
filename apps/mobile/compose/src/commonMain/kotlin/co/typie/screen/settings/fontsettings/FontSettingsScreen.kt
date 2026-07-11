@@ -382,6 +382,8 @@ private fun fontUploadSummaryDisplay(summary: FontUploadResult): Pair<String, St
           val errorMessage =
             when (failure.error) {
               FontUploadError.InvalidFontStyle -> "기울어진 폰트는 업로드할 수 없어요."
+              FontUploadError.UnsupportedFontFormat ->
+                "지원하지 않는 폰트 형식이에요. TrueType(glyf) 폰트만 업로드할 수 있어요."
               FontUploadError.Generic -> "폰트 업로드에 실패했어요."
             }
           if (failure.name.isNotEmpty()) "\u2022 ${failure.name}: $errorMessage"

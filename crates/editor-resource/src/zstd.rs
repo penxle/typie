@@ -18,6 +18,23 @@ pub fn compress_zstd(data: &[u8]) -> Vec<u8> {
     ruzstd::encoding::compress_to_vec(data, ruzstd::encoding::CompressionLevel::Fastest)
 }
 
+pub fn decompress_zstd_capped(data: &[u8], max_len: usize) -> Result<Vec<u8>, ResourceError> {
+    let decoder = ruzstd::decoding::StreamingDecoder::new(data)
+        .map_err(|e| ResourceError::Decompression(format!("{e:?}")))?;
+
+    let mut output = Vec::new();
+    let mut limited = decoder.take(max_len as u64 + 1);
+    limited
+        .read_to_end(&mut output)
+        .map_err(|e| ResourceError::Decompression(format!("{e:?}")))?;
+
+    if output.len() > max_len {
+        return Err(ResourceError::Decompression("over size limit".into()));
+    }
+
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -41,6 +41,11 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             Ok(())
         }
 
+        SystemEvent::FontManifestLoaded { family, weight } => {
+            editor.manifest_loaded(&family, weight);
+            Ok(())
+        }
+
         SystemEvent::SetExternalHeight { node_id, height } => {
             editor.set_external_height(node_id, height);
             Ok(())
@@ -77,21 +82,27 @@ mod tests {
     use editor_macros::state;
 
     fn test_config_single_chunk(
+        resource: &mut editor_resource::Resource,
         family: &str,
         weight: u16,
         hash: &str,
         start: u32,
         end: u32,
-    ) -> Vec<editor_resource::FontFamily> {
-        vec![editor_resource::FontFamily {
+    ) {
+        resource.set_fonts(vec![editor_resource::FontFamily {
             name: family.into(),
             source: editor_resource::FontFamilySource::Default,
             weights: vec![editor_resource::FontWeight {
                 value: weight,
                 hash: hash.into(),
-                chunks: vec![vec![start, end]],
             }],
-        }]
+        }]);
+        let id = resource.font_registry.intern(family);
+        resource.font_registry.set_manifest(
+            id,
+            weight,
+            editor_resource::FontManifest::from_coverages(&[vec![start, end]]),
+        );
     }
 
     fn fake_base_bytes() -> Vec<u8> {
@@ -102,7 +113,7 @@ mod tests {
 
     fn fake_chunk_bytes() -> Vec<u8> {
         // num_entries = 0 header — no glyph patches. add_font_chunk just marks the chunk loaded.
-        editor_resource::compress_zstd(&0u32.to_be_bytes())
+        0u32.to_be_bytes().to_vec()
     }
 
     #[test]
@@ -141,7 +152,7 @@ mod tests {
         // Populate FontConfig so resolve_codepoint_mappings can find the primary.
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
         }
 
         let events = editor.apply(Message::System {
@@ -236,7 +247,7 @@ mod tests {
         // Config covers 'A' only (chunk 0). 'B' has no chunk → stays Missing.
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -279,7 +290,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -325,7 +336,7 @@ mod tests {
         // Config covers 'A' only — 'B' stays unresolved for this family.
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -385,7 +396,7 @@ mod tests {
         // Config covers ' ' (space) so strut resolves Pending before load.
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x20, 0x20));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x20, 0x20);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -445,7 +456,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -624,7 +635,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -678,12 +689,6 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "primary-400".into(),
-                        chunks: vec![
-                            vec![0x41, 0x41],
-                            vec![0x61, 0x61],
-                            vec![0x62, 0x62],
-                            vec![0x63, 0x63],
-                        ],
                     }],
                 },
                 editor_resource::FontFamily {
@@ -692,11 +697,27 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "fallback-400".into(),
-                        chunks: vec![vec![0x42, 0x42]],
                     }],
                 },
             ];
             resource.set_fonts(families);
+            let primary_id = resource.font_registry.intern_id("Primary").unwrap();
+            resource.font_registry.set_manifest(
+                primary_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[
+                    vec![0x41, 0x41],
+                    vec![0x61, 0x61],
+                    vec![0x62, 0x62],
+                    vec![0x63, 0x63],
+                ]),
+            );
+            let fallback_id = resource.font_registry.intern_id("Fallback").unwrap();
+            resource.font_registry.set_manifest(
+                fallback_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x42, 0x42]]),
+            );
         }
 
         // Step 2: Initialize — should emit FontDataMissing for Primary and Fallback.
@@ -819,7 +840,6 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "arial-400".into(),
-                        chunks: vec![vec![0x41, 0x42]],
                     }],
                 },
                 editor_resource::FontFamily {
@@ -828,11 +848,22 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "pretendard-400".into(),
-                        chunks: vec![vec![0x41, 0x42]],
                     }],
                 },
             ];
             resource.set_fonts(families);
+            let arial_id = resource.font_registry.intern_id("Arial").unwrap();
+            resource.font_registry.set_manifest(
+                arial_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
+            );
+            let pretendard_id = resource.font_registry.intern_id("Pretendard").unwrap();
+            resource.font_registry.set_manifest(
+                pretendard_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
+            );
             resource
                 .add_font_base("Arial", 400, &fake_base_bytes())
                 .unwrap();
@@ -890,10 +921,18 @@ mod tests {
                 weights: vec![editor_resource::FontWeight {
                     value: 400,
                     hash: "testfont-400".into(),
-                    chunks: vec![vec![0x41, 0x41], vec![0x42, 0x42]],
                 }],
             }];
             resource.set_fonts(families);
+            let id = resource.font_registry.intern_id("TestFont").unwrap();
+            resource.font_registry.set_manifest(
+                id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[
+                    vec![0x41, 0x41],
+                    vec![0x42, 0x42],
+                ]),
+            );
             resource
                 .add_font_base("TestFont", 400, &fake_base_bytes())
                 .unwrap();
@@ -941,7 +980,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -988,7 +1027,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -1096,7 +1135,7 @@ mod tests {
 
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
         }
 
         let events = editor.apply(Message::System {
@@ -1135,7 +1174,7 @@ mod tests {
 
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
             resource
                 .add_font_base("TestFont", 400, &fake_base_bytes())
                 .unwrap();
@@ -1498,6 +1537,27 @@ mod tests {
     }
 
     #[test]
+    fn probe_font_manifest_loaded_for_unknown_family_is_false() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let probed = editor
+            .can(Message::System {
+                event: SystemEvent::FontManifestLoaded {
+                    family: "UnknownFont".into(),
+                    weight: 400,
+                },
+            })
+            .unwrap();
+        assert!(!probed);
+    }
+
+    #[test]
     fn base_font_load_remeasures_pending_nodes() {
         let (state, p1) = state! {
             doc {
@@ -1511,7 +1571,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -1567,7 +1627,6 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "p".into(),
-                        chunks: vec![vec![0x41, 0x41]],
                     }],
                 },
                 editor_resource::FontFamily {
@@ -1576,11 +1635,22 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "f".into(),
-                        chunks: vec![vec![0x42, 0x42]],
                     }],
                 },
             ];
             resource.set_fonts(families);
+            let primary_id = resource.font_registry.intern_id("Primary").unwrap();
+            resource.font_registry.set_manifest(
+                primary_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            );
+            let fallback_id = resource.font_registry.intern_id("Fallback").unwrap();
+            resource.font_registry.set_manifest(
+                fallback_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x42, 0x42]]),
+            );
             // Primary fully loaded; 'B' is not in Primary so it falls back to Fallback.
             resource
                 .add_font_base("Primary", 400, &fake_base_bytes())
@@ -1638,7 +1708,6 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "a".into(),
-                        chunks: vec![vec![0x41, 0x41]],
                     }],
                 },
                 editor_resource::FontFamily {
@@ -1647,11 +1716,22 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "b".into(),
-                        chunks: vec![vec![0x5a, 0x5a]],
                     }],
                 },
             ];
             resource.set_fonts(families);
+            let font_a_id = resource.font_registry.intern_id("FontA").unwrap();
+            resource.font_registry.set_manifest(
+                font_a_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            );
+            let font_b_id = resource.font_registry.intern_id("FontB").unwrap();
+            resource.font_registry.set_manifest(
+                font_b_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x5a, 0x5a]]),
+            );
             // FontA fully loaded so re-inserting 'A' into p1 raises no missing-data event.
             resource
                 .add_font_base("FontA", 400, &fake_base_bytes())
@@ -1704,7 +1784,6 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "a".into(),
-                        chunks: vec![vec![0x58, 0x58]],
                     }],
                 },
                 editor_resource::FontFamily {
@@ -1713,11 +1792,22 @@ mod tests {
                     weights: vec![editor_resource::FontWeight {
                         value: 400,
                         hash: "f".into(),
-                        chunks: vec![vec![0x58, 0x58]],
                     }],
                 },
             ];
             resource.set_fonts(families);
+            let font_a_id = resource.font_registry.intern_id("FontA").unwrap();
+            resource.font_registry.set_manifest(
+                font_a_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x58, 0x58]]),
+            );
+            let font_f_id = resource.font_registry.intern_id("FontF").unwrap();
+            resource.font_registry.set_manifest(
+                font_f_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x58, 0x58]]),
+            );
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -1759,7 +1849,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         {
             let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
         }
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -1775,6 +1865,289 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
             "FontsChanged must emit RenderInvalidated so the host repaints"
+        );
+    }
+
+    #[test]
+    fn load_font_emits_manifest_required_and_sibling_prefetch() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        // 2-weight family (400, 700) registered WITHOUT manifests. Resolving 'A' at weight
+        // 400 must demand the 400 manifest first, and prefetch sibling weight 700's manifest.
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(vec![editor_resource::FontFamily {
+                name: "TestFont".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![
+                    editor_resource::FontWeight {
+                        value: 400,
+                        hash: "tf-400".into(),
+                    },
+                    editor_resource::FontWeight {
+                        value: 700,
+                        hash: "tf-700".into(),
+                    },
+                ],
+            }]);
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let required_manifest_400 = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "TestFont"
+                            && *weight == 400
+                            && required.len() == 1
+                            && matches!(required[0], FontData::Manifest)
+                            && prefetch.is_empty()
+                )
+            })
+            .count();
+        assert_eq!(
+            required_manifest_400, 1,
+            "weight 400 must demand its manifest exactly once"
+        );
+
+        let prefetch_manifest_700 = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "TestFont"
+                            && *weight == 700
+                            && required.is_empty()
+                            && prefetch.len() == 1
+                            && matches!(prefetch[0], FontData::Manifest)
+                )
+            })
+            .count();
+        assert_eq!(
+            prefetch_manifest_700, 1,
+            "sibling weight 700's manifest must be prefetched exactly once"
+        );
+
+        // Deliver weight 400's manifest (covers 'A') and fire FontManifestLoaded. Reinterpreting
+        // pending now demands base + chunk 0 instead of the manifest.
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_manifest(
+                    "TestFont",
+                    400,
+                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+                )
+                .unwrap();
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontManifestLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+
+        let base_now_required = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, required, .. }
+                    if family == "TestFont"
+                        && *weight == 400
+                        && required.iter().any(|d| matches!(d, FontData::Base))
+                        && required.iter().any(|d| matches!(d, FontData::Chunk { id: 0 }))
+            )
+        });
+        assert!(
+            base_now_required,
+            "once the manifest arrives, weight 400 must demand base + chunk 0"
+        );
+    }
+
+    #[test]
+    fn font_manifest_loaded_second_time_emits_zero_events() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(vec![editor_resource::FontFamily {
+                name: "TestFont".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "tf".into(),
+                }],
+            }]);
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_manifest(
+                    "TestFont",
+                    400,
+                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+                )
+                .unwrap();
+        }
+
+        let first = editor.apply(Message::System {
+            event: SystemEvent::FontManifestLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+        assert!(
+            first.iter().any(|e| matches!(
+                e,
+                EditorEvent::FontDataMissing { family, .. } if family == "TestFont"
+            )),
+            "first manifest load must reinterpret pending and emit a base/chunk request"
+        );
+
+        let second = editor.apply(Message::System {
+            event: SystemEvent::FontManifestLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+        assert_eq!(
+            second.len(),
+            0,
+            "second identical manifest load must be deduped to zero events; got {second:?}"
+        );
+    }
+
+    #[test]
+    fn fallback_entry_emits_fallback_manifest_prefetch() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("P".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(vec![
+                editor_resource::FontFamily {
+                    name: "P".into(),
+                    source: editor_resource::FontFamilySource::Default,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "p".into(),
+                    }],
+                },
+                editor_resource::FontFamily {
+                    name: "FB1".into(),
+                    source: editor_resource::FontFamilySource::Fallback,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "fb1".into(),
+                    }],
+                },
+                editor_resource::FontFamily {
+                    name: "FB2".into(),
+                    source: editor_resource::FontFamilySource::Fallback,
+                    weights: vec![editor_resource::FontWeight {
+                        value: 400,
+                        hash: "fb2".into(),
+                    }],
+                },
+            ]);
+            // Primary's manifest is present but does NOT cover 'A' (0x41; covers only 0x50), so
+            // resolution walks into the fallbacks, whose manifests are still absent.
+            resource
+                .add_font_manifest(
+                    "P",
+                    400,
+                    editor_resource::FontManifest::from_coverages(&[vec![0x50, 0x50]]),
+                )
+                .unwrap();
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let fb1_required = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "FB1"
+                            && *weight == 400
+                            && required.len() == 1
+                            && matches!(required[0], FontData::Manifest)
+                            && prefetch.is_empty()
+                )
+            })
+            .count();
+        assert_eq!(
+            fb1_required, 1,
+            "first fallback candidate must demand its manifest exactly once"
+        );
+
+        let fb2_prefetch = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "FB2"
+                            && *weight == 400
+                            && required.is_empty()
+                            && prefetch.len() == 1
+                            && matches!(prefetch[0], FontData::Manifest)
+                )
+            })
+            .count();
+        assert_eq!(
+            fb2_prefetch, 1,
+            "sibling fallback family's manifest must be prefetched exactly once"
+        );
+
+        let primary_manifest_events = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, .. } if family == "P"
+                )
+            })
+            .count();
+        assert_eq!(
+            primary_manifest_events, 0,
+            "primary with a present manifest must not appear in manifest requests"
         );
     }
 }

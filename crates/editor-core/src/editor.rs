@@ -128,6 +128,12 @@ fn typing_run(kind: MergeKind, before: &State, after: &State) -> RecordMerge {
 
 type SelectionMarkRectsCache = Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ManifestRequestClass {
+    Prefetch,
+    Required,
+}
+
 pub struct Editor {
     pub(crate) state: State,
     pub(crate) view: View,
@@ -151,6 +157,7 @@ pub struct Editor {
     pub(crate) pending_ops: Vec<Op<EditOp>>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
+    pub(crate) requested_manifests: HashMap<(u16, u16), ManifestRequestClass>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
     mode: Mode,
@@ -218,6 +225,7 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
             mode: Mode::Apply,
@@ -1577,6 +1585,25 @@ impl Editor {
         crate::font::retry_pending_on_load(self, family, base_loaded);
     }
 
+    pub(crate) fn resolve_pending_fonts(&mut self) {
+        crate::font::resolve_pending_fonts(self);
+    }
+
+    pub(crate) fn manifest_loaded(&mut self, family: &str, weight: u16) {
+        if matches!(self.mode, Mode::Probe { .. }) {
+            return;
+        }
+        let family_id = {
+            let resource = self.resource.lock().unwrap();
+            resource.font_registry.intern_id(family)
+        };
+        let Some(fid) = family_id else { return };
+        if self.requested_manifests.remove(&(fid, weight)).is_none() {
+            return;
+        }
+        self.resolve_pending_fonts();
+    }
+
     pub(crate) fn reresolve_fonts(&mut self) -> Result<(), EditorError> {
         if matches!(self.mode, Mode::Probe { .. }) {
             return Ok(());
@@ -1591,6 +1618,7 @@ impl Editor {
         let family_id = resource.font_registry.intern(family);
 
         let mut grouped: HashMap<(u16, u16), HashSet<u16>> = HashMap::default();
+        let mut manifest_needed: HashSet<(u16, u16)> = HashSet::default();
         for &cp in codepoints {
             match resource.font_registry.resolve(family_id, weight, cp) {
                 Resolution::Pending { target, .. } => {
@@ -1598,6 +1626,12 @@ impl Editor {
                         .entry((target.family_id, target.weight))
                         .or_default()
                         .insert(target.chunk_id);
+                }
+                Resolution::AwaitingManifest {
+                    family_id: fid,
+                    weight: w,
+                } => {
+                    manifest_needed.insert((fid, w));
                 }
                 Resolution::Ready(_) | Resolution::Missing => {}
             }
@@ -1656,8 +1690,84 @@ impl Editor {
             })
             .collect();
 
+        let mut manifest_events: Vec<EditorEvent> = Vec::new();
+        let mut prefetch_targets: HashSet<(u16, u16)> = HashSet::default();
+        for &(fid, w) in &manifest_needed {
+            let prev = self
+                .requested_manifests
+                .insert((fid, w), ManifestRequestClass::Required);
+            if prev == Some(ManifestRequestClass::Required) {
+                continue;
+            }
+            let family_name = resource
+                .font_registry
+                .family_name_opt(fid)
+                .unwrap_or("")
+                .to_string();
+            manifest_events.push(EditorEvent::FontDataMissing {
+                family: family_name.clone(),
+                weight: w,
+                required: vec![FontData::Manifest],
+                prefetch: Vec::new(),
+            });
+            if prev.is_some() {
+                continue;
+            }
+            if let Some(ws) = resource.font_registry.weights(&family_name) {
+                for &sibling in ws {
+                    if sibling != w && !resource.font_registry.has_manifest(fid, sibling) {
+                        prefetch_targets.insert((fid, sibling));
+                    }
+                }
+            }
+        }
+        let awaiting_fallback = manifest_needed.iter().any(|&(fid, _)| {
+            resource.font_registry.family_source(fid)
+                == Some(editor_resource::FontFamilySource::Fallback)
+        });
+        if awaiting_fallback {
+            let fb_ids: Vec<u16> = resource.font_registry.fallback_family_ids().collect();
+            for fb_id in fb_ids {
+                let Some(name) = resource.font_registry.family_name_opt(fb_id) else {
+                    continue;
+                };
+                let name = name.to_string();
+                let Some(ws) = resource.font_registry.weights(&name) else {
+                    continue;
+                };
+                for &w in ws {
+                    if !resource.font_registry.has_manifest(fb_id, w)
+                        && !manifest_needed.contains(&(fb_id, w))
+                    {
+                        prefetch_targets.insert((fb_id, w));
+                    }
+                }
+            }
+        }
+        for (fid, w) in prefetch_targets {
+            if manifest_needed.contains(&(fid, w)) {
+                continue;
+            }
+            if self.requested_manifests.contains_key(&(fid, w)) {
+                continue;
+            }
+            self.requested_manifests
+                .insert((fid, w), ManifestRequestClass::Prefetch);
+            let family_name = resource
+                .font_registry
+                .family_name_opt(fid)
+                .unwrap_or("")
+                .to_string();
+            manifest_events.push(EditorEvent::FontDataMissing {
+                family: family_name,
+                weight: w,
+                required: Vec::new(),
+                prefetch: vec![FontData::Manifest],
+            });
+        }
+
         drop(resource);
-        for event in events {
+        for event in events.into_iter().chain(manifest_events) {
             self.push_event(event);
         }
     }
@@ -1691,6 +1801,7 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
             mode: Mode::Apply,
@@ -2188,10 +2299,15 @@ mod tests {
                 weights: vec![editor_resource::FontWeight {
                     value: 400,
                     hash: "inter-400".into(),
-                    chunks: vec![vec![0x41, 0x42]],
                 }],
             }];
             resource.set_fonts(families);
+            let inter_id = resource.font_registry.intern_id("Inter").unwrap();
+            resource.font_registry.set_manifest(
+                inter_id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
+            );
         }
 
         editor.process_effects(HashSet::from([Effect::LoadFont {
@@ -2213,6 +2329,97 @@ mod tests {
             )
         });
         assert!(has_data_missing);
+    }
+
+    #[test]
+    fn prefetched_manifest_escalates_to_required_once_when_hit_as_blocking() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(vec![editor_resource::FontFamily {
+                name: "TestFont".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![
+                    editor_resource::FontWeight {
+                        value: 400,
+                        hash: "tf-400".into(),
+                    },
+                    editor_resource::FontWeight {
+                        value: 700,
+                        hash: "tf-700".into(),
+                    },
+                ],
+            }]);
+        }
+
+        let init = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let init_prefetch_700 = init
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "TestFont"
+                            && *weight == 700
+                            && required.is_empty()
+                            && prefetch.len() == 1
+                            && matches!(prefetch[0], FontData::Manifest)
+                )
+            })
+            .count();
+        assert_eq!(
+            init_prefetch_700, 1,
+            "sibling weight 700's manifest must start as a prefetch-only request"
+        );
+
+        editor.resolve_fonts("TestFont", 700, &['A' as u32]);
+        let first = std::mem::take(&mut editor.pending_events);
+        let first_required_700 = first
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "TestFont"
+                            && *weight == 700
+                            && required.len() == 1
+                            && matches!(required[0], FontData::Manifest)
+                            && prefetch.is_empty()
+                )
+            })
+            .count();
+        assert_eq!(
+            first_required_700, 1,
+            "a prefetch-only manifest hit as blocking must emit its required manifest exactly once"
+        );
+
+        editor.resolve_fonts("TestFont", 700, &['A' as u32]);
+        let second = std::mem::take(&mut editor.pending_events);
+        let second_manifest_700 = second
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, .. }
+                        if family == "TestFont" && *weight == 700
+                )
+            })
+            .count();
+        assert_eq!(
+            second_manifest_700, 0,
+            "a second blocking hit on an already-required manifest must not re-emit"
+        );
     }
 
     #[test]
@@ -4853,7 +5060,7 @@ mod tests {
     }
 
     fn real_font_resource() -> Arc<Mutex<editor_resource::Resource>> {
-        use editor_resource::{FontFamily, FontFamilySource, FontWeight};
+        use editor_resource::{FontFamily, FontFamilySource, FontManifest, FontWeight};
         let mut res = editor_resource::Resource::new_test();
         res.set_fonts(vec![FontFamily {
             name: "test".into(),
@@ -4861,9 +5068,14 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "test-400".into(),
-                chunks: vec![vec![0x0000, 0xFFFF]],
             }],
         }]);
+        let test_id = res.font_registry.intern_id("test").unwrap();
+        res.font_registry.set_manifest(
+            test_id,
+            400,
+            FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
+        );
         res.add_font_base("test", 400, compressed_test_font())
             .unwrap();
         Arc::new(Mutex::new(res))

@@ -33,6 +33,7 @@ pub(crate) fn resolve_font_family_weight(
         Resolution::Pending {
             needs_base: true, ..
         }
+        | Resolution::AwaitingManifest { .. }
         | Resolution::Missing => (placeholder_id, PLACEHOLDER_WEIGHT),
     }
 }
@@ -97,7 +98,7 @@ mod tests {
         NodeAttrLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::{
-        FontFamily, FontFamilySource, FontRegistry, FontWeight, PLACEHOLDER_WEIGHT,
+        FontFamily, FontFamilySource, FontManifest, FontRegistry, FontWeight, PLACEHOLDER_WEIGHT,
     };
 
     use crate::measure::text::inline::collect_text_runs;
@@ -179,7 +180,6 @@ mod tests {
                 .map(|&w| FontWeight {
                     value: w,
                     hash: format!("h{}_{}", name, w),
-                    chunks: vec![vec![0x0000, 0xFFFF]],
                 })
                 .collect(),
         }
@@ -192,7 +192,17 @@ mod tests {
             .iter()
             .map(|(n, w)| family(n, FontFamilySource::Default, w))
             .collect();
-        reg.set_fonts(families);
+        reg.set_fonts(families.clone());
+        for family in &families {
+            let fid = reg.intern_id(&family.name).unwrap();
+            for w in &family.weights {
+                reg.set_manifest(
+                    fid,
+                    w.value,
+                    FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
+                );
+            }
+        }
         reg
     }
 
@@ -263,10 +273,14 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "h".into(),
-                chunks: vec![vec![0x0000, 0x00FF]],
             }],
         }]);
         let arial = reg.intern_id("Arial").unwrap();
+        reg.set_manifest(
+            arial,
+            400,
+            FontManifest::from_coverages(&[vec![0x0000, 0x00FF]]),
+        );
         reg.force_loaded_for_test(arial, 400, 1);
         let placeholder = reg.placeholder_family_id().unwrap();
         let (_t, srs, _n) = style_runs_of(&l, &mut reg);
@@ -320,10 +334,14 @@ mod tests {
             weights: vec![FontWeight {
                 value: 400,
                 hash: "h".into(),
-                chunks: vec![vec![0x0000, 0x00FF]],
             }],
         }]);
         let arial = reg.intern_id("Arial").unwrap();
+        reg.set_manifest(
+            arial,
+            400,
+            FontManifest::from_coverages(&[vec![0x0000, 0x00FF]]),
+        );
         reg.force_loaded_for_test(arial, 400, 1);
         let placeholder = reg.placeholder_family_id().unwrap();
         let (_t, srs, n_runs) = style_runs_of(&l, &mut reg);

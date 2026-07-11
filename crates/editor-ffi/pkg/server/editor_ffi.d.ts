@@ -69,15 +69,6 @@ export type Affinity = "downstream" | "upstream";
 export type Bind = "left" | "right";
 
 /**
- * chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
- */
-export interface FontWeight {
-    value: number;
-    hash: string;
-    chunks: number[][];
-}
-
-/**
  *Auto-generated discriminant enum variants
  */
 export type ModifierType = "bold" | "italic" | "underline" | "strikethrough" | "font_size" | "font_family" | "font_weight" | "text_color" | "background_color" | "letter_spacing" | "link" | "ruby" | "line_height" | "block_gap" | "paragraph_indent" | "alignment";
@@ -122,6 +113,7 @@ export interface BuiltFont {
     coverage: number[][];
     base: Uint8Array;
     chunks: Uint8Array[];
+    manifest: Uint8Array;
 }
 
 export interface ChangesetEntry {
@@ -208,6 +200,11 @@ export interface FontName {
 
 export interface FontSizeValue {
     value: number;
+}
+
+export interface FontWeight {
+    value: number;
+    hash: string;
 }
 
 export interface FontWeightValue {
@@ -604,7 +601,7 @@ export type FoldNodeAttr = void;
 
 export type FoldTitleNodeAttr = void;
 
-export type FontData = { type: "base" } | { type: "chunk"; id: number };
+export type FontData = { type: "base" } | { type: "chunk"; id: number } | { type: "manifest" };
 
 export type FontFamilySource = "DEFAULT" | "USER" | "FALLBACK";
 
@@ -674,7 +671,7 @@ export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges" | "last_history_tag" | "placeholder";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: Dot; height: number } | { type: "fonts_changed" };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "font_manifest_loaded"; family: string; weight: number } | { type: "set_external_height"; node_id: Dot; height: number } | { type: "fonts_changed" };
 
 export type TabNodeAttr = void;
 
@@ -775,6 +772,7 @@ declare class EditorHost {
     [Symbol.dispose](): void;
     add_font_base(family: string, weight: number, data: Uint8Array): void;
     add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
+    add_font_manifest(family: string, weight: number, data: Uint8Array): void;
     static create(icu_data: Uint8Array): EditorHost;
     create_editor_from_doc(doc: PlainDoc, viewport: Viewport): Editor;
     create_editor_from_graph(changesets: Uint8Array, viewport: Viewport): Editor;
@@ -795,6 +793,7 @@ declare class EditorServer {
     [Symbol.dispose](): void;
     apply(existing: Uint8Array, _new: Uint8Array): Uint8Array;
     build_font(ttf_data: Uint8Array, chunk_codepoints: ChunkCodepoints): BuiltFont;
+    build_font_manifest(coverages: ChunkCodepoints): Uint8Array;
     /**
      * Fold a batch onto `existing` for the collect job while attributing
      * per-bundle character counts — with the expensive `State` build amortized.

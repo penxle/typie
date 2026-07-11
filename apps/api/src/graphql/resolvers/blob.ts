@@ -14,7 +14,7 @@ import { db, Files, first, firstOrThrow, FontFamilies, FontNames, Fonts, Images,
 import { stack } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
 import { compressZstd } from '#/utils/compression.ts';
-import { processFont } from '#/utils/font.ts';
+import { isUnsupportedFontFormat, processFont } from '#/utils/font.ts';
 import { processFont as processFontLegacy } from '#/utils/font-legacy.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm.ts';
@@ -451,8 +451,13 @@ builder.mutationFields((t) => ({
       });
 
       const fontName = postScriptName;
-      const [{ hash, coverages, base, chunks }, legacy] = await Promise.all([
-        processFont(fontName, buffer),
+      const [{ hash, coverages, base, chunks, manifest }, legacy] = await Promise.all([
+        processFont(fontName, buffer).catch((err: unknown) => {
+          if (isUnsupportedFontFormat(err)) {
+            throw new TypieError({ code: 'unsupported_font_format' });
+          }
+          throw err;
+        }),
         processFontLegacy(fontName, buffer),
       ]);
 
@@ -474,6 +479,15 @@ builder.mutationFields((t) => ({
             Bucket: 'typie-usercontents',
             Key: `${s3Base}/${hash}/base`,
             Body: base,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/${hash}/manifest.v1`,
+            Body: manifest,
             ContentType: 'application/octet-stream',
             Tagging: tagging,
           }),

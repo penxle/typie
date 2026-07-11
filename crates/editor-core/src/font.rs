@@ -94,7 +94,7 @@ fn collect_for_block(block: &NodeView, font_registry: &FontRegistry, output: &mu
         if let Some(family_id) = font_registry.intern_id(&family)
             && matches!(
                 font_registry.resolve(family_id, weight, ' ' as u32),
-                Resolution::Pending { .. }
+                Resolution::Pending { .. } | Resolution::AwaitingManifest { .. }
             )
         {
             output
@@ -145,6 +145,7 @@ pub(crate) fn derive_font_updates_from_ops(
 }
 
 pub(crate) fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
+    editor.requested_manifests.clear();
     {
         let resource = editor.resource.lock().unwrap();
         let view = editor.state.view();
@@ -209,7 +210,33 @@ fn invalidate_font_affected(editor: &mut Editor, affected_nodes: &[Dot]) {
     }
 }
 
+pub(crate) fn resolve_pending_fonts(editor: &mut Editor) {
+    if editor.pending_fonts.is_empty() {
+        return;
+    }
+    let requests: Vec<(String, u16, Vec<u32>)> = editor
+        .pending_fonts
+        .iter()
+        .map(|((family, weight), nodes)| {
+            let cps: Vec<u32> = nodes
+                .values()
+                .flatten()
+                .copied()
+                .collect::<HashSet<u32>>()
+                .into_iter()
+                .collect();
+            (family.clone(), *weight, cps)
+        })
+        .collect();
+    for (family, weight, cps) in requests {
+        editor.resolve_fonts(&family, weight, &cps);
+    }
+}
+
 pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str, base_loaded: bool) {
+    if editor.pending_fonts.is_empty() {
+        return;
+    }
     let resource = editor.resource.lock().unwrap();
     if resource.font_registry.intern_id(family).is_none() {
         return;

@@ -7,7 +7,6 @@ fragment FontLoader_FontFamily on DocumentFontFamily {
     weight
     url
     hash
-    chunks
   }
 }
 

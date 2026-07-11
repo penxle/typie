@@ -7,7 +7,7 @@ import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { asc, eq } from 'drizzle-orm';
 import { db, FontFamilies, Fonts } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
-import { FONTS_BUCKET } from '#/utils/backfill-fonts.ts';
+import { FONTS_BUCKET, objectExistsNonEmpty } from '#/utils/backfill-fonts.ts';
 import type { BackfillResult, BackfillTarget } from '#/utils/backfill-fonts.ts';
 
 process.env.SCRIPT = '1';
@@ -17,11 +17,13 @@ const SCAN_CONCURRENCY = 16;
 const { values } = parseArgs({
   options: {
     'dry-run': { type: 'boolean', default: false },
+    verify: { type: 'boolean', default: false },
     concurrency: { type: 'string' },
   },
 });
 
 const dryRun = values['dry-run'] ?? false;
+const verify = values.verify ?? false;
 const concurrency = values.concurrency ? Number(values.concurrency) : os.cpus().length;
 
 const formatDuration = (ms: number): string => {
@@ -73,11 +75,85 @@ const rows = await db
     postScriptName: Fonts.postScriptName,
     path: Fonts.path,
     hash: Fonts.hash,
+    chunks: Fonts.chunks,
     userId: FontFamilies.userId,
   })
   .from(Fonts)
   .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
   .orderBy(asc(Fonts.id));
+
+if (verify) {
+  console.log(`검증 시작: 전체 ${rows.length}개 행`);
+
+  const verifyStart = Date.now();
+  let checked = 0;
+
+  const notMigrated: { id: string; path: string }[] = [];
+  const cffSuspect: { id: string; path: string }[] = [];
+  const incomplete: { id: string; path: string; reason: string }[] = [];
+
+  await mapWithConcurrency(rows, SCAN_CONCURRENCY, async (row) => {
+    if (row.hash === '') {
+      notMigrated.push({ id: row.id, path: row.path });
+      checked++;
+      logProgress('검증', checked, rows.length, verifyStart);
+      return;
+    }
+
+    const hashBase = `fonts/${row.path}/${row.hash}`;
+    const manifestOk = await objectExistsNonEmpty(`${hashBase}/manifest.v1`);
+    if (manifestOk) {
+      const expectedChunks = (row.chunks as number[][]).length;
+      const chunkChecks = await mapWithConcurrency(
+        Array.from({ length: expectedChunks }, (_, i) => i),
+        SCAN_CONCURRENCY,
+        (id) => objectExistsNonEmpty(`${hashBase}/chunks/${id}`),
+      );
+      const missingCount = chunkChecks.filter((ok) => !ok).length;
+      if (missingCount > 0) {
+        incomplete.push({ id: row.id, path: row.path, reason: `${missingCount}/${expectedChunks} chunk objects missing or empty` });
+      }
+    } else {
+      const hasChunkObjects = await objectExistsNonEmpty(`${hashBase}/chunks/0`);
+      if (hasChunkObjects) {
+        incomplete.push({ id: row.id, path: row.path, reason: 'manifest.v1 missing or empty' });
+      } else {
+        cffSuspect.push({ id: row.id, path: row.path });
+      }
+    }
+
+    checked++;
+    logProgress('검증', checked, rows.length, verifyStart);
+  });
+
+  process.stdout.write('\n');
+  console.log(
+    `검증 완료: 마이그레이션됨 ${rows.length - notMigrated.length}개 중 불충족 ${incomplete.length}개, cff-suspect ${cffSuspect.length}개(게이트 제외), 미마이그레이션 ${notMigrated.length}개(게이트 제외)`,
+  );
+
+  if (notMigrated.length > 0) {
+    console.log('미마이그레이션 목록(게이트 제외):');
+    for (const r of notMigrated) {
+      console.log(`- ${r.id} ${r.path}`);
+    }
+  }
+
+  if (cffSuspect.length > 0) {
+    console.log('cff-suspect 목록(게이트 제외):');
+    for (const r of cffSuspect) {
+      console.log(`- ${r.id} ${r.path}`);
+    }
+  }
+
+  if (incomplete.length > 0) {
+    console.log('불충족 목록:');
+    for (const r of incomplete) {
+      console.log(`- ${r.id} ${r.path}: ${r.reason}`);
+    }
+  }
+
+  process.exit(incomplete.length > 0 ? 1 : 0);
+}
 
 console.log(`전체 폰트 ${rows.length}개 스캔 시작`);
 
@@ -87,10 +163,16 @@ let scanned = 0;
 const scanTargets = await mapWithConcurrency(rows, SCAN_CONCURRENCY, async (row): Promise<BackfillTarget | null> => {
   const needsV2 = row.hash === '';
   const needsLegacy = !(await objectExists(`fonts/${row.path}/manifest.json`));
+  const needsManifest = row.hash !== '' && !(await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/manifest.v1`));
   scanned++;
   logProgress('스캔', scanned, rows.length, scanStart);
-  return needsV2 || needsLegacy
-    ? { row: { id: row.id, postScriptName: row.postScriptName, path: row.path, userId: row.userId }, needsV2, needsLegacy }
+  return needsV2 || needsLegacy || needsManifest
+    ? {
+        row: { id: row.id, postScriptName: row.postScriptName, path: row.path, userId: row.userId },
+        needsV2,
+        needsLegacy,
+        needsManifest,
+      }
     : null;
 });
 
@@ -100,16 +182,23 @@ process.stdout.write('\n');
 
 const v2Count = pending.filter((t) => t.needsV2).length;
 const legacyCount = pending.filter((t) => t.needsLegacy).length;
-console.log(`대상 ${pending.length}개 (완료 ${rows.length - pending.length}개 스킵) — v2 필요 ${v2Count}개, legacy 필요 ${legacyCount}개`);
+const manifestCount = pending.filter((t) => t.needsManifest).length;
+console.log(
+  `대상 ${pending.length}개 (완료 ${rows.length - pending.length}개 스킵) — v2 필요 ${v2Count}개, legacy 필요 ${legacyCount}개, manifest 필요 ${manifestCount}개`,
+);
 
 if (dryRun) {
-  for (const { row, needsV2, needsLegacy } of pending) {
-    console.log(`- ${row.id} ${row.path} (${[needsV2 && 'v2', needsLegacy && 'legacy'].filter(Boolean).join(', ')})`);
+  for (const { row, needsV2, needsLegacy, needsManifest } of pending) {
+    console.log(
+      `- ${row.id} ${row.path} (${[needsV2 && 'v2', needsLegacy && 'legacy', needsManifest && 'manifest'].filter(Boolean).join(', ')})`,
+    );
   }
   process.exit(0);
 }
 
-const failures: BackfillResult[] = [];
+const succeeded: BackfillResult[] = [];
+const skipped: BackfillResult[] = [];
+const failed: BackfillResult[] = [];
 const startTime = Date.now();
 let processed = 0;
 let cursor = 0;
@@ -132,9 +221,13 @@ if (pending.length > 0) {
       worker.on('message', (result: BackfillResult | null) => {
         if (result) {
           processed += 1;
-          if (result.error) {
-            failures.push(result);
-            process.stdout.write(`\n실패: ${result.id} (${result.path}) — ${result.error}\n`);
+          if (result.status === 'failed') {
+            failed.push(result);
+            process.stdout.write(`\n실패: ${result.id} (${result.path}) — ${result.reason}\n`);
+          } else if (result.status === 'skipped') {
+            skipped.push(result);
+          } else {
+            succeeded.push(result);
           }
           logProgress('백필', processed, pending.length, startTime);
         }
@@ -162,13 +255,22 @@ if (pending.length > 0) {
 }
 
 process.stdout.write('\n');
-console.log(`완료: 성공 ${processed - failures.length}개, 실패 ${failures.length}개, 스킵 ${rows.length - pending.length}개`);
+console.log(
+  `완료: 성공 ${succeeded.length}개, 스킵 ${skipped.length}개, 실패 ${failed.length}개, 대상외 ${rows.length - pending.length}개`,
+);
 
-if (failures.length > 0) {
-  console.log('실패 목록:');
-  for (const failure of failures) {
-    console.log(`- ${failure.id} ${failure.path}: ${failure.error}`);
+if (skipped.length > 0) {
+  console.log('스킵 목록:');
+  for (const s of skipped) {
+    console.log(`- ${s.id} ${s.path}: ${s.reason}`);
   }
 }
 
-process.exit(aborted || failures.length > 0 ? 1 : 0);
+if (failed.length > 0) {
+  console.log('실패 목록:');
+  for (const f of failed) {
+    console.log(`- ${f.id} ${f.path}: ${f.reason}`);
+  }
+}
+
+process.exit(aborted || failed.length > 0 ? 1 : 0);

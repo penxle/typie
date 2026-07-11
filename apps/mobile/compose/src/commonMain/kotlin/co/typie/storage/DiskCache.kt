@@ -12,6 +12,8 @@ interface DiskCache {
   suspend fun get(url: String): ByteArray?
 
   suspend fun put(url: String, data: ByteArray)
+
+  suspend fun remove(url: String)
 }
 
 fun diskCache(): DiskCache = OkioDiskCache(diskCacheDir())
@@ -36,6 +38,11 @@ private class OkioDiskCache(
       val path = cacheDir / url.toFileName()
       fileSystem.write(path) { write(data) }
       Unit
+    }
+
+  override suspend fun remove(url: String): Unit =
+    withContext(Dispatchers.IO) {
+      fileSystem.delete(cacheDir / url.toFileName())
     }
 }
 

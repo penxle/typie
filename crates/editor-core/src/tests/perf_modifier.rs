@@ -9,7 +9,7 @@ use editor_model::{
     Modifier, ModifierType, PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode,
     PlainTextNode,
 };
-use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource};
+use editor_resource::{FontFamily, FontFamilySource, FontManifest, FontWeight, Resource};
 use editor_state::test_utils::build_state_from_plain;
 use editor_state::{State, flat_size};
 
@@ -65,26 +65,36 @@ fn build_large_state(paras: usize, chars_per_para: usize) -> State {
 
 fn make_resource() -> Resource {
     let mut resource = Resource::new_test();
+    let families = [
+        ("Pretendard", vec![400u16, 700]),
+        ("Paperlogy", vec![400u16, 700]),
+    ];
     resource.set_fonts(
-        [
-            ("Pretendard", vec![400u16, 700]),
-            ("Paperlogy", vec![400u16, 700]),
-        ]
-        .into_iter()
-        .map(|(name, weights)| FontFamily {
-            name: name.to_string(),
-            source: FontFamilySource::Default,
-            weights: weights
-                .into_iter()
-                .map(|value| FontWeight {
-                    value,
-                    hash: format!("{name}-{value}"),
-                    chunks: vec![vec![0x0000, 0xFFFF]],
-                })
-                .collect(),
-        })
-        .collect(),
+        families
+            .iter()
+            .map(|(name, weights)| FontFamily {
+                name: name.to_string(),
+                source: FontFamilySource::Default,
+                weights: weights
+                    .iter()
+                    .map(|&value| FontWeight {
+                        value,
+                        hash: format!("{name}-{value}"),
+                    })
+                    .collect(),
+            })
+            .collect(),
     );
+    for (name, weights) in &families {
+        let id = resource.font_registry.intern_id(name).unwrap();
+        for &value in weights {
+            resource.font_registry.set_manifest(
+                id,
+                value,
+                FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
+            );
+        }
+    }
     resource
 }
 
