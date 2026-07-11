@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.KeyInputModifierNode
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.node.ModifierNodeElement
@@ -188,7 +189,8 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     coroutineScope.launch {
@@ -222,7 +224,8 @@ internal class EditorInputNode(
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor.syncWithBringIntoView(bringIntoViewRequests) {
@@ -241,11 +244,13 @@ internal class EditorInputNode(
       }
 
       override fun insertText(text: String): Boolean {
+        recordToolbarInput("insertText", text)
         dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
         return true
       }
 
       override fun commitText(text: String) {
+        recordToolbarInput("commitText", text)
         if (text == "\n") {
           dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
         } else {
@@ -254,14 +259,17 @@ internal class EditorInputNode(
       }
 
       override fun setComposingText(text: String) {
+        recordToolbarInput("setComposingText", text)
         dispatch(listOf(Message.TextInput(listOf(FlatImeOp.Compose(text)))))
       }
 
       override fun finishComposition() {
+        recordToolbarInput("finishComposition")
         dispatch(listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))))
       }
 
       override fun pressKey(key: TextInputKey): Boolean {
+        recordToolbarInput("pressKey", key.name)
         val ffiKey =
           when (key) {
             TextInputKey.Enter -> FfiKey.Enter
@@ -276,16 +284,65 @@ internal class EditorInputNode(
       }
     }
 
+  private fun recordHardwareKey(
+    event: KeyEvent,
+    stage: String,
+    matchedBinding: Boolean,
+    blockedByComposition: Boolean,
+    consumed: Boolean,
+    text: String? = null,
+  ) {
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.HardwareKey(
+        seq = seq,
+        t = t,
+        key = event.key.toString(),
+        stage = stage,
+        matchedBinding = matchedBinding,
+        blockedByComposition = blockedByComposition,
+        consumed = consumed,
+        text = text,
+      )
+    }
+  }
+
+  private fun recordToolbarInput(method: String, args: String? = null) {
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.ToolbarInput(seq = seq, t = t, method = method, args = args)
+    }
+  }
+
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
       if (editor.ime?.composing != null) {
+        recordHardwareKey(
+          event = event,
+          stage = "onKeyEvent",
+          matchedBinding = true,
+          blockedByComposition = true,
+          consumed = true,
+        )
         return true
       }
       if (platformInputBridge.shouldConsumeKeyEvent(event)) {
+        recordHardwareKey(
+          event = event,
+          stage = "onKeyEvent",
+          matchedBinding = true,
+          blockedByComposition = false,
+          consumed = true,
+        )
         return true
       }
+      recordHardwareKey(
+        event = event,
+        stage = "onKeyEvent",
+        matchedBinding = true,
+        blockedByComposition = false,
+        consumed = true,
+      )
       dispatchBinding(binding, PlatformModule.clipboard)
       return true
     }
@@ -301,6 +358,14 @@ internal class EditorInputNode(
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
+      recordHardwareKey(
+        event = event,
+        stage = "onKeyEvent",
+        matchedBinding = false,
+        blockedByComposition = false,
+        consumed = true,
+        text = text,
+      )
       dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
       return true
     }
@@ -308,6 +373,14 @@ internal class EditorInputNode(
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
+    recordHardwareKey(
+      event = event,
+      stage = "onKeyEvent",
+      matchedBinding = false,
+      blockedByComposition = false,
+      consumed = true,
+      text = ch.toString(),
+    )
     dispatch(listOf(Message.Insertion(InsertionOp.Text(ch.toString()))))
     return true
   }
@@ -316,20 +389,36 @@ internal class EditorInputNode(
     if (event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
     if (editor.ime?.composing != null) {
+      recordHardwareKey(
+        event = event,
+        stage = "onPreKeyEvent",
+        matchedBinding = true,
+        blockedByComposition = true,
+        consumed = true,
+      )
       return true
     }
-    return platformInputBridge.onPreKeyEvent(
+    val consumed =
+      platformInputBridge.onPreKeyEvent(
+        event = event,
+        editorState = { editor.state },
+        inputCoroutineScope = coroutineScope,
+        bindingMessages = { with(binding) { editor.action(PlatformModule.clipboard) } },
+        commit = { messages ->
+          dispatchBindingMessages(
+            messages = messages,
+            bringIntoViewTarget = binding.bringIntoViewTarget,
+          )
+        },
+      )
+    recordHardwareKey(
       event = event,
-      editorState = { editor.state },
-      inputCoroutineScope = coroutineScope,
-      bindingMessages = { with(binding) { editor.action(PlatformModule.clipboard) } },
-      commit = { messages ->
-        dispatchBindingMessages(
-          messages = messages,
-          bringIntoViewTarget = binding.bringIntoViewTarget,
-        )
-      },
+      stage = "onPreKeyEvent",
+      matchedBinding = true,
+      blockedByComposition = false,
+      consumed = consumed,
     )
+    return consumed
   }
 
   override fun onFocusEvent(focusState: FocusState) {
@@ -344,6 +433,9 @@ internal class EditorInputNode(
 
   private fun syncTextInputSession() {
     val sessionEnabled = focused && textInputSessionEnabled
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.Session(seq = seq, t = t, event = if (sessionEnabled) "start" else "stop")
+    }
     if (!sessionEnabled && editor.ime?.composing != null) {
       dispatchSync(
         listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
@@ -372,11 +464,13 @@ internal class EditorInputNode(
                   bringIntoViewRequests = bringIntoViewRequests,
                   onEditCommand = { commands ->
                     val preState = editor.state
-                    val messages =
+                    val intercepted =
                       platformInputBridge.interceptEditCommands(
                         commands = commands,
                         state = preState,
                       )
+                    val messages =
+                      intercepted
                         ?: EditorImeCommandNormalizer.normalize(
                           commands = commands,
                           ime = preState.ime,
@@ -387,6 +481,17 @@ internal class EditorInputNode(
                         messages = messages,
                         preState = preState,
                         postState = postState,
+                      )
+                    }
+                    editor.inputRecorder?.record { seq, t ->
+                      RecordedInputEntry.EditCommands(
+                        seq = seq,
+                        t = t,
+                        commands = commands.map { it.describe() },
+                        decision = classifyBridgeRoute(intercepted),
+                        messages = messages,
+                        imeBefore = preState.ime,
+                        imeAfter = postState?.ime,
                       )
                     }
                   },

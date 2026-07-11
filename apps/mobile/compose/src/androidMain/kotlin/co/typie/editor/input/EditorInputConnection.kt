@@ -33,32 +33,71 @@ internal class EditorInputConnection(
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
 ) : InputConnection {
   private val batch = ImeEditBatch { messages ->
-    editor.syncWithBringIntoView(bringIntoViewRequests) {
-      for (message in messages) {
-        enqueue(message)
+    val recorder = editor.inputRecorder
+    val imeBefore = if (recorder == null) null else editor.ime
+    val state =
+      editor.syncWithBringIntoView(bringIntoViewRequests) {
+        for (message in messages) {
+          enqueue(message)
+        }
+        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
-      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+    recorder?.record { seq, t ->
+      RecordedInputEntry.Dispatch(
+        seq = seq,
+        t = t,
+        messages = messages,
+        imeBefore = imeBefore,
+        imeAfter = state?.ime,
+      )
+    }
+  }
+
+  private fun recordCall(method: String, args: String) {
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.ImeCall(seq = seq, t = t, method = method, args = args)
+    }
+  }
+
+  private fun recordRead(method: String, args: String, result: String?) {
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.ImeRead(seq = seq, t = t, method = method, args = args, result = result)
     }
   }
 
   override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
-    if (n < 0) return null
-    val ctx = editor.ime(n, 0) ?: return null
-    return ctx.text.substring(0, ctx.selection.start - ctx.windowStart)
+    val result =
+      if (n < 0) {
+        null
+      } else {
+        editor.ime(n, 0)?.let { ctx ->
+          ctx.text.substring(0, ctx.selection.start - ctx.windowStart)
+        }
+      }
+    recordRead("getTextBeforeCursor", "n=$n, flags=$flags", result)
+    return result
   }
 
   override fun getTextAfterCursor(n: Int, flags: Int): CharSequence? {
-    if (n < 0) return null
-    val ctx = editor.ime(0, n) ?: return null
-    return ctx.text.substring(ctx.selection.end - ctx.windowStart)
+    val result =
+      if (n < 0) {
+        null
+      } else {
+        editor.ime(0, n)?.let { ctx -> ctx.text.substring(ctx.selection.end - ctx.windowStart) }
+      }
+    recordRead("getTextAfterCursor", "n=$n, flags=$flags", result)
+    return result
   }
 
   override fun getSelectedText(flags: Int): CharSequence? {
-    val ctx = editor.ime(0, 0) ?: return null
-    val start = ctx.selection.start - ctx.windowStart
-    val end = ctx.selection.end - ctx.windowStart
-    val text = ctx.text.substring(start, end)
-    return text.ifEmpty { null }
+    val result =
+      editor.ime(0, 0)?.let { ctx ->
+        val start = ctx.selection.start - ctx.windowStart
+        val end = ctx.selection.end - ctx.windowStart
+        ctx.text.substring(start, end).ifEmpty { null }
+      }
+    recordRead("getSelectedText", "flags=$flags", result)
+    return result
   }
 
   @RequiresApi(31)
@@ -67,10 +106,23 @@ internal class EditorInputConnection(
     afterLength: Int,
     flags: Int,
   ): SurroundingText? {
-    if (beforeLength < 0 || afterLength < 0) return null
-    val ctx = editor.ime(beforeLength, afterLength) ?: return null
+    val args = "before=$beforeLength, after=$afterLength, flags=$flags"
+    if (beforeLength < 0 || afterLength < 0) {
+      recordRead("getSurroundingText", args, null)
+      return null
+    }
+    val ctx = editor.ime(beforeLength, afterLength)
+    if (ctx == null) {
+      recordRead("getSurroundingText", args, null)
+      return null
+    }
     val selStart = ctx.selection.start - ctx.windowStart
     val selEnd = ctx.selection.end - ctx.windowStart
+    recordRead(
+      "getSurroundingText",
+      args,
+      "text=${ctx.text}, selStart=$selStart, selEnd=$selEnd, offset=${ctx.windowStart}",
+    )
     return SurroundingText(ctx.text, selStart, selEnd, ctx.windowStart)
   }
 
@@ -80,6 +132,7 @@ internal class EditorInputConnection(
 
   override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
+    recordCall("commitText", "text=$value, newCursorPosition=$newCursorPosition")
     if (value == "\n") {
       batch.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
     } else {
@@ -90,37 +143,45 @@ internal class EditorInputConnection(
 
   override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
+    recordCall("setComposingText", "text=$value, newCursorPosition=$newCursorPosition")
     batch.enqueue(FlatImeOp.Compose(value))
     return true
   }
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
+    recordCall("setComposingRegion", "start=$start, end=$end")
     batch.enqueue(FlatImeOp.SetComposition(start, end))
     return true
   }
 
   override fun finishComposingText(): Boolean {
+    recordCall("finishComposingText", "")
     batch.finishComposingText(hasActiveComposition = editor.ime?.composing != null)
     return true
   }
 
   override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+    recordCall("deleteSurroundingText", "before=$beforeLength, after=$afterLength")
     batch.enqueue(FlatImeOp.DeleteSurroundingUtf16(beforeLength, afterLength))
     return true
   }
 
   override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
+    recordCall("deleteSurroundingTextInCodePoints", "before=$beforeLength, after=$afterLength")
     batch.enqueue(FlatImeOp.DeleteSurrounding(beforeLength, afterLength))
     return true
   }
 
   override fun setSelection(start: Int, end: Int): Boolean {
+    recordCall("setSelection", "start=$start, end=$end")
     batch.enqueue(FlatImeOp.SetSelection(start, end))
     return true
   }
 
   override fun sendKeyEvent(event: KeyEvent?): Boolean {
-    if (event == null || event.action != KeyEvent.ACTION_DOWN) return false
+    if (event == null) return false
+    recordCall("sendKeyEvent", "keyCode=${event.keyCode}, action=${event.action}")
+    if (event.action != KeyEvent.ACTION_DOWN) return false
     val key =
       when (event.keyCode) {
         KeyEvent.KEYCODE_DEL -> Key.Backspace
@@ -138,9 +199,15 @@ internal class EditorInputConnection(
 
   override fun performContextMenuAction(id: Int): Boolean = false
 
-  override fun beginBatchEdit(): Boolean = batch.beginBatchEdit()
+  override fun beginBatchEdit(): Boolean {
+    recordCall("beginBatchEdit", "")
+    return batch.beginBatchEdit()
+  }
 
-  override fun endBatchEdit(): Boolean = batch.endBatchEdit()
+  override fun endBatchEdit(): Boolean {
+    recordCall("endBatchEdit", "")
+    return batch.endBatchEdit()
+  }
 
   override fun clearMetaKeyStates(states: Int): Boolean = false
 
@@ -153,6 +220,7 @@ internal class EditorInputConnection(
   override fun getHandler() = null
 
   override fun closeConnection() {
+    recordCall("closeConnection", "")
     batch.closeConnection(hasActiveComposition = editor.ime?.composing != null)
   }
 

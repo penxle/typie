@@ -85,26 +85,42 @@ internal fun BottomToolbarTools(
 }
 
 private fun debugToolItems(debugOverlays: EditorToolbarDebugOverlays): List<ToolItem> {
-  return listOf(
-    ToolItem(
-      icon = Lucide.PanelTop,
-      label = debugOverlays.viewportVisible.debugToggleLabel("뷰포트 기준선"),
-      action = EditorToolbarToolAction.DebugViewportOverlay,
-      key = "debug-viewport-overlay",
-    ),
-    ToolItem(
-      icon = Lucide.PanelBottom,
-      label = debugOverlays.bodyVisible.debugToggleLabel("바디 영역"),
-      action = EditorToolbarToolAction.DebugBodyOverlay,
-      key = "debug-body-overlay",
-    ),
-    ToolItem(
-      icon = Lucide.InspectionPanel,
-      label = debugOverlays.surfaceVisible.debugToggleLabel("페이지 표면"),
-      action = EditorToolbarToolAction.DebugSurfaceOverlay,
-      key = "debug-surface-overlay",
-    ),
-  )
+  return buildList {
+    add(
+      ToolItem(
+        icon = Lucide.PanelTop,
+        label = debugOverlays.viewportVisible.debugToggleLabel("뷰포트 기준선"),
+        action = EditorToolbarToolAction.DebugViewportOverlay,
+        key = "debug-viewport-overlay",
+      )
+    )
+    add(
+      ToolItem(
+        icon = Lucide.PanelBottom,
+        label = debugOverlays.bodyVisible.debugToggleLabel("바디 영역"),
+        action = EditorToolbarToolAction.DebugBodyOverlay,
+        key = "debug-body-overlay",
+      )
+    )
+    add(
+      ToolItem(
+        icon = Lucide.InspectionPanel,
+        label = debugOverlays.surfaceVisible.debugToggleLabel("페이지 표면"),
+        action = EditorToolbarToolAction.DebugSurfaceOverlay,
+        key = "debug-surface-overlay",
+      )
+    )
+    if (debugOverlays.inputLogAvailable) {
+      add(
+        ToolItem(
+          icon = Lucide.Send,
+          label = "입력 로그 보내기",
+          action = EditorToolbarToolAction.SendInputLog,
+          key = "debug-send-input-log",
+        )
+      )
+    }
+  }
 }
 
 private fun Boolean.debugToggleLabel(label: String): String = "$label ${if (this) "끄기" else "켜기"}"

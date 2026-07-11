@@ -34,8 +34,26 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
+    private var lastPulledValue: TextFieldValue? = null
+
     override val value: () -> TextFieldValue = {
-      editor.ime?.toTextFieldValue() ?: TextFieldValue()
+      val pulled = editor.ime?.toTextFieldValue() ?: TextFieldValue()
+      val recorder = editor.inputRecorder
+      if (recorder != null && pulled != lastPulledValue) {
+        lastPulledValue = pulled
+        recorder.record { seq, t ->
+          RecordedInputEntry.ValuePull(
+            seq = seq,
+            t = t,
+            text = pulled.text,
+            selectionStart = pulled.selection.start,
+            selectionEnd = pulled.selection.end,
+            compositionStart = pulled.composition?.start,
+            compositionEnd = pulled.composition?.end,
+          )
+        }
+      }
+      pulled
     }
 
     override val imeOptions: ImeOptions =
@@ -63,8 +81,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val textLayoutResult: () -> TextLayoutResult? = { null }
 
-    @ExperimentalComposeUiApi
-    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
+    @ExperimentalComposeUiApi override val unclippedTextOffsetInRoot: () -> Offset? = { null }
 
     // Workaround for Compose iOS 1.10.3: startInputMethod only uses textFieldRectInRoot
     // to position the hidden UIKit text input view, while IntermediateTextInputUIView

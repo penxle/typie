@@ -32,6 +32,7 @@ import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
+import co.typie.editor.input.EditorInputRecorder
 import co.typie.editor.sync.MissingBytes
 import co.typie.editor.sync.PartitionedBytes
 import co.typie.editor.sync.SplitChangeset
@@ -77,6 +78,8 @@ internal constructor(
 ) {
   var state: EditorState by mutableStateOf(EditorState.Initial)
     private set
+
+  internal var inputRecorder: EditorInputRecorder? = null
 
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
   val placeholder: PlaceholderMetrics? by derivedStateOf { state.placeholder }

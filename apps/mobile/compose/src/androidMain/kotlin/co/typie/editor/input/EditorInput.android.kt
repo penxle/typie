@@ -43,6 +43,14 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     if (suppressSoftwareKeyboard) {
       androidView.post { hideEditorSoftwareKeyboard(androidView) }
     }
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.SessionStart(
+        seq = seq,
+        t = t,
+        initialSelStart = outAttrs.initialSelStart,
+        initialSelEnd = outAttrs.initialSelEnd,
+      )
+    }
     connection
   }
 }
@@ -59,15 +67,21 @@ internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(edit
       androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         ?: return
     val ctx = editor.ime(0, 0)
+    val selStart = ctx?.selection?.start ?: -1
+    val selEnd = ctx?.selection?.end ?: -1
     val composingStart = ctx?.composing?.start ?: -1
     val composingEnd = ctx?.composing?.end ?: -1
-    imm.updateSelection(
-      androidView,
-      ctx?.selection?.start ?: -1,
-      ctx?.selection?.end ?: -1,
-      composingStart,
-      composingEnd,
-    )
+    editor.inputRecorder?.record { seq, t ->
+      RecordedInputEntry.UpdateSelection(
+        seq = seq,
+        t = t,
+        selStart = selStart,
+        selEnd = selEnd,
+        composingStart = composingStart,
+        composingEnd = composingEnd,
+      )
+    }
+    imm.updateSelection(androidView, selStart, selEnd, composingStart, composingEnd)
   }
 
   if (Looper.myLooper() == Looper.getMainLooper()) {

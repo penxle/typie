@@ -68,6 +68,9 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.input.EditorInputRecorder
+import co.typie.editor.input.buildInputLogPayload
+import co.typie.editor.input.sendInputLog
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.allowsViewportScrollReconcile
@@ -189,6 +192,7 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
 import kotlin.time.Clock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -273,6 +277,11 @@ fun EditorScreen(entityId: String) {
     }
   }
   val editor = runtime.editor
+  LaunchedEffect(editor) {
+    if (editor != null && editor.inputRecorder == null && Preference.devMode) {
+      editor.inputRecorder = EditorInputRecorder()
+    }
+  }
   val editorState = editor?.state ?: EditorState.Initial
   val externalAssetIds =
     remember(editorState.externalElements) {
@@ -1253,6 +1262,7 @@ fun EditorScreen(entityId: String) {
                   viewportVisible = model.debugViewportOverlayVisible,
                   bodyVisible = model.debugBodyOverlayVisible,
                   surfaceVisible = model.debugSurfaceOverlayVisible,
+                  inputLogAvailable = editor?.inputRecorder != null,
                 )
               } else {
                 null
@@ -1295,6 +1305,23 @@ fun EditorScreen(entityId: String) {
                 EditorToolbarToolAction.DebugViewportOverlay -> model.toggleDebugViewportOverlay()
                 EditorToolbarToolAction.DebugBodyOverlay -> model.toggleDebugBodyOverlay()
                 EditorToolbarToolAction.DebugSurfaceOverlay -> model.toggleDebugSurfaceOverlay()
+                EditorToolbarToolAction.SendInputLog -> {
+                  val recorder = editor?.inputRecorder
+                  if (recorder != null) {
+                    scope.launch {
+                      val name = sheet.present<String> { InputLogSendSheet() } ?: return@launch
+                      val payload = buildInputLogPayload(name = name, entries = recorder.snapshot())
+                      try {
+                        sendInputLog(payload)
+                        toast.show(ToastType.Success, "입력 로그를 보냈어요.")
+                      } catch (e: CancellationException) {
+                        throw e
+                      } catch (_: Exception) {
+                        toast.show(ToastType.Error, "입력 로그 전송에 실패했어요.")
+                      }
+                    }
+                  }
+                }
               }
             },
             modifier = Modifier,
