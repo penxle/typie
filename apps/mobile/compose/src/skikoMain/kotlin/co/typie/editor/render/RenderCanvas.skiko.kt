@@ -74,90 +74,79 @@ internal actual fun RenderCanvas(
     var cachedSkBitmap: Bitmap? = null
     var cachedPixelsAddr = 0L
     var readerLastVersion = 0L
-    var retiredSkBitmap: Bitmap? = null
 
-    try {
-      trigger.conflate().collect { version ->
-        // The retired bitmap's last on-screen frame has been presented by the time the
-        // next commit arrives, so its pixels are safe to free here.
-        retiredSkBitmap?.let {
-          it.close()
-          retiredSkBitmap = null
-        }
-        if (!RenderBuffer.beginRead(handle)) return@collect
+    trigger.conflate().collect { version ->
+      if (!RenderBuffer.beginRead(handle)) return@collect
 
-        val w = RenderBuffer.getPixelWidth(handle)
-        val h = RenderBuffer.getPixelHeight(handle)
-        if (w <= 0 || h <= 0) {
-          RenderBuffer.endRead(handle)
-          return@collect
-        }
-
-        val hadBitmap = cachedSkBitmap != null
-        val prevW = cachedWidth
-        val prevH = cachedHeight
-        val skBitmap =
-          cachedSkBitmap?.takeIf { prevW == w && prevH == h }
-            ?: run {
-              cachedSkBitmap?.let { retiredSkBitmap = it }
-              val fresh = Bitmap()
-              if (!fresh.allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL))) {
-                fresh.close()
-                RenderBuffer.endRead(handle)
-                return@collect
-              }
-              val addr = fresh.peekPixels()?.use { it.addr.toLong() } ?: 0L
-              if (addr == 0L) {
-                fresh.close()
-                RenderBuffer.endRead(handle)
-                return@collect
-              }
-              cachedSkBitmap = fresh
-              cachedPixelsAddr = addr
-              cachedWidth = w
-              cachedHeight = h
-              readerLastVersion = 0L
-              fresh
-            }
-
-        val pinnedVersion = RenderBuffer.getPinnedVersion(handle)
-        val damageFrom = RenderBuffer.getPinnedDamageFrom(handle)
-        val damageCount = RenderBuffer.getPinnedDamageCount(handle)
-        val damagePtr = RenderBuffer.getPinnedDamagePointer(handle)
-        val partial =
-          shouldPartialUpload(
-            hadBitmap,
-            prevW,
-            prevH,
-            w,
-            h,
-            readerLastVersion,
-            damageFrom,
-            damageCount,
-          )
-        var rowFrom = 0
-        var rowTo = h
-        if (partial && damagePtr != 0L && damageCount.toLong() * 4 <= Int.MAX_VALUE) {
-          val ints = readNativeInts(damagePtr, damageCount * 4)
-          val rr = damageRowRange(ints, damageCount, h)
-          if (rr.minY < rr.maxY) {
-            rowFrom = rr.minY
-            rowTo = rr.maxY
-          }
-        }
-        val ok =
-          RenderBuffer.readPinnedInto(handle, cachedPixelsAddr, w.toLong() * h * 4, rowFrom, rowTo)
+      val w = RenderBuffer.getPixelWidth(handle)
+      val h = RenderBuffer.getPixelHeight(handle)
+      if (w <= 0 || h <= 0) {
         RenderBuffer.endRead(handle)
-        if (!ok) return@collect
-
-        skBitmap.notifyPixelsChanged()
-        bitmap = skBitmap.asComposeImageBitmap()
-        currentOnBitmapCommitted(IntSize(w, h), version)
-        readerLastVersion = pinnedVersion
+        return@collect
       }
-    } finally {
-      retiredSkBitmap?.close()
-      cachedSkBitmap?.close()
+
+      val hadBitmap = cachedSkBitmap != null
+      val prevW = cachedWidth
+      val prevH = cachedHeight
+      val skBitmap =
+        cachedSkBitmap?.takeIf { prevW == w && prevH == h }
+          ?: run {
+            val fresh = Bitmap()
+            if (!fresh.allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL))) {
+              fresh.close()
+              RenderBuffer.endRead(handle)
+              return@collect
+            }
+            val addr = fresh.peekPixels()?.use { it.addr.toLong() } ?: 0L
+            if (addr == 0L) {
+              fresh.close()
+              RenderBuffer.endRead(handle)
+              return@collect
+            }
+            cachedSkBitmap = fresh
+            cachedPixelsAddr = addr
+            cachedWidth = w
+            cachedHeight = h
+            readerLastVersion = 0L
+            fresh
+          }
+
+      val pinnedVersion = RenderBuffer.getPinnedVersion(handle)
+      val damageFrom = RenderBuffer.getPinnedDamageFrom(handle)
+      val damageCount = RenderBuffer.getPinnedDamageCount(handle)
+      val damagePtr = RenderBuffer.getPinnedDamagePointer(handle)
+      val partial =
+        shouldPartialUpload(
+          hadBitmap,
+          prevW,
+          prevH,
+          w,
+          h,
+          readerLastVersion,
+          damageFrom,
+          damageCount,
+        )
+      var rowFrom = 0
+      var rowTo = h
+      if (partial && damagePtr != 0L && damageCount.toLong() * 4 <= Int.MAX_VALUE) {
+        val ints = readNativeInts(damagePtr, damageCount * 4)
+        val rr = damageRowRange(ints, damageCount, h)
+        if (rr.minY < rr.maxY) {
+          rowFrom = rr.minY
+          rowTo = rr.maxY
+        }
+      }
+      val ok =
+        RenderBuffer.readPinnedInto(handle, cachedPixelsAddr, w.toLong() * h * 4, rowFrom, rowTo)
+      RenderBuffer.endRead(handle)
+      if (!ok) return@collect
+
+      skBitmap.notifyPixelsChanged()
+      // asComposeImageBitmap() is zero-copy, so Compose may still draw this Bitmap after
+      // it leaves the cache. Let Skiko's managed cleanup reclaim published bitmaps.
+      bitmap = skBitmap.asComposeImageBitmap()
+      currentOnBitmapCommitted(IntSize(w, h), version)
+      readerLastVersion = pinnedVersion
     }
   }
 
