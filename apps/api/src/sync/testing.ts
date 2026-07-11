@@ -39,6 +39,7 @@ export class FakeSyncDeps implements SyncDeps {
   bundles = new Map<string, BundleRow[]>();
   stream = new Map<string, StreamEntry[]>();
   oldestRetained = new Map<string, string>();
+  trimmed = new Set<string>();
   collectedSeq = new Map<string, string>();
   liveHeads = new Map<string, Uint8Array>();
   durableHeadsMap = new Map<string, Uint8Array>();
@@ -83,6 +84,8 @@ export class FakeSyncDeps implements SyncDeps {
     const oldest = this.oldestRetained.get(documentId);
     return oldest !== undefined && compareStreamSeq(oldest, sinceSeq) > 0;
   };
+
+  hasStreamBeenTrimmed = async (documentId: string): Promise<boolean> => this.trimmed.has(documentId);
 
   streamTip = async (documentId: string): Promise<string | null> => {
     const entries = this.stream.get(documentId) ?? [];

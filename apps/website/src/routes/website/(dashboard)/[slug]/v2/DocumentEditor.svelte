@@ -346,6 +346,7 @@
     }
     if (applied) editor.flush();
     if (event.seq) syncSeq = event.seq;
+    if (event.bundles.length === 0 && event.seq) return;
     pusher?.setConfirmedHeads(event.heads);
     pusher?.setDurableHeads(event.durableHeads);
   };

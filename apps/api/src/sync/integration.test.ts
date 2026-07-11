@@ -129,6 +129,50 @@ test('E2E: hello → attach → snapshot → tail → live → push → echo 억
   await stopServer(server);
 });
 
+test('E2E: 발신자도 attach 상태면 자기 push에 대해 빈 changesets 프레임(seq/heads)을 받는다(본문 제외)', async () => {
+  const deps = new FakeSyncDeps();
+  deps.tickets.set('TK', { sessionId: 'S1', userId: 'U1', deviceId: 'DEV1' });
+  deps.liveHeads.set('D1', Uint8Array.of(0xaa));
+  deps.durableHeadsMap.set('D1', Uint8Array.of(0xdd));
+
+  const server = await startServer(deps);
+  const port = (server.address() as AddressInfo).port;
+
+  const client = new Client(port);
+  try {
+    await once(client.ws, 'open');
+    client.send({ t: 'hello', ticket: 'TK', clientId: 'client-a', capabilities: [] });
+    await client.waitFor('hello-ack');
+
+    client.send({ t: 'attach', documentId: 'D1' });
+    await client.waitFor('snapshot-end');
+
+    client.send({ t: 'push', id: 'p1', documentId: 'D1', changesets: Uint8Array.of(7, 7) });
+    const ack = await client.waitFor('push-ack');
+
+    const notify = await (async () => {
+      for (let i = 0; i < 200; i += 1) {
+        const found = client.received.filter((m) => m.t === 'changesets').find((m) => m.t === 'changesets' && m.bundles.length === 0);
+        if (found) return found;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw new Error('timeout waiting for sender seq-only notify');
+    })();
+    if (notify.t !== 'changesets') return assert.fail();
+    assert.equal(notify.seq, '1-0');
+    assert.deepEqual(notify.heads, ack.heads);
+    assert.deepEqual(notify.durableHeads, ack.durableHeads);
+
+    const bodyDelivered = client.received
+      .filter((m) => m.t === 'changesets')
+      .some((m) => m.t === 'changesets' && m.bundles.some((b) => new Uint8Array(b)[0] === 7));
+    assert.equal(bodyDelivered, false);
+  } finally {
+    client.ws.close();
+    await stopServer(server);
+  }
+});
+
 test('E2E: 잘못된 티켓 → close 4001', async () => {
   const deps = new FakeSyncDeps();
   const server = await startServer(deps);

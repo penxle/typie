@@ -352,6 +352,33 @@ class DocumentWsChannelTest {
   }
 
   @Test
+  fun emptyBundlesChangesetsStillAdvancesLiveSeqAcrossReconnect() = runTest {
+    val (_, channel, sockets) = harness()
+    val events = mutableListOf<AttachEvent>()
+    collectJob(channel.events, events)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+    socket0.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+    socket0.serverSend(snapshotEnd("6-0"))
+    socket0.serverSend(changesets("7-0", emptyList()))
+    runCurrent()
+    assertEquals(
+      listOf(endS("6-0"), changesetsS("7-0", emptyList())),
+      events.snapshots(),
+    )
+
+    socket0.serverClose(1006)
+    advanceTimeBy(1_000)
+    runCurrent()
+    val socket1 = sockets[1]
+    handshake(socket1)
+    val resumeAttach = assertIs<WsClientMessage.Attach>(socket1.lastOf("attach"))
+    assertEquals("7-0", resumeAttach.sinceSeq)
+    assertNull(resumeAttach.snapshotCursor)
+  }
+
+  @Test
   fun concurrentSubscribersProduceSingleAttachFrame() = runTest {
     val (_, channel, sockets) = harness()
     val loaderEvents = mutableListOf<AttachEvent>()

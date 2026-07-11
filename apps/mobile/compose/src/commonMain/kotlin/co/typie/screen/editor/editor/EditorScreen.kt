@@ -624,6 +624,7 @@ fun EditorScreen(entityId: String) {
           if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
           pendingChangesets.clear()
           readyLoad.close()
+          loaderRetryGeneration += 1
         }
       }
       val transport =

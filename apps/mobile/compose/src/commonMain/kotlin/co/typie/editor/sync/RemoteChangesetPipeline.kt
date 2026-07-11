@@ -39,7 +39,13 @@ class RemoteChangesetPipeline(
           try {
             transport.subscribe(syncSeq.ifEmpty { null }).collect { event ->
               attempts = 0
-              apply(event.changesets, event.seq, event.heads, event.durableHeads)
+              apply(
+                event.changesets,
+                event.seq,
+                event.heads,
+                event.durableHeads,
+                propagateHeads = !(event.changesets.isEmpty() && event.seq.isNotEmpty()),
+              )
             }
           } catch (e: CancellationException) {
             throw e
@@ -85,6 +91,7 @@ class RemoteChangesetPipeline(
     seq: String,
     heads: ByteArray,
     durableHeads: ByteArray,
+    propagateHeads: Boolean = true,
   ) {
     applyMutex.withLock {
       for (payload in changesets) {
@@ -93,6 +100,7 @@ class RemoteChangesetPipeline(
         }
       }
       if (seq.isNotEmpty()) syncSeq = seq
+      if (!propagateHeads) return
       headsSink.setConfirmedHeads(heads)
       headsSink.setDurableHeads(durableHeads)
     }

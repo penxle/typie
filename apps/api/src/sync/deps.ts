@@ -10,6 +10,7 @@ import {
   getCollectedSeq,
   getDurableHeads,
   getLiveHeads,
+  hasStreamBeenTrimmed,
   readMergedGraph,
   readStreamBatch,
   seqCompare,
@@ -80,6 +81,8 @@ export const createProductionDeps = (): SyncDeps => ({
     const rows = (await redis.xrange(streamKey(documentId), '-', '+', 'COUNT', 1)) as [string, string[]][];
     return rows.length > 0 && seqCompare(rows[0][0], sinceSeq) > 0;
   },
+
+  hasStreamBeenTrimmed,
 
   streamTip,
 

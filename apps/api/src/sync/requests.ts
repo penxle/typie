@@ -35,12 +35,21 @@ export const handlePush = async (
   heads ??= await ctx.deps.bootstrapLiveHeads(message.documentId);
 
   if (opsCount > 0 && seq) {
+    const headsB64 = heads.toBase64();
+    const durableHeadsB64 = durableHeads.toBase64();
     ctx.deps.publishChangesets(message.documentId, {
       target: `!${ctx.clientId}`,
       seq,
       changesets: [message.changesets.toBase64()],
-      heads: heads.toBase64(),
-      durableHeads: durableHeads.toBase64(),
+      heads: headsB64,
+      durableHeads: durableHeadsB64,
+    });
+    ctx.deps.publishChangesets(message.documentId, {
+      target: ctx.clientId,
+      seq,
+      changesets: [],
+      heads: headsB64,
+      durableHeads: durableHeadsB64,
     });
     await ctx.deps.enqueueCollect(message.documentId);
   }
@@ -61,8 +70,11 @@ export const handlePull = async (
 
   if (sinceSeq === null) {
     if ((await ctx.deps.getCollectedSeq(message.documentId)) !== null) {
-      await reload();
-      return;
+      const tip = await ctx.deps.streamTip(message.documentId);
+      if (tip === null || (await ctx.deps.hasStreamBeenTrimmed(message.documentId))) {
+        await reload();
+        return;
+      }
     }
   } else {
     const tip = await ctx.deps.streamTip(message.documentId);

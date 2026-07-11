@@ -13,6 +13,7 @@ import { wasm } from './wasm-ffi.ts';
 //
 //   stream:{id}    Redis Stream. fields: c=base64 bundle, u=userId, d=deviceId
 //   collected:{id} last stream id folded into the persisted snapshot by collect
+//   trimmed:{id}   set once trim is about to drop entries, before the XTRIM (no TTL)
 //
 // The persisted history (`DocumentBundles`, one row per collected bundle) backs
 // text/search/full-load; it is fed from the stream, which is trimmed behind
@@ -24,6 +25,7 @@ import { wasm } from './wasm-ffi.ts';
 export const streamKey = (documentId: string) => `document:changesets:stream:${documentId}`;
 export const collectedKey = (documentId: string) => `document:changesets:collected:${documentId}`;
 export const liveKey = (documentId: string) => `document:changesets:live:${documentId}`;
+export const trimmedKey = (documentId: string) => `document:changesets:trimmed:${documentId}`;
 
 // Retain this much history behind the collected cursor so a briefly-
 // disconnected client catches up incrementally; anyone older full-reloads (see
@@ -81,11 +83,30 @@ export const readStreamBatch = async (documentId: string, sinceSeq: string | nul
 // Trim history older than the catch-up window *behind the collected cursor*.
 // Entries after the cursor (un-collected) are always newer than the floor, so
 // they are never trimmed regardless of how far collect has fallen behind.
+// The durable `trimmed:{id}` marker (no TTL) is set *before* the XTRIM, keyed
+// on the oldest retained id predating the floor: a crash after the set is a
+// safe false positive (one spurious reload), whereas set-after-removal could
+// leave a trimmed stream unmarked forever and silently lose the dropped
+// prefix. Approximate trim (`~`) deferring physical removal errs the same
+// safe direction. A no-op trim (nothing yet old enough) leaves the marker
+// unset, so callers can tell "collect has run" from "the stream was ever
+// truncated" instead of conflating the two.
 export const trimStream = async (documentId: string, collectedSeq: string): Promise<void> => {
   const collectedMs = Number(collectedSeq.split('-')[0]);
   const floorMs = collectedMs - RETAIN_WINDOW_MS;
   if (floorMs <= 0) return;
-  await redis.xtrim(streamKey(documentId), 'MINID', '~', `${floorMs}-0`);
+  const floorSeq = `${floorMs}-0`;
+  const oldest = (await redis.xrange(streamKey(documentId), '-', '+', 'COUNT', 1)) as XRangeRow[];
+  if (oldest.length > 0 && seqCompare(oldest[0][0], floorSeq) < 0) {
+    await redis.set(trimmedKey(documentId), '1');
+  }
+  await redis.xtrim(streamKey(documentId), 'MINID', '~', floorSeq);
+};
+
+// Has `trimStream` ever dropped entries (or been about to, see above)? `false`
+// also covers a document that was never collected — there is nothing to trim yet.
+export const hasStreamBeenTrimmed = async (documentId: string): Promise<boolean> => {
+  return (await redis.exists(trimmedKey(documentId))) === 1;
 };
 
 // All stream entries strictly after `sinceSeq` (exclusive). `truncated` is true

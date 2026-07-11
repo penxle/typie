@@ -116,6 +116,33 @@ class RemoteChangesetPipelineTest {
   }
 
   @Test
+  fun cursorOnlyEventAdvancesSeqWithoutTouchingHeads() = runTest {
+    val (editor, transport, sink, pipeline) = harness(initialSeq = "s1")
+    pipeline.start()
+    runCurrent()
+
+    transport.subscriptionEvents.send(
+      RemoteChangesetEvent(
+        changesets = emptyList(),
+        seq = "s2",
+        heads = enc(9),
+        durableHeads = enc(9),
+      )
+    )
+    runCurrent()
+    assertTrue(editor.known.isEmpty())
+    assertTrue(sink.confirmed.isEmpty())
+    assertTrue(sink.durable.isEmpty())
+
+    transport.subscriptionEvents.close()
+    runCurrent()
+    advanceTimeBy(1_100)
+    runCurrent()
+    assertEquals("s2", transport.subscribeCalls.last())
+    pipeline.stop()
+  }
+
+  @Test
   fun reconnectUsesLatestSeq() = runTest {
     val (_, transport, _, pipeline) = harness(initialSeq = "s1")
     transport.failSubscriptionAfterFirstEvent = true

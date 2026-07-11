@@ -183,6 +183,32 @@ describe('DocumentChannels', () => {
     expect(sockets[1].lastOf('attach')?.sinceSeq).toBe('6-0');
   });
 
+  test('발신자용 빈 changesets 알림(bundles: [])도 sinceSeq를 전진시킨다', async () => {
+    const { channels, sockets } = setup();
+    const s = subscriber();
+    channels.subscribe('D1', s.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].lastOf('attach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    sockets[0].serverSend({
+      t: 'changesets',
+      documentId: 'D1',
+      seq: '6-0',
+      bundles: [],
+      heads: Uint8Array.of(9),
+      durableHeads: Uint8Array.of(8),
+    });
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot', 'changesets:6-0']));
+
+    sockets[0].serverClose(1006);
+    await vi.waitFor(() => expect(sockets.length).toBe(2), { timeout: 3000 });
+    await handshake(sockets[1]);
+    await vi.waitFor(() => expect(sockets[1].lastOf('attach')).toBeDefined());
+    expect(sockets[1].lastOf('attach')?.sinceSeq).toBe('6-0');
+  });
+
   test('늦은 구독자: fresh attach의 과거 tail은 기존 구독자에게 전달되지 않는다 (구독자별 커서)', async () => {
     const { channels, sockets } = setup();
     const first = subscriber();

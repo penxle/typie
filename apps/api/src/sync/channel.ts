@@ -137,8 +137,11 @@ export class DocumentChannel {
     };
     if (cursor === null) {
       if ((await this.#deps.getCollectedSeq(this.#documentId)) !== null) {
-        await reload();
-        return;
+        const tip = await this.#deps.streamTip(this.#documentId);
+        if (tip === null || (await this.#deps.hasStreamBeenTrimmed(this.#documentId))) {
+          await reload();
+          return;
+        }
       }
     } else if ((await this.#deps.streamTip(this.#documentId)) === null) {
       await reload();

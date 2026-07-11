@@ -10,15 +10,25 @@ const ctx = (deps: FakeSyncDeps): RequestContext => ({
   clientId: 'me',
 });
 
-test('push: append → advance → publish(!clientId) → collect enqueue → ack', async () => {
+test('push: append → advance → publish(!clientId 본문) + publish(clientId 빈 알림) → collect enqueue → ack', async () => {
   const deps = new FakeSyncDeps();
   deps.liveHeads.set('D1', Uint8Array.of(0x01));
   deps.durableHeadsMap.set('D1', Uint8Array.of(0x02));
   const { sent, send } = collectSend();
   await handlePush(ctx(deps), { id: 'r1', documentId: 'D1', changesets: Uint8Array.of(9, 9) }, send);
 
-  assert.equal(deps.published.length, 1);
-  assert.equal(deps.published[0].event.target, '!me');
+  assert.equal(deps.published.length, 2);
+  const [body, notify] = deps.published;
+  assert.equal(body.event.target, '!me');
+  assert.deepEqual(
+    body.event.changesets.map((c) => Uint8Array.fromBase64(c)),
+    [Uint8Array.of(9, 9)],
+  );
+  assert.equal(notify.event.target, 'me');
+  assert.deepEqual(notify.event.changesets, []);
+  assert.equal(notify.event.seq, body.event.seq);
+  assert.equal(notify.event.heads, body.event.heads);
+  assert.equal(notify.event.durableHeads, body.event.durableHeads);
   assert.deepEqual(deps.collectJobs, ['D1']);
   const ack = sent[0];
   if (ack.t !== 'push-ack') return assert.fail();
@@ -27,6 +37,17 @@ test('push: append → advance → publish(!clientId) → collect enqueue → ac
   assert.deepEqual(ack.durableHeads, Uint8Array.of(0x02));
   const { entries } = await deps.readStreamSince('D1', null);
   assert.equal(entries.length, 1);
+});
+
+test('push: 발신자가 채널에 attach하지 않아도 오류 없이 처리된다(구독 없으면 알림은 no-op)', async () => {
+  const deps = new FakeSyncDeps();
+  const { sent, send } = collectSend();
+  await handlePush(ctx(deps), { id: 'r1', documentId: 'D1', changesets: Uint8Array.of(3) }, send);
+  assert.equal(deps.subscriberCount('D1'), 0);
+  assert.equal(deps.published.length, 2);
+  const ack = sent[0];
+  if (ack.t !== 'push-ack') return assert.fail();
+  assert.equal(ack.id, 'r1');
 });
 
 test('push: 잘못된 페이로드는 permanent 오류, append 없음', async () => {
@@ -64,7 +85,7 @@ test('push: cold cache면 bootstrapLiveHeads로 부트스트랩', async () => {
   const ack = sent[0];
   if (ack.t !== 'push-ack') return assert.fail();
   assert.deepEqual(ack.heads, Uint8Array.of(0xb0));
-  assert.equal(deps.published.length, 1);
+  assert.equal(deps.published.length, 2);
 });
 
 test('pull: sinceSeq 이후 tail과 커서 반환', async () => {
@@ -132,10 +153,11 @@ test('pull: 빈 스트림에 sinceSeq가 있으면 needsReload', async () => {
   assert.equal(ack.needsReload, true);
 });
 
-test('pull: 빈 문자열 sinceSeq(빈 문서 기준) + collect 발생이면 needsReload', async () => {
+test('pull: 빈 문자열 sinceSeq(빈 문서 기준) + 실제 trim 발생이면 needsReload', async () => {
   const deps = new FakeSyncDeps();
   deps.seedStream('D1', [{ seq: '9-0', changeset: Uint8Array.of(9) }]);
   deps.collectedSeq.set('D1', '9-0');
+  deps.trimmed.add('D1');
   const { sent, send } = collectSend();
   await handlePull(ctx(deps), { id: 'r7', documentId: 'D1', sinceSeq: '' }, send);
   const ack = sent[0];
@@ -157,6 +179,36 @@ test('pull: 빈 문자열 sinceSeq(빈 문서 기준) + collect 미발생이면 
     ack.changesets.map((c) => new Uint8Array(c)),
     [Uint8Array.of(9)],
   );
+});
+
+test('pull: 빈-기준선 + collect 존재 + trim 없음(스트림 잔존)이면 needsReload=false, 스트림 전체 반환', async () => {
+  const deps = new FakeSyncDeps();
+  deps.seedStream('D1', [
+    { seq: '9-0', changeset: Uint8Array.of(9) },
+    { seq: '10-0', changeset: Uint8Array.of(10) },
+  ]);
+  deps.collectedSeq.set('D1', '9-0');
+  const { sent, send } = collectSend();
+  await handlePull(ctx(deps), { id: 'r9', documentId: 'D1', sinceSeq: '' }, send);
+  const ack = sent[0];
+  if (ack.t !== 'pull-ack') return assert.fail();
+  assert.equal(ack.needsReload, false);
+  assert.equal(ack.seq, '10-0');
+  assert.deepEqual(
+    ack.changesets.map((c) => new Uint8Array(c)),
+    [Uint8Array.of(9), Uint8Array.of(10)],
+  );
+});
+
+test('pull: 빈-기준선 + collect 존재 + 스트림 빈 상태면 needsReload=true', async () => {
+  const deps = new FakeSyncDeps();
+  deps.collectedSeq.set('D1', '9-0');
+  const { sent, send } = collectSend();
+  await handlePull(ctx(deps), { id: 'r11', documentId: 'D1', sinceSeq: '' }, send);
+  const ack = sent[0];
+  if (ack.t !== 'pull-ack') return assert.fail();
+  assert.equal(ack.needsReload, true);
+  assert.deepEqual(ack.changesets, []);
 });
 
 test('pull: 빈 문자열 sinceSeq는 커서 없음으로 정규화된다', async () => {

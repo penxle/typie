@@ -21,6 +21,7 @@ export type SyncDeps = {
   readBundlesAfter: (documentId: string, afterSeq: number, limit: number) => Promise<BundleRow[]>;
   readStreamBatch: (documentId: string, sinceSeq: string | null, count: number) => Promise<StreamEntry[]>;
   isStreamTruncated: (documentId: string, sinceSeq: string) => Promise<boolean>;
+  hasStreamBeenTrimmed: (documentId: string) => Promise<boolean>;
   streamTip: (documentId: string) => Promise<string | null>;
   getLiveHeads: (documentId: string) => Promise<Uint8Array | null>;
   getDurableHeads: (documentId: string) => Promise<Uint8Array | null>;
