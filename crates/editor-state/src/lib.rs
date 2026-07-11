@@ -41,9 +41,7 @@ pub mod undo;
 pub use affinity::*;
 pub use apply::*;
 pub use bind::*;
-pub use builders::{
-    cell_rect_selection, gap_cursor_selection_between, gap_cursor_selection_leading,
-};
+pub use builders::{cell_rect_selection, gap_cursor_selection_at};
 pub use carry::{block_accepts_carry_kind, end_touched_textblocks};
 pub use cell_selection::{
     CellRect, as_cell_rect, enclosing_table, enclosing_table_cell, selected_table_cell_ids,

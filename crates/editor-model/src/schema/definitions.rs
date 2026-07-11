@@ -31,6 +31,7 @@ impl Default for SchemaInner {
             nodes: enum_map! {
                 NodeType::Root => NodeSpec {
                     content: content_expr!((Paragraph | Image | File | Embed | Archived | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold | Table)*, Paragraph),
+                    isolating: true,
                     ..Default::default()
                 },
                 NodeType::Blockquote => NodeSpec {

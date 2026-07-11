@@ -61,12 +61,12 @@ fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
     let view = state.view();
     let rs = state.selection.as_ref()?.resolve(&view)?;
     match as_gap_cursor(&rs)? {
-        GapCursor::LeadingUnit { .. } => Some(GapPhantom {
-            parent: Dot::ROOT,
-            index: 0,
-        }),
         GapCursor::BetweenMonolithic { parent, index, .. } => Some(GapPhantom {
             parent: parent.id(),
+            index,
+        }),
+        GapCursor::IsolatingBoundary { host, index, .. } => Some(GapPhantom {
+            parent: host.id(),
             index,
         }),
     }

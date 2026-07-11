@@ -5,20 +5,47 @@ use crate::affinity::Affinity;
 use crate::{Position, classify, selection::ResolvedSelection};
 
 pub enum GapCursor<'a> {
-    LeadingUnit {
-        unit: ChildView<'a>,
-    },
     BetweenMonolithic {
         parent: NodeView<'a>,
         before: ChildView<'a>,
         after: ChildView<'a>,
         index: usize,
     },
+    /// Between an isolating container's own boundary and its adjacent unit
+    /// child: `index == 0` is the leading boundary (unit is the first
+    /// child), `index == child count` is the trailing boundary (unit is
+    /// the last child). The document root is isolating, so the document's
+    /// leading gap is this variant with the root as host.
+    IsolatingBoundary {
+        host: NodeView<'a>,
+        unit: ChildView<'a>,
+        index: usize,
+    },
 }
 
-pub fn leading_unit<'a>(view: &'a DocView<'a>) -> Option<ChildView<'a>> {
-    let first = view.root()?.first_child()?;
-    classify::child_is_unit(&first).then_some(first)
+pub fn isolating_boundary_at<'a>(host: &NodeView<'a>, index: usize) -> Option<ChildView<'a>> {
+    if !Schema::node_spec(host.node_type()).isolating {
+        return None;
+    }
+    let children: Vec<ChildView> = host.children().collect();
+    let count = children.len();
+    if count == 0 || (index != 0 && index != count) {
+        return None;
+    }
+    let unit = host.child_at(if index == 0 { 0 } else { count - 1 })?;
+    if !classify::child_is_unit(&unit) {
+        return None;
+    }
+    let ty = |c: &ChildView| match c {
+        ChildView::Block(b) => b.node_type(),
+        ChildView::Leaf(l) => l.node_type(),
+    };
+    let mut seq: Vec<NodeType> = children.iter().map(ty).collect();
+    seq.insert(index, NodeType::Paragraph);
+    Schema::node_spec(host.node_type())
+        .content
+        .matches_sequence(&seq)
+        .then_some(unit)
 }
 
 pub fn between_monolithic_at(host: &NodeView, index: usize) -> bool {
@@ -45,9 +72,19 @@ pub fn between_monolithic_at(host: &NodeView, index: usize) -> bool {
 
 pub fn gap_cursor_at<'a>(pos: &Position, view: &'a DocView<'a>) -> Option<GapCursor<'a>> {
     let host = view.node(pos.node)?;
-    let is_root = view.root().map(|r| r.id()) == Some(pos.node);
-    if is_root && pos.offset == 0 && pos.affinity == Affinity::Upstream {
-        return leading_unit(view).map(|unit| GapCursor::LeadingUnit { unit });
+    // Boundary gaps claim only the position encodings whose affinity faces
+    // the boundary — (0, Upstream) / (count, Downstream). The opposite
+    // affinities keep their existing meaning (unit node-selection
+    // expansion in normalize).
+    let count = host.child_count();
+    let faces_boundary = (pos.offset == 0 && pos.affinity == Affinity::Upstream)
+        || (count > 0 && pos.offset == count && pos.affinity == Affinity::Downstream);
+    if faces_boundary && let Some(unit) = isolating_boundary_at(&host, pos.offset) {
+        return Some(GapCursor::IsolatingBoundary {
+            host,
+            unit,
+            index: pos.offset,
+        });
     }
     if !between_monolithic_at(&host, pos.offset) {
         return None;
@@ -202,11 +239,214 @@ mod tests {
         (project_document(&logs(&items)).unwrap(), root)
     }
 
+    // root > fold > [fold_title, fold_content > callout > para] + para
+    fn fold_callout_doc() -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(2, 1);
+        let title = Dot::new(2, 2);
+        let content = Dot::new(2, 3);
+        let callout = Dot::new(2, 4);
+        let inner_para = Dot::new(2, 5);
+        let para = Dot::new(2, 6);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                title,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                content,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                callout,
+                SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![root, fold, content],
+                    attrs: vec![],
+                },
+            ),
+            (
+                inner_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, fold, content, callout],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        (project_document(&logs(&items)).unwrap(), content)
+    }
+
+    // root > fold > [fold_title, fold_content > para] + para
+    fn fold_paragraph_doc() -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(3, 1);
+        let title = Dot::new(3, 2);
+        let content = Dot::new(3, 3);
+        let inner_para = Dot::new(3, 4);
+        let para = Dot::new(3, 5);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                title,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                content,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                inner_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, fold, content],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        (project_document(&logs(&items)).unwrap(), content)
+    }
+
+    #[test]
+    fn test_isolating_boundary_at_fold_content_with_callout() {
+        let (pd, content) = fold_callout_doc();
+        let view = DocView::new(&pd);
+        let host = view.node(content).unwrap();
+        assert!(
+            isolating_boundary_at(&host, 0).is_some(),
+            "leading boundary of isolating fold_content next to a callout is a gap"
+        );
+        assert!(
+            isolating_boundary_at(&host, 1).is_some(),
+            "trailing boundary of isolating fold_content next to a callout is a gap"
+        );
+        assert!(
+            isolating_boundary_at(&host, 2).is_none(),
+            "out-of-range index is not a gap"
+        );
+    }
+
+    #[test]
+    fn test_isolating_boundary_at_root() {
+        let (pd, _root) = two_folds_doc();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        assert!(
+            isolating_boundary_at(&root_node, 0).is_some(),
+            "root is isolating; its leading slot before a fold is a boundary gap"
+        );
+        assert!(
+            isolating_boundary_at(&root_node, 3).is_none(),
+            "root trailing slot is never a gap — the last child is always a paragraph"
+        );
+    }
+
+    #[test]
+    fn test_isolating_boundary_at_rejects_non_unit_neighbor() {
+        let (pd, content) = fold_paragraph_doc();
+        let view = DocView::new(&pd);
+        let host = view.node(content).unwrap();
+        assert!(
+            isolating_boundary_at(&host, 0).is_none(),
+            "a paragraph neighbor is not a unit — no boundary gap"
+        );
+        assert!(
+            isolating_boundary_at(&host, 1).is_none(),
+            "a paragraph neighbor is not a unit — no boundary gap"
+        );
+    }
+
+    #[test]
+    fn test_gap_cursor_at_isolating_boundary_affinity_gates() {
+        let (pd, content) = fold_callout_doc();
+        let view = DocView::new(&pd);
+        let at = |offset, affinity| {
+            gap_cursor_at(
+                &Position {
+                    node: content,
+                    offset,
+                    affinity,
+                },
+                &view,
+            )
+        };
+        assert!(
+            matches!(
+                at(0, Affinity::Upstream),
+                Some(GapCursor::IsolatingBoundary { index: 0, .. })
+            ),
+            "(0, Upstream) faces the leading boundary"
+        );
+        assert!(
+            at(0, Affinity::Downstream).is_none(),
+            "(0, Downstream) keeps its unit node-selection expansion meaning"
+        );
+        assert!(
+            matches!(
+                at(1, Affinity::Downstream),
+                Some(GapCursor::IsolatingBoundary { index: 1, .. })
+            ),
+            "(count, Downstream) faces the trailing boundary"
+        );
+        assert!(
+            at(1, Affinity::Upstream).is_none(),
+            "(count, Upstream) keeps its unit node-selection expansion meaning"
+        );
+    }
+
     #[test]
     fn test_1_leading_unit_image() {
         let (pd, _root) = image_first_doc();
         let view = DocView::new(&pd);
-        let unit = leading_unit(&view);
+        let root_node = view.root().unwrap();
+        let unit = isolating_boundary_at(&root_node, 0);
         assert!(
             unit.is_some(),
             "image as first root child should be a leading unit"
@@ -231,8 +471,9 @@ mod tests {
         )];
         let pd = project_document(&logs(&items)).unwrap();
         let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
         assert!(
-            leading_unit(&view).is_none(),
+            isolating_boundary_at(&root_node, 0).is_none(),
             "paragraph as first child is not a unit"
         );
     }
@@ -313,7 +554,10 @@ mod tests {
             gc.is_some(),
             "upstream at offset 0 before image should produce a gap cursor"
         );
-        assert!(matches!(gc, Some(GapCursor::LeadingUnit { .. })));
+        assert!(matches!(
+            gc,
+            Some(GapCursor::IsolatingBoundary { index: 0, .. })
+        ));
     }
 
     // §4.3 — affinity-invariant for between: Downstream also resolves BetweenMonolithic

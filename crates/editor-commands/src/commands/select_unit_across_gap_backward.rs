@@ -17,9 +17,17 @@ pub fn select_unit_across_gap_backward(tr: &mut Transaction) -> CommandResult {
         };
         match as_gap_cursor(&rs) {
             None => return Ok(false),
-            Some(GapCursor::LeadingUnit { .. }) => (view.root().unwrap().id(), 0, 1),
             Some(GapCursor::BetweenMonolithic { parent, index, .. }) => {
                 (parent.id(), index - 1, index)
+            }
+            // A boundary gap has a single adjacent unit; select it in
+            // either direction.
+            Some(GapCursor::IsolatingBoundary { host, index, .. }) => {
+                if index == 0 {
+                    (host.id(), 0, 1)
+                } else {
+                    (host.id(), index - 1, index)
+                }
             }
         }
     };
@@ -180,6 +188,58 @@ mod tests {
                 }
             }
             selection: (r, 0, >) -> (r, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn leading_boundary_gap_in_fold_content_selects_callout() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fc: fold_content { callout { paragraph { text("x") } } }
+                }
+                paragraph {}
+            } }
+            selection: (fc, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| select_unit_across_gap_backward(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fc: fold_content { callout { paragraph { text("x") } } }
+                }
+                paragraph {}
+            } }
+            selection: (fc, 0, >) -> (fc, 1, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn trailing_boundary_gap_in_fold_content_selects_callout() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fc: fold_content { callout { paragraph { text("x") } } }
+                }
+                paragraph {}
+            } }
+            selection: (fc, 1, >)
+        };
+        let (actual, ..) = transact!(initial, |tr| select_unit_across_gap_backward(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fc: fold_content { callout { paragraph { text("x") } } }
+                }
+                paragraph {}
+            } }
+            selection: (fc, 0, >) -> (fc, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }

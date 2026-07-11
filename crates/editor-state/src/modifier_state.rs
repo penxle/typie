@@ -2225,7 +2225,8 @@ mod tests {
         let state = ProjectedState::from_graph(graph).unwrap();
         let s = {
             let view = state.view();
-            crate::gap_cursor_selection_leading(&view).expect("leading gap cursor")
+            crate::gap_cursor_selection_at(editor_crdt::Dot::ROOT, 0, &view)
+                .expect("leading gap cursor")
         };
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
         assert_eq!(
@@ -2279,7 +2280,8 @@ mod tests {
             .unwrap();
         let s = {
             let view = state.view();
-            crate::gap_cursor_selection_leading(&view).expect("leading gap cursor")
+            crate::gap_cursor_selection_at(editor_crdt::Dot::ROOT, 0, &view)
+                .expect("leading gap cursor")
         };
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
         assert_eq!(

@@ -2,8 +2,8 @@ use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Schema};
 use editor_state::{
     Affinity, GapCursor, Position, Selection, as_gap_cursor, cell_rect_selection,
-    enclosing_table_cell, first_cursor_position, gap_cursor_selection_between,
-    gap_cursor_selection_leading, is_unit_node_selection, last_cursor_position,
+    enclosing_table_cell, first_cursor_position, gap_cursor_selection_at, is_unit_node_selection,
+    last_cursor_position,
 };
 use editor_transaction::HistoryMeta;
 
@@ -75,13 +75,19 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     selection
                         .resolve(&view)
                         .and_then(|rs| as_gap_cursor(&rs))
-                        .map(|gap| matches!(gap, GapCursor::LeadingUnit { .. }))
+                        .map(|gap| {
+                            matches!(
+                                gap,
+                                GapCursor::IsolatingBoundary { index: 0, ref host, .. }
+                                    if host.id() == Dot::ROOT
+                            )
+                        })
                 };
                 let at_document_start = match leading_gap {
                     Some(is_leading) => is_leading,
                     None => {
                         let resource = editor.resource.lock().unwrap();
-                        gap_cursor_selection_leading(&editor.state.view()).is_none()
+                        gap_cursor_selection_at(Dot::ROOT, 0, &editor.state.view()).is_none()
                             && editor
                                 .view
                                 .would_resolve_movement(
@@ -119,21 +125,6 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     let view = editor.state.view();
                     match selection.resolve(&view).and_then(|rs| as_gap_cursor(&rs)) {
                         None => None,
-                        Some(GapCursor::LeadingUnit { unit }) => {
-                            if backward {
-                                // Document start — nothing before it.
-                                Some(None)
-                            } else {
-                                Some(Some(exit_into_or_node_select(
-                                    editor,
-                                    child_view_dot(&unit),
-                                    Dot::ROOT,
-                                    0,
-                                    false,
-                                    &movement,
-                                )))
-                            }
-                        }
                         Some(GapCursor::BetweenMonolithic {
                             parent,
                             before,
@@ -161,6 +152,38 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                                 )))
                             }
                         }
+                        Some(GapCursor::IsolatingBoundary { host, unit, index }) => {
+                            let leading = index == 0;
+                            if leading && backward && host.id() == Dot::ROOT {
+                                // Document start — nothing before it.
+                                Some(None)
+                            } else if leading == backward {
+                                // Moving toward the isolating boundary itself:
+                                // not a gap crossing — fall through to the
+                                // geometric movement (the phantom line is part
+                                // of the layout, so line movement leaves the
+                                // gap like any other line).
+                                None
+                            } else if leading {
+                                Some(Some(exit_into_or_node_select(
+                                    editor,
+                                    child_view_dot(&unit),
+                                    host.id(),
+                                    0,
+                                    false,
+                                    &movement,
+                                )))
+                            } else {
+                                Some(Some(exit_into_or_node_select(
+                                    editor,
+                                    child_view_dot(&unit),
+                                    host.id(),
+                                    index - 1,
+                                    true,
+                                    &movement,
+                                )))
+                            }
+                        }
                     }
                 };
                 if let Some(exit) = gap_exit {
@@ -178,21 +201,19 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 }
 
                 // Entry: a unit node-selection moving (non-extend) toward an
-                // adjacent gap becomes that gap cursor. The builders return
-                // Some only for a valid leading-unit / between-monolithic gap
-                // (they encapsulate the both-monolithic + paragraph-admittable
-                // checks), so a non-gap move falls through to the range
-                // endpoint policy below. Independent of resolve_movement's
-                // result.
+                // adjacent gap becomes that gap cursor. The builder returns
+                // Some only for a valid between-monolithic / isolating-boundary
+                // gap (it encapsulates the neighbor-class +
+                // paragraph-admittable checks), so a non-gap move falls
+                // through to the range endpoint policy below. Independent of
+                // resolve_movement's result.
                 if is_unit_node_selection(&selection, &editor.state.view()) {
                     let parent = selection.anchor.node;
                     let idx = selection.anchor.offset.min(selection.head.offset);
-                    let entry = if backward && parent == Dot::ROOT && idx == 0 {
-                        gap_cursor_selection_leading(&editor.state.view())
-                    } else if backward {
-                        gap_cursor_selection_between(parent, idx, &editor.state.view())
+                    let entry = if backward {
+                        gap_cursor_selection_at(parent, idx, &editor.state.view())
                     } else {
-                        gap_cursor_selection_between(parent, idx + 1, &editor.state.view())
+                        gap_cursor_selection_at(parent, idx + 1, &editor.state.view())
                     };
                     if let Some(sel) = entry {
                         editor.transact(|tr| {
@@ -482,13 +503,9 @@ fn gap_cursor_from_inner_edge(
         }
         let parent_id = parent.id();
         return if backward {
-            if parent_id == Dot::ROOT && index == 0 {
-                gap_cursor_selection_leading(&doc)
-            } else {
-                gap_cursor_selection_between(parent_id, index, &doc)
-            }
+            gap_cursor_selection_at(parent_id, index, &doc)
         } else {
-            gap_cursor_selection_between(parent_id, index + 1, &doc)
+            gap_cursor_selection_at(parent_id, index + 1, &doc)
         };
     }
     None
@@ -573,11 +590,12 @@ fn step_cell<'a>(
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::Modifier;
     use editor_state::{
-        Affinity, PendingModifier, Position, Selection, as_gap_cursor,
-        gap_cursor_selection_between, gap_cursor_selection_leading, is_unit_node_selection,
+        Affinity, PendingModifier, Position, Selection, as_gap_cursor, gap_cursor_selection_at,
+        is_unit_node_selection,
     };
 
     use crate::editor::Editor;
@@ -2040,8 +2058,8 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected =
-            gap_cursor_selection_leading(&editor.state.view()).expect("leading fold gap is valid");
+        let expected = gap_cursor_selection_at(Dot::ROOT, 0, &editor.state.view())
+            .expect("leading fold gap is valid");
 
         arrow(
             &mut editor,
@@ -2225,7 +2243,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2252,7 +2270,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2278,7 +2296,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2399,7 +2417,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2426,7 +2444,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_leading(&editor.state.view())
+        let expected = gap_cursor_selection_at(Dot::ROOT, 0, &editor.state.view())
             .expect("leading-callout gap is valid");
         arrow(
             &mut editor,
@@ -2453,7 +2471,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2542,7 +2560,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2568,7 +2586,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2593,7 +2611,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_leading(&editor.state.view())
+        let expected = gap_cursor_selection_at(Dot::ROOT, 0, &editor.state.view())
             .expect("leading-callout gap is valid");
         arrow(
             &mut editor,
@@ -2631,7 +2649,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(fc, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(fc, 1, &editor.state.view())
             .expect("inner between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2642,6 +2660,270 @@ mod tests {
         );
         let s = editor.state().selection.expect("selection exists in test");
         assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_up_from_callout_at_fold_content_start_enters_inner_leading_gap() {
+        let (state, fc, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title {}
+                        fc: fold_content {
+                            callout { p1: paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_at(fc, 0, &editor.state.view())
+            .expect("gap between fold_content start boundary and callout is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_down_from_callout_at_fold_content_end_enters_inner_trailing_gap() {
+        let (state, fc, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title {}
+                        fc: fold_content {
+                            callout { p1: paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_at(fc, 1, &editor.state.view())
+            .expect("gap between callout and fold_content end boundary is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_up_from_image_node_selection_at_fold_content_start_enters_gap() {
+        let (state, fc, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title {}
+                        fc: fold_content {
+                            image
+                            paragraph {}
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (fc, 0, >) -> (fc, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let expected = gap_cursor_selection_at(fc, 0, &editor.state.view())
+            .expect("gap between fold_content start boundary and image is valid");
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert_eq!((s.anchor, s.head), (expected.anchor, expected.head));
+    }
+
+    #[test]
+    fn arrow_down_from_inner_leading_gap_enters_callout_start() {
+        let (state, _fc, p1) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title {}
+                        fc: fold_content {
+                            callout { p1: paragraph { text("ab") } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (fc, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(
+            (s.head.node, s.head.offset),
+            (p1, 0),
+            "down from the leading gap enters the callout at its start"
+        );
+    }
+
+    #[test]
+    fn arrow_up_from_inner_leading_gap_exits_to_fold_title() {
+        let (state, ft, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        ft: fold_title {}
+                        fc: fold_content {
+                            callout { p1: paragraph {} }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        assert!(
+            editor
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
+                .is_some(),
+            "first Up enters the leading boundary gap"
+        );
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(
+            (s.head.node, s.head.offset),
+            (ft, 0),
+            "up from the leading gap lands in the fold title"
+        );
+    }
+
+    #[test]
+    fn arrow_up_from_inner_trailing_gap_enters_callout_end() {
+        let (state, _fc, p1) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title {}
+                        fc: fold_content {
+                            callout { p1: paragraph { text("ab") } }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (fc, 1, >)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(
+            (s.head.node, s.head.offset),
+            (p1, 2),
+            "up from the trailing gap enters the callout at its end"
+        );
+    }
+
+    #[test]
+    fn arrow_down_from_inner_trailing_gap_exits_to_next_paragraph() {
+        let (state, _fc, _p1, p2) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title {}
+                        fc: fold_content {
+                            callout { p1: paragraph {} }
+                        }
+                    }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        assert!(
+            editor
+                .state()
+                .selection
+                .expect("selection exists in test")
+                .resolve(&editor.state().view())
+                .and_then(|rs| as_gap_cursor(&rs))
+                .is_some(),
+            "first Down enters the trailing boundary gap"
+        );
+        arrow(
+            &mut editor,
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(
+            (s.head.node, s.head.offset),
+            (p2, 0),
+            "down from the trailing gap lands in the paragraph after the fold"
+        );
     }
 
     #[test]
@@ -2811,7 +3093,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let gap = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let gap = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("between-callouts gap is valid");
         arrow(
             &mut editor,
@@ -2880,7 +3162,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("table↔fold between gap is valid");
         arrow(
             &mut editor,
@@ -2923,7 +3205,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.view.layout(&editor.state);
-        let expected = gap_cursor_selection_between(r, 1, &editor.state.view())
+        let expected = gap_cursor_selection_at(r, 1, &editor.state.view())
             .expect("table↔fold between gap is valid");
         arrow(
             &mut editor,

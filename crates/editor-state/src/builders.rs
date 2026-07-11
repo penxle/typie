@@ -4,7 +4,7 @@ use editor_model::{DocView, NodeType};
 use crate::affinity::Affinity;
 
 use crate::Position;
-use crate::gap_cursor::{between_monolithic_at, leading_unit};
+use crate::gap_cursor::{between_monolithic_at, isolating_boundary_at};
 use crate::normalize::normalize;
 use crate::selection::Selection;
 
@@ -34,28 +34,29 @@ pub fn cell_rect_selection<'a>(
     )
 }
 
-pub fn gap_cursor_selection_leading<'a>(view: &'a DocView<'a>) -> Option<Selection> {
-    leading_unit(view)?;
-    normalize(
-        &Selection::collapsed(Position {
-            node: view.root()?.id(),
-            offset: 0,
-            affinity: Affinity::Upstream,
-        }),
-        view,
-    )
-}
-
-pub fn gap_cursor_selection_between<'a>(
+pub fn gap_cursor_selection_at<'a>(
     parent: Dot,
     index: usize,
     view: &'a DocView<'a>,
 ) -> Option<Selection> {
     let host = view.node(parent)?;
-    if !between_monolithic_at(&host, index) {
-        return None;
+    if between_monolithic_at(&host, index) {
+        return normalize(&Selection::collapsed(Position::new(parent, index)), view);
     }
-    normalize(&Selection::collapsed(Position::new(parent, index)), view)
+    isolating_boundary_at(&host, index)?;
+    let affinity = if index == 0 {
+        Affinity::Upstream
+    } else {
+        Affinity::Downstream
+    };
+    normalize(
+        &Selection::collapsed(Position {
+            node: parent,
+            offset: index,
+            affinity,
+        }),
+        view,
+    )
 }
 
 #[cfg(test)]
@@ -604,12 +605,12 @@ mod tests {
         );
     }
 
-    // §4.4 — gap_cursor_selection_leading: image first → LeadingUnit collapsed
+    // §4.4 — document leading gap: image first → root IsolatingBoundary collapsed
     #[test]
     fn test_4_gap_leading_image() {
         let (pd, _root) = image_first_doc();
         let view = DocView::new(&pd);
-        let sel = gap_cursor_selection_leading(&view);
+        let sel = gap_cursor_selection_at(Dot::ROOT, 0, &view);
         assert!(
             sel.is_some(),
             "image-first doc must produce a leading gap selection"
@@ -623,19 +624,19 @@ mod tests {
         let gc = as_gap_cursor(&rs);
         assert!(gc.is_some(), "result must classify as gap cursor");
         assert!(
-            matches!(gc, Some(GapCursor::LeadingUnit { .. })),
-            "must be LeadingUnit"
+            matches!(gc, Some(GapCursor::IsolatingBoundary { index: 0, .. })),
+            "must be the root leading boundary gap"
         );
     }
 
-    // §4.4 — gap_cursor_selection_leading: fold first → LeadingUnit collapsed
+    // §4.4 — document leading gap: fold first → root IsolatingBoundary collapsed
     #[test]
     fn test_4_gap_leading_fold() {
         let (pd, _root) = two_folds_doc();
         let view = DocView::new(&pd);
         // In two_folds_doc, fold1 is the first child of root.
-        // Fold is monolithic (isolating+monolithic), so it's a unit → LeadingUnit
-        let sel = gap_cursor_selection_leading(&view);
+        // Fold is monolithic (isolating+monolithic), so it's a unit
+        let sel = gap_cursor_selection_at(Dot::ROOT, 0, &view);
         assert!(
             sel.is_some(),
             "fold-first doc must produce a leading gap selection"
@@ -649,31 +650,31 @@ mod tests {
         let gc = as_gap_cursor(&rs);
         assert!(gc.is_some(), "result must classify as gap cursor");
         assert!(
-            matches!(gc, Some(GapCursor::LeadingUnit { .. })),
-            "must be LeadingUnit"
+            matches!(gc, Some(GapCursor::IsolatingBoundary { index: 0, .. })),
+            "must be the root leading boundary gap"
         );
     }
 
-    // §4.4 — gap_cursor_selection_leading: paragraph first → None
+    // §4.4 — document leading gap: paragraph first → None
     #[test]
     fn test_4_gap_leading_para_is_none() {
         let (pd, _root) = leading_para_doc();
         let view = DocView::new(&pd);
-        let sel = gap_cursor_selection_leading(&view);
+        let sel = gap_cursor_selection_at(Dot::ROOT, 0, &view);
         assert!(
             sel.is_none(),
             "paragraph-first doc must return None for leading gap"
         );
     }
 
-    // §4.5 — gap_cursor_selection_between: between two folds → BetweenMonolithic { index: 1 }
+    // §4.5 — gap_cursor_selection_at: between two folds → BetweenMonolithic { index: 1 }
     #[test]
     fn test_5_gap_between_folds() {
         let (pd, root) = two_folds_doc();
         let view = DocView::new(&pd);
         let root_id = root;
 
-        let sel = gap_cursor_selection_between(root_id, 1, &view);
+        let sel = gap_cursor_selection_at(root_id, 1, &view);
         assert!(sel.is_some(), "between two folds at index 1 must succeed");
         let sel = sel.unwrap();
         assert!(
@@ -689,19 +690,27 @@ mod tests {
         );
     }
 
-    // §4.5 — gap_cursor_selection_between: index 0 → None (nothing before)
+    // §4.5 — root is isolating: its leading slot builds through the unified
+    // boundary rule and re-detects as the same gap
     #[test]
-    fn test_5_gap_between_index_zero_is_none() {
+    fn test_5_gap_at_root_leading_slot_builds() {
         let (pd, root) = two_folds_doc();
         let view = DocView::new(&pd);
-        let root_id = root;
+
+        let sel = gap_cursor_selection_at(root, 0, &view)
+            .expect("root leading slot before a fold is a boundary gap");
+        assert!(sel.is_collapsed(), "boundary gap selection is collapsed");
+        let rs = sel.resolve(&view).unwrap();
         assert!(
-            gap_cursor_selection_between(root_id, 0, &view).is_none(),
-            "index 0 is never a gap (nothing before)"
+            matches!(
+                as_gap_cursor(&rs),
+                Some(GapCursor::IsolatingBoundary { index: 0, .. })
+            ),
+            "root leading gap classifies as IsolatingBoundary at index 0"
         );
     }
 
-    // §4.5 — gap_cursor_selection_between: out-of-range index → None
+    // §4.5 — gap_cursor_selection_at: out-of-range index → None
     #[test]
     fn test_5_gap_between_out_of_range_is_none() {
         let (pd, root) = two_folds_doc();
@@ -710,12 +719,12 @@ mod tests {
         // two_folds_doc has 3 children: fold1, fold2, para — indices 0,1,2
         // index 3 is out of range (>= count)
         assert!(
-            gap_cursor_selection_between(root_id, 3, &view).is_none(),
+            gap_cursor_selection_at(root_id, 3, &view).is_none(),
             "out-of-range index must return None"
         );
     }
 
-    // §4.5 — gap_cursor_selection_between: non-monolithic neighbor (fold + para) → None
+    // §4.5 — gap_cursor_selection_at: non-monolithic neighbor (fold + para) → None
     #[test]
     fn test_5_gap_between_non_monolithic_is_none() {
         let (pd, root) = two_folds_doc();
@@ -724,8 +733,93 @@ mod tests {
         // children: fold1(0), fold2(1), para(2)
         // between fold2 and para at index 2: para is not monolithic → None
         assert!(
-            gap_cursor_selection_between(root_id, 2, &view).is_none(),
+            gap_cursor_selection_at(root_id, 2, &view).is_none(),
             "fold+para at index 2 is not a valid gap (para not monolithic)"
+        );
+    }
+
+    // root > fold > [fold_title, fold_content > callout > para] + para
+    fn fold_callout_doc() -> (ProjectedDoc, Dot) {
+        let root = Dot::ROOT;
+        let fold = Dot::new(10, 1);
+        let title = Dot::new(10, 2);
+        let content = Dot::new(10, 3);
+        let callout = Dot::new(10, 4);
+        let inner_para = Dot::new(10, 5);
+        let para = Dot::new(10, 6);
+        let items = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                title,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![root, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                content,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![root, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                callout,
+                SeqItem::Block {
+                    node_type: NodeType::Callout,
+                    parents: vec![root, fold, content],
+                    attrs: vec![],
+                },
+            ),
+            (
+                inner_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, fold, content, callout],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        (project_document(&logs(&items)).unwrap(), content)
+    }
+
+    // §4.5 — gap_cursor_selection_at: isolating boundary slots round-trip
+    #[test]
+    fn test_5_gap_at_isolating_boundaries_round_trips() {
+        let (pd, content) = fold_callout_doc();
+        let view = DocView::new(&pd);
+
+        for index in [0usize, 1] {
+            let sel = gap_cursor_selection_at(content, index, &view)
+                .unwrap_or_else(|| panic!("boundary gap at index {index} must build"));
+            assert!(sel.is_collapsed(), "boundary gap selection is collapsed");
+            let rs = sel.resolve(&view).unwrap();
+            let gc = as_gap_cursor(&rs);
+            assert!(
+                matches!(gc, Some(GapCursor::IsolatingBoundary { index: i, .. }) if i == index),
+                "index {index} must re-detect as IsolatingBoundary"
+            );
+        }
+        assert!(
+            gap_cursor_selection_at(content, 2, &view).is_none(),
+            "out-of-range index must return None"
         );
     }
 
@@ -765,16 +859,16 @@ mod tests {
                 }
             }
 
-            // gap_cursor_selection_between: never panic
+            // gap_cursor_selection_at: never panic
             let (pd8, root8) = two_folds_doc();
             let view8 = DocView::new(&pd8);
             let root8_id = root8;
-            let _ = gap_cursor_selection_between(root8_id, gap_index, &view8);
+            let _ = gap_cursor_selection_at(root8_id, gap_index, &view8);
 
-            // gap_cursor_selection_leading: never panic
+            // document leading gap: never panic
             let (pd7, _) = image_first_doc();
             let view7 = DocView::new(&pd7);
-            let _ = gap_cursor_selection_leading(&view7);
+            let _ = gap_cursor_selection_at(Dot::ROOT, 0, &view7);
         }
 
         #[test]
@@ -784,7 +878,7 @@ mod tests {
             let (pd, root) = two_folds_doc();
             let view = DocView::new(&pd);
             let root_id = root;
-            if let Some(sel) = gap_cursor_selection_between(root_id, gap_index, &view) {
+            if let Some(sel) = gap_cursor_selection_at(root_id, gap_index, &view) {
                 // Must be collapsed and re-detect as a gap cursor
                 proptest::prop_assert!(sel.is_collapsed(), "gap between must be collapsed");
                 let rs = sel.resolve(&view).expect("must resolve");
@@ -802,14 +896,14 @@ mod tests {
         ) {
             let (pd, _) = image_first_doc();
             let view = DocView::new(&pd);
-            if let Some(sel) = gap_cursor_selection_leading(&view) {
+            if let Some(sel) = gap_cursor_selection_at(Dot::ROOT, 0, &view) {
                 proptest::prop_assert!(sel.is_collapsed(), "leading gap must be collapsed");
                 let rs = sel.resolve(&view).expect("must resolve");
                 let gc = as_gap_cursor(&rs);
                 proptest::prop_assert!(gc.is_some(), "leading gap must re-detect as gap cursor");
                 proptest::prop_assert!(
-                    matches!(gc, Some(GapCursor::LeadingUnit { .. })),
-                    "must be LeadingUnit"
+                    matches!(gc, Some(GapCursor::IsolatingBoundary { index: 0, .. })),
+                    "must be the root leading boundary gap"
                 );
             }
         }

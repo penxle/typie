@@ -28,12 +28,12 @@ pub fn materialize_gap_paragraph(tr: &mut Transaction) -> CommandResult {
         };
         let (parent, index) = match as_gap_cursor(&rs) {
             None => return Ok(false),
-            // Leading-unit gap: caret before the document's first child
-            // unit. The slot is index 0 under the document root.
-            Some(GapCursor::LeadingUnit { .. }) => (view.root().unwrap(), 0),
             // Between-monolithic gap: the slot is at `index` under
             // `parent`, between the two adjacent monolithic siblings.
             Some(GapCursor::BetweenMonolithic { parent, index, .. }) => (parent, index),
+            // Isolating-boundary gap: the slot is at `index` under the
+            // isolating host (0 = leading, child count = trailing).
+            Some(GapCursor::IsolatingBoundary { host, index, .. }) => (host, index),
         };
         if !is_block_container(&parent) || !parent.spec().content.matches(NodeType::Paragraph) {
             return Ok(false);
@@ -116,6 +116,64 @@ mod tests {
                 fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
                 p1: paragraph
                 fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn leading_boundary_gap_in_fold_content_inserts_paragraph_at_index_0() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fc: fold_content { callout { paragraph { text("x") } } }
+                }
+                paragraph {}
+            } }
+            selection: (fc, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| materialize_gap_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fold_content {
+                        p1: paragraph
+                        callout { paragraph { text("x") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn trailing_boundary_gap_in_fold_content_inserts_paragraph_at_end() {
+        let (initial, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fc: fold_content { callout { paragraph { text("x") } } }
+                }
+                paragraph {}
+            } }
+            selection: (fc, 1, >)
+        };
+        let (actual, ..) = transact!(initial, |tr| materialize_gap_paragraph(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("t") }
+                    fold_content {
+                        callout { paragraph { text("x") } }
+                        p1: paragraph
+                    }
+                }
                 paragraph {}
             } }
             selection: (p1, 0)
