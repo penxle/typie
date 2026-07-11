@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -47,7 +46,6 @@ import co.typie.domain.subscription.PlanUpgradeBenefit
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.editor.Editor
-import co.typie.editor.EditorGraphSource
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
 import co.typie.editor.LocalEditorZoomController
@@ -63,7 +61,6 @@ import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElementData
-import co.typie.editor.ffi.GraphIngest
 import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
@@ -90,9 +87,9 @@ import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.sync.ActiveSyncEngines
 import co.typie.editor.sync.ChangesetDeltaStore
+import co.typie.editor.sync.DocumentEditorLoad
 import co.typie.editor.sync.RemoteChangesetPipeline
 import co.typie.editor.sync.SyncEngine
-import co.typie.editor.sync.SyncHeadsSink
 import co.typie.editor.sync.SyncSession
 import co.typie.editor.sync.asSyncEditor
 import co.typie.editor.sync.catchingNonCancellation
@@ -102,7 +99,6 @@ import co.typie.editor.sync.syncAppScope
 import co.typie.editor.sync.ws.AttachEvent
 import co.typie.editor.sync.ws.DocumentGraphLoader
 import co.typie.editor.sync.ws.DocumentGraphLoaderEvent
-import co.typie.editor.sync.ws.DocumentSyncBaseline
 import co.typie.editor.sync.ws.SyncWs
 import co.typie.editor.sync.ws.SyncWsException
 import co.typie.editor.sync.ws.WsSyncTransport
@@ -197,9 +193,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.decodeFromJsonElement
 
@@ -228,6 +225,12 @@ fun EditorScreen(entityId: String) {
   val entity = model.query.data.entity
   val document = entity.node.onDocument
   val documentLocked = document?.locked == true
+  val documentId = model.documentId
+  var editorLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
+  var syncActiveLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
+  val pendingChangesets = remember(entityId) { mutableListOf<AttachEvent.ChangesetsEvent>() }
+  var loaderFailedCode by remember(entityId) { mutableStateOf<String?>(null) }
+  var loaderRetryGeneration by remember(entityId) { mutableStateOf(0) }
 
   DisposableEffect(model) {
     onDispose {
@@ -263,7 +266,18 @@ fun EditorScreen(entityId: String) {
   }
   LaunchedEffect(runtime.error) {
     runtime.error ?: return@LaunchedEffect
-    dialog.error(nav) { runtime.clearError() }
+    dialog.error(nav) {
+      val failedLoad = editorLoadState
+      runtime.clearError()
+      editorLoadState = null
+      if (syncActiveLoadState === failedLoad) syncActiveLoadState = null
+      pendingChangesets.clear()
+      failedLoad?.close()
+      documentId?.let {
+        SyncWs.retryDocument(it)
+        loaderRetryGeneration += 1
+      }
+    }
   }
   val legacyDocument = !loading && document != null && document.state == null
   LaunchedEffect(legacyDocument, nav.isTransitioning) {
@@ -487,64 +501,58 @@ fun EditorScreen(entityId: String) {
   }
 
   val activeEditor = runtime.editor
-  val documentId = model.documentId
-
-  var editorGraphHandleState by remember(entityId) { mutableStateOf<GraphIngest?>(null) }
-  var syncBaselineState by remember(entityId) { mutableStateOf<DocumentSyncBaseline?>(null) }
-  var activeSyncHeadsSinkState by remember(entityId) { mutableStateOf<SyncHeadsSink?>(null) }
-  var loaderFailedCode by remember(entityId) { mutableStateOf<String?>(null) }
-  var loaderRetryGeneration by remember(entityId) { mutableStateOf(0) }
 
   LaunchedEffect(documentId, loaderRetryGeneration) {
     val currentDocumentId = documentId ?: return@LaunchedEffect
     loaderFailedCode = null
     val channel = SyncWs.channel(currentDocumentId)
     val loader = DocumentGraphLoader(beginIngest = { PlatformModule.editorHost.beginGraphIngest() })
-    val pendingChangesets = mutableListOf<AttachEvent.ChangesetsEvent>()
 
     try {
-      launch {
-        snapshotFlow { runtime.editor }
-          .filterNotNull()
-          .collect { readyEditor ->
-            if (pendingChangesets.isEmpty()) return@collect
-            val queued = pendingChangesets.toList()
-            pendingChangesets.clear()
-            var latestHeads: ByteArray? = null
-            var latestDurableHeads: ByteArray? = null
-            for (event in queued) {
-              for (bundle in event.bundles) {
-                if (bundle.isNotEmpty()) readyEditor.receiveRemoteChangeset(bundle)
-              }
-              latestHeads = event.heads
-              latestDurableHeads = event.durableHeads
-            }
-            val heads = latestHeads
-            val durableHeads = latestDurableHeads
-            if (heads != null && durableHeads != null) {
-              syncBaselineState =
-                syncBaselineState?.copy(heads = heads, durableHeads = durableHeads)
-              activeSyncHeadsSinkState?.let { sink ->
-                sink.setConfirmedHeads(heads)
-                sink.setDurableHeads(durableHeads)
-              }
-            }
-          }
-      }
-
       channel.freshSubscribe().collect { event ->
-        if (event is AttachEvent.ChangesetsEvent && runtime.editor == null) {
-          pendingChangesets.add(event)
+        val currentLoad = editorLoadState
+        if (
+          event is AttachEvent.ChangesetsEvent &&
+            currentLoad != null &&
+            syncActiveLoadState !== currentLoad
+        ) {
+          pendingChangesets += event
         }
         when (val outcome = loader.handle(event)) {
           is DocumentGraphLoaderEvent.Loaded -> {
-            pendingChangesets.clear()
-            runtime.clear()
-            editorGraphHandleState = outcome.handle
-            syncBaselineState = outcome.baseline
+            var nextLoad: DocumentEditorLoad? = null
+            var installed = false
+            try {
+              val pending = ChangesetDeltaStore.load(currentDocumentId).map { it.changeset }
+              nextLoad =
+                DocumentEditorLoad(
+                  ingest = outcome.handle,
+                  initialBaseline = outcome.baseline,
+                  pending = pending,
+                  parentScope = scope,
+                  onEditorError = { editor, error -> runtime.reportError(editor, error) },
+                )
+
+              val previousLoad = editorLoadState
+              runtime.clear()
+              editorLoadState = null
+              if (syncActiveLoadState === previousLoad) syncActiveLoadState = null
+              pendingChangesets.clear()
+              previousLoad?.close()
+              editorLoadState = nextLoad
+              installed = true
+            } catch (e: CancellationException) {
+              throw e
+            } catch (e: Throwable) {
+              runtime.reportError(e)
+            } finally {
+              if (!installed) {
+                nextLoad?.close() ?: runCatching { outcome.handle.abort() }
+              }
+            }
           }
           is DocumentGraphLoaderEvent.Failed -> {
-            if (editorGraphHandleState != null) {
+            if (editorLoadState != null) {
               runtime.reportError(SyncWsException(outcome.code, permanent = true))
             } else {
               loaderFailedCode = outcome.code
@@ -555,6 +563,12 @@ fun EditorScreen(entityId: String) {
       }
     } finally {
       loader.cancel()
+      val closingLoad = editorLoadState
+      runtime.clear()
+      editorLoadState = null
+      if (syncActiveLoadState === closingLoad) syncActiveLoadState = null
+      pendingChangesets.clear()
+      closingLoad?.close()
     }
   }
 
@@ -567,67 +581,103 @@ fun EditorScreen(entityId: String) {
     }
   }
 
-  val syncBaseline = syncBaselineState
-  if (activeEditor != null && syncBaseline != null && documentId != null) {
-    DisposableEffect(activeEditor) {
-      val graphHandleAtAttach = editorGraphHandleState
-      lateinit var engine: SyncEngine
+  val activeLoad = editorLoadState
+  LaunchedEffect(activeEditor, activeLoad, documentId) {
+    val readyEditor = activeEditor ?: return@LaunchedEffect
+    val readyLoad = activeLoad ?: return@LaunchedEffect
+    val currentDocumentId = documentId ?: return@LaunchedEffect
+    var effectiveBaseline = readyLoad.initialBaseline
+    var session: SyncSession? = null
+    val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    try {
+      while (true) {
+        if (editorLoadState !== readyLoad || runtime.editor !== readyEditor) {
+          return@LaunchedEffect
+        }
+        val queued = pendingChangesets.toList()
+        pendingChangesets.clear()
+        if (queued.isEmpty()) break
+
+        for (event in queued) {
+          for (bundle in event.bundles) {
+            if (bundle.isNotEmpty()) readyEditor.receiveRemoteChangeset(bundle)
+          }
+          effectiveBaseline =
+            effectiveBaseline.copy(
+              seq = event.seq.ifEmpty { effectiveBaseline.seq },
+              heads = event.heads,
+              durableHeads = event.durableHeads,
+            )
+        }
+      }
+
+      lateinit var createdEngine: SyncEngine
       val handleNeedsReload: suspend () -> Unit = {
-        catchingNonCancellation { engine.captureNow() }
-        engine.stop()
+        catchingNonCancellation { createdEngine.captureNow() }
+        createdEngine.stop()
         model.refetchDocument()
         model.bumpReloadGeneration()
-        if (editorGraphHandleState === graphHandleAtAttach) editorGraphHandleState = null
-        runtime.clear(activeEditor)
+        runtime.clear(readyEditor)
+        if (editorLoadState === readyLoad) {
+          editorLoadState = null
+          if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
+          pendingChangesets.clear()
+          readyLoad.close()
+        }
       }
-      val channel = SyncWs.channel(documentId)
       val transport =
         WsSyncTransport(
-          channel = channel,
+          channel = SyncWs.channel(currentDocumentId),
           connection = SyncWs.connection,
-          documentId = documentId,
+          documentId = currentDocumentId,
           onReload = handleNeedsReload,
-          scope = scope,
+          scope = engineScope,
         )
-      val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-      engine =
+      createdEngine =
         SyncEngine(
-          editor = activeEditor.asSyncEditor(),
-          documentId = documentId,
-          initialServerHeads = syncBaseline.heads,
-          initialDurableHeads = syncBaseline.durableHeads,
+          editor = readyEditor.asSyncEditor(),
+          documentId = currentDocumentId,
+          initialServerHeads = effectiveBaseline.heads,
+          initialDurableHeads = effectiveBaseline.durableHeads,
           store = ChangesetDeltaStore,
           pushFn = { transport.push(it) },
           scope = engineScope,
           isPermanent = ::isPermanentSyncError,
           now = { Clock.System.now().toEpochMilliseconds() },
         )
-      activeSyncHeadsSinkState = engine
-      val pipeline =
+      val createdPipeline =
         RemoteChangesetPipeline(
-          editor = activeEditor.asSyncEditor(),
-          headsSink = engine,
+          editor = readyEditor.asSyncEditor(),
+          headsSink = createdEngine,
           transport = transport,
-          initialSeq = syncBaseline.seq,
-          scope = scope,
+          initialSeq = effectiveBaseline.seq,
+          scope = engineScope,
           onNeedsReload = handleNeedsReload,
         )
-      val session = SyncSession(engine = engine, pipeline = pipeline)
-      ActiveSyncEngines.register(documentId, session)
-      pipeline.start()
+      val createdSession = SyncSession(engine = createdEngine, pipeline = createdPipeline)
+      session = createdSession
+      ActiveSyncEngines.register(currentDocumentId, createdSession)
 
-      val revisionJob = scope.launch {
-        snapshotFlow { activeEditor.state.documentRevision }.drop(1).collect { engine.schedule() }
-      }
+      createdPipeline.start()
+      syncActiveLoadState = readyLoad
 
-      onDispose {
-        revisionJob.cancel()
-        pipeline.stop()
-        engine.stop()
-        ActiveSyncEngines.unregister(documentId, session)
-        if (activeSyncHeadsSinkState === engine) activeSyncHeadsSinkState = null
-        syncAppScope.launch { orphanSweeper.sweep() }
+      launch {
+        snapshotFlow { readyEditor.state.documentRevision }
+          .drop(1)
+          .collect { createdEngine.schedule() }
       }
+      awaitCancellation()
+    } finally {
+      if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
+      val closingSession = session
+      closingSession?.let {
+        it.pipeline.stop()
+        it.engine.stop()
+        ActiveSyncEngines.unregister(currentDocumentId, it)
+      }
+      engineScope.cancel()
+      if (closingSession != null) syncAppScope.launch { orphanSweeper.sweep() }
     }
   }
 
@@ -1176,26 +1226,10 @@ fun EditorScreen(entityId: String) {
           }
         },
         body = {
-          val editorGraphHandle = editorGraphHandleState
-          val pending by
-            produceState<List<ByteArray>?>(
-              initialValue = null,
-              model.documentId,
-              model.reloadGeneration,
-            ) {
-              val documentId = model.documentId
-              value =
-                if (documentId == null) {
-                  emptyList()
-                } else {
-                  ChangesetDeltaStore.load(documentId).map { it.changeset }
-                }
-            }
-          val loadedPending = pending
-          if (editorGraphHandle != null && loadedPending != null) {
+          val editorLoad = editorLoadState
+          if (editorLoad != null) {
             EditorBody(
-              source =
-                EditorGraphSource.Ingest(handle = editorGraphHandle, pending = loadedPending),
+              load = editorLoad,
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,

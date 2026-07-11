@@ -12,7 +12,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +26,7 @@ import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.external.EditorExternalElementOverlay
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.editorInput
 import co.typie.editor.interaction.LocalEditorInteractionScope
@@ -37,13 +38,14 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
+import co.typie.editor.sync.DocumentEditorLoad
 import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
 import kotlinx.coroutines.CancellationException
 
 @Composable
 internal fun EditorView(
-  source: EditorGraphSource,
+  load: DocumentEditorLoad,
   layoutSpec: EditorDocumentLayoutSpec,
   viewportWidth: Float,
   viewportHeight: Float,
@@ -54,7 +56,6 @@ internal fun EditorView(
 ) {
   val platform = PlatformModule.platform
   val density = LocalDensity.current
-  val scope = rememberCoroutineScope()
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
@@ -63,34 +64,73 @@ internal fun EditorView(
   val displayZoom = zoomController.displayZoom
   val themeVariant = currentEditorThemeVariant()
   val canCreateEditor = runtime.canCreateEditor
+  val environment =
+    EditorAttachEnvironment(
+      width = viewportWidth,
+      height = viewportHeight,
+      scaleFactor = density.density.toDouble(),
+      themeVariant = themeVariant,
+    )
+  val currentLoad by rememberUpdatedState(load)
+  val currentEnvironment by rememberUpdatedState(environment)
+  var editorThemeVariant by remember(load) { mutableStateOf<ThemeVariant?>(null) }
 
-  LaunchedEffect(canCreateEditor, viewportWidth, viewportHeight, density.density, themeVariant) {
-    if (viewportWidth <= 0f || viewportHeight <= 0f) {
+  LaunchedEffect(load, canCreateEditor, environment) {
+    if (!environment.isValid) {
       return@LaunchedEffect
     }
     if (!canCreateEditor) {
       return@LaunchedEffect
     }
 
-    val scaleFactor = density.density.toDouble()
-    val viewport =
-      Viewport(width = viewportWidth, height = viewportHeight, scaleFactor = scaleFactor)
     if (runtime.editor == null) {
       uiState.clear()
       try {
-        val editor =
-          Editor.createFromSource(
-            source = source,
-            viewport = viewport,
-            themeVariant = themeVariant,
-            scope = scope,
-            onError = { editor, error -> runtime.reportError(editor, error) },
-          )
-        runtime.attach(editor)
+        if (editorThemeVariant == null) editorThemeVariant = environment.themeVariant
+        val editor = load.awaitEditor(environment.toViewport(), environment.themeVariant)
+        while (currentLoad === load && !load.isClosed) {
+          val target = currentEnvironment
+          if (!target.isValid) return@LaunchedEffect
+          val shouldUpdateTheme = editorThemeVariant != target.themeVariant
+          if (shouldUpdateTheme) {
+            val hostThemeChanged = PlatformModule.editorHost.setThemeVariant(target.themeVariant)
+            if (hostThemeChanged) {
+              for (registeredEditor in EditorRegistry.snapshot()) {
+                if (registeredEditor !== editor) {
+                  registeredEditor.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+                }
+              }
+            }
+          }
+          editor.await {
+            if (shouldUpdateTheme) {
+              enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+            }
+            enqueue(
+              Message.System(
+                SystemEvent.Resize(
+                  width = target.width,
+                  height = target.height,
+                  scaleFactor = target.scaleFactor,
+                )
+              )
+            )
+          }
+          if (shouldUpdateTheme) editorThemeVariant = target.themeVariant
+          if (currentLoad !== load || load.isClosed) return@LaunchedEffect
+          if (currentEnvironment != target) continue
+
+          if (runtime.canCreateEditor && runtime.editor == null) {
+            runtime.attach(editor)
+          }
+          return@LaunchedEffect
+        }
       } catch (e: CancellationException) {
         throw e
       } catch (e: Throwable) {
-        runtime.reportError(e)
+        if (currentLoad === load && !load.isClosed) {
+          runtime.reportError(e)
+        }
       }
     }
   }
@@ -102,8 +142,8 @@ internal fun EditorView(
     LaunchedEffect(editor, themeVariant) {
       val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
       if (changed) {
-        for (e in EditorRegistry.snapshot()) {
-          e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+        for (registeredEditor in EditorRegistry.snapshot()) {
+          registeredEditor.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
         }
       }
     }
@@ -203,4 +243,16 @@ internal fun EditorView(
       }
     }
   }
+}
+
+private data class EditorAttachEnvironment(
+  val width: Float,
+  val height: Float,
+  val scaleFactor: Double,
+  val themeVariant: ThemeVariant,
+) {
+  val isValid: Boolean
+    get() = width > 0f && height > 0f
+
+  fun toViewport() = Viewport(width = width, height = height, scaleFactor = scaleFactor)
 }

@@ -22,11 +22,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import co.typie.editor.EditorGraphSource
 import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
+import co.typie.editor.sync.DocumentEditorLoad
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -34,7 +34,7 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 
 @Composable
 internal fun EditorBody(
-  source: EditorGraphSource,
+  load: DocumentEditorLoad,
   geometry: EditorBodyGeometry,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
@@ -102,7 +102,7 @@ internal fun EditorBody(
                 }
             ) {
               EditorView(
-                source = source,
+                load = load,
                 layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,

@@ -46,7 +46,7 @@ private fun end(seq: String = "0-1") =
 
 class DocumentGraphLoaderTest {
   @Test
-  fun restart_aborts_old_generation_handle_and_begins_new_handle_exactly_once() {
+  fun restart_aborts_old_handle_and_begins_new_handle_exactly_once() {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -67,14 +67,13 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun reload_after_transferred_does_not_abort_handle_and_enters_new_generation_on_next_chunk() {
+  fun reload_after_transferred_does_not_abort_handle_and_begins_new_ingest_on_next_chunk() {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
     assertNull(loader.handle(chunk()))
     val firstLoaded = loader.handle(end())
     assertIs<DocumentGraphLoaderEvent.Loaded>(firstLoaded)
-    assertEquals(0, firstLoaded.generation)
     val firstHandle = handles.single()
 
     assertNull(loader.handle(AttachEvent.ReloadEvent))
@@ -86,13 +85,12 @@ class DocumentGraphLoaderTest {
 
     val secondLoaded = loader.handle(end())
     assertIs<DocumentGraphLoaderEvent.Loaded>(secondLoaded)
-    assertEquals(1, secondLoaded.generation)
     assertSame(handles[1], secondLoaded.handle)
     assertEquals(0, firstHandle.abortCount)
   }
 
   @Test
-  fun duplicate_snapshot_end_for_same_generation_is_ignored() {
+  fun duplicate_snapshot_end_after_transfer_is_ignored() {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -120,7 +118,7 @@ class DocumentGraphLoaderTest {
     assertEquals(0, handle.abortCount)
     assertEquals(0, handle.finishCount)
 
-    // Further loader events for this now-transferred generation must not touch the handle again,
+    // Further loader events after transfer must not touch the handle again,
     // leaving it in a state where the caller can finish it exactly once.
     assertNull(loader.handle(end()))
     assertEquals(0, handle.abortCount)

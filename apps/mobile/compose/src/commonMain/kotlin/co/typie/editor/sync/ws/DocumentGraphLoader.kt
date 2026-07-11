@@ -5,11 +5,8 @@ import co.typie.editor.ffi.GraphIngest
 data class DocumentSyncBaseline(val seq: String, val heads: ByteArray, val durableHeads: ByteArray)
 
 sealed interface DocumentGraphLoaderEvent {
-  data class Loaded(
-    val generation: Int,
-    val handle: GraphIngest,
-    val baseline: DocumentSyncBaseline,
-  ) : DocumentGraphLoaderEvent
+  data class Loaded(val handle: GraphIngest, val baseline: DocumentSyncBaseline) :
+    DocumentGraphLoaderEvent
 
   data class Failed(val code: String) : DocumentGraphLoaderEvent
 }
@@ -18,15 +15,14 @@ class DocumentGraphLoader(private val beginIngest: () -> GraphIngest) {
   private sealed interface State {
     data object Idle : State
 
-    data class Receiving(val generation: Int, val handle: GraphIngest) : State
+    data class Receiving(val handle: GraphIngest) : State
 
-    data class Transferred(val generation: Int) : State
+    data object Transferred : State
 
     data object Failed : State
   }
 
   private var state: State = State.Idle
-  private var nextGeneration = 0
 
   fun handle(event: AttachEvent): DocumentGraphLoaderEvent? =
     when (event) {
@@ -44,32 +40,28 @@ class DocumentGraphLoader(private val beginIngest: () -> GraphIngest) {
 
   private fun onChunk(bytes: ByteArray): DocumentGraphLoaderEvent? {
     val receiving = state as? State.Receiving
-    val generation: Int
     val handle: GraphIngest
     if (receiving != null) {
-      generation = receiving.generation
       handle = receiving.handle
     } else {
-      generation = nextGeneration++
       handle = beginIngest()
     }
     handle.appendChunk(bytes)
-    state = State.Receiving(generation, handle)
+    state = State.Receiving(handle)
     return null
   }
 
   private fun onRestart(): DocumentGraphLoaderEvent? {
     val receiving = state as? State.Receiving ?: return null
     receiving.handle.abort()
-    state = State.Receiving(receiving.generation, beginIngest())
+    state = State.Receiving(beginIngest())
     return null
   }
 
   private fun onEnd(event: AttachEvent.SnapshotEndEvent): DocumentGraphLoaderEvent? {
     val receiving = state as? State.Receiving ?: return null
-    state = State.Transferred(receiving.generation)
+    state = State.Transferred
     return DocumentGraphLoaderEvent.Loaded(
-      generation = receiving.generation,
       handle = receiving.handle,
       baseline =
         DocumentSyncBaseline(

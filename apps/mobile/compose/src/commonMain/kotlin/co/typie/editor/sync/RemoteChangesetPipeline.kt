@@ -3,6 +3,7 @@ package co.typie.editor.sync
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -31,29 +32,30 @@ class RemoteChangesetPipeline(
 
   fun start() {
     if (subscriptionJob != null || pollJob != null) return
-    subscriptionJob = scope.launch {
-      var attempts = 0
-      while (isActive) {
-        try {
-          transport.subscribe(syncSeq.ifEmpty { null }).collect { event ->
-            attempts = 0
-            apply(event.changesets, event.seq, event.heads, event.durableHeads)
-          }
-        } catch (e: CancellationException) {
-          throw e
-        } catch (e: Throwable) {
-          if (isPermanentSyncError(e)) {
-            Logger.w(e) {
-              "RemoteChangesetPipeline: permanent subscription error, giving up (polling remains)"
+    subscriptionJob =
+      scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        var attempts = 0
+        while (isActive) {
+          try {
+            transport.subscribe(syncSeq.ifEmpty { null }).collect { event ->
+              attempts = 0
+              apply(event.changesets, event.seq, event.heads, event.durableHeads)
             }
-            return@launch
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Throwable) {
+            if (isPermanentSyncError(e)) {
+              Logger.w(e) {
+                "RemoteChangesetPipeline: permanent subscription error, giving up (polling remains)"
+              }
+              return@launch
+            }
+            Logger.w(e) { "RemoteChangesetPipeline: subscription failed, reconnecting" }
           }
-          Logger.w(e) { "RemoteChangesetPipeline: subscription failed, reconnecting" }
+          attempts += 1
+          delay(minOf(RECONNECT_DELAY_MS * attempts, RECONNECT_CAP_MS))
         }
-        attempts += 1
-        delay(minOf(RECONNECT_DELAY_MS * attempts, RECONNECT_CAP_MS))
       }
-    }
     pollJob = scope.launch {
       while (isActive) {
         delay(POLL_INTERVAL_MS)

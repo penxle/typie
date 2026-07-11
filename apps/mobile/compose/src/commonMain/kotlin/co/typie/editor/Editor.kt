@@ -61,13 +61,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-sealed interface EditorGraphSource {
-  data class Bytes(val graph: ByteArray, val pending: List<ByteArray>) : EditorGraphSource
-
-  data class Ingest(val handle: co.typie.editor.ffi.GraphIngest, val pending: List<ByteArray>) :
-    EditorGraphSource
-}
-
 @OptIn(ExperimentalAtomicApi::class)
 class Editor
 internal constructor(
@@ -658,37 +651,6 @@ internal constructor(
         },
       )
 
-    suspend fun createFromSource(
-      source: EditorGraphSource,
-      viewport: Viewport,
-      scope: CoroutineScope,
-      themeVariant: ThemeVariant = ThemeVariant.LightWhite,
-      dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
-      onError: (Editor, Throwable) -> Unit = { _, _ -> },
-    ): Editor =
-      when (source) {
-        is EditorGraphSource.Bytes ->
-          createWithPending(
-            graph = source.graph,
-            pending = source.pending,
-            viewport = viewport,
-            scope = scope,
-            themeVariant = themeVariant,
-            dispatcher = dispatcher,
-            onError = onError,
-          )
-        is EditorGraphSource.Ingest ->
-          createInitialized(
-            scope = scope,
-            themeVariant = themeVariant,
-            dispatcher = dispatcher,
-            onError = onError,
-            createInner = {
-              source.handle.finishWithPending(encodeLengthPrefixedBlobs(source.pending), viewport)
-            },
-          )
-      }
-
     suspend fun createFromDoc(
       doc: PlainDoc,
       viewport: Viewport,
@@ -705,7 +667,7 @@ internal constructor(
         createInner = { PlatformModule.editorHost.createEditorFromDoc(doc, viewport) },
       )
 
-    private suspend fun createInitialized(
+    internal suspend fun createInitialized(
       scope: CoroutineScope,
       themeVariant: ThemeVariant,
       dispatcher: CoroutineDispatcher,
@@ -714,29 +676,31 @@ internal constructor(
     ): Editor {
       var createdEditor: Editor? = null
       return try {
-        withContext(Dispatchers.Default) {
-          val editor = Editor(createInner(), scope, dispatcher, onError)
-          createdEditor = editor
+        val editor =
+          withContext(Dispatchers.Default) {
+            val editor = Editor(createInner(), scope, dispatcher, onError)
+            createdEditor = editor
 
-          editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
-          var initialized = false
-          EditorRegistry.register(editor)
-          try {
-            PlatformModule.editorHost.setThemeVariant(themeVariant)
-            editor.awaitOrThrow {
-              enqueue(Message.System(SystemEvent.ThemeVariantChanged))
-              enqueue(Message.System(SystemEvent.Initialize))
+            editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+            var initialized = false
+            EditorRegistry.register(editor)
+            try {
+              PlatformModule.editorHost.setThemeVariant(themeVariant)
+              editor.awaitOrThrow {
+                enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+                enqueue(Message.System(SystemEvent.Initialize))
+              }
+              initialized = true
+            } finally {
+              if (!initialized) {
+                EditorRegistry.unregister(editor)
+              }
             }
-            initialized = true
-          } finally {
-            if (!initialized) {
-              EditorRegistry.unregister(editor)
-            }
+
+            editor
           }
-
-          createdEditor = null
-          editor
-        }
+        createdEditor = null
+        editor
       } finally {
         createdEditor?.dispose()
       }
