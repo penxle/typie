@@ -285,6 +285,28 @@ impl FlatImeTextChange {
         self
     }
 
+    /// iOS Korean keyboards rewrite the composing syllable together with the
+    /// committed character(s) before it (select + recommit). Drop the unchanged
+    /// prefix so the replacement covers only what actually changed and the
+    /// recommitted prefix keeps its own per-character paint. Prefix-only: a
+    /// common-suffix trim would move the caret off the end of the insert.
+    fn without_common_text_prefix(mut self, initial: &FlatText) -> Self {
+        while self.replace_start < self.replace_end {
+            let Some(&inserted) = self.insert.first() else {
+                break;
+            };
+            let deleted = initial.at(self.replace_start);
+            if is_token(deleted) || deleted != inserted {
+                break;
+            }
+
+            self.replace_start += 1;
+            self.insert.remove(0);
+        }
+
+        self
+    }
+
     fn inserts_token(&self) -> bool {
         self.insert.iter().any(|c| is_token(*c))
     }
@@ -561,7 +583,14 @@ impl FlatImeState {
             None
         };
         let text_change = match text_change {
-            Some(change) => Some(change.without_reinserted_boundary_tokens(&initial_text)),
+            Some(change) => {
+                let change = change.without_reinserted_boundary_tokens(&initial_text);
+                Some(if self.comp.is_none() {
+                    change.without_common_text_prefix(&initial_text)
+                } else {
+                    change
+                })
+            }
             None if initial_text == self.text => {
                 Some(FlatImeTextChange::collapsed_at(initial_sel_start))
             }
@@ -4093,6 +4122,183 @@ mod tests {
             ops: vec![FlatImeOp::ReplaceSelection { text: "아".into() }],
         });
         assert_eq!(paint_at(&editor, p1, 1), vec![], "아 unstyled");
+    }
+
+    #[test]
+    fn ime_rewrite_with_common_prefix_keeps_composing_char_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("안녕") } } }
+            selection: (p1, 2)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅎ".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 2), vec![Modifier::Bold], "ㅎ bold");
+
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 2, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+                FlatImeOp::ReplaceSelection { text: "하".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("안녕") text("하") [bold] } } }
+            selection: (p1, 3, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn ime_ios_korean_full_log_replay_keeps_pending_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let msgs: Vec<Vec<FlatImeOp>> = vec![
+            vec![FlatImeOp::ReplaceSelection { text: "ㅇ".into() }],
+            vec![
+                FlatImeOp::SetSelection { start: 0, end: 2 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection {
+                    text: "\u{2028}".into(),
+                },
+                FlatImeOp::ReplaceSelection { text: "아".into() },
+            ],
+            vec![
+                FlatImeOp::SetSelection { start: 0, end: 2 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection {
+                    text: "\u{2028}".into(),
+                },
+                FlatImeOp::ReplaceSelection { text: "안".into() },
+            ],
+            vec![FlatImeOp::ReplaceSelection { text: "ㄴ".into() }],
+            vec![
+                FlatImeOp::SetSelection { start: 1, end: 3 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "안".into() },
+                FlatImeOp::ReplaceSelection { text: "녀".into() },
+            ],
+            vec![
+                FlatImeOp::SetSelection { start: 1, end: 3 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "안".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+            ],
+        ];
+        for ops in msgs {
+            editor.apply(Message::TextInput { ops });
+        }
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Bold,
+            },
+        });
+
+        let msgs: Vec<Vec<FlatImeOp>> = vec![
+            vec![FlatImeOp::ReplaceSelection { text: "ㅎ".into() }],
+            vec![
+                FlatImeOp::SetSelection { start: 2, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+                FlatImeOp::ReplaceSelection { text: "하".into() },
+            ],
+            vec![
+                FlatImeOp::SetSelection { start: 2, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+                FlatImeOp::ReplaceSelection { text: "핫".into() },
+            ],
+            vec![
+                FlatImeOp::SetSelection { start: 2, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+                FlatImeOp::ReplaceSelection {
+                    text: "하세".into(),
+                },
+            ],
+            vec![
+                FlatImeOp::SetSelection { start: 3, end: 5 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "하".into() },
+                FlatImeOp::ReplaceSelection { text: "셍".into() },
+            ],
+            vec![
+                FlatImeOp::SetSelection { start: 3, end: 5 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "하".into() },
+                FlatImeOp::ReplaceSelection {
+                    text: "세요".into(),
+                },
+            ],
+        ];
+        for ops in msgs {
+            editor.apply(Message::TextInput { ops });
+        }
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("안녕") text("하세요") [bold] } } }
+            selection: (p1, 5, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn ime_rewrite_deleting_composing_char_then_retype_keeps_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("안녕") } } }
+            selection: (p1, 2)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅎ".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 2, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+            ],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "ㅁ".into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("안녕") text("ㅁ") [bold] } } }
+            selection: (p1, 3, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn ime_rewrite_with_common_prefix_extending_syllable_keeps_paint() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("안녕") text("핫") [bold] } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 2, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "".into() },
+                FlatImeOp::ReplaceSelection { text: "녕".into() },
+                FlatImeOp::ReplaceSelection {
+                    text: "하세".into(),
+                },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("안녕") text("하세") [bold] } } }
+            selection: (p1, 4, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
