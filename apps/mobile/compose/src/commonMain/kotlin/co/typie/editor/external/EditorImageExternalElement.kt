@@ -54,11 +54,18 @@ internal fun EditorImageExternalElement(
 ) {
   val density = LocalDensity.current
   val editor = LocalEditorRuntime.current.editor
-  val imageState = LocalEditorExternalElementState.current.images
+  val externalElementState = LocalEditorExternalElementState.current
+  val imageState = externalElementState.images
   val upload = imageState.uploads[nodeId]
   val asset = data.id?.let(imageState.assets::get)
   val hasImage = asset != null || upload != null
-  val resolvingAsset = data.id != null && asset == null && upload == null
+  val resolution = data.id?.let(externalElementState.resolutions::get)
+  val missingAsset = data.id != null && asset == null && upload == null
+  val unavailableAsset =
+    missingAsset &&
+      (resolution == EditorAssetResolution.RetryableFailure ||
+        resolution == EditorAssetResolution.Unavailable)
+  val resolvingAsset = missingAsset && !unavailableAsset
   val ratio = asset?.ratio ?: upload?.ratio
   var activeResizeReverse by remember(nodeId) { mutableStateOf<Boolean?>(null) }
 
@@ -70,7 +77,7 @@ internal fun EditorImageExternalElement(
   }
 
   if (!hasImage) {
-    ImagePlaceholder(resolvingAsset = resolvingAsset)
+    ImagePlaceholder(resolvingAsset = resolvingAsset, unavailableAsset = unavailableAsset)
     return
   }
 
@@ -219,10 +226,15 @@ internal fun EditorImageExternalElement(
 
 @Composable
 context(scope: EditorExternalElementRenderScope)
-private fun ImagePlaceholder(resolvingAsset: Boolean) {
+private fun ImagePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) {
   EditorExternalElementPlaceholder(
     icon = Lucide.Image,
-    text = if (resolvingAsset) "이미지를 불러오는 중..." else "이미지",
+    text =
+      when {
+        unavailableAsset -> "이미지를 불러올 수 없어요"
+        resolvingAsset -> "이미지를 불러오는 중..."
+        else -> "이미지"
+      },
     trailing = {
       if (resolvingAsset) {
         Spinner(

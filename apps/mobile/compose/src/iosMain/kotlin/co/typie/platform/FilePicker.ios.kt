@@ -3,14 +3,12 @@
 package co.typie.platform
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import kotlin.math.roundToInt
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
@@ -31,22 +29,27 @@ import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeData
 import platform.darwin.NSObject
+import platform.objc.OBJC_ASSOCIATION_RETAIN_NONATOMIC
+import platform.objc.objc_setAssociatedObject
 import platform.posix.memcpy
 
 @Composable
 actual fun rememberFilePicker(
   selectionMode: FilePickerSelectionMode,
-  onResult: (List<PickedFile>) -> Unit,
+  onResult: (FilePickerResult) -> Unit,
 ): (mimeType: String) -> Unit {
   val currentOnResult = rememberUpdatedState(onResult)
-  var delegateHolder by remember { mutableStateOf<NSObject?>(null) }
 
   return remember(selectionMode) {
     { mimeType: String ->
       val presenter =
         topViewController()
           ?: run {
-            currentOnResult.value(emptyList())
+            currentOnResult.value(
+              FilePickerResult.Failed(
+                IllegalStateException("No view controller can present the file picker")
+              )
+            )
             return@remember
           }
 
@@ -65,8 +68,8 @@ actual fun rememberFilePicker(
               UINavigationControllerDelegateProtocol {
               override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
                 picker.dismissViewControllerAnimated(true, completion = null)
-                delegateHolder = null
-                currentOnResult.value(emptyList())
+                picker.retainFilePickerDelegate(null)
+                currentOnResult.value(FilePickerResult.Cancelled)
               }
 
               override fun imagePickerController(
@@ -78,28 +81,36 @@ actual fun rememberFilePicker(
                 val data = image?.let { UIImageJPEGRepresentation(it, 0.9) }
 
                 picker.dismissViewControllerAnimated(true, completion = null)
-                delegateHolder = null
+                picker.retainFilePickerDelegate(null)
 
                 if (data == null) {
-                  currentOnResult.value(emptyList())
+                  currentOnResult.value(
+                    FilePickerResult.Failed(
+                      IllegalStateException("Unable to convert the selected image")
+                    )
+                  )
                   return
                 }
 
                 currentOnResult.value(
-                  listOf(
-                    PickedFile(
-                      bytes = data.toByteArray(),
-                      filename = pickedFilename(originalFilename = null, mimeType = "image/jpeg"),
-                      mimeType = "image/jpeg",
-                      imageWidth = image.pixelWidth(),
-                      imageHeight = image.pixelHeight(),
-                    )
+                  FilePickerResult.Selected(
+                    files =
+                      listOf(
+                        PickedFile(
+                          bytes = data.toByteArray(),
+                          filename =
+                            pickedFilename(originalFilename = null, mimeType = "image/jpeg"),
+                          mimeType = "image/jpeg",
+                          imageWidth = image.pixelWidth(),
+                          imageHeight = image.pixelHeight(),
+                        )
+                      )
                   )
                 )
               }
             }
 
-          delegateHolder = delegate
+          picker.retainFilePickerDelegate(delegate)
           picker.delegate = delegate
           presenter.presentViewController(picker, animated = true, completion = null)
         }
@@ -112,7 +123,7 @@ actual fun rememberFilePicker(
               }
             )
           val picker =
-            UIDocumentPickerViewController(forOpeningContentTypes = types).apply {
+            UIDocumentPickerViewController(forOpeningContentTypes = types, asCopy = true).apply {
               allowsMultipleSelection = selectionMode == FilePickerSelectionMode.Multiple
             }
 
@@ -122,35 +133,50 @@ actual fun rememberFilePicker(
                 controller: UIDocumentPickerViewController,
                 didPickDocumentsAtURLs: List<*>,
               ) {
-                delegateHolder = null
-                val files =
-                  didPickDocumentsAtURLs
-                    .mapNotNull { it as? NSURL }
-                    .mapNotNull { url ->
-                      val data = NSData.create(contentsOfURL = url) ?: return@mapNotNull null
-                      PickedFile(
-                        bytes = data.toByteArray(),
-                        filename = pickedFilename(url.lastPathComponent, mimeType = null),
-                        mimeType = mimeType,
-                      )
+                controller.retainFilePickerDelegate(null)
+                currentOnResult.value(
+                  aggregateSelectedFiles(
+                    didPickDocumentsAtURLs.map { value ->
+                      runCatching {
+                        val url = value as? NSURL ?: error("Selected document URL is unavailable")
+                        val data =
+                          NSData.create(contentsOfURL = url)
+                            ?: error("Unable to read selected document")
+                        PickedFile(
+                          bytes = data.toByteArray(),
+                          filename = pickedFilename(url.lastPathComponent, mimeType = null),
+                          mimeType = mimeType,
+                        )
+                      }
                     }
-
-                currentOnResult.value(files)
+                  )
+                )
               }
 
               override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
-                delegateHolder = null
-                currentOnResult.value(emptyList())
+                controller.retainFilePickerDelegate(null)
+                currentOnResult.value(FilePickerResult.Cancelled)
               }
             }
 
-          delegateHolder = delegate
+          picker.retainFilePickerDelegate(delegate)
           picker.delegate = delegate
           presenter.presentViewController(picker, animated = true, completion = null)
         }
       }
     }
   }
+}
+
+private val FilePickerDelegateAssociationKey = StableRef.create(Unit).asCPointer()
+
+private fun UIViewController.retainFilePickerDelegate(delegate: NSObject?) {
+  objc_setAssociatedObject(
+    `object` = this,
+    key = FilePickerDelegateAssociationKey,
+    value = delegate,
+    policy = OBJC_ASSOCIATION_RETAIN_NONATOMIC,
+  )
 }
 
 private fun topViewController(): UIViewController? {
@@ -164,6 +190,9 @@ private fun topViewController(): UIViewController? {
 }
 
 private fun NSData.toByteArray(): ByteArray {
+  if (length == 0uL) {
+    return ByteArray(0)
+  }
   val byteArray = ByteArray(length.toInt())
   byteArray.usePinned { pinned -> memcpy(pinned.addressOf(0), bytes, length) }
   return byteArray

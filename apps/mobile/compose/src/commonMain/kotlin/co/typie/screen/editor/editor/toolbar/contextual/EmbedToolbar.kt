@@ -23,14 +23,20 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.external.EditorEmbedAsset
 import co.typie.editor.external.EditorEmbedUnfurl
 import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.syncWithBringIntoView
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_UnfurlEmbed_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UnfurlEmbedInput
 import co.typie.icons.Lucide
+import co.typie.screen.editor.editor.toEditorEmbedAsset
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
@@ -72,7 +78,10 @@ private fun EditorEmbedToolbar(
   val dialog = LocalDialog.current
   val toast = LocalToast.current
   val uriHandler = LocalUriHandler.current
-  val embedState = LocalEditorExternalElementState.current.embeds
+  val runtime = LocalEditorRuntime.current
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val externalElementState = LocalEditorExternalElementState.current
+  val embedState = externalElementState.embeds
   val embedId = embed?.id
   val asset = embedId?.let(embedState.assets::get)
   val unfurling = nodeId?.let { embedState.unfurls.containsKey(it) } == true
@@ -92,25 +101,40 @@ private fun EditorEmbedToolbar(
             embedState.unfurls[selectedNodeId] = unfurl
 
             try {
-              val embedded = unfurlEmbedAsset(url)
-              if (embedState.unfurls[selectedNodeId] !== unfurl) {
-                return@launch
-              }
-
-              embedState.assets[embedded.id] = embedded
-              scope.sendMessage(
-                Message.Node(
-                  NodeOp.SetAttrs(id = selectedNodeId, attrs = PlainNode.Embed(id = embedded.id))
-                )
+              completeAttachmentOperation(
+                persist = { unfurlEmbedAsset(url) },
+                isCurrent = { embedState.unfurls[selectedNodeId] === unfurl },
+                cache = externalElementState::put,
+                commit = { embedded ->
+                  val editor = checkNotNull(runtime.editor) { "No active editor is available" }
+                  val committedState =
+                    editor.syncWithBringIntoView(bringIntoViewRequests) {
+                      if (editor.ime?.composing != null) {
+                        enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+                      }
+                      enqueue(
+                        Message.Node(
+                          NodeOp.SetAttrs(
+                            id = selectedNodeId,
+                            attrs = PlainNode.Embed(id = embedded.id),
+                          )
+                        )
+                      )
+                      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                    }
+                  checkNotNull(committedState) { "Editor embed attrs did not commit" }
+                },
+                clearPending = {
+                  if (embedState.unfurls[selectedNodeId] === unfurl) {
+                    embedState.unfurls.remove(selectedNodeId)
+                  }
+                },
               )
             } catch (error: CancellationException) {
               throw error
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+              reportAttachmentFailure(AttachmentKind.Embed, error)
               toast.error("링크를 임베드할 수 없어요.")
-            } finally {
-              if (embedState.unfurls[selectedNodeId] === unfurl) {
-                embedState.unfurls.remove(selectedNodeId)
-              }
             }
           }
         },
@@ -198,12 +222,5 @@ private suspend fun unfurlEmbedAsset(url: String): EditorEmbedAsset {
   val embed =
     Apollo.executeMutation(EditorScreen_UnfurlEmbed_Mutation(input = UnfurlEmbedInput(url = url)))
       .unfurlEmbed
-  return EditorEmbedAsset(
-    id = embed.id,
-    url = embed.url,
-    title = embed.title,
-    description = embed.description,
-    thumbnailUrl = embed.thumbnailUrl,
-    html = embed.html,
-  )
+  return embed.toEditorEmbedAsset()
 }

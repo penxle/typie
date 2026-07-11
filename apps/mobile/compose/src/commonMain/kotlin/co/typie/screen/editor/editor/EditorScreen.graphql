@@ -37,32 +37,7 @@ query EditorScreen_Query($entityId: ID!) {
           durableHeads
         }
         assets {
-          __typename
-
-          ... on Image {
-            id
-            url
-            width
-            height
-            ratio
-            placeholder
-          }
-
-          ... on File {
-            id
-            name
-            size
-            url
-          }
-
-          ... on Embed {
-            id
-            url
-            title
-            description
-            thumbnailUrl
-            html
-          }
+          ...EditorExternalAsset_asset
         }
         toolbarFontFamilies: fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
           ...EditorSettingsFontFamily_family
@@ -70,6 +45,47 @@ query EditorScreen_Query($entityId: ID!) {
         ...FontLoader_Document
       }
     }
+  }
+}
+
+query EditorScreen_AssetsByIds_Query($entityId: ID!, $ids: [ID!]!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    node {
+      ... on Document {
+        assetsByIds(ids: $ids) {
+          ...EditorExternalAsset_asset
+        }
+      }
+    }
+  }
+}
+
+fragment EditorExternalAsset_asset on DocumentAsset {
+  __typename
+
+  ... on Image {
+    id
+    url
+    width
+    height
+    ratio
+    placeholder
+  }
+
+  ... on File {
+    id
+    name
+    size
+    url
+  }
+
+  ... on Embed {
+    id
+    url
+    title
+    description
+    thumbnailUrl
+    html
   }
 }
 

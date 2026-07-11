@@ -53,6 +53,7 @@ import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.platform.FilePickerResult
 import co.typie.platform.rememberFilePicker
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -107,8 +108,16 @@ fun SpaceSettingsScreen() {
   val toast = LocalToast.current
   val sheet = LocalSheet.current
 
-  val filePicker = rememberFilePicker { files ->
-    val file = files.firstOrNull() ?: return@rememberFilePicker
+  val filePicker = rememberFilePicker { result ->
+    val file =
+      when (result) {
+        FilePickerResult.Cancelled -> return@rememberFilePicker
+        is FilePickerResult.Failed -> {
+          toast.error("로고 이미지를 불러오지 못했어요.")
+          return@rememberFilePicker
+        }
+        is FilePickerResult.Selected -> result.files.first()
+      }
     scope.launch {
       model
         .uploadLogo(file)

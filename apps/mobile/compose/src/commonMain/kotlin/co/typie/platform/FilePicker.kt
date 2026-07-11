@@ -15,11 +15,40 @@ enum class FilePickerSelectionMode {
   Multiple,
 }
 
+sealed interface FilePickerResult {
+  data object Cancelled : FilePickerResult
+
+  data class Selected(val files: List<PickedFile>, val unreadableCount: Int = 0) :
+    FilePickerResult {
+    init {
+      require(files.isNotEmpty())
+      require(unreadableCount >= 0)
+    }
+  }
+
+  data class Failed(val cause: Throwable) : FilePickerResult
+}
+
 @Composable
 expect fun rememberFilePicker(
   selectionMode: FilePickerSelectionMode = FilePickerSelectionMode.Single,
-  onResult: (List<PickedFile>) -> Unit,
+  onResult: (FilePickerResult) -> Unit,
 ): (mimeType: String) -> Unit
+
+internal fun aggregateSelectedFiles(files: List<Result<PickedFile>>): FilePickerResult {
+  val readableFiles = files.mapNotNull(Result<PickedFile>::getOrNull)
+  if (readableFiles.isNotEmpty()) {
+    return FilePickerResult.Selected(
+      files = readableFiles,
+      unreadableCount = files.size - readableFiles.size,
+    )
+  }
+
+  return FilePickerResult.Failed(
+    files.firstNotNullOfOrNull(Result<PickedFile>::exceptionOrNull)
+      ?: IllegalStateException("File picker returned no selected files")
+  )
+}
 
 internal fun pickedFilename(originalFilename: String?, mimeType: String?): String {
   val trimmedFilename = originalFilename?.trim()?.takeIf { it.isNotEmpty() }

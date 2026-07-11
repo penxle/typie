@@ -7,7 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.editor.FontLoader
+import co.typie.editor.external.EditorExternalAsset
 import co.typie.graphql.Apollo
+import co.typie.graphql.EditorScreen_AssetsByIds_Query
 import co.typie.graphql.EditorScreen_Query
 import co.typie.graphql.EditorScreen_UpdateDocument_Mutation
 import co.typie.graphql.EditorScreen_ViewEntity_Mutation
@@ -180,6 +182,21 @@ class EditorViewModel(val entityId: String) : ViewModel() {
       .fetchPolicy(FetchPolicy.NetworkOnly)
       .execute()
     query.refetch()
+  }
+
+  internal suspend fun resolveExternalAssets(ids: List<String>): List<EditorExternalAsset> {
+    if (ids.isEmpty()) {
+      return emptyList()
+    }
+
+    val data =
+      Apollo.query(EditorScreen_AssetsByIds_Query(entityId = entityId, ids = ids))
+        .fetchPolicy(FetchPolicy.NetworkOnly)
+        .execute()
+        .dataOrThrow()
+    return data.entity.node.onDocument?.assetsByIds.orEmpty().mapNotNull { asset ->
+      asset.editorExternalAsset_asset.toEditorExternalAsset()
+    }
   }
 
   fun flushDraftsAsync() {

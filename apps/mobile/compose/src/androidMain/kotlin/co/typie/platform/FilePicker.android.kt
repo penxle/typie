@@ -14,18 +14,30 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 actual fun rememberFilePicker(
   selectionMode: FilePickerSelectionMode,
-  onResult: (List<PickedFile>) -> Unit,
+  onResult: (FilePickerResult) -> Unit,
 ): (mimeType: String) -> Unit {
   val context = LocalContext.current
   val currentOnResult = rememberUpdatedState(onResult)
   val singleLauncher =
     rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
-      currentOnResult.value(uri?.let { context.readPlatformFile(it) }?.let(::listOf) ?: emptyList())
+      currentOnResult.value(
+        if (uri == null) {
+          FilePickerResult.Cancelled
+        } else {
+          aggregateSelectedFiles(listOf(runCatching { context.readPlatformFile(uri) }))
+        }
+      )
     }
   val multipleLauncher =
     rememberLauncherForActivityResult(contract = ActivityResultContracts.GetMultipleContents()) {
       uris ->
-      currentOnResult.value(uris.mapNotNull(context::readPlatformFile))
+      currentOnResult.value(
+        if (uris.isEmpty()) {
+          FilePickerResult.Cancelled
+        } else {
+          aggregateSelectedFiles(uris.map { uri -> runCatching { context.readPlatformFile(uri) } })
+        }
+      )
     }
 
   return remember(singleLauncher, multipleLauncher, selectionMode) {
@@ -38,8 +50,10 @@ actual fun rememberFilePicker(
   }
 }
 
-private fun Context.readPlatformFile(uri: Uri): PickedFile? {
-  val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+private fun Context.readPlatformFile(uri: Uri): PickedFile {
+  val bytes =
+    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+      ?: error("Unable to open selected file")
   val mimeType = contentResolver.getType(uri)
   val imageSize = bytes.decodeImageSizeIfNeeded(mimeType)
   val filename =

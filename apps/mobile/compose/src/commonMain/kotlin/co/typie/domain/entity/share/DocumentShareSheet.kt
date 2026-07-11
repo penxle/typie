@@ -25,6 +25,7 @@ import co.typie.graphql.fragment.DocumentShare_entity
 import co.typie.graphql.type.DocumentContentRating
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
+import co.typie.platform.FilePickerResult
 import co.typie.platform.PickedFile
 import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
@@ -455,9 +456,17 @@ internal fun DocumentShareSheet(
     }
   }
 
-  val filePicker = rememberFilePicker { files ->
+  val filePicker = rememberFilePicker { result ->
     if (loading) return@rememberFilePicker
-    val file = files.firstOrNull() ?: return@rememberFilePicker
+    val file =
+      when (result) {
+        FilePickerResult.Cancelled -> return@rememberFilePicker
+        is FilePickerResult.Failed -> {
+          toast.error("대표 이미지를 불러오지 못했어요.")
+          return@rememberFilePicker
+        }
+        is FilePickerResult.Selected -> result.files.first()
+      }
     if (isUploadingThumbnail || isRemovingThumbnail) return@rememberFilePicker
 
     isUploadingThumbnail = true

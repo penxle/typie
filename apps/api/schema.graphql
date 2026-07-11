@@ -204,6 +204,7 @@ input DeleteWidgetInput {
 type Document implements IDocument {
   allowReaction: Boolean!
   assets: [DocumentAsset!]!
+  assetsByIds(ids: [ID!]!): [DocumentAsset!]!
   characterCount: Int!
   characterCountChange: CharacterCountChange!
   commentThreads(resolved: Boolean): [DocumentCommentThread!]!
@@ -449,6 +450,7 @@ type DocumentVersionMeta {
 type DocumentView implements IDocument {
   allowReaction: Boolean!
   assets: [DocumentAsset!]!
+  assetsByIds(ids: [ID!]!): [DocumentAsset!]!
   availableActions: [DocumentAvailableAction!]!
   body: DocumentViewBody!
   createdAt: DateTime!
@@ -683,6 +685,7 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 
 interface IDocument {
   assets: [DocumentAsset!]!
+  assetsByIds(ids: [ID!]!): [DocumentAsset!]!
   createdAt: DateTime!
   excerpt: String!
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!

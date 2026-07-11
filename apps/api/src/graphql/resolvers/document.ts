@@ -104,6 +104,7 @@ import {
   isTypeOf,
   User,
 } from '../objects.ts';
+import { resolveDocumentAssetsByIds } from './document-assets-by-ids.ts';
 import type { PlainDoc } from '@typie/editor-ffi/server';
 import type { Context } from '#/context.ts';
 import type { TemplatePreset } from '#/utils/entity.ts';
@@ -128,6 +129,108 @@ const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   toKey: (item) => item.id,
   sort: true,
 });
+
+type MaterializedDocumentAssetIds = {
+  imageIds: string[];
+  fileIds: string[];
+  embedIds: string[];
+  archivedIds: string[];
+};
+
+async function loadMaterializedDocumentAssetIds(documentId: string): Promise<MaterializedDocumentAssetIds> {
+  const state = await db
+    .select({ json: DocumentStates.json })
+    .from(DocumentStates)
+    .where(eq(DocumentStates.documentId, documentId))
+    .then(first);
+
+  let assetIds: { imageIds: string[]; fileIds: string[]; embedIds: string[]; archivedIds: string[] };
+  if (state) {
+    assetIds = extractAssetIdsFromPlainDoc(state.json as PlainDoc);
+  } else {
+    const content = await db
+      .select({ snapshot: DocumentContents.snapshot })
+      .from(DocumentContents)
+      .where(eq(DocumentContents.documentId, documentId))
+      .then(firstOrThrow);
+    const doc = new LoroDoc();
+    doc.import(content.snapshot);
+    assetIds = extractAssetIdsFromLoroDoc(doc);
+  }
+
+  return assetIds;
+}
+
+async function loadExistingDocumentAssetIds({ imageIds, fileIds, embedIds, archivedIds }: MaterializedDocumentAssetIds): Promise<string[]> {
+  const [existingImageIds, existingFileIds, existingEmbedIds, existingArchivedIds] = await Promise.all([
+    imageIds.length > 0
+      ? db
+          .select({ id: Images.id })
+          .from(Images)
+          .where(inArray(Images.id, imageIds))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+    fileIds.length > 0
+      ? db
+          .select({ id: Files.id })
+          .from(Files)
+          .where(inArray(Files.id, fileIds))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+    embedIds.length > 0
+      ? db
+          .select({ id: Embeds.id })
+          .from(Embeds)
+          .where(inArray(Embeds.id, embedIds))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+    archivedIds.length > 0
+      ? db
+          .select({ id: DocumentArchivedNodes.id })
+          .from(DocumentArchivedNodes)
+          .where(inArray(DocumentArchivedNodes.id, archivedIds))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+  ]);
+
+  return [...existingImageIds, ...existingFileIds, ...existingEmbedIds, ...existingArchivedIds];
+}
+
+async function loadReferencedDocumentAssetIds(documentId: string): Promise<string[]> {
+  return await loadExistingDocumentAssetIds(await loadMaterializedDocumentAssetIds(documentId));
+}
+
+async function loadOwnedDocumentAssetIds(userId: string, ids: string[]): Promise<string[]> {
+  const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
+  const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
+  const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
+
+  const [ownedImageIds, ownedFileIds, ownedEmbedIds] = await Promise.all([
+    imageIds.length > 0
+      ? db
+          .select({ id: Images.id })
+          .from(Images)
+          .where(and(eq(Images.userId, userId), inArray(Images.id, imageIds)))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+    fileIds.length > 0
+      ? db
+          .select({ id: Files.id })
+          .from(Files)
+          .where(and(eq(Files.userId, userId), inArray(Files.id, fileIds)))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+    embedIds.length > 0
+      ? db
+          .select({ id: Embeds.id })
+          .from(Embeds)
+          .where(and(eq(Embeds.userId, userId), inArray(Embeds.id, embedIds)))
+          .then((rows) => rows.map(({ id }) => id))
+      : [],
+  ]);
+
+  return [...ownedImageIds, ...ownedFileIds, ...ownedEmbedIds];
+}
 
 IDocument.implement({
   fields: (t) => ({
@@ -180,62 +283,23 @@ IDocument.implement({
     assets: t.field({
       type: [DocumentAsset],
       resolve: async (self) => {
-        const state = await db
-          .select({ json: DocumentStates.json })
-          .from(DocumentStates)
-          .where(eq(DocumentStates.documentId, self.id))
-          .then(first);
+        return await loadReferencedDocumentAssetIds(self.id);
+      },
+    }),
 
-        let imageIds: string[];
-        let fileIds: string[];
-        let embedIds: string[];
-        let archivedIds: string[];
-
-        if (state) {
-          ({ imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromPlainDoc(state.json as PlainDoc));
-        } else {
-          const content = await db
-            .select({ snapshot: DocumentContents.snapshot })
-            .from(DocumentContents)
-            .where(eq(DocumentContents.documentId, self.id))
-            .then(firstOrThrow);
-          const doc = new LoroDoc();
-          doc.import(content.snapshot);
-          ({ imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc));
-        }
-
-        const [existingImageIds, existingFileIds, existingEmbedIds, existingArchivedIds] = await Promise.all([
-          imageIds.length > 0
-            ? db
-                .select({ id: Images.id })
-                .from(Images)
-                .where(inArray(Images.id, imageIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          fileIds.length > 0
-            ? db
-                .select({ id: Files.id })
-                .from(Files)
-                .where(inArray(Files.id, fileIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          embedIds.length > 0
-            ? db
-                .select({ id: Embeds.id })
-                .from(Embeds)
-                .where(inArray(Embeds.id, embedIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-          archivedIds.length > 0
-            ? db
-                .select({ id: DocumentArchivedNodes.id })
-                .from(DocumentArchivedNodes)
-                .where(inArray(DocumentArchivedNodes.id, archivedIds))
-                .then((r) => r.map((x) => x.id))
-            : [],
-        ]);
-
-        return [...existingImageIds, ...existingFileIds, ...existingEmbedIds, ...existingArchivedIds];
+    assetsByIds: t.field({
+      type: [DocumentAsset],
+      args: { ids: t.arg.idList() },
+      resolve: async (self, { ids }, ctx) => {
+        return await resolveDocumentAssetsByIds({
+          documentId: self.id,
+          userId: ctx.session?.userId ?? null,
+          requestedIds: ids,
+          access: {
+            loadOwnedIds: async ({ userId, ids }) => await loadOwnedDocumentAssetIds(userId, ids),
+            loadReferencedIds: async ({ documentId }) => await loadReferencedDocumentAssetIds(documentId),
+          },
+        });
       },
     }),
 

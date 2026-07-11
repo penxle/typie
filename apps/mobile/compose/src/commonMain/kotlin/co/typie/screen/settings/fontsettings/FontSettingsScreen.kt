@@ -27,6 +27,7 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.FontSettingsScreen_Query
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.platform.FilePickerResult
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
 import co.typie.result.Result
@@ -74,8 +75,21 @@ fun FontSettingsScreen() {
   val sheet = LocalSheet.current
 
   val filePicker =
-    rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { files ->
-      if (files.isEmpty()) return@rememberFilePicker
+    rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { result ->
+      val files =
+        when (result) {
+          FilePickerResult.Cancelled -> return@rememberFilePicker
+          is FilePickerResult.Failed -> {
+            toast.error("폰트 파일을 불러오지 못했어요.")
+            return@rememberFilePicker
+          }
+          is FilePickerResult.Selected -> {
+            if (result.unreadableCount > 0) {
+              toast.error("일부 폰트 파일을 불러오지 못했어요.")
+            }
+            result.files
+          }
+        }
 
       scope.launch {
         model

@@ -29,16 +29,23 @@ import kotlin.math.roundToInt
 @Composable
 context(scope: EditorExternalElementRenderScope)
 internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: String) {
-  val fileState = LocalEditorExternalElementState.current.files
+  val externalElementState = LocalEditorExternalElementState.current
+  val fileState = externalElementState.files
   val upload = fileState.uploads[nodeId]
   val asset = data.id?.let(fileState.assets::get)
   val hasFile = asset != null || upload != null
-  val resolvingAsset = data.id != null && asset == null && upload == null
+  val resolution = data.id?.let(externalElementState.resolutions::get)
+  val missingAsset = data.id != null && asset == null && upload == null
+  val unavailableAsset =
+    missingAsset &&
+      (resolution == EditorAssetResolution.RetryableFailure ||
+        resolution == EditorAssetResolution.Unavailable)
+  val resolvingAsset = missingAsset && !unavailableAsset
   val displayName = asset?.name ?: upload?.name ?: "파일"
   val displaySize = formatFileSize(asset?.size ?: upload?.size)
 
   if (!hasFile) {
-    FilePlaceholder(resolvingAsset = resolvingAsset)
+    FilePlaceholder(resolvingAsset = resolvingAsset, unavailableAsset = unavailableAsset)
     return
   }
 
@@ -98,12 +105,17 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
 
 @Composable
 context(scope: EditorExternalElementRenderScope)
-private fun FilePlaceholder(resolvingAsset: Boolean) {
+private fun FilePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) {
   Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
     Box(modifier = Modifier.widthIn(max = scope.scaledDp(400f)).fillMaxWidth()) {
       EditorExternalElementPlaceholder(
         icon = Lucide.File,
-        text = if (resolvingAsset) "파일을 불러오는 중..." else "파일",
+        text =
+          when {
+            unavailableAsset -> "파일을 불러올 수 없어요"
+            resolvingAsset -> "파일을 불러오는 중..."
+            else -> "파일"
+          },
         trailing = {
           if (resolvingAsset) {
             Spinner(

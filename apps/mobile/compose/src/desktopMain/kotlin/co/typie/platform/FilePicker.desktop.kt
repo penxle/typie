@@ -14,7 +14,7 @@ import javax.imageio.ImageIO
 @Composable
 actual fun rememberFilePicker(
   selectionMode: FilePickerSelectionMode,
-  onResult: (List<PickedFile>) -> Unit,
+  onResult: (FilePickerResult) -> Unit,
 ): (mimeType: String) -> Unit {
   val currentOnResult = rememberUpdatedState(onResult)
 
@@ -43,24 +43,32 @@ actual fun rememberFilePicker(
           isMultipleMode = selectionMode == FilePickerSelectionMode.Multiple
           isVisible = true
         }
-      val files =
-        dialog.files.map { file ->
-          val bytes = file.readBytes()
-          val image =
-            when (contentType) {
-              "image" -> bytes.decodeImageOrNull()
-              else -> null
+      val selectedFiles = dialog.files
+      currentOnResult.value(
+        if (selectedFiles.isEmpty()) {
+          FilePickerResult.Cancelled
+        } else {
+          aggregateSelectedFiles(
+            selectedFiles.map { file ->
+              runCatching {
+                val bytes = file.readBytes()
+                val image =
+                  when (contentType) {
+                    "image" -> bytes.decodeImageOrNull()
+                    else -> null
+                  }
+                PickedFile(
+                  bytes = bytes,
+                  filename = file.name,
+                  mimeType = file.probeContentType(),
+                  imageWidth = image?.width,
+                  imageHeight = image?.height,
+                )
+              }
             }
-          PickedFile(
-            bytes = bytes,
-            filename = file.name,
-            mimeType = file.probeContentType(),
-            imageWidth = image?.width,
-            imageHeight = image?.height,
           )
         }
-
-      currentOnResult.value(files)
+      )
     }
   }
 }

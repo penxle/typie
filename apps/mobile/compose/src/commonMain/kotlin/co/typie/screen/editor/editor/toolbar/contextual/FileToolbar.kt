@@ -9,6 +9,7 @@ import co.typie.editor.external.EditorFileAsset
 import co.typie.editor.external.EditorFileUpload
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Fragment
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
@@ -19,14 +20,17 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.syncWithBringIntoView
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_PersistBlobAsFile_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.PersistBlobAsFileInput
 import co.typie.icons.Lucide
+import co.typie.platform.FilePickerResult
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.PickedFile
 import co.typie.platform.rememberFilePicker
+import co.typie.screen.editor.editor.toEditorFileAsset
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
@@ -56,16 +60,31 @@ private fun EditorFileToolbar(
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val uriHandler = LocalUriHandler.current
-  val fileState = LocalEditorExternalElementState.current.files
+  val externalElementState = LocalEditorExternalElementState.current
+  val fileState = externalElementState.files
   val fileId = file?.id
   val asset = fileId?.let(fileState.assets::get)
   val uploading = nodeId?.let { fileState.uploads.containsKey(it) } == true
   val hasFile = fileId != null || uploading
 
   val picker =
-    rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { files ->
+    rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { result ->
       val selectedNodeId = nodeId ?: return@rememberFilePicker
-      val selectedFile = files.firstOrNull() ?: return@rememberFilePicker
+      val files =
+        when (result) {
+          FilePickerResult.Cancelled -> return@rememberFilePicker
+          is FilePickerResult.Failed -> {
+            toast.error("파일을 불러올 수 없어요.")
+            return@rememberFilePicker
+          }
+          is FilePickerResult.Selected -> {
+            if (result.unreadableCount > 0) {
+              toast.error("일부 파일을 불러오지 못했어요.")
+            }
+            result.files
+          }
+        }
+      val selectedFile = files.first()
       val selectedUpload = selectedFile.toFileUpload()
       val restUploads = files.drop(1).map { file -> file to file.toFileUpload() }
 
@@ -99,24 +118,40 @@ private fun EditorFileToolbar(
             try {
               // TODO(TR-38): Check restrictedBlob before starting file uploads and surface the
               // plan upgrade flow instead of letting the upload proceed.
-              val uploaded = uploadFileAsset(file)
-              if (fileState.uploads[targetNodeId] !== upload) {
-                return@launch
-              }
-              fileState.assets[uploaded.id] = uploaded
-              scope.sendMessage(
-                Message.Node(
-                  NodeOp.SetAttrs(id = targetNodeId, attrs = PlainNode.File(id = uploaded.id))
-                )
+              completeAttachmentOperation(
+                persist = { uploadFileAsset(file) },
+                isCurrent = { fileState.uploads[targetNodeId] === upload },
+                cache = externalElementState::put,
+                commit = { uploaded ->
+                  val editor = checkNotNull(runtime.editor) { "No active editor is available" }
+                  val committedState =
+                    editor.syncWithBringIntoView(bringIntoViewRequests) {
+                      if (editor.ime?.composing != null) {
+                        enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+                      }
+                      enqueue(
+                        Message.Node(
+                          NodeOp.SetAttrs(
+                            id = targetNodeId,
+                            attrs = PlainNode.File(id = uploaded.id),
+                          )
+                        )
+                      )
+                      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                    }
+                  checkNotNull(committedState) { "Editor file attrs did not commit" }
+                },
+                clearPending = {
+                  if (fileState.uploads[targetNodeId] === upload) {
+                    fileState.uploads.remove(targetNodeId)
+                  }
+                },
               )
             } catch (error: CancellationException) {
               throw error
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+              reportAttachmentFailure(AttachmentKind.File, error)
               toast.error("파일 업로드에 실패했어요.")
-            } finally {
-              if (fileState.uploads[targetNodeId] === upload) {
-                fileState.uploads.remove(targetNodeId)
-              }
             }
           }
         }
@@ -194,10 +229,5 @@ private suspend fun uploadFileAsset(file: PickedFile): EditorFileAsset {
         EditorScreen_PersistBlobAsFile_Mutation(input = PersistBlobAsFileInput(path = path))
       )
       .persistBlobAsFile
-  return EditorFileAsset(
-    id = uploaded.id,
-    name = uploaded.name,
-    url = uploaded.url,
-    size = uploaded.size,
-  )
+  return uploaded.toEditorFileAsset()
 }

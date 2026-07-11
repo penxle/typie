@@ -9,12 +9,35 @@ internal class EditorExternalElementState {
   val images = EditorExternalImageElementState()
   val files = EditorExternalFileElementState()
   val embeds = EditorExternalEmbedElementState()
+  val resolutions = mutableStateMapOf<String, EditorAssetResolution>()
+
+  fun put(asset: EditorExternalAsset) {
+    when (asset) {
+      is EditorImageAsset -> images.assets[asset.id] = asset
+      is EditorFileAsset -> files.assets[asset.id] = asset
+      is EditorEmbedAsset -> embeds.assets[asset.id] = asset
+    }
+  }
 
   fun clear() {
     images.clear()
     files.clear()
     embeds.clear()
+    resolutions.clear()
   }
+
+  fun containsAsset(id: String): Boolean =
+    images.assets.containsKey(id) || files.assets.containsKey(id) || embeds.assets.containsKey(id)
+}
+
+internal sealed interface EditorAssetResolution {
+  data object InFlight : EditorAssetResolution
+
+  data object RetryableFailure : EditorAssetResolution
+
+  data class AwaitingMaterialization(val attempt: Int) : EditorAssetResolution
+
+  data object Unavailable : EditorAssetResolution
 }
 
 @Stable
@@ -56,30 +79,34 @@ internal class EditorExternalEmbedElementState {
   }
 }
 
+internal sealed interface EditorExternalAsset {
+  val id: String
+}
+
 internal data class EditorFileAsset(
-  val id: String,
+  override val id: String,
   val name: String,
   val url: String,
   val size: Long?,
-)
+) : EditorExternalAsset
 
 internal data class EditorImageAsset(
-  val id: String,
+  override val id: String,
   val url: String,
   val width: Int,
   val height: Int,
   val ratio: Double,
   val placeholder: String?,
-)
+) : EditorExternalAsset
 
 internal data class EditorEmbedAsset(
-  val id: String,
+  override val id: String,
   val url: String,
   val title: String?,
   val description: String?,
   val thumbnailUrl: String?,
   val html: String?,
-)
+) : EditorExternalAsset
 
 internal class EditorEmbedUnfurl
 

@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import co.touchlab.kermit.Logger
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
@@ -236,16 +237,19 @@ internal fun EditorToolbarHost(
     if (messages.isEmpty()) {
       return
     }
-    val editor = runtime.editor ?: return
-    val bringIntoViewTarget = EditorBringIntoViewTarget.CurrentSelectionHead
 
     commandScope.launch {
-      editor.awaitWithBringIntoView(bringIntoViewRequests) {
-        if (editor.ime?.composing != null) {
-          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+      val editor = runtime.editor ?: return@launch
+      val committedState =
+        editor.awaitWithBringIntoView(bringIntoViewRequests) {
+          if (editor.ime?.composing != null) {
+            enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+          }
+          messages.forEach(::enqueue)
+          beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
         }
-        messages.forEach { enqueue(it) }
-        beforeCommit { bringIntoView(bringIntoViewTarget) }
+      if (committedState == null) {
+        Logger.e { "Editor toolbar messages did not commit" }
       }
     }
   }

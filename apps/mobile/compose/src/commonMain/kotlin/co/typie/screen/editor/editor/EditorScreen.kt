@@ -54,13 +54,11 @@ import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
-import co.typie.editor.external.EditorEmbedAsset
 import co.typie.editor.external.EditorExternalElementState
-import co.typie.editor.external.EditorFileAsset
-import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
@@ -99,6 +97,7 @@ import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
+import co.typie.platform.connectivityRestoredFlow
 import co.typie.route.Route
 import co.typie.screen.document.document.DocumentCharacterCountSnapshots
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackOptInSheet
@@ -200,6 +199,11 @@ fun EditorScreen(entityId: String) {
   val interactionScope = remember(entityId) { EditorInteractionScope(coroutineScope = scope) }
   val uiState = remember(entityId) { EditorUiState() }
   val externalElementState = remember(entityId) { EditorExternalElementState() }
+  val assetHydrator =
+    remember(entityId) {
+      EditorAssetHydrator(state = externalElementState, fetch = model::resolveExternalAssets)
+    }
+  var assetQueryGeneration by remember(entityId) { mutableStateOf(0L) }
   val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
   val subPaneState = remember(entityId) { EditorSubPaneState() }
@@ -230,44 +234,14 @@ fun EditorScreen(entityId: String) {
       loading = loading,
     )
   }
-  LaunchedEffect(document?.assets, loading, externalElementState) {
+  LaunchedEffect(document?.assets, loading, model.reloadGeneration, assetHydrator) {
     if (!loading) {
-      for (asset in document?.assets.orEmpty()) {
-        when (asset.__typename) {
-          "Image" -> {
-            asset.onImage?.let { image ->
-              externalElementState.images.assets[image.id] =
-                EditorImageAsset(
-                  id = image.id,
-                  url = image.url,
-                  width = image.width,
-                  height = image.height,
-                  ratio = image.ratio,
-                  placeholder = image.placeholder,
-                )
-            }
-          }
-          "File" -> {
-            asset.onFile?.let { file ->
-              externalElementState.files.assets[file.id] =
-                EditorFileAsset(id = file.id, name = file.name, url = file.url, size = file.size)
-            }
-          }
-          "Embed" -> {
-            asset.onEmbed?.let { embed ->
-              externalElementState.embeds.assets[embed.id] =
-                EditorEmbedAsset(
-                  id = embed.id,
-                  url = embed.url,
-                  title = embed.title,
-                  description = embed.description,
-                  thumbnailUrl = embed.thumbnailUrl,
-                  html = embed.html,
-                )
-            }
-          }
+      val assets =
+        document?.assets.orEmpty().mapNotNull { asset ->
+          asset.editorExternalAsset_asset.toEditorExternalAsset()
         }
-      }
+      assetQueryGeneration += 1
+      assetHydrator.onQueryRefresh(generation = assetQueryGeneration, assets = assets)
     }
   }
   LaunchedEffect(runtime.error) {
@@ -288,6 +262,30 @@ fun EditorScreen(entityId: String) {
   }
   val editor = runtime.editor
   val editorState = editor?.state ?: EditorState.Initial
+  val externalAssetIds =
+    remember(editorState.externalElements) {
+      editorState.externalElements
+        .mapNotNull { element ->
+          when (val data = element.data) {
+            is ExternalElementData.Image -> data.id
+            is ExternalElementData.File -> data.id
+            is ExternalElementData.Embed -> data.id
+            is ExternalElementData.Archived -> null
+          }
+        }
+        .distinct()
+        .sorted()
+    }
+  LaunchedEffect(assetHydrator, assetQueryGeneration, externalAssetIds) {
+    assetHydrator.resolve(externalAssetIds)
+  }
+  LaunchedEffect(assetHydrator) {
+    var connectivityGeneration = 0L
+    connectivityRestoredFlow().collect {
+      connectivityGeneration += 1
+      assetHydrator.onConnectivityRestored(connectivityGeneration)
+    }
+  }
   LaunchedEffect(subPaneState.active, editorState.selection) {
     subPaneState.dismissTableAxisActionsIfSelectionChanged(editorState.selection)
   }

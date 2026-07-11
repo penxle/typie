@@ -26,6 +26,7 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.platform.FilePickerResult
 import co.typie.platform.rememberFilePicker
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -57,8 +58,16 @@ fun UpdateProfileScreen() {
   val nav = Nav.current
   val toast = LocalToast.current
 
-  val filePicker = rememberFilePicker { files ->
-    val file = files.firstOrNull() ?: return@rememberFilePicker
+  val filePicker = rememberFilePicker { result ->
+    val file =
+      when (result) {
+        FilePickerResult.Cancelled -> return@rememberFilePicker
+        is FilePickerResult.Failed -> {
+          toast.error("프로필 사진을 불러오지 못했어요.")
+          return@rememberFilePicker
+        }
+        is FilePickerResult.Selected -> result.files.first()
+      }
 
     scope.launch {
       model
