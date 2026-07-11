@@ -10,8 +10,10 @@ import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Fragment
+import co.typie.editor.ffi.ImageNodeAttr
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NodeAttr
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -131,12 +133,7 @@ private fun EditorImageToolbar(
             imageState.uploads[newNodeId] = pending.second
           }
 
-          fun launchUpload(
-            targetNodeId: String,
-            file: PickedFile,
-            upload: EditorImageUpload,
-            proportion: Int,
-          ) {
+          fun launchUpload(targetNodeId: String, file: PickedFile, upload: EditorImageUpload) {
             val job = launch {
               try {
                 // TODO(TR-38): Check restrictedBlob before starting image uploads and
@@ -155,9 +152,9 @@ private fun EditorImageToolbar(
                         }
                         enqueue(
                           Message.Node(
-                            NodeOp.SetAttrs(
+                            NodeOp.SetAttr(
                               id = targetNodeId,
-                              attrs = PlainNode.Image(id = uploaded.id, proportion = proportion),
+                              attr = NodeAttr.Image(ImageNodeAttr.Id(uploaded.id)),
                             )
                           )
                         )
@@ -183,19 +180,9 @@ private fun EditorImageToolbar(
             job.invokeOnCompletion { file.close() }
           }
 
-          launchUpload(
-            targetNodeId = selectedNodeId,
-            file = selectedImage,
-            upload = selectedUpload,
-            proportion = image?.proportion ?: 100,
-          )
+          launchUpload(targetNodeId = selectedNodeId, file = selectedImage, upload = selectedUpload)
           restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
-            launchUpload(
-              targetNodeId = newNodeId,
-              file = pending.first,
-              upload = pending.second,
-              proportion = 100,
-            )
+            launchUpload(targetNodeId = newNodeId, file = pending.first, upload = pending.second)
           }
         }
       uploadJob.invokeOnCompletion { imageUploads.forEach { (file) -> file.close() } }

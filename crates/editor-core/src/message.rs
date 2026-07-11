@@ -2,7 +2,7 @@ pub use editor_common::{Axis, DecorationStyle, Direction, Movement};
 use editor_crdt::Dot;
 use editor_macros::ffi;
 use editor_model::{
-    BlockquoteVariant, Fragment, Modifier, ModifierType, PlainNode, TableBorderStyle,
+    BlockquoteVariant, Fragment, Modifier, ModifierType, NodeAttr, PlainNode, TableBorderStyle,
 };
 use editor_state::{Position, Selection, StableSelection};
 use serde::{Deserialize, Serialize};
@@ -244,6 +244,7 @@ pub enum TableOp {
 pub enum NodeOp {
     Delete { id: Dot },
     CycleCalloutVariant { id: Dot },
+    SetAttr { id: Dot, attr: NodeAttr },
     SetAttrs { id: Dot, attrs: PlainNode },
     Unwrap { id: Dot },
     Table { id: Dot, op: TableOp },
@@ -465,4 +466,80 @@ pub enum Message {
     Remote {
         changeset: editor_crdt::Changeset<editor_model::EditOp>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use editor_model::{CalloutNodeAttr, CalloutVariant, ImageNodeAttr};
+    use serde_json::json;
+
+    #[test]
+    fn image_node_attrs_use_type_and_value_wire_shape() {
+        let id = NodeAttr::Image {
+            attr: ImageNodeAttr::Id(Some("asset-1".to_string())),
+        };
+        let proportion = NodeAttr::Image {
+            attr: ImageNodeAttr::Proportion(65),
+        };
+
+        assert_eq!(
+            serde_json::to_value(id).unwrap(),
+            json!({
+                "type": "image",
+                "attr": { "type": "id", "value": "asset-1" },
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(proportion).unwrap(),
+            json!({
+                "type": "image",
+                "attr": { "type": "proportion", "value": 65 },
+            })
+        );
+    }
+
+    #[test]
+    fn non_image_node_attr_uses_type_and_value_wire_shape() {
+        let attr = NodeAttr::Callout {
+            attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+        };
+
+        assert_eq!(
+            serde_json::to_value(attr).unwrap(),
+            json!({
+                "type": "callout",
+                "attr": { "type": "variant", "value": "warning" },
+            })
+        );
+    }
+
+    #[test]
+    fn image_set_attr_message_roundtrips_through_json() {
+        let message = Message::Node {
+            op: NodeOp::SetAttr {
+                id: Dot::new(1, 2),
+                attr: NodeAttr::Image {
+                    attr: ImageNodeAttr::Proportion(65),
+                },
+            },
+        };
+        let value = serde_json::to_value(&message).unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "type": "node",
+                "op": {
+                    "type": "set_attr",
+                    "id": "1_2",
+                    "attr": {
+                        "type": "image",
+                        "attr": { "type": "proportion", "value": 65 },
+                    },
+                },
+            })
+        );
+        assert_eq!(serde_json::from_value::<Message>(value).unwrap(), message);
+    }
 }

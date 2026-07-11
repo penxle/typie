@@ -24,12 +24,14 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.ImageNodeAttr
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NodeAttr
 import co.typie.editor.ffi.NodeOp
-import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.icons.Lucide
 import co.typie.ui.component.Img
@@ -119,9 +121,9 @@ internal fun EditorImageExternalElement(
       editor?.sync {
         enqueue(
           Message.Node(
-            NodeOp.SetAttrs(
+            NodeOp.SetAttr(
               id = nodeId,
-              attrs = PlainNode.Image(id = data.id, proportion = nextProportion),
+              attr = NodeAttr.Image(ImageNodeAttr.Proportion(nextProportion)),
             )
           )
         )
@@ -263,17 +265,12 @@ private fun ImageResizeHandle(
   val currentOnEnd by rememberUpdatedState(onEnd)
   Box(
     modifier =
-      modifier.pointerInput(reverse) {
-        detectDragGestures(
-          onDragStart = { currentOnStart() },
-          onDrag = { change, dragAmount ->
-            change.consume()
-            currentOnDrag(dragAmount.x)
-          },
-          onDragEnd = { currentOnEnd() },
-          onDragCancel = { currentOnEnd() },
-        )
-      },
+      modifier.imageResizeHandlePointerInput(
+        key = reverse,
+        onStart = { currentOnStart() },
+        onDrag = { currentOnDrag(it) },
+        onEnd = { currentOnEnd() },
+      ),
     contentAlignment = Alignment.Center,
   ) {
     Canvas(modifier = Modifier.width(scope.scaledDp(RESIZE_HANDLE_VISUAL_WIDTH)).fillMaxHeight()) {
@@ -285,3 +282,26 @@ private fun ImageResizeHandle(
     }
   }
 }
+
+internal fun Modifier.imageResizeHandlePointerInput(
+  key: Any?,
+  onStart: () -> Unit,
+  onDrag: (Float) -> Unit,
+  onEnd: () -> Unit,
+): Modifier =
+  pointerInput(key) {
+    detectDragGestures(
+      orientationLock = null,
+      onDragStart = { _, _, _ -> onStart() },
+      onDrag = { change, dragAmount ->
+        change.consume()
+        onDrag(dragAmount.x)
+      },
+      onDragEnd = { change ->
+        val finalDeltaX = change.positionChange().x
+        if (finalDeltaX != 0f) onDrag(finalDeltaX)
+        onEnd()
+      },
+      onDragCancel = onEnd,
+    )
+  }

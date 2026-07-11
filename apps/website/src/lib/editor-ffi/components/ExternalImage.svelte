@@ -21,7 +21,6 @@
     processImageUpload,
     queuePendingImages,
     resolveImageSrc,
-    setImageAttrsMessage,
   } from '../handlers/image-flow';
   import { getImageDimensions, uploadImageFile } from '../handlers/upload';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
@@ -122,7 +121,6 @@
     const result = await processImageUpload({
       file,
       nodeId: element.node,
-      getProportion: () => proportion,
       setInflightImage: (nodeId, image) => editor.inflightImages.set(nodeId, { ...image, uploadId }),
       deleteInflightImage: (nodeId) => {
         if (editor.inflightImages.get(nodeId)?.uploadId === uploadId) editor.inflightImages.delete(nodeId);
@@ -226,7 +224,17 @@
 
     isResizing = false;
     initialResizeData = null;
-    ctx.editor?.enqueue(setImageAttrsMessage(element.node, imageId, proportion));
+    ctx.editor?.enqueue({
+      type: 'node',
+      op: {
+        type: 'set_attr',
+        id: element.node,
+        attr: {
+          type: 'image',
+          attr: { type: 'proportion', value: Math.round(proportion) },
+        },
+      },
+    });
     ctx.editor?.focus();
   };
 

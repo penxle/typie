@@ -141,7 +141,7 @@ pub fn generate(input: &NodeAttrInput) -> TokenStream {
     quote! {
         #[::editor_macros::ffi]
         #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
-        #[serde(tag = "type", rename_all = "snake_case")]
+        #[serde(tag = "type", content = "value", rename_all = "snake_case")]
         pub enum #attr_ident {
             #(#attr_variants),*
         }

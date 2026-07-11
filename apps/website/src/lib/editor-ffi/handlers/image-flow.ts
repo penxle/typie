@@ -20,19 +20,6 @@ export const deriveImageStage = ({
 type UploadImageFile = (file: File) => Promise<ImageAsset>;
 type ReadImageDimensions = (src: string) => Promise<{ width: number; height: number }>;
 
-export const setImageAttrsMessage = (nodeId: string, imageId: string | undefined, proportion: number): Message => ({
-  type: 'node',
-  op: {
-    type: 'set_attrs',
-    id: nodeId,
-    attrs: {
-      type: 'image',
-      id: imageId,
-      proportion: Math.round(proportion),
-    },
-  },
-});
-
 export const deleteNodeMessage = (nodeId: string): Message => ({
   type: 'node',
   op: {
@@ -121,7 +108,6 @@ export const calculateImageContainerSize = ({
 export const processImageUpload = async ({
   file,
   nodeId,
-  getProportion,
   setInflightImage,
   deleteInflightImage,
   setImageAsset,
@@ -135,7 +121,6 @@ export const processImageUpload = async ({
 }: {
   file: File;
   nodeId: string;
-  getProportion: () => number;
   setInflightImage: (nodeId: string, image: { url: string; width: number; height: number }) => void;
   deleteInflightImage: (nodeId: string) => void;
   setImageAsset: (asset: ImageAsset) => void;
@@ -164,7 +149,17 @@ export const processImageUpload = async ({
     const uploaded = await uploadImageFile(file);
     if (!isCurrent()) return cancel();
     setImageAsset(uploaded);
-    commit(setImageAttrsMessage(nodeId, uploaded.id, getProportion()));
+    commit({
+      type: 'node',
+      op: {
+        type: 'set_attr',
+        id: nodeId,
+        attr: {
+          type: 'image',
+          attr: { type: 'id', value: uploaded.id },
+        },
+      },
+    });
     deleteInflightImage(nodeId);
     revokeObjectUrl(objectUrl);
     focus();

@@ -6,6 +6,10 @@ use crate::message::*;
 
 pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError> {
     editor.transact(|tr| match op {
+        NodeOp::SetAttr { id, attr } => {
+            tr.set_node_attr(id, attr)?;
+            Ok(())
+        }
         NodeOp::SetAttrs { id, attrs } => {
             tr.set_node(id, attrs)?;
             Ok(())
@@ -73,8 +77,8 @@ mod tests {
 
     use editor_macros::state;
     use editor_model::{
-        CalloutVariant, ChildView, HorizontalRuleVariant, Node, PlainDoc, PlainHorizontalRuleNode,
-        PlainNode, PlainNodeEntry,
+        CalloutVariant, ChildView, HorizontalRuleVariant, ImageNodeAttr, Node, NodeAttr, PlainDoc,
+        PlainHorizontalRuleNode, PlainNode, PlainNodeEntry,
     };
     use editor_state::{Affinity, Position, Selection, State, assert_state_eq};
 
@@ -221,6 +225,56 @@ mod tests {
             other => panic!("expected horizontal rule, got {other:?}"),
         };
         assert_eq!(variant, HorizontalRuleVariant::Zigzag);
+    }
+
+    #[test]
+    fn set_attr_updates_only_one_image_field_and_records_history() {
+        let (initial, image) = state! {
+            doc { root { image: image } }
+            selection: none
+        };
+        let mut editor = Editor::new_test(initial.clone());
+
+        editor.apply(Message::Node {
+            op: NodeOp::SetAttr {
+                id: image,
+                attr: NodeAttr::Image {
+                    attr: ImageNodeAttr::Id(Some("asset-1".to_string())),
+                },
+            },
+        });
+        editor.apply(Message::Node {
+            op: NodeOp::SetAttr {
+                id: image,
+                attr: NodeAttr::Image {
+                    attr: ImageNodeAttr::Proportion(65),
+                },
+            },
+        });
+
+        let attrs =
+            |editor: &Editor| match editor.state().view().leaf(image).unwrap().node().unwrap() {
+                Node::Image(node) => (node.id.get().clone(), *node.proportion.get()),
+                other => panic!("expected image, got {other:?}"),
+            };
+        assert_eq!(attrs(&editor), (Some("asset-1".to_string()), 65));
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(attrs(&editor), (Some("asset-1".to_string()), 100));
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(attrs(&editor), (None, 100));
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_eq!(attrs(&editor), (Some("asset-1".to_string()), 65));
     }
     #[test]
     fn cycle_callout_variant_updates_target_and_records_history() {

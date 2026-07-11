@@ -2,9 +2,9 @@ use editor_common::time::{Duration, Instant};
 use editor_crdt::Dot;
 use editor_macros::state;
 use editor_model::{
-    AtomLeaf, CalloutVariant, ChildView, EditOp, LayoutMode, Modifier, ModifierType, Node,
-    NodeAttrOp, NodeType, NodeView, PlainCalloutNode, PlainNode, PlainParagraphNode, PlainRootNode,
-    Subtree,
+    AtomLeaf, CalloutVariant, ChildView, EditOp, ImageNodeAttr, LayoutMode, Modifier, ModifierType,
+    Node, NodeAttr, NodeAttrOp, NodeType, NodeView, PlainCalloutNode, PlainNode,
+    PlainParagraphNode, PlainRootNode, Subtree,
 };
 use editor_state::undo::{RecordMerge, TransientState, UndoEntry, UndoHistory};
 use editor_state::{
@@ -61,6 +61,13 @@ fn snapshot(state: &State) -> Vec<(usize, NodeType, String)> {
         walk(&root, 0, &mut out);
     }
     out
+}
+
+fn image_attrs(state: &State, image: Dot) -> (Option<String>, u32) {
+    match state.view().leaf(image).unwrap().node().unwrap() {
+        Node::Image(node) => (node.id.get().clone(), *node.proportion.get()),
+        other => panic!("expected image, got {other:?}"),
+    }
 }
 
 #[test]
@@ -596,6 +603,103 @@ mod tests {
         } else {
             panic!("expected callout");
         }
+    }
+
+    #[test]
+    fn set_node_attr_preserves_independent_image_fields_in_both_orders() {
+        fn apply(id_first: bool) -> (Option<String>, u32) {
+            let (state, image) = state! {
+                doc { root { image: image } }
+                selection: none
+            };
+            let mut tr = Transaction::new(&state);
+            let id = NodeAttr::Image {
+                attr: ImageNodeAttr::Id(Some("asset-1".to_string())),
+            };
+            let proportion = NodeAttr::Image {
+                attr: ImageNodeAttr::Proportion(65),
+            };
+            if id_first {
+                tr.set_node_attr(image, id).unwrap();
+                tr.set_node_attr(image, proportion).unwrap();
+            } else {
+                tr.set_node_attr(image, proportion).unwrap();
+                tr.set_node_attr(image, id).unwrap();
+            }
+            image_attrs(tr.state(), image)
+        }
+
+        assert_eq!(apply(true), (Some("asset-1".to_string()), 65));
+        assert_eq!(apply(false), (Some("asset-1".to_string()), 65));
+    }
+
+    #[test]
+    fn set_node_attr_rejects_attr_for_another_node_kind() {
+        let (state, paragraph) = state! {
+            doc { root { paragraph: paragraph {} } }
+            selection: (paragraph, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let result = tr.set_node_attr(
+            paragraph,
+            NodeAttr::Image {
+                attr: ImageNodeAttr::Proportion(65),
+            },
+        );
+
+        assert!(matches!(
+            result,
+            Err(StepError::NodeAttrKindMismatch { block }) if block == paragraph
+        ));
+    }
+
+    #[test]
+    fn set_node_attr_inverse_restores_only_the_changed_field() {
+        let (state, image) = state! {
+            doc { root { image: image } }
+            selection: none
+        };
+        let old = NodeAttr::Image {
+            attr: ImageNodeAttr::Proportion(100),
+        };
+        let new = NodeAttr::Image {
+            attr: ImageNodeAttr::Proportion(65),
+        };
+        let step = Step::SetNodeAttr {
+            block: image,
+            old,
+            new,
+        };
+
+        let after = step.apply(&state).unwrap().state;
+        assert_eq!(image_attrs(&after, image), (None, 65));
+        let restored = step.inverse().apply(&after).unwrap().state;
+        assert_eq!(image_attrs(&restored, image), (None, 100));
+    }
+
+    #[test]
+    fn set_node_attr_step_rejects_different_old_and_new_fields() {
+        let (state, image) = state! {
+            doc { root { image: image } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&state);
+        let result = tr.apply_steps(vec![Step::SetNodeAttr {
+            block: image,
+            old: NodeAttr::Image {
+                attr: ImageNodeAttr::Id(None),
+            },
+            new: NodeAttr::Image {
+                attr: ImageNodeAttr::Proportion(65),
+            },
+        }]);
+
+        assert!(matches!(
+            result,
+            Err(StepError::NodeAttrFieldMismatch { block }) if block == image
+        ));
+        assert_eq!(image_attrs(tr.state(), image), (None, 100));
     }
 
     #[test]

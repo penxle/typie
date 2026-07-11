@@ -14,6 +14,7 @@ pub(crate) mod remove_text;
 pub(crate) mod replace_block_type;
 pub(crate) mod set_composition;
 pub(crate) mod set_node;
+pub(crate) mod set_node_attr;
 pub(crate) mod set_node_carry;
 pub(crate) mod set_pending_modifiers;
 pub(crate) mod set_selection;

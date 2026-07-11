@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
-use editor_model::{DocView, Modifier, ModifierType, NodeType, PlainNode, Subtree};
+use editor_model::{DocView, Modifier, ModifierType, NodeAttr, NodeType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
 use editor_state::{BatchedState, Composition, PendingModifiers, State};
@@ -253,6 +253,22 @@ impl Transaction {
             old_node,
             new_node,
         })
+    }
+
+    pub fn set_node_attr(&mut self, block: Dot, new: NodeAttr) -> Result<(), StepError> {
+        let node = self
+            .state
+            .projected
+            .block_node(block)
+            .or_else(|| self.state.projected.atom_leaf_node(block))
+            .ok_or(StepError::NodeNotFound(block))?;
+        let old = node
+            .to_plain()
+            .to_attrs()
+            .into_iter()
+            .find(|attr| attr.same_field(&new))
+            .ok_or(StepError::NodeAttrKindMismatch { block })?;
+        self.apply_step(Step::SetNodeAttr { block, old, new })
     }
 
     pub fn replace_block_type(&mut self, block: Dot, new_type: NodeType) -> Result<(), StepError> {

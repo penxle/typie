@@ -26,9 +26,10 @@ import co.typie.editor.external.IMAGE_MIN_PROPORTION
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.external.imageResizeProportionRange
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.ImageNodeAttr
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NodeAttr
 import co.typie.editor.ffi.NodeOp
-import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelTextStyle
@@ -113,7 +114,7 @@ internal fun ImageResizeSecondaryToolbar(
       editor.sync {
         enqueue(
           Message.Node(
-            NodeOp.SetAttrs(id = nodeId, attrs = PlainNode.Image(id = imageId, proportion = next))
+            NodeOp.SetAttr(id = nodeId, attr = NodeAttr.Image(ImageNodeAttr.Proportion(next)))
           )
         )
       }

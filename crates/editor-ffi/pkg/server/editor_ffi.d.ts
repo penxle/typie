@@ -552,13 +552,13 @@ export interface Viewport {
 
 export type Alignment = "left" | "center" | "right" | "justify";
 
-export type ArchivedNodeAttr = { type: "id" } & string | undefined;
+export type ArchivedNodeAttr = { type: "id"; value: string | undefined };
 
 export type Axis = "horizontal" | "vertical";
 
 export type BlockOp = { type: "toggle_blockquote"; variant: BlockquoteVariant } | { type: "toggle_callout" } | { type: "wrap_fold" };
 
-export type BlockquoteNodeAttr = { type: "variant" } & BlockquoteVariant;
+export type BlockquoteNodeAttr = { type: "variant"; value: BlockquoteVariant };
 
 export type BlockquoteVariant = "left_line" | "left_quote" | "message_sent" | "message_received";
 
@@ -568,7 +568,7 @@ export type BulletListNodeAttr = void;
 
 export type BundleStatus = "applied" | "duplicate" | "failed";
 
-export type CalloutNodeAttr = { type: "variant" } & CalloutVariant;
+export type CalloutNodeAttr = { type: "variant"; value: CalloutVariant };
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
@@ -588,13 +588,13 @@ export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { ty
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
-export type EmbedNodeAttr = { type: "id" } & string | undefined;
+export type EmbedNodeAttr = { type: "id"; value: string | undefined };
 
 export type ExternalDndPayloadKind = "text" | "html" | "image_files" | "files" | "mixed_files";
 
 export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
 
-export type FileNodeAttr = { type: "id" } & string | undefined;
+export type FileNodeAttr = { type: "id"; value: string | undefined };
 
 export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "commit_as_is" } | { type: "move_cursor"; delta: number };
 
@@ -616,11 +616,11 @@ export type HistoryOp = { type: "undo" } | { type: "redo" };
 
 export type HistoryTag = { type: "auto_replacement" } | { type: "paste_html"; plain_text: string; start: number | undefined };
 
-export type HorizontalRuleNodeAttr = { type: "variant" } & HorizontalRuleVariant;
+export type HorizontalRuleNodeAttr = { type: "variant"; value: HorizontalRuleVariant };
 
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
-export type ImageNodeAttr = ({ type: "id" } & string | undefined) | ({ type: "proportion" } & number);
+export type ImageNodeAttr = { type: "id"; value: string | undefined } | { type: "proportion"; value: number };
 
 export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment } | { type: "table"; rows: number; cols: number };
 
@@ -648,7 +648,7 @@ export type NavigationOp = { type: "move"; movement: Movement; extend: boolean }
 
 export type NodeAttr = { type: "root"; attr: RootNodeAttr } | { type: "paragraph"; attr: ParagraphNodeAttr } | { type: "blockquote"; attr: BlockquoteNodeAttr } | { type: "callout"; attr: CalloutNodeAttr } | { type: "text"; attr: TextNodeAttr } | { type: "bullet_list"; attr: BulletListNodeAttr } | { type: "ordered_list"; attr: OrderedListNodeAttr } | { type: "list_item"; attr: ListItemNodeAttr } | { type: "fold"; attr: FoldNodeAttr } | { type: "fold_title"; attr: FoldTitleNodeAttr } | { type: "fold_content"; attr: FoldContentNodeAttr } | { type: "table"; attr: TableNodeAttr } | { type: "table_row"; attr: TableRowNodeAttr } | { type: "table_cell"; attr: TableCellNodeAttr } | { type: "image"; attr: ImageNodeAttr } | { type: "file"; attr: FileNodeAttr } | { type: "embed"; attr: EmbedNodeAttr } | { type: "archived"; attr: ArchivedNodeAttr } | { type: "hard_break"; attr: HardBreakNodeAttr } | { type: "horizontal_rule"; attr: HorizontalRuleNodeAttr } | { type: "page_break"; attr: PageBreakNodeAttr } | { type: "tab"; attr: TabNodeAttr } | { type: "unknown"; tag: number; bytes: number[] };
 
-export type NodeOp = { type: "delete"; id: Dot } | { type: "cycle_callout_variant"; id: Dot } | { type: "set_attrs"; id: Dot; attrs: PlainNode } | { type: "unwrap"; id: Dot } | { type: "table"; id: Dot; op: TableOp };
+export type NodeOp = { type: "delete"; id: Dot } | { type: "cycle_callout_variant"; id: Dot } | { type: "set_attr"; id: Dot; attr: NodeAttr } | { type: "set_attrs"; id: Dot; attrs: PlainNode } | { type: "unwrap"; id: Dot } | { type: "table"; id: Dot; op: TableOp };
 
 export type OrderedListNodeAttr = void;
 
@@ -664,7 +664,7 @@ export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph
 
 export type PointerStyle = "default" | "text" | "pointer";
 
-export type RootNodeAttr = { type: "layout_mode" } & LayoutMode;
+export type RootNodeAttr = { type: "layout_mode"; value: LayoutMode };
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
@@ -680,9 +680,9 @@ export type TabNodeAttr = void;
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
-export type TableCellNodeAttr = ({ type: "col_width" } & number | undefined) | ({ type: "background_color" } & string | undefined);
+export type TableCellNodeAttr = { type: "col_width"; value: number | undefined } | { type: "background_color"; value: string | undefined };
 
-export type TableNodeAttr = ({ type: "border_style" } & TableBorderStyle) | ({ type: "proportion" } & number);
+export type TableNodeAttr = { type: "border_style"; value: TableBorderStyle } | { type: "proportion"; value: number };
 
 export type TableOp = { type: "insert_axis"; axis: Axis; index: number; before: boolean } | { type: "delete_axis"; axis: Axis; index: number } | { type: "move_axis"; axis: Axis; from: number; to: number } | { type: "select_axis"; axis: Axis | undefined; index: number | undefined } | { type: "set_column_widths"; widths: number[] } | { type: "set_border_style"; border_style: TableBorderStyle } | { type: "set_proportion"; proportion: number } | { type: "set_axis_background_color"; axis: Axis; index: number; color: string | undefined } | { type: "set_cell_background_color"; color: string | undefined };
 

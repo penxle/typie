@@ -9,7 +9,6 @@ import {
   processImageUpload,
   queuePendingImages,
   resolveImageSrc,
-  setImageAttrsMessage,
 } from './image-flow';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { ImageAsset } from '../types';
@@ -70,21 +69,6 @@ describe('이미지 표시 여부 결정', () => {
 });
 
 describe('v2 image flow messages', () => {
-  it('creates a v2 node attrs message for uploaded image id and rounded proportion', () => {
-    expect(setImageAttrsMessage('node-1', 'image-1', 74.6)).toEqual({
-      type: 'node',
-      op: {
-        type: 'set_attrs',
-        id: 'node-1',
-        attrs: {
-          type: 'image',
-          id: 'image-1',
-          proportion: 75,
-        },
-      },
-    });
-  });
-
   it('creates a v2 node delete message for placeholder cleanup and deletion', () => {
     expect(deleteNodeMessage('node-1')).toEqual({
       type: 'node',
@@ -214,7 +198,6 @@ describe('v2 image upload processing', () => {
     const result = await processImageUpload({
       file: createFile('image.png', 'image/png'),
       nodeId: 'node-1',
-      getProportion: () => 100,
       ...deps,
       createObjectUrl: () => 'blob:image',
       revokeObjectUrl,
@@ -224,7 +207,19 @@ describe('v2 image upload processing', () => {
 
     expect(result).toBe('uploaded');
     expect(assets.get('image-1')).toEqual(createAsset('image-1'));
-    expect(messages).toEqual([setImageAttrsMessage('node-1', 'image-1', 100)]);
+    expect(messages).toEqual([
+      {
+        type: 'node',
+        op: {
+          type: 'set_attr',
+          id: 'node-1',
+          attr: {
+            type: 'image',
+            attr: { type: 'id', value: 'image-1' },
+          },
+        },
+      },
+    ]);
     expect(commitSawInflight()).toBe(true);
     expect(inflight.has('node-1')).toBe(false);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:image');
@@ -240,7 +235,6 @@ describe('v2 image upload processing', () => {
     const upload = processImageUpload({
       file: createFile('image.png', 'image/png'),
       nodeId: 'node-1',
-      getProportion: () => 100,
       ...deps,
       isCurrent: () => current,
       createObjectUrl: () => 'blob:image',
@@ -266,7 +260,6 @@ describe('v2 image upload processing', () => {
     const result = await processImageUpload({
       file: createFile('image.png', 'image/png'),
       nodeId: 'node-1',
-      getProportion: () => 100,
       ...deps,
       isCurrent: () => inflight.has('node-1'),
       createObjectUrl: () => 'blob:image',

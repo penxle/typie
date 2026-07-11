@@ -7,6 +7,12 @@ pub enum StepError {
     #[error("node not found: {0:?}")]
     NodeNotFound(Dot),
 
+    #[error("node attr kind does not match target node: {block:?}")]
+    NodeAttrKindMismatch { block: Dot },
+
+    #[error("old and new node attrs refer to different fields: {block:?}")]
+    NodeAttrFieldMismatch { block: Dot },
+
     #[error("offset {offset} out of bounds for node {block:?} (len: {len})")]
     OffsetOutOfBounds {
         block: Dot,
