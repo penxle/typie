@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 
 class EditorBodyGeometryTest {
   @Test
-  fun `geometry respects visible occlusion when resolving body height and page column width`() {
+  fun `continuous geometry uses the engine page width after content reaches its cap`() {
     val geometry =
       resolveEditorBodyGeometry(
         visibleArea =
@@ -19,13 +19,31 @@ class EditorBodyGeometryTest {
             imeInset = 100f,
           ),
         layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-        pageSizes = listOf(PageSize(width = 600f, height = 800f)),
+        pageSizes = listOf(PageSize(width = 640f, height = 800f)),
         displayZoom = 1f,
       )
 
-    assertEquals(600f, geometry.pageColumnWidth)
+    assertEquals(640f, geometry.pageColumnWidth)
     assertEquals(620f, geometry.minimumBodyHeight)
     assertEquals(40f, geometry.topSpacerHeight)
+  }
+
+  @Test
+  fun `continuous geometry follows the engine page width across the content cap boundary`() {
+    val geometry =
+      resolveEditorBodyGeometry(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 620f, height = 900f),
+            headerHeight = 120f,
+            topInset = 120f,
+          ),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes = listOf(PageSize(width = 620f, height = 800f)),
+        displayZoom = 1f,
+      )
+
+    assertEquals(620f, geometry.pageColumnWidth)
   }
 
   @Test
@@ -46,6 +64,29 @@ class EditorBodyGeometryTest {
     assertEquals(360f, geometry.pageColumnWidth)
     assertEquals(568f, geometry.minimumBodyHeight)
     assertEquals(40f, geometry.topSpacerHeight)
+  }
+
+  @Test
+  fun `continuous geometry ignores invalid engine page widths`() {
+    val geometry =
+      resolveEditorBodyGeometry(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 720f, height = 900f),
+            headerHeight = 120f,
+            topInset = 120f,
+          ),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes =
+          listOf(
+            PageSize(width = 0f, height = 800f),
+            PageSize(width = -1f, height = 800f),
+            PageSize(width = Float.POSITIVE_INFINITY, height = 800f),
+          ),
+        displayZoom = 1f,
+      )
+
+    assertEquals(720f, geometry.pageColumnWidth)
   }
 
   @Test

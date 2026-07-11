@@ -27,27 +27,18 @@ internal fun resolveEditorBodyGeometry(
       1f
     }
   val visibleBodySize = visibleArea.visibleBodySize
-  val maxPageWidth = pageSizes.maxOfOrNull(PageSize::width) ?: 0f
-  val preferredPageWidth =
-    when (layoutSpec) {
-      is EditorDocumentLayoutSpec.Continuous -> layoutSpec.maxWidth
-      is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageWidth
-    }
+  val maxPageWidth = resolveEditorPageWidth(pageSizes) ?: 0f
   val pageColumnWidth =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous ->
         when {
-          preferredPageWidth > 0f && visibleBodySize.width > 0f ->
-            preferredPageWidth.coerceAtMost(visibleBodySize.width)
-          preferredPageWidth > 0f -> preferredPageWidth
-          maxPageWidth > 0f && visibleBodySize.width > 0f ->
-            maxPageWidth.coerceAtMost(visibleBodySize.width)
+          // Continuous.maxWidth caps content; engine page sizes also include its page margins.
           maxPageWidth > 0f -> maxPageWidth
           else -> visibleBodySize.width
         }
       is EditorDocumentLayoutSpec.Paginated ->
         when {
-          preferredPageWidth > 0f -> preferredPageWidth * effectiveDisplayZoom
+          layoutSpec.pageWidth > 0f -> layoutSpec.pageWidth * effectiveDisplayZoom
           maxPageWidth > 0f -> maxPageWidth * effectiveDisplayZoom
           else -> visibleBodySize.width
         }
@@ -70,6 +61,9 @@ internal fun resolveEditorBodyGeometry(
       },
   )
 }
+
+internal fun resolveEditorPageWidth(pageSizes: List<PageSize>): Float? =
+  pageSizes.asSequence().map(PageSize::width).filter { it.isFinite() && it > 0f }.maxOrNull()
 
 internal fun resolveMinimumBodyHeight(
   viewportHeight: Float,

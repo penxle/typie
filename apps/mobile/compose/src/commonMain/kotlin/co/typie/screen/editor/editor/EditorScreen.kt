@@ -55,6 +55,7 @@ import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
+import co.typie.editor.body.resolveEditorPageWidth
 import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
@@ -939,14 +940,13 @@ fun EditorScreen(entityId: String) {
         targetLineHeight = typewriterTargetLineHeight,
       )
     val bodyTrackWidth = bodyGeometry.pageColumnWidth.coerceAtLeast(0f)
-    val isPaginatedLayout = layoutSpec is EditorDocumentLayoutSpec.Paginated
     val headerTrackWidth =
-      if (isPaginatedLayout) {
-          visibleArea.visibleBodySize.width
-        } else {
-          bodyTrackWidth
-        }
-        .coerceAtLeast(0f)
+      resolveEditorHeaderTrackWidth(
+        layoutSpec = layoutSpec,
+        resolvedPageWidth = resolveEditorPageWidth(pageSizes),
+        visibleBodyWidth = visibleArea.visibleBodySize.width,
+        bodyTrackWidth = bodyTrackWidth,
+      )
     val viewportScrollableState = rememberScrollable2DState { delta ->
       consumeEditorViewportTouchPan(
         viewportState = screenState.viewportState,
@@ -1361,6 +1361,22 @@ fun EditorScreen(entityId: String) {
     }
   }
 }
+
+internal fun resolveEditorHeaderTrackWidth(
+  layoutSpec: EditorDocumentLayoutSpec,
+  resolvedPageWidth: Float?,
+  visibleBodyWidth: Float,
+  bodyTrackWidth: Float,
+): Float =
+  when (layoutSpec) {
+    is EditorDocumentLayoutSpec.Continuous ->
+      if (resolvedPageWidth != null && resolvedPageWidth.isFinite() && resolvedPageWidth > 0f) {
+        bodyTrackWidth
+      } else {
+        0f
+      }
+    is EditorDocumentLayoutSpec.Paginated -> visibleBodyWidth
+  }.coerceAtLeast(0f)
 
 @Composable
 private fun EditorBodyLoadingSkeleton(modifier: Modifier = Modifier) {

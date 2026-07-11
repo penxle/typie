@@ -94,7 +94,7 @@ internal fun EditorHeader(
   ) {
     val contentModifier = Modifier.run {
       when {
-        layoutSpec is EditorDocumentLayoutSpec.Paginated && trackWidth > 0f -> width(trackWidth.dp)
+        trackWidth > 0f -> width(trackWidth.dp)
         else -> widthIn(max = ResponsiveContainerDefaults.MaxWidth).fillMaxWidth()
       }
     }
