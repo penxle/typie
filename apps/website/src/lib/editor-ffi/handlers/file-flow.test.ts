@@ -161,29 +161,34 @@ describe('v2 file upload processing', () => {
 
   it('handles multiple concurrent uploads independently', async () => {
     const { deps, messages, inflight, assets } = createDeps();
+    const uploadA = Promise.withResolvers<FileAsset>();
+    const uploadB = Promise.withResolvers<FileAsset>();
 
-    const [result1, result2] = await Promise.all([
-      processFileUpload({
-        file: createFile('a.pdf', 'application/pdf'),
-        nodeId: 'node-a',
-        ...deps,
-        uploadFileAsFile: async () => ({ id: 'file-a', name: 'a.pdf', size: '1024', url: 'https://example.com/a.pdf' }),
-      }),
-      processFileUpload({
-        file: createFile('b.pdf', 'application/pdf'),
-        nodeId: 'node-b',
-        ...deps,
-        uploadFileAsFile: async () => ({ id: 'file-b', name: 'b.pdf', size: '2048', url: 'https://example.com/b.pdf' }),
-      }),
-    ]);
+    const resultA = processFileUpload({
+      file: createFile('a.pdf', 'application/pdf'),
+      nodeId: 'node-a',
+      ...deps,
+      uploadFileAsFile: () => uploadA.promise,
+    });
+    const resultB = processFileUpload({
+      file: createFile('b.pdf', 'application/pdf'),
+      nodeId: 'node-b',
+      ...deps,
+      uploadFileAsFile: () => uploadB.promise,
+    });
 
-    expect(result1).toBe('uploaded');
-    expect(result2).toBe('uploaded');
+    uploadB.resolve({ id: 'file-b', name: 'b.pdf', size: '2048', url: 'https://example.com/b.pdf' });
+    await expect(resultB).resolves.toBe('uploaded');
+    expect(messages).toEqual([createSetFileAttrsMessage('node-b', 'file-b')]);
+
+    uploadA.resolve({ id: 'file-a', name: 'a.pdf', size: '1024', url: 'https://example.com/a.pdf' });
+    await expect(resultA).resolves.toBe('uploaded');
+
     expect(assets.has('file-a')).toBe(true);
     expect(assets.has('file-b')).toBe(true);
     expect(inflight.has('node-a')).toBe(false);
     expect(inflight.has('node-b')).toBe(false);
-    expect(messages).toHaveLength(2);
+    expect(messages).toEqual([createSetFileAttrsMessage('node-b', 'file-b'), createSetFileAttrsMessage('node-a', 'file-a')]);
   });
 
   it('first upload success does not affect second upload failure', async () => {

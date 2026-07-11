@@ -1,7 +1,11 @@
 <script lang="ts" module>
   import ky from 'ky';
+  import pLimit from 'p-limit';
   import { mearieClient } from '$lib/graphql';
   import { graphql } from '$mearie';
+
+  const MAX_CONCURRENT_BLOB_UPLOADS = 5;
+  const limitBlobUploads = pLimit(MAX_CONCURRENT_BLOB_UPLOADS);
 
   const issueBlobUploadUrlMutation = graphql(`
     mutation BlobUtils_IssueBlobUploadUrl($input: IssueBlobUploadUrlInput!) {
@@ -39,26 +43,27 @@
     }
   `);
 
-  export const uploadBlob = async (file: File) => {
-    const {
-      issueBlobUploadUrl: { path, url, fields },
-    } = await mearieClient.mutation(issueBlobUploadUrlMutation, { input: { filename: file.name } });
+  export const uploadBlob = (file: File) =>
+    limitBlobUploads(async () => {
+      const {
+        issueBlobUploadUrl: { path, url, fields },
+      } = await mearieClient.mutation(issueBlobUploadUrlMutation, { input: { filename: file.name } });
 
-    const formData = new FormData();
-    for (const [key, value] of Object.entries<string>(fields)) {
-      formData.append(key, value);
-    }
+      const formData = new FormData();
+      for (const [key, value] of Object.entries<string>(fields)) {
+        formData.append(key, value);
+      }
 
-    formData.append('Content-Type', file.type);
-    formData.append('file', file);
+      formData.append('Content-Type', file.type);
+      formData.append('file', file);
 
-    await ky.post(url, {
-      body: formData,
-      timeout: false,
+      await ky.post(url, {
+        body: formData,
+        timeout: false,
+      });
+
+      return path;
     });
-
-    return path;
-  };
 
   export const uploadBlobAsFile = async (file: File) => {
     const path = await uploadBlob(file);

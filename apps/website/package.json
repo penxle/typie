@@ -62,6 +62,7 @@
     "mearie": "^0.1.7",
     "mixpanel-browser": "^2.80.0",
     "nanoid": "^5.1.16",
+    "p-limit": "^7.3.0",
     "query-string": "^9.4.1",
     "remeda": "^2.39.0",
     "svelte": "^5.56.4",

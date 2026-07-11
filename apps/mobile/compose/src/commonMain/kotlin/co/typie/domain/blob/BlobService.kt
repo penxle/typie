@@ -12,6 +12,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.headers
 import io.ktor.http.quote
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -25,7 +27,10 @@ internal class BlobUploadException(val stage: BlobUploadStage, cause: Throwable)
   RuntimeException("Blob upload failed at $stage", cause)
 
 object BlobService {
-  suspend fun upload(file: PickedFile): String {
+  private const val MaxConcurrentUploads = 5
+  private val uploadSemaphore = Semaphore(MaxConcurrentUploads)
+
+  suspend fun upload(file: PickedFile): String = uploadSemaphore.withPermit {
     val resolvedMimeType = file.mimeType ?: "application/octet-stream"
     val result =
       withBlobUploadStage(BlobUploadStage.IssueUploadUrl) {
