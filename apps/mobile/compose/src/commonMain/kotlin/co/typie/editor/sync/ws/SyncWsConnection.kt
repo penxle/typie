@@ -3,6 +3,7 @@ package co.typie.editor.sync.ws
 import co.touchlab.kermit.Logger
 import co.typie.editor.sync.PullResult
 import co.typie.editor.sync.PushResult
+import io.sentry.kotlin.multiplatform.Sentry
 import kotlin.concurrent.Volatile
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -18,13 +19,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+data class SyncWsSocketClosed(val code: Int, val reason: String)
+
 interface SyncWsSocket {
   suspend fun send(bytes: ByteArray)
 
   fun close()
 
   val incoming: Flow<ByteArray>
-  val closed: Deferred<Int>
+  val closed: Deferred<SyncWsSocketClosed>
 }
 
 typealias SocketFactory = suspend () -> SyncWsSocket
@@ -41,6 +44,9 @@ class SyncWsConnection(
   private companion object {
     const val RECONNECT_CAP_MS = 30_000L
     const val PING_MAX_MISSES = 2
+    const val PROTOCOL_ERROR_CLOSE_CODE = 4003
+    const val AUTH_FAILED_CLOSE_CODE = 4001
+    const val AUTH_FAILED_MAX_STREAK = 3
   }
 
   private val clientId = Uuid.random().toString()
@@ -51,9 +57,15 @@ class SyncWsConnection(
   @Volatile private var ready = false
 
   @Volatile private var disposed = false
+
+  @Volatile private var terminal = false
+  @Volatile private var terminalError: SyncWsException? = null
+
   private var attempts = 0
   private var requestSeq = 0
   private var missedPongs = 0
+  private var authFailedStreak = 0
+  private var lastCloseCode: Int? = null
 
   private val pending = mutableMapOf<String, CompletableDeferred<WsServerMessage>>()
   private val channelHandlers = mutableMapOf<String, MutableList<(WsServerMessage) -> Unit>>()
@@ -93,6 +105,7 @@ class SyncWsConnection(
   }
 
   fun registerChannel(documentId: String, handler: (WsServerMessage) -> Unit): () -> Unit {
+    if (terminal && documentId !in channelHandlers) resetTerminal()
     val handlers = channelHandlers.getOrPut(documentId) { mutableListOf() }
     handlers.add(handler)
     recomputeIdle()
@@ -151,6 +164,7 @@ class SyncWsConnection(
 
   private suspend fun request(build: (String) -> WsClientMessage): WsServerMessage {
     if (disposed) throw SyncWsException("connection_lost", false)
+    terminalError?.let { throw it }
     val id = "r${++requestSeq}"
     val message = build(id)
     val deferred = CompletableDeferred<WsServerMessage>()
@@ -162,7 +176,7 @@ class SyncWsConnection(
   }
 
   private fun ensureConnected() {
-    if (disposed || socket != null || reconnectJob != null) return
+    if (disposed || terminal || socket != null || reconnectJob != null) return
     scope.launch {
       connectMutex.withLock {
         if (disposed || socket != null) return@withLock
@@ -203,8 +217,8 @@ class SyncWsConnection(
     }
 
     closedWatcherJob = scope.launch {
-      val code = newSocket.closed.await()
-      onSocketClosed(newSocket, code)
+      val closed = newSocket.closed.await()
+      onSocketClosed(newSocket, closed)
     }
 
     senderJob = scope.launch {
@@ -237,6 +251,7 @@ class SyncWsConnection(
   private fun handleHelloAck() {
     ready = true
     attempts = 0
+    authFailedStreak = 0
     helloAckDeferred?.complete(Unit)
     startPing()
     recomputeIdle()
@@ -267,8 +282,10 @@ class SyncWsConnection(
     channelHandlers[documentId]?.toList()?.forEach { it(message) }
   }
 
-  private fun onSocketClosed(sourceSocket: SyncWsSocket, code: Int) {
+  private fun onSocketClosed(sourceSocket: SyncWsSocket, closed: SyncWsSocketClosed) {
     if (sourceSocket !== socket) return
+    Logger.w { "SyncWsConnection: socket closed (${closed.code} ${closed.reason})" }
+    lastCloseCode = closed.code
     socket = null
     ready = false
     helloAckDeferred = null
@@ -281,14 +298,88 @@ class SyncWsConnection(
     receiverJob = null
     closedWatcherJob = null
     sendChannel = Channel(Channel.UNLIMITED)
+
+    val permanent =
+      when (closed.code) {
+        PROTOCOL_ERROR_CLOSE_CODE -> true
+        AUTH_FAILED_CLOSE_CODE -> {
+          authFailedStreak += 1
+          authFailedStreak >= AUTH_FAILED_MAX_STREAK
+        }
+        else -> {
+          authFailedStreak = 0
+          false
+        }
+      }
+
+    if (permanent) {
+      enterTerminal(closed)
+      return
+    }
+
     failAllPending()
     if (!disposed) scheduleReconnect()
   }
+
+  private fun enterTerminal(closed: SyncWsSocketClosed) {
+    if (terminal) return
+    terminal = true
+    reconnectJob?.cancel()
+    reconnectJob = null
+
+    val code = permanentCodeFor(closed.code)
+    val error = SyncWsException(code, permanent = true)
+    terminalError = error
+
+    Logger.e {
+      "SyncWsConnection: connection permanent after close (${closed.code} ${closed.reason})"
+    }
+    Sentry.captureException(error) { scope ->
+      scope.setTag("ws_close_code", closed.code.toString())
+      scope.setExtra("ws_close_reason", closed.reason)
+    }
+
+    failAllPendingPermanent(error)
+    propagatePermanentToChannels(error)
+  }
+
+  fun resetTerminal() {
+    terminal = false
+    terminalError = null
+    authFailedStreak = 0
+  }
+
+  private fun permanentCodeFor(closeCode: Int): String =
+    if (closeCode == PROTOCOL_ERROR_CLOSE_CODE) {
+      "connection_permanent_protocol_error"
+    } else {
+      "connection_permanent_auth_failed"
+    }
 
   private fun failAllPending() {
     val entries = pending.values.toList()
     pending.clear()
     for (entry in entries) entry.completeExceptionally(SyncWsException("connection_lost", false))
+  }
+
+  private fun failAllPendingPermanent(error: SyncWsException) {
+    val entries = pending.values.toList()
+    pending.clear()
+    for (entry in entries) entry.completeExceptionally(error)
+  }
+
+  private fun propagatePermanentToChannels(error: SyncWsException) {
+    for (documentId in channelHandlers.keys.toList()) {
+      routeToChannel(
+        documentId,
+        WsServerMessage.WsError(
+          scope = "document",
+          documentId = documentId,
+          code = error.code,
+          permanent = true,
+        ),
+      )
+    }
   }
 
   private fun scheduleReconnect() {
@@ -297,7 +388,9 @@ class SyncWsConnection(
     attempts += 1
     val delayMs =
       minOf(reconnectBaseMs * (1L shl (attempts - 1).coerceAtMost(16)), RECONNECT_CAP_MS)
-    Logger.w { "SyncWsConnection: reconnecting (attempt $attempts) in ${delayMs}ms" }
+    Logger.w {
+      "SyncWsConnection: reconnecting (attempt $attempts) in ${delayMs}ms after close $lastCloseCode"
+    }
     reconnectJob = scope.launch {
       delay(delayMs)
       reconnectJob = null

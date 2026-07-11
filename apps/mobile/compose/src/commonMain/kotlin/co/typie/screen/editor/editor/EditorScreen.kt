@@ -7,7 +7,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -174,6 +176,7 @@ import co.typie.serialization.json
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.LocalPopoverOverlayState
@@ -181,6 +184,7 @@ import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
@@ -480,9 +484,12 @@ fun EditorScreen(entityId: String) {
   var editorGraphHandleState by remember(entityId) { mutableStateOf<GraphIngest?>(null) }
   var syncBaselineState by remember(entityId) { mutableStateOf<DocumentSyncBaseline?>(null) }
   var activeSyncHeadsSinkState by remember(entityId) { mutableStateOf<SyncHeadsSink?>(null) }
+  var loaderFailedCode by remember(entityId) { mutableStateOf<String?>(null) }
+  var loaderRetryGeneration by remember(entityId) { mutableStateOf(0) }
 
-  LaunchedEffect(documentId) {
+  LaunchedEffect(documentId, loaderRetryGeneration) {
     val currentDocumentId = documentId ?: return@LaunchedEffect
+    loaderFailedCode = null
     val channel = SyncWs.channel(currentDocumentId)
     val loader = DocumentGraphLoader(beginIngest = { PlatformModule.editorHost.beginGraphIngest() })
     val pendingChangesets = mutableListOf<AttachEvent.ChangesetsEvent>()
@@ -528,13 +535,27 @@ fun EditorScreen(entityId: String) {
             editorGraphHandleState = outcome.handle
             syncBaselineState = outcome.baseline
           }
-          is DocumentGraphLoaderEvent.Failed ->
-            runtime.reportError(SyncWsException(outcome.code, permanent = true))
+          is DocumentGraphLoaderEvent.Failed -> {
+            if (editorGraphHandleState != null) {
+              runtime.reportError(SyncWsException(outcome.code, permanent = true))
+            } else {
+              loaderFailedCode = outcome.code
+            }
+          }
           null -> {}
         }
       }
     } finally {
       loader.cancel()
+    }
+  }
+
+  LaunchedEffect(loaderFailedCode) {
+    if (loaderFailedCode == null) return@LaunchedEffect
+    dialog.error(nav) {
+      documentId?.let { SyncWs.retryDocument(it) }
+      loaderFailedCode = null
+      loaderRetryGeneration += 1
     }
   }
 
@@ -1202,6 +1223,10 @@ fun EditorScreen(entityId: String) {
                 }
               },
             )
+          } else {
+            Skeleton(enabled = true, modifier = Modifier.fillMaxSize()) {
+              EditorBodyLoadingSkeleton(modifier = Modifier.fillMaxSize())
+            }
           }
         },
         toolbar = {
@@ -1306,6 +1331,22 @@ fun EditorScreen(entityId: String) {
             )
           },
       )
+    }
+  }
+}
+
+@Composable
+private fun EditorBodyLoadingSkeleton(modifier: Modifier = Modifier) {
+  Box(modifier = modifier, contentAlignment = Alignment.TopCenter) {
+    Column(
+      modifier =
+        Modifier.fillMaxWidth()
+          .widthIn(max = ResponsiveContainerDefaults.MaxWidth)
+          .padding(horizontal = 20.dp, vertical = 32.dp),
+      verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+      Skeleton.list(6) { text(16..34) }
+        .forEach { line -> Text(text = line, style = AppTheme.typography.body) }
     }
   }
 }

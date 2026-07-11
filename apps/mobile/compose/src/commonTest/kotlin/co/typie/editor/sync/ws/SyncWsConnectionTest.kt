@@ -225,6 +225,124 @@ class SyncWsConnectionTest {
   }
 
   @Test
+  fun protocolErrorCloseEntersTerminalImmediately() = runTest {
+    val (connection, sockets) = harness(reconnectBaseMs = 1_000)
+    val received = mutableListOf<WsServerMessage>()
+    connection.registerChannel("D1") { message -> received.add(message) }
+    val pushResult = async { runCatching { connection.push("D1", byteArrayOf(1)) } }
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+
+    socket.serverClose(4003, "bad frame")
+    runCurrent()
+
+    val error = assertIs<SyncWsException>(pushResult.await().exceptionOrNull())
+    assertTrue(error.permanent)
+
+    val err = assertIs<WsServerMessage.WsError>(received.single())
+    assertTrue(err.permanent)
+    assertEquals("D1", err.documentId)
+
+    advanceTimeBy(60_000)
+    runCurrent()
+    assertEquals(1, sockets.size)
+
+    val rejected =
+      assertIs<SyncWsException>(
+        runCatching { connection.push("D1", byteArrayOf(2)) }.exceptionOrNull()
+      )
+    assertTrue(rejected.permanent)
+
+    connection.dispose()
+  }
+
+  @Test
+  fun singleAuthFailedCloseIsTransientAndReconnects() = runTest {
+    val (connection, sockets) = harness(reconnectBaseMs = 1_000)
+    val received = mutableListOf<WsServerMessage>()
+    connection.registerChannel("D1") { message -> received.add(message) }
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+
+    socket0.serverClose(4001, "auth failed")
+    runCurrent()
+
+    assertTrue(received.isEmpty())
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun threeConsecutiveAuthFailedClosesEnterTerminal() = runTest {
+    val (connection, sockets) = harness(reconnectBaseMs = 1_000)
+    val received = mutableListOf<WsServerMessage>()
+    connection.registerChannel("D1") { message -> received.add(message) }
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    assertEquals(1, sockets.size)
+
+    sockets[0].serverClose(4001)
+    runCurrent()
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, sockets.size)
+
+    sockets[1].serverClose(4001)
+    runCurrent()
+    advanceTimeBy(2_000)
+    runCurrent()
+    assertEquals(3, sockets.size)
+
+    sockets[2].serverClose(4001)
+    runCurrent()
+
+    val err = assertIs<WsServerMessage.WsError>(received.single())
+    assertTrue(err.permanent)
+
+    advanceTimeBy(60_000)
+    runCurrent()
+    assertEquals(3, sockets.size)
+
+    connection.dispose()
+  }
+
+  @Test
+  fun explicitTerminalResetResumesConnectionAttempts() = runTest {
+    val (connection, sockets) = harness()
+    connection.registerChannel("D1") {}
+    val pushResult = async { runCatching { connection.push("D1", byteArrayOf(1)) } }
+    runCurrent()
+    handshake(sockets[0])
+
+    sockets[0].serverClose(4003)
+    runCurrent()
+    assertTrue(assertIs<SyncWsException>(pushResult.await().exceptionOrNull()).permanent)
+
+    advanceTimeBy(60_000)
+    runCurrent()
+    assertEquals(1, sockets.size)
+
+    connection.resetTerminal()
+    val pushDeferred = async { connection.push("D1", byteArrayOf(2)) }
+    runCurrent()
+    assertEquals(2, sockets.size)
+    val socket1 = sockets[1]
+    handshake(socket1)
+    val push = assertIs<WsClientMessage.Push>(socket1.lastOf("push"))
+    socket1.serverSend(
+      WsServerMessage.PushAck(id = push.id, heads = ByteArray(0), durableHeads = ByteArray(0))
+    )
+    pushDeferred.await()
+    connection.dispose()
+  }
+
+  @Test
   fun detachThenAttachArriveInWireOrder() = runTest {
     val (connection, sockets) = harness()
     connection.registerChannel("D1") {}

@@ -89,26 +89,26 @@ internal fun serverMessageTypeOf(message: WsServerMessage): String =
 
 internal class FakeSyncWsSocket : SyncWsSocket {
   val sent = mutableListOf<WsClientMessage>()
-  private val closedDeferred = CompletableDeferred<Int>()
+  private val closedDeferred = CompletableDeferred<SyncWsSocketClosed>()
   private val incomingFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
 
   override val incoming: Flow<ByteArray> = incomingFlow
-  override val closed: Deferred<Int> = closedDeferred
+  override val closed: Deferred<SyncWsSocketClosed> = closedDeferred
 
   override suspend fun send(bytes: ByteArray) {
     decodeClientMessageForFake(bytes)?.let { sent.add(it) }
   }
 
   override fun close() {
-    closedDeferred.complete(1000)
+    closedDeferred.complete(SyncWsSocketClosed(code = 1000, reason = ""))
   }
 
   fun serverSend(message: WsServerMessage) {
     incomingFlow.tryEmit(encodeServerMessageForFake(message))
   }
 
-  fun serverClose(code: Int) {
-    closedDeferred.complete(code)
+  fun serverClose(code: Int, reason: String = "") {
+    closedDeferred.complete(SyncWsSocketClosed(code = code, reason = reason))
   }
 
   fun lastOf(t: String): WsClientMessage? = sent.lastOrNull { clientMessageTypeOf(it) == t }

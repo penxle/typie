@@ -25,11 +25,11 @@ private constructor(
   private val session: DefaultClientWebSocketSession,
   private val scope: CoroutineScope,
 ) : SyncWsSocket {
-  private val closedDeferred = CompletableDeferred<Int>()
+  private val closedDeferred = CompletableDeferred<SyncWsSocketClosed>()
   private val incomingFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 256)
 
   override val incoming: Flow<ByteArray> = incomingFlow
-  override val closed: Deferred<Int> = closedDeferred
+  override val closed: Deferred<SyncWsSocketClosed> = closedDeferred
 
   init {
     scope.launch {
@@ -41,7 +41,9 @@ private constructor(
         throw e
       } catch (_: Throwable) {}
       val reason = session.closeReason.await()
-      closedDeferred.complete(reason?.code?.toInt() ?: 1000)
+      closedDeferred.complete(
+        SyncWsSocketClosed(code = reason?.code?.toInt() ?: 1000, reason = reason?.message ?: "")
+      )
     }
   }
 
@@ -84,4 +86,9 @@ object SyncWs {
         }
       created
     }
+
+  fun retryDocument(documentId: String) {
+    channels.remove(documentId)
+    connection.resetTerminal()
+  }
 }
