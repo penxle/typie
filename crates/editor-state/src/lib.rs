@@ -50,7 +50,9 @@ pub use cell_selection::{
     table_cell_ids,
 };
 pub use composition::*;
-pub use continuation::{apply_pending, continuation_at, continuation_from_neighbors};
+pub use continuation::{
+    apply_pending, caret_provided_and_override, continuation_at, continuation_from_neighbors,
+};
 pub use error::*;
 pub use flat::{
     FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPositionFlatExt, flat_chars, flat_segments,

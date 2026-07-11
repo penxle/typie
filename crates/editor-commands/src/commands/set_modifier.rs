@@ -1,6 +1,6 @@
 use editor_crdt::Dot;
-use editor_model::{DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_model::Modifier;
+use editor_state::{PendingModifier, PendingModifiers, caret_provided_and_override};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
@@ -35,35 +35,6 @@ pub fn set_modifier(tr: &mut Transaction, modifier: Modifier) -> CommandResult {
     }
 }
 
-/// The value at a collapsed caret supplied by the leaf's applied style or by
-/// ancestor inheritance, ignoring any explicit (non-style) leaf override; and
-/// whether such an explicit override is present.
-fn provided_and_override(
-    view: &DocView,
-    block: Dot,
-    offset: usize,
-    ty: ModifierType,
-) -> (Option<Modifier>, bool) {
-    let Some(node) = view.node(block) else {
-        return (None, false);
-    };
-    let block_eff = node.effective().get(&ty).cloned();
-    let leaf_idx = offset.saturating_sub(1);
-    let st = node.leaf_state_at(leaf_idx);
-    let own = st.and_then(|s| s.own.get(&ty).map(|o| o.value.clone()));
-    let has_explicit_override = own.is_some();
-    let provided = match &own {
-        // An explicit override shadows the inherited value; report the inherited
-        // value so a matching Set drops the override instead.
-        Some(_) => block_eff,
-        // No own modifier: the leaf inherits the value. Text-target modifiers like
-        // FontSize don't surface on the block's own effective map, so read the
-        // leaf's effective value.
-        None => st.and_then(|s| s.eff.get(&ty).cloned()).or(block_eff),
-    };
-    (provided, has_explicit_override)
-}
-
 fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> CommandResult {
     let modifier_type = modifier.as_type();
     if !modifier_type.is_carry_kind() {
@@ -78,7 +49,7 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
         let view = tr.view();
         view.node(pos.node)
             .ok_or(CommandError::NodeNotFound(pos.node))?;
-        provided_and_override(&view, pos.node, pos.offset, modifier_type)
+        caret_provided_and_override(&tr.state().projected, pos.node, pos.offset, modifier_type)
     };
 
     let mut pending: PendingModifiers = tr
@@ -158,6 +129,7 @@ mod tests {
 
     use super::*;
     use crate::test_utils::*;
+    use editor_model::ModifierType;
 
     #[test]
     fn collapsed_set_font_size() {
@@ -206,6 +178,64 @@ mod tests {
                 }
             }
             selection: (p1, 3)
+            pending_modifiers: [!font_size]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_empty_paragraph_carry_set_to_inherited_unsets() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph carry([font_size(1600)]) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 1200 }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph carry([font_size(1600)]) {}
+                }
+            }
+            selection: (p1, 0)
+            pending_modifiers: [!font_size]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_after_trailing_page_break_reads_left_charlike_override() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("가") [font_size(1600)]
+                        page_break
+                    }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 1200 }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("가") [font_size(1600)]
+                        page_break
+                    }
+                }
+            }
+            selection: (p1, 2)
             pending_modifiers: [!font_size]
         };
         assert_state_eq!(&actual, &expected);

@@ -87,6 +87,30 @@ pub fn continuation_at(
     }
 }
 
+/// The value a collapsed caret at `(block, offset)` surfaces for `ty` once its
+/// explicit override is ignored, and whether such an override is present. Reads
+/// the same source the caret paint does: the nearest charlike neighbor (left,
+/// then right), falling back to the block's carry.
+pub fn caret_provided_and_override(
+    state: &ProjectedState,
+    block: Dot,
+    offset: usize,
+    ty: ModifierType,
+) -> (Option<Modifier>, bool) {
+    let view = state.view();
+    let Some(host) = view.node(block) else {
+        return (None, false);
+    };
+    let block_eff = host.effective().get(&ty).cloned();
+    match nearest_charlike_left(&host, offset).or_else(|| first_charlike_right(&host, offset)) {
+        Some(st) => match st.own.get(&ty) {
+            Some(_) => (block_eff, true),
+            None => (st.eff.get(&ty).cloned().or(block_eff), false),
+        },
+        None => (block_eff, state.carry_modifiers(block).contains_key(&ty)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

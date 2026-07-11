@@ -1,8 +1,9 @@
 use editor_common::Tri;
-use editor_crdt::Dot;
-use editor_model::{DEFAULT_FONT_WEIGHT, DocView, Modifier, ModifierType};
+use editor_model::{DEFAULT_FONT_WEIGHT, Modifier, ModifierType};
 use editor_resource::Resource;
-use editor_state::{PendingModifier, PendingModifiers, resolve_modifier_state};
+use editor_state::{
+    PendingModifier, PendingModifiers, caret_provided_and_override, resolve_modifier_state,
+};
 use editor_transaction::Transaction;
 
 use crate::helpers::{font_weight, set_font_family_range, weight_and_bold_after_family_change};
@@ -28,27 +29,6 @@ pub fn set_font_family(tr: &mut Transaction, value: String, resource: &Resource)
     }
 }
 
-fn provided_and_override(
-    view: &DocView,
-    block: Dot,
-    offset: usize,
-    ty: ModifierType,
-) -> (Option<Modifier>, bool) {
-    let Some(node) = view.node(block) else {
-        return (None, false);
-    };
-    let block_eff = node.effective().get(&ty).cloned();
-    let leaf_idx = offset.saturating_sub(1);
-    let st = node.leaf_state_at(leaf_idx);
-    let own = st.and_then(|s| s.own.get(&ty).map(|o| o.value.clone()));
-    let has_explicit_override = own.is_some();
-    let provided = match &own {
-        Some(_) => block_eff,
-        None => st.and_then(|s| s.eff.get(&ty).cloned()).or(block_eff),
-    };
-    (provided, has_explicit_override)
-}
-
 fn set_collapsed(
     tr: &mut Transaction,
     family: Modifier,
@@ -71,8 +51,12 @@ fn set_collapsed(
             .node(pos.node)
             .map(|node| font_weight(node.effective()))
             .unwrap_or(DEFAULT_FONT_WEIGHT);
-        let (provided, explicit) =
-            provided_and_override(&view, pos.node, pos.offset, ModifierType::FontFamily);
+        let (provided, explicit) = caret_provided_and_override(
+            &tr.state().projected,
+            pos.node,
+            pos.offset,
+            ModifierType::FontFamily,
+        );
         (
             provided,
             explicit,
@@ -262,6 +246,110 @@ mod tests {
                 modifier: Modifier::Bold
             }
         )));
+    }
+
+    #[test]
+    fn empty_paragraph_carry_set_to_default_family_applies() {
+        let resource = make_resource([("Pretendard", vec![400, 700]), ("RIDIBatang", vec![400])]);
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    paragraph carry([font_family("RIDIBatang".to_string())]) {
+                        text("리디바탕") [font_family("RIDIBatang".to_string())]
+                    }
+                    p1: paragraph carry([font_family("RIDIBatang".to_string())]) {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+
+        assert!(set_font_family(&mut tr, "Pretendard".to_string(), &resource).unwrap());
+
+        let selection = tr.selection().unwrap();
+        let ms = resolve_modifier_state(&tr.state().projected, &selection, tr.pending_modifiers())
+            .unwrap();
+        assert_eq!(
+            ms.font_family,
+            Tri::Uniform {
+                value: editor_model::FontFamilyValue {
+                    value: "Pretendard".to_string()
+                }
+            },
+            "setting the default family over an empty-paragraph carry must surface at the caret"
+        );
+
+        assert!(crate::commands::insert_text(&mut tr, "가").unwrap());
+        let head = tr.selection().unwrap().head;
+        let typed_own = tr.view().node(head.node).unwrap().leaf_own_modifiers_at(0);
+        assert!(
+            !typed_own
+                .iter()
+                .any(|m| matches!(m, Modifier::FontFamily { .. })),
+            "text typed after the change must not keep the carried family: {typed_own:?}"
+        );
+    }
+
+    #[test]
+    fn page_break_only_paragraph_carry_set_to_default_family_unsets() {
+        let resource = make_resource([("Pretendard", vec![400, 700]), ("RIDIBatang", vec![400])]);
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph carry([font_family("RIDIBatang".to_string())]) { page_break }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_font_family(
+            &mut tr,
+            "Pretendard".to_string(),
+            &resource
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph carry([font_family("RIDIBatang".to_string())]) { page_break }
+                }
+            }
+            selection: (p1, 0)
+            pending_modifiers: [!font_family]
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn caret_after_trailing_page_break_set_to_default_family_unsets() {
+        let resource = make_resource([("Pretendard", vec![400, 700]), ("RIDIBatang", vec![400])]);
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("리") [font_family("RIDIBatang".to_string())]
+                        page_break
+                    }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_font_family(
+            &mut tr,
+            "Pretendard".to_string(),
+            &resource
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("리") [font_family("RIDIBatang".to_string())]
+                        page_break
+                    }
+                }
+            }
+            selection: (p1, 2)
+            pending_modifiers: [!font_family]
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
