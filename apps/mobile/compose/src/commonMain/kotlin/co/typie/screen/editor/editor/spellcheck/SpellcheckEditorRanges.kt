@@ -16,19 +16,17 @@ internal const val ACTIVE_SPELLCHECK_RANGE_GROUP = "spellcheck-active"
 
 internal data class SpellcheckRangeRegistration(val id: String, val selection: Selection)
 
-internal fun Editor.installSpellcheckDecorations() {
-  sync { installSpellcheckDecorations(this) }
+internal suspend fun Editor.installSpellcheckDecorations() {
+  await { installSpellcheckDecorations(this) }
 }
 
 internal fun Editor.clearSpellcheckRanges() {
-  sync {
-    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SPELLCHECK_RANGE_GROUP)))
-    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SPELLCHECK_RANGE_GROUP)))
-  }
+  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SPELLCHECK_RANGE_GROUP)))
+  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SPELLCHECK_RANGE_GROUP)))
 }
 
-internal fun Editor.setSpellcheckRanges(items: List<SpellcheckRangeRegistration>) {
-  sync {
+internal suspend fun Editor.setSpellcheckRanges(items: List<SpellcheckRangeRegistration>) {
+  await {
     enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SPELLCHECK_RANGE_GROUP)))
     enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SPELLCHECK_RANGE_GROUP)))
     items.forEach { item ->
@@ -45,9 +43,12 @@ internal fun Editor.setSpellcheckRanges(items: List<SpellcheckRangeRegistration>
   }
 }
 
-internal fun Editor.setActiveSpellcheckRange(activeId: String?, currentRanges: List<TrackedRange>) {
+internal suspend fun Editor.setActiveSpellcheckRange(
+  activeId: String?,
+  currentRanges: List<TrackedRange>,
+) {
   val spellcheckRanges = currentRanges.spellcheckRanges()
-  sync {
+  await {
     spellcheckRanges
       .filter { it.group == ACTIVE_SPELLCHECK_RANGE_GROUP && it.id != activeId }
       .forEach { range ->
@@ -71,20 +72,20 @@ internal fun Editor.setActiveSpellcheckRange(activeId: String?, currentRanges: L
   }
 }
 
-internal fun Editor.removeSpellcheckRange(id: String) {
-  sync { enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) }
+internal suspend fun Editor.removeSpellcheckRange(id: String) {
+  await { enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) }
 }
 
-internal fun Editor.removeSpellcheckRanges(ids: Iterable<String>) {
-  sync { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
+internal suspend fun Editor.removeSpellcheckRanges(ids: Iterable<String>) {
+  await { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
 }
 
-internal fun Editor.replaceSpellcheckRangeText(
+internal suspend fun Editor.replaceSpellcheckRangeText(
   id: String,
   expectedText: String,
   replacement: String,
 ) {
-  sync {
+  await {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.ReplaceText(id = id, expectedText = expectedText, replacement = replacement)

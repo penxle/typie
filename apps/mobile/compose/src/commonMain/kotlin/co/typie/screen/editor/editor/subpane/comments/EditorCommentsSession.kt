@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
@@ -19,6 +20,7 @@ import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
+import kotlinx.coroutines.launch
 
 internal class EditorCommentsSession(
   val model: CommentsViewModel?,
@@ -29,7 +31,7 @@ internal class EditorCommentsSession(
   val threadLocationById: Map<String, CommentThreadLocation>,
   val composeLocation: CommentThreadLocation?,
   val virtualThreadGuardVisible: Boolean,
-  val freezeCurrentSelection: () -> StableSelection?,
+  val freezeCurrentSelection: suspend () -> StableSelection?,
   val onInputFocusChanged: (Boolean) -> Unit,
   val requestFromTextToolbar: () -> Unit,
   val openFromToolPanel: () -> Unit,
@@ -92,6 +94,7 @@ internal fun rememberEditorCommentsSession(
   openSheet: () -> Unit,
 ): EditorCommentsSession {
   val requestQueue = remember(entityId) { CommentSheetRequestQueue() }
+  val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   var inputFocused by remember(entityId) { mutableStateOf(false) }
   val model = documentId?.let { id ->
@@ -243,12 +246,14 @@ internal fun rememberEditorCommentsSession(
       val currentSelection = editorState.selection
       if (currentSelection != null && activeEditor != null) {
         if (currentSelection.anchor != currentSelection.head) {
-          val frozenSelection = activeEditor.freezeSelection(currentSelection)
-          if (frozenSelection == null) {
-            toast.show(ToastType.Error, "선택 영역에 코멘트를 달 수 없어요.")
-          } else {
-            openSheet()
-            requestQueue.requestCreate(frozenSelection)
+          scope.launch {
+            val frozenSelection = activeEditor.freezeSelection(currentSelection)
+            if (frozenSelection == null) {
+              toast.show(ToastType.Error, "선택 영역에 코멘트를 달 수 없어요.")
+            } else {
+              openSheet()
+              requestQueue.requestCreate(frozenSelection)
+            }
           }
         } else {
           openSheet()

@@ -16,11 +16,11 @@ internal const val ACTIVE_COMMENT_RANGE_GROUP = "comment-active"
 internal const val COMMENT_COMPOSE_RANGE_GROUP = "__comment_compose__"
 internal const val COMMENT_COMPOSE_RANGE_ID = "__comment_compose__"
 
-internal fun Editor.installCommentDecorations() {
-  sync { installCommentDecorations(this) }
+internal suspend fun Editor.installCommentDecorations() {
+  await { installCommentDecorations(this) }
 }
 
-internal fun Editor.syncCommentRanges(
+internal suspend fun Editor.syncCommentRanges(
   selectionsById: Map<String, StableSelection>,
   activeId: String?,
   currentRanges: List<TrackedRange>,
@@ -30,7 +30,7 @@ internal fun Editor.syncCommentRanges(
   val desiredIds = selectionsById.keys
   val activeCommentId = activeId?.takeIf { it in desiredIds }
 
-  sync {
+  await {
     (registeredIds - desiredIds).forEach { id ->
       enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
     }
@@ -73,8 +73,8 @@ internal fun Editor.syncCommentRanges(
   }
 }
 
-internal fun Editor.setCommentComposeRange(selection: StableSelection?) {
-  sync {
+internal suspend fun Editor.setCommentComposeRange(selection: StableSelection?) {
+  await {
     enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = COMMENT_COMPOSE_RANGE_ID)))
     if (selection != null) {
       enqueue(

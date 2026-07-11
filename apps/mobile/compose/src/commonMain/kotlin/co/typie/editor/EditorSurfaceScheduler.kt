@@ -16,8 +16,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 private typealias SurfacePresentedCallback = (version: Long) -> Unit
 
@@ -93,7 +91,6 @@ internal class EditorSurfaceScheduler(
   private val inner: FfiEditor,
   private val scope: CoroutineScope,
   private val dispatcher: CoroutineDispatcher,
-  private val mutex: Mutex,
   private val versionCounter: AtomicLong,
   private val disposed: AtomicBoolean,
   private val markPageAttached: (Int) -> Unit,
@@ -242,43 +239,40 @@ internal class EditorSurfaceScheduler(
     command: SurfaceRenderOnlyCommand
   ): PersistentList<SurfaceCommand> {
     var replaced = false
-    val next =
-      map { queued ->
-          when {
-            queued is SurfaceResizeAndRenderCommand && queued.sessionId == command.sessionId -> {
-              replaced = true
-              queued.copy(onPresented = command.onPresented)
-            }
-            queued is SurfaceRenderOnlyCommand && queued.sessionId == command.sessionId -> {
-              replaced = true
-              command
-            }
-            else -> queued
-          }
+    val next = map { queued ->
+      when {
+        queued is SurfaceResizeAndRenderCommand && queued.sessionId == command.sessionId -> {
+          replaced = true
+          queued.copy(onPresented = command.onPresented)
         }
-        .toPersistentList()
+        queued is SurfaceRenderOnlyCommand && queued.sessionId == command.sessionId -> {
+          replaced = true
+          command
+        }
+        else -> queued
+      }
+    }
+      .toPersistentList()
     return if (replaced) next else next.adding(command)
   }
 
   private fun PersistentList<SurfaceCommand>.coalesceResize(
     command: SurfaceResizeAndRenderCommand
-  ): PersistentList<SurfaceCommand> =
-    filterNot {
-        it.sessionId == command.sessionId &&
-          (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
-      }
-      .toPersistentList()
-      .adding(command)
+  ): PersistentList<SurfaceCommand> = filterNot {
+    it.sessionId == command.sessionId &&
+      (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
+  }
+    .toPersistentList()
+    .adding(command)
 
   private fun PersistentList<SurfaceCommand>.coalesceDetach(
     command: SurfaceDetachCommand
-  ): PersistentList<SurfaceCommand> =
-    filterNot {
-        it.sessionId == command.sessionId &&
-          (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
-      }
-      .toPersistentList()
-      .adding(command)
+  ): PersistentList<SurfaceCommand> = filterNot {
+    it.sessionId == command.sessionId &&
+      (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
+  }
+    .toPersistentList()
+    .adding(command)
 
   private fun schedule() {
     if (!scheduled.compareAndSet(expectedValue = false, newValue = true)) return
@@ -335,18 +329,16 @@ internal class EditorSurfaceScheduler(
     }
 
     var attached = false
-    mutex.withLock {
-      if (!disposed.load() && isActive(command.page, command.sessionId)) {
-        inner.attachSurface(
-          command.page,
-          command.handle,
-          command.width,
-          command.height,
-          command.scaleFactor,
-        )
-        attachedSessions.updatePersistent { it.putting(command.page, command.sessionId) }
-        attached = true
-      }
+    if (!disposed.load() && isActive(command.page, command.sessionId)) {
+      inner.attachSurface(
+        command.page,
+        command.handle,
+        command.width,
+        command.height,
+        command.scaleFactor,
+      )
+      attachedSessions.updatePersistent { it.putting(command.page, command.sessionId) }
+      attached = true
     }
 
     removePendingAttach(key)
@@ -362,17 +354,14 @@ internal class EditorSurfaceScheduler(
   private suspend fun flushRender(command: SurfaceRenderCommand) {
     if (disposed.load() || !isActive(command.page, command.sessionId)) return
 
-    val (presented, version) =
-      mutex.withLock {
-        if (disposed.load() || !isActive(command.page, command.sessionId)) {
-          return
-        }
-
-        if (command is SurfaceResizeAndRenderCommand) {
-          inner.resizeSurface(command.page, command.width, command.height, command.scaleFactor)
-        }
-        inner.renderSurface(command.page) to versionCounter.load()
-      }
+    // Reading the version before rendering under-reports what the frame may
+    // contain, which only delays a settle until the follow-up render command;
+    // the skip path below then settles it with a fresh read.
+    val version = versionCounter.load()
+    if (command is SurfaceResizeAndRenderCommand) {
+      inner.resizeSurface(command.page, command.width, command.height, command.scaleFactor)
+    }
+    val presented = inner.renderSurface(command.page)
 
     if (!isActive(command.page, command.sessionId)) return
     if (presented) {
@@ -400,12 +389,8 @@ internal class EditorSurfaceScheduler(
 
   private suspend fun detachAttachedSession(page: Int, sessionId: Long) {
     if (attachedSessions.load()[page] != sessionId) return
-    mutex.withLock {
-      if (attachedSessions.load()[page] == sessionId) {
-        inner.detachSurface(page)
-        removeAttachedSession(page, sessionId)
-      }
-    }
+    inner.detachSurface(page)
+    removeAttachedSession(page, sessionId)
   }
 
   private fun removeAttachedSession(page: Int, sessionId: Long) {

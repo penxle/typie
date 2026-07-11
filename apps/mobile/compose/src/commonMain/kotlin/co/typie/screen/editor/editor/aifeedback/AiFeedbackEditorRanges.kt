@@ -14,19 +14,17 @@ internal const val ACTIVE_AI_FEEDBACK_RANGE_GROUP = "ai-feedback-active"
 
 internal data class AiFeedbackRangeRegistration(val id: String, val selection: Selection)
 
-internal fun Editor.installAiFeedbackDecorations() {
-  sync { installAiFeedbackDecorations(this) }
+internal suspend fun Editor.installAiFeedbackDecorations() {
+  await { installAiFeedbackDecorations(this) }
 }
 
 internal fun Editor.clearAiFeedbackRanges() {
-  sync {
-    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = AI_FEEDBACK_RANGE_GROUP)))
-    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_AI_FEEDBACK_RANGE_GROUP)))
-  }
+  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = AI_FEEDBACK_RANGE_GROUP)))
+  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_AI_FEEDBACK_RANGE_GROUP)))
 }
 
-internal fun Editor.addAiFeedbackRange(item: AiFeedbackRangeRegistration) {
-  sync {
+internal suspend fun Editor.addAiFeedbackRange(item: AiFeedbackRangeRegistration) {
+  await {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.Add(
@@ -39,9 +37,12 @@ internal fun Editor.addAiFeedbackRange(item: AiFeedbackRangeRegistration) {
   }
 }
 
-internal fun Editor.setActiveAiFeedbackRange(activeId: String?, currentRanges: List<TrackedRange>) {
+internal suspend fun Editor.setActiveAiFeedbackRange(
+  activeId: String?,
+  currentRanges: List<TrackedRange>,
+) {
   val aiFeedbackRanges = currentRanges.aiFeedbackRanges()
-  sync {
+  await {
     aiFeedbackRanges
       .filter { it.group == ACTIVE_AI_FEEDBACK_RANGE_GROUP && it.id != activeId }
       .forEach { range ->
@@ -65,12 +66,12 @@ internal fun Editor.setActiveAiFeedbackRange(activeId: String?, currentRanges: L
   }
 }
 
-internal fun Editor.removeAiFeedbackRange(id: String) {
-  sync { enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) }
+internal suspend fun Editor.removeAiFeedbackRange(id: String) {
+  await { enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) }
 }
 
-internal fun Editor.removeAiFeedbackRanges(ids: Iterable<String>) {
-  sync { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
+internal suspend fun Editor.removeAiFeedbackRanges(ids: Iterable<String>) {
+  await { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
 }
 
 internal val TrackedRangeEndpoints.isAiFeedbackRange: Boolean

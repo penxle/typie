@@ -21,7 +21,6 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
-import co.typie.editor.scroll.syncWithBringIntoView
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_PersistBlobAsImage_Mutation
 import co.typie.graphql.executeMutation
@@ -146,7 +145,7 @@ private fun EditorImageToolbar(
                   commit = { uploaded ->
                     val editor = checkNotNull(runtime.editor) { "No active editor is available" }
                     val committedState =
-                      editor.syncWithBringIntoView(bringIntoViewRequests) {
+                      editor.awaitWithBringIntoView(bringIntoViewRequests) {
                         if (editor.ime?.composing != null) {
                           enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
                         }

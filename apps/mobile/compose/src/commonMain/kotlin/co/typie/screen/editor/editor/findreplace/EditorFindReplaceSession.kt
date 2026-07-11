@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
@@ -17,6 +18,9 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.storage.Preference
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Stable
 internal class EditorFindReplaceSession(
@@ -56,6 +60,7 @@ internal fun rememberEditorFindReplaceSession(
   bringIntoViewRequests: EditorBringIntoViewRequests,
 ): EditorFindReplaceSession {
   val state = remember { FindReplaceSessionController() }
+  val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   val matchWholeWord = Preference.searchMatchWholeWord
 
@@ -89,37 +94,48 @@ internal fun rememberEditorFindReplaceSession(
     matchCount = state.matches.size,
     activeMatchNumber = state.activeIndex?.let { it + 1 },
     searchInputFocusRequest = state.searchInputFocusRequest,
-    onOpen = { state.open(editor) },
-    close = { state.close(editor) },
+    onOpen = { scope.launch { state.open(editor) } },
+    close = { scope.launch { state.close(editor) } },
     updateFindText = state::updateFindText,
     updateReplaceText = state::updateReplaceText,
     updateMatchWholeWord = { enabled -> Preference.searchMatchWholeWord = enabled },
     findPrevious = {
-      state.findBy(offset = -1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
+      scope.launch {
+        state.findBy(offset = -1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
+      }
     },
     findNext = {
-      state.findBy(offset = 1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
+      scope.launch {
+        state.findBy(offset = 1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
+      }
     },
     replace = {
-      state.replaceActive(
-        editor = editor,
-        documentLocked = documentLocked,
-        onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
-        bringIntoViewRequests = bringIntoViewRequests,
-      )
+      scope.launch {
+        state.replaceActive(
+          editor = editor,
+          documentLocked = documentLocked,
+          onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
+          bringIntoViewRequests = bringIntoViewRequests,
+        )
+      }
     },
     replaceAll = {
-      state.replaceAllMatches(
-        editor = editor,
-        documentLocked = documentLocked,
-        onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
-        bringIntoViewRequests = bringIntoViewRequests,
-      )
+      scope.launch {
+        state.replaceAllMatches(
+          editor = editor,
+          documentLocked = documentLocked,
+          onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
+          bringIntoViewRequests = bringIntoViewRequests,
+        )
+      }
     },
   )
 }
 
 private class FindReplaceSessionController {
+  // Serializes suspending session operations that the old runBlocking dispatch kept
+  // strictly sequential; mutating flows would otherwise interleave at suspension points.
+  private val stateLock = Mutex()
   var active by mutableStateOf(false)
   var findText by mutableStateOf("")
   var replaceText by mutableStateOf("")
@@ -128,18 +144,22 @@ private class FindReplaceSessionController {
   var searchInputFocusRequest by mutableIntStateOf(0)
   private var lastSearchInput by mutableStateOf<FindReplaceSearchInput?>(null)
 
-  fun open(editor: Editor?) {
-    active = true
-    editor?.findReplaceInitialFindTextFromSelection()?.let { findText = it }
-    searchInputFocusRequest += 1
-    editor?.installFindReplaceDecorations()
+  suspend fun open(editor: Editor?) {
+    stateLock.withLock {
+      active = true
+      editor?.findReplaceInitialFindTextFromSelection()?.let { findText = it }
+      searchInputFocusRequest += 1
+      editor?.installFindReplaceDecorations()
+    }
   }
 
-  fun close(editor: Editor?) {
-    active = false
-    findText = ""
-    replaceText = ""
-    clearSearchState(editor)
+  suspend fun close(editor: Editor?) {
+    stateLock.withLock {
+      active = false
+      findText = ""
+      replaceText = ""
+      clearSearchState(editor)
+    }
   }
 
   fun updateFindText(value: String) {
@@ -150,7 +170,21 @@ private class FindReplaceSessionController {
     replaceText = value.toSingleLineText()
   }
 
-  fun runSearch(
+  suspend fun runSearch(
+    editor: Editor?,
+    matchWholeWord: Boolean,
+    bringIntoViewRequests: EditorBringIntoViewRequests,
+  ) {
+    stateLock.withLock {
+      runSearchLocked(
+        editor = editor,
+        matchWholeWord = matchWholeWord,
+        bringIntoViewRequests = bringIntoViewRequests,
+      )
+    }
+  }
+
+  private suspend fun runSearchLocked(
     editor: Editor?,
     matchWholeWord: Boolean,
     bringIntoViewRequests: EditorBringIntoViewRequests,
@@ -199,30 +233,36 @@ private class FindReplaceSessionController {
     }
   }
 
-  fun findBy(offset: Int, editor: Editor?, bringIntoViewRequests: EditorBringIntoViewRequests) {
-    if (matches.isEmpty()) return
-    val currentIndex = activeIndex ?: 0
-    activeIndex = (currentIndex + offset + matches.size) % matches.size
-    editor?.let {
-      updateActiveRangeDecoration(it)
-      requestActiveRangeIntoView(it, bringIntoViewRequests)
+  suspend fun findBy(
+    offset: Int,
+    editor: Editor?,
+    bringIntoViewRequests: EditorBringIntoViewRequests,
+  ) {
+    stateLock.withLock {
+      if (matches.isEmpty()) return
+      val currentIndex = activeIndex ?: 0
+      activeIndex = (currentIndex + offset + matches.size) % matches.size
+      editor?.let {
+        updateActiveRangeDecoration(it)
+        requestActiveRangeIntoView(it, bringIntoViewRequests)
+      }
     }
   }
 
-  fun replaceActive(
+  suspend fun replaceActive(
     editor: Editor?,
     documentLocked: Boolean,
     onLocked: () -> Unit,
     bringIntoViewRequests: EditorBringIntoViewRequests,
-  ) {
-    val activeEditor = editor ?: return
-    if (findText.isEmpty() || replaceText.containsLineBreak()) return
+  ) = stateLock.withLock {
+    val activeEditor = editor ?: return@withLock
+    if (findText.isEmpty() || replaceText.containsLineBreak()) return@withLock
     if (documentLocked) {
       onLocked()
-      return
+      return@withLock
     }
-    val replaceIndex = activeIndex ?: return
-    val match = matches.getOrNull(replaceIndex) ?: return
+    val replaceIndex = activeIndex ?: return@withLock
+    val match = matches.getOrNull(replaceIndex) ?: return@withLock
 
     activeEditor.replaceFindReplaceRangeText(
       id = match.id,
@@ -235,7 +275,7 @@ private class FindReplaceSessionController {
         matches.isEmpty() -> null
         else -> replaceIndex.coerceAtMost(matches.lastIndex)
       }
-    runSearch(
+    runSearchLocked(
       editor = activeEditor,
       matchWholeWord = Preference.searchMatchWholeWord,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -243,17 +283,17 @@ private class FindReplaceSessionController {
     )
   }
 
-  fun replaceAllMatches(
+  suspend fun replaceAllMatches(
     editor: Editor?,
     documentLocked: Boolean,
     onLocked: () -> Unit,
     bringIntoViewRequests: EditorBringIntoViewRequests,
-  ) {
-    val activeEditor = editor ?: return
-    if (findText.isEmpty() || replaceText.containsLineBreak() || matches.isEmpty()) return
+  ) = stateLock.withLock {
+    val activeEditor = editor ?: return@withLock
+    if (findText.isEmpty() || replaceText.containsLineBreak() || matches.isEmpty()) return@withLock
     if (documentLocked) {
       onLocked()
-      return
+      return@withLock
     }
 
     activeEditor.replaceAllFindReplaceRanges(
@@ -263,7 +303,7 @@ private class FindReplaceSessionController {
     )
     matches = emptyList()
     activeIndex = null
-    runSearch(
+    runSearchLocked(
       editor = activeEditor,
       matchWholeWord = Preference.searchMatchWholeWord,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -300,7 +340,7 @@ private class FindReplaceSessionController {
       else -> previousIndex.coerceIn(0, nextMatches.lastIndex)
     }
 
-  private fun updateActiveRangeDecoration(editor: Editor) {
+  private suspend fun updateActiveRangeDecoration(editor: Editor) {
     editor.setActiveFindReplaceRange(
       activeId = activeMatchId(),
       currentRanges = editor.state.trackedRanges,

@@ -20,8 +20,8 @@ internal fun List<TrackedRange>.searchMatchRanges(): List<TrackedRange> = filter
   it.group == SEARCH_MATCH_RANGE_GROUP || it.group == ACTIVE_SEARCH_MATCH_RANGE_GROUP
 }
 
-internal fun Editor.installFindReplaceDecorations() {
-  sync {
+internal suspend fun Editor.installFindReplaceDecorations() {
+  await {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.SetGroupDecoration(
@@ -58,16 +58,12 @@ internal fun Editor.installFindReplaceDecorations() {
 }
 
 internal fun Editor.clearFindReplaceRanges() {
-  sync {
-    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
-    enqueue(
-      Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
-    )
-  }
+  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
+  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP)))
 }
 
-internal fun Editor.setFindReplaceRanges(items: List<FindReplaceRangeRegistration>) {
-  sync {
+internal suspend fun Editor.setFindReplaceRanges(items: List<FindReplaceRangeRegistration>) {
+  await {
     enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
     enqueue(
       Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
@@ -86,12 +82,12 @@ internal fun Editor.setFindReplaceRanges(items: List<FindReplaceRangeRegistratio
   }
 }
 
-internal fun Editor.setActiveFindReplaceRange(
+internal suspend fun Editor.setActiveFindReplaceRange(
   activeId: String?,
   currentRanges: List<TrackedRange>,
 ) {
   val searchRanges = currentRanges.searchMatchRanges()
-  sync {
+  await {
     searchRanges
       .filter { it.group == ACTIVE_SEARCH_MATCH_RANGE_GROUP && it.id != activeId }
       .forEach { range ->
@@ -115,12 +111,12 @@ internal fun Editor.setActiveFindReplaceRange(
   }
 }
 
-internal fun Editor.replaceFindReplaceRangeText(
+internal suspend fun Editor.replaceFindReplaceRangeText(
   id: String,
   expectedText: String,
   replacement: String,
 ) {
-  sync {
+  await {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.ReplaceText(id = id, expectedText = expectedText, replacement = replacement)
@@ -130,12 +126,12 @@ internal fun Editor.replaceFindReplaceRangeText(
   }
 }
 
-internal fun Editor.replaceAllFindReplaceRanges(
+internal suspend fun Editor.replaceAllFindReplaceRanges(
   matches: List<FindReplaceMatch>,
   expectedText: String,
   replacement: String,
 ) {
-  sync {
+  await {
     matches.forEach { match ->
       enqueue(
         Message.TrackedRange(

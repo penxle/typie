@@ -61,6 +61,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+// Window (flat chars each side of the selection) materialized into snapshot IME
+// state; consumers resolve absolute offsets through Ime.windowStart, so a bounded
+// window only limits how much surrounding text the IME can observe.
+private const val IME_SNAPSHOT_WINDOW = 4096
+
 @OptIn(ExperimentalAtomicApi::class)
 class Editor
 internal constructor(
@@ -101,7 +106,6 @@ internal constructor(
       inner = inner,
       scope = scope,
       dispatcher = dispatcher,
-      mutex = mutex,
       versionCounter = versionCounter,
       disposed = disposed,
       markPageAttached = { page -> attachedPages.updatePersistent { it.adding(page) } },
@@ -245,17 +249,17 @@ internal constructor(
       }
     }
 
-  fun freezeSelection(selection: Selection): StableSelection? =
+  suspend fun freezeSelection(selection: Selection): StableSelection? =
     readInner(defaultValue = { null }) { it.freezeSelection(selection) }
 
-  fun findMatches(query: String, matchWholeWord: Boolean): List<Selection> =
+  suspend fun findMatches(query: String, matchWholeWord: Boolean): List<Selection> =
     readInner(defaultValue = { emptyList() }) {
       it.findMatches(query, SearchOptions(matchWholeWord = matchWholeWord))
     }
 
-  fun proseText(): String = readInner(defaultValue = { "" }) { it.proseText() }
+  suspend fun proseText(): String = readInner(defaultValue = { "" }) { it.proseText() }
 
-  fun proseToSelection(start: Int, end: Int): Selection? =
+  suspend fun proseToSelection(start: Int, end: Int): Selection? =
     readInner(defaultValue = { null }) { it.proseToSelection(start, end) }
 
   private fun scheduleTick() {
@@ -529,7 +533,7 @@ internal constructor(
       rootModifiers = inner.rootModifiers(),
       modifierState = inner.modifierState(),
       blockState = inner.blockState(),
-      ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE),
+      ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW),
       lastHistoryTag =
         if (lastHistoryTagChanged || state.version == 0L) {
           inner.lastHistoryTag()
@@ -577,9 +581,12 @@ internal constructor(
       defaultValue()
     }
 
-  private fun <T> readInner(defaultValue: () -> T, block: (co.typie.editor.ffi.Editor) -> T): T =
-    withFailureNotification(defaultValue) {
-      runBlocking {
+  private suspend fun <T> readInner(
+    defaultValue: () -> T,
+    block: (co.typie.editor.ffi.Editor) -> T,
+  ): T =
+    withSuspendFailureNotification(defaultValue) {
+      withContext(dispatcher) {
         mutex.withLock {
           if (disposed.load()) error("Editor disposed")
           block(inner)

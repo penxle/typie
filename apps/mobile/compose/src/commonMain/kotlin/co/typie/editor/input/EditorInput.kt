@@ -201,14 +201,18 @@ internal class EditorInputNode(
     }
   }
 
+  private val bindingCoalescer by lazy {
+    EditorKeyBindingCoalescer(
+      scope = coroutineScope,
+      resolveMessages = { binding, clipboard -> with(binding) { editor.action(clipboard) } },
+      dispatch = { messages, bringIntoViewTarget ->
+        dispatchBindingMessages(messages = messages, bringIntoViewTarget = bringIntoViewTarget)
+      },
+    )
+  }
+
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
-    coroutineScope.launch {
-      val messages = with(binding) { editor.action(clipboard) }
-      dispatchBindingMessages(
-        messages = messages,
-        bringIntoViewTarget = binding.bringIntoViewTarget,
-      )
-    }
+    bindingCoalescer.submit(binding, clipboard)
   }
 
   private suspend fun dispatchBindingMessages(

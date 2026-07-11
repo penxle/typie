@@ -82,25 +82,30 @@ fn assemble_send_payload(
 struct EditorInner {
     editor: editor_core::Editor,
     carrier_bytes: CarrierStash,
-    #[cfg(not(feature = "wasm-server"))]
+}
+
+// Raster/present state lives behind its own lock so a page rasterization never
+// holds the editor lock; hosts that read or tick the editor concurrently with a
+// render only contend for the brief display-list build. Lock order is render →
+// editor (render_surface nests them in that direction); never lock render while
+// holding the editor lock.
+#[cfg(not(feature = "wasm-server"))]
+struct RenderState {
     surfaces: HashMap<u32, SurfaceHandle>,
     // Last render signature presented for each page. `render_surface` skips
     // re-rasterizing a page whose signature is unchanged (the selection-drag hot
     // path, where only the page under the moving endpoint actually changes).
     // Cleared whenever the page's pixel buffer is (re)created: attach/detach/resize.
-    #[cfg(not(feature = "wasm-server"))]
     last_render_sig: HashMap<u32, u64>,
-    #[cfg(not(feature = "wasm-server"))]
     prev_dl: HashMap<u32, editor_renderer::display_list::DisplayList>,
     // Content height (device px) last painted per page. The surface backing is
     // fixed at the page's max height, so when content grows we force-damage the
     // newly revealed strip [prev, current) that no primitive diff would cover.
-    #[cfg(not(feature = "wasm-server"))]
     last_content_height: HashMap<u32, i32>,
 }
 
 #[cfg(not(feature = "wasm-server"))]
-impl EditorInner {
+impl RenderState {
     fn clear_page_present_state(&mut self, page: u32) {
         self.last_render_sig.remove(&page);
         self.prev_dl.remove(&page);
@@ -112,6 +117,8 @@ impl EditorInner {
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct Editor {
     inner: Mutex<EditorInner>,
+    #[cfg(not(feature = "wasm-server"))]
+    render: Mutex<RenderState>,
 }
 
 #[ffi]
@@ -852,25 +859,25 @@ impl Editor {
         scale_factor: f64,
     ) -> EditorResult<()> {
         let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
-        self.with_inner(|inner| {
-            inner.surfaces.insert(page, surface);
+        self.with_render(|render| {
+            render.surfaces.insert(page, surface);
             // Fresh buffer: drop any stale signature/display-list so the first paint always renders.
-            inner.clear_page_present_state(page);
+            render.clear_page_present_state(page);
             Ok(())
         })
     }
 
     pub fn detach_surface(&self, page: u32) -> EditorResult<()> {
-        self.with_inner(|inner| {
-            inner.surfaces.remove(&page);
-            inner.clear_page_present_state(page);
+        self.with_render(|render| {
+            render.surfaces.remove(&page);
+            render.clear_page_present_state(page);
             Ok(())
         })
     }
 
     pub fn invalidate_surface(&self, page: u32) -> EditorResult<()> {
-        self.with_inner(|inner| {
-            inner.clear_page_present_state(page);
+        self.with_render(|render| {
+            render.clear_page_present_state(page);
             Ok(())
         })
     }
@@ -882,8 +889,8 @@ impl Editor {
         height: f64,
         scale_factor: f64,
     ) -> EditorResult<()> {
-        self.with_inner(|inner| {
-            let changed = inner
+        self.with_render(|render| {
+            let changed = render
                 .surfaces
                 .get_mut(&page)
                 .map(|surface| surface.resize(width, height, scale_factor))
@@ -893,7 +900,7 @@ impl Editor {
             // pixels. A no-op resize (same backing size) keeps the retained state so
             // a content-height change never forces a full repaint.
             if changed {
-                inner.clear_page_present_state(page);
+                render.clear_page_present_state(page);
             }
             Ok(())
         })
@@ -904,29 +911,35 @@ impl Editor {
     /// that wait for a present (the mobile settle handshake) must treat the page as
     /// settled instead of waiting.
     pub fn render_surface(&self, page: u32) -> EditorResult<bool> {
-        self.with_inner(|inner| {
-            // Skip the rebuild + incremental raster + present when nothing this page
-            // draws has changed since the last presented frame. During a selection
-            // drag only the page under the moving endpoint changes; every other
-            // visible page keeps a stable signature and is skipped here.
-            let sig = inner.editor.page_render_signature(page);
-            if inner.last_render_sig.get(&page) == Some(&sig) {
-                return Ok(false);
-            }
-            let scale_factor = match inner.surfaces.get(&page) {
+        self.with_render(|render| {
+            let scale_factor = match render.surfaces.get(&page) {
                 Some(surface) => surface.scale_factor() as f32,
                 None => return Ok(false),
+            };
+            // The editor lock is held only for the signature check and the
+            // display-list build; the raster + present below run with the editor
+            // free for concurrent ticks and reads.
+            let (sig, built) = {
+                let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
+                // Skip the rebuild + incremental raster + present when nothing this page
+                // draws has changed since the last presented frame. During a selection
+                // drag only the page under the moving endpoint changes; every other
+                // visible page keeps a stable signature and is skipped here.
+                let sig = inner.editor.page_render_signature(page);
+                if render.last_render_sig.get(&page) == Some(&sig) {
+                    return Ok(false);
+                }
+                (sig, inner.editor.build_display_list(page, scale_factor))
             };
             // The page may have been removed by an edit this frame (the host's
             // surfaces outlive a shrinking document until it re-renders), in
             // which case no frame will arrive from this call.
-            let Some((dl, page_bounds)) = inner.editor.build_display_list(page, scale_factor)
-            else {
+            let Some((dl, page_bounds)) = built else {
                 return Ok(false);
             };
-            let prev_content_h = inner.last_content_height.get(&page).copied();
-            let prev = inner.prev_dl.get(&page);
-            let surface = inner.surfaces.get_mut(&page).unwrap();
+            let prev_content_h = render.last_content_height.get(&page).copied();
+            let prev = render.prev_dl.get(&page);
+            let surface = render.surfaces.get_mut(&page).unwrap();
             let mut damage = editor_renderer::diff::render_incremental(
                 prev,
                 &dl,
@@ -955,12 +968,12 @@ impl Editor {
             }
             let committed = surface.present_damage(&damage);
             if committed {
-                inner.prev_dl.insert(page, dl);
-                inner.last_render_sig.insert(page, sig);
-                inner.last_content_height.insert(page, page_bounds.y1);
+                render.prev_dl.insert(page, dl);
+                render.last_render_sig.insert(page, sig);
+                render.last_content_height.insert(page, page_bounds.y1);
                 Ok(true)
             } else {
-                inner.clear_page_present_state(page);
+                render.clear_page_present_state(page);
                 Ok(false)
             }
         })
@@ -973,13 +986,12 @@ impl Editor {
             inner: Mutex::new(EditorInner {
                 editor: core,
                 carrier_bytes,
-                #[cfg(not(feature = "wasm-server"))]
+            }),
+            #[cfg(not(feature = "wasm-server"))]
+            render: Mutex::new(RenderState {
                 surfaces: HashMap::new(),
-                #[cfg(not(feature = "wasm-server"))]
                 last_render_sig: HashMap::new(),
-                #[cfg(not(feature = "wasm-server"))]
                 prev_dl: HashMap::new(),
-                #[cfg(not(feature = "wasm-server"))]
                 last_content_height: HashMap::new(),
             }),
         }
@@ -991,6 +1003,15 @@ impl Editor {
     {
         let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut inner)
+    }
+
+    #[cfg(not(feature = "wasm-server"))]
+    fn with_render<F, R>(&self, f: F) -> EditorResult<R>
+    where
+        F: FnOnce(&mut RenderState) -> EditorResult<R>,
+    {
+        let mut render = self.render.lock().map_err(|_| FfiError::LockPoisoned)?;
+        f(&mut render)
     }
 }
 
@@ -3241,13 +3262,13 @@ mod tests {
             state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
         let editor = make_ffi_editor(initial);
         {
-            let mut g = editor.inner.lock().unwrap();
+            let mut g = editor.render.lock().unwrap();
             g.prev_dl
                 .insert(0, editor_renderer::display_list::DisplayList::default());
             g.last_render_sig.insert(0, 123);
         }
-        editor.inner.lock().unwrap().clear_page_present_state(0);
-        let g = editor.inner.lock().unwrap();
+        editor.render.lock().unwrap().clear_page_present_state(0);
+        let g = editor.render.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
         assert!(!g.last_render_sig.contains_key(&0));
     }
@@ -3258,14 +3279,14 @@ mod tests {
             state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
         let editor = make_ffi_editor(initial);
         {
-            let mut g = editor.inner.lock().unwrap();
+            let mut g = editor.render.lock().unwrap();
             g.prev_dl
                 .insert(0, editor_renderer::display_list::DisplayList::default());
             g.last_render_sig.insert(0, 123);
             g.last_content_height.insert(0, 456);
         }
         editor.invalidate_surface(0).unwrap();
-        let g = editor.inner.lock().unwrap();
+        let g = editor.render.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
         assert!(!g.last_render_sig.contains_key(&0));
         assert!(!g.last_content_height.contains_key(&0));
@@ -3277,13 +3298,13 @@ mod tests {
             state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
         let editor = make_ffi_editor(initial);
         {
-            let mut g = editor.inner.lock().unwrap();
+            let mut g = editor.render.lock().unwrap();
             g.prev_dl
                 .insert(0, editor_renderer::display_list::DisplayList::default());
             g.last_render_sig.insert(0, 123);
         }
         editor.detach_surface(0).expect("detach must succeed");
-        let g = editor.inner.lock().unwrap();
+        let g = editor.render.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
         assert!(!g.last_render_sig.contains_key(&0));
     }

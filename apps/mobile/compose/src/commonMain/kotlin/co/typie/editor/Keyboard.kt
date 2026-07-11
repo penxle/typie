@@ -41,6 +41,9 @@ internal data class KeyBinding(
   val predicate: (() -> Boolean)? = null,
   val bringIntoViewTarget: EditorBringIntoViewTarget? =
     EditorBringIntoViewTarget.CurrentSelectionHead,
+  // Only bindings whose action emits constant messages without reading editor or
+  // clipboard state may coalesce with neighboring key events.
+  val coalescible: Boolean = true,
   val action: suspend Editor.(Clipboard) -> List<Message>,
 )
 
@@ -347,6 +350,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       ComposeKey.C,
       setOf(KeyModifier.Mod),
       bringIntoViewTarget = null,
+      coalescible = false,
       action = { clipboard ->
         copySelection()?.let { clipboard.copyRichText(html = it.html, text = it.text) }
         emptyList()
@@ -355,6 +359,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.X,
       setOf(KeyModifier.Mod),
+      coalescible = false,
       action = { clipboard ->
         val payload = copySelection() ?: return@KeyBinding emptyList()
         if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
@@ -367,6 +372,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.V,
       setOf(KeyModifier.Mod),
+      coalescible = false,
       action = { clipboard ->
         val read = clipboard.paste() ?: return@KeyBinding emptyList()
         listOf(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))
@@ -375,6 +381,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.V,
       setOf(KeyModifier.Mod, KeyModifier.Shift),
+      coalescible = false,
       action = { clipboard ->
         val read = clipboard.paste() ?: return@KeyBinding emptyList()
         listOf(Message.Clipboard(ClipboardOp.Paste(html = null, text = read.text)))
@@ -391,6 +398,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       setOf(KeyModifier.Ctrl),
       predicate = { isMac },
       bringIntoViewTarget = null,
+      coalescible = false,
     ) {
       inspectState()
       emptyList()
@@ -400,6 +408,7 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
       setOf(KeyModifier.Ctrl),
       predicate = { isMac },
       bringIntoViewTarget = null,
+      coalescible = false,
     ) {
       inspectStateAsMacro()
       emptyList()

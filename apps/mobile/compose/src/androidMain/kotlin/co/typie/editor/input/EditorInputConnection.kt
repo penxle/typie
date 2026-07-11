@@ -27,6 +27,11 @@ import co.typie.editor.scroll.syncWithBringIntoView
 import java.util.concurrent.Executor
 import java.util.function.IntConsumer
 
+// InputConnection text reads may legally return less context than requested; a
+// bounded window keeps IMEs that ask for the whole document (n=Int.MAX_VALUE per
+// key) from forcing a full-document text materialization on every read.
+private const val IME_READ_WINDOW = 4096
+
 internal class EditorInputConnection(
   private val editor: Editor,
   private val view: View,
@@ -70,7 +75,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.ime(n, 0)?.let { ctx ->
+        editor.ime(n.coerceAtMost(IME_READ_WINDOW), 0)?.let { ctx ->
           ctx.text.substring(0, ctx.selection.start - ctx.windowStart)
         }
       }
@@ -83,7 +88,9 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.ime(0, n)?.let { ctx -> ctx.text.substring(ctx.selection.end - ctx.windowStart) }
+        editor.ime(0, n.coerceAtMost(IME_READ_WINDOW))?.let { ctx ->
+          ctx.text.substring(ctx.selection.end - ctx.windowStart)
+        }
       }
     recordRead("getTextAfterCursor", "n=$n, flags=$flags", result)
     return result
@@ -111,7 +118,11 @@ internal class EditorInputConnection(
       recordRead("getSurroundingText", args, null)
       return null
     }
-    val ctx = editor.ime(beforeLength, afterLength)
+    val ctx =
+      editor.ime(
+        beforeLength.coerceAtMost(IME_READ_WINDOW),
+        afterLength.coerceAtMost(IME_READ_WINDOW),
+      )
     if (ctx == null) {
       recordRead("getSurroundingText", args, null)
       return null

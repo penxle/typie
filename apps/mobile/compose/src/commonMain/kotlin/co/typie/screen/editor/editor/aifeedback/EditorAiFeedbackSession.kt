@@ -81,7 +81,7 @@ internal fun rememberEditorAiFeedbackSession(
     )
   }
 
-  fun updateActiveRangeDecoration() {
+  suspend fun updateActiveRangeDecoration() {
     val activeEditor = editor ?: return
     activeEditor.setActiveAiFeedbackRange(
       activeId = model?.activeRangeId,
@@ -106,21 +106,21 @@ internal fun rememberEditorAiFeedbackSession(
   fun runAnalysis() {
     val activeModel = model ?: return
     val activeEditor = editor ?: return
-    val sourceText = activeEditor.proseText()
 
     analysisJob?.cancel()
-    val analysisRunId = activeModel.prepareAnalysis(sourceText)
-    activeEditor.installAiFeedbackDecorations()
-    activeEditor.clearAiFeedbackRanges()
-    lastSelectionMappedToAiFeedback = activeEditor.state.selection
-    if (sourceText.trim().isBlank()) {
-      activeModel.complete()
-      setOverlayBottomOcclusion(0f)
-      toast.show(ToastType.Success, "피드백이 없습니다.")
-      return
-    }
-
     analysisJob = scope.launch {
+      val sourceText = activeEditor.proseText()
+      val analysisRunId = activeModel.prepareAnalysis(sourceText)
+      activeEditor.installAiFeedbackDecorations()
+      activeEditor.clearAiFeedbackRanges()
+      lastSelectionMappedToAiFeedback = activeEditor.state.selection
+      if (sourceText.trim().isBlank()) {
+        activeModel.complete()
+        setOverlayBottomOcclusion(0f)
+        toast.show(ToastType.Success, "피드백이 없습니다.")
+        return@launch
+      }
+
       try {
         Apollo.subscription(
             AiFeedback_LiteraryAnalysisDocumentStream_Subscription(text = sourceText)
@@ -347,21 +347,25 @@ internal fun rememberEditorAiFeedbackSession(
     activateResult = { id ->
       model?.activate(id)
       updateCompactOverlayHeightForRange(model?.activeRangeId)
-      updateActiveRangeDecoration()
-      requestRangeIntoView(id)
+      scope.launch {
+        updateActiveRangeDecoration()
+        requestRangeIntoView(id)
+      }
     },
     showCurrentResult = { id -> model?.setCurrent(id) },
     ignore = ignore@{ id ->
         val activeEditor = editor ?: return@ignore
-        activeEditor.removeAiFeedbackRange(id)
-        val nextId = model?.remove(id, activateReplacement = true)
-        if (nextId != null) {
-          updateCompactOverlayHeightForRange(nextId)
-        } else {
-          setOverlayBottomOcclusion(0f)
+        scope.launch {
+          activeEditor.removeAiFeedbackRange(id)
+          val nextId = model?.remove(id, activateReplacement = true)
+          if (nextId != null) {
+            updateCompactOverlayHeightForRange(nextId)
+          } else {
+            setOverlayBottomOcclusion(0f)
+          }
+          updateActiveRangeDecoration()
+          requestRangeIntoView(nextId)
         }
-        updateActiveRangeDecoration()
-        requestRangeIntoView(nextId)
       },
     setExpanded = { expanded -> model?.updateExpanded(expanded) },
   )
