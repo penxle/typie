@@ -32,7 +32,12 @@ pub struct BuiltFont {
 
 pub fn get_font_codepoints(ttf_data: &[u8]) -> Result<Vec<u32>, ServerError> {
     let font = FontRef::new(ttf_data).map_err(|e| ServerError::InvalidFont(e.to_string()))?;
-    let mut codepoints: Vec<u32> = font.charmap().mappings().map(|(cp, _)| cp).collect();
+    let mut codepoints: Vec<u32> = font
+        .charmap()
+        .mappings()
+        .map(|(cp, _)| cp)
+        .filter(|cp| !(0xD800..=0xDFFF).contains(cp))
+        .collect();
     codepoints.sort();
     codepoints.dedup();
     Ok(codepoints)
@@ -499,6 +504,34 @@ mod tests {
         for w in cps.windows(2) {
             assert!(w[0] < w[1], "not sorted/deduped: {} >= {}", w[0], w[1]);
         }
+    }
+
+    #[test]
+    fn codepoints_exclude_surrogates() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let font = FontRef::new(&data).unwrap();
+
+        let mut cmap = Vec::new();
+        for v in [0u16, 1, 3, 1] {
+            cmap.extend_from_slice(&v.to_be_bytes());
+        }
+        cmap.extend_from_slice(&12u32.to_be_bytes());
+        for v in [
+            4u16, 32, 0, 4, 4, 1, 0, 0xD801, 0xFFFF, 0, 0xD7A4, 0xFFFF, 10333, 1, 0, 0,
+        ] {
+            cmap.extend_from_slice(&v.to_be_bytes());
+        }
+
+        let mut builder = FontBuilder::new();
+        builder.add_raw(Tag::new(b"cmap"), cmap.as_slice());
+        builder.copy_missing_tables(font);
+        let patched = builder.build();
+
+        let cps = get_font_codepoints(&patched).unwrap();
+        assert!(cps.iter().any(|cp| (0xD7A4..0xD800).contains(cp)));
+        assert!(!cps.iter().any(|cp| (0xD800..=0xDFFF).contains(cp)));
     }
 
     #[test]

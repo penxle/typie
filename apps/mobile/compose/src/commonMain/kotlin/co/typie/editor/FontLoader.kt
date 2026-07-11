@@ -14,6 +14,7 @@ import co.typie.network.Http
 import co.typie.platform.PlatformModule
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsBytes
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
