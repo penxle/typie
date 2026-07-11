@@ -136,7 +136,7 @@ internal class EditorInputConnection(
     if (value == "\n") {
       batch.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
     } else {
-      batch.enqueue(FlatImeOp.ReplaceSelection(value))
+      batch.commitText(value)
     }
     return true
   }
@@ -295,6 +295,12 @@ private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
       pendingOps.add(FlatImeOp.ClearComposition)
     }
     flush()
+  }
+
+  fun commitText(text: String) {
+    pendingOps.add(FlatImeOp.Compose(text))
+    pendingOps.add(FlatImeOp.CommitAsIs)
+    flushIfReady()
   }
 
   fun enqueue(op: FlatImeOp) {

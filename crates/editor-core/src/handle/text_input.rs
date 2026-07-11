@@ -1564,6 +1564,39 @@ mod tests {
     }
 
     #[test]
+    fn batched_autocomplete_commit_replaces_composition() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "안".into() }],
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose {
+                    text: "안녕하세요".into(),
+                },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::Compose { text: " ".into() },
+                FlatImeOp::CommitAsIs,
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요 ") } } }
+            selection: (p1, 6)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
     fn commit_no_composition_inserts_at_cursor() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }

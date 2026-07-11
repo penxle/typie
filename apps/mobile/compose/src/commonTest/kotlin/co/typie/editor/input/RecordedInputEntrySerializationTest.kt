@@ -115,7 +115,10 @@ class RecordedInputEntrySerializationTest {
         imeBefore = null,
         imeAfter = null,
       )
-    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a")))), entry.messages)
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("a"), FlatImeOp.CommitAsIs))),
+      entry.messages,
+    )
     assertEquals(listOf("CommitText(text=a, newCursorPosition=1)"), entry.commands)
   }
 }

@@ -33,13 +33,19 @@ internal object EditorImeCommandNormalizer {
     var hasActiveComposition = ime?.composing != null
 
     for (command in commands) {
-      if (command is CommitTextCommand && command.text == "\n") {
-        if (ops.isNotEmpty()) {
-          messages += Message.TextInput(ops.toList())
-          ops.clear()
-        }
+      if (command is CommitTextCommand) {
+        if (command.text == "\n") {
+          if (ops.isNotEmpty()) {
+            messages += Message.TextInput(ops.toList())
+            ops.clear()
+          }
 
-        messages += Message.Key(KeyEvent(Key.Enter))
+          messages += Message.Key(KeyEvent(Key.Enter))
+        } else {
+          ops += FlatImeOp.Compose(command.text)
+          ops += FlatImeOp.CommitAsIs
+          hasActiveComposition = false
+        }
         continue
       }
 
@@ -99,7 +105,6 @@ internal object EditorImeCommandNormalizer {
 
   private fun EditCommand.toFlatImeOp(): FlatImeOp? =
     when (this) {
-      is CommitTextCommand -> FlatImeOp.ReplaceSelection(text)
       is SetComposingTextCommand -> FlatImeOp.Compose(text)
       is SetSelectionCommand -> FlatImeOp.SetSelection(start, end)
       is SetComposingRegionCommand -> FlatImeOp.SetComposition(start, end)

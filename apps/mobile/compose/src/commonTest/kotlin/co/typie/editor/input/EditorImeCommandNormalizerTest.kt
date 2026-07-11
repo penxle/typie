@@ -19,11 +19,57 @@ import kotlin.test.assertEquals
 
 class EditorImeCommandNormalizerTest {
   @Test
-  fun `commit text normalizes to flat replace selection`() {
+  fun `commit text normalizes to composition replacement and commit`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("a", 1)), ime = null)
 
-    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a")))), messages)
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("a"), FlatImeOp.CommitAsIs))),
+      messages,
+    )
+  }
+
+  @Test
+  fun `commit text during active preedit replaces composition`() {
+    val ime =
+      Ime(text = "안", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
+    val messages =
+      EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("안녕하세요", 1)), ime = ime)
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("안녕하세요"), FlatImeOp.CommitAsIs))),
+      messages,
+    )
+  }
+
+  @Test
+  fun `autocomplete selection batch replaces active preedit before trailing commit`() {
+    val ime =
+      Ime(text = " 안 ", windowStart = 0, selection = ImeRange(2, 2), composing = ImeRange(1, 2))
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(
+          CommitTextCommand("안녕하세요", 1),
+          FinishComposingTextCommand(),
+          CommitTextCommand(" ", 1),
+        ),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(
+            FlatImeOp.Compose("안녕하세요"),
+            FlatImeOp.CommitAsIs,
+            FlatImeOp.ClearComposition,
+            FlatImeOp.Compose(" "),
+            FlatImeOp.CommitAsIs,
+          )
+        )
+      ),
+      messages,
+    )
   }
 
   @Test
