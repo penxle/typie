@@ -23,7 +23,7 @@ sealed interface SubscriptionServiceState {
 }
 
 object SubscriptionService {
-  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
   private val query = Apollo.watchQuery(scope = scope) { SubscriptionService_Query() }
 

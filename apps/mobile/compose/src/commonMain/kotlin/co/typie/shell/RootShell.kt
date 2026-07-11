@@ -27,7 +27,8 @@ import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
 import co.typie.editor.sync.ActiveSyncEngines
 import co.typie.editor.sync.orphanSweeper
-import co.typie.platform.connectivityRestoredFlow
+import co.typie.platform.appLifecycleService
+import co.typie.platform.connectivityService
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
@@ -52,6 +53,7 @@ import co.typie.ui.component.toast.ToastOverlay
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
@@ -68,8 +70,10 @@ fun RootShell() {
   LaunchedEffect(Unit) { BootstrapService.launch() }
   LaunchedEffect(Unit) { PushNotificationService.launch() }
 
+  LaunchedEffect(Unit) { connectivityService.monitor() }
+
   LaunchedEffect(Unit) {
-    connectivityRestoredFlow().collect {
+    connectivityService.restorationGeneration.drop(1).collect {
       ActiveSyncEngines.retryAll()
       orphanSweeper.sweep()
     }
@@ -87,10 +91,19 @@ fun RootShell() {
   val lifecycleOwner = LocalLifecycleOwner.current
   val lifecycleScope = rememberCoroutineScope()
   DisposableEffect(lifecycleOwner) {
+    appLifecycleService.update(
+      foreground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+    )
     val observer = LifecycleEventObserver { _, event ->
       when (event) {
-        Lifecycle.Event.ON_START -> lifecycleScope.launch { orphanSweeper.sweep() }
-        Lifecycle.Event.ON_STOP -> lifecycleScope.launch { ActiveSyncEngines.flushAll() }
+        Lifecycle.Event.ON_START -> {
+          appLifecycleService.update(foreground = true)
+          lifecycleScope.launch { orphanSweeper.sweep() }
+        }
+        Lifecycle.Event.ON_STOP -> {
+          appLifecycleService.update(foreground = false)
+          lifecycleScope.launch { ActiveSyncEngines.flushAll() }
+        }
         else -> {}
       }
     }

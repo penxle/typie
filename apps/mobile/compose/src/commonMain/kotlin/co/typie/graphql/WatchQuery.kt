@@ -6,8 +6,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import co.touchlab.kermit.Logger
 import co.typie.contract.Loadable
+import co.typie.platform.AppLifecycleService
+import co.typie.platform.AppLifecycleState
+import co.typie.platform.ConnectivityService
+import co.typie.platform.appLifecycleService as defaultAppLifecycleService
+import co.typie.platform.connectivityService as defaultConnectivityService
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
+import com.apollographql.apollo.exception.ApolloNetworkException
+import com.apollographql.apollo.exception.ApolloOfflineException
 import com.apollographql.apollo.exception.CacheMissException
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
@@ -15,20 +22,26 @@ import com.apollographql.cache.normalized.refetchPolicyInterceptor
 import com.apollographql.cache.normalized.watch
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class WatchQuery<D : Query.Data, out R>
-private constructor(
-  private val scope: CoroutineScope,
+internal constructor(
+  scope: CoroutineScope,
   private val apolloClient: ApolloClient,
   private val query: () -> Query<D>,
   private val placeholderData: D?,
   private val onInitialData: (suspend (D) -> Unit)?,
   private val skip: () -> Boolean = { false },
   private val resetOnChange: Boolean = true,
+  private val appLifecycleService: AppLifecycleService = defaultAppLifecycleService,
+  private val connectivityService: ConnectivityService = defaultConnectivityService,
+  stateDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : Loadable<D> {
   override var state: QueryState<D> by mutableStateOf(QueryState.Loading)
     private set
@@ -69,9 +82,11 @@ private constructor(
 
   private var job: Job? = null
   private var initialized = false
+  private var recoveryGeneration = 0L
+  private val stateScope = CoroutineScope(scope.coroutineContext + stateDispatcher)
 
   init {
-    scope.launch {
+    stateScope.launch {
       snapshotFlow {
           val shouldSkip = skip()
           shouldSkip to if (shouldSkip) null else query()
@@ -85,6 +100,31 @@ private constructor(
           }
         }
     }
+
+    stateScope.launch {
+      var foregroundGeneration = appLifecycleService.snapshot.value.foregroundGeneration
+      var connectivityGeneration = connectivityService.restorationGeneration.value
+      combine(appLifecycleService.snapshot, connectivityService.restorationGeneration) {
+          lifecycle,
+          connectivity ->
+          lifecycle to connectivity
+        }
+        .collect { (lifecycle, connectivity) ->
+          val returnedToForeground = lifecycle.foregroundGeneration > foregroundGeneration
+          val restoredInForeground =
+            connectivity > connectivityGeneration && lifecycle.state == AppLifecycleState.Foreground
+          foregroundGeneration = lifecycle.foregroundGeneration
+          connectivityGeneration = connectivity
+
+          if (returnedToForeground || restoredInForeground) {
+            recoveryGeneration += 1
+            val error = (state as? QueryState.Error)?.exception
+            if (error?.isRecoverableNetworkError() == true) {
+              refetch()
+            }
+          }
+        }
+    }
   }
 
   private fun execute(query: Query<D>, resetState: Boolean = false) {
@@ -95,7 +135,8 @@ private constructor(
       state = QueryState.Loading
     }
 
-    job = scope.launch {
+    val attemptRecoveryGeneration = recoveryGeneration
+    job = stateScope.launch {
       try {
         apolloClient
           .query(query)
@@ -117,36 +158,44 @@ private constructor(
               val error =
                 response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
               if (error != null) {
-                stateQuery = query
-                state = QueryState.Error(error)
-                runCatching {
-                  Logger.e {
-                    "GraphQL error (${query.name()}): ${error.message ?: "unknown error"}"
-                  }
-                }
-                runCatching { Sentry.captureException(error) }
+                publishError(query, error, attemptRecoveryGeneration)
               }
             }
           }
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
-        stateQuery = query
-        state = QueryState.Error(e)
-        runCatching { Logger.e { "GraphQL error: ${e.message ?: "unknown error"}" } }
-        runCatching { Sentry.captureException(e) }
+        publishError(query, e, attemptRecoveryGeneration)
       }
     }
   }
 
-  override fun refetch() {
-    if (skip()) {
-      return
+  private fun publishError(query: Query<D>, error: Throwable, attemptRecoveryGeneration: Long) {
+    stateQuery = query
+    state = QueryState.Error(error)
+    runCatching {
+      Logger.e { "GraphQL error (${query.name()}): ${error.message ?: "unknown error"}" }
     }
+    runCatching { Sentry.captureException(error) }
 
-    execute(query())
+    if (error.isRecoverableNetworkError() && recoveryGeneration > attemptRecoveryGeneration) {
+      refetch()
+    }
+  }
+
+  override fun refetch() {
+    stateScope.launch {
+      if (skip()) {
+        return@launch
+      }
+
+      execute(query())
+    }
   }
 }
+
+private fun Throwable.isRecoverableNetworkError(): Boolean =
+  this is ApolloNetworkException || this is ApolloOfflineException
 
 fun <D : Query.Data> ApolloClient.watchQuery(
   scope: CoroutineScope,

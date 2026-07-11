@@ -112,7 +112,7 @@ import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
-import co.typie.platform.connectivityRestoredFlow
+import co.typie.platform.connectivityService
 import co.typie.route.Route
 import co.typie.screen.document.document.DocumentCharacterCountSnapshots
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackOptInSheet
@@ -298,15 +298,13 @@ fun EditorScreen(entityId: String) {
         .distinct()
         .sorted()
     }
+  LaunchedEffect(assetHydrator) {
+    connectivityService.restorationGeneration.drop(1).collect { generation ->
+      assetHydrator.onConnectivityRestored(generation)
+    }
+  }
   LaunchedEffect(assetHydrator, assetQueryGeneration, externalAssetIds) {
     assetHydrator.resolve(externalAssetIds)
-  }
-  LaunchedEffect(assetHydrator) {
-    var connectivityGeneration = 0L
-    connectivityRestoredFlow().collect {
-      connectivityGeneration += 1
-      assetHydrator.onConnectivityRestored(connectivityGeneration)
-    }
   }
   LaunchedEffect(subPaneState.active, editorState.selection) {
     subPaneState.dismissTableAxisActionsIfSelectionChanged(editorState.selection)

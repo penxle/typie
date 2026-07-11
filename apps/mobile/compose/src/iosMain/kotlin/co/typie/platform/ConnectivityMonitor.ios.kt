@@ -16,13 +16,10 @@ import platform.Network.nw_path_status_satisfied
 import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.dispatch_get_global_queue
 
-actual fun connectivityRestoredFlow(): Flow<Unit> = callbackFlow {
+actual fun connectivityAvailabilityFlow(): Flow<Boolean> = callbackFlow {
   val monitor = nw_path_monitor_create()
-  var wasSatisfied = true
   nw_path_monitor_set_update_handler(monitor) { path ->
-    val satisfied = nw_path_get_status(path) == nw_path_status_satisfied
-    if (satisfied && !wasSatisfied) trySend(Unit)
-    wasSatisfied = satisfied
+    trySend(nw_path_get_status(path) == nw_path_status_satisfied)
   }
   nw_path_monitor_set_queue(
     monitor,
