@@ -108,6 +108,49 @@ const mergeAdjacentTextRuns = (children: PlainNodeEntry[]): PlainNodeEntry[] => 
   return out;
 };
 
+const INLINE_NODE_TYPES = new Set(['text', 'tab', 'hard_break']);
+
+const emptyParagraph = (): PlainNodeEntry => ({
+  node: { type: 'paragraph' },
+  modifiers: {} as PlainNodeEntry['modifiers'],
+  carry: [],
+  children: [],
+});
+
+const normalizeBlockChildren = (children: PlainNodeEntry[]): PlainNodeEntry[] => {
+  const out: PlainNodeEntry[] = [];
+  let inlineBuffer: PlainNodeEntry[] = [];
+  const flushInlines = () => {
+    if (inlineBuffer.length > 0) {
+      const wrapped = emptyParagraph();
+      wrapped.children = mergeAdjacentTextRuns(inlineBuffer);
+      out.push(wrapped);
+      inlineBuffer = [];
+    }
+  };
+  for (const child of children) {
+    if (INLINE_NODE_TYPES.has(child.node.type)) {
+      inlineBuffer.push(child);
+      continue;
+    }
+    flushInlines();
+    const prev = out.at(-1);
+    if (
+      prev &&
+      (child.node.type === 'bullet_list' || child.node.type === 'ordered_list') &&
+      prev.node.type === child.node.type &&
+      Object.keys(prev.modifiers).length === 0 &&
+      Object.keys(child.modifiers).length === 0
+    ) {
+      prev.children.push(...child.children);
+      continue;
+    }
+    out.push(child);
+  }
+  flushInlines();
+  return out;
+};
+
 const roundLayoutMode = (layout: LegacyLayoutMode) =>
   layout.type === 'paginated'
     ? {
@@ -242,6 +285,34 @@ type Inherited = {
   lineHeight: number;
   styles: Partial<Record<ModifierType, Modifier>>;
   stylesAllowed: boolean;
+};
+
+const LEAF_NODE_TYPES = new Set(['image', 'file', 'embed', 'archived']);
+
+const countLegacySubtreeChars = (entry: LegacyNodeEntry, nodes: Record<string, LegacyNodeEntry>): number => {
+  let count = 0;
+  const walk = (node: LegacyNodeEntry) => {
+    if (node.type === 'text') {
+      for (const segment of node.text ?? []) count += segment.text.replaceAll('\t', '').length;
+      return;
+    }
+    for (const childId of node.children ?? []) {
+      const child = nodes[childId];
+      if (child) walk(child);
+    }
+  };
+  for (const childId of entry.children ?? []) {
+    const child = nodes[childId];
+    if (child) walk(child);
+  }
+  return count;
+};
+
+const warnLeafSubtreeText = (nodeId: string, entry: LegacyNodeEntry, ctx: WalkCtx): void => {
+  const count = countLegacySubtreeChars(entry, ctx.nodes);
+  if (count > 0) {
+    ctx.warnings.push(`text inside ${entry.type} dropped: ${count} chars (${nodeId})`);
+  }
 };
 
 const collectRemarks = (nodeId: string, entry: LegacyNodeEntry, path: number[], ctx: WalkCtx) => {
@@ -394,20 +465,40 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
       return [makeEntry({ type: 'paragraph' }, modifiers, mergeAdjacentTextRuns(convertChildren(entry, path, childInherited, ctx)), carry)];
     }
     case 'blockquote': {
-      return [makeEntry({ type: 'blockquote', variant: entry.variant as never }, {}, convertChildren(entry, path, childInherited, ctx))];
+      return [
+        makeEntry(
+          { type: 'blockquote', variant: entry.variant as never },
+          {},
+          normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx)),
+        ),
+      ];
     }
     case 'callout': {
-      return [makeEntry({ type: 'callout', variant: entry.variant as never }, {}, convertChildren(entry, path, childInherited, ctx))];
+      return [
+        makeEntry(
+          { type: 'callout', variant: entry.variant as never },
+          {},
+          normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx)),
+        ),
+      ];
     }
     case 'fold_title': {
       const inner: Inherited = { lineHeight: childInherited.lineHeight, styles: {}, stylesAllowed: false };
       return [makeEntry({ type: 'fold_title' }, {}, mergeAdjacentTextRuns(convertChildren(entry, path, inner, ctx)), [])];
     }
+    case 'list_item': {
+      const children = normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx));
+      if (children[0]?.node.type !== 'paragraph') {
+        children.unshift(emptyParagraph());
+      }
+      return [makeEntry({ type: 'list_item' }, {}, children)];
+    }
+    case 'fold_content': {
+      return [makeEntry({ type: 'fold_content' }, {}, normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx)))];
+    }
     case 'bullet_list':
     case 'ordered_list':
-    case 'list_item':
     case 'fold':
-    case 'fold_content':
     case 'table_row': {
       return [makeEntry({ type: entry.type }, {}, convertChildren(entry, path, childInherited, ctx))];
     }
@@ -417,11 +508,18 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
       if (tableAlign !== 'left') {
         modifiers.alignment = { type: 'alignment', value: tableAlign as 'left' | 'center' | 'right' };
       }
+      const rows = convertChildren(entry, path, childInherited, ctx);
+      const maxCols = Math.max(0, ...rows.map((row) => row.children.length));
+      for (const row of rows) {
+        while (row.children.length < maxCols) {
+          row.children.push(makeEntry({ type: 'table_cell', col_width: undefined, background_color: undefined }, {}, [emptyParagraph()]));
+        }
+      }
       return [
         makeEntry(
           { type: 'table', border_style: entry.border_style as never, proportion: toProportion(entry.proportion) },
           modifiers,
-          convertChildren(entry, path, childInherited, ctx),
+          rows,
         ),
       ];
     }
@@ -433,26 +531,30 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
       }
       const cellInherited: Inherited = { ...childInherited, styles: { ...childInherited.styles } };
       delete cellInherited.styles.background_color;
+      const cellChildren = normalizeBlockChildren(convertChildren(entry, path, cellInherited, ctx));
+      if (cellChildren.length === 0) {
+        cellChildren.push(emptyParagraph());
+      }
       return [
-        makeEntry(
-          { type: 'table_cell', col_width: toColWidth(entry.col_width), background_color: undefined },
-          modifiers,
-          convertChildren(entry, path, cellInherited, ctx),
-        ),
+        makeEntry({ type: 'table_cell', col_width: toColWidth(entry.col_width), background_color: undefined }, modifiers, cellChildren),
       ];
     }
     case 'image': {
+      warnLeafSubtreeText(nodeId, entry, ctx);
       return [
         makeEntry({ type: 'image', id: (entry.id as string | undefined) ?? undefined, proportion: toProportion(entry.proportion) }, {}, []),
       ];
     }
     case 'file': {
+      warnLeafSubtreeText(nodeId, entry, ctx);
       return [makeEntry({ type: 'file', id: (entry.id as string | undefined) ?? undefined }, {}, [])];
     }
     case 'embed': {
+      warnLeafSubtreeText(nodeId, entry, ctx);
       return [makeEntry({ type: 'embed', id: (entry.id as string | undefined) ?? undefined }, {}, [])];
     }
     case 'archived': {
+      warnLeafSubtreeText(nodeId, entry, ctx);
       return [makeEntry({ type: 'archived', id: (entry.id as string | undefined) ?? undefined }, {}, [])];
     }
     case 'hard_break': {
@@ -507,7 +609,9 @@ export const convertLegacyDocumentJson = (json: LegacyDocumentJson): ConvertResu
   const inheritedLineHeight = modifiers.line_height?.type === 'line_height' ? modifiers.line_height.value : 160;
   const layoutMode = roundLayoutMode(json.settings.layout_mode ?? { type: 'continuous', max_width: 600 });
 
-  const children = convertChildren(root, [], { lineHeight: inheritedLineHeight, styles: {}, stylesAllowed: true }, ctx);
+  const children = normalizeBlockChildren(
+    convertChildren(root, [], { lineHeight: inheritedLineHeight, styles: {}, stylesAllowed: true }, ctx),
+  );
 
   const plain: PlainDoc = {
     root: makeEntry({ type: 'root', layout_mode: layoutMode }, modifiers, children),
@@ -556,6 +660,7 @@ export const collectLegacyTextChars = (json: LegacyDocumentJson): string => {
       for (const segment of entry.text ?? []) out += segment.text.replaceAll('\t', '');
       return;
     }
+    if (LEAF_NODE_TYPES.has(entry.type)) return;
     for (const childId of entry.children ?? []) walk(childId);
   };
   walk(ROOT_ID);
@@ -597,11 +702,21 @@ const truncate = (value: unknown): string => {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const summarizeEntry = (value: unknown): string => {
+  if (!isPlainObject(value) || !isPlainObject(value.node)) return truncate(value);
+  const node = value.node as { type?: string; text?: string };
+  const text = typeof node.text === 'string' ? `"${node.text.slice(0, 12)}"` : '';
+  const keys = isPlainObject(value.modifiers) ? Object.keys(value.modifiers).join(',') : '';
+  return `${node.type ?? '?'}${text ? `(${text})` : ''}${keys ? `{${keys}}` : ''}`;
+};
+
 const collectDiffs = (a: unknown, b: unknown, path: string, out: string[]): void => {
   if (out.length >= DIFF_LIMIT) return;
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) {
-      out.push(`${path}: array length ${a.length} != ${b.length}`);
+      out.push(
+        `${path}: array length ${a.length} != ${b.length} — a=[${a.map(summarizeEntry).join(' ')}] b=[${b.map(summarizeEntry).join(' ')}]`,
+      );
       return;
     }
     for (const [i, item] of a.entries()) collectDiffs(item, b[i], `${path}[${i}]`, out);

@@ -21,6 +21,7 @@ export type MigrateDocumentResult =
   | { status: 'failed'; documentId: string; error: string };
 
 export const migrateDocumentToV2 = async (documentId: string, options?: { dryRun?: boolean }): Promise<MigrateDocumentResult> => {
+  let stage = 'load';
   try {
     const existing = await db
       .select({ documentId: DocumentStates.documentId })
@@ -36,20 +37,30 @@ export const migrateDocumentToV2 = async (documentId: string, options?: { dryRun
       .then(first);
     if (!content) return { status: 'failed', documentId, error: 'no-legacy-content' };
 
+    stage = 'snapshot-to-json';
     const legacyJson = (await wasm.snapshotToJson(content.snapshot)) as LegacyDocumentJson;
+    stage = 'convert';
     const { plain, remarkAnchors, warnings } = convertLegacyDocumentJson(legacyJson);
 
     const { graph, anchors, heads, text, roundtrip } = await wasmFfi.use((host) => {
+      stage = 'verify_plain';
       host.verify_plain(plain);
+      stage = 'to_graph_with_anchors';
       const result = host.to_graph_with_anchors(plain, { paths: remarkAnchors.map((anchor) => anchor.path) });
+      stage = 'heads';
+      const headsBytes = host.heads(result.graph);
+      stage = 'extract_text';
+      const extracted = host.extract_text(plain);
+      stage = 'to_plain-roundtrip';
       return {
         graph: result.graph,
         anchors: result.anchors,
-        heads: host.heads(result.graph),
-        text: host.extract_text(plain),
+        heads: headsBytes,
+        text: extracted,
         roundtrip: host.to_plain(result.graph),
       };
     });
+    stage = 'gates';
 
     if (!plainStructureEquals(plain, roundtrip)) {
       return { status: 'failed', documentId, error: `structure-mismatch: ${plainStructureDiff(plain, roundtrip).join(' | ')}` };
@@ -90,6 +101,7 @@ export const migrateDocumentToV2 = async (documentId: string, options?: { dryRun
     const characterCount = countCharacters(text);
     const blobSize = await calculateBlobSizeFromAssetIds(v2Assets.imageIds, v2Assets.fileIds);
 
+    stage = 'transaction';
     await db.transaction(async (tx) => {
       await insertFreshV2Content(tx, documentId, { plain, graph, heads, text, characterCount, blobSize });
 
@@ -123,7 +135,8 @@ export const migrateDocumentToV2 = async (documentId: string, options?: { dryRun
 
     return { status: 'migrated', documentId, applied: true, threadCount: remarkAnchors.length, commentCount, warnings };
   } catch (err) {
-    return { status: 'failed', documentId, error: err instanceof Error ? err.message : String(err) };
+    const detail = err instanceof Error ? [err.message, ...(err.stack?.split('\n').slice(1, 3) ?? [])].join(' ').trim() : String(err);
+    return { status: 'failed', documentId, error: `[${stage}] ${detail}` };
   }
 };
 

@@ -228,3 +228,95 @@ test('validate를 통과하지 못하는 과거 데이터: fold_title 내 스타
   assert.equal(text, deriveExpectedTextFromPlain(plain));
   assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
 });
+
+test('구식 스키마 데이터: 비직사각형 테이블·컨테이너 직속 인라인·인접 동종 리스트가 선정규화되어 게이트를 통과한다', async () => {
+  const json: LegacyDocumentJson = await (async () => {
+    const fixture: LegacyDocumentJson = {
+      settings: baseSettings,
+      nodes: {
+        [ROOT_ID]: { type: 'root', children: [id(1), id(20), id(29), id(40)] },
+        [id(29)]: { type: 'bullet_list', parent: ROOT_ID, children: [id(30)] },
+        [id(1)]: { type: 'table', border_style: 'solid', align: 'left', proportion: 1, parent: ROOT_ID, children: [id(2), id(3)] },
+        [id(2)]: { type: 'table_row', parent: id(1), children: [id(4), id(5), id(6)] },
+        [id(3)]: { type: 'table_row', parent: id(1), children: [id(7)] },
+        [id(4)]: { type: 'table_cell', parent: id(2), children: [id(8)] },
+        [id(5)]: { type: 'table_cell', parent: id(2), children: [id(9)] },
+        [id(6)]: { type: 'table_cell', parent: id(2), children: [id(10)] },
+        [id(7)]: { type: 'table_cell', parent: id(3), children: [id(11)] },
+        [id(8)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(4), children: [] },
+        [id(9)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(5), children: [] },
+        [id(10)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(6), children: [] },
+        [id(11)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(7), children: [] },
+        [id(20)]: { type: 'bullet_list', parent: ROOT_ID, children: [id(21)] },
+        [id(21)]: { type: 'list_item', parent: id(20), children: [id(22), id(23), id(24)] },
+        [id(22)]: { type: 'text', parent: id(21), text: [{ text: '항목 ' }, { text: '강조', styles: [{ type: 'bold' }] }] },
+        [id(23)]: { type: 'hard_break', parent: id(21) },
+        [id(24)]: { type: 'bullet_list', parent: id(21), children: [id(25)] },
+        [id(25)]: { type: 'list_item', parent: id(24), children: [id(26)] },
+        [id(26)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(25), children: [] },
+        [id(30)]: { type: 'list_item', parent: id(29), children: [id(31), id(32), id(33)] },
+        [id(31)]: { type: 'bullet_list', parent: id(30), children: [id(34)] },
+        [id(32)]: { type: 'bullet_list', parent: id(30), children: [id(35)] },
+        [id(33)]: { type: 'bullet_list', parent: id(30), children: [id(36)] },
+        [id(34)]: { type: 'list_item', parent: id(31), children: [id(37)] },
+        [id(35)]: { type: 'list_item', parent: id(32), children: [id(38)] },
+        [id(36)]: { type: 'list_item', parent: id(33), children: [id(39)] },
+        [id(37)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(34), children: [] },
+        [id(38)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(35), children: [] },
+        [id(39)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(36), children: [] },
+        [id(40)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [] },
+      },
+    };
+    const snapshot = await wasm.jsonToSnapshot(fixture);
+    return await wasm.snapshotToJson(snapshot);
+  })();
+
+  const { plain, remarkAnchors } = convertLegacyDocumentJson(json);
+
+  const [table, outerList] = plain.root.children;
+  assert.equal(plain.root.children.length, 3);
+  assert.equal(table.node.type, 'table');
+  for (const row of table.children) {
+    assert.equal(row.children.length, 3);
+  }
+  const [, secondRow] = table.children;
+  const [, padCell1, padCell2] = secondRow.children;
+  for (const cell of [padCell1, padCell2]) {
+    assert.equal(cell.node.type, 'table_cell');
+    assert.deepEqual(
+      cell.children.map((c) => c.node.type),
+      ['paragraph'],
+    );
+  }
+
+  assert.equal(outerList.node.type, 'bullet_list');
+  assert.equal(outerList.children.length, 2);
+  const [item, mergeItem] = outerList.children;
+  assert.deepEqual(
+    item.children.map((c) => c.node.type),
+    ['paragraph', 'bullet_list'],
+  );
+  const [wrapped] = item.children;
+  assert.deepEqual(
+    wrapped.children.map((c) => c.node.type),
+    ['text', 'text', 'hard_break'],
+  );
+
+  assert.equal(mergeItem.node.type, 'list_item');
+  assert.deepEqual(
+    mergeItem.children.map((c) => c.node.type),
+    ['paragraph', 'bullet_list'],
+  );
+  const mergedList = mergeItem.children.at(1);
+  assert.ok(mergedList);
+  assert.equal(mergedList.children.length, 3);
+
+  const { text, roundtrip } = await wasmFfi.use((host) => {
+    host.verify_plain(plain);
+    const result = host.to_graph_with_anchors(plain, { paths: remarkAnchors.map((anchor) => anchor.path) });
+    return { text: host.extract_text(plain), roundtrip: host.to_plain(result.graph) };
+  });
+
+  assert.equal(text, deriveExpectedTextFromPlain(plain));
+  assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
+});
