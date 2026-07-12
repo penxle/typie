@@ -49,8 +49,8 @@ class EditorInputKeyHandlingTest {
   fun `input session restarts when suppression changes on platforms that require restart`() {
     assertTrue(
       shouldRestartEditorInputSession(
-        previousTextInputSessionEnabled = true,
-        textInputSessionEnabled = true,
+        previousEnabled = true,
+        enabled = true,
         previousSuppressSoftwareKeyboard = false,
         suppressSoftwareKeyboard = true,
         restartOnSoftwareKeyboardSuppressionChange = true,
@@ -62,8 +62,8 @@ class EditorInputKeyHandlingTest {
   fun `input session does not restart for suppression-only change when platform can hide keyboard surface`() {
     assertFalse(
       shouldRestartEditorInputSession(
-        previousTextInputSessionEnabled = true,
-        textInputSessionEnabled = true,
+        previousEnabled = true,
+        enabled = true,
         previousSuppressSoftwareKeyboard = false,
         suppressSoftwareKeyboard = true,
         restartOnSoftwareKeyboardSuppressionChange = false,
@@ -75,8 +75,8 @@ class EditorInputKeyHandlingTest {
   fun `input session restarts when enabled state changes`() {
     assertTrue(
       shouldRestartEditorInputSession(
-        previousTextInputSessionEnabled = false,
-        textInputSessionEnabled = true,
+        previousEnabled = false,
+        enabled = true,
         previousSuppressSoftwareKeyboard = true,
         suppressSoftwareKeyboard = true,
         restartOnSoftwareKeyboardSuppressionChange = false,

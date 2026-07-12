@@ -24,9 +24,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.overlay.EditorExtensionAreaLineHighlightOverlay
+import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.sync.DocumentEditorLoad
+import co.typie.storage.Preference
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -39,13 +42,14 @@ internal fun EditorBody(
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
-  textInputSessionEnabled: Boolean = true,
+  editorInputEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
   overlay: @Composable BoxScope.() -> Unit = {},
 ) {
   val density = LocalDensity.current
+  val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
   val extensionAreaFillSpacerHeight =
@@ -65,6 +69,15 @@ internal fun EditorBody(
 
   Box(modifier = modifier.fillMaxWidth()) {
     EditorExtensionArea(layoutSpec = layoutSpec, modifier = containerModifier) {
+      if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
+        EditorExtensionAreaLineHighlightOverlay(
+          cursor = editor?.cursor,
+          focused = uiState.focused,
+          editorBounds = uiState.editorBoundsInContainer,
+          viewportTransform = uiState.resolveViewportTransform(editor?.pageSizes.orEmpty()),
+          enabled = Preference.lineHighlightEnabled,
+        )
+      }
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Column(
           modifier =
@@ -107,7 +120,7 @@ internal fun EditorBody(
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
-                textInputSessionEnabled = textInputSessionEnabled,
+                editorInputEnabled = editorInputEnabled,
                 suppressSoftwareKeyboard = suppressSoftwareKeyboard,
                 showDebugSurfaceOverlay = showDebugSurfaceOverlay,
               )

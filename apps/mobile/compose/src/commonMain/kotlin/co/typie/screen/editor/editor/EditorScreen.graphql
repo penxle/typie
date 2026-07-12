@@ -30,6 +30,7 @@ query EditorScreen_Query($entityId: ID!) {
         locked
         nullableTitle
         subtitle
+        layoutMode
         state {
           updatedAt
         }

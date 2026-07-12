@@ -56,6 +56,7 @@ internal fun EditorHeader(
   layoutSpec: EditorDocumentLayoutSpec,
   trackWidth: Float,
   loading: Boolean,
+  enabled: Boolean = true,
   topInset: Dp,
   subtitleFocusRequestVersion: Int = 0,
   modifier: Modifier = Modifier,
@@ -72,16 +73,18 @@ internal fun EditorHeader(
     rememberTextInputState(
       value = title,
       onValueChange = onTitleChange,
+      enabled = enabled,
       onDismiss = onEnterDocument,
     )
   val subtitleInputState =
     rememberTextInputState(
       value = subtitle,
       onValueChange = onSubtitleChange,
+      enabled = enabled,
       onDismiss = onEnterDocument,
     )
-  LaunchedEffect(subtitleFocusRequestVersion) {
-    if (subtitleFocusRequestVersion > 0) {
+  LaunchedEffect(subtitleFocusRequestVersion, enabled) {
+    if (enabled && subtitleFocusRequestVersion > 0) {
       subtitleInputState.requestFocus()
     }
   }
@@ -126,6 +129,7 @@ internal fun EditorHeader(
             fontWeight = FontWeight.Bold,
           ),
         showSkeleton = showSkeleton,
+        enabled = enabled,
         imeAction = ImeAction.Next,
         onFocusNext = { subtitleInputState.requestFocus() },
         onEnterDocument = { subtitleInputState.requestFocus() },
@@ -155,6 +159,7 @@ internal fun EditorHeader(
             fontWeight = FontWeight.Medium,
           ),
         showSkeleton = showSkeleton,
+        enabled = enabled,
         imeAction = ImeAction.Done,
         onFocusNext = onEnterDocument,
         onEnterDocument = onEnterDocument,
@@ -188,6 +193,7 @@ private fun EditorHeaderField(
   style: TextStyle,
   placeholderStyle: TextStyle,
   showSkeleton: Boolean,
+  enabled: Boolean,
   imeAction: ImeAction,
   onFocusNext: () -> Unit,
   onEnterDocument: () -> Unit,
@@ -200,9 +206,10 @@ private fun EditorHeaderField(
   BasicTextField(
     value = text,
     onValueChange = onValueChange,
+    enabled = enabled,
     modifier =
       modifier
-        .textInputFocusable(textInputState) {
+        .textInputFocusable(textInputState, enabled = enabled) {
           if (it.isFocused) {
             onFocused()
           }

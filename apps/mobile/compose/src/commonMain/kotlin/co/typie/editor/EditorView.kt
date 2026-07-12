@@ -50,7 +50,7 @@ internal fun EditorView(
   viewportWidth: Float,
   viewportHeight: Float,
   modifier: Modifier = Modifier,
-  textInputSessionEnabled: Boolean = true,
+  editorInputEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
 ) {
@@ -171,11 +171,11 @@ internal fun EditorView(
           editor.enqueue(Message.System(SystemEvent.SetFocused(it.isFocused)))
         }
         .editorInput(
+          enabled = editorInputEnabled,
           editor = editor,
           uiState = uiState,
           platform = platform,
           bringIntoViewRequests = bringIntoViewRequests,
-          textInputSessionEnabled = textInputSessionEnabled,
           suppressSoftwareKeyboard = suppressSoftwareKeyboard,
         )
         .focusable()
@@ -211,13 +211,15 @@ internal fun EditorView(
               },
             showDebugOverlay = showDebugSurfaceOverlay,
             backgroundOverlay = {
-              EditorLineHighlightOverlay(
-                cursor = pageCursor,
-                focused = uiState.focused,
-                displayZoom = displayZoom,
-                pageWidth = size.width,
-                enabled = Preference.lineHighlightEnabled,
-              )
+              if (layoutSpec is EditorDocumentLayoutSpec.Paginated) {
+                EditorLineHighlightOverlay(
+                  cursor = pageCursor,
+                  focused = uiState.focused,
+                  displayZoom = displayZoom,
+                  pageWidth = size.width,
+                  enabled = Preference.lineHighlightEnabled,
+                )
+              }
             },
             foregroundOverlay = {
               EditorExternalElementOverlay(

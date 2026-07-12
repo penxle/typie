@@ -50,7 +50,7 @@ internal fun Modifier.editorInput(
   uiState: EditorUiState,
   platform: Platform,
   bringIntoViewRequests: EditorBringIntoViewRequests,
-  textInputSessionEnabled: Boolean,
+  enabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean,
 ): Modifier =
   this then
@@ -59,7 +59,7 @@ internal fun Modifier.editorInput(
       uiState = uiState,
       platform = platform,
       bringIntoViewRequests = bringIntoViewRequests,
-      textInputSessionEnabled = textInputSessionEnabled,
+      enabled = enabled,
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
     )
 
@@ -77,14 +77,14 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
 internal expect fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean
 
 internal fun shouldRestartEditorInputSession(
-  previousTextInputSessionEnabled: Boolean,
-  textInputSessionEnabled: Boolean,
+  previousEnabled: Boolean,
+  enabled: Boolean,
   previousSuppressSoftwareKeyboard: Boolean,
   suppressSoftwareKeyboard: Boolean,
   restartOnSoftwareKeyboardSuppressionChange: Boolean =
     requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(),
 ): Boolean =
-  previousTextInputSessionEnabled != textInputSessionEnabled ||
+  previousEnabled != enabled ||
     (previousSuppressSoftwareKeyboard != suppressSoftwareKeyboard &&
       restartOnSoftwareKeyboardSuppressionChange)
 
@@ -111,7 +111,7 @@ private data class EditorInputElement(
   private val uiState: EditorUiState,
   private val platform: Platform,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
-  private val textInputSessionEnabled: Boolean,
+  private val enabled: Boolean,
   private val suppressSoftwareKeyboard: Boolean,
 ) : ModifierNodeElement<EditorInputNode>() {
   override fun create(): EditorInputNode =
@@ -120,7 +120,7 @@ private data class EditorInputElement(
       uiState = uiState,
       platform = platform,
       bringIntoViewRequests = bringIntoViewRequests,
-      textInputSessionEnabled = textInputSessionEnabled,
+      enabled = enabled,
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
     )
 
@@ -129,10 +129,7 @@ private data class EditorInputElement(
     node.uiState = uiState
     node.updatePlatform(platform)
     node.bringIntoViewRequests = bringIntoViewRequests
-    node.updateInputSessionPolicy(
-      textInputSessionEnabled = textInputSessionEnabled,
-      suppressSoftwareKeyboard = suppressSoftwareKeyboard,
-    )
+    node.updateInputPolicy(enabled = enabled, suppressSoftwareKeyboard = suppressSoftwareKeyboard)
   }
 }
 
@@ -142,7 +139,7 @@ internal class EditorInputNode(
   var uiState: EditorUiState,
   var platform: Platform,
   var bringIntoViewRequests: EditorBringIntoViewRequests,
-  textInputSessionEnabled: Boolean,
+  enabled: Boolean,
   suppressSoftwareKeyboard: Boolean,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
@@ -150,7 +147,7 @@ internal class EditorInputNode(
   private var bindings = createBindings(platform)
     private set
 
-  private var textInputSessionEnabled = textInputSessionEnabled
+  private var enabled = enabled
   private var suppressSoftwareKeyboard = suppressSoftwareKeyboard
   private val platformInputBridge = EditorPlatformInputBridge()
 
@@ -162,25 +159,19 @@ internal class EditorInputNode(
     platformInputBridge.reset()
   }
 
-  fun updateInputSessionPolicy(
-    textInputSessionEnabled: Boolean,
-    suppressSoftwareKeyboard: Boolean,
-  ) {
+  fun updateInputPolicy(enabled: Boolean, suppressSoftwareKeyboard: Boolean) {
     val shouldRestart =
       shouldRestartEditorInputSession(
-        previousTextInputSessionEnabled = this.textInputSessionEnabled,
-        textInputSessionEnabled = textInputSessionEnabled,
+        previousEnabled = this.enabled,
+        enabled = enabled,
         previousSuppressSoftwareKeyboard = this.suppressSoftwareKeyboard,
         suppressSoftwareKeyboard = suppressSoftwareKeyboard,
       )
-    if (
-      this.textInputSessionEnabled == textInputSessionEnabled &&
-        this.suppressSoftwareKeyboard == suppressSoftwareKeyboard
-    ) {
+    if (this.enabled == enabled && this.suppressSoftwareKeyboard == suppressSoftwareKeyboard) {
       return
     }
 
-    this.textInputSessionEnabled = textInputSessionEnabled
+    this.enabled = enabled
     this.suppressSoftwareKeyboard = suppressSoftwareKeyboard
     if (shouldRestart) {
       syncTextInputSession()
@@ -189,8 +180,7 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? =
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     coroutineScope.launch {
@@ -228,8 +218,7 @@ internal class EditorInputNode(
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? =
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor.syncWithBringIntoView(bringIntoViewRequests) {
@@ -317,7 +306,7 @@ internal class EditorInputNode(
   }
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
-    if (event.type != KeyEventType.KeyDown) return false
+    if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
       if (editor.ime?.composing != null) {
@@ -390,7 +379,7 @@ internal class EditorInputNode(
   }
 
   override fun onPreKeyEvent(event: KeyEvent): Boolean {
-    if (event.type != KeyEventType.KeyDown) return false
+    if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
     if (editor.ime?.composing != null) {
       recordHardwareKey(
@@ -436,7 +425,7 @@ internal class EditorInputNode(
   }
 
   private fun syncTextInputSession() {
-    val sessionEnabled = focused && textInputSessionEnabled
+    val sessionEnabled = focused && enabled
     editor.inputRecorder?.record { seq, t ->
       RecordedInputEntry.Session(seq = seq, t = t, event = if (sessionEnabled) "start" else "stop")
     }

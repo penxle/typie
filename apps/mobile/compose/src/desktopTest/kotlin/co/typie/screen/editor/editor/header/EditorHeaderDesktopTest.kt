@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -53,6 +54,35 @@ class EditorHeaderDesktopTest {
         .width
 
     assertEquals(600f, titleWidth, absoluteTolerance = 0.01f)
+  }
+
+  @Test
+  fun disabledHeaderExposesNoTextEditingAction() = runComposeUiTest {
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorHeader(
+          title = Title,
+          subtitle = "",
+          layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+          trackWidth = 640f,
+          loading = false,
+          enabled = false,
+          topInset = 0.dp,
+          onTitleChange = {},
+          onSubtitleChange = {},
+          onTitleFocused = {},
+          onSubtitleFocused = {},
+          onHeightChanged = {},
+          onEnterDocument = {},
+        )
+      }
+    }
+    waitForIdle()
+
+    onAllNodes(hasText(Title) and hasSetTextAction(), useUnmergedTree = true).assertCountEquals(0)
   }
 
   private companion object {

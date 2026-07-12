@@ -80,6 +80,7 @@ internal fun EditorScreenLayout(
   magnifierFocalPositionInRoot: Offset? = null,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
+  viewportInputEnabled: Boolean = true,
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
   onViewportWheelScroll: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
@@ -149,17 +150,23 @@ internal fun EditorScreenLayout(
       )
     val viewportContentPlaceables =
       subcompose(EditorScreenLayoutSlot.ViewportContent) {
+          val viewportInputModifier =
+            if (viewportInputEnabled) {
+              Modifier.scrollable2D(state = viewportScrollableState)
+                .editorViewportWheelScroll(
+                  viewportState = state.viewportState,
+                  onScrollConsumed = onViewportWheelScroll,
+                )
+            } else {
+              Modifier
+            }
           Layout(
             modifier =
               Modifier.fillMaxSize()
                 .clipToBounds()
                 .hazeSource(toolbarBackdropHazeState)
                 .navigationPopNestedScroll()
-                .scrollable2D(state = viewportScrollableState)
-                .editorViewportWheelScroll(
-                  viewportState = state.viewportState,
-                  onScrollConsumed = onViewportWheelScroll,
-                ),
+                .then(viewportInputModifier),
             content = {
               Column {
                 Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
@@ -515,7 +522,8 @@ private fun Modifier.editorViewportWheelScroll(
           continue
         }
 
-        // DesktopScrollTranslation turns mouse drags into synthetic wheel events; handle those here
+        // DesktopScrollTranslation turns mouse drags into synthetic wheel events; handle those
+        // here
         // as the same viewport pan path because scrollable2D currently has no wheel handling.
         viewportState.updateScrollableInteractionInProgress(true)
         val consumed =

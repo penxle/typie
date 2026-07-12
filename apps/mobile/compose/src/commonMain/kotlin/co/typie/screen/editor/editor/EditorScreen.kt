@@ -7,9 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -176,7 +174,6 @@ import co.typie.serialization.json
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
-import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.LocalPopoverOverlayState
@@ -184,7 +181,6 @@ import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
@@ -682,8 +678,11 @@ fun EditorScreen(entityId: String) {
     }
   }
 
+  val preloadedLayoutSpec =
+    remember(document?.layoutMode) { resolveEditorLoadingLayoutSpec(document?.layoutMode) }
   val layoutSpec: EditorDocumentLayoutSpec =
     editor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
+      ?: preloadedLayoutSpec
       ?: EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
   val background =
     when (layoutSpec) {
@@ -828,7 +827,7 @@ fun EditorScreen(entityId: String) {
           suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
         )
       } ?: true
-    val editorTextInputSessionEnabled = toolbarTextInputSessionEnabled && !subPaneBlocksEditorInput
+    val editorInputEnabledByToolbar = toolbarTextInputSessionEnabled && !subPaneBlocksEditorInput
     val editorSuppressesSoftwareKeyboard =
       toolbarSuppressesSoftwareKeyboard || subPaneBlocksEditorInput
     val previousImeVisible = remember { mutableStateOf(imeVisible) }
@@ -996,6 +995,30 @@ fun EditorScreen(entityId: String) {
         visibleBodyWidth = visibleArea.visibleBodySize.width,
         bodyTrackWidth = bodyTrackWidth,
       )
+    val editorGeometryValid =
+      hasValidEditorGeometry(
+        editorAttached = editor != null,
+        pageSizes = pageSizes,
+        trackWidth = bodyTrackWidth,
+      )
+    val editorReady = !loading && editorGeometryValid
+    val editorInteractionFocused = editorReady && uiState.focused && screenState.sceneInForeground
+
+    LaunchedEffect(editor, editorGeometryValid) {
+      val attachedEditor = editor ?: return@LaunchedEffect
+      if (!editorGeometryValid && runtime.editor === attachedEditor) {
+        runtime.reportError(
+          attachedEditor,
+          IllegalStateException("Attached editor has invalid geometry"),
+        )
+      }
+    }
+    LaunchedEffect(editor, editorReady) {
+      if (!editorReady) {
+        runtime.blur()
+        focusManager.clearFocus(force = true)
+      }
+    }
     val viewportScrollableState = rememberScrollable2DState { delta ->
       consumeEditorViewportTouchPan(
         viewportState = screenState.viewportState,
@@ -1017,9 +1040,7 @@ fun EditorScreen(entityId: String) {
       )
     val viewportScrollReconcileMode =
       if (
-        uiState.focused &&
-          screenState.sceneInForeground &&
-          editor != null &&
+        editorInteractionFocused &&
           interactionScope.controller.interactionMode.allowsViewportScrollReconcile
       ) {
         if (subPaneLayoutInfo != null) {
@@ -1061,10 +1082,10 @@ fun EditorScreen(entityId: String) {
         density = density,
         scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
-        pointerInputEnabled = { !popoverOverlayState.isOutsideDismissGestureActive },
+        pointerInputEnabled = { editorReady && !popoverOverlayState.isOutsideDismissGestureActive },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
         onRequestSoftwareKeyboard = {
-          if (editorTextInputSessionEnabled && !editorSuppressesSoftwareKeyboard) {
+          if (editorReady && editorInputEnabledByToolbar && !editorSuppressesSoftwareKeyboard) {
             keyboardController?.show()
           }
         },
@@ -1077,6 +1098,7 @@ fun EditorScreen(entityId: String) {
     val debugWheelZoomModifier =
       if (
         PlatformModule.platform == co.typie.platform.Platform.Desktop &&
+          editorReady &&
           paginatedLayout != null &&
           density > 0f
       ) {
@@ -1102,9 +1124,7 @@ fun EditorScreen(entityId: String) {
           }
         }
     }
-    LaunchedEffect(uiState.focused, screenState.sceneInForeground, editor) {
-      val editorInteractionFocused =
-        uiState.focused && screenState.sceneInForeground && editor != null
+    LaunchedEffect(editorInteractionFocused) {
       if (!editorInteractionFocused) {
         uiState.contextMenu.hide()
         bringIntoViewRequests.cancel()
@@ -1126,6 +1146,7 @@ fun EditorScreen(entityId: String) {
         visibleArea = visibleArea,
         magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
         viewportScrollableState = viewportScrollableState,
+        viewportInputEnabled = editorReady,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
         onViewportWheelScroll = { uiState.contextMenu.hide() },
@@ -1153,7 +1174,8 @@ fun EditorScreen(entityId: String) {
             subtitle = model.subtitleDraft,
             layoutSpec = layoutSpec,
             trackWidth = headerTrackWidth,
-            loading = loading,
+            loading = false,
+            enabled = editorReady,
             topInset = topInset,
             subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
             onTitleChange = model::updateTitleDraft,
@@ -1172,57 +1194,71 @@ fun EditorScreen(entityId: String) {
           )
         },
         viewportOverlay = {
-          EditorZoomOverlay(
-            modifier =
-              Modifier.align(Alignment.BottomStart)
-                .padding(start = 20.dp, bottom = 20.dp + visibleArea.bottomOcclusion.dp)
-          )
-          EditorCharacterCountOverlay(
-            editor = runtime.editor,
-            viewportState = screenState.viewportState,
-            visibleArea = visibleArea,
-          )
-        },
-        overlay = {
-          Box(modifier = Modifier.fillMaxSize()) {
-            EditorScreenOverlayHost(
+          if (editorReady) {
+            EditorZoomOverlay(
+              modifier =
+                Modifier.align(Alignment.BottomStart)
+                  .padding(start = 20.dp, bottom = 20.dp + visibleArea.bottomOcclusion.dp)
+            )
+            EditorCharacterCountOverlay(
+              editor = runtime.editor,
               viewportState = screenState.viewportState,
               visibleArea = visibleArea,
-              autoScrollPolicy = autoScrollPolicy,
+            )
+          } else {
+            EditorLoadingSkeleton(
               layoutSpec = layoutSpec,
-              pageSizes = pageSizes,
-              displayZoom = displayZoom,
-              onTableAxisActionsRequest = { target, openedSelection ->
-                findReplace.close()
-                aiFeedback.close()
-                spellcheck.close()
-                uiState.contextMenu.hide()
-                subPaneState.open(
-                  EditorSubPane.TableAxisActions(target = target, openedSelection = openedSelection)
-                )
-              },
-              showDebugOverlay = devMode && model.debugViewportOverlayVisible,
+              topInset = topInset,
+              background = background,
               modifier = Modifier.fillMaxSize(),
             )
-            SpellcheckOverlay(
-              session = spellcheck,
-              visibleArea = visibleAreas.base,
-              modifier = Modifier.fillMaxSize(),
-            )
-            AiFeedbackOverlay(
-              session = aiFeedback,
-              visibleArea = visibleAreas.base,
-              modifier = Modifier.fillMaxSize(),
-            )
-            val activeEditor = runtime.editor
-            if (activeEditor != null) {
-              EditorRepasteAsTextOverlay(
-                editor = activeEditor,
-                visibleArea = visibleAreas.base,
-                visible = repasteAsTextVisible,
-                bringIntoViewRequests = bringIntoViewRequests,
+          }
+        },
+        overlay = {
+          if (editorReady) {
+            Box(modifier = Modifier.fillMaxSize()) {
+              EditorScreenOverlayHost(
+                viewportState = screenState.viewportState,
+                visibleArea = visibleArea,
+                autoScrollPolicy = autoScrollPolicy,
+                layoutSpec = layoutSpec,
+                pageSizes = pageSizes,
+                displayZoom = displayZoom,
+                onTableAxisActionsRequest = { target, openedSelection ->
+                  findReplace.close()
+                  aiFeedback.close()
+                  spellcheck.close()
+                  uiState.contextMenu.hide()
+                  subPaneState.open(
+                    EditorSubPane.TableAxisActions(
+                      target = target,
+                      openedSelection = openedSelection,
+                    )
+                  )
+                },
+                showDebugOverlay = devMode && model.debugViewportOverlayVisible,
                 modifier = Modifier.fillMaxSize(),
               )
+              SpellcheckOverlay(
+                session = spellcheck,
+                visibleArea = visibleAreas.base,
+                modifier = Modifier.fillMaxSize(),
+              )
+              AiFeedbackOverlay(
+                session = aiFeedback,
+                visibleArea = visibleAreas.base,
+                modifier = Modifier.fillMaxSize(),
+              )
+              val activeEditor = runtime.editor
+              if (activeEditor != null) {
+                EditorRepasteAsTextOverlay(
+                  editor = activeEditor,
+                  visibleArea = visibleAreas.base,
+                  visible = repasteAsTextVisible,
+                  bringIntoViewRequests = bringIntoViewRequests,
+                  modifier = Modifier.fillMaxSize(),
+                )
+              }
             }
           }
         },
@@ -1235,12 +1271,12 @@ fun EditorScreen(entityId: String) {
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
               modifier = Modifier.then(debugWheelZoomModifier),
-              textInputSessionEnabled = editorTextInputSessionEnabled,
-              suppressSoftwareKeyboard = editorSuppressesSoftwareKeyboard,
+              editorInputEnabled = editorReady && editorInputEnabledByToolbar,
+              suppressSoftwareKeyboard = !editorReady || editorSuppressesSoftwareKeyboard,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
               overlay = {
-                if (!documentLocked) {
+                if (editorReady && !documentLocked) {
                   EditorDocumentPlaceholder(
                     placeholder = editorState.placeholder,
                     geometry = bodyGeometry,
@@ -1251,7 +1287,7 @@ fun EditorScreen(entityId: String) {
                     onLoadTemplate = ::openTemplateSheet,
                   )
                 }
-                if (comments.virtualThreadGuardVisible) {
+                if (editorReady && comments.virtualThreadGuardVisible) {
                   val guardInteractionSource = remember { MutableInteractionSource() }
                   Box(
                     modifier =
@@ -1265,10 +1301,6 @@ fun EditorScreen(entityId: String) {
                 }
               },
             )
-          } else {
-            Skeleton(enabled = true, modifier = Modifier.fillMaxSize()) {
-              EditorBodyLoadingSkeleton(modifier = Modifier.fillMaxSize())
-            }
           }
         },
         toolbar = {
@@ -1380,7 +1412,7 @@ fun EditorScreen(entityId: String) {
         modifier =
           Modifier.padding(start = startInset, end = endInset).editorScreenShortcutFocusTarget(
             active = screenShortcutModeActive,
-            enabled = screenState.sceneInForeground && !subPaneBlocksEditorInput,
+            enabled = editorReady && screenState.sceneInForeground && !subPaneBlocksEditorInput,
             editorFocused = uiState.focused,
             selection = editorState.selection,
           ) { event ->
@@ -1410,22 +1442,6 @@ internal fun resolveEditorHeaderTrackWidth(
       }
     is EditorDocumentLayoutSpec.Paginated -> visibleBodyWidth
   }.coerceAtLeast(0f)
-
-@Composable
-private fun EditorBodyLoadingSkeleton(modifier: Modifier = Modifier) {
-  Box(modifier = modifier, contentAlignment = Alignment.TopCenter) {
-    Column(
-      modifier =
-        Modifier.fillMaxWidth()
-          .widthIn(max = ResponsiveContainerDefaults.MaxWidth)
-          .padding(horizontal = 20.dp, vertical = 32.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-      Skeleton.list(6) { text(16..34) }
-        .forEach { line -> Text(text = line, style = AppTheme.typography.body) }
-    }
-  }
-}
 
 internal fun enterDocumentStartFromHeader(
   editor: Editor?,
