@@ -18,10 +18,10 @@ pub(crate) enum DndState {
 }
 
 impl DndState {
-    pub(crate) fn drop_target(&self) -> Option<DropTarget> {
+    pub(crate) fn drop_target(&self) -> Option<&DropTarget> {
         match self {
             Self::InternalDnd { drop_target, .. } | Self::ExternalDnd { drop_target, .. } => {
-                *drop_target
+                drop_target.as_ref()
             }
             _ => None,
         }

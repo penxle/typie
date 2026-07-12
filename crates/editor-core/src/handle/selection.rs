@@ -3,7 +3,7 @@ use editor_crdt::Dot;
 use editor_model::DocView;
 use editor_state::{
     Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
-    cell_rect_selection, enclosing_table, enclosing_table_cell,
+    cell_rect_selection, enclosing_table, enclosing_table_cell, remap_selection,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion, table_cell_ids,
 };
@@ -53,7 +53,10 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             Ok(())
         }),
         SelectionOp::SetAt { page, x, y } => {
-            let selection = editor.view.hit_test(page, x, y);
+            let selection = editor
+                .view
+                .hit_test(page, x, y)
+                .and_then(|selection| remap_layout_selection(editor, selection));
             editor.transact(|tr| {
                 tr.update_meta(|m| m.history = HistoryMeta::Skip);
                 if let Some(selection) = selection {
@@ -158,6 +161,11 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
     }
 }
 
+fn remap_layout_selection(editor: &Editor, selection: Selection) -> Option<Selection> {
+    let layout_state = editor.view.layout_state()?;
+    remap_selection(selection, layout_state, &editor.state)
+}
+
 fn resolve_select_unit_at_selection(
     editor: &Editor,
     page: usize,
@@ -165,26 +173,23 @@ fn resolve_select_unit_at_selection(
     y: f32,
     unit: SelectionPointUnit,
 ) -> Option<Selection> {
+    let layout_state = editor.view.layout_state()?;
+    let layout_view = layout_state.view();
     let hit = editor.view.hit_test(page, x, y)?;
-    match unit {
+    let selection = match unit {
         SelectionPointUnit::Word => {
             let resource = editor.resource.lock().unwrap();
-            Some(
-                resolve_word_selection_expansion(&hit, &editor.state.view(), &resource)
-                    .unwrap_or(hit),
-            )
+            resolve_word_selection_expansion(&hit, &layout_view, &resource).unwrap_or(hit)
         }
         SelectionPointUnit::Sentence => {
             let resource = editor.resource.lock().unwrap();
-            Some(
-                resolve_sentence_selection_expansion(&hit, &editor.state.view(), &resource)
-                    .unwrap_or(hit),
-            )
+            resolve_sentence_selection_expansion(&hit, &layout_view, &resource).unwrap_or(hit)
         }
         SelectionPointUnit::Paragraph => {
-            Some(resolve_paragraph_selection_expansion(&hit, &editor.state.view()).unwrap_or(hit))
+            resolve_paragraph_selection_expansion(&hit, &layout_view).unwrap_or(hit)
         }
-    }
+    };
+    remap_layout_selection(editor, selection)
 }
 
 fn resolve_extend_to_selection(
@@ -196,7 +201,8 @@ fn resolve_extend_to_selection(
     base_selection: Option<Selection>,
     allow_collapse: bool,
 ) -> Option<Selection> {
-    let view = editor.state().view();
+    let input_state = editor.layout_input_state()?;
+    let view = input_state.view();
     let base_cell_rect_anchor = base_selection
         .as_ref()
         .and_then(|selection| selection.resolve(&view))
@@ -218,8 +224,7 @@ fn resolve_extend_to_selection(
                 .nearest_node_box(head_page, head_x, head_y, &cells)
             {
                 let is_cell_mode = started_from_cell_rect
-                    || editor
-                        .state
+                    || input_state
                         .selection
                         .as_ref()
                         .and_then(|selection| selection.resolve(&view))
@@ -227,7 +232,7 @@ fn resolve_extend_to_selection(
                 let is_same_cell_content_hit = if head_cell == anchor_cell && !is_cell_mode {
                     editor
                         .view
-                        .hit_test_extending(editor.state(), &anchor, head_page, head_x, head_y)
+                        .hit_test_extending(&input_state, &anchor, head_page, head_x, head_y)
                         .is_some_and(|hit| {
                             hit.source == ExtendingHitSource::Exact
                                 && selection_endpoints_inside_cell(
@@ -242,7 +247,7 @@ fn resolve_extend_to_selection(
                 if (head_cell != anchor_cell || is_cell_mode || !is_same_cell_content_hit)
                     && let Some(selection) = cell_rect_selection(anchor_cell, head_cell, &view)
                 {
-                    return Some(selection);
+                    return remap_layout_selection(editor, selection);
                 }
             }
         }
@@ -252,7 +257,7 @@ fn resolve_extend_to_selection(
     let head_hit =
         editor
             .view
-            .hit_test_extending(editor.state(), &anchor, head_page, head_x, head_y)?;
+            .hit_test_extending(&input_state, &anchor, head_page, head_x, head_y)?;
 
     let selection = if let Some(base_selection) = base_selection {
         extend_base_selection(&view, base_selection, head_hit.selection)?
@@ -261,7 +266,9 @@ fn resolve_extend_to_selection(
     };
     let selection = selection.normalize(&view).unwrap_or(selection);
 
-    (allow_collapse || !selection.is_collapsed()).then_some(selection)
+    (allow_collapse || !selection.is_collapsed())
+        .then_some(selection)
+        .and_then(|selection| remap_layout_selection(editor, selection))
 }
 
 fn selection_endpoints_inside_cell(view: &DocView, selection: &Selection, cell: Dot) -> bool {

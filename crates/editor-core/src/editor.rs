@@ -9,6 +9,7 @@ use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
     LayoutDirty, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
     State, closest_empty_paragraph_break_end_between, farther_endpoint, is_unit_node_selection,
+    remap_selection,
 };
 use editor_transaction::{Effect, HistoryMeta, MergeKind, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
@@ -626,7 +627,7 @@ impl Editor {
             self.state.projected_mut().commit();
         }
 
-        let layout_dirty = self.state.projected_mut().take_layout_dirty();
+        let layout_dirty = self.view.take_layout_dirty(&mut self.state);
 
         if !self.pending_ops.is_empty() {
             self.augment_font_state_from_ops(&layout_dirty);
@@ -1322,13 +1323,25 @@ impl Editor {
         }
     }
 
+    /// Rebinds the latest live selection by identity into the document snapshot
+    /// that produced the current layout.
+    pub(crate) fn layout_input_state(&self) -> Option<State> {
+        let mut state = self.view.layout_state()?.clone();
+        state.selection = self
+            .state
+            .selection
+            .and_then(|selection| remap_selection(selection, &self.state, &state));
+        Some(state)
+    }
+
     pub(crate) fn resolve_extend_movement(
         &mut self,
         selection: Selection,
         movement: &Movement,
+        state: &State,
     ) -> Option<Selection> {
         let target = self.resolve_movement(&selection.head, movement)?;
-        let doc = self.state.view();
+        let doc = state.view();
         let current_is_unit = is_unit_node_selection(&selection, &doc);
         let fixed = if current_is_unit {
             farther_endpoint(&doc, &target.head, &selection.anchor, &selection.head)
@@ -1853,7 +1866,8 @@ mod tests {
         PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
     };
     use editor_state::{
-        Affinity, PendingModifier, PendingModifiers, Position, Selection, StableResolveCtx, State,
+        Affinity, PendingModifier, PendingModifiers, Position, Selection, StablePosition,
+        StableResolveCtx, State,
     };
     use hashbrown::HashSet;
     use std::collections::BTreeMap;
@@ -3721,7 +3735,7 @@ mod tests {
             panic!("internal dnd should start from selected image");
         };
         *drop_target = Some(editor_view::DropTarget {
-            position: Position::new(p1, 3),
+            position: StablePosition::capture(&Position::new(p1, 3), &editor.state.view()),
             indicator: editor_view::DropIndicator::Inline {
                 page_idx: 0,
                 x: 0.0,
@@ -3789,7 +3803,10 @@ mod tests {
         editor.dnd = DndState::ExternalDnd {
             payload: ExternalDndPayloadKind::Text,
             drop_target: Some(editor_view::DropTarget {
-                position: Position::new(Dot::ROOT, 1),
+                position: StablePosition::capture(
+                    &Position::new(Dot::ROOT, 1),
+                    &editor.state.view(),
+                ),
                 indicator: editor_view::DropIndicator::Block {
                     page_idx: 0,
                     x: 0.0,
@@ -3848,7 +3865,10 @@ mod tests {
         editor.dnd = DndState::ExternalDnd {
             payload: ExternalDndPayloadKind::Text,
             drop_target: Some(editor_view::DropTarget {
-                position: Position::new(Dot::ROOT, 1),
+                position: StablePosition::capture(
+                    &Position::new(Dot::ROOT, 1),
+                    &editor.state.view(),
+                ),
                 indicator: editor_view::DropIndicator::Block {
                     page_idx: 0,
                     x: 0.0,
@@ -4307,9 +4327,7 @@ mod tests {
             .expect("cursor metrics")
             .caret;
 
-        let target = editor
-            .view
-            .drop_target_at(&editor.state, 0, caret.x, page_bottom - 1.0);
+        let target = editor.view.drop_target_at(0, caret.x, page_bottom - 1.0);
 
         assert!(
             target.is_some(),
@@ -4318,9 +4336,11 @@ mod tests {
             caret.height
         );
         if let Some(t) = target {
+            let view = editor.state.view();
+            let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
             assert_eq!(
-                t.position,
-                Position::new(Dot::ROOT, 2),
+                t.position.resolve(&ctx),
+                Some(Position::new(Dot::ROOT, 2)),
                 "drop target position must be (root, 2) - after paragraph"
             );
         }

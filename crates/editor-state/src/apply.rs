@@ -108,6 +108,9 @@ impl State {
         css: Vec<Changeset<EditOp>>,
     ) -> Result<(Self, Vec<Op<EditOp>>), StateError> {
         let (next_projected, applied) = self.projected.receive_changesets(css)?;
+        if applied.is_empty() {
+            return Ok((self.clone(), applied));
+        }
         let mut next = self.clone();
         next.projected = Arc::new(next_projected);
         Ok((next, applied))

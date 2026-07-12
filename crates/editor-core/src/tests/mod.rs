@@ -1,5 +1,6 @@
 mod alias_e2e;
 mod can_invariants;
+mod layout_state_input;
 mod perf_modifier;
 mod perf_tracked_resolve;
 mod set_doc;

@@ -4,9 +4,9 @@ use editor_model::{DocView, Node};
 use editor_state::Position;
 
 use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
+use crate::DropIndicator;
 use crate::paginate::types::{LayoutContent, LayoutLine, SpacingKind};
 use crate::style::Direction;
-use crate::{DropIndicator, DropTarget};
 
 pub(crate) fn drop_target_at(
     layout_index: &LayoutIndex,
@@ -14,16 +14,13 @@ pub(crate) fn drop_target_at(
     page_idx: usize,
     x: f32,
     page_y: f32,
-) -> Option<DropTarget> {
+) -> Option<(Position, DropIndicator)> {
     let point = layout_index.point(page_idx, x, page_y)?;
     let position = dnd_position(layout_index, view, point)?;
     let position =
         promote_outer_edge_drop_position(layout_index, view, position).unwrap_or(position);
     let indicator = drop_indicator_from_position(layout_index, view, position)?;
-    Some(DropTarget {
-        position,
-        indicator,
-    })
+    Some((position, indicator))
 }
 
 fn dnd_position(
@@ -492,16 +489,16 @@ mod tests {
         let test_x = line_rect.x + line_rect.width * 0.5;
 
         let result = drop_target_at(&index, &view, 0, test_x, mid_y - para_rect.y);
-        let target = result.expect("drop target must be Some");
+        let (position, indicator) = result.expect("drop target must be Some");
 
         assert_eq!(
-            target.position.node, para_id,
+            position.node, para_id,
             "position.node must be the paragraph Dot"
         );
         assert!(
-            matches!(target.indicator, DropIndicator::Inline { .. }),
+            matches!(indicator, DropIndicator::Inline { .. }),
             "indicator must be Inline, got {:?}",
-            target.indicator
+            indicator
         );
 
         let LayoutContent::Line(line) = &entry.content(&index).unwrap() else {
@@ -509,7 +506,7 @@ mod tests {
         };
         let expected_pos = grapheme::position_at_x(line, test_x - line_rect.x);
         assert_eq!(
-            target.position.offset, expected_pos.offset,
+            position.offset, expected_pos.offset,
             "offset must match position_at_x"
         );
 
@@ -559,11 +556,11 @@ mod tests {
         let page_y = second_right_line.rect.y - index.pages()[0].y_start
             + second_right_line.rect.height / 2.0;
 
-        let target =
+        let (position, _) =
             drop_target_at(&index, &view, 0, x, page_y).expect("gutter drop in row must resolve");
 
         assert_eq!(
-            target.position.node,
+            position.node,
             left_para.id(),
             "row side gutter drop must route to the nearest cell scope"
         );
@@ -591,26 +588,27 @@ mod tests {
         let x = para_rect.x + para_rect.width * 0.5;
 
         let top_padding_y = (cell_rect.y + para_rect.y) * 0.5 - index.pages()[0].y_start;
-        let top_target = drop_target_at(&index, &view, 0, x, top_padding_y)
+        let (top_position, top_indicator) = drop_target_at(&index, &view, 0, x, top_padding_y)
             .expect("cell top padding drop must resolve");
-        assert_eq!(top_target.position.node, cell.id());
-        assert_eq!(top_target.position.offset, 0);
+        assert_eq!(top_position.node, cell.id());
+        assert_eq!(top_position.offset, 0);
         assert!(
-            matches!(top_target.indicator, DropIndicator::Block { .. }),
+            matches!(top_indicator, DropIndicator::Block { .. }),
             "cell padding drop should be a block boundary, got {:?}",
-            top_target.indicator
+            top_indicator
         );
 
         let bottom_padding_y =
             (para_rect.bottom() + cell_rect.bottom()) * 0.5 - index.pages()[0].y_start;
-        let bottom_target = drop_target_at(&index, &view, 0, x, bottom_padding_y)
-            .expect("cell bottom padding drop must resolve");
-        assert_eq!(bottom_target.position.node, cell.id());
-        assert_eq!(bottom_target.position.offset, 1);
+        let (bottom_position, bottom_indicator) =
+            drop_target_at(&index, &view, 0, x, bottom_padding_y)
+                .expect("cell bottom padding drop must resolve");
+        assert_eq!(bottom_position.node, cell.id());
+        assert_eq!(bottom_position.offset, 1);
         assert!(
-            matches!(bottom_target.indicator, DropIndicator::Block { .. }),
+            matches!(bottom_indicator, DropIndicator::Block { .. }),
             "cell padding drop should be a block boundary, got {:?}",
-            bottom_target.indicator
+            bottom_indicator
         );
     }
 
@@ -673,28 +671,29 @@ mod tests {
         let page = index.page(0).expect("page 0 must exist");
 
         let gap_page_y = gap_mid_y - page.y_start;
-        let gap_target = drop_target_at(&index, &view, 0, 10.0, gap_page_y)
+        let (gap_position, gap_indicator) = drop_target_at(&index, &view, 0, 10.0, gap_page_y)
             .expect("drop_target_at must resolve at a block edge in the inter-paragraph gap");
         assert!(
-            matches!(gap_target.indicator, DropIndicator::Block { .. }),
+            matches!(gap_indicator, DropIndicator::Block { .. }),
             "indicator in inter-paragraph gap must be Block, got {:?}",
-            gap_target.indicator
+            gap_indicator
         );
         assert_eq!(
-            gap_target.position.node, root_id,
+            gap_position.node, root_id,
             "drop in gap must resolve to root node"
         );
 
         let gap_bottom_page_y = p2_rect.y - 1.0 - page.y_start;
-        let gap_bottom_target = drop_target_at(&index, &view, 0, 10.0, gap_bottom_page_y)
-            .expect("drop_target_at must resolve at a block edge near the bottom of the gap");
+        let (gap_bottom_position, gap_bottom_indicator) =
+            drop_target_at(&index, &view, 0, 10.0, gap_bottom_page_y)
+                .expect("drop_target_at must resolve at a block edge near the bottom of the gap");
         assert!(
-            matches!(gap_bottom_target.indicator, DropIndicator::Block { .. }),
+            matches!(gap_bottom_indicator, DropIndicator::Block { .. }),
             "indicator near bottom of gap must be Block, got {:?}",
-            gap_bottom_target.indicator
+            gap_bottom_indicator
         );
         assert_eq!(
-            gap_bottom_target.position.node, root_id,
+            gap_bottom_position.node, root_id,
             "drop near bottom of gap must resolve to root node"
         );
     }
@@ -769,18 +768,18 @@ mod tests {
             atom_rect.y + atom_rect.height * 0.5 - index.page_y_start(0).unwrap_or(0.0);
 
         let result = drop_target_at(&index, &view, 0, mid_x, mid_y_page);
-        let target = result.expect("drop target on atom must be Some");
+        let (position, _) = result.expect("drop target on atom must be Some");
 
         assert_eq!(
-            target.position.node, expected_parent,
+            position.node, expected_parent,
             "position.node must be atom.attachment.parent (root Dot)"
         );
         assert_eq!(
-            target.position.node, root_id,
+            position.node, root_id,
             "atom attachment parent must be the root"
         );
         assert_eq!(
-            target.position.offset, expected_offset,
+            position.offset, expected_offset,
             "offset must be attachment.index + 1"
         );
     }

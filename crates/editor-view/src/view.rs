@@ -4,7 +4,7 @@ use editor_common::{EdgeInsets, Movement};
 use editor_crdt::Dot;
 use editor_model::{LayoutMode, Node, NodeType, NodeView};
 use editor_resource::Resource;
-use editor_state::{LayoutDirty, Position, ResolvedSelection, Selection, State};
+use editor_state::{LayoutDirty, Position, ResolvedSelection, Selection, StablePosition, State};
 
 use crate::measure::Measurer;
 use crate::measure::context::measure_context;
@@ -24,6 +24,7 @@ const CONTINUOUS_CONTENT_CAP: f32 = 1024.0;
 pub struct View {
     resource: Arc<Mutex<Resource>>,
     layout: Option<LayoutResult>,
+    layout_state: Option<State>,
     fingerprint: Option<LayoutFingerprint>,
     viewport: Viewport,
     view_state: ViewState,
@@ -50,6 +51,7 @@ impl View {
             viewport,
             view_state: ViewState::new(),
             layout: None,
+            layout_state: None,
             fingerprint: None,
             measurer: Measurer::new(),
         }
@@ -102,9 +104,14 @@ impl View {
             LayoutDirty::Incremental { content, structural }
                 if content.is_empty() && structural.is_empty()
         );
-        if dirty_empty && self.layout.is_some() {
+        let same_projected_state = self
+            .layout_state
+            .as_ref()
+            .is_some_and(|layout_state| Arc::ptr_eq(&layout_state.projected, &state.projected));
+        if dirty_empty && same_projected_state && self.layout.is_some() {
             let (_, _, new_fingerprint) = self.build_pipeline(state);
             if self.fingerprint.as_ref() == Some(&new_fingerprint) {
+                self.layout_state = Some(state.clone());
                 return false;
             }
         }
@@ -144,6 +151,7 @@ impl View {
         }
 
         self.compute_inner(state, content_targets.as_deref());
+        self.layout_state = Some(state.clone());
 
         if pending_changed {
             self.view_state.preferred_x = None;
@@ -225,6 +233,25 @@ impl View {
 
     fn compute(&mut self, state: &State) {
         self.compute_inner(state, None);
+        self.layout_state = Some(state.clone());
+    }
+
+    pub fn layout_state(&self) -> Option<&State> {
+        self.layout_state.as_ref()
+    }
+
+    /// Consumes projected layout dirtiness without making the retained layout
+    /// snapshot force a copy-on-write clone of an otherwise unchanged document.
+    pub fn take_layout_dirty(&mut self, state: &mut State) -> LayoutDirty {
+        let layout_was_current = self
+            .layout_state
+            .take()
+            .is_some_and(|layout_state| Arc::ptr_eq(&layout_state.projected, &state.projected));
+        let dirty = state.projected_mut().take_layout_dirty();
+        if layout_was_current {
+            self.layout_state = Some(state.clone());
+        }
+        dirty
     }
 
     fn compute_inner(&mut self, state: &State, content_targets: Option<&[editor_crdt::Dot]>) {
@@ -332,13 +359,19 @@ impl View {
 
     pub fn drop_target_at(
         &self,
-        state: &State,
         page_idx: usize,
         x: f32,
         y: f32,
     ) -> Option<crate::dnd::DropTarget> {
         let layout_index = &self.layout.as_ref()?.layout_index;
-        crate::query::dnd::drop_target_at(layout_index, &state.view(), page_idx, x, y)
+        let layout_state = self.layout_state.as_ref()?;
+        let view = layout_state.view();
+        let (position, indicator) =
+            crate::query::dnd::drop_target_at(layout_index, &view, page_idx, x, y)?;
+        Some(crate::dnd::DropTarget {
+            position: StablePosition::capture(&position, &view),
+            indicator,
+        })
     }
 
     pub fn interactive_hit_test(
@@ -814,7 +847,7 @@ mod invalidation_tests {
         NodeType, SeqItem, TableNodeAttr,
     };
     use editor_resource::Resource;
-    use editor_state::{LayoutDirty, ProjectedState, State};
+    use editor_state::{LayoutDirty, Position, ProjectedState, Selection, State};
 
     use super::View;
     use crate::measure::context::measure_context;
@@ -854,6 +887,54 @@ mod invalidation_tests {
         let mut resource = view.resource.lock().unwrap();
         view.measurer
             .measure(&nv, content_width, &ctx, &mut resource)
+    }
+
+    #[test]
+    fn layout_state_tracks_the_state_used_by_the_layout() {
+        let mut projected = ProjectedState::empty();
+        projected.commit();
+        let paragraph = projected
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        let state = State::new(projected, None);
+        let mut view = make_view(800.0);
+
+        view.layout(&state);
+
+        let layout_state = view
+            .layout_state()
+            .expect("layout must retain its source state");
+        assert!(Arc::ptr_eq(&layout_state.projected, &state.projected));
+
+        let mut selection_state = state.clone();
+        selection_state.selection = Some(Selection::collapsed(Position::new(paragraph, 0)));
+        assert!(!view.reconcile(&selection_state, LayoutDirty::empty(), None, None,));
+        assert_eq!(
+            view.layout_state().and_then(|state| state.selection),
+            selection_state.selection,
+        );
+    }
+
+    #[test]
+    fn taking_layout_dirty_does_not_clone_a_current_layout_snapshot() {
+        let mut projected = ProjectedState::empty();
+        projected.commit();
+        let mut state = State::new(projected, None);
+        let mut view = make_view(800.0);
+        view.layout(&state);
+        let projected_before = Arc::as_ptr(&state.projected);
+
+        let _ = view.take_layout_dirty(&mut state);
+
+        assert_eq!(Arc::as_ptr(&state.projected), projected_before);
+        assert!(view.layout_state().is_some_and(|layout_state| {
+            Arc::ptr_eq(&layout_state.projected, &state.projected)
+        }));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use editor_common::Rect;
-use editor_state::Position;
+use editor_state::StablePosition;
 
 use crate::PageRect;
 
@@ -38,9 +38,9 @@ impl DropIndicator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DropTarget {
-    pub position: Position,
+    pub position: StablePosition,
     pub indicator: DropIndicator,
 }
 

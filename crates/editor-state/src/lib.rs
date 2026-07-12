@@ -77,7 +77,7 @@ pub use selection_expansion::{
     resolve_word_selection_expansion,
 };
 pub use stable_position::{StablePosition, StablePositionChild, StableResolveCtx};
-pub use stable_selection::StableSelection;
+pub use stable_selection::{StableSelection, remap_selection};
 pub use state::*;
 pub use to_plain::to_plain;
 pub use traversal::{

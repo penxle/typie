@@ -8,7 +8,8 @@ use editor_model::{
     ChildView, ContextExpr, DocView, Fragment, Node, NodeType, PlainFileNode, PlainImageNode,
     PlainNode, PlainRootNode, Schema,
 };
-use editor_state::{Position, Selection, StableResolveCtx, StableSelection};
+use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
+use editor_view::DropTarget;
 
 #[derive(Debug, Clone, Copy)]
 enum SelectionAfterDrop {
@@ -17,7 +18,7 @@ enum SelectionAfterDrop {
 }
 
 pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> {
-    let previous_drop_target = editor.dnd.drop_target();
+    let previous_drop_target = editor.dnd.drop_target().cloned();
     let result = match op {
         DndOp::StartInternalSelection => {
             let view = editor.state.view();
@@ -63,38 +64,41 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                 editor.dnd = DndState::Idle;
             }
 
-            let target = match editor.dnd.clone() {
-                DndState::InternalDnd { .. } => editor
-                    .view
-                    .drop_target_at(&editor.state, page, x, y)
-                    .filter(|target| {
-                        internal_source.as_ref().is_some_and(|source| {
+            let target = editor.view.drop_target_at(page, x, y);
+            let target = match (editor.dnd.clone(), target) {
+                (DndState::InternalDnd { .. }, Some(target)) => {
+                    let live_position = resolve_drop_position(&target, &editor.state);
+                    live_position.and_then(|live_position| {
+                        internal_source.as_ref().and_then(|source| {
                             let inside = {
                                 let view = editor.state.view();
-                                position_inside_selection(&view, target.position, source)
+                                position_inside_selection(&view, live_position, source)
                             };
-                            !inside
+                            (!inside
                                 && can_apply_drop(
                                     editor,
-                                    target.position,
+                                    live_position,
                                     DndDropPayload::InternalSelection,
                                     modifiers,
                                     Some(*source),
-                                )
+                                ))
+                            .then_some(target)
                         })
-                    }),
-                DndState::ExternalDnd { payload, .. } => editor
-                    .view
-                    .drop_target_at(&editor.state, page, x, y)
-                    .filter(|target| {
+                    })
+                }
+                (DndState::ExternalDnd { payload, .. }, Some(target)) => {
+                    let live_position = resolve_drop_position(&target, &editor.state);
+                    live_position.and_then(|live_position| {
                         can_apply_drop(
                             editor,
-                            target.position,
+                            live_position,
                             representative_external_payload(payload),
                             modifiers,
                             None,
                         )
-                    }),
+                        .then_some(target)
+                    })
+                }
                 _ => None,
             };
             editor.dnd.set_drop_target(target);
@@ -125,30 +129,34 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             let target = if accepts_payload {
                 match (&payload, internal_source.as_ref()) {
                     (DndDropPayload::InternalSelection, Some(source)) => {
-                        editor.dnd.drop_target().filter(|target| {
+                        editor.dnd.drop_target().cloned().and_then(|target| {
+                            let position = resolve_drop_position(&target, &editor.state)?;
                             let inside = {
                                 let view = editor.state.view();
-                                position_inside_selection(&view, target.position, source)
+                                position_inside_selection(&view, position, source)
                             };
-                            !inside
+                            (!inside
                                 && can_apply_drop(
                                     editor,
-                                    target.position,
+                                    position,
                                     DndDropPayload::InternalSelection,
                                     modifiers,
                                     Some(*source),
-                                )
+                                ))
+                            .then_some(position)
                         })
                     }
-                    _ => editor.dnd.drop_target().filter(|target| {
-                        can_apply_drop(editor, target.position, payload.clone(), modifiers, None)
+                    _ => editor.dnd.drop_target().cloned().and_then(|target| {
+                        let position = resolve_drop_position(&target, &editor.state)?;
+                        can_apply_drop(editor, position, payload.clone(), modifiers, None)
+                            .then_some(position)
                     }),
                 }
             } else {
                 None
             };
-            let result = if let Some(target) = target {
-                apply_drop(editor, target.position, payload, modifiers, internal_source)
+            let result = if let Some(position) = target {
+                apply_drop(editor, position, payload, modifiers, internal_source)
             } else {
                 Ok(())
             };
@@ -172,10 +180,16 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
             Ok(())
         }
     };
-    if editor.dnd.drop_target() != previous_drop_target {
+    if editor.dnd.drop_target() != previous_drop_target.as_ref() {
         editor.invalidate_render();
     }
     result
+}
+
+fn resolve_drop_position(target: &DropTarget, state: &State) -> Option<Position> {
+    let view = state.view();
+    let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+    target.position.resolve(&ctx)
 }
 
 fn position_inside_selection(view: &DocView, position: Position, selection: &Selection) -> bool {

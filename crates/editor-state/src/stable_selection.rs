@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use editor_macros::ffi;
 use editor_model::DocView;
 use serde::{Deserialize, Serialize};
 
 use crate::selection::Selection;
 use crate::stable_position::{StablePosition, StableResolveCtx};
+use crate::state::State;
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -45,6 +48,27 @@ impl StableSelection {
     }
 }
 
+/// Remaps a selection that resolves in `source` into `target` by stable identity.
+///
+/// `selection` must resolve in `source`; debug builds assert this precondition.
+/// `None` means the captured selection could not resolve in `target`.
+pub fn remap_selection(selection: Selection, source: &State, target: &State) -> Option<Selection> {
+    debug_assert!(
+        {
+            let source_view = source.view();
+            selection.resolve(&source_view).is_some()
+        },
+        "remap_selection source selection must resolve"
+    );
+    if Arc::ptr_eq(&source.projected, &target.projected) {
+        return Some(selection);
+    }
+    let stable = StableSelection::capture(&selection, &source.view());
+    let target_view = target.view();
+    let ctx = StableResolveCtx::from_live(&target_view, target.projected.seq_checkout());
+    stable.resolve(&ctx)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,6 +79,17 @@ mod tests {
     };
 
     use crate::Position;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "remap_selection source selection must resolve")]
+    fn remap_selection_requires_a_valid_source() {
+        let source = State::empty();
+        let target = source.clone();
+        let selection = Selection::collapsed(Position::new(Dot::new(9, 9), 0));
+
+        let _ = remap_selection(selection, &source, &target);
+    }
 
     fn block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
         SeqItem::Block {

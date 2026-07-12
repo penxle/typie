@@ -247,6 +247,7 @@ mod tests {
             changeset: cs.clone(),
         });
         let after_first = editor.state().selection;
+        let projected_after_first = std::sync::Arc::as_ptr(&editor.state().projected);
         let view = editor.state().view();
         let text_first = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
 
@@ -271,6 +272,11 @@ mod tests {
             after_first,
             editor.state().selection,
             "duplicate receive must leave the selection unchanged"
+        );
+        assert_eq!(
+            projected_after_first,
+            std::sync::Arc::as_ptr(&editor.state().projected),
+            "duplicate receive must preserve the projected document allocation"
         );
     }
 

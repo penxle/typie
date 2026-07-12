@@ -3,7 +3,7 @@ use editor_model::{ChildView, DocView, Schema};
 use editor_state::{
     Affinity, GapCursor, Position, Selection, as_gap_cursor, cell_rect_selection,
     enclosing_table_cell, first_cursor_position, gap_cursor_selection_at, is_unit_node_selection,
-    last_cursor_position,
+    last_cursor_position, remap_selection,
 };
 use editor_transaction::HistoryMeta;
 
@@ -15,7 +15,10 @@ use crate::message::*;
 pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(), EditorError> {
     match op {
         NavigationOp::Move { movement, extend } => {
-            let Some(selection) = editor.state.selection else {
+            let Some(input_state) = editor.layout_input_state() else {
+                return Ok(());
+            };
+            let Some(selection) = input_state.selection else {
                 if !extend && let Movement::Document { .. } = movement {
                     let probe_pos = Position {
                         node: Dot::ROOT,
@@ -23,14 +26,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         affinity: Affinity::Upstream,
                     };
                     if let Some(target) = editor.resolve_movement(&probe_pos, &movement) {
-                        editor.transact(|tr| {
-                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                            if tr.selection() != Some(target) {
-                                tr.clear_pending_format()?;
-                            }
-                            tr.set_selection(Some(target))?;
-                            Ok(())
-                        })?;
+                        set_navigation_selection(editor, &input_state, target)?;
                     }
                 }
                 return Ok(());
@@ -71,7 +67,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 
             if is_upward_exit && selection.is_collapsed() {
                 let leading_gap = {
-                    let view = editor.state.view();
+                    let view = input_state.view();
                     selection
                         .resolve(&view)
                         .and_then(|rs| as_gap_cursor(&rs))
@@ -87,7 +83,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     Some(is_leading) => is_leading,
                     None => {
                         let resource = editor.resource.lock().unwrap();
-                        gap_cursor_selection_at(Dot::ROOT, 0, &editor.state.view()).is_none()
+                        gap_cursor_selection_at(Dot::ROOT, 0, &input_state.view()).is_none()
                             && editor
                                 .view
                                 .would_resolve_movement(
@@ -122,7 +118,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
             if !extend {
                 // Exit: the current selection is itself a gap cursor.
                 let gap_exit = {
-                    let view = editor.state.view();
+                    let view = input_state.view();
                     match selection.resolve(&view).and_then(|rs| as_gap_cursor(&rs)) {
                         None => None,
                         Some(GapCursor::BetweenMonolithic {
@@ -188,14 +184,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 };
                 if let Some(exit) = gap_exit {
                     if let Some(sel) = exit {
-                        editor.transact(|tr| {
-                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                            if tr.selection() != Some(sel) {
-                                tr.clear_pending_format()?;
-                            }
-                            tr.set_selection(Some(sel))?;
-                            Ok(())
-                        })?;
+                        set_navigation_selection(editor, &input_state, sel)?;
                     }
                     return Ok(());
                 }
@@ -207,23 +196,16 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // paragraph-admittable checks), so a non-gap move falls
                 // through to the range endpoint policy below. Independent of
                 // resolve_movement's result.
-                if is_unit_node_selection(&selection, &editor.state.view()) {
+                if is_unit_node_selection(&selection, &input_state.view()) {
                     let parent = selection.anchor.node;
                     let idx = selection.anchor.offset.min(selection.head.offset);
                     let entry = if backward {
-                        gap_cursor_selection_at(parent, idx, &editor.state.view())
+                        gap_cursor_selection_at(parent, idx, &input_state.view())
                     } else {
-                        gap_cursor_selection_at(parent, idx + 1, &editor.state.view())
+                        gap_cursor_selection_at(parent, idx + 1, &input_state.view())
                     };
                     if let Some(sel) = entry {
-                        editor.transact(|tr| {
-                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                            if tr.selection() != Some(sel) {
-                                tr.clear_pending_format()?;
-                            }
-                            tr.set_selection(Some(sel))?;
-                            Ok(())
-                        })?;
+                        set_navigation_selection(editor, &input_state, sel)?;
                         return Ok(());
                     }
                 }
@@ -240,7 +222,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // movement base: backward starts from `from`, forward starts
                 // from `to`.
                 if !selection.is_collapsed() {
-                    let view = editor.state.view();
+                    let view = input_state.view();
                     let Some(resolved) = selection.resolve(&view) else {
                         return Ok(());
                     };
@@ -299,8 +281,13 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         Selection::collapsed(base_position)
                     } else if !left_or_right
                         && can_stop_at_gap
-                        && let Some(sel) =
-                            gap_cursor_from_inner_edge(editor, base_position, backward, &movement)
+                        && let Some(sel) = gap_cursor_from_inner_edge(
+                            editor,
+                            &input_state,
+                            base_position,
+                            backward,
+                            &movement,
+                        )
                     {
                         // Vertical/word/block movement can stop at an adjacent
                         // gap before asking the view for geometric movement.
@@ -313,19 +300,12 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
 
                         view_target.unwrap_or_else(|| {
                             let collapsed = Selection::collapsed(base_position);
-                            let view = editor.state.view();
+                            let view = input_state.view();
                             collapsed.normalize(&view).unwrap_or(collapsed)
                         })
                     };
 
-                    editor.transact(|tr| {
-                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                        if tr.selection() != Some(target) {
-                            tr.clear_pending_format()?;
-                        }
-                        tr.set_selection(Some(target))?;
-                        Ok(())
-                    })?;
+                    set_navigation_selection(editor, &input_state, target)?;
                     return Ok(());
                 }
 
@@ -344,20 +324,18 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 // Ancestors are innermost-first, so one keypress crosses
                 // exactly one boundary.
                 if can_stop_at_gap
-                    && let Some(sel) =
-                        gap_cursor_from_inner_edge(editor, selection.head, backward, &movement)
+                    && let Some(sel) = gap_cursor_from_inner_edge(
+                        editor,
+                        &input_state,
+                        selection.head,
+                        backward,
+                        &movement,
+                    )
                 {
                     if matches!(movement, Movement::Line { .. }) {
                         editor.ensure_preferred_x_at(&selection.head);
                     }
-                    editor.transact(|tr| {
-                        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                        if tr.selection() != Some(sel) {
-                            tr.clear_pending_format()?;
-                        }
-                        tr.set_selection(Some(sel))?;
-                        Ok(())
-                    })?;
+                    set_navigation_selection(editor, &input_state, sel)?;
                     return Ok(());
                 }
             }
@@ -373,7 +351,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 );
                 if is_cell_movement {
                     let new_sel = {
-                        let view = editor.state.view();
+                        let view = input_state.view();
                         selection
                             .resolve(&view)
                             .and_then(|rs| rs.as_cell_rect())
@@ -388,21 +366,14 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                             })
                     };
                     if let Some(new_sel) = new_sel {
-                        editor.transact(|tr| {
-                            tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                            if tr.selection() != Some(new_sel) {
-                                tr.clear_pending_format()?;
-                            }
-                            tr.set_selection(Some(new_sel))?;
-                            Ok(())
-                        })?;
+                        set_navigation_selection(editor, &input_state, new_sel)?;
                         return Ok(());
                     }
                 }
             }
 
             let new_selection = if extend {
-                editor.resolve_extend_movement(selection, &movement)
+                editor.resolve_extend_movement(selection, &movement, &input_state)
             } else {
                 editor.resolve_movement(&selection.head, &movement)
             };
@@ -419,47 +390,47 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     );
                     if is_cell_movement {
                         let current_cell =
-                            enclosing_table_cell(&editor.state.view(), selection.head.node);
+                            enclosing_table_cell(&input_state.view(), selection.head.node);
                         if let Some(current_cell) = current_cell {
                             let stays_in_cell =
-                                enclosing_table_cell(&editor.state.view(), new_selection.head.node)
+                                enclosing_table_cell(&input_state.view(), new_selection.head.node)
                                     == Some(current_cell);
                             let cell_sel = if !stays_in_cell {
-                                cell_rect_selection(
-                                    current_cell,
-                                    current_cell,
-                                    &editor.state.view(),
-                                )
+                                cell_rect_selection(current_cell, current_cell, &input_state.view())
                             } else {
                                 None
                             };
                             if let Some(cell_sel) = cell_sel {
-                                editor.transact(|tr| {
-                                    tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                                    if tr.selection() != Some(cell_sel) {
-                                        tr.clear_pending_format()?;
-                                    }
-                                    tr.set_selection(Some(cell_sel))?;
-                                    Ok(())
-                                })?;
+                                set_navigation_selection(editor, &input_state, cell_sel)?;
                                 return Ok(());
                             }
                         }
                     }
                 }
 
-                editor.transact(|tr| {
-                    tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
-                    if tr.selection() != Some(new_selection) {
-                        tr.clear_pending_format()?;
-                    }
-                    tr.set_selection(Some(new_selection))?;
-                    Ok(())
-                })?;
+                set_navigation_selection(editor, &input_state, new_selection)?;
             }
         }
     }
     Ok(())
+}
+
+fn set_navigation_selection(
+    editor: &mut Editor,
+    input_state: &editor_state::State,
+    selection: Selection,
+) -> Result<(), EditorError> {
+    let Some(selection) = remap_selection(selection, input_state, &editor.state) else {
+        return Ok(());
+    };
+    editor.transact(|tr| {
+        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+        if tr.selection() != Some(selection) {
+            tr.clear_pending_format()?;
+        }
+        tr.set_selection(Some(selection))?;
+        Ok(())
+    })
 }
 
 fn child_view_dot(child: &ChildView) -> Dot {
@@ -471,11 +442,12 @@ fn child_view_dot(child: &ChildView) -> Dot {
 
 fn gap_cursor_from_inner_edge(
     editor: &Editor,
+    state: &editor_state::State,
     head: Position,
     backward: bool,
     movement: &Movement,
 ) -> Option<Selection> {
-    let doc = editor.state.view();
+    let doc = state.view();
     let start = doc.node(head.node)?;
     let vertical = matches!(movement, Movement::Line { .. });
     for monolithic in start.ancestors() {
@@ -3547,11 +3519,13 @@ mod tests {
                 },
             );
             eprintln!("TEST5 resolve_movement((r,1),back) = {tgt:?}");
+            let input_state = editor.state.clone();
             let ext = editor.resolve_extend_movement(
                 editor.state().selection.unwrap(),
                 &Movement::Grapheme {
                     direction: Direction::Backward,
                 },
+                &input_state,
             );
             eprintln!("TEST5 resolve_extend_movement(L1sel,back) = {ext:?}");
         }
