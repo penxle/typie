@@ -20,42 +20,22 @@ import kotlinx.coroutines.withContext
 
 class AndroidLegacyMigrationPlatformSource(private val context: Context) :
   LegacyMigrationPlatformSource {
-  override suspend fun load(): LegacyMigrationSource? =
+  override suspend fun load(): LegacyEncryptedHiveBoxSource? =
     withContext(Dispatchers.IO) {
-      val baseDirectory = findLegacyHiveDirectory()
-      val authBoxBytes = baseDirectory?.readBox("auth_box")
-      val preferenceBoxBytes = baseDirectory?.readBox("preference_box")
-      val themeBoxBytes = baseDirectory?.readBox("theme_box")
-      val base64HiveKey = readHiveEncryptionKey()
+      val baseDirectory = findLegacyHiveDirectory() ?: return@withContext null
+      val authBoxBytes = baseDirectory.readBox(LEGACY_AUTH_BOX_NAME) ?: return@withContext null
+      val base64HiveKey = readHiveEncryptionKey() ?: return@withContext null
+      val keyCrc = calculateLegacyHiveKeyCrc(base64HiveKey) ?: return@withContext null
 
-      val authBoxSource =
-        if (authBoxBytes != null && base64HiveKey != null) {
-          val keyCrc =
-            calculateLegacyHiveKeyCrc(base64HiveKey)
-              ?: return@withContext nullSource(
-                preferenceBox = preferenceBoxBytes,
-                themeBox = themeBoxBytes,
-              )
-
-          LegacyEncryptedHiveBoxSource(
-            bytes = authBoxBytes,
-            keyCrc = keyCrc,
-            decryptor =
-              LegacyAuthPayloadDecryptor { payload ->
-                decryptLegacyHivePayload(payload, base64HiveKey)
-                  ?: error("Failed to decrypt legacy Hive auth payload.")
-              },
-          )
-        } else {
-          null
-        }
-
-      LegacyMigrationSource(
-          authBox = authBoxSource,
-          preferenceBox = preferenceBoxBytes,
-          themeBox = themeBoxBytes,
-        )
-        .takeIf { it.authBox != null || it.preferenceBox != null || it.themeBox != null }
+      LegacyEncryptedHiveBoxSource(
+        bytes = authBoxBytes,
+        keyCrc = keyCrc,
+        decryptor =
+          LegacyAuthPayloadDecryptor { payload ->
+            decryptLegacyHivePayload(payload, base64HiveKey)
+              ?: error("Failed to decrypt legacy Hive auth payload.")
+          },
+      )
     }
 
   private fun findLegacyHiveDirectory(): File? {
@@ -66,8 +46,7 @@ class AndroidLegacyMigrationPlatformSource(private val context: Context) :
     }
 
     return candidates.firstOrNull { directory ->
-      directory.exists() &&
-        LEGACY_HIVE_BOX_NAMES.any { boxName -> File(directory, "$boxName.hive").exists() }
+      directory.exists() && File(directory, "$LEGACY_AUTH_BOX_NAME.hive").exists()
     }
   }
 
@@ -83,18 +62,17 @@ class AndroidLegacyMigrationPlatformSource(private val context: Context) :
         .getString("${FLUTTER_SECURE_STORAGE_KEY_PREFIX}_$HIVE_ENCRYPTION_KEY_NAME", null)
         ?: return null
 
-    val attempts =
-      buildList {
-          add(AndroidLegacySecureStorageAlgorithms.fromConfig(context))
-          add(AndroidLegacySecureStorageAlgorithms.LegacyDefault)
-          add(AndroidLegacySecureStorageAlgorithms.CurrentDefault)
-        }
-        .distinct()
+    val attempts = buildList {
+      add(AndroidLegacySecureStorageAlgorithms.fromConfig(context))
+      add(AndroidLegacySecureStorageAlgorithms.LegacyDefault)
+      add(AndroidLegacySecureStorageAlgorithms.CurrentDefault)
+    }
+      .distinct()
 
     return attempts.firstNotNullOfOrNull { algorithms ->
       runCatching {
-          decryptFlutterSecureStorageValue(encryptedValue = encryptedValue, algorithms = algorithms)
-        }
+        decryptFlutterSecureStorageValue(encryptedValue = encryptedValue, algorithms = algorithms)
+      }
         .getOrNull()
     }
   }
@@ -160,11 +138,6 @@ class AndroidLegacyMigrationPlatformSource(private val context: Context) :
     )
 
     return cipher.doFinal(payload.copyOfRange(LEGACY_HIVE_IV_SIZE, payload.size))
-  }
-
-  private fun nullSource(preferenceBox: ByteArray?, themeBox: ByteArray?): LegacyMigrationSource? {
-    return LegacyMigrationSource(authBox = null, preferenceBox = preferenceBox, themeBox = themeBox)
-      .takeIf { it.preferenceBox != null || it.themeBox != null }
   }
 
   private data class AndroidLegacySecureStorageAlgorithms(
@@ -234,8 +207,8 @@ class AndroidLegacyMigrationPlatformSource(private val context: Context) :
         }
 
       return runCatching {
-          Cipher.getInstance(transformation, ANDROID_KEYSTORE_WORKAROUND_PROVIDER)
-        }
+        Cipher.getInstance(transformation, ANDROID_KEYSTORE_WORKAROUND_PROVIDER)
+      }
         .getOrElse { Cipher.getInstance(transformation) }
     }
   }
@@ -295,8 +268,8 @@ private const val FLUTTER_SECURE_STORAGE_PREFS_NAME = "FlutterSecureStorage"
 private const val FLUTTER_SECURE_STORAGE_KEY_PREFIX =
   "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIHNlY3VyZSBzdG9yYWdlCg"
 private const val HIVE_ENCRYPTION_KEY_NAME = "hive_encryption_key"
+private const val LEGACY_AUTH_BOX_NAME = "auth_box"
 private const val LEGACY_HIVE_IV_SIZE = 16
 private const val LEGACY_HIVE_TRANSFORMATION = "AES/CBC/PKCS5Padding"
-private val LEGACY_HIVE_BOX_NAMES = listOf("auth_box", "preference_box", "theme_box")
 private const val RSA_OAEP_TRANSFORMATION = "RSA/ECB/OAEPPadding"
 private const val RSA_PKCS1_TRANSFORMATION = "RSA/ECB/PKCS1Padding"

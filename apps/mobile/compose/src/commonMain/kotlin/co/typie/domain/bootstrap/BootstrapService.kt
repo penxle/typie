@@ -10,6 +10,7 @@ import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.graphql.Apollo
 import co.typie.graphql.BootstrapService_Query
+import co.typie.migration.LegacyMigrationCoordinator
 import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
 import kotlinx.coroutines.CancellationException
@@ -25,11 +26,21 @@ object BootstrapService {
     val preflight = snapshotFlow { PreflightService.state }.first { it !is PreflightState.NotReady }
     if (preflight is PreflightState.Ready || preflight is PreflightState.Unavailable) {
       try {
-        AuthService.renew()
+        LegacyMigrationCoordinator.runIfNeeded()
       } catch (e: CancellationException) {
         throw e
       } catch (_: Exception) {
         // best effort
+      }
+
+      if (AuthService.state !is AuthState.Authenticated) {
+        try {
+          AuthService.renew()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (_: Exception) {
+          // best effort
+        }
       }
 
       if (AuthService.state is AuthState.Authenticated) {

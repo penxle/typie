@@ -53,29 +53,4 @@ class LegacyHiveBoxReaderTest {
 
     assertEquals(mapOf("session_token" to "fixture-session-token"), values)
   }
-
-  @Test
-  fun `readBox decodes preference box primitive values`() {
-    assertEquals(
-      mapOf(
-        "site_id" to "site_fixture",
-        "dev_mode" to true,
-        "typewriter_enabled" to true,
-        "typewriter_position" to 0.25,
-        "line_highlight_enabled" to false,
-        "auto_surround_enabled" to false,
-        "character_count_floating_enabled" to true,
-        "widget_auto_fade_enabled" to false,
-      ),
-      reader.readBox(loadLegacyMigrationFixture("preference_box.hive")),
-    )
-  }
-
-  @Test
-  fun `readBox decodes theme box mode`() {
-    assertEquals(
-      mapOf("mode" to "dark"),
-      reader.readBox(loadLegacyMigrationFixture("theme_box.hive")),
-    )
-  }
 }

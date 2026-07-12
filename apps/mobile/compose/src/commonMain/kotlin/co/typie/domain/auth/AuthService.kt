@@ -166,5 +166,5 @@ object AuthService {
 
   @Serializable private data class TokenError(val error: String)
 
-  private class InvalidCredentialsException : Exception()
+  class InvalidCredentialsException : Exception()
 }

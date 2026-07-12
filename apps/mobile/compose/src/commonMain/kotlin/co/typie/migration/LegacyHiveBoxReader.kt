@@ -1,19 +1,10 @@
 package co.typie.migration
 
 object LegacyHiveBoxReader {
-  fun readBox(bytes: ByteArray): Map<String, Any?> =
-    readFrames(bytes = bytes, keyCrc = 0, decrypt = null)
-
   fun readEncryptedBox(
     bytes: ByteArray,
     keyCrc: Long,
     decrypt: (ByteArray) -> ByteArray,
-  ): Map<String, Any?> = readFrames(bytes = bytes, keyCrc = keyCrc, decrypt = decrypt)
-
-  private fun readFrames(
-    bytes: ByteArray,
-    keyCrc: Long,
-    decrypt: ((ByteArray) -> ByteArray)?,
   ): Map<String, Any?> {
     val values = linkedMapOf<String, Any?>()
     var offset = 0
@@ -41,12 +32,7 @@ object LegacyHiveBoxReader {
       cursor = keyEnd
 
       val rawValueBytes = bytes.copyOfRange(cursor, crcOffset)
-      val value =
-        when {
-          rawValueBytes.isEmpty() -> null
-          decrypt != null -> decodeValue(decrypt(rawValueBytes))
-          else -> decodeValue(rawValueBytes)
-        }
+      val value = if (rawValueBytes.isEmpty()) null else decodeValue(decrypt(rawValueBytes))
 
       values[key] = value
       offset = frameEnd

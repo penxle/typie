@@ -39,6 +39,8 @@ object Preference {
 
   var devMode by prefs("dev_mode", false)
 
+  var legacyMigrationHandled by prefs("legacy_migration_handled", false)
+
   var preflightCache by prefs<Preflight?>("preflight_cache", null)
 
   private var _deviceId: String? by prefs<String?>("device_id", null)
