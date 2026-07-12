@@ -129,7 +129,7 @@ fun NavigationStack(
   val progress = remember { Animatable(0f) }
 
   var lastDragAmount by remember { mutableStateOf(0f) }
-  var nestedPopDragActive by remember { mutableStateOf(false) }
+  val nestedPopGestureSession = remember { NavigationPopGestureSession() }
 
   fun startPopDrag() {
     val prev = navigator.previous ?: return
@@ -148,7 +148,7 @@ fun NavigationStack(
   }
 
   fun finishPopDrag() {
-    nestedPopDragActive = false
+    nestedPopGestureSession.reset()
     val velocity = lastDragAmount * 1000f / 16f
     scope.launch {
       if (progress.value > 0.5f || velocity > 1000f) {
@@ -176,7 +176,7 @@ fun NavigationStack(
     remember(navigator.canPop, animState, containerWidth) {
       object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-          if (source != NestedScrollSource.UserInput || !nestedPopDragActive) {
+          if (source != NestedScrollSource.UserInput || !nestedPopGestureSession.isClaimed) {
             return Offset.Zero
           }
 
@@ -191,37 +191,45 @@ fun NavigationStack(
         ): Offset {
           if (
             source != NestedScrollSource.UserInput ||
-              nestedPopDragActive ||
+              nestedPopGestureSession.isClaimed ||
               !navigator.canPop ||
               containerWidth <= 0f ||
-              (animState != AnimState.Idle && animState != AnimState.Dragging) ||
-              !available.isDominantRightDrag()
+              (animState != AnimState.Idle && animState != AnimState.Dragging)
+          ) {
+            return Offset.Zero
+          }
+          if (
+            !nestedPopGestureSession.tryClaim(
+              initialDrag = consumed + available,
+              childConsumed = consumed != Offset.Zero,
+            )
           ) {
             return Offset.Zero
           }
 
-          nestedPopDragActive = true
           startPopDrag()
           updatePopDrag(available.x)
           return available
         }
 
         override suspend fun onPreFling(available: Velocity): Velocity {
-          if (!nestedPopDragActive) {
+          val claimed = nestedPopGestureSession.isClaimed
+          nestedPopGestureSession.reset()
+          if (!claimed) {
             return Velocity.Zero
           }
 
-          nestedPopDragActive = false
           finishPopDrag()
           return available
         }
 
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-          if (!nestedPopDragActive) {
+          val claimed = nestedPopGestureSession.isClaimed
+          nestedPopGestureSession.reset()
+          if (!claimed) {
             return Velocity.Zero
           }
 
-          nestedPopDragActive = false
           finishPopDrag()
           return available
         }
@@ -229,7 +237,7 @@ fun NavigationStack(
     }
 
   fun cancelPopDrag() {
-    nestedPopDragActive = false
+    nestedPopGestureSession.reset()
     scope.launch {
       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
       behindRoute = null
@@ -498,6 +506,7 @@ fun NavigationStack(
               val slop = viewConfiguration.touchSlop
               awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                val popGestureSession = NavigationPopGestureSession()
                 if (animState != AnimState.Idle && animState != AnimState.Dragging)
                   return@awaitEachGesture
                 var overSlopX = 0f
@@ -511,8 +520,14 @@ fun NavigationStack(
                   val dx = change.position.x - down.position.x
                   val dy = change.position.y - down.position.y
                   if (abs(dx) > slop || abs(dy) > slop) {
-                    if (dx <= 0f || abs(dx) <= abs(dy)) return@awaitEachGesture
-                    if (change.isConsumed) return@awaitEachGesture
+                    if (
+                      !popGestureSession.tryClaim(
+                        initialDrag = Offset(dx, dy),
+                        childConsumed = change.isConsumed,
+                      )
+                    ) {
+                      return@awaitEachGesture
+                    }
                     val confirmEvent = awaitPointerEvent(PointerEventPass.Main)
                     val confirmChange =
                       confirmEvent.changes.fastFirstOrNull { it.id == down.id }
@@ -608,13 +623,14 @@ fun NavigationStack(
         }
       }
 
-      // 엣지 제스처 감지 영역 (child consume 여부 무관하게 pop 우선)
+      // 엣지 제스처 감지 영역 (첫 touch slop 이동이 소비되지 않은 오른쪽 드래그일 때만 claim)
       if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
         Box(
           Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(Unit) {
             val slop = viewConfiguration.touchSlop
             awaitEachGesture {
               val down = awaitFirstDown(requireUnconsumed = false)
+              val popGestureSession = NavigationPopGestureSession()
               var overSlopX = 0f
               var claimed = false
               while (!claimed) {
@@ -623,9 +639,17 @@ fun NavigationStack(
                 val change =
                   event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
                 if (!change.pressed) return@awaitEachGesture
-                if (change.isConsumed) return@awaitEachGesture
                 val dx = change.position.x - down.position.x
-                if (abs(dx) >= slop) {
+                val dy = change.position.y - down.position.y
+                if (abs(dx) > slop || abs(dy) > slop) {
+                  if (
+                    !popGestureSession.tryClaim(
+                      initialDrag = Offset(dx, dy),
+                      childConsumed = change.isConsumed,
+                    )
+                  ) {
+                    return@awaitEachGesture
+                  }
                   change.consume()
                   overSlopX = dx
                   claimed = true
@@ -666,5 +690,3 @@ private fun cornerRadius(progress: Float): Dp {
     }
   return maxRadius * factor.coerceIn(0f, 1f)
 }
-
-private fun Offset.isDominantRightDrag(): Boolean = x > 0f && abs(x) > abs(y)
