@@ -1,13 +1,16 @@
 import { getContext, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
+import type { Editor as FfiEditor } from '$lib/editor-ffi/editor.svelte';
+
+export type RegisteredEditor = NativeEditor | FfiEditor;
 
 const key: unique symbol = Symbol('EditorRegistry');
 
 class EditorRegistry {
-  #entries = new SvelteMap<string, NativeEditor>();
+  #entries = new SvelteMap<string, RegisteredEditor>();
 
-  register(paneId: string, slug: string, editor: NativeEditor | undefined) {
+  register(paneId: string, slug: string, editor: RegisteredEditor | undefined) {
     if (editor) {
       const key = `${paneId}-${slug}`;
       this.#entries.set(key, editor);
@@ -19,7 +22,7 @@ class EditorRegistry {
     this.#entries.delete(key);
   }
 
-  get(paneId: string, slug: string): NativeEditor | undefined {
+  get(paneId: string, slug: string): RegisteredEditor | undefined {
     const key = `${paneId}-${slug}`;
     return this.#entries.get(key);
   }

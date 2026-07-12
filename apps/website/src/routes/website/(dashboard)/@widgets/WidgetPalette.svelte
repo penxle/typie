@@ -7,16 +7,16 @@
   import PlusIcon from '~icons/lucide/plus';
   import { dragPaletteWidget } from './drag-palette-widget-action';
   import { WIDGET_CATEGORIES, WIDGET_COMPONENTS, WIDGET_METADATA } from './widgets';
-  import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
   import type {
     Editor_Widget_CharacterCountChangeWidget_document$key,
     Editor_Widget_DocumentRelatedNoteWidget_document$key,
   } from '$mearie';
+  import type { RegisteredEditor } from '../[slug]/@pane/editor-registry.svelte';
   import type { WidgetType } from './widget-context.svelte';
 
   type Props = {
     open: boolean;
-    editor?: NativeEditor;
+    editor?: RegisteredEditor;
     document$key?: Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key;
     addedWidgets?: WidgetType[];
     onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;

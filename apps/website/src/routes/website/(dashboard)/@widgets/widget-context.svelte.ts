@@ -1,6 +1,6 @@
 import { getContext, setContext } from 'svelte';
-import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
 import type { Editor_Widget_CharacterCountChangeWidget_document$key, Editor_Widget_DocumentRelatedNoteWidget_document$key } from '$mearie';
+import type { RegisteredEditor } from '../[slug]/@pane/editor-registry.svelte';
 
 export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding' | 'timer';
 
@@ -14,7 +14,7 @@ export type WidgetPosition = {
 type WidgetEnvironment = {
   editMode: boolean;
   palette: boolean;
-  editor?: NativeEditor;
+  editor?: RegisteredEditor;
   document$key?: (Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key) | undefined;
 };
 

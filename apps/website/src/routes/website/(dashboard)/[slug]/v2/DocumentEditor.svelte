@@ -34,6 +34,7 @@
   import CloseButton from '../@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { dragPane } from '../@pane/dnd';
+  import { getEditorRegistry } from '../@pane/editor-registry.svelte';
   import CommentPopover from './@document-comments/CommentPopover.svelte';
   import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
@@ -258,6 +259,7 @@
   const currentSite = $derived(query.data?.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data?.me.sites[0]);
   const paneGroup = getPaneGroup();
   const pane = getPane();
+  const editorRegistry = getEditorRegistry();
   const dragPaneProps = $derived({ paneGroup, paneId: pane.id });
 
   const ctx = getEditorContext();
@@ -741,6 +743,18 @@
     if (currentViewZenModeEnabled) {
       Tip.show('editor.zen-mode.enabled', '집중 모드가 활성화되었어요. Esc 키를 눌러 빠져나올 수 있어요.');
     }
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    const slug = entity?.slug;
+    if (!editor || !slug) return;
+
+    editorRegistry.register(pane.id, slug, editor);
+
+    return () => {
+      editorRegistry.unregister(pane.id, slug);
+    };
   });
 
   let editorReady = false;
