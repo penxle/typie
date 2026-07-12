@@ -90,7 +90,7 @@ const sortCarry = (modifiers: Modifier[]): Modifier[] =>
 const modifiersSignature = (modifiers: PlainNodeEntry['modifiers']): string =>
   JSON.stringify(Object.entries(modifiers).toSorted(([a], [b]) => a.localeCompare(b)));
 
-const mergeAdjacentTextRuns = (children: PlainNodeEntry[]): PlainNodeEntry[] => {
+const mergeAdjacentTextRuns = (children: PlainNodeEntry[], ctx: WalkCtx): PlainNodeEntry[] => {
   const out: PlainNodeEntry[] = [];
   for (const child of children) {
     const prev = out.at(-1);
@@ -101,6 +101,7 @@ const mergeAdjacentTextRuns = (children: PlainNodeEntry[]): PlainNodeEntry[] => 
       modifiersSignature(prev.modifiers) === modifiersSignature(child.modifiers)
     ) {
       prev.node.text += child.node.text;
+      transferTags(child, prev, ctx);
     } else {
       out.push(child);
     }
@@ -117,13 +118,13 @@ const emptyParagraph = (): PlainNodeEntry => ({
   children: [],
 });
 
-const normalizeBlockChildren = (children: PlainNodeEntry[]): PlainNodeEntry[] => {
+const normalizeBlockChildren = (children: PlainNodeEntry[], ctx: WalkCtx): PlainNodeEntry[] => {
   const out: PlainNodeEntry[] = [];
   let inlineBuffer: PlainNodeEntry[] = [];
   const flushInlines = () => {
     if (inlineBuffer.length > 0) {
       const wrapped = emptyParagraph();
-      wrapped.children = mergeAdjacentTextRuns(inlineBuffer);
+      wrapped.children = mergeAdjacentTextRuns(inlineBuffer, ctx);
       out.push(wrapped);
       inlineBuffer = [];
     }
@@ -134,18 +135,24 @@ const normalizeBlockChildren = (children: PlainNodeEntry[]): PlainNodeEntry[] =>
       continue;
     }
     flushInlines();
+    let block = child;
+    if (block.node.type === 'list_item') {
+      ctx.warnings.push('orphan list_item wrapped into bullet_list');
+      block = makeEntry({ type: 'bullet_list' }, {}, [block]);
+    }
     const prev = out.at(-1);
     if (
       prev &&
-      (child.node.type === 'bullet_list' || child.node.type === 'ordered_list') &&
-      prev.node.type === child.node.type &&
+      (block.node.type === 'bullet_list' || block.node.type === 'ordered_list') &&
+      prev.node.type === block.node.type &&
       Object.keys(prev.modifiers).length === 0 &&
-      Object.keys(child.modifiers).length === 0
+      Object.keys(block.modifiers).length === 0
     ) {
-      prev.children.push(...child.children);
+      prev.children.push(...block.children);
+      transferTags(block, prev, ctx);
       continue;
     }
-    out.push(child);
+    out.push(block);
   }
   flushInlines();
   return out;
@@ -164,11 +171,27 @@ const roundLayoutMode = (layout: LegacyLayoutMode) =>
       }
     : { type: 'continuous' as const, max_width: Math.round(layout.max_width) };
 
+type RemarkTag = { nodeId: string; remarks: LegacyRemark[] };
+
 type WalkCtx = {
   nodes: Record<string, LegacyNodeEntry>;
-  remarkAnchors: RemarkAnchor[];
+  anchorTags: WeakMap<PlainNodeEntry, RemarkTag[]>;
+  orphanTags: RemarkTag[];
   warnings: string[];
   rootEffective: Partial<Record<ModifierType, Modifier>>;
+};
+
+const pushTags = (entry: PlainNodeEntry, tags: RemarkTag[], ctx: WalkCtx): void => {
+  const existing = ctx.anchorTags.get(entry);
+  if (existing) existing.push(...tags);
+  else ctx.anchorTags.set(entry, [...tags]);
+};
+
+const transferTags = (from: PlainNodeEntry, to: PlainNodeEntry, ctx: WalkCtx): void => {
+  const tags = ctx.anchorTags.get(from);
+  if (!tags) return;
+  ctx.anchorTags.delete(from);
+  pushTags(to, tags, ctx);
 };
 
 const INHERITABLE_RUN_KINDS = ['font_family', 'font_size', 'font_weight', 'letter_spacing'] as const;
@@ -315,13 +338,35 @@ const warnLeafSubtreeText = (nodeId: string, entry: LegacyNodeEntry, ctx: WalkCt
   }
 };
 
-const collectRemarks = (nodeId: string, entry: LegacyNodeEntry, path: number[], ctx: WalkCtx) => {
+const attachRemarks = (nodeId: string, entry: LegacyNodeEntry, result: PlainNodeEntry[], ctx: WalkCtx): void => {
   const remarks = Object.entries(entry.remarks ?? {})
     .map(([remarkId, r]) => ({ id: remarkId, user_id: r.user_id, text: r.text, created_at: r.created_at }))
     .toSorted((a, b) => a.created_at - b.created_at);
+  const tags = [...ctx.orphanTags];
+  ctx.orphanTags.length = 0;
   if (remarks.length > 0) {
-    ctx.remarkAnchors.push({ path, nodeId, remarks });
+    tags.push({ nodeId, remarks });
   }
+  if (tags.length === 0) return;
+  const target = result[0];
+  if (target) {
+    pushTags(target, tags, ctx);
+  } else {
+    ctx.warnings.push(`remark anchor deferred to parent: converted node produced no output (${nodeId})`);
+    ctx.orphanTags.push(...tags);
+  }
+};
+
+const collectAnchors = (root: PlainNodeEntry, ctx: WalkCtx): RemarkAnchor[] => {
+  const anchors: RemarkAnchor[] = [];
+  const walk = (entry: PlainNodeEntry, path: number[]) => {
+    for (const tag of ctx.anchorTags.get(entry) ?? []) {
+      anchors.push({ path, nodeId: tag.nodeId, remarks: tag.remarks });
+    }
+    for (const [index, child] of entry.children.entries()) walk(child, [...path, index]);
+  };
+  walk(root, []);
+  return anchors;
 };
 
 const makeEntry = (
@@ -331,12 +376,12 @@ const makeEntry = (
   carry: Modifier[] = [],
 ): PlainNodeEntry => ({ node, modifiers: modifiers as PlainNodeEntry['modifiers'], carry, children });
 
-const convertChildren = (entry: LegacyNodeEntry, path: number[], inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
+const convertChildren = (entry: LegacyNodeEntry, inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
   const out: PlainNodeEntry[] = [];
   for (const childId of entry.children ?? []) {
     const child = ctx.nodes[childId];
     if (!child) throw new Error(`dangling child: ${childId}`);
-    out.push(...convertNode(childId, child, [...path, out.length], inherited, ctx));
+    out.push(...convertNode(childId, child, inherited, ctx));
   }
   return out;
 };
@@ -428,9 +473,13 @@ const convertTextNode = (entry: LegacyNodeEntry, ctx: WalkCtx, inherited: Inheri
   return out;
 };
 
-const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
-  collectRemarks(nodeId, entry, path, ctx);
+const convertNode = (nodeId: string, entry: LegacyNodeEntry, inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
+  const result = convertNodeInner(nodeId, entry, inherited, ctx);
+  attachRemarks(nodeId, entry, result, ctx);
+  return result;
+};
 
+const convertNodeInner = (nodeId: string, entry: LegacyNodeEntry, inherited: Inherited, ctx: WalkCtx): PlainNodeEntry[] => {
   const cascade = readCascade(entry, ctx.warnings);
   const cascadeLineHeight = cascade.line_height?.type === 'line_height' ? cascade.line_height.value : null;
   const cascadeStyles: Partial<Record<ModifierType, Modifier>> = { ...cascade };
@@ -462,14 +511,24 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
       const carrySource = { ...childInherited.styles };
       dropInheritedEquals(carrySource, ctx);
       const carry = isEmpty && inherited.stylesAllowed ? sortCarry(Object.values(carrySource)) : [];
-      return [makeEntry({ type: 'paragraph' }, modifiers, mergeAdjacentTextRuns(convertChildren(entry, path, childInherited, ctx)), carry)];
+      const inlines = mergeAdjacentTextRuns(convertChildren(entry, childInherited, ctx), ctx);
+      const chunks: PlainNodeEntry[][] = [[]];
+      for (const inline of inlines) {
+        chunks.at(-1)?.push(inline);
+        if (inline.node.type === 'page_break') chunks.push([]);
+      }
+      if (chunks.length > 1 && chunks.at(-1)?.length === 0) chunks.pop();
+      if (chunks.length > 1) {
+        ctx.warnings.push(`paragraph split at page_break into ${chunks.length} paragraphs`);
+      }
+      return chunks.map((chunk, index) => makeEntry({ type: 'paragraph' }, { ...modifiers }, chunk, index === 0 ? carry : []));
     }
     case 'blockquote': {
       return [
         makeEntry(
           { type: 'blockquote', variant: entry.variant as never },
           {},
-          normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx)),
+          normalizeBlockChildren(convertChildren(entry, childInherited, ctx), ctx),
         ),
       ];
     }
@@ -478,29 +537,48 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
         makeEntry(
           { type: 'callout', variant: entry.variant as never },
           {},
-          normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx)),
+          normalizeBlockChildren(convertChildren(entry, childInherited, ctx), ctx),
         ),
       ];
     }
     case 'fold_title': {
       const inner: Inherited = { lineHeight: childInherited.lineHeight, styles: {}, stylesAllowed: false };
-      return [makeEntry({ type: 'fold_title' }, {}, mergeAdjacentTextRuns(convertChildren(entry, path, inner, ctx)), [])];
+      const children = mergeAdjacentTextRuns(convertChildren(entry, inner, ctx), ctx);
+      const texts = children.filter((child) => child.node.type === 'text');
+      if (texts.length !== children.length) {
+        ctx.warnings.push(
+          `fold_title children other than text dropped: ${children
+            .filter((child) => child.node.type !== 'text')
+            .map((child) => child.node.type)
+            .join(', ')}`,
+        );
+        for (const dropped of children) {
+          if (dropped.node.type === 'text') continue;
+          const tags = ctx.anchorTags.get(dropped);
+          if (tags) {
+            ctx.anchorTags.delete(dropped);
+            ctx.orphanTags.push(...tags);
+          }
+        }
+      }
+      return [makeEntry({ type: 'fold_title' }, {}, mergeAdjacentTextRuns(texts, ctx), [])];
     }
     case 'list_item': {
-      const children = normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx));
-      if (children[0]?.node.type !== 'paragraph') {
-        children.unshift(emptyParagraph());
-      }
-      return [makeEntry({ type: 'list_item' }, {}, children)];
+      const children = normalizeBlockChildren(convertChildren(entry, childInherited, ctx), ctx);
+      return rebuildListItems(children, ctx);
     }
     case 'fold_content': {
-      return [makeEntry({ type: 'fold_content' }, {}, normalizeBlockChildren(convertChildren(entry, path, childInherited, ctx)))];
+      return [makeEntry({ type: 'fold_content' }, {}, normalizeBlockChildren(convertChildren(entry, childInherited, ctx), ctx))];
     }
     case 'bullet_list':
-    case 'ordered_list':
-    case 'fold':
+    case 'ordered_list': {
+      return [makeEntry({ type: entry.type }, {}, convertChildren(entry, childInherited, ctx))];
+    }
+    case 'fold': {
+      return [makeEntry({ type: 'fold' }, {}, rebuildFoldChildren(convertChildren(entry, childInherited, ctx), ctx))];
+    }
     case 'table_row': {
-      return [makeEntry({ type: entry.type }, {}, convertChildren(entry, path, childInherited, ctx))];
+      return [makeEntry({ type: 'table_row' }, {}, rebuildRowCells(convertChildren(entry, childInherited, ctx), ctx))];
     }
     case 'table': {
       const modifiers: Partial<Record<ModifierType, Modifier>> = {};
@@ -508,7 +586,7 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
       if (tableAlign !== 'left') {
         modifiers.alignment = { type: 'alignment', value: tableAlign as 'left' | 'center' | 'right' };
       }
-      const rows = convertChildren(entry, path, childInherited, ctx);
+      const rows = rebuildTableRows(convertChildren(entry, childInherited, ctx), ctx);
       const maxCols = Math.max(0, ...rows.map((row) => row.children.length));
       for (const row of rows) {
         while (row.children.length < maxCols) {
@@ -531,7 +609,7 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
       }
       const cellInherited: Inherited = { ...childInherited, styles: { ...childInherited.styles } };
       delete cellInherited.styles.background_color;
-      const cellChildren = normalizeBlockChildren(convertChildren(entry, path, cellInherited, ctx));
+      const cellChildren = normalizeBlockChildren(convertChildren(entry, cellInherited, ctx), ctx);
       if (cellChildren.length === 0) {
         cellChildren.push(emptyParagraph());
       }
@@ -575,13 +653,151 @@ const convertNode = (nodeId: string, entry: LegacyNodeEntry, path: number[], inh
   }
 };
 
+const LIST_ITEM_CHILD_TYPES = new Set(['paragraph', 'bullet_list', 'ordered_list']);
+
+const rebuildListItems = (children: PlainNodeEntry[], ctx: WalkCtx): PlainNodeEntry[] => {
+  if (children.some((child) => !LIST_ITEM_CHILD_TYPES.has(child.node.type))) {
+    ctx.warnings.push(`list_item child not representable in v2 schema: ${children.map((c) => c.node.type).join(', ')}`);
+    return [makeEntry({ type: 'list_item' }, {}, children)];
+  }
+
+  const segments: { head: PlainNodeEntry; list: PlainNodeEntry | null }[] = [];
+  let current: (typeof segments)[number] | null = null;
+  for (const child of children) {
+    if (child.node.type === 'paragraph') {
+      if (current && current.list === null) {
+        if (modifiersSignature(child.modifiers) !== modifiersSignature(current.head.modifiers)) {
+          ctx.warnings.push(`paragraph modifiers dropped in list_item merge: ${JSON.stringify(child.modifiers)}`);
+        }
+        current.head.children = mergeAdjacentTextRuns(
+          [...current.head.children, makeEntry({ type: 'hard_break' }, {}, []), ...child.children],
+          ctx,
+        );
+        current.head.carry = [];
+        transferTags(child, current.head, ctx);
+        ctx.warnings.push('list_item paragraphs merged with hard_break');
+      } else {
+        current = { head: child, list: null };
+        segments.push(current);
+      }
+    } else {
+      if (current && current.list === null) {
+        current.list = child;
+      } else {
+        current = { head: emptyParagraph(), list: child };
+        segments.push(current);
+      }
+    }
+  }
+  if (segments.length === 0) {
+    segments.push({ head: emptyParagraph(), list: null });
+  }
+  if (segments.length > 1) {
+    ctx.warnings.push(`list_item split into ${segments.length} items`);
+  }
+  return segments.map((segment) => makeEntry({ type: 'list_item' }, {}, segment.list ? [segment.head, segment.list] : [segment.head]));
+};
+
+const makeCell = (children: PlainNodeEntry[]): PlainNodeEntry =>
+  makeEntry({ type: 'table_cell', col_width: undefined, background_color: undefined }, {}, children);
+
+const rebuildRowCells = (children: PlainNodeEntry[], ctx: WalkCtx): PlainNodeEntry[] => {
+  const cells: PlainNodeEntry[] = [];
+  let inlineBuffer: PlainNodeEntry[] = [];
+  const flushInlines = () => {
+    if (inlineBuffer.length > 0) {
+      const wrapped = emptyParagraph();
+      wrapped.children = mergeAdjacentTextRuns(inlineBuffer, ctx);
+      cells.push(makeCell([wrapped]));
+      inlineBuffer = [];
+      ctx.warnings.push('table_row inline children wrapped into table_cell');
+    }
+  };
+  for (const child of children) {
+    if (INLINE_NODE_TYPES.has(child.node.type)) {
+      inlineBuffer.push(child);
+      continue;
+    }
+    flushInlines();
+    if (child.node.type === 'table_cell') {
+      cells.push(child);
+    } else {
+      cells.push(makeCell([child]));
+      ctx.warnings.push(`table_row child wrapped into table_cell: ${child.node.type}`);
+    }
+  }
+  flushInlines();
+  return cells;
+};
+
+const rebuildTableRows = (children: PlainNodeEntry[], ctx: WalkCtx): PlainNodeEntry[] => {
+  const rows: PlainNodeEntry[] = [];
+  let inlineBuffer: PlainNodeEntry[] = [];
+  const flushInlines = () => {
+    if (inlineBuffer.length > 0) {
+      const wrapped = emptyParagraph();
+      wrapped.children = mergeAdjacentTextRuns(inlineBuffer, ctx);
+      rows.push(makeEntry({ type: 'table_row' }, {}, [makeCell([wrapped])]));
+      inlineBuffer = [];
+      ctx.warnings.push('table inline children wrapped into table_row');
+    }
+  };
+  for (const child of children) {
+    if (INLINE_NODE_TYPES.has(child.node.type)) {
+      inlineBuffer.push(child);
+      continue;
+    }
+    flushInlines();
+    if (child.node.type === 'table_row') {
+      rows.push(child);
+    } else {
+      rows.push(makeEntry({ type: 'table_row' }, {}, [makeCell([child])]));
+      ctx.warnings.push(`table child wrapped into table_row: ${child.node.type}`);
+    }
+  }
+  flushInlines();
+  return rows;
+};
+
+const rebuildFoldChildren = (children: PlainNodeEntry[], ctx: WalkCtx): PlainNodeEntry[] => {
+  if (children.some((child) => child.node.type !== 'fold_title' && child.node.type !== 'fold_content')) {
+    ctx.warnings.push(`fold child not representable in v2 schema: ${children.map((c) => c.node.type).join(', ')}`);
+    return children;
+  }
+
+  const titles = children.filter((child) => child.node.type === 'fold_title');
+  const contents = children.filter((child) => child.node.type === 'fold_content');
+
+  const title = titles[0] ?? makeEntry({ type: 'fold_title' }, {}, []);
+  for (const extra of titles.slice(1)) {
+    title.children = mergeAdjacentTextRuns([...title.children, ...extra.children], ctx);
+    transferTags(extra, title, ctx);
+  }
+  if (titles.length !== 1) {
+    ctx.warnings.push(`fold normalized to a single fold_title (had ${titles.length})`);
+  }
+
+  const content = contents[0] ?? makeEntry({ type: 'fold_content' }, {}, []);
+  for (const extra of contents.slice(1)) {
+    content.children.push(...extra.children);
+    transferTags(extra, content, ctx);
+  }
+  content.children = normalizeBlockChildren(content.children, ctx);
+  if (content.children.length === 0) {
+    content.children.push(emptyParagraph());
+  }
+  if (contents.length !== 1) {
+    ctx.warnings.push(`fold normalized to a single fold_content (had ${contents.length})`);
+  }
+
+  return [title, content];
+};
+
 export const convertLegacyDocumentJson = (json: LegacyDocumentJson): ConvertResult => {
-  const ctx: WalkCtx = { nodes: json.nodes, remarkAnchors: [], warnings: [], rootEffective: {} };
+  const ctx: WalkCtx = { nodes: json.nodes, anchorTags: new WeakMap(), orphanTags: [], warnings: [], rootEffective: {} };
 
   const root = json.nodes[ROOT_ID];
   if (!root || root.type !== 'root') throw new Error('missing root node');
-
-  collectRemarks(ROOT_ID, root, [], ctx);
 
   const modifiers = readCascade(root, ctx.warnings);
   for (const ty of INHERITABLE_RUN_KINDS) {
@@ -610,14 +826,19 @@ export const convertLegacyDocumentJson = (json: LegacyDocumentJson): ConvertResu
   const layoutMode = roundLayoutMode(json.settings.layout_mode ?? { type: 'continuous', max_width: 600 });
 
   const children = normalizeBlockChildren(
-    convertChildren(root, [], { lineHeight: inheritedLineHeight, styles: {}, stylesAllowed: true }, ctx),
+    convertChildren(root, { lineHeight: inheritedLineHeight, styles: {}, stylesAllowed: true }, ctx),
+    ctx,
   );
+  if (children.at(-1)?.node.type !== 'paragraph') {
+    children.push(emptyParagraph());
+  }
 
-  const plain: PlainDoc = {
-    root: makeEntry({ type: 'root', layout_mode: layoutMode }, modifiers, children),
-  };
+  const rootEntry = makeEntry({ type: 'root', layout_mode: layoutMode }, modifiers, children);
+  attachRemarks(ROOT_ID, root, [rootEntry], ctx);
 
-  return { plain, remarkAnchors: ctx.remarkAnchors, warnings: ctx.warnings };
+  const plain: PlainDoc = { root: rootEntry };
+
+  return { plain, remarkAnchors: collectAnchors(rootEntry, ctx), warnings: ctx.warnings };
 };
 
 const TEXT_CONTAINERS = new Set([

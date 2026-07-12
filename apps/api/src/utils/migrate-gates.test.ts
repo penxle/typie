@@ -320,3 +320,213 @@ test('구식 스키마 데이터: 비직사각형 테이블·컨테이너 직속
   assert.equal(text, deriveExpectedTextFromPlain(plain));
   assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
 });
+
+test('구식 스키마 데이터: 다문단 list_item·행 직속 블록·다중 fold_title/fold_content·고아 list_item이 선정규화되어 게이트를 통과한다', async () => {
+  const json: LegacyDocumentJson = await (async () => {
+    const fixture: LegacyDocumentJson = {
+      settings: baseSettings,
+      nodes: {
+        [ROOT_ID]: { type: 'root', children: [id(1), id(10), id(20), id(30), id(40)] },
+        [id(1)]: { type: 'bullet_list', parent: ROOT_ID, children: [id(2)] },
+        [id(2)]: {
+          type: 'list_item',
+          parent: id(1),
+          children: [id(3), id(4), id(5), id(8)],
+          remarks: { [id(100)]: { user_id: 'U1', text: '항목 remark', created_at: 1000 } },
+        },
+        [id(3)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(2), children: [id(9)] },
+        [id(9)]: { type: 'text', parent: id(3), text: [{ text: '첫 문단' }] },
+        [id(4)]: {
+          type: 'paragraph',
+          align: 'left',
+          line_height: 160,
+          parent: id(2),
+          children: [id(50)],
+          remarks: { [id(101)]: { user_id: 'U2', text: '둘째 문단 remark', created_at: 2000 } },
+        },
+        [id(50)]: { type: 'text', parent: id(4), text: [{ text: '둘째 문단' }] },
+        [id(5)]: { type: 'bullet_list', parent: id(2), children: [id(6)] },
+        [id(6)]: { type: 'list_item', parent: id(5), children: [id(7)] },
+        [id(7)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(6), children: [id(51)] },
+        [id(51)]: { type: 'text', parent: id(7), text: [{ text: '중첩' }] },
+        [id(8)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(2), children: [id(52)] },
+        [id(52)]: { type: 'text', parent: id(8), text: [{ text: '셋째' }] },
+        [id(10)]: { type: 'table', border_style: 'solid', align: 'left', proportion: 1, parent: ROOT_ID, children: [id(11), id(14)] },
+        [id(11)]: { type: 'table_row', parent: id(10), children: [id(12), id(13)] },
+        [id(12)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(11), children: [] },
+        [id(13)]: { type: 'text', parent: id(11), text: [{ text: '행 직속 텍스트' }] },
+        [id(14)]: { type: 'table_row', parent: id(10), children: [id(15)] },
+        [id(15)]: { type: 'table_cell', parent: id(14), children: [id(16)] },
+        [id(16)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(15), children: [] },
+        [id(20)]: { type: 'fold', parent: ROOT_ID, children: [id(21), id(22), id(23), id(25)] },
+        [id(21)]: { type: 'fold_title', parent: id(20), children: [id(53)] },
+        [id(53)]: { type: 'text', parent: id(21), text: [{ text: '제목1' }] },
+        [id(22)]: { type: 'fold_title', parent: id(20), children: [id(54)] },
+        [id(54)]: { type: 'text', parent: id(22), text: [{ text: '제목2' }] },
+        [id(23)]: { type: 'fold_content', parent: id(20), children: [id(24)] },
+        [id(24)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(23), children: [id(55)] },
+        [id(55)]: { type: 'text', parent: id(24), text: [{ text: '내용1' }] },
+        [id(25)]: { type: 'fold_content', parent: id(20), children: [id(26)] },
+        [id(26)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(25), children: [id(56)] },
+        [id(56)]: { type: 'text', parent: id(26), text: [{ text: '내용2' }] },
+        [id(30)]: { type: 'list_item', parent: ROOT_ID, children: [id(31)] },
+        [id(31)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(30), children: [id(57)] },
+        [id(57)]: { type: 'text', parent: id(31), text: [{ text: '고아' }] },
+        [id(40)]: { type: 'image', id: 'IMG1', proportion: 0.8, parent: ROOT_ID },
+      },
+    };
+    const snapshot = await wasm.jsonToSnapshot(fixture);
+    return await wasm.snapshotToJson(snapshot);
+  })();
+
+  const { plain, remarkAnchors } = convertLegacyDocumentJson(json);
+
+  assert.equal(plain.root.children.length, 6);
+  const [outerList, table, fold, orphanList, image, trailing] = plain.root.children;
+
+  assert.equal(outerList.node.type, 'bullet_list');
+  assert.equal(outerList.children.length, 2);
+  const [firstItem, secondItem] = outerList.children;
+  assert.deepEqual(
+    firstItem.children.map((c) => c.node.type),
+    ['paragraph', 'bullet_list'],
+  );
+  const [mergedPara] = firstItem.children;
+  assert.deepEqual(
+    mergedPara.children.map((c) => c.node.type),
+    ['text', 'hard_break', 'text'],
+  );
+  assert.deepEqual(
+    secondItem.children.map((c) => c.node.type),
+    ['paragraph'],
+  );
+
+  assert.equal(remarkAnchors.length, 2);
+  const [itemAnchor, paraAnchor] = remarkAnchors;
+  assert.equal(itemAnchor.remarks[0].text, '항목 remark');
+  assert.deepEqual(itemAnchor.path, [0, 0]);
+  assert.equal(paraAnchor.remarks[0].text, '둘째 문단 remark');
+  assert.deepEqual(paraAnchor.path, [0, 0, 0]);
+
+  assert.equal(table.node.type, 'table');
+  for (const row of table.children) {
+    assert.equal(row.children.length, 2);
+    for (const cell of row.children) {
+      assert.equal(cell.node.type, 'table_cell');
+    }
+  }
+
+  assert.equal(fold.node.type, 'fold');
+  assert.deepEqual(
+    fold.children.map((c) => c.node.type),
+    ['fold_title', 'fold_content'],
+  );
+  const [foldTitle, foldContent] = fold.children;
+  assert.equal(foldTitle.children.length, 1);
+  const [titleRun] = foldTitle.children;
+  assert.equal(titleRun.node.type === 'text' && titleRun.node.text, '제목1제목2');
+  assert.deepEqual(
+    foldContent.children.map((c) => c.node.type),
+    ['paragraph', 'paragraph'],
+  );
+
+  assert.equal(orphanList.node.type, 'bullet_list');
+  assert.equal(orphanList.children.at(0)?.node.type, 'list_item');
+
+  assert.equal(image.node.type, 'image');
+  assert.equal(trailing.node.type, 'paragraph');
+
+  const { text, roundtrip } = await wasmFfi.use((host) => {
+    host.verify_plain(plain);
+    const result = host.to_graph_with_anchors(plain, { paths: remarkAnchors.map((anchor) => anchor.path) });
+    return { text: host.extract_text(plain), roundtrip: host.to_plain(result.graph) };
+  });
+
+  assert.equal(text, deriveExpectedTextFromPlain(plain));
+  assert.equal(collectPlainTextChars(plain), collectLegacyTextChars(json));
+  assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
+});
+
+test('구식 스키마 데이터: 다중/중간 page_break·table 직속 문단·fold_title 내 tab이 선정규화되어 게이트를 통과한다', async () => {
+  const json: LegacyDocumentJson = await (async () => {
+    const fixture: LegacyDocumentJson = {
+      settings: baseSettings,
+      nodes: {
+        [ROOT_ID]: { type: 'root', children: [id(1), id(5), id(10), id(20), id(30)] },
+        [id(1)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [id(2), id(3)] },
+        [id(2)]: { type: 'page_break', parent: id(1) },
+        [id(3)]: { type: 'page_break', parent: id(1) },
+        [id(5)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [id(6), id(7), id(8)] },
+        [id(6)]: { type: 'text', parent: id(5), text: [{ text: '앞' }] },
+        [id(7)]: { type: 'page_break', parent: id(5) },
+        [id(8)]: { type: 'text', parent: id(5), text: [{ text: '뒤' }] },
+        [id(10)]: { type: 'table', border_style: 'solid', align: 'left', proportion: 1, parent: ROOT_ID, children: [id(11), id(13)] },
+        [id(11)]: { type: 'paragraph', align: 'center', line_height: 160, parent: id(10), children: [id(12)] },
+        [id(12)]: { type: 'text', parent: id(11), text: [{ text: '표 직속 문단' }] },
+        [id(13)]: { type: 'table_row', parent: id(10), children: [id(14)] },
+        [id(14)]: { type: 'table_cell', parent: id(13), children: [id(15)] },
+        [id(15)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(14), children: [] },
+        [id(20)]: { type: 'fold', parent: ROOT_ID, children: [id(21), id(23)] },
+        [id(21)]: { type: 'fold_title', parent: id(20), children: [id(22)] },
+        [id(22)]: { type: 'text', parent: id(21), text: [{ text: '제목\t이어짐' }] },
+        [id(23)]: { type: 'fold_content', parent: id(20), children: [id(24)] },
+        [id(24)]: { type: 'paragraph', align: 'left', line_height: 160, parent: id(23), children: [] },
+        [id(30)]: { type: 'paragraph', align: 'left', line_height: 160, parent: ROOT_ID, children: [] },
+      },
+    };
+    const snapshot = await wasm.jsonToSnapshot(fixture);
+    return await wasm.snapshotToJson(snapshot);
+  })();
+
+  const { plain, remarkAnchors, warnings } = convertLegacyDocumentJson(json);
+
+  assert.equal(plain.root.children.length, 7);
+  const [pb1, pb2, front, back, table, fold] = plain.root.children;
+  for (const para of [pb1, pb2]) {
+    assert.equal(para.node.type, 'paragraph');
+    assert.deepEqual(
+      para.children.map((c) => c.node.type),
+      ['page_break'],
+    );
+  }
+  assert.deepEqual(
+    front.children.map((c) => c.node.type),
+    ['text', 'page_break'],
+  );
+  assert.deepEqual(
+    back.children.map((c) => c.node.type),
+    ['text'],
+  );
+
+  assert.equal(table.node.type, 'table');
+  assert.equal(table.children.length, 2);
+  for (const row of table.children) {
+    assert.equal(row.node.type, 'table_row');
+    assert.equal(row.children.length, 1);
+    assert.equal(row.children.at(0)?.node.type, 'table_cell');
+  }
+  const wrappedPara = table.children.at(0)?.children.at(0)?.children.at(0);
+  assert.ok(wrappedPara);
+  assert.equal(wrappedPara.node.type, 'paragraph');
+  assert.deepEqual(wrappedPara.modifiers, { alignment: { type: 'alignment', value: 'center' } });
+
+  assert.equal(fold.node.type, 'fold');
+  const [foldTitle] = fold.children;
+  assert.deepEqual(
+    foldTitle.children.map((c) => c.node.type),
+    ['text'],
+  );
+  const [titleRun] = foldTitle.children;
+  assert.equal(titleRun.node.type === 'text' && titleRun.node.text, '제목이어짐');
+  assert.ok(warnings.some((w) => w.includes('fold_title children other than text dropped')));
+
+  const { text, roundtrip } = await wasmFfi.use((host) => {
+    host.verify_plain(plain);
+    const result = host.to_graph_with_anchors(plain, { paths: remarkAnchors.map((anchor) => anchor.path) });
+    return { text: host.extract_text(plain), roundtrip: host.to_plain(result.graph) };
+  });
+
+  assert.equal(text, deriveExpectedTextFromPlain(plain));
+  assert.equal(collectPlainTextChars(plain), collectLegacyTextChars(json));
+  assert.deepEqual(plainStructureDiff(plain, roundtrip), []);
+});
