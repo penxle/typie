@@ -1,4 +1,4 @@
-import { EntityState, NoteState, NoteStatus } from '@typie/lib/enums';
+import { EntityState, NoteState, NoteStatus, SiteState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, asc, eq, inArray } from 'drizzle-orm';
@@ -69,6 +69,14 @@ builder.queryFields((t) => ({
       status: t.arg({ type: NoteStatus, required: false }),
     },
     resolve: async (_, args, ctx) => {
+      const entity = args.entityId
+        ? await db
+            .select({ siteId: Entities.siteId })
+            .from(Entities)
+            .where(and(eq(Entities.id, args.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
+            .then(firstOrThrow)
+        : null;
+
       let siteId: string | undefined;
 
       if (args.siteId) {
@@ -79,11 +87,13 @@ builder.queryFields((t) => ({
         }
 
         siteId = args.siteId;
+      } else if (entity) {
+        siteId = entity.siteId;
       } else {
         const fallbackSite = await db
           .select({ id: Sites.id })
           .from(Sites)
-          .where(eq(Sites.userId, ctx.session.userId))
+          .where(and(eq(Sites.userId, ctx.session.userId), eq(Sites.state, SiteState.ACTIVE)))
           .orderBy(asc(Sites.createdAt))
           .limit(1)
           .then(first);
@@ -105,12 +115,6 @@ builder.queryFields((t) => ({
       }
 
       if (args.entityId) {
-        await db
-          .select({ id: Entities.id })
-          .from(Entities)
-          .where(and(eq(Entities.id, args.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
-          .then(firstOrThrow);
-
         const noteIds = await db
           .select({ noteId: NoteEntities.noteId })
           .from(NoteEntities)
