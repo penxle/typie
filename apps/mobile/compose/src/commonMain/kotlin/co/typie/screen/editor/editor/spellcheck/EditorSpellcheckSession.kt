@@ -327,19 +327,21 @@ internal fun rememberEditorSpellcheckSession(
           return@applySuggestion
         }
 
-        scope.launch {
-          activeEditor.replaceSpellcheckRangeText(
-            id = id,
-            expectedText = result.context,
-            replacement = replacement,
-          )
-          programmaticSelectionToSkip = activeEditor.state.selection
-          val nextId = model.remove(id, activateReplacement = true)
-          if (nextId != null) {
-            updateCompactOverlayHeightForRange(nextId)
+        activeEditor.trackLocalEdit { context ->
+          activeEditor.scope.launch(context) {
+            activeEditor.replaceSpellcheckRangeText(
+              id = id,
+              expectedText = result.context,
+              replacement = replacement,
+            )
+            programmaticSelectionToSkip = activeEditor.state.selection
+            val nextId = model.remove(id, activateReplacement = true)
+            if (nextId != null) {
+              updateCompactOverlayHeightForRange(nextId)
+            }
+            updateActiveRangeDecoration()
+            requestRangeIntoView(nextId)
           }
-          updateActiveRangeDecoration()
-          requestRangeIntoView(nextId)
         }
       },
     directEdit = directEdit@{ id ->

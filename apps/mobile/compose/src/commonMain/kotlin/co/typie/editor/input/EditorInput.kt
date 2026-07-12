@@ -183,10 +183,12 @@ internal class EditorInputNode(
     bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
-    coroutineScope.launch {
-      editor.awaitWithBringIntoView(bringIntoViewRequests) {
-        messages.forEach(::enqueue)
-        beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+    editor.trackLocalEdit { context ->
+      editor.scope.launch(context) {
+        editor.awaitWithBringIntoView(bringIntoViewRequests) {
+          messages.forEach(::enqueue)
+          beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+        }
       }
     }
   }
@@ -202,7 +204,11 @@ internal class EditorInputNode(
   }
 
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
-    bindingCoalescer.submit(binding, clipboard)
+    if (binding.coalescible) {
+      editor.trackLocalEdit { localEdit -> bindingCoalescer.submit(binding, clipboard, localEdit) }
+    } else {
+      coroutineScope.launch { bindingCoalescer.submit(binding, clipboard).await() }
+    }
   }
 
   private suspend fun dispatchBindingMessages(

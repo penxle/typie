@@ -109,26 +109,32 @@ internal fun rememberEditorFindReplaceSession(
         state.findBy(offset = 1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
       }
     },
-    replace = {
-      scope.launch {
-        state.replaceActive(
-          editor = editor,
-          documentLocked = documentLocked,
-          onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
-          bringIntoViewRequests = bringIntoViewRequests,
-        )
-      }
-    },
-    replaceAll = {
-      scope.launch {
-        state.replaceAllMatches(
-          editor = editor,
-          documentLocked = documentLocked,
-          onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
-          bringIntoViewRequests = bringIntoViewRequests,
-        )
-      }
-    },
+    replace = replace@{
+        val activeEditor = editor ?: return@replace
+        activeEditor.trackLocalEdit { context ->
+          activeEditor.scope.launch(context) {
+            state.replaceActive(
+              editor = activeEditor,
+              documentLocked = documentLocked,
+              onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
+              bringIntoViewRequests = bringIntoViewRequests,
+            )
+          }
+        }
+      },
+    replaceAll = replaceAll@{
+        val activeEditor = editor ?: return@replaceAll
+        activeEditor.trackLocalEdit { context ->
+          activeEditor.scope.launch(context) {
+            state.replaceAllMatches(
+              editor = activeEditor,
+              documentLocked = documentLocked,
+              onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
+              bringIntoViewRequests = bringIntoViewRequests,
+            )
+          }
+        }
+      },
   )
 }
 

@@ -102,10 +102,12 @@ internal fun EditorRepasteAsTextOverlay(
             .background(AppTheme.colors.surfaceDefault, RepasteAsTextOverlayShape)
             .semantics(mergeDescendants = true) {}
             .clickable {
-              editor.scope.launch {
-                editor.awaitWithBringIntoView(bringIntoViewRequests) {
-                  enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
-                  beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+              editor.trackLocalEdit { context ->
+                editor.scope.launch(context) {
+                  editor.awaitWithBringIntoView(bringIntoViewRequests) {
+                    enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
+                    beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                  }
                 }
               }
               editor.focus()

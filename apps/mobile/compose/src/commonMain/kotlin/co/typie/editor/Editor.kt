@@ -43,6 +43,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
@@ -54,6 +55,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -96,9 +98,12 @@ internal constructor(
   private val versionCounter: AtomicLong = AtomicLong(0L)
   private val disposed: AtomicBoolean = AtomicBoolean(false)
   private val syncInProgress: AtomicBoolean = AtomicBoolean(false)
+  private val localEdits = EditorLocalEditCoordinator()
   private val attachedPages: AtomicReference<PersistentSet<Int>> =
     AtomicReference(persistentSetOf())
   private val pendingSettles: AtomicReference<PersistentList<PendingSettle>> =
+    AtomicReference(persistentListOf())
+  private val queuedLocalEdits: AtomicReference<PersistentList<LocalEdit>> =
     AtomicReference(persistentListOf())
   private val queued: AtomicBoolean = AtomicBoolean(false)
   private val surfaceScheduler =
@@ -140,8 +145,39 @@ internal constructor(
     focusManager?.clearFocus()
   }
 
+  internal fun trackLocalEdit(start: (CoroutineContext) -> Job) {
+    val localEdit = localEdits.register() ?: return
+    val completion =
+      try {
+        start(localEdit)
+      } catch (e: CancellationException) {
+        localEdit.fail(e)
+        throw e
+      } catch (e: Throwable) {
+        localEdit.fail(e)
+        notifyFailure(e)
+        return
+      }
+    completion.invokeOnCompletion { failure ->
+      if (failure == null) {
+        localEdit.complete()
+      } else {
+        localEdit.fail(failure)
+      }
+    }
+  }
+
+  internal fun quiesceLocalEdits(): LocalEditQuiescence = localEdits.quiesce()
+
   suspend fun await(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
-    withSuspendFailureNotification { awaitOrThrow(beforeCommit = beforeCommit, block = block) }
+    try {
+      awaitOrThrow(beforeCommit = beforeCommit, block = block)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      throw e
+    }
   }
 
   private suspend fun awaitOrThrow(
@@ -158,40 +194,42 @@ internal constructor(
     block(collector)
     if (messages.isEmpty()) return
 
-    val (events, snapshot) =
-      withContext(NonCancellable + dispatcher) {
-        mutex.withLock {
-          if (disposed.load()) throw CancellationException("Editor disposed")
-          for (m in messages) inner.enqueue(m)
-          val e = inner.tick()
-          val version = versionCounter.addAndFetch(1L)
-          val s = readSnapshot(version = version, events = e)
-          e to s
-        }
-      }
-
-    val pending: PendingSettle? =
-      if (events.any { it is EditorEvent.RenderInvalidated }) {
-        val initial = attachedPages.load()
-        if (initial.isEmpty()) null
-        else
-          PendingSettle(initial, requiredVersion = snapshot.version).also {
-            pendingSettles.updatePersistent { list -> list.add(it) }
+    localEdits.run {
+      val (events, snapshot) =
+        withContext(NonCancellable + dispatcher) {
+          mutex.withLock {
+            if (disposed.load()) throw CancellationException("Editor disposed")
+            for (m in messages) inner.enqueue(m)
+            val e = inner.tick()
+            val version = versionCounter.addAndFetch(1L)
+            val s = readSnapshot(version = version, events = e)
+            e to s
           }
-      } else null
+        }
 
-    try {
-      emit(events)
-      pending?.await()
-    } finally {
-      if (pending != null) {
-        pendingSettles.updatePersistent { it.remove(pending) }
-      }
-      withContext(NonCancellable) {
-        mutex.withLock {
-          if (!disposed.load()) {
-            beforeCommit?.invoke(snapshot)
-            commit(snapshot)
+      val pending: PendingSettle? =
+        if (events.any { it is EditorEvent.RenderInvalidated }) {
+          val initial = attachedPages.load()
+          if (initial.isEmpty()) null
+          else
+            PendingSettle(initial, requiredVersion = snapshot.version).also {
+              pendingSettles.updatePersistent { list -> list.add(it) }
+            }
+        } else null
+
+      try {
+        emit(events)
+        pending?.await()
+      } finally {
+        if (pending != null) {
+          pendingSettles.updatePersistent { it.remove(pending) }
+        }
+        withContext(NonCancellable) {
+          mutex.withLock {
+            if (!disposed.load()) {
+              beforeCommit?.invoke(snapshot)
+              commit(snapshot)
+            }
           }
         }
       }
@@ -199,32 +237,37 @@ internal constructor(
   }
 
   fun sync(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
+    val localEdit = localEdits.register() ?: return
     if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
-      notifyFailure(IllegalStateException("nested sync is not supported"))
+      val error = IllegalStateException("nested sync is not supported")
+      localEdit.fail(error)
+      notifyFailure(error)
       return
     }
     try {
-      withFailureNotification {
-        runBlocking {
-          val events: List<EditorEvent>
-          mutex.withLock {
-            if (disposed.load()) error("Editor disposed")
-            val collector =
-              object : EditorScope {
-                override fun enqueue(message: Message) {
-                  inner.enqueue(message)
-                }
+      runBlocking {
+        val events: List<EditorEvent>
+        mutex.withLock {
+          if (disposed.load()) error("Editor disposed")
+          val collector =
+            object : EditorScope {
+              override fun enqueue(message: Message) {
+                inner.enqueue(message)
               }
-            block(collector)
-            events = inner.tick()
-            val version = versionCounter.addAndFetch(1L)
-            val snapshot = readSnapshot(version = version, events = events)
-            beforeCommit?.invoke(snapshot)
-            commit(snapshot)
-          }
-          emit(events)
+            }
+          block(collector)
+          events = inner.tick()
+          val version = versionCounter.addAndFetch(1L)
+          val snapshot = readSnapshot(version = version, events = events)
+          beforeCommit?.invoke(snapshot)
+          commit(snapshot)
         }
+        emit(events)
       }
+      localEdit.complete()
+    } catch (e: Throwable) {
+      localEdit.fail(e)
+      notifyFailure(e)
     } finally {
       syncInProgress.store(false)
     }
@@ -232,8 +275,16 @@ internal constructor(
 
   fun enqueue(message: Message) {
     if (disposed.load()) return
-    inner.enqueue(message)
-    scheduleTick()
+    val localEdit = localEdits.register() ?: return
+    try {
+      inner.enqueue(message)
+      queuedLocalEdits.updatePersistent { it.adding(localEdit) }
+      scheduleTick()
+    } catch (e: Throwable) {
+      localEdit.fail(e)
+      notifyFailure(e)
+      throw e
+    }
   }
 
   suspend fun can(message: Message): Boolean =
@@ -265,11 +316,13 @@ internal constructor(
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
     scope.launch(dispatcher) {
-      withSuspendFailureNotification {
+      var edits: PersistentList<LocalEdit> = persistentListOf()
+      try {
         val events =
           withContext(dispatcher) {
             mutex.withLock {
               queued.store(false)
+              edits = queuedLocalEdits.exchange(persistentListOf())
               if (disposed.load()) return@withLock emptyList()
               val e = inner.tick()
               val version = versionCounter.addAndFetch(1L)
@@ -278,6 +331,13 @@ internal constructor(
             }
           }
         emit(events)
+        edits.forEach(LocalEdit::complete)
+      } catch (e: CancellationException) {
+        edits.forEach { localEdit -> localEdit.fail(e) }
+        throw e
+      } catch (e: Throwable) {
+        edits.forEach { localEdit -> localEdit.fail(e) }
+        notifyFailure(e)
       }
     }
   }
@@ -446,20 +506,27 @@ internal constructor(
   }
 
   suspend fun insertTemplateFragment(changesets: ByteArray): Boolean =
-    withSuspendFailureNotification(defaultValue = { false }) {
-      val events =
-        withContext(NonCancellable + dispatcher) {
-          mutex.withLock {
-            if (disposed.load()) throw CancellationException("Editor disposed")
-            inner.insertTemplateFragment(changesets)
-            val e = inner.tick()
-            val version = versionCounter.addAndFetch(1L)
-            commit(readSnapshot(version = version, events = e))
-            e
+    try {
+      localEdits.run {
+        val events =
+          withContext(NonCancellable + dispatcher) {
+            mutex.withLock {
+              if (disposed.load()) throw CancellationException("Editor disposed")
+              inner.insertTemplateFragment(changesets)
+              val e = inner.tick()
+              val version = versionCounter.addAndFetch(1L)
+              commit(readSnapshot(version = version, events = e))
+              e
+            }
           }
-        }
-      emit(events)
-      true
+        emit(events)
+        true
+      }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      false
     }
 
   internal suspend fun currentHeads(): ByteArray =
@@ -482,6 +549,7 @@ internal constructor(
     if (!disposed.compareAndSet(expectedValue = false, newValue = true)) return
     EditorRegistry.unregisterAsync(this)
     pendingSettles.exchange(persistentListOf()).forEach { it.cancel() }
+    queuedLocalEdits.exchange(persistentListOf()).forEach(LocalEdit::complete)
     listeners.store(persistentMapOf())
     attachedPages.store(persistentSetOf())
     surfaceScheduler.dispose()

@@ -15,6 +15,7 @@ import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeEndpoints
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -24,13 +25,17 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
 
@@ -293,19 +298,111 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun await_reports_tick_exception_without_committing() =
+  fun await_reports_and_propagates_tick_exception_without_committing() =
     runTest(dispatcher) {
       val boom = RuntimeException("boom")
       val fake = FakeFfiEditor(onTick = { throw boom })
       val reported = mutableListOf<Throwable>()
       val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
 
-      editor.await { enqueue(sampleMessage) }
+      val thrown = assertFailsWith<RuntimeException> { editor.await { enqueue(sampleMessage) } }
 
+      assertEquals(boom.message, thrown.message)
       assertEquals(1, reported.size)
       assertTrue(reported.single() is RuntimeException)
       assertEquals(boom.message, reported.single().message)
       assertEquals(EditorState.Initial, editor.state)
+    }
+
+  @Test
+  fun await_is_rejected_after_local_transactions_quiesce() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      editor.quiesceLocalEdits()
+
+      assertFailsWith<CancellationException> { editor.await { enqueue(sampleMessage) } }
+
+      assertEquals(emptyList(), fake.enqueued)
+      assertEquals(0, fake.tickCount)
+    }
+
+  @Test
+  fun track_local_edit_registers_before_its_coroutine_starts() =
+    runTest(dispatcher) {
+      val editor = Editor(FakeFfiEditor(), this, dispatcher)
+      val gate = CompletableDeferred<Unit>()
+
+      editor.trackLocalEdit { context -> launch(context) { gate.await() } }
+      val quiescence = editor.quiesceLocalEdits()
+      val barrier = async(start = CoroutineStart.UNDISPATCHED) { quiescence.await() }
+
+      assertFalse(barrier.isCompleted)
+
+      dispatcher.scheduler.runCurrent()
+      assertFalse(barrier.isCompleted)
+
+      gate.complete(Unit)
+      dispatcher.scheduler.runCurrent()
+      assertTrue(barrier.await().isSuccess)
+    }
+
+  @Test
+  fun track_local_edit_is_rejected_after_quiesce() =
+    runTest(dispatcher) {
+      val editor = Editor(FakeFfiEditor(), this, dispatcher)
+      var started = false
+      editor.quiesceLocalEdits()
+
+      editor.trackLocalEdit { context -> launch(context) { started = true } }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertFalse(started)
+    }
+
+  @Test
+  fun accepted_tracked_local_edit_can_commit_after_quiesce() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.trackLocalEdit { context ->
+        launch(context) { editor.await { enqueue(sampleMessage) } }
+      }
+      val quiescence = editor.quiesceLocalEdits()
+      val barrier = async(start = CoroutineStart.UNDISPATCHED) { quiescence.await() }
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(barrier.await().isSuccess)
+      assertEquals(listOf(sampleMessage), fake.enqueued)
+      assertEquals(1, fake.tickCount)
+    }
+
+  @Test
+  fun accepted_local_edit_can_commit_from_another_coroutine_after_quiesce() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val handedOff = CompletableDeferred<CoroutineContext>()
+      val completion = CompletableDeferred<Unit>()
+
+      editor.trackLocalEdit { context ->
+        handedOff.complete(context)
+        completion
+      }
+      val context = handedOff.await()
+      val quiescence = editor.quiesceLocalEdits()
+      val barrier = async(start = CoroutineStart.UNDISPATCHED) { quiescence.await() }
+
+      assertFalse(barrier.isCompleted)
+
+      withContext(context) { editor.await { enqueue(sampleMessage) } }
+      completion.complete(Unit)
+
+      assertTrue(barrier.await().isSuccess)
+      assertEquals(listOf(sampleMessage), fake.enqueued)
+      assertEquals(1, fake.tickCount)
     }
 
   @Test
@@ -329,6 +426,19 @@ class EditorAwaitTest {
     }
 
   @Test
+  fun sync_is_rejected_after_local_transactions_quiesce() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      editor.quiesceLocalEdits()
+
+      editor.sync { enqueue(sampleMessage) }
+
+      assertEquals(emptyList(), fake.enqueued)
+      assertEquals(0, fake.tickCount)
+    }
+
+  @Test
   fun insert_template_fragment_calls_inner_ticks_and_commits() =
     runTest(dispatcher) {
       val fakeCursor =
@@ -349,6 +459,24 @@ class EditorAwaitTest {
       assertEquals(1, fake.tickCount)
       assertEquals(fakeCursor, editor.cursor)
       assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun insert_template_fragment_is_rejected_after_local_edits_quiesce() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val quiescence = editor.quiesceLocalEdits()
+
+      try {
+        assertFailsWith<CancellationException> {
+          editor.insertTemplateFragment(byteArrayOf(1, 2, 3))
+        }
+        assertTrue(fake.insertedTemplateFragments.isEmpty())
+        assertEquals(0, fake.tickCount)
+      } finally {
+        quiescence.resume()
+      }
     }
 
   @Test
@@ -960,6 +1088,55 @@ class EditorAwaitTest {
       dispatcher.scheduler.advanceUntilIdle()
       assertEquals(1, fake.tickCount)
       assertEquals(listOf(sampleMessage), fake.enqueued)
+    }
+
+  @Test
+  fun queued_enqueue_holds_local_transaction_barrier_until_tick_commits() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.enqueue(sampleMessage)
+      val quiescence = editor.quiesceLocalEdits()
+      val barrier = async(start = CoroutineStart.UNDISPATCHED) { quiescence.await() }
+
+      assertFalse(barrier.isCompleted)
+
+      dispatcher.scheduler.runCurrent()
+      assertTrue(barrier.await().isSuccess)
+      assertEquals(1, fake.tickCount)
+    }
+
+  @Test
+  fun queued_enqueue_failure_reaches_local_transaction_barrier() =
+    runTest(dispatcher) {
+      val boom = RuntimeException("boom")
+      val fake = FakeFfiEditor(onTick = { throw boom })
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.enqueue(sampleMessage)
+      val quiescence = editor.quiesceLocalEdits()
+      val barrier = async { quiescence.await() }
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      val result = barrier.await()
+      assertTrue(result.isFailure)
+      assertEquals(boom.message, result.exceptionOrNull()?.message)
+    }
+
+  @Test
+  fun enqueue_is_rejected_after_local_transactions_quiesce() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      editor.quiesceLocalEdits()
+
+      editor.enqueue(sampleMessage)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(emptyList(), fake.enqueued)
+      assertEquals(0, fake.tickCount)
     }
 
   @Test

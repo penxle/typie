@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,7 +71,6 @@ internal fun BottomToolbarNodes(
 ) {
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
-  val scope = rememberCoroutineScope()
   val editor = runtime.editor
   val showPageBreak = editor?.rootAttrs?.layoutMode is LayoutMode.Paginated
   val hasUnitSelection =
@@ -108,10 +106,12 @@ internal fun BottomToolbarNodes(
             is EditorToolbarNodeInsertAction.OpenPanel -> onBottomPanelRequest(action.panel)
             is EditorToolbarNodeInsertAction.SendMessage -> {
               val currentEditor = runtime.editor ?: return@NodeInsertTile
-              scope.launch {
-                currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
-                  enqueue(action.message)
-                  beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+              currentEditor.trackLocalEdit { context ->
+                currentEditor.scope.launch(context) {
+                  currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+                    enqueue(action.message)
+                    beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                  }
                 }
               }
               onEditorInputRequest()

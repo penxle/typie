@@ -238,18 +238,20 @@ internal fun EditorToolbarHost(
       return
     }
 
-    commandScope.launch {
-      val editor = runtime.editor ?: return@launch
-      val committedState =
-        editor.awaitWithBringIntoView(bringIntoViewRequests) {
-          if (editor.ime?.composing != null) {
-            enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+    val editor = runtime.editor ?: return
+    editor.trackLocalEdit { context ->
+      editor.scope.launch(context) {
+        val committedState =
+          editor.awaitWithBringIntoView(bringIntoViewRequests) {
+            if (editor.ime?.composing != null) {
+              enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+            }
+            messages.forEach(::enqueue)
+            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
           }
-          messages.forEach(::enqueue)
-          beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+        if (committedState == null) {
+          Logger.e { "Editor toolbar messages did not commit" }
         }
-      if (committedState == null) {
-        Logger.e { "Editor toolbar messages did not commit" }
       }
     }
   }
