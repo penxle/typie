@@ -22,6 +22,8 @@ import co.typie.ext.onlyTop
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.platform.PlatformModule
+import co.typie.platform.ShareAnchor
+import co.typie.platform.rememberShareAnchor
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
@@ -62,10 +64,10 @@ fun ReferralScreen() {
     }
   }
 
-  suspend fun shareLink() {
+  suspend fun shareLink(anchor: ShareAnchor?) {
     model.issueReferralUrl().withDefaultExceptionHandler(toast).onOk {
       val message = buildReferralInviteMessage(it)
-      val shared = PlatformModule.share.share(message)
+      val shared = PlatformModule.share.share(message, anchor)
       if (!shared) {
         toast.error("초대 링크를 공유할 수 없어요.")
       }
@@ -74,7 +76,7 @@ fun ReferralScreen() {
 
   ProvideTopBar(
     center = { Text("초대", style = AppTheme.typography.title) },
-    trailing = { ActionsMenu(onCopyLink = { copyLink() }, onShareLink = { shareLink() }) },
+    trailing = { ActionsMenu(onCopyLink = { copyLink() }, onShareLink = { shareLink(it) }) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
@@ -178,12 +180,18 @@ fun ReferralScreen() {
 }
 
 @Composable
-private fun ActionsMenu(onCopyLink: suspend () -> Unit, onShareLink: suspend () -> Unit) {
+private fun ActionsMenu(
+  onCopyLink: suspend () -> Unit,
+  onShareLink: suspend (ShareAnchor?) -> Unit,
+) {
   val scope = rememberCoroutineScope()
+  val shareAnchor = rememberShareAnchor()
 
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, modifier = shareAnchor.modifier) }) {
     item(icon = Lucide.Copy, label = "초대 링크 복사") { scope.launch { onCopyLink() } }
-    item(icon = Lucide.Share2, label = "초대 링크 공유") { scope.launch { onShareLink() } }
+    item(icon = Lucide.Share2, label = "초대 링크 공유") {
+      scope.launch { onShareLink(shareAnchor.value) }
+    }
   }
 }
 

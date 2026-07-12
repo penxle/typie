@@ -29,6 +29,7 @@ import co.typie.platform.FilePickerResult
 import co.typie.platform.PickedFile
 import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
+import co.typie.platform.rememberShareAnchor
 import co.typie.result.Result
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -436,6 +437,8 @@ internal fun DocumentShareSheet(
     }
   }
 
+  val shareAnchor = rememberShareAnchor()
+
   suspend fun shareDocument() {
     if (loading) return
     if (isSharing) return
@@ -448,7 +451,7 @@ internal fun DocumentShareSheet(
 
     isSharing = true
     try {
-      if (!share.share(shareText)) {
+      if (!share.share(shareText, shareAnchor.value)) {
         toast.show(ToastType.Error, "문서 링크를 공유할 수 없어요.")
       }
     } finally {
@@ -712,6 +715,7 @@ internal fun DocumentShareSheet(
         enabled = !loading && !isSharing,
         loading = isSharing,
         onClick = { shareDocument() },
+        modifier = shareAnchor.modifier,
       )
     }
   }

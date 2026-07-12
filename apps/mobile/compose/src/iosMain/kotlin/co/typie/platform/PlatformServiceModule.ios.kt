@@ -7,10 +7,12 @@ import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
@@ -31,6 +33,7 @@ import platform.UIKit.UIImage
 import platform.UIKit.UIImageWriteToSavedPhotosAlbum
 import platform.UIKit.UIPasteboard
 import platform.UIKit.UIViewController
+import platform.UIKit.popoverPresentationController
 
 private fun NSBundle.infoString(key: String): String =
   (objectForInfoDictionaryKey(key) as? String)?.takeIf(String::isNotBlank) ?: "unknown"
@@ -170,7 +173,7 @@ private fun ByteArray.toNSData(): NSData {
 private fun NSData.decodeUtf8(): String? = bytes?.readBytes(length.toInt())?.decodeToString()
 
 internal class IOSShare : Share {
-  override suspend fun share(bytes: ByteArray, mimeType: String): Boolean =
+  override suspend fun share(bytes: ByteArray, mimeType: String, anchor: ShareAnchor?): Boolean =
     withContext(Dispatchers.Main) {
       runCatching {
           val item: Any =
@@ -180,24 +183,41 @@ internal class IOSShare : Share {
               bytes.toNSData()
             }
 
-          presentShareSheet(listOf(item))
+          presentShareSheet(listOf(item), anchor)
           true
         }
         .getOrDefault(false)
     }
 
-  override suspend fun share(text: String): Boolean =
+  override suspend fun share(text: String, anchor: ShareAnchor?): Boolean =
     withContext(Dispatchers.Main) {
       runCatching {
-          presentShareSheet(listOf(text))
+          presentShareSheet(listOf(text), anchor)
           true
         }
         .getOrDefault(false)
     }
 
-  private fun presentShareSheet(items: List<Any>) {
+  private fun presentShareSheet(items: List<Any>, anchor: ShareAnchor?) {
     val controller = topViewController() ?: return
+    val sourceView = controller.view
     val activityVC = UIActivityViewController(activityItems = items, applicationActivities = null)
+    activityVC.popoverPresentationController?.let { popover ->
+      popover.sourceView = sourceView
+      if (anchor != null) {
+        popover.sourceRect =
+          sourceView.convertRect(
+            CGRectMake(anchor.x, anchor.y, anchor.width, anchor.height),
+            fromView = null,
+          )
+      } else {
+        popover.sourceRect =
+          sourceView.bounds.useContents {
+            CGRectMake(size.width / 2.0, size.height / 2.0, 0.0, 0.0)
+          }
+        popover.permittedArrowDirections = 0uL
+      }
+    }
     controller.presentViewController(activityVC, animated = true, completion = null)
   }
 

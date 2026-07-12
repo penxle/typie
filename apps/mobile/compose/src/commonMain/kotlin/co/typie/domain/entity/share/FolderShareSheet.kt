@@ -20,6 +20,7 @@ import co.typie.platform.FilePickerResult
 import co.typie.platform.PickedFile
 import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
+import co.typie.platform.rememberShareAnchor
 import co.typie.result.Result
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -243,6 +244,8 @@ internal fun FolderShareSheet(
     }
   }
 
+  val shareAnchor = rememberShareAnchor()
+
   suspend fun shareFolder() {
     if (loading) return
     if (isSharing) return
@@ -255,7 +258,7 @@ internal fun FolderShareSheet(
 
     isSharing = true
     try {
-      if (!share.share(shareText)) {
+      if (!share.share(shareText, shareAnchor.value)) {
         toast.show(co.typie.ui.component.toast.ToastType.Error, "폴더 링크를 공유할 수 없어요.")
       }
     } finally {
@@ -434,6 +437,7 @@ internal fun FolderShareSheet(
           enabled = !loading && !isSharing,
           loading = isSharing,
           onClick = { shareFolder() },
+          modifier = shareAnchor.modifier,
         )
       }
     }

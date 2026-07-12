@@ -77,14 +77,14 @@ internal class AndroidClipboard(private val context: Context) : Clipboard {
   override suspend fun paste(): ClipboardReadPayload? =
     withContext(Dispatchers.IO) {
       runCatching {
-          val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-          val clip = clipboard.primaryClip ?: return@runCatching null
-          if (clip.itemCount == 0) return@runCatching null
-          val item = clip.getItemAt(0)
-          val html = item.htmlText
-          val text = item.coerceToText(context).toString()
-          ClipboardReadPayload(html = html, text = text)
-        }
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip ?: return@runCatching null
+        if (clip.itemCount == 0) return@runCatching null
+        val item = clip.getItemAt(0)
+        val html = item.htmlText
+        val text = item.coerceToText(context).toString()
+        ClipboardReadPayload(html = html, text = text)
+      }
         .getOrNull()
     }
 }
@@ -150,7 +150,7 @@ internal class AndroidFileSystem(private val context: Context) : FileSystem {
 }
 
 internal class AndroidShare(private val context: Context) : Share {
-  override suspend fun share(bytes: ByteArray, mimeType: String): Boolean =
+  override suspend fun share(bytes: ByteArray, mimeType: String, anchor: ShareAnchor?): Boolean =
     withContext(Dispatchers.IO) {
       runCatching {
           val directory = File(context.cacheDir, "share").apply { mkdirs() }
@@ -176,7 +176,7 @@ internal class AndroidShare(private val context: Context) : Share {
         .getOrDefault(false)
     }
 
-  override suspend fun share(text: String): Boolean =
+  override suspend fun share(text: String, anchor: ShareAnchor?): Boolean =
     withContext(Dispatchers.IO) {
       runCatching {
           val intent =
