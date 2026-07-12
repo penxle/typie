@@ -50,12 +50,12 @@ suspend fun Dialog.confirm(
   }
 
 suspend fun Dialog.error(
-  nav: Navigator,
+  nav: Navigator?,
   title: String = "문제가 발생했어요",
   message: String = "잠시 후 다시 시도해주세요.",
   onRetry: () -> Unit,
 ) {
-  val canPop = nav.canPop
+  val canPop = nav?.canPop == true
 
   present(dismissible = false) {
     DialogLayout(
@@ -78,5 +78,5 @@ suspend fun Dialog.error(
     )
   }
 
-  if (canPop) nav.pop() else onRetry()
+  if (canPop) nav?.pop() else onRetry()
 }

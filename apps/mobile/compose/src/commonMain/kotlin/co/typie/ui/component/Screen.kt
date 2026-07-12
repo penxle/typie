@@ -66,7 +66,7 @@ fun Screen(
   val topBarState = LocalTopBarState.current
   val hasTopBar = topBarState != null && topBarState.enabled && topBarState.visible
 
-  val nav = Nav.current
+  val nav = if (loadable != null) Nav.current else null
   val dialog = LocalDialog.current
   val focusManager = LocalFocusManager.current
 
