@@ -21,10 +21,14 @@ const { values } = parseArgs({
     concurrency: { type: 'string' },
     ids: { type: 'string' },
     'skip-drain-check': { type: 'boolean', default: false },
+    profile: { type: 'boolean', default: false },
+    limit: { type: 'string' },
   },
 });
 
 const dryRun = values['dry-run'] ?? false;
+const profile = values.profile ?? false;
+const limit = values.limit ? Number(values.limit) : null;
 const concurrency = values.concurrency ? Number(values.concurrency) : os.cpus().length;
 
 if (!values['skip-drain-check']) {
@@ -81,6 +85,8 @@ const refill = async () => {
   queue.push(...window);
 };
 
+let supplied = 0;
+
 const nextBatch = async (): Promise<string[]> => {
   while (queue.length < BATCH_SIZE && !exhausted) {
     refilling ??= refill().finally(() => {
@@ -88,7 +94,10 @@ const nextBatch = async (): Promise<string[]> => {
     });
     await refilling;
   }
-  return queue.splice(0, BATCH_SIZE);
+  const budget = limit === null ? BATCH_SIZE : Math.min(BATCH_SIZE, Math.max(0, limit - supplied));
+  const batch = queue.splice(0, budget);
+  supplied += batch.length;
+  return batch;
 };
 
 const startTime = Date.now();
@@ -96,6 +105,7 @@ let processed = 0;
 const failures: MigrateDocumentResult[] = [];
 const skips: MigrateDocumentResult[] = [];
 const warned: MigrateDocumentResult[] = [];
+const stageTotals: Record<string, number> = {};
 
 const formatEta = (ms: number): string => {
   const seconds = Math.ceil(ms / 1000);
@@ -110,7 +120,7 @@ await new Promise<void>((resolve, reject) => {
 
   const spawn = () => {
     const worker = new Worker(new URL('migrate-documents-to-v2-worker.ts', import.meta.url), {
-      workerData: { dryRun },
+      workerData: { dryRun, profile, skipExistingCheck: explicitIds === null },
       execArgv: process.execArgv,
       env: { ...process.env, WASM_POOL_SIZE: '1', DB_POOL_MAX: '2' },
     });
@@ -121,7 +131,14 @@ await new Promise<void>((resolve, reject) => {
         processed += 1;
         if (result.status === 'failed') failures.push(result);
         else if (result.status === 'skipped') skips.push(result);
-        else if (result.warnings.length > 0) warned.push(result);
+        else {
+          if (result.warnings.length > 0) warned.push(result);
+          if (result.timings) {
+            for (const [k, v] of Object.entries(result.timings)) {
+              stageTotals[k] = (stageTotals[k] ?? 0) + v;
+            }
+          }
+        }
       }
       if (results.length > 0) {
         const elapsed = Date.now() - startTime;
@@ -160,6 +177,7 @@ const report = {
   skipped: skips,
   withWarnings: warned,
   elapsedMs: Date.now() - startTime,
+  ...(profile && { stageTotalsMs: Object.fromEntries(Object.entries(stageTotals).map(([k, v]) => [k, Math.round(v)])) }),
 };
 
 const reportPath = `migration-report-${Date.now()}.json`;
@@ -167,4 +185,10 @@ await writeFile(reportPath, JSON.stringify(report, null, 2));
 console.log(
   `\n완료. 리포트: ${reportPath} (실패 ${failures.length}, 스킵 ${skips.length}, 경고 ${warned.length}${aborted ? ', ABORTED' : ''})`,
 );
+if (profile) {
+  const totalStage = Object.values(stageTotals).reduce((a, b) => a + b, 0);
+  for (const [k, v] of Object.entries(stageTotals).toSorted(([, a], [, b]) => b - a)) {
+    console.log(`  ${k.padEnd(24)} ${(v / 1000).toFixed(1)}s (${((v / totalStage) * 100).toFixed(0)}%)`);
+  }
+}
 process.exit(aborted || failures.length > 0 ? 1 : 0);
