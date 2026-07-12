@@ -48,6 +48,8 @@ export class FakeSyncDeps implements SyncDeps {
   invalidPayloads: Uint8Array[] = [];
   published: { documentId: string; event: ChangesetEvent }[] = [];
   collectJobs: string[] = [];
+  writable = true;
+  checkWritableCalls = 0;
 
   consumeTicket = async (ticket: string): Promise<SyncSession | null> => {
     const session = this.tickets.get(ticket) ?? null;
@@ -56,6 +58,12 @@ export class FakeSyncDeps implements SyncDeps {
   };
 
   checkDocumentAccess = async (_userId: string, documentId: string): Promise<DocumentAccess> => this.access.get(documentId) ?? 'ok';
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- required by SyncDeps.checkWritable contract
+  checkWritable = async (_userId: string): Promise<boolean> => {
+    this.checkWritableCalls++;
+    return this.writable;
+  };
 
   getCollectedSeq = async (documentId: string): Promise<string | null> => this.collectedSeq.get(documentId) ?? null;
 

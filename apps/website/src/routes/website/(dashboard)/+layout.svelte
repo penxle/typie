@@ -4,7 +4,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
-  import { Button, HorizontalDivider } from '@typie/ui/components';
+  import { Button, HorizontalDivider, Icon } from '@typie/ui/components';
   import { setupAppContext } from '@typie/ui/context';
   import { Updater } from '@typie/ui/notification';
   import { isMobileDevice } from '@typie/ui/utils';
@@ -12,8 +12,9 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
+  import CrownIcon from '~icons/lucide/crown';
   import { browser } from '$app/environment';
-  import { goto } from '$app/navigation';
+  import { goto, pushState } from '$app/navigation';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -38,6 +39,7 @@
   import EditorSelectModal from './EditorSelectModal.svelte';
   import MaintenanceBanner from './MaintenanceBanner.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
+  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import PlanUpgradeModal from './PlanUpgradeModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
@@ -202,6 +204,10 @@
     if (sites.length > 0 && sites.every((s) => s.id !== app.preference.current.currentSiteId)) {
       paneGroup.switchToSite(sites[0].id);
     }
+  });
+
+  $effect(() => {
+    app.state.subscribed = !!query.data.me.subscription;
   });
 
   $effect(() => {
@@ -398,6 +404,52 @@
     <AdminImpersonateBanner query$key={query.data} />
     <MaintenanceBanner />
 
+    {#if !query.data.me.subscription}
+      <div
+        class={flex({
+          position: 'relative',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          paddingX: '20px',
+          paddingY: '10px',
+          backgroundColor: 'accent.brand.subtle',
+          fontSize: '13px',
+          color: 'text.brand',
+        })}
+      >
+        <div class={flex({ alignItems: 'center', gap: '10px' })}>
+          <Icon icon={CrownIcon} size={16} />
+          <span class={css({ fontWeight: 'semibold' })}>지금은 읽기 전용 상태예요. 글 열람과 공유는 계속 가능해요.</span>
+        </div>
+
+        <button
+          class={flex({
+            alignItems: 'center',
+            gap: '4px',
+            paddingX: '10px',
+            paddingY: '4px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 'semibold',
+            whiteSpace: 'nowrap',
+            color: 'text.bright',
+            backgroundColor: 'accent.brand.default',
+            cursor: 'pointer',
+            transition: 'common',
+            _hover: { backgroundColor: 'accent.brand.hover' },
+          })}
+          onclick={() => {
+            mixpanel.track('open_plan_upgrade_modal', { via: 'readonly_banner' });
+            pushState('', { shallowRoute: '/preference/billing' });
+          }}
+          type="button"
+        >
+          FULL ACCESS 시작하기
+        </button>
+      </div>
+    {/if}
+
     <div
       class={flex({
         position: 'relative',
@@ -434,7 +486,7 @@
 <Shortcuts query$key={query.data} />
 <ShortcutsModal />
 
-<PlanUpgradeModal user$key={query.data.me} />
+<PlanUpgradeModal />
 
 <EditorSelectModal
   onOpenChange={(open) => {
@@ -447,6 +499,12 @@
     if (!context) return;
 
     app.state.editorSelectContext = null;
+
+    if (!query.data.me.subscription) {
+      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
+      mixpanel.track('open_plan_upgrade_modal', { via: 'editor_select' });
+      return;
+    }
 
     const resp = await createDocument({
       input: {

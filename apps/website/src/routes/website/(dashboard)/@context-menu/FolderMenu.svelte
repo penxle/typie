@@ -29,6 +29,7 @@
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { maxDepth } from '../@tree/utils';
+  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
 
@@ -487,6 +488,12 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
+    if (!app.state.subscribed) {
+      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
+      mixpanel.track('open_plan_upgrade_modal', { via: 'folder_menu_create_document' });
+      return;
+    }
+
     if (app.preference.current.experimental_v2EditorEnabled) {
       app.state.editorSelectContext = {
         siteId: entity.site.id,
@@ -515,6 +522,12 @@
   <MenuItem
     icon={FolderPlusIcon}
     onclick={async () => {
+      if (!app.state.subscribed) {
+        PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 폴더를 만들 수 있어요.' });
+        mixpanel.track('open_plan_upgrade_modal', { via: 'folder_menu_create_folder' });
+        return;
+      }
+
       const resp = await createFolder({
         input: {
           siteId: entity.site.id,

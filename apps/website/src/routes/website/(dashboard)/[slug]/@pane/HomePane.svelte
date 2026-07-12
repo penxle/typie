@@ -19,6 +19,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$mearie';
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';
+  import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
@@ -304,6 +305,12 @@
             <Button
               onclick={async () => {
                 if (!query.data || !currentSite) return;
+
+                if (!app.state.subscribed) {
+                  PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
+                  mixpanel.track('open_plan_upgrade_modal', { via: 'home_create_document' });
+                  return;
+                }
 
                 if (app.preference.current.experimental_v2EditorEnabled) {
                   app.state.editorSelectContext = {

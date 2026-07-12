@@ -242,6 +242,36 @@ test('bufferedAmount 초과 → close 4002', async () => {
   assert.equal(d.socket.closed?.code, 4002);
 });
 
+test('push: 무구독이면 error(subscription_required, permanent) + append 없음', async () => {
+  const d = setup();
+  d.deps.writable = false;
+  await hello(d);
+  await d.dispatch({ t: 'push', id: 'r1', documentId: 'D1', changesets: Uint8Array.of(1) });
+  const error = d.socket.sent.at(-1);
+  if (error?.t !== 'error') return assert.fail();
+  assert.equal(error.scope, 'request');
+  assert.equal(error.code, 'subscription_required');
+  assert.equal(error.permanent, true);
+  assert.equal((d.deps.stream.get('D1') ?? []).length, 0);
+});
+
+test('push: 구독 있으면 통과하고 checkWritable은 커넥션당 1회', async () => {
+  const d = setup();
+  await hello(d);
+  await d.dispatch({ t: 'push', id: 'r1', documentId: 'D1', changesets: Uint8Array.of(1) });
+  await d.dispatch({ t: 'push', id: 'r2', documentId: 'D1', changesets: Uint8Array.of(2) });
+  assert.equal(d.deps.checkWritableCalls, 1);
+  assert.equal(d.socket.sent.filter((m) => m.t === 'push-ack').length, 2);
+});
+
+test('pull: 무구독이어도 허용', async () => {
+  const d = setup();
+  d.deps.writable = false;
+  await hello(d);
+  await d.dispatch({ t: 'pull', id: 'r1', documentId: 'D1' });
+  assert.notEqual(d.socket.sent.at(-1)?.t, 'error');
+});
+
 test('push rate limit: 용량 소진 시 rate_limited, 시간 경과로 refill', async () => {
   let clock = 0;
   const d = setup({ now: () => clock });

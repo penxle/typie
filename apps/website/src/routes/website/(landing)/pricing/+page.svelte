@@ -14,16 +14,12 @@
   let selectedInterval = $state<'monthly' | 'yearly'>('monthly');
   let expandedIndex = $state<number | null>(null);
 
-  const features = {
-    basic: PLAN_FEATURES.basic.map((feature) => feature.label),
-    full: PLAN_FEATURES.full.map((feature) => feature.label),
-  };
+  const features = PLAN_FEATURES.full.map((feature) => feature.label);
 
   const faqs = [
     {
-      question: '유료 플랜에서 무료 플랜으로 다운그레이드하면 기존 데이터는 어떻게 되나요?',
-      answer:
-        '기존 데이터는 모두 안전하게 보존돼요. 다만 무료 플랜의 제한을 초과한 콘텐츠는 읽기 전용으로 전환되며, 제한 내로 조정하면 다시 편집이 가능해요.',
+      question: '구독을 해지하면 기존 글은 어떻게 되나요?',
+      answer: '모든 글이 읽기 전용 상태로 안전하게 보존돼요. 열람과 공유는 계속 가능하지만, 새 글 작성과 편집은 구독이 필요해요.',
     },
     {
       question: '언제든지 플랜을 변경할 수 있나요?',
@@ -44,7 +40,7 @@
   };
 </script>
 
-<Helmet description="무료로 시작하고, 필요할 때 업그레이드하세요. 월 4,900원으로 모든 기능을 제한 없이 쓸 수 있어요." title="구독 안내" />
+<Helmet description="2주 무료 체험 후, 월 2,900원으로 모든 기능을 제한 없이 쓸 수 있어요." title="구독 안내" />
 
 <div
   class={css({
@@ -120,7 +116,7 @@
           maxWidth: '[400px]',
         })}
       >
-        무료로 충분히 써보고, 마음에 들면 업그레이드하세요.
+        2주간 충분히 써보고, 마음에 들면 구독하세요.
       </p>
     </div>
   </section>
@@ -242,7 +238,7 @@
       <div
         class={css({
           display: 'grid',
-          gridTemplateColumns: { sm: '1fr', lg: '1fr 1fr' },
+          gridTemplateColumns: { sm: '1fr', lg: '[1fr 400px]' },
           gap: '0',
           borderTopWidth: '1px',
           borderTopColor: 'dark.gray.900',
@@ -267,118 +263,46 @@
             borderRightColor: 'dark.gray.900',
             display: 'flex',
             flexDirection: 'column',
-            order: { sm: '2', lg: '1' },
           })}
         >
-          <div class={css({ marginBottom: '20px' })}>
-            <span
-              class={css({
-                display: 'block',
-                fontSize: '11px',
-                fontFamily: 'mono',
-                color: 'transparent',
-                letterSpacing: '[0.1em]',
-                textTransform: 'uppercase',
-                marginBottom: '6px',
-                visibility: 'hidden',
-              })}
-            >
-              Placeholder
-            </span>
-            <span
-              class={css({
-                fontSize: '14px',
-                fontFamily: 'mono',
-                fontWeight: 'medium',
-                color: 'dark.gray.400',
-                letterSpacing: '[0.1em]',
-                textTransform: 'uppercase',
-              })}
-            >
-              Basic
-            </span>
-          </div>
-
-          <div class={flex({ alignItems: 'baseline', gap: '8px', marginBottom: '8px', height: { sm: '[56px]', lg: '[64px]' } })}>
-            <span
-              class={css({
-                fontSize: { sm: '[40px]', lg: '[48px]' },
-                fontWeight: 'medium',
-                color: 'dark.gray.100',
-                lineHeight: '[1]',
-                fontFamily: 'Paperlogy',
-              })}
-            >
-              무료
-            </span>
-            <span class={css({ fontSize: '15px', color: 'transparent', visibility: 'hidden' })}>원 / 월</span>
-          </div>
-
-          <p
+          <span
             class={css({
-              fontSize: '14px',
-              color: 'dark.gray.500',
-              marginBottom: '24px',
-              height: '20px',
-            })}
-          ></p>
-
-          <p
-            class={css({
-              fontSize: '15px',
-              color: 'dark.gray.400',
-              marginBottom: '32px',
-              lineHeight: '[1.65]',
+              display: 'block',
+              fontSize: '11px',
+              fontFamily: 'mono',
+              color: 'dark.brand.400',
+              letterSpacing: '[0.1em]',
+              textTransform: 'uppercase',
+              marginBottom: '20px',
             })}
           >
-            핵심 기능만으로 가볍게 시작하세요
-          </p>
+            Free Trial
+          </span>
 
-          <a
+          <h2
             class={css({
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingX: '24px',
-              paddingY: '14px',
-              fontSize: '15px',
+              fontSize: { sm: '[28px]', lg: '[36px]' },
               fontWeight: 'medium',
-              borderWidth: '1px',
-              borderColor: 'dark.gray.700',
-              color: 'dark.gray.200',
-              transition: '[all 0.2s ease-out]',
-              marginBottom: '32px',
-              _hover: {
-                borderColor: 'dark.gray.600',
-                backgroundColor: 'dark.gray.900',
-              },
+              color: 'dark.gray.100',
+              lineHeight: '[1.25]',
+              letterSpacing: '[-0.02em]',
+              fontFamily: 'Paperlogy',
+              marginBottom: '16px',
             })}
-            href="/start"
           >
-            무료로 시작하기
-          </a>
+            2주 무료 체험 후 시작
+          </h2>
 
-          <div class={flex({ flexDirection: 'column', gap: '16px', flex: '1' })}>
-            <p
-              class={css({
-                fontSize: '12px',
-                fontFamily: 'mono',
-                color: 'dark.gray.500',
-                letterSpacing: '[0.05em]',
-                textTransform: 'uppercase',
-              })}
-            >
-              Includes
-            </p>
-            <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
-              {#each features.basic as feature, index (index)}
-                <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
-                  <Icon style={css.raw({ color: 'dark.gray.600', marginTop: '4px' })} icon={CheckIcon} size={14} />
-                  <span class={css({ fontSize: '15px', color: 'dark.gray.300', lineHeight: '[1.65]' })}>{feature}</span>
-                </li>
-              {/each}
-            </ul>
-          </div>
+          <p
+            class={css({
+              fontSize: { sm: '15px', lg: '16px' },
+              color: 'dark.gray.400',
+              lineHeight: '[1.65]',
+              maxWidth: '[420px]',
+            })}
+          >
+            2주 동안 모든 기능을 제한 없이 써보고, 마음에 들면 이어서 구독하세요.
+          </p>
         </div>
 
         <div
@@ -388,7 +312,6 @@
             paddingRight: { lg: '0' },
             display: 'flex',
             flexDirection: 'column',
-            order: { sm: '1', lg: '2' },
           })}
         >
           <div class={css({ marginBottom: '20px' })}>
@@ -430,7 +353,7 @@
                   fontVariantNumeric: 'tabular-nums',
                   fontFamily: 'Paperlogy',
                 })}
-                value={selectedInterval === 'monthly' ? 4900 : Math.floor(49_000 / 12)}
+                value={selectedInterval === 'monthly' ? 2900 : Math.floor(29_000 / 12)}
               />
             {:else}
               <span
@@ -443,7 +366,7 @@
                   fontFamily: 'Paperlogy',
                 })}
               >
-                {selectedInterval === 'monthly' ? 4900 : Math.floor(49_000 / 12)}
+                {selectedInterval === 'monthly' ? 2900 : Math.floor(29_000 / 12)}
               </span>
             {/if}
             <span class={css({ fontSize: '15px', color: 'dark.gray.500' })}>원 / 월</span>
@@ -458,7 +381,7 @@
             })}
           >
             {#if selectedInterval === 'yearly'}
-              연 {comma(49_000)}원 결제
+              연 {comma(29_000)}원 결제
             {/if}
           </p>
 
@@ -521,10 +444,10 @@
                 textTransform: 'uppercase',
               })}
             >
-              Everything in Basic, plus
+              Includes
             </p>
             <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
-              {#each features.full as feature, index (index)}
+              {#each features as feature, index (index)}
                 <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
                   <Icon style={css.raw({ color: 'dark.brand.400', marginTop: '4px' })} icon={CheckIcon} size={14} />
                   <span class={css({ fontSize: '15px', color: 'dark.gray.300', lineHeight: '[1.65]' })}>{feature}</span>
@@ -744,7 +667,7 @@
               maxWidth: '[400px]',
             })}
           >
-            무료 플랜으로 먼저 경험해보세요.
+            2주 무료 체험으로 먼저 경험해보세요.
           </p>
         </div>
 
@@ -769,7 +692,7 @@
           )}
           href="/start"
         >
-          무료로 시작하기
+          2주 무료로 시작하기
           <Icon
             style={css.raw({
               transition: '[transform 0.2s ease-out]',

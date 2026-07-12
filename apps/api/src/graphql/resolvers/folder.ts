@@ -18,6 +18,7 @@ import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { generateFractionalOrder, generatePermalink, generateSlug } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { Entity, EntityView, Folder, FolderView, IFolder, Image, isTypeOf } from '../objects.ts';
 
@@ -250,6 +251,8 @@ builder.mutationFields((t) => ({
         userId: ctx.session.userId,
         siteId: input.siteId,
       });
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       let depth = 0;
       if (input.parentEntityId) {

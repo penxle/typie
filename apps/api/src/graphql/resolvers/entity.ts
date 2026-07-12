@@ -27,7 +27,7 @@ import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { buildFreshV2Content, copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
-import { assertPlanRule } from '#/utils/plan.ts';
+import { assertActiveSubscription, assertPlanRule } from '#/utils/plan.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { builder } from '../builder.ts';
 import {
@@ -1169,6 +1169,8 @@ builder.mutationFields((t) => ({
         userId: ctx.session.userId,
         siteId: input.targetSiteId,
       });
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       // 플랜 제한 사전 검증
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });

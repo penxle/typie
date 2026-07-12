@@ -4,8 +4,10 @@
   import { PlanAvailability } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import LockIcon from '~icons/lucide/lock';
   import { pushState } from '$app/navigation';
   import { graphql } from '$mearie';
   import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
@@ -21,7 +23,6 @@
     graphql(`
       fragment DashboardLayout_PlanUsageWidget_user on User {
         id
-        canStartTrial
         usage {
           totalCharacterCount
           totalBlobSize
@@ -59,7 +60,7 @@
     return Math.max(charProgress, blobProgress);
   });
 
-  const canStartTrial = $derived(user.data.canStartTrial && !user.data.subscription);
+  const subscribed = $derived(Boolean(user.data.subscription));
   const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
 
   const trialDaysRemaining = $derived.by(() => {
@@ -76,7 +77,7 @@
     return Math.min(1, (totalDays - trialDaysRemaining) / totalDays);
   });
 
-  const visible = $derived(progress !== -1 || isTrial);
+  const visible = $derived(!subscribed || isTrial || progress !== -1);
 </script>
 
 {#if visible}
@@ -104,27 +105,33 @@
       })}
     >
       <div class={flex({ alignItems: 'center', justifyContent: 'center', gap: '8px', width: 'full' })}>
-        <div
-          style:--progress={`${(isTrial ? trialProgress : progress) * 360}deg`}
-          class={css({
-            flexShrink: '0',
-            width: '16px',
-            height: '16px',
-            borderRadius: 'full',
-            background:
-              '[conic-gradient(token(colors.accent.brand.default) var(--progress), token(colors.interactive.hover) var(--progress))]',
-            mask: '[radial-gradient(circle, transparent 5px, black 5.5px)]',
-          })}
-        ></div>
+        {#if subscribed}
+          <div
+            style:--progress={`${(isTrial ? trialProgress : progress) * 360}deg`}
+            class={css({
+              flexShrink: '0',
+              width: '16px',
+              height: '16px',
+              borderRadius: 'full',
+              background:
+                '[conic-gradient(token(colors.accent.brand.default) var(--progress), token(colors.interactive.hover) var(--progress))]',
+              mask: '[radial-gradient(circle, transparent 5px, black 5.5px)]',
+            })}
+          ></div>
+        {:else}
+          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={LockIcon} size={16} />
+        {/if}
         <span class={css({ fontSize: '12px', color: 'text.faint' })}>
-          {#if isTrial}
+          {#if !subscribed}
+            지금은 읽기 전용 상태예요
+          {:else if isTrial}
             {#if trialDaysRemaining === 0}
               무료 체험이 오늘 종료돼요
             {:else}
               무료 체험 중 · {trialDaysRemaining}일 남음
             {/if}
           {:else}
-            무료 플랜 · 현재 {Math.round(progress * 100)}% 사용
+            현재 {Math.round(progress * 100)}% 사용
           {/if}
         </span>
       </div>
@@ -147,17 +154,13 @@
             pushState('', { shallowRoute: '/preference/billing' });
             mixpanel.track('open_billing_from_trial_widget');
           } else {
-            PlanUpgradeDialog.show(
-              canStartTrial
-                ? { title: '2주 무료 체험을 시작해보세요', message: '결제 수단 등록 없이 타이피의 모든 기능을\n무료로 이용할 수 있어요.' }
-                : { message: 'FULL ACCESS로 업그레이드하면\n무제한으로 글을 작성하고 파일을 업로드할 수 있어요.' },
-            );
+            PlanUpgradeDialog.show({ message: 'FULL ACCESS로 업그레이드하면\n무제한으로 글을 작성하고 파일을 업로드할 수 있어요.' });
             mixpanel.track('open_plan_upgrade_modal', { via: 'usage_widget' });
           }
         }}
         type="button"
       >
-        {canStartTrial ? '2주 무료 체험하기' : '지금 업그레이드하기'}
+        지금 업그레이드하기
       </button>
     </div>
   </div>

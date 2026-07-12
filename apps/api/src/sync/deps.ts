@@ -19,6 +19,7 @@ import {
   streamTip,
 } from '#/utils/changeset.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { hasActiveSubscription } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
 import type { SyncDeps } from './types.ts';
 
@@ -52,6 +53,8 @@ export const createProductionDeps = (): SyncDeps => ({
       .then(first);
     return state ? 'ok' : 'not_v2';
   },
+
+  checkWritable: async (userId) => await hasActiveSubscription({ userId }),
 
   getCollectedSeq,
 

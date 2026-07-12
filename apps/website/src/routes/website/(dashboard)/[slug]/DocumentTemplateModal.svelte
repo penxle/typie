@@ -3,9 +3,12 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
+  import mixpanel from 'mixpanel-browser';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { graphql } from '$mearie';
+  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { DocumentTemplateModal_site$key } from '$mearie';
 
@@ -16,6 +19,8 @@
   };
 
   let { site$key, editor, focused }: Props = $props();
+
+  const app = getAppContext();
 
   const site = createFragment(
     graphql(`
@@ -81,6 +86,13 @@
   });
 
   const loadTemplate = (slug: string) => {
+    if (!app.state.subscribed) {
+      open = false;
+      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 템플릿을 사용할 수 있어요.' });
+      mixpanel.track('open_plan_upgrade_modal', { via: 'document_template' });
+      return;
+    }
+
     templateSlug = slug;
   };
 </script>

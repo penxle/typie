@@ -126,21 +126,7 @@ User.implement({
     }),
 
     canStartTrial: t.boolean({
-      resolve: async (self) => {
-        const existingTrial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, self.id)).then(first);
-
-        if (existingTrial) {
-          return false;
-        }
-
-        const subscriptionHistory = await db
-          .select({ id: Subscriptions.id })
-          .from(Subscriptions)
-          .where(eq(Subscriptions.userId, self.id))
-          .then(first);
-
-        return !subscriptionHistory;
-      },
+      resolve: () => false,
     }),
 
     uuid: t.string({

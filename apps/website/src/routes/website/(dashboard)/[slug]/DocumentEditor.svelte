@@ -35,7 +35,6 @@
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
   import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
-  import TrialPopupExperimentModal from '../TrialPopupExperimentModal.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import CloseButton from './@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from './@pane/context.svelte';
@@ -68,14 +67,11 @@
         me @required {
           id
           role
-          canStartTrial
-          surveys
           subscription {
             id
           }
           ...EditorContext_user
           ...DocumentPanel_user
-          ...TrialPopupExperimentModal_user
           sites {
             id
             ...DocumentTemplateModal_site
@@ -409,18 +405,6 @@
   let subtitleFocused = $state(false);
   let titleDirty = $state(false);
   let subtitleDirty = $state(false);
-  let trialPopupExperimentOpen = $state(false);
-
-  const shouldOfferTrialPopupExperiment = $derived(
-    Boolean(
-      documentId &&
-      entity &&
-      entity.user.id === query.data.me.id &&
-      query.data.me.canStartTrial &&
-      !query.data.me.subscription &&
-      query.data.me.surveys.includes('trial_popup_content_entry_202605'),
-    ),
-  );
 
   $effect(() => {
     if (document) {
@@ -441,14 +425,6 @@
         localSubtitle = serverSubtitle;
       }
     }
-  });
-
-  $effect(() => {
-    if (trialPopupExperimentOpen || !focused || !editor.isFocused || !shouldOfferTrialPopupExperiment || PlanUpgradeDialog.current) {
-      return;
-    }
-
-    trialPopupExperimentOpen = true;
   });
 
   function flushTitleUpdate() {
@@ -1120,24 +1096,26 @@
               <DocumentMenu {document} {entity} via="editor" />
             </Menu>
 
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '24px',
-                color: editor.locked ? 'accent.brand.default' : 'text.faint',
-                transition: 'common',
-                _hover: {
-                  color: editor.locked ? 'accent.brand.hover' : 'text.subtle',
-                  backgroundColor: 'surface.muted',
-                },
-              })}
-              onclick={() => toggleEditLock()}
-              onpointerdown={(e) => e.preventDefault()}
-              type="button"
-              use:tooltip={{ message: editor.locked ? '편집 잠금 해제' : '편집 잠금' }}
-            >
-              <Icon icon={editor.locked ? LockIcon : LockOpenIcon} size={16} />
-            </button>
+            {#if query.data.me.subscription}
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: editor.locked ? 'accent.brand.default' : 'text.faint',
+                  transition: 'common',
+                  _hover: {
+                    color: editor.locked ? 'accent.brand.hover' : 'text.subtle',
+                    backgroundColor: 'surface.muted',
+                  },
+                })}
+                onclick={() => toggleEditLock()}
+                onpointerdown={(e) => e.preventDefault()}
+                type="button"
+                use:tooltip={{ message: editor.locked ? '편집 잠금 해제' : '편집 잠금' }}
+              >
+                <Icon icon={editor.locked ? LockIcon : LockOpenIcon} size={16} />
+              </button>
+            {/if}
           {/if}
 
           <button
@@ -1307,6 +1285,7 @@
               onEditorReady={handleEditorReady}
               onExitedDocumentStart={() => subtitleEl?.focus()}
               onSelectionChanged={handleSelectionChanged}
+              readOnly={!query.data.me.subscription}
               resizing={paneGroup.resizing}
               snapshot={serverSnapshot}
               unit="cm"
@@ -1506,10 +1485,6 @@
   </div>
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
-
-  {#if documentId}
-    <TrialPopupExperimentModal {documentId} user$key={query.data.me} bind:open={trialPopupExperimentOpen} />
-  {/if}
 
   {#if currentSite}
     <DocumentTemplateModal {editor} {focused} site$key={currentSite} />

@@ -47,12 +47,12 @@ const compensateReferrer = async (tx: Transaction, refereeId: string) => {
   if (existingCredit) {
     await tx
       .update(UserPaymentCredits)
-      .set({ amount: existingCredit.amount + 4900 })
+      .set({ amount: existingCredit.amount + 2900 })
       .where(eq(UserPaymentCredits.id, existingCredit.id));
   } else {
     await tx.insert(UserPaymentCredits).values({
       userId: referral.referrerId,
-      amount: 4900,
+      amount: 2900,
     });
   }
 

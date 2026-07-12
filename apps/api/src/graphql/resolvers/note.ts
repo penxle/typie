@@ -5,6 +5,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, NoteEntities, Notes, Sites, TableCode, validateDbId } from '#/db/index.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { Entity, isTypeOf, Note, Site, User } from '../objects.ts';
 
@@ -164,6 +165,8 @@ builder.mutationFields((t) => ({
       color: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       let siteId: string;
 
       if (input.siteId) {
@@ -249,6 +252,8 @@ builder.mutationFields((t) => ({
       status: t.input.field({ type: NoteStatus, required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const note = await db
         .select()
         .from(Notes)

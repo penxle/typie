@@ -12,7 +12,6 @@
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
-  import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
@@ -31,8 +30,6 @@
         credit
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
         ...DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user
-
-        canStartTrial
 
         billingKey {
           id
@@ -73,7 +70,6 @@
   );
 
   const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
-  const canStartTrial = $derived(user.data.canStartTrial);
 
   const [scheduleSubscriptionCancellation] = createMutation(
     graphql(`
@@ -139,24 +135,6 @@
     `),
   );
 
-  const [subscribePlanWithTrial] = createMutation(
-    graphql(`
-      mutation DashboardLayout_PreferenceModal_BillingTab_SubscribePlanWithTrial_Mutation {
-        subscribePlanWithTrial {
-          id
-          state
-          expiresAt
-
-          plan {
-            id
-            name
-            availability
-          }
-        }
-      }
-    `),
-  );
-
   const [deleteBillingKey] = createMutation(
     graphql(`
       mutation DashboardLayout_PreferenceModal_BillingTab_DeleteBillingKey_Mutation {
@@ -169,7 +147,6 @@
   let updatePaymentMethodMode = $state<'register' | 'subscribe'>('register');
   let redeemCreditCodeOpen = $state(false);
   let cancellationSurveyOpen = $state(false);
-  let trialStartedModalOpen = $state(false);
 
   async function handleCancellationSurveySubmit(surveyData: unknown) {
     await recordSurvey({
@@ -200,46 +177,22 @@
       <SettingsCard>
         <SettingsRow>
           {#snippet label()}
-            타이피 BASIC ACCESS
+            구독 없음
           {/snippet}
           {#snippet description()}
-            타이피의 기본 기능을 무료로 이용할 수 있어요.
+            읽기 전용 상태예요.
           {/snippet}
           {#snippet value()}
-            <div class={flex({ gap: '8px' })}>
-              {#if canStartTrial}
-                <Button
-                  onclick={() => {
-                    Dialog.confirm({
-                      title: '무료 체험을 시작하시겠어요?',
-                      message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
-                      actionLabel: '시작하기',
-                      actionHandler: async () => {
-                        await subscribePlanWithTrial();
-                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
-                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
-                        mixpanel.track('start_trial');
-                        trialStartedModalOpen = true;
-                      },
-                    });
-                  }}
-                  size="sm"
-                  variant="primary"
-                >
-                  2주 무료 체험하기
-                </Button>
-              {/if}
-              <Button
-                onclick={() => {
-                  updatePaymentMethodMode = 'subscribe';
-                  updatePaymentMethodOpen = true;
-                }}
-                size="sm"
-                variant={canStartTrial ? 'secondary' : 'primary'}
-              >
-                업그레이드
-              </Button>
-            </div>
+            <Button
+              onclick={() => {
+                updatePaymentMethodMode = 'subscribe';
+                updatePaymentMethodOpen = true;
+              }}
+              size="sm"
+              variant="primary"
+            >
+              구독 시작하기
+            </Button>
           {/snippet}
         </SettingsRow>
       </SettingsCard>
@@ -289,8 +242,8 @@
                   Dialog.confirm({
                     title: isMonthly ? '연간 플랜으로 전환하시겠어요?' : '월간 플랜으로 전환하시겠어요?',
                     message: isMonthly
-                      ? `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 연간 플랜(49,000원/년)이 적용돼요.`
-                      : `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용돼요.`,
+                      ? `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 연간 플랜(29,000원/년)이 적용돼요.`
+                      : `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 월간 플랜(2,900원/월)이 적용돼요.`,
                     actionLabel: '전환하기',
                     actionHandler: async () => {
                       await schedulePlanChange({ input: { planId: targetPlanId } });
@@ -530,8 +483,3 @@
 <UpdatePaymentMethodModal mode={updatePaymentMethodMode} user$key={user.data} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
 <SubscriptionCancellationSurveyModal onSubmit={handleCancellationSurveySubmit} user$key={user.data} bind:open={cancellationSurveyOpen} />
-<SubscriptionCelebrationModal
-  message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
-  title="무료 체험이 시작됐어요!"
-  bind:open={trialStartedModalOpen}
-/>

@@ -1,5 +1,6 @@
 import { GetObjectTaggingCommand, PutObjectTaggingCommand } from '@aws-sdk/client-s3';
 import { faker } from '@faker-js/faker';
+import { TRIAL_DURATION_DAYS } from '@typie/lib/const';
 import { SingleSignOnProvider, UserState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import argon2 from 'argon2';
@@ -31,6 +32,7 @@ import { dev, env } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
 import { apple, google, kakao, naver } from '#/external/sso/index.ts';
 import { generateFractionalOrder, generateRandomAvatar, generateRandomName, persistBlobAsImage } from '#/utils/index.ts';
+import { createTrialSubscription } from '#/utils/plan.ts';
 import { createSite } from '#/utils/site.ts';
 import { builder } from '../builder.ts';
 import type { UserContext } from '#/context.ts';
@@ -491,9 +493,16 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, logoI
         refereeId: user.id,
         refereeCompensatedAt: dayjs(),
       });
-      await tx.insert(UserPaymentCredits).values({ userId: user.id, amount: 4900 });
+      await tx.insert(UserPaymentCredits).values({ userId: user.id, amount: 2900 });
     }
   }
+
+  const trialStartsAt = dayjs();
+  await createTrialSubscription(tx, {
+    userId: user.id,
+    startsAt: trialStartsAt,
+    expiresAt: trialStartsAt.add(TRIAL_DURATION_DAYS, 'days'),
+  });
 
   return user;
 };

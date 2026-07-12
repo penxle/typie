@@ -30,7 +30,6 @@
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
   import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
-  import TrialPopupExperimentModal from '../../TrialPopupExperimentModal.svelte';
   import CloseButton from '../@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { dragPane } from '../@pane/dnd';
@@ -63,14 +62,11 @@
         me @required {
           id
           role
-          canStartTrial
-          surveys
           subscription {
             id
           }
           ...EditorContextV2_user
           ...DocumentPanelV2_user
-          ...TrialPopupExperimentModal_user
           ...CommentComposerV2_user
           sites {
             id
@@ -614,18 +610,6 @@
   let subtitleFocused = $state(false);
   let titleDirty = $state(false);
   let subtitleDirty = $state(false);
-  let trialPopupExperimentOpen = $state(false);
-
-  const shouldOfferTrialPopupExperiment = $derived(
-    Boolean(
-      documentId &&
-      entity &&
-      entity.user.id === query.data.me.id &&
-      query.data.me.canStartTrial &&
-      !query.data.me.subscription &&
-      query.data.me.surveys.includes('trial_popup_content_entry_202605'),
-    ),
-  );
 
   $effect(() => {
     if (document) {
@@ -646,20 +630,6 @@
         localSubtitle = serverSubtitle;
       }
     }
-  });
-
-  $effect(() => {
-    if (
-      trialPopupExperimentOpen ||
-      !focused ||
-      !(ctx.editor?.focused ?? false) ||
-      !shouldOfferTrialPopupExperiment ||
-      PlanUpgradeDialog.current
-    ) {
-      return;
-    }
-
-    trialPopupExperimentOpen = true;
   });
 
   function flushTitleUpdate() {
@@ -699,7 +669,7 @@
   $effect(() => {
     const editor = ctx.liveEditor;
     if (editor) {
-      editor.readOnly = document?.locked ?? false;
+      editor.readOnly = (document?.locked ?? false) || !query.data.me.subscription;
     }
   });
 
@@ -707,6 +677,8 @@
   let lockedToastTimer: ReturnType<typeof setTimeout> | null = null;
 
   function toggleEditLock() {
+    if (!query.data.me.subscription) return;
+
     const newValue = !(ctx.editor?.readOnly ?? false);
 
     if (documentId) {
@@ -979,24 +951,26 @@
               <DocumentMenu {document} {entity} via="editor" />
             </Menu>
 
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '24px',
-                color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.default' : 'text.faint',
-                transition: 'common',
-                _hover: {
-                  color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.hover' : 'text.subtle',
-                  backgroundColor: 'surface.muted',
-                },
-              })}
-              onclick={() => toggleEditLock()}
-              onpointerdown={(e) => e.preventDefault()}
-              type="button"
-              use:tooltip={{ message: (ctx.editor?.readOnly ?? false) ? '편집 잠금 해제' : '편집 잠금' }}
-            >
-              <Icon icon={(ctx.editor?.readOnly ?? false) ? LockIcon : LockOpenIcon} size={16} />
-            </button>
+            {#if query.data.me.subscription}
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.default' : 'text.faint',
+                  transition: 'common',
+                  _hover: {
+                    color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.hover' : 'text.subtle',
+                    backgroundColor: 'surface.muted',
+                  },
+                })}
+                onclick={() => toggleEditLock()}
+                onpointerdown={(e) => e.preventDefault()}
+                type="button"
+                use:tooltip={{ message: (ctx.editor?.readOnly ?? false) ? '편집 잠금 해제' : '편집 잠금' }}
+              >
+                <Icon icon={(ctx.editor?.readOnly ?? false) ? LockIcon : LockOpenIcon} size={16} />
+              </button>
+            {/if}
           {/if}
 
           <button
@@ -1334,10 +1308,6 @@
   </div>
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
-
-  {#if documentId}
-    <TrialPopupExperimentModal {documentId} user$key={query.data.me} bind:open={trialPopupExperimentOpen} />
-  {/if}
 
   {#if currentSite}
     <DocumentTemplateModal editor={ctx.editor} {focused} site$key={currentSite} />

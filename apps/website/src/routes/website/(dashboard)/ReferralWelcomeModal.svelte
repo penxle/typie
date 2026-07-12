@@ -68,7 +68,7 @@
     <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>친구 초대로 가입하셨네요!</div>
 
     <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
-      타이피 FULL ACCESS 플랜을 체험해볼 수 있는 4,900원 크레딧 혜택을 받았어요. 플랜을 업그레이드하면 나를 초대한 친구도 1달 무료 혜택을
+      타이피 FULL ACCESS 플랜을 체험해볼 수 있는 2,900원 크레딧 혜택을 받았어요. 플랜을 업그레이드하면 나를 초대한 친구도 1달 무료 혜택을
       받아요.
     </div>
   </div>
@@ -90,7 +90,7 @@
       <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
 
       <div class={css({ color: 'text.brand' })}>
-        <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>4,900</span>
+        <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>2,900</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
       </div>

@@ -24,6 +24,7 @@
   import { beforeNavigate, goto, pushState } from '$app/navigation';
   import { graphql } from '$mearie';
   import EntityIcon from './@context-menu/EntityIcon.svelte';
+  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_CommandPalette_user$key } from '$mearie';
 
@@ -189,6 +190,12 @@
       aliases: ['새 문서 생성', '새 글 쓰기', '새 글 생성'],
       icon: SquarePenIcon,
       action: async () => {
+        if (!app.state.subscribed) {
+          PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
+          mixpanel.track('open_plan_upgrade_modal', { via: 'command_palette_create_document' });
+          return;
+        }
+
         if (app.preference.current.experimental_v2EditorEnabled) {
           app.state.editorSelectContext = {
             siteId: currentSiteId,

@@ -99,7 +99,6 @@ export const load: LayoutLoad = async (event) => {
           ...DashboardLayout_PreferenceModal_user
           ...DashboardLayout_Sidebar_user
           ...DashboardLayout_SiteSettingsModal_user
-          ...DashboardLayout_PlanUpgradeModal_user
           ...DashboardLayout_TrialExpiredModal_user
         }
 

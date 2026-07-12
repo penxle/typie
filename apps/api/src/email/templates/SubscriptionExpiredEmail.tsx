@@ -17,7 +17,7 @@ const Email = ({ userName, planName, expiredAt }: Props) => {
       </Text>
 
       <Text className="text-[16px] text-zinc-700 mb-[20px] leading-[1.5]">
-        구독이 중단되어 일부 기능이 제한되지만, 기존에 작성한 글은 계속 확인할 수 있어요.
+        구독이 중단되어 글이 읽기 전용으로 전환되지만, 기존에 작성한 글은 계속 확인하고 공유할 수 있어요.
       </Text>
 
       <Text className="text-[16px] text-zinc-700 mb-[28px] leading-[1.5]">

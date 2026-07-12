@@ -23,6 +23,7 @@
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
+  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
   import SpaceMenu from './SpaceMenu.svelte';
@@ -591,6 +592,12 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
+            if (!app.state.subscribed) {
+              PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 폴더를 만들 수 있어요.' });
+              mixpanel.track('open_plan_upgrade_modal', { via: 'sidebar_create_folder' });
+              return;
+            }
+
             const { lowerOrder, upperOrder } = getAdjacentOrders();
             const resp = await createFolder({
               input: {
@@ -621,6 +628,12 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
+            if (!app.state.subscribed) {
+              PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
+              mixpanel.track('open_plan_upgrade_modal', { via: 'sidebar_create_document' });
+              return;
+            }
+
             const { lowerOrder, upperOrder } = getAdjacentOrders();
 
             if (app.preference.current.experimental_v2EditorEnabled) {

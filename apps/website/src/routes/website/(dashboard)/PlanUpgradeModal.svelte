@@ -1,69 +1,18 @@
 <script lang="ts">
-  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
-  import { Dialog } from '@typie/ui/notification';
-  import mixpanel from 'mixpanel-browser';
-  import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CrownIcon from '~icons/lucide/crown';
   import GiftIcon from '~icons/lucide/gift';
   import KeyIcon from '~icons/lucide/key';
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
   import { pushState } from '$app/navigation';
-  import { cache } from '$lib/graphql';
-  import { graphql } from '$mearie';
   import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
-  import SubscriptionCelebrationModal from './SubscriptionCelebrationModal.svelte';
-  import type { DashboardLayout_PlanUpgradeModal_user$key } from '$mearie';
-
-  type Props = {
-    user$key: DashboardLayout_PlanUpgradeModal_user$key;
-  };
-
-  let { user$key }: Props = $props();
-
-  const user = createFragment(
-    graphql(`
-      fragment DashboardLayout_PlanUpgradeModal_user on User {
-        id
-
-        canStartTrial
-
-        subscription {
-          id
-        }
-      }
-    `),
-    () => user$key,
-  );
-
-  const [subscribePlanWithTrial] = createMutation(
-    graphql(`
-      mutation DashboardLayout_PlanUpgradeModal_SubscribePlanWithTrial_Mutation {
-        subscribePlanWithTrial {
-          id
-          state
-          expiresAt
-
-          plan {
-            id
-            name
-            availability
-          }
-        }
-      }
-    `),
-  );
-
-  const canStartTrial = $derived(user.data.canStartTrial);
 
   const title = $derived(PlanUpgradeDialog.current?.title ?? '플랜 업그레이드가 필요해요');
   const message = $derived(PlanUpgradeDialog.current?.message ?? '');
-
-  let trialStartedModalOpen = $state(false);
 </script>
 
 {#if PlanUpgradeDialog.current}
@@ -139,7 +88,7 @@
         <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
 
         <div class={css({ color: 'text.brand' })}>
-          <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>4,900</span>
+          <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>2,900</span>
           <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
           <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
         </div>
@@ -157,57 +106,14 @@
       </ul>
     </div>
 
-    <div class={flex({ flexDirection: 'column', gap: '10px', marginTop: '24px', width: 'full' })}>
-      {#if canStartTrial}
-        <Button
-          style={css.raw({ width: 'full' })}
-          onclick={() => {
-            Dialog.confirm({
-              title: '무료 체험을 시작하시겠어요?',
-              message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
-              actionLabel: '시작하기',
-              actionHandler: async () => {
-                await subscribePlanWithTrial();
-                cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
-                cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
-                mixpanel.track('start_trial');
-                PlanUpgradeDialog.close();
-                trialStartedModalOpen = true;
-              },
-            });
-          }}
-        >
-          <div class={flex({ alignItems: 'center', gap: '4px' })}>
-            <span>2주 무료 체험하기</span>
-
-            <Icon
-              style={css.raw({
-                transition: 'transform',
-                _groupHover: { transform: 'translateX(2px)' },
-              })}
-              icon={ArrowRightIcon}
-              size={16}
-            />
-          </div>
-        </Button>
-      {/if}
-
-      <Button
-        style={css.raw({ width: 'full' })}
-        onclick={() => {
-          PlanUpgradeDialog.close();
-          pushState('', { shallowRoute: '/preference/billing' });
-        }}
-        variant={canStartTrial ? 'secondary' : undefined}
-      >
-        업그레이드
-      </Button>
-    </div>
+    <Button
+      style={css.raw({ marginTop: '24px', width: 'full' })}
+      onclick={() => {
+        PlanUpgradeDialog.close();
+        pushState('', { shallowRoute: '/preference/billing' });
+      }}
+    >
+      업그레이드
+    </Button>
   </Modal>
 {/if}
-
-<SubscriptionCelebrationModal
-  message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
-  title="무료 체험이 시작됐어요!"
-  bind:open={trialStartedModalOpen}
-/>

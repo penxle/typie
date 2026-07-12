@@ -194,6 +194,8 @@ builder.mutationFields((t) => ({
     type: File,
     input: { path: t.input.string() },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const head = await aws.s3.send(
         new HeadObjectCommand({
           Bucket: 'typie-uploads',
@@ -243,6 +245,8 @@ builder.mutationFields((t) => ({
       modification: t.input.field({ type: 'JSON', required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const object = await aws.s3.send(
         new GetObjectCommand({
           Bucket: 'typie-uploads',

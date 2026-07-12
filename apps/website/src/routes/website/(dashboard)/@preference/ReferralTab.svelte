@@ -112,7 +112,7 @@
         {#snippet value()}
           <span>
             {#if user.data.referrals.some((referral) => referral.compensated)}
-              {comma(user.data.referrals.filter((referral) => referral.compensated).length * 4900)}원
+              {comma(user.data.referrals.filter((referral) => referral.compensated).length * 2900)}원
             {:else}
               없음
             {/if}

@@ -55,6 +55,8 @@ type AppState = {
   shortcutsOpen: boolean;
   upgradeOpen: boolean;
 
+  subscribed: boolean;
+
   usage: {
     current: { totalCharacterCount: number; totalBlobSize: string };
     limit: { totalCharacterCount: number; totalBlobSize: string };
@@ -112,6 +114,8 @@ export const setupAppContext = (userId: string) => {
     statsOpen: false,
     shortcutsOpen: false,
     upgradeOpen: false,
+
+    subscribed: false,
 
     usage: {
       current: {

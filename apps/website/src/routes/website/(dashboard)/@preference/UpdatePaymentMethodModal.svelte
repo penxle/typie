@@ -144,11 +144,11 @@
         if (interval === PlanInterval.MONTHLY) {
           await subscribePlanWithBillingKey({ input: { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY } });
           mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
-          fb.track('Subscribe', { value: '4900.00', currency: 'KRW', predicted_ltv: '4900.00' });
+          fb.track('Subscribe', { value: '2900.00', currency: 'KRW', predicted_ltv: '2900.00' });
         } else if (interval === PlanInterval.YEARLY) {
           await subscribePlanWithBillingKey({ input: { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY } });
           mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
-          fb.track('Subscribe', { value: '49000.00', currency: 'KRW', predicted_ltv: '49000.00' });
+          fb.track('Subscribe', { value: '29000.00', currency: 'KRW', predicted_ltv: '29000.00' });
         }
 
         open = false;
@@ -196,7 +196,7 @@
     form.fields.agreementsAccepted = allChecked;
   });
 
-  const planFee = $derived(interval === PlanInterval.MONTHLY ? 4900 : 49_000);
+  const planFee = $derived(interval === PlanInterval.MONTHLY ? 2900 : 29_000);
   const creditDiscount = $derived(Math.min(user.data.credit, planFee));
   const finalAmount = $derived(planFee - creditDiscount);
 
@@ -258,7 +258,7 @@
           >
             <div class={flex({ justify: 'space-between', alignItems: 'center' })}>
               <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>월간</span>
-              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>4,900원</span>
+              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>2,900원</span>
             </div>
             <div class={css({ fontSize: '12px', color: 'text.subtle', marginTop: '4px' })}>매월 결제</div>
           </button>
@@ -298,10 +298,10 @@
             </div>
             <div class={flex({ justify: 'space-between', alignItems: 'center' })}>
               <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>연간</span>
-              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>49,000원</span>
+              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>29,000원</span>
             </div>
             <div class={css({ fontSize: '12px', color: 'text.subtle', marginTop: '4px' })}>
-              매년 결제 · <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>월 4,083원</span>
+              매년 결제 · <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>월 2,416원</span>
             </div>
           </button>
         </div>
@@ -514,7 +514,7 @@
       {#if mode === 'register'}
         {user.data.billingKey ? '변경하기' : '등록하기'}
       {:else if finalAmount === 0}
-        무료로 시작하기
+        구독 시작하기
       {:else}
         {comma(finalAmount)}원 결제하고 시작하기
       {/if}

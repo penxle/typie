@@ -148,7 +148,7 @@
       <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
 
       <div class={css({ color: 'text.brand' })}>
-        <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>4,900</span>
+        <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>2,900</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
       </div>

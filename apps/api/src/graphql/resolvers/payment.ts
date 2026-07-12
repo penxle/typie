@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { defaultPlanRules, PlanId, TRIAL_DURATION_DAYS } from '@typie/lib/const';
+import { defaultPlanRules, TRIAL_DURATION_DAYS } from '@typie/lib/const';
 import {
   CreditCodeState,
   InAppPurchaseStore,
@@ -38,6 +38,7 @@ import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
 import { getSubscriptionExpiresAt, hasBillableUsageDuring, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
+import { createTrialSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { builder } from '../builder.ts';
 import {
@@ -205,27 +206,7 @@ builder.mutationFields((t) => ({
       const expiresAt = startsAt.add(TRIAL_DURATION_DAYS, 'days');
 
       return await db.transaction(async (tx) => {
-        const subscription = await tx
-          .insert(Subscriptions)
-          .values({
-            userId: ctx.session.userId,
-            planId: PlanId.FULL_ACCESS_TRIAL,
-            startsAt,
-            expiresAt,
-            renewedAt: startsAt,
-            state: SubscriptionState.WILL_EXPIRE,
-          })
-          .returning()
-          .then(firstOrThrow);
-
-        await tx.insert(UserTrials).values({
-          userId: ctx.session.userId,
-          subscriptionId: subscription.id,
-          startedAt: startsAt,
-          expiresAt,
-        });
-
-        return subscription;
+        return await createTrialSubscription(tx, { userId: ctx.session.userId, startsAt, expiresAt });
       });
     },
   }),

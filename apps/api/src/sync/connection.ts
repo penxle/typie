@@ -28,6 +28,7 @@ export class SyncConnection {
   #access = new Map<string, DocumentAccess>();
   #pushTokens = PUSH_BUCKET_CAPACITY;
   #pushRefilledAt: number;
+  #writable: boolean | undefined;
   #queue: Promise<void> = Promise.resolve();
   #destroyed = false;
 
@@ -186,6 +187,15 @@ export class SyncConnection {
       return;
     }
     if (this.#destroyed) return;
+    if (this.#writable === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before push
+      this.#writable = await this.#deps.checkWritable(this.#session!.userId);
+    }
+    if (this.#destroyed) return;
+    if (!this.#writable) {
+      await this.#send({ t: 'error', scope: 'request', id: message.id, code: 'subscription_required', permanent: true });
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before push
     await handlePush({ deps: this.#deps, session: this.#session!, clientId: this.#clientId }, message, (m) => this.#send(m));
   }

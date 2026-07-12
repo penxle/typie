@@ -953,6 +953,8 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       let depth = 0;
       if (input.parentEntityId) {
         const parentEntity = await db
@@ -1189,6 +1191,8 @@ builder.mutationFields((t) => ({
         .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
         .where(eq(Documents.id, input.documentId))
         .then(firstOrThrow);
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
@@ -1525,6 +1529,8 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       if (input.type === DocumentSyncType.UPDATE) {
+        await assertActiveSubscription({ userId: ctx.session.userId });
+
         pubsub.publish('document:sync', input.documentId, {
           target: `!${input.clientId}`,
           type: DocumentSyncType.UPDATE,
@@ -1652,6 +1658,8 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       await assertSitePermission({ userId: ctx.session.userId, siteId: docEntity.siteId });
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       const head = await db
         .select({ heads: DocumentHeads.heads })

@@ -9,6 +9,7 @@
   import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import { showPasteToast } from './paste-toast';
 
   let { siteId, lastRootEntityOrder }: { siteId: string; lastRootEntityOrder: string | null } = $props();
@@ -237,6 +238,12 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
+    if (!app.state.subscribed) {
+      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
+      mixpanel.track('open_plan_upgrade_modal', { via: 'tree_root_menu_create_document' });
+      return;
+    }
+
     if (app.preference.current.experimental_v2EditorEnabled) {
       app.state.editorSelectContext = {
         siteId,
@@ -255,6 +262,12 @@
 <MenuItem
   icon={FolderPlusIcon}
   onclick={async () => {
+    if (!app.state.subscribed) {
+      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 폴더를 만들 수 있어요.' });
+      mixpanel.track('open_plan_upgrade_modal', { via: 'tree_root_menu_create_folder' });
+      return;
+    }
+
     const resp = await createFolder({ input: { siteId, name: '새 폴더' } });
     mixpanel.track('create_folder', { via: 'tree_root_menu' });
     app.state.newFolderId = resp.createFolder.id;
