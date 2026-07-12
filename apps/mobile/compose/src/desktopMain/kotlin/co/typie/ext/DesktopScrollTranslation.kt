@@ -168,8 +168,8 @@ private class DragToScrollHandler(
       return
     }
 
-    stopFling()
-    val generation = ++flingGeneration
+    // The pending drag dispatch and its fling belong to the same input generation.
+    val generation = flingGeneration
     val timer =
       Timer(FLING_FRAME_MS) { event ->
         if (generation != flingGeneration) {
