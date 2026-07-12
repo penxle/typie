@@ -372,6 +372,7 @@ private fun EditorTapGesture.dispatchTap(
           !snapshot.selection.isCollapsed() -> {
             if (!hitExistingSelectionAtTap) {
               context.uiState.contextMenu.show(snapshot)
+              context.semantics.cursorMove.requestCurrentSelectionHead(version = snapshot.version)
             } else {
               context.uiState.contextMenu.hide()
             }

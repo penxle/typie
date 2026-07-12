@@ -385,7 +385,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `android single tap that creates range selection opens context menu after commit`() =
+  fun `android single tap that creates range selection opens context menu and requests bring into view after commit`() =
     runTest(StandardTestDispatcher()) {
       val collapsedSelection =
         Selection(
@@ -431,6 +431,7 @@ class EditorInteractionControllerTest {
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
       assertTrue(host.focused)
+      assertEquals(listOf(2L), host.requestedBringIntoViewVersions)
     }
 
   @Test
