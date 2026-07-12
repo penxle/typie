@@ -3,7 +3,7 @@ use editor_state::first_cursor_position;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::find_ancestor_textblock;
+use crate::helpers::{find_ancestor_textblock, materialize_caret_block};
 use crate::{CommandError, CommandResult};
 
 pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResult {
@@ -13,6 +13,29 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
     if selection.anchor != selection.head {
         return Ok(false);
     }
+
+    let node_type = fragment.node.as_type();
+    {
+        let view = tr.view();
+        let Some(textblock_id) = find_ancestor_textblock(&view, selection.head.node) else {
+            return Ok(false);
+        };
+        let textblock = view
+            .node(textblock_id)
+            .ok_or(CommandError::NodeNotFound(textblock_id))?;
+        let parent = textblock
+            .parent()
+            .ok_or(CommandError::NoParent(textblock_id))?;
+        if !parent.spec().content.matches(node_type) {
+            return Ok(false);
+        }
+    }
+
+    materialize_caret_block(tr)?;
+
+    let selection = tr
+        .selection()
+        .ok_or_else(|| CommandError::Corrupted("materialized caret selection missing".into()))?;
     let pos = selection.head;
 
     let (parent_id, textblock_id, textblock_index, child_count, is_empty) = {
@@ -26,11 +49,6 @@ pub fn insert_fragment(tr: &mut Transaction, fragment: Fragment) -> CommandResul
         let parent = textblock
             .parent()
             .ok_or(CommandError::NoParent(textblock_id))?;
-
-        let node_type = fragment.node.as_type();
-        if !parent.spec().content.matches(node_type) {
-            return Ok(false);
-        }
 
         let parent_id = parent.id();
         let textblock_index = textblock
@@ -286,6 +304,37 @@ mod tests {
     }
 
     #[test]
+    fn rejects_disallowed_fragment_without_materializing_synthetic_caret() {
+        let (mut initial, ..) = state! {
+            doc { root { blockquote paragraph {} } }
+            selection: none
+        };
+        let body = {
+            let view = initial.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|block| block.node_type() == NodeType::Blockquote)
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .id()
+        };
+        assert!(
+            body.as_op_dot().is_none(),
+            "fixture caret must be synthetic"
+        );
+        initial.selection = Some(Selection::collapsed(Position::new(body, 0)));
+        let expected = initial.clone();
+
+        let (actual, ..) = transact_fail!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
+
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(actual.selection.unwrap().head.node, body);
+    }
+
+    #[test]
     fn inserts_in_root_direct_child_paragraph() {
         let (initial, ..) = state! {
             doc { root {
@@ -363,6 +412,42 @@ mod tests {
                 paragraph {}
             } }
             selection: (p, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn materializes_synthetic_fold_content_before_inserting_fragment() {
+        let (mut initial, ..) = state! {
+            doc { root { fold paragraph {} } }
+            selection: none
+        };
+        let body = {
+            let view = initial.view();
+            let fold = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|block| block.node_type() == NodeType::Fold)
+                .unwrap();
+            let content = fold
+                .child_blocks()
+                .find(|block| block.node_type() == NodeType::FoldContent)
+                .unwrap();
+            content.child_blocks().next().unwrap().id()
+        };
+        initial.selection = Some(Selection::collapsed(Position::new(body, 0)));
+
+        let (actual, ..) = transact!(initial, |tr| insert_fragment(&mut tr, hr_fragment()));
+        let (expected, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title {}
+                    content: fold_content { horizontal_rule }
+                }
+                paragraph {}
+            } }
+            selection: (content, 0, >) -> (content, 1, <)
         };
         assert_state_eq!(&actual, &expected);
     }
