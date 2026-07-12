@@ -49,11 +49,6 @@ fun DesktopScrollTranslation(window: ComposeWindow, content: @Composable () -> U
   }
 }
 
-private enum class Axis {
-  VERTICAL,
-  HORIZONTAL,
-}
-
 private class DragToScrollHandler(
   private val window: ComposeWindow,
   private val awtScale: Double,
@@ -65,8 +60,8 @@ private class DragToScrollHandler(
   private var lastY = 0
   private var scrolling = false
   private var inSystemChrome = false
-  private var axis: Axis? = null
-  private var flingDelta = 0.0
+  private var flingDeltaX = 0.0
+  private var flingDeltaY = 0.0
   private var flingTimer: Timer? = null
   private var lastWheelTarget: Component? = null
   private var lastWheelX = 0
@@ -92,8 +87,8 @@ private class DragToScrollHandler(
         lastY = e.y
         scrolling = false
         inSystemChrome = e.y < SYSTEM_CHROME_TOP_PX
-        axis = null
-        flingDelta = 0.0
+        flingDeltaX = 0.0
+        flingDeltaY = 0.0
       }
 
       override fun mouseReleased(e: MouseEvent) {
@@ -119,60 +114,42 @@ private class DragToScrollHandler(
           val totalDx = abs(e.x - startX)
           val totalDy = abs(e.y - startY)
           if (totalDx < TOUCH_SLOP_PX && totalDy < TOUCH_SLOP_PX) return
-          axis = if (totalDx >= totalDy) Axis.HORIZONTAL else Axis.VERTICAL
           scrolling = true
         }
 
-        val (delta, modifiers) =
-          when (axis) {
-            Axis.HORIZONTAL -> {
-              if (dx == 0) return
-              (-dx.toDouble() / awtScale * DRAG_SCROLL_SENSITIVITY) to
-                (e.modifiersEx or InputEvent.SHIFT_DOWN_MASK)
-            }
-            Axis.VERTICAL -> {
-              if (dy == 0) return
-              (-dy.toDouble() / awtScale * DRAG_SCROLL_SENSITIVITY) to e.modifiersEx
-            }
-            null -> return
-          }
+        val deltaX = -dx.toDouble() / awtScale * DRAG_SCROLL_SENSITIVITY
+        val deltaY = -dy.toDouble() / awtScale * DRAG_SCROLL_SENSITIVITY
+        if (deltaX == 0.0 && deltaY == 0.0) return
 
-        trackFlingDelta(e, delta, modifiers)
-        val wheelEvent =
-          MouseWheelEvent(
-            e.component,
-            MouseWheelEvent.MOUSE_WHEEL,
-            e.`when`,
-            modifiers,
-            e.x,
-            e.y,
-            e.xOnScreen,
-            e.yOnScreen,
-            0,
-            false,
-            MouseWheelEvent.WHEEL_UNIT_SCROLL,
-            1,
-            0,
-            delta,
-          )
+        trackFlingDelta(e, deltaX, deltaY)
         val target = e.component
         val generation = flingGeneration
+        val eventTime = e.`when`
+        val modifiers = e.modifiersEx
+        val x = e.x
+        val y = e.y
+        val xOnScreen = e.xOnScreen
+        val yOnScreen = e.yOnScreen
         SwingUtilities.invokeLater {
           if (generation == flingGeneration) {
-            target.dispatchEvent(wheelEvent)
+            target.dispatchWheelEvents(
+              eventTime = eventTime,
+              modifiers = modifiers,
+              x = x,
+              y = y,
+              xOnScreen = xOnScreen,
+              yOnScreen = yOnScreen,
+              deltaX = deltaX,
+              deltaY = deltaY,
+            )
           }
         }
       }
     }
 
-  private fun trackFlingDelta(e: MouseEvent, delta: Double, modifiers: Int) {
-    flingDelta =
-      if (flingDelta == 0.0) {
-        delta
-      } else {
-        flingDelta * (1.0 - FLING_SMOOTHING) + delta * FLING_SMOOTHING
-      }
-    flingDelta = flingDelta.coerceIn(-FLING_MAX_DELTA, FLING_MAX_DELTA)
+  private fun trackFlingDelta(e: MouseEvent, deltaX: Double, deltaY: Double) {
+    flingDeltaX = smoothFlingDelta(flingDeltaX, deltaX)
+    flingDeltaY = smoothFlingDelta(flingDeltaY, deltaY)
     lastWheelTarget = e.component
     lastWheelX = e.x
     lastWheelY = e.y
@@ -180,13 +157,14 @@ private class DragToScrollHandler(
     lastWheelYOnScreen = e.yOnScreen
     val buttonMask =
       InputEvent.BUTTON1_DOWN_MASK or InputEvent.BUTTON2_DOWN_MASK or InputEvent.BUTTON3_DOWN_MASK
-    lastWheelModifiers = modifiers and buttonMask.inv()
+    lastWheelModifiers = e.modifiersEx and buttonMask.inv()
   }
 
   private fun startFling() {
     val target = lastWheelTarget ?: return
-    var delta = flingDelta * FLING_DELTA_MULTIPLIER
-    if (abs(delta) < FLING_MIN_DELTA) {
+    var deltaX = flingDeltaX * FLING_DELTA_MULTIPLIER
+    var deltaY = flingDeltaY * FLING_DELTA_MULTIPLIER
+    if (abs(deltaX) < FLING_MIN_DELTA && abs(deltaY) < FLING_MIN_DELTA) {
       return
     }
 
@@ -198,29 +176,24 @@ private class DragToScrollHandler(
           (event.source as? Timer)?.stop()
           return@Timer
         }
-        delta *= FLING_DECAY
-        if (abs(delta) < FLING_MIN_DELTA) {
+        deltaX *= FLING_DECAY
+        deltaY *= FLING_DECAY
+        val activeDeltaX = deltaX.takeIf { abs(it) >= FLING_MIN_DELTA } ?: 0.0
+        val activeDeltaY = deltaY.takeIf { abs(it) >= FLING_MIN_DELTA } ?: 0.0
+        if (activeDeltaX == 0.0 && activeDeltaY == 0.0) {
           stopFling()
           return@Timer
         }
 
-        target.dispatchEvent(
-          MouseWheelEvent(
-            target,
-            MouseWheelEvent.MOUSE_WHEEL,
-            System.currentTimeMillis(),
-            lastWheelModifiers,
-            lastWheelX,
-            lastWheelY,
-            lastWheelXOnScreen,
-            lastWheelYOnScreen,
-            0,
-            false,
-            MouseWheelEvent.WHEEL_UNIT_SCROLL,
-            1,
-            0,
-            delta,
-          )
+        target.dispatchWheelEvents(
+          eventTime = System.currentTimeMillis(),
+          modifiers = lastWheelModifiers,
+          x = lastWheelX,
+          y = lastWheelY,
+          xOnScreen = lastWheelXOnScreen,
+          yOnScreen = lastWheelYOnScreen,
+          deltaX = activeDeltaX,
+          deltaY = activeDeltaY,
         )
       }
     flingTimer = timer
@@ -231,6 +204,79 @@ private class DragToScrollHandler(
     flingGeneration++
     flingTimer?.stop()
     flingTimer = null
+  }
+
+  private fun smoothFlingDelta(previous: Double, current: Double): Double {
+    val smoothed =
+      if (previous == 0.0) {
+        current
+      } else {
+        previous * (1.0 - FLING_SMOOTHING) + current * FLING_SMOOTHING
+      }
+    return smoothed.coerceIn(-FLING_MAX_DELTA, FLING_MAX_DELTA)
+  }
+
+  private fun Component.dispatchWheelEvents(
+    eventTime: Long,
+    modifiers: Int,
+    x: Int,
+    y: Int,
+    xOnScreen: Int,
+    yOnScreen: Int,
+    deltaX: Double,
+    deltaY: Double,
+  ) {
+    if (deltaY != 0.0) {
+      dispatchWheelEvent(
+        eventTime = eventTime,
+        modifiers = modifiers and InputEvent.SHIFT_DOWN_MASK.inv(),
+        x = x,
+        y = y,
+        xOnScreen = xOnScreen,
+        yOnScreen = yOnScreen,
+        delta = deltaY,
+      )
+    }
+    if (deltaX != 0.0) {
+      dispatchWheelEvent(
+        eventTime = eventTime,
+        modifiers = modifiers or InputEvent.SHIFT_DOWN_MASK,
+        x = x,
+        y = y,
+        xOnScreen = xOnScreen,
+        yOnScreen = yOnScreen,
+        delta = deltaX,
+      )
+    }
+  }
+
+  private fun Component.dispatchWheelEvent(
+    eventTime: Long,
+    modifiers: Int,
+    x: Int,
+    y: Int,
+    xOnScreen: Int,
+    yOnScreen: Int,
+    delta: Double,
+  ) {
+    dispatchEvent(
+      MouseWheelEvent(
+        this,
+        MouseWheelEvent.MOUSE_WHEEL,
+        eventTime,
+        modifiers,
+        x,
+        y,
+        xOnScreen,
+        yOnScreen,
+        0,
+        false,
+        MouseWheelEvent.WHEEL_UNIT_SCROLL,
+        1,
+        0,
+        delta,
+      )
+    )
   }
 
   private fun MouseEvent.isInWindow(): Boolean =
