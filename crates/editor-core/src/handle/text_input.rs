@@ -484,44 +484,18 @@ impl FlatImeState {
                 })
             }
             FlatImeOp::DeleteSurrounding { before, after } => {
-                let cursor = self.sel_start.min(self.text.len());
-                let del_start = cursor.saturating_sub(*before);
-                let del_end = (cursor + after).min(self.text.len());
-                let change = (del_start < del_end).then_some(FlatImeTextChange {
-                    replace_start: del_start,
-                    replace_end: del_end,
-                    insert: Vec::new(),
-                });
-                if del_end > cursor {
-                    self.text.splice(cursor..del_end, std::iter::empty());
-                }
-                if del_start < cursor {
-                    self.text.splice(del_start..cursor, std::iter::empty());
-                }
-                self.sel_start = del_start;
-                self.sel_end = del_start;
-                change
+                let (base_before, base_after) = self.surrounding_delete_bases();
+                let del_start = base_before.saturating_sub(*before);
+                let del_end = base_after.saturating_add(*after).min(self.text.len());
+                self.apply_surrounding_deletes(del_start, base_before, base_after, del_end)
             }
             FlatImeOp::DeleteSurroundingUtf16 { before, after } => {
-                let cursor = self.sel_start.min(self.text.len());
-                let before_chars = utf16_units_to_chars(self.text.iter_rev_to(cursor), *before);
-                let after_chars = utf16_units_to_chars(self.text.iter_from(cursor), *after);
-                let del_start = cursor - before_chars;
-                let del_end = cursor + after_chars;
-                let change = (del_start < del_end).then_some(FlatImeTextChange {
-                    replace_start: del_start,
-                    replace_end: del_end,
-                    insert: Vec::new(),
-                });
-                if del_end > cursor {
-                    self.text.splice(cursor..del_end, std::iter::empty());
-                }
-                if del_start < cursor {
-                    self.text.splice(del_start..cursor, std::iter::empty());
-                }
-                self.sel_start = del_start;
-                self.sel_end = del_start;
-                change
+                let (base_before, base_after) = self.surrounding_delete_bases();
+                let del_start =
+                    base_before - utf16_units_to_chars(self.text.iter_rev_to(base_before), *before);
+                let del_end =
+                    base_after + utf16_units_to_chars(self.text.iter_from(base_after), *after);
+                self.apply_surrounding_deletes(del_start, base_before, base_after, del_end)
             }
             FlatImeOp::SetComposition { start, end } => {
                 self.comp = Some((*start, *end));
@@ -542,6 +516,81 @@ impl FlatImeState {
                 self.sel_end = pos;
                 None
             }
+        }
+    }
+
+    // deleteSurrounding must not touch the composing text: lengths count from
+    // its edges (AOSP BaseInputConnection contract).
+    fn surrounding_delete_bases(&self) -> (usize, usize) {
+        let len = self.text.len();
+        let cursor = self.sel_start.min(len);
+        match self.comp {
+            Some((comp_start, comp_end)) => {
+                let base_before = cursor.min(comp_start);
+                let base_after = self.sel_end.max(comp_end).min(len).max(base_before);
+                (base_before, base_after)
+            }
+            None => (cursor, cursor),
+        }
+    }
+
+    fn apply_surrounding_deletes(
+        &mut self,
+        del_start: usize,
+        base_before: usize,
+        base_after: usize,
+        del_end: usize,
+    ) -> Option<FlatImeTextChange> {
+        let deletes_before = del_start < base_before;
+        let deletes_after = base_after < del_end;
+        // Deleting on both sides of a non-empty composing region is two
+        // disjoint edits — unrepresentable as one flat replacement (same
+        // policy as disjoint batches), so the op is ignored.
+        if base_before < base_after && deletes_before && deletes_after {
+            return None;
+        }
+
+        let remap_selection = self.comp.is_some();
+        let (start, end) = if base_before < base_after {
+            if deletes_before {
+                (del_start, base_before)
+            } else {
+                (base_after, del_end)
+            }
+        } else {
+            (del_start, del_end)
+        };
+
+        if start < end {
+            self.text.splice(start..end, std::iter::empty());
+            self.remap_after_delete(start, end, remap_selection);
+        }
+        if !remap_selection {
+            self.sel_start = del_start;
+            self.sel_end = del_start;
+        }
+        (start < end).then_some(FlatImeTextChange {
+            replace_start: start,
+            replace_end: end,
+            insert: Vec::new(),
+        })
+    }
+
+    fn remap_after_delete(&mut self, del_start: usize, del_end: usize, remap_selection: bool) {
+        let removed = del_end - del_start;
+        let map = |pos: usize| {
+            if pos >= del_end {
+                pos - removed
+            } else {
+                pos.min(del_start)
+            }
+        };
+        if let Some((start, end)) = self.comp {
+            self.comp = Some((map(start), map(end)));
+        }
+        if remap_selection {
+            self.sel_start = map(self.sel_start);
+            self.sel_end = map(self.sel_end);
         }
     }
 
@@ -928,29 +977,34 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 }
 
                 let composition = match (result.comp, composition_text_start) {
-                    (Some((start, end)), Some(text_start)) => {
-                        let invalid = || EditorError::General {
-                            msg: "invariant violated: flat IME composition remap failed".into(),
-                        };
+                    // A structural replay rebuilds flat coordinates, so a composing
+                    // region the IME placed outside the replayed insert has no
+                    // mapping; drop it rather than fail the whole edit.
+                    (Some((start, end)), Some(text_start)) => (|| {
+                        // Text before the replayed range keeps its flat
+                        // coordinates, so a composing region there needs no
+                        // remap.
+                        if start <= end && end < text_start {
+                            return Some(Composition { start, end });
+                        }
                         let inserted_len = delta.ins_text.char_count();
-                        let relative_start = start.checked_sub(text_start).ok_or_else(invalid)?;
-                        let relative_end = end.checked_sub(text_start).ok_or_else(invalid)?;
+                        let relative_start = start.checked_sub(text_start)?;
+                        let relative_end = end.checked_sub(text_start)?;
                         if relative_start > relative_end || relative_end > inserted_len {
-                            return Err(invalid());
+                            return None;
                         }
 
                         let doc = tr.view();
                         let inserted_start = tr
                             .selection()
                             .and_then(|selection| selection.head.resolve(&doc))
-                            .and_then(|head| head.to_flat().checked_sub(inserted_len))
-                            .ok_or_else(invalid)?;
+                            .and_then(|head| head.to_flat().checked_sub(inserted_len))?;
 
                         Some(Composition {
                             start: inserted_start + relative_start,
                             end: inserted_start + relative_end,
                         })
-                    }
+                    })(),
                     (Some((start, end)), None) => Some(Composition { start, end }),
                     (None, _) => None,
                 };
@@ -971,6 +1025,25 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                     tr.clear_pending_format()?;
                     let paint: Vec<Modifier> = paint.into_values().collect();
                     tr.update_meta(|m| m.composition_paint = Some(paint));
+                }
+
+                // Without structural replay the reduced coordinates match the
+                // document 1:1, so the reduced selection is authoritative
+                // (e.g. a delete before the composing text keeps the caret at
+                // the composition, not at the deletion site).
+                if has_text_delta && composition_text_start.is_none() {
+                    let doc = tr.view();
+                    let current = tr.selection().and_then(|s| {
+                        let anchor = s.anchor.resolve(&doc)?.to_flat();
+                        let head = s.head.resolve(&doc)?.to_flat();
+                        Some((anchor.min(head), anchor.max(head)))
+                    });
+                    if current != Some((result.sel_start, result.sel_end))
+                        && let Ok(sel) =
+                            selection_from_flat_range(&doc, result.sel_start, result.sel_end)
+                    {
+                        commands::set_selection(tr, sel)?;
+                    }
                 }
 
                 Ok(())
@@ -4319,5 +4392,261 @@ mod tests {
             ops: vec![FlatImeOp::ReplaceSelection { text: "아".into() }],
         });
         assert_eq!(paint_at(&editor, p1, 0), vec![Modifier::Bold], "아 bold");
+    }
+
+    #[test]
+    fn flat_ime_backspace_across_open_token_with_empty_composition() {
+        let (state, ..) = state! {
+            doc { root {
+                paragraph { text("가나") }
+                p2: paragraph { text("다") }
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "라".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "".into() }],
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 5, end: 5 })
+        );
+        editor.enqueue(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                before: 1,
+                after: 0,
+            }],
+        });
+        editor
+            .tick()
+            .expect("backspace across open token must not fail");
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가나다") } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 3, end: 3 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_empty_compose_then_delete_across_token_single_batch() {
+        let (state, ..) = state! {
+            doc { root {
+                paragraph { text("가나") }
+                p2: paragraph { text("다") }
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "라".into() }],
+        });
+        editor.enqueue(Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose { text: "".into() },
+                FlatImeOp::DeleteSurroundingUtf16 {
+                    before: 1,
+                    after: 0,
+                },
+            ],
+        });
+        editor
+            .tick()
+            .expect("batched empty compose + delete across token must not fail");
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가나다") } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 3, end: 3 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_delete_surrounding_excludes_composing_text() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가") } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "나".into() }],
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                before: 1,
+                after: 0,
+            }],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("나") } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_delete_surrounding_after_composing_text() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가다") } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "나".into() }],
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                before: 0,
+                after: 1,
+            }],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가나") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_delete_surrounding_both_sides_of_composing_text_is_ignored() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가다") } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "나".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                before: 1,
+                after: 1,
+            }],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가나다") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_text_edit_with_set_selection_moves_cursor() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("abc") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection { text: "d".into() },
+                FlatImeOp::SetSelection { start: 1, end: 1 },
+            ],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("abcd") } } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_set_composition_before_token_edit_is_preserved() {
+        let (state, ..) = state! {
+            doc { root {
+                paragraph { text("가나") }
+                p2: paragraph { text("다") }
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.enqueue(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurroundingUtf16 {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::SetComposition { start: 1, end: 2 },
+            ],
+        });
+        editor
+            .tick()
+            .expect("composing region before the edit must not fail");
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가나다") } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_set_composition_beyond_insert_in_token_edit_is_dropped() {
+        let (state, ..) = state! {
+            doc { root {
+                paragraph { text("가나") }
+                p2: paragraph { text("다라") }
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.enqueue(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurroundingUtf16 {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::SetComposition { start: 5, end: 6 },
+            ],
+        });
+        editor
+            .tick()
+            .expect("unmappable composing region must not fail");
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("가나다라") } } }
+            selection: (p1, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
     }
 }
