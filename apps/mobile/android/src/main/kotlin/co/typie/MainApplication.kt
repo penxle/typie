@@ -10,10 +10,13 @@ class MainApplication : Application() {
   override fun onCreate() {
     super.onCreate()
 
+    val packageInfo = packageManager.getPackageInfo(packageName, 0)
+
     Sentry.init { options ->
       options.dsn = Konfig.SENTRY_DSN
       options.sendDefaultPii = true
       options.attachScreenshot = true
+      options.release = "$packageName@${packageInfo.versionName}+${packageInfo.longVersionCode}"
     }
 
     PlatformModule.context = this
