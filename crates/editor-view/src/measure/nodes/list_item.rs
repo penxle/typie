@@ -245,8 +245,8 @@ mod tests {
 
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AliasLog, Anchor, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog, NodeType,
-        SeqItem, SpanLog, SpanOp, project_document,
+        AliasLog, Anchor, AtomLeaf, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, NodeAttrLog,
+        NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::Resource;
 
@@ -817,6 +817,100 @@ mod tests {
             "large font marker height ({}) must exceed small font marker height ({})",
             dec_l.rect.height,
             dec_s.rect.height
+        );
+    }
+
+    fn bullet_list_doc_hard_break(with_hard_break: bool) -> (DocLogs, Dot) {
+        let root = Dot::ROOT;
+        let bl = Dot::new(30, 1);
+        let li = Dot::new(30, 2);
+        let para = Dot::new(30, 3);
+        let mut items = vec![
+            (
+                bl,
+                SeqItem::Block {
+                    node_type: NodeType::BulletList,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                li,
+                SeqItem::Block {
+                    node_type: NodeType::ListItem,
+                    parents: vec![root, bl],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bl, li],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(30, 4), SeqItem::Char('x')),
+        ];
+        if with_hard_break {
+            items.push((Dot::new(30, 5), SeqItem::Atom(AtomLeaf::HardBreak)));
+            items.push((Dot::new(30, 6), SeqItem::Char('y')));
+        }
+        items.push((
+            Dot::new(30, 100),
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![root],
+                attrs: vec![],
+            },
+        ));
+        (logs(&items), li)
+    }
+
+    #[test]
+    fn hard_break_keeps_second_line_height() {
+        let mut res = resource_with_font();
+
+        let (doc_single, li_single) = bullet_list_doc_hard_break(false);
+        let pd_single = project_document(&doc_single).unwrap();
+        let view_single = DocView::new(&pd_single);
+        let li_single_node = get_list_item(&view_single, li_single);
+        let h_single = measure_list_item(
+            &mut Measurer::new(),
+            &li_single_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        )
+        .height;
+
+        let (doc_hb, li_hb) = bullet_list_doc_hard_break(true);
+        let pd_hb = project_document(&doc_hb).unwrap();
+        let view_hb = DocView::new(&pd_hb);
+        let li_hb_node = get_list_item(&view_hb, li_hb);
+        let measured_hb = measure_list_item(
+            &mut Measurer::new(),
+            &li_hb_node,
+            400.0,
+            &MeasureContext::default(),
+            &mut res,
+        );
+
+        let MeasuredContent::Box(ref b) = measured_hb.content else {
+            panic!("expected Box for list_item");
+        };
+        let children_height: f32 = b.children.iter().map(|c| c.height).sum();
+        assert!(
+            (measured_hb.height - children_height).abs() < 0.01,
+            "list_item height ({}) must match its children's height ({})",
+            measured_hb.height,
+            children_height
+        );
+        assert!(
+            (measured_hb.height - 2.0 * h_single).abs() < 0.01,
+            "two-line list_item ({}) must be twice the one-line height ({})",
+            measured_hb.height,
+            h_single
         );
     }
 

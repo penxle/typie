@@ -65,7 +65,7 @@ pub(crate) fn expand_first_line(
             let mut running_y = b.style.padding.top + b.style.border.top;
             for (i, child) in b.children.iter().enumerate() {
                 if let Some(expanded) = expand_first_line(child, expansion) {
-                    let delta = expanded.height - child.height;
+                    let delta = expanded.tree.height - child.height;
                     let mut new_children = b.children.clone();
                     new_children.set(i, Arc::new(expanded.tree));
                     return Some(ExpandedFirstLine {
@@ -270,6 +270,61 @@ mod tests {
         assert_eq!(
             line_wrapper.height, inner_line_height,
             "H1: wrapper height must equal line.height"
+        );
+    }
+
+    #[test]
+    fn expand_first_line_nested_box_keeps_following_lines() {
+        let line1 = make_line(4, 10.0, 8.0, 2.0, false);
+        let line2 = make_line(5, 10.0, 8.0, 2.0, false);
+        let inner_children = MeasuredChildren::from_blocks(vec![
+            Arc::new(MeasuredNode::from_line(100.0, line1)),
+            Arc::new(MeasuredNode::from_line(100.0, line2)),
+        ]);
+        let inner = MeasuredNode {
+            width: 100.0,
+            height: 20.0,
+            content: MeasuredContent::Box(MeasuredBox {
+                node: Dot::new(1, 97),
+                style: BoxStyle::default(),
+                children: inner_children,
+                page_break_policy: PageBreakPolicy::Auto,
+                scope: false,
+            }),
+        };
+        let outer = MeasuredNode {
+            width: 100.0,
+            height: 20.0,
+            content: MeasuredContent::Box(MeasuredBox {
+                node: Dot::new(1, 96),
+                style: BoxStyle::default(),
+                children: MeasuredChildren::from_blocks(vec![Arc::new(inner)]),
+                page_break_policy: PageBreakPolicy::Auto,
+                scope: false,
+            }),
+        };
+
+        let expansion = LineStrutExpansion {
+            ascent: 12.0,
+            descent: 3.0,
+            min_line_height: 0.0,
+        };
+        let result = expand_first_line(&outer, &expansion).unwrap();
+
+        let first_line_delta = result.height - 10.0;
+        assert!(first_line_delta > 0.0, "first line must grow");
+        assert_eq!(
+            result.tree.height,
+            20.0 + first_line_delta,
+            "outer box must keep the second line's height and grow only by the first line's delta"
+        );
+        let MeasuredContent::Box(ref ob) = result.tree.content else {
+            panic!("expected outer box");
+        };
+        assert_eq!(
+            ob.children[0].height,
+            20.0 + first_line_delta,
+            "inner box must keep the second line's height"
         );
     }
 
