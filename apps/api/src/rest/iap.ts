@@ -1,7 +1,7 @@
 import { DeliveryStatus, RefundPreference } from '@apple/app-store-server-library';
 import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { match } from 'ts-pattern';
 import { db, first, Plans, Subscriptions, UserInAppPurchases, UserTrials } from '#/db/index.ts';
@@ -14,6 +14,26 @@ import type { Env } from '#/context.ts';
 import type { DeveloperNotification } from '#/external/googleplay.ts';
 
 export const iap = new Hono<Env>();
+
+const getLiveInAppPurchaseSubscription = async (userId: string) => {
+  return await db
+    .select({
+      id: Subscriptions.id,
+      state: Subscriptions.state,
+      expiresAt: Subscriptions.expiresAt,
+    })
+    .from(Subscriptions)
+    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+    .where(
+      and(
+        eq(Subscriptions.userId, userId),
+        eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+      ),
+    )
+    .orderBy(desc(eq(Subscriptions.state, SubscriptionState.ACTIVE)), desc(Subscriptions.createdAt))
+    .then(first);
+};
 
 iap.post('/appstore', async (c) => {
   const body = await c.req.json<ResponseBodyV2>();
@@ -41,22 +61,7 @@ iap.post('/appstore', async (c) => {
     return c.json({}, 200);
   }
 
-  const subscription = await db
-    .select({
-      id: Subscriptions.id,
-      state: Subscriptions.state,
-      expiresAt: Subscriptions.expiresAt,
-    })
-    .from(Subscriptions)
-    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-    .where(
-      and(
-        eq(Subscriptions.userId, inAppPurchase.userId),
-        eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
-      ),
-    )
-    .then(first);
+  const subscription = await getLiveInAppPurchaseSubscription(inAppPurchase.userId);
 
   await match(notification.notificationType)
     .with('DID_RENEW', 'SUBSCRIBED', async () => {
@@ -73,14 +78,22 @@ iap.post('/appstore', async (c) => {
         const plan = await db.select({ id: Plans.id }).from(Plans).where(eq(Plans.id, planId)).then(first);
         if (plan) {
           const startsAt = dayjs(notification.data.transaction?.purchaseDate);
-          await db.insert(Subscriptions).values({
-            userId: inAppPurchase.userId,
-            planId,
-            startsAt,
-            expiresAt: dayjs(notification.data.transaction?.expiresDate),
-            renewedAt: startsAt,
-            state: SubscriptionState.ACTIVE,
-          });
+          const expiresAt = dayjs(notification.data.transaction?.expiresDate);
+          await db
+            .insert(Subscriptions)
+            .values({
+              userId: inAppPurchase.userId,
+              planId,
+              startsAt,
+              expiresAt,
+              renewedAt: startsAt,
+              state: SubscriptionState.ACTIVE,
+            })
+            .onConflictDoUpdate({
+              target: [Subscriptions.userId],
+              targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
+              set: { planId, startsAt, expiresAt, renewedAt: startsAt },
+            });
         }
       }
     })
@@ -203,22 +216,7 @@ iap.post('/googleplay', async (c) => {
       return c.json({}, 200);
     }
 
-    const subscription = await db
-      .select({
-        id: Subscriptions.id,
-        state: Subscriptions.state,
-        expiresAt: Subscriptions.expiresAt,
-      })
-      .from(Subscriptions)
-      .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-      .where(
-        and(
-          eq(Subscriptions.userId, inAppPurchase.userId),
-          eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-          inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
-        ),
-      )
-      .then(first);
+    const subscription = await getLiveInAppPurchaseSubscription(inAppPurchase.userId);
 
     await match(googlePlaySubscription.subscriptionState)
       .with('SUBSCRIPTION_STATE_ACTIVE', async () => {
@@ -233,14 +231,22 @@ iap.post('/googleplay', async (c) => {
             .where(eq(Subscriptions.id, subscription.id));
         } else {
           const startsAt = dayjs(googlePlaySubscription.startTime);
-          await db.insert(Subscriptions).values({
-            userId: inAppPurchase.userId,
-            planId,
-            startsAt,
-            expiresAt: dayjs(item.expiryTime),
-            renewedAt: startsAt,
-            state: SubscriptionState.ACTIVE,
-          });
+          const expiresAt = dayjs(item.expiryTime);
+          await db
+            .insert(Subscriptions)
+            .values({
+              userId: inAppPurchase.userId,
+              planId,
+              startsAt,
+              expiresAt,
+              renewedAt: startsAt,
+              state: SubscriptionState.ACTIVE,
+            })
+            .onConflictDoUpdate({
+              target: [Subscriptions.userId],
+              targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
+              set: { planId, startsAt, expiresAt, renewedAt: startsAt },
+            });
         }
       })
       .with('SUBSCRIPTION_STATE_EXPIRED', async () => {
@@ -298,18 +304,7 @@ iap.post('/googleplay', async (c) => {
       .then(first);
 
     if (inAppPurchase) {
-      const subscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, inAppPurchase.userId),
-            eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-            inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
-          ),
-        )
-        .then(first);
+      const subscription = await getLiveInAppPurchaseSubscription(inAppPurchase.userId);
 
       if (subscription) {
         await db

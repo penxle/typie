@@ -539,6 +539,16 @@ builder.mutationFields((t) => ({
         }
 
         await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              inArray(Subscriptions.state, [SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+            ),
+          );
+
+        await tx
           .insert(UserInAppPurchases)
           .values({
             userId: ctx.session.userId,
