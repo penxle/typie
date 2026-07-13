@@ -1,7 +1,7 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Schema};
 use editor_state::{
-    Affinity, GapCursor, Position, Selection, as_gap_cursor, cell_rect_selection,
+    Affinity, GapCursor, Position, Selection, as_gap_cursor, cell_rect_selection, enclosing_table,
     enclosing_table_cell, first_cursor_position, gap_cursor_selection_at, is_unit_node_selection,
     last_cursor_position, remap_selection,
 };
@@ -350,30 +350,74 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         }
                 );
                 if is_cell_movement {
-                    let new_sel = {
+                    let cell_rect = {
                         let view = input_state.view();
                         selection
                             .resolve(&view)
                             .and_then(|rs| rs.as_cell_rect())
-                            .and_then(|rect| {
-                                let anchor_cell_id = rect.anchor_cell.id();
-                                let head_cell_id = rect.head_cell.id();
-                                let is_vertical = matches!(movement, Movement::Line { .. });
-                                let new_head_cell_id =
-                                    step_cell(&view, head_cell_id, backward, is_vertical)
-                                        .unwrap_or(head_cell_id);
-                                cell_rect_selection(anchor_cell_id, new_head_cell_id, &view)
+                            .map(|rect| {
+                                (rect.table_id(), rect.anchor_cell.id(), rect.head_cell.id())
                             })
                     };
-                    if let Some(new_sel) = new_sel {
-                        set_navigation_selection(editor, &input_state, new_sel)?;
+                    if let Some((table_id, anchor_cell_id, head_cell_id)) = cell_rect {
+                        let is_vertical = matches!(movement, Movement::Line { .. });
+                        let stepped =
+                            step_cell(&input_state.view(), head_cell_id, backward, is_vertical);
+                        if let Some(new_head_cell_id) = stepped {
+                            if let Some(new_selection) = cell_rect_selection(
+                                anchor_cell_id,
+                                new_head_cell_id,
+                                &input_state.view(),
+                            ) {
+                                set_navigation_selection(editor, &input_state, new_selection)?;
+                            }
+                            return Ok(());
+                        }
+
+                        let at_end = !backward;
+                        let movement_from = if is_vertical {
+                            editor
+                                .view
+                                .position_at_preferred_x_in(head_cell_id, at_end)
+                                .or_else(|| {
+                                    editor.view.editable_position_inside(head_cell_id, at_end)
+                                })
+                        } else {
+                            editor.view.editable_position_inside(head_cell_id, at_end)
+                        };
+                        let Some(movement_from) = movement_from else {
+                            return Ok(());
+                        };
+                        let Some(extended) = editor.resolve_extend_movement(
+                            selection,
+                            movement_from,
+                            &movement,
+                            &input_state,
+                        ) else {
+                            return Ok(());
+                        };
+                        let target_cell =
+                            enclosing_table_cell(&input_state.view(), extended.head.node);
+                        let stays_in_table = target_cell.is_some_and(|cell| {
+                            enclosing_table(&input_state.view(), cell) == Some(table_id)
+                        });
+                        let new_selection = if stays_in_table {
+                            target_cell.and_then(|cell| {
+                                cell_rect_selection(anchor_cell_id, cell, &input_state.view())
+                            })
+                        } else {
+                            Some(extended)
+                        };
+                        if let Some(new_selection) = new_selection {
+                            set_navigation_selection(editor, &input_state, new_selection)?;
+                        }
                         return Ok(());
                     }
                 }
             }
 
             let new_selection = if extend {
-                editor.resolve_extend_movement(selection, &movement, &input_state)
+                editor.resolve_extend_movement(selection, selection.head, &movement, &input_state)
             } else {
                 editor.resolve_movement(&selection.head, &movement)
             };
@@ -392,10 +436,14 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         let current_cell =
                             enclosing_table_cell(&input_state.view(), selection.head.node);
                         if let Some(current_cell) = current_cell {
-                            let stays_in_cell =
-                                enclosing_table_cell(&input_state.view(), new_selection.head.node)
-                                    == Some(current_cell);
-                            let cell_sel = if !stays_in_cell {
+                            let target_cell =
+                                enclosing_table_cell(&input_state.view(), new_selection.head.node);
+                            let enters_other_cell_in_same_table = target_cell.is_some_and(|cell| {
+                                cell != current_cell
+                                    && enclosing_table(&input_state.view(), cell)
+                                        == enclosing_table(&input_state.view(), current_cell)
+                            });
+                            let cell_sel = if enters_other_cell_in_same_table {
                                 cell_rect_selection(current_cell, current_cell, &input_state.view())
                             } else {
                                 None
@@ -566,9 +614,10 @@ mod tests {
     use editor_macros::state;
     use editor_model::Modifier;
     use editor_state::{
-        Affinity, PendingModifier, Position, Selection, as_gap_cursor, gap_cursor_selection_at,
-        is_unit_node_selection,
+        Affinity, PendingModifier, Position, Selection, as_gap_cursor, cell_rect_selection,
+        gap_cursor_selection_at, is_unit_node_selection,
     };
+    use editor_transaction::HistoryMeta;
 
     use crate::editor::Editor;
     use crate::message::*;
@@ -702,6 +751,106 @@ mod tests {
                 extend: true,
             },
         });
+    }
+
+    fn set_cell_rect_selection(editor: &mut Editor, anchor_cell: Dot, head_cell: Dot) {
+        let selection = {
+            let view = editor.state().view();
+            cell_rect_selection(anchor_cell, head_cell, &view)
+                .expect("cell rect selection builds in test")
+        };
+        editor
+            .transact(|tr| {
+                tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+                tr.set_selection(Some(selection))?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn assert_selection_contains_table(editor: &Editor, table: Dot) {
+        let view = editor.state().view();
+        let table = view.node(table).expect("table exists in test");
+        let parent = table.parent().expect("table parent exists in test");
+        let index = table.index().expect("table index exists in test");
+        let table_selection = Selection::new(
+            Position {
+                node: parent.id(),
+                offset: index,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: parent.id(),
+                offset: index + 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let selection = editor.state().selection.expect("selection exists in test");
+        let resolved = selection
+            .resolve(&view)
+            .expect("selection resolves in test");
+        let resolved_table = table_selection
+            .resolve(&view)
+            .expect("table selection resolves in test");
+        assert!(
+            resolved.from() <= resolved_table.from() && resolved.to() >= resolved_table.to(),
+            "selection must contain the entire table: {selection:?}"
+        );
+    }
+
+    struct TableNavigationFixture {
+        state: editor_state::State,
+        p1: Dot,
+        table: Dot,
+        c00: Dot,
+        p00: Dot,
+        c10: Dot,
+        p10: Dot,
+        c11: Dot,
+        p11: Dot,
+        p2: Dot,
+    }
+
+    fn table_navigation_fixture() -> TableNavigationFixture {
+        let (state, p1, table, c00, p00, c10, p10, c11, p11, p2) = state! {
+            doc {
+                root (layout_mode: editor_model::LayoutMode::Continuous { max_width: 400 }) {
+                    p1: paragraph { text("abcdefghijkl") }
+                    table: table {
+                        table_row {
+                            c00: table_cell { p00: paragraph { text("abcdefghijkl") } }
+                            table_cell { paragraph { text("abcdefghijkl") } }
+                        }
+                        table_row {
+                            c10: table_cell { p10: paragraph { text("abcdefghijkl") } }
+                            c11: table_cell { p11: paragraph { text("abcdefghijkl") } }
+                        }
+                    }
+                    p2: paragraph { text("abcdefghijkl") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        TableNavigationFixture {
+            state,
+            p1,
+            table,
+            c00,
+            p00,
+            c10,
+            p10,
+            c11,
+            p11,
+            p2,
+        }
+    }
+
+    fn editor_with_selection(fixture: &TableNavigationFixture, selection: Selection) -> Editor {
+        let mut state = fixture.state.clone();
+        state.selection = Some(selection);
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        editor
     }
 
     #[test]
@@ -3112,6 +3261,281 @@ mod tests {
         );
     }
 
+    #[test]
+    fn shift_horizontal_from_outside_contains_entire_table_in_both_directions() {
+        let fixture = table_navigation_fixture();
+
+        let mut forward = editor_with_selection(
+            &fixture,
+            Selection::collapsed(Position::new(fixture.p1, 12)),
+        );
+        shift_right(&mut forward);
+        assert_selection_contains_table(&forward, fixture.table);
+        let anchor = forward.state().selection.unwrap().anchor;
+        assert_eq!((anchor.node, anchor.offset), (fixture.p1, 12));
+
+        let mut reverse =
+            editor_with_selection(&fixture, Selection::collapsed(Position::new(fixture.p2, 0)));
+        shift_left(&mut reverse);
+        assert_selection_contains_table(&reverse, fixture.table);
+        let anchor = reverse.state().selection.unwrap().anchor;
+        assert_eq!((anchor.node, anchor.offset), (fixture.p2, 0));
+    }
+
+    #[test]
+    fn shift_vertical_from_outside_contains_entire_table_in_both_directions() {
+        let fixture = table_navigation_fixture();
+
+        let mut forward =
+            editor_with_selection(&fixture, Selection::collapsed(Position::new(fixture.p1, 8)));
+        shift_down(&mut forward);
+        assert_selection_contains_table(&forward, fixture.table);
+
+        let mut reverse =
+            editor_with_selection(&fixture, Selection::collapsed(Position::new(fixture.p2, 8)));
+        shift_up(&mut reverse);
+        assert_selection_contains_table(&reverse, fixture.table);
+    }
+
+    #[test]
+    fn shift_from_table_text_contains_entire_table_before_leaving() {
+        let fixture = table_navigation_fixture();
+        let cases = [
+            (
+                Position::new(fixture.p10, 12),
+                shift_down as fn(&mut Editor),
+                fixture.p2,
+            ),
+            (
+                Position::new(fixture.p11, 12),
+                shift_right as fn(&mut Editor),
+                fixture.p2,
+            ),
+            (
+                Position::new(fixture.p00, 0),
+                shift_up as fn(&mut Editor),
+                fixture.p1,
+            ),
+            (
+                Position::new(fixture.p00, 0),
+                shift_left as fn(&mut Editor),
+                fixture.p1,
+            ),
+        ];
+
+        for (position, navigate, outside_node) in cases {
+            let mut editor = editor_with_selection(&fixture, Selection::collapsed(position));
+            navigate(&mut editor);
+
+            assert_eq!(editor.state().selection.unwrap().head.node, outside_node);
+            assert_selection_contains_table(&editor, fixture.table);
+        }
+    }
+
+    #[test]
+    fn shift_right_text_stays_textual_then_cell_rect_promotes_to_full_table() {
+        let fixture = table_navigation_fixture();
+        let mut editor = editor_with_selection(
+            &fixture,
+            Selection::collapsed(Position::new(fixture.p00, 11)),
+        );
+
+        shift_right(&mut editor);
+
+        {
+            let view = editor.state().view();
+            let selection = editor.state().selection.unwrap();
+            assert_eq!(
+                (selection.head.node, selection.head.offset),
+                (fixture.p00, 12)
+            );
+            assert!(
+                selection
+                    .resolve(&view)
+                    .and_then(|resolved| resolved.as_cell_rect())
+                    .is_none(),
+                "movement inside one cell must remain textual"
+            );
+        }
+
+        shift_right(&mut editor);
+
+        {
+            let view = editor.state().view();
+            let selection = editor.state().selection.unwrap();
+            let rect = selection
+                .resolve(&view)
+                .and_then(|resolved| resolved.as_cell_rect())
+                .expect("movement into another cell must start a cell rect");
+            assert_eq!(rect.anchor_cell.id(), fixture.c00);
+            assert_eq!(rect.head_cell.id(), fixture.c00);
+        }
+
+        shift_down(&mut editor);
+        shift_right(&mut editor);
+
+        let selection = editor.state().selection.unwrap();
+        assert!(is_unit_node_selection(&selection, &editor.state().view()));
+        assert_eq!(
+            selection,
+            cell_rect_selection(fixture.c00, fixture.c11, &editor.state().view()).unwrap()
+        );
+    }
+
+    #[test]
+    fn partial_cell_rect_uses_general_movement_at_table_boundaries() {
+        let fixture = table_navigation_fixture();
+
+        let mut down =
+            editor_with_selection(&fixture, Selection::collapsed(Position::new(fixture.p2, 0)));
+        down.ensure_preferred_x_at(&Position::new(fixture.p10, 8));
+        let preferred_x = down.view.view_state().preferred_x;
+        set_cell_rect_selection(&mut down, fixture.c00, fixture.c10);
+        shift_down(&mut down);
+        assert_eq!(down.state().selection.unwrap().head.node, fixture.p2);
+        assert_eq!(down.view.view_state().preferred_x, preferred_x);
+        assert_selection_contains_table(&down, fixture.table);
+        assert!(!down.undo_history.can_undo());
+
+        let mut up =
+            editor_with_selection(&fixture, Selection::collapsed(Position::new(fixture.p1, 0)));
+        set_cell_rect_selection(&mut up, fixture.c10, fixture.c00);
+        shift_up(&mut up);
+        assert_eq!(up.state().selection.unwrap().head.node, fixture.p1);
+        assert_selection_contains_table(&up, fixture.table);
+
+        let mut left =
+            editor_with_selection(&fixture, Selection::collapsed(Position::new(fixture.p1, 0)));
+        set_cell_rect_selection(&mut left, fixture.c10, fixture.c00);
+        shift_left(&mut left);
+        assert_eq!(left.state().selection.unwrap().head.node, fixture.p1);
+        assert_selection_contains_table(&left, fixture.table);
+    }
+
+    #[test]
+    fn shift_right_from_partial_cell_rect_includes_adjacent_unit_target() {
+        let (state, root, table, c01, c11, ..) = state! {
+            doc {
+                root: root {
+                    table: table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            c01: table_cell { paragraph { text("b") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("c") } }
+                            c11: table_cell { paragraph { text("d") } }
+                        }
+                    }
+                    image
+                    paragraph {}
+                }
+            }
+            selection: (root, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        set_cell_rect_selection(&mut editor, c01, c11);
+
+        shift_right(&mut editor);
+
+        let selection = editor.state().selection.unwrap();
+        assert_eq!((selection.anchor.node, selection.anchor.offset), (root, 0));
+        assert_eq!((selection.head.node, selection.head.offset), (root, 2));
+        assert_selection_contains_table(&editor, table);
+    }
+
+    #[test]
+    fn shift_horizontal_cell_rect_steps_and_wraps_both_directions() {
+        let (state, c01, c02, c10, _p10, ..) = state! {
+            doc {
+                root {
+                    table {
+                        table_row {
+                            table_cell { paragraph { text("a") } }
+                            c01: table_cell { paragraph { text("b") } }
+                            c02: table_cell { paragraph { text("c") } }
+                        }
+                        table_row {
+                            c10: table_cell { p10: paragraph { text("d") } }
+                            table_cell { paragraph { text("e") } }
+                            table_cell { paragraph { text("f") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("g") } }
+                            table_cell { paragraph { text("h") } }
+                            table_cell { paragraph { text("i") } }
+                        }
+                    }
+                }
+            }
+            selection: (p10, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        set_cell_rect_selection(&mut editor, c01, c01);
+
+        shift_right(&mut editor);
+        {
+            let view = editor.state().view();
+            let rect = editor
+                .state()
+                .selection
+                .unwrap()
+                .resolve(&view)
+                .and_then(|resolved| resolved.as_cell_rect())
+                .expect("same-row step must remain a cell rect");
+            assert_eq!(rect.head_cell.id(), c02);
+        }
+
+        shift_right(&mut editor);
+        {
+            let view = editor.state().view();
+            let rect = editor
+                .state()
+                .selection
+                .unwrap()
+                .resolve(&view)
+                .and_then(|resolved| resolved.as_cell_rect())
+                .expect("forward row wrap must remain a cell rect");
+            assert_eq!(rect.head_cell.id(), c10);
+        }
+
+        shift_left(&mut editor);
+        let view = editor.state().view();
+        let rect = editor
+            .state()
+            .selection
+            .unwrap()
+            .resolve(&view)
+            .and_then(|resolved| resolved.as_cell_rect())
+            .expect("backward row wrap must remain a cell rect");
+        assert_eq!(rect.anchor_cell.id(), c01);
+        assert_eq!(rect.head_cell.id(), c02);
+    }
+
+    #[test]
+    fn probe_predicts_partial_cell_rect_boundary_exit() {
+        let fixture = table_navigation_fixture();
+        let mut state = fixture.state;
+        state.selection = {
+            let view = state.view();
+            cell_rect_selection(fixture.c00, fixture.c10, &view)
+        };
+
+        assert_probe_predicts_apply(
+            state,
+            Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Line {
+                        direction: Direction::Forward,
+                        axis: Axis::Vertical,
+                    },
+                    extend: true,
+                },
+            },
+        );
+    }
     // TR-199: 테이블 뒤에 폴드가 오면 그 경계는 두 monolithic 사이의 유효한
     // 갭이다. 마지막 행에서 아래로 이동하면 마지막 열뿐 아니라 어느 열에서든
     // 이 갭으로 진입해야 한다. 버그는 테이블의 유일한 "마지막 navigable 라인"이
@@ -3529,6 +3953,7 @@ mod tests {
             let input_state = editor.state.clone();
             let ext = editor.resolve_extend_movement(
                 editor.state().selection.unwrap(),
+                head,
                 &Movement::Grapheme {
                     direction: Direction::Backward,
                 },

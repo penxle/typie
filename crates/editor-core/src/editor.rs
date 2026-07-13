@@ -1344,10 +1344,11 @@ impl Editor {
     pub(crate) fn resolve_extend_movement(
         &mut self,
         selection: Selection,
+        movement_from: Position,
         movement: &Movement,
         state: &State,
     ) -> Option<Selection> {
-        let target = self.resolve_movement(&selection.head, movement)?;
+        let target = self.resolve_movement(&movement_from, movement)?;
         let doc = state.view();
         let current_is_unit = is_unit_node_selection(&selection, &doc);
         let fixed = if current_is_unit {
@@ -1362,11 +1363,11 @@ impl Editor {
                 Movement::Grapheme { .. } | Movement::Word { .. } | Movement::Sentence { .. }
             )
             && let Some(stop) =
-                closest_empty_paragraph_break_end_between(&selection.head, &head, &doc)
+                closest_empty_paragraph_break_end_between(&movement_from, &head, &doc)
         {
             head = stop;
         }
-        Some(Selection::new(fixed, head))
+        Selection::new(fixed, head).normalize(&doc)
     }
 
     pub fn last_history_tag(&self) -> Option<HistoryTag> {
