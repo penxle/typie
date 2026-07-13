@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.Konfig
-import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.orphanSweeper
 import co.typie.graphql.Apollo
@@ -66,8 +66,8 @@ object AuthService {
 
   suspend fun logout() {
     withContext(Dispatchers.Main) {
-      catchingNonCancellation { ActiveSyncEngines.flushAll() }
-      ActiveSyncEngines.stopAll()
+      catchingNonCancellation { ActiveDocumentEditingSessions.flushSyncAll() }
+      ActiveDocumentEditingSessions.stopAll()
       catchingNonCancellation {
         orphanSweeper.sweep(includeOpenDocuments = true, deleteOnSuccess = true)
       }

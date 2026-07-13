@@ -21,13 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import co.typie.editor.Editor
-import co.typie.editor.ffi.ClipboardOp
-import co.typie.editor.ffi.Message
-import co.typie.editor.scroll.EditorBringIntoViewRequests
-import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorVisibleArea
-import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.ext.clickable
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
@@ -35,7 +29,6 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
-import kotlinx.coroutines.launch
 
 private val RepasteAsTextOverlayShape = AppShapes.rounded(AppShapes.full)
 private val RepasteAsTextOverlayTopGap = 12.dp
@@ -44,10 +37,9 @@ private const val RepasteAsTextOverlayAnimationMillis = 150
 
 @Composable
 internal fun EditorRepasteAsTextOverlay(
-  editor: Editor,
   visibleArea: EditorVisibleArea,
   visible: Boolean,
-  bringIntoViewRequests: EditorBringIntoViewRequests,
+  onRepasteAsText: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   AnimatedVisibility(
@@ -101,17 +93,7 @@ internal fun EditorRepasteAsTextOverlay(
             .border(1.dp, AppTheme.colors.borderDefault, RepasteAsTextOverlayShape)
             .background(AppTheme.colors.surfaceDefault, RepasteAsTextOverlayShape)
             .semantics(mergeDescendants = true) {}
-            .clickable {
-              editor.trackLocalEdit { context ->
-                editor.scope.launch(context) {
-                  editor.awaitWithBringIntoView(bringIntoViewRequests) {
-                    enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
-                    beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
-                  }
-                }
-              }
-              editor.focus()
-            }
+            .clickable { onRepasteAsText() }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {

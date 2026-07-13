@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.text.input.EditCommand
+import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
@@ -40,13 +41,14 @@ import co.typie.ext.registerTextInputClient
 import co.typie.platform.Clipboard
 import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 internal fun Modifier.editorInput(
-  editor: Editor,
+  session: DocumentEditingSession,
   uiState: EditorUiState,
   platform: Platform,
   bringIntoViewRequests: EditorBringIntoViewRequests,
@@ -55,7 +57,7 @@ internal fun Modifier.editorInput(
 ): Modifier =
   this then
     EditorInputElement(
-      editor = editor,
+      session = session,
       uiState = uiState,
       platform = platform,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -107,7 +109,7 @@ internal fun fixedLocalCaretTextFieldRectInRoot(
 }
 
 private data class EditorInputElement(
-  private val editor: Editor,
+  private val session: DocumentEditingSession,
   private val uiState: EditorUiState,
   private val platform: Platform,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
@@ -116,7 +118,7 @@ private data class EditorInputElement(
 ) : ModifierNodeElement<EditorInputNode>() {
   override fun create(): EditorInputNode =
     EditorInputNode(
-      editor = editor,
+      session = session,
       uiState = uiState,
       platform = platform,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -125,7 +127,7 @@ private data class EditorInputElement(
     )
 
   override fun update(node: EditorInputNode) {
-    node.editor = editor
+    node.session = session
     node.uiState = uiState
     node.updatePlatform(platform)
     node.bringIntoViewRequests = bringIntoViewRequests
@@ -135,7 +137,7 @@ private data class EditorInputElement(
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal class EditorInputNode(
-  var editor: Editor,
+  var session: DocumentEditingSession,
   var uiState: EditorUiState,
   var platform: Platform,
   var bringIntoViewRequests: EditorBringIntoViewRequests,
@@ -150,6 +152,10 @@ internal class EditorInputNode(
   private var enabled = enabled
   private var suppressSoftwareKeyboard = suppressSoftwareKeyboard
   private val platformInputBridge = EditorPlatformInputBridge()
+  private val editor: Editor
+    get() = session.editor
+
+  private fun <T : Job> submit(start: (Editor, CoroutineContext) -> T): T? = session.submit(start)
 
   fun updatePlatform(platform: Platform) {
     if (this.platform == platform) return
@@ -183,9 +189,9 @@ internal class EditorInputNode(
     bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
-    editor.trackLocalEdit { context ->
-      editor.scope.launch(context) {
-        editor.awaitWithBringIntoView(bringIntoViewRequests) {
+    submit { sessionEditor, context ->
+      sessionEditor.scope.launch(context) {
+        sessionEditor.awaitWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
           beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
         }
@@ -205,7 +211,7 @@ internal class EditorInputNode(
 
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
     if (binding.coalescible) {
-      editor.trackLocalEdit { localEdit -> bindingCoalescer.submit(binding, clipboard, localEdit) }
+      submit { _, localEdit -> bindingCoalescer.submit(binding, clipboard, localEdit) }
     } else {
       coroutineScope.launch { bindingCoalescer.submit(binding, clipboard).await() }
     }

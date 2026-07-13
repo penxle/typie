@@ -43,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.subscription.PlanUpgradeBenefit
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
+import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
@@ -56,6 +57,7 @@ import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.ClipboardOp
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElementData
@@ -79,16 +81,16 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
-import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.ChangesetDeltaStore
 import co.typie.editor.sync.DocumentEditorLoad
 import co.typie.editor.sync.RemoteChangesetPipeline
 import co.typie.editor.sync.SyncEngine
-import co.typie.editor.sync.SyncSession
 import co.typie.editor.sync.asSyncEditor
 import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.isPermanentSyncError
@@ -288,6 +290,8 @@ fun EditorScreen(entityId: String) {
     }
   }
   val editor = runtime.editor
+  val editingSession = runtime.session
+  val editorSessionAttached = editingSession != null
   LaunchedEffect(editor) {
     if (editor != null && editor.inputRecorder == null && Preference.devMode) {
       editor.inputRecorder = EditorInputRecorder()
@@ -330,7 +334,7 @@ fun EditorScreen(entityId: String) {
   val findReplace =
     rememberEditorFindReplaceSession(
       documentLocked = documentLocked,
-      editor = editor,
+      editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
     )
@@ -378,7 +382,7 @@ fun EditorScreen(entityId: String) {
     rememberEditorSpellcheckSession(
       documentId = document?.id,
       documentLocked = documentLocked,
-      editor = editor,
+      editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
       hideContextMenu = { uiState.contextMenu.hide() },
@@ -526,7 +530,9 @@ fun EditorScreen(entityId: String) {
                   initialBaseline = outcome.baseline,
                   pending = pending,
                   parentScope = scope,
-                  onEditorError = { editor, error -> runtime.reportError(editor, error) },
+                  onEditorError = { _, error ->
+                    scope.launch { if (editorLoadState === nextLoad) runtime.reportError(error) }
+                  },
                 )
 
               val previousLoad = editorLoadState
@@ -578,17 +584,18 @@ fun EditorScreen(entityId: String) {
   }
 
   val activeLoad = editorLoadState
-  LaunchedEffect(activeEditor, activeLoad, documentId) {
-    val readyEditor = activeEditor ?: return@LaunchedEffect
+  LaunchedEffect(activeLoad, documentId) {
     val readyLoad = activeLoad ?: return@LaunchedEffect
     val currentDocumentId = documentId ?: return@LaunchedEffect
+    val readyEditor = readyLoad.awaitReadyEditor()
+    if (editorLoadState !== readyLoad || readyLoad.isClosed) return@LaunchedEffect
     var effectiveBaseline = readyLoad.initialBaseline
-    var session: SyncSession? = null
+    var session: DocumentEditingSession? = null
     val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     try {
       while (true) {
-        if (editorLoadState !== readyLoad || runtime.editor !== readyEditor) {
+        if (editorLoadState !== readyLoad || readyLoad.isClosed) {
           return@LaunchedEffect
         }
         val queued = pendingChangesets.toList()
@@ -609,12 +616,13 @@ fun EditorScreen(entityId: String) {
       }
 
       lateinit var createdEngine: SyncEngine
+      lateinit var createdSession: DocumentEditingSession
       val handleNeedsReload: suspend () -> Unit = {
         catchingNonCancellation { createdEngine.captureNow() }
-        createdEngine.stop()
+        createdSession.stop()
         model.refetchDocument()
         model.bumpReloadGeneration()
-        runtime.clear(readyEditor)
+        runtime.clear(createdSession)
         if (editorLoadState === readyLoad) {
           editorLoadState = null
           if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
@@ -652,26 +660,30 @@ fun EditorScreen(entityId: String) {
           scope = engineScope,
           onNeedsReload = handleNeedsReload,
         )
-      val createdSession = SyncSession(engine = createdEngine, pipeline = createdPipeline)
+      createdSession =
+        DocumentEditingSession(
+          documentId = currentDocumentId,
+          editor = readyEditor,
+          engine = createdEngine,
+          pipeline = createdPipeline,
+          scope = engineScope,
+        )
       session = createdSession
-      ActiveSyncEngines.register(currentDocumentId, createdSession)
+      runtime.attach(createdSession)
+      if (runtime.session !== createdSession) return@LaunchedEffect
 
-      createdPipeline.start()
+      createdSession.start()
+      ActiveDocumentEditingSessions.register(createdSession)
       syncActiveLoadState = readyLoad
 
-      launch {
-        snapshotFlow { readyEditor.state.documentRevision }
-          .drop(1)
-          .collect { createdEngine.schedule() }
-      }
       awaitCancellation()
     } finally {
       if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
       val closingSession = session
       closingSession?.let {
-        it.pipeline.stop()
-        it.engine.stop()
-        ActiveSyncEngines.unregister(currentDocumentId, it)
+        runtime.clear(it)
+        it.stop()
+        ActiveDocumentEditingSessions.unregister(it)
       }
       engineScope.cancel()
       if (closingSession != null) syncAppScope.launch { orphanSweeper.sweep() }
@@ -730,7 +742,10 @@ fun EditorScreen(entityId: String) {
     val subPaneBlocksEditorInput = subPaneState.editorInputBlocked
     val screenShortcutModeActive = findReplace.active || spellcheck.active || aiFeedback.active
     val editorToolbarVisible =
-      screenState.sceneInForeground && !subPaneBlocksEditorInput && !findReplace.active
+      editorSessionAttached &&
+        screenState.sceneInForeground &&
+        !subPaneBlocksEditorInput &&
+        !findReplace.active
     val findReplaceToolbarVisible =
       screenState.sceneInForeground && !subPaneBlocksEditorInput && findReplace.active
     val findReplaceToolbarTransition = remember {
@@ -1001,7 +1016,7 @@ fun EditorScreen(entityId: String) {
         pageSizes = pageSizes,
         trackWidth = bodyTrackWidth,
       )
-    val editorReady = !loading && editorGeometryValid
+    val editorReady = !loading && editorGeometryValid && editorSessionAttached
     val editorInteractionFocused = editorReady && uiState.focused && screenState.sceneInForeground
 
     LaunchedEffect(editor, editorGeometryValid) {
@@ -1263,16 +1278,25 @@ fun EditorScreen(entityId: String) {
                 visibleArea = visibleAreas.base,
                 modifier = Modifier.fillMaxSize(),
               )
-              val activeEditor = runtime.editor
-              if (activeEditor != null) {
-                EditorRepasteAsTextOverlay(
-                  editor = activeEditor,
-                  visibleArea = visibleAreas.base,
-                  visible = repasteAsTextVisible,
-                  bringIntoViewRequests = bringIntoViewRequests,
-                  modifier = Modifier.fillMaxSize(),
-                )
-              }
+              val activeSession: DocumentEditingSession = editingSession
+              EditorRepasteAsTextOverlay(
+                visibleArea = visibleAreas.base,
+                visible = repasteAsTextVisible,
+                onRepasteAsText = {
+                  activeSession.submit { activeEditor, context ->
+                    activeEditor.scope.launch(context) {
+                      activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+                        enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
+                        beforeCommit {
+                          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                        }
+                      }
+                    }
+                  }
+                  activeSession.editor.focus()
+                },
+                modifier = Modifier.fillMaxSize(),
+              )
             }
           }
         },

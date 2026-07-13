@@ -118,7 +118,7 @@ internal fun EditorView(
           if (currentEnvironment != target) continue
 
           if (runtime.canCreateEditor && runtime.editor == null) {
-            runtime.attach(editor)
+            load.markEditorReady(editor)
           }
           return@LaunchedEffect
         }
@@ -133,7 +133,8 @@ internal fun EditorView(
   }
 
   Box(modifier) {
-    val editor = runtime.editor ?: return@Box
+    val session = runtime.session ?: return@Box
+    val editor = session.editor
     val focusManager = LocalFocusManager.current
     var previousSelection by remember(editor) { mutableStateOf(editor.selection) }
     LaunchedEffect(editor, themeVariant) {
@@ -153,10 +154,10 @@ internal fun EditorView(
       }
     }
     SideEffect { editor.focusManager = focusManager }
-    DisposableEffect(editor, uiState) {
+    DisposableEffect(session, uiState) {
       onDispose {
         uiState.clear()
-        runtime.clear(editor)
+        runtime.clear(session)
       }
     }
 
@@ -169,7 +170,7 @@ internal fun EditorView(
         }
         .editorInput(
           enabled = editorInputEnabled,
-          editor = editor,
+          session = session,
           uiState = uiState,
           platform = platform,
           bringIntoViewRequests = bringIntoViewRequests,

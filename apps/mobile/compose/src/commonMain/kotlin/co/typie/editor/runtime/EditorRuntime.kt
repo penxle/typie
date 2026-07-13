@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.touchlab.kermit.Logger
+import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
@@ -14,8 +15,24 @@ import kotlinx.coroutines.launch
 
 @Stable
 class EditorRuntime(private val uiScope: CoroutineScope) {
-  var editor by mutableStateOf<Editor?>(null)
-    private set
+  private sealed interface Attachment {
+    val editor: Editor
+  }
+
+  private class EditorOnly(override val editor: Editor) : Attachment
+
+  private class DocumentSession(val session: DocumentEditingSession) : Attachment {
+    override val editor: Editor
+      get() = session.editor
+  }
+
+  private var attachment by mutableStateOf<Attachment?>(null)
+
+  val editor: Editor?
+    get() = attachment?.editor
+
+  internal val session: DocumentEditingSession?
+    get() = (attachment as? DocumentSession)?.session
 
   var error by mutableStateOf<Throwable?>(null)
     private set
@@ -28,21 +45,44 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
       editor.dispose()
       return
     }
-    if (this.editor === editor) {
+    val current = attachment
+    if (current?.editor === editor) return
+
+    dispose(current)
+    attachment = EditorOnly(editor)
+  }
+
+  internal fun attach(session: DocumentEditingSession) {
+    if (error != null) {
+      session.stop()
+      session.editor.dispose()
       return
     }
 
-    this.editor?.dispose()
-    this.editor = editor
+    val current = attachment
+    if ((current as? DocumentSession)?.session === session) return
+    check(current?.editor !== session.editor) {
+      "An attached editor cannot be rebound to a document editing session"
+    }
+
+    dispose(current)
+    attachment = DocumentSession(session)
   }
 
   fun clear(editor: Editor? = null) {
-    if (editor != null && this.editor !== editor) {
-      return
-    }
+    val current = attachment
+    if (editor != null && current?.editor !== editor) return
 
-    this.editor?.dispose()
-    this.editor = null
+    attachment = null
+    dispose(current)
+  }
+
+  internal fun clear(session: DocumentEditingSession) {
+    val current = attachment as? DocumentSession ?: return
+    if (current.session !== session) return
+
+    attachment = null
+    dispose(current)
   }
 
   fun reportError(error: Throwable) {
@@ -74,6 +114,11 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
     Sentry.captureException(error)
     this.error = error
     clear()
+  }
+
+  private fun dispose(attachment: Attachment?) {
+    (attachment as? DocumentSession)?.session?.stop()
+    attachment?.editor?.dispose()
   }
 
   fun clearError() {

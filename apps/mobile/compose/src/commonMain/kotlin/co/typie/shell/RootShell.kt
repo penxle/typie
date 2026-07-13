@@ -25,7 +25,7 @@ import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
-import co.typie.editor.sync.ActiveSyncEngines
+import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.orphanSweeper
 import co.typie.platform.appLifecycleService
 import co.typie.platform.connectivityService
@@ -74,7 +74,7 @@ fun RootShell() {
 
   LaunchedEffect(Unit) {
     connectivityService.restorationGeneration.drop(1).collect {
-      ActiveSyncEngines.retryAll()
+      ActiveDocumentEditingSessions.retrySyncAll()
       orphanSweeper.sweep()
     }
   }
@@ -102,7 +102,7 @@ fun RootShell() {
         }
         Lifecycle.Event.ON_STOP -> {
           appLifecycleService.update(foreground = false)
-          lifecycleScope.launch { ActiveSyncEngines.flushAll() }
+          lifecycleScope.launch { ActiveDocumentEditingSessions.flushSyncAll() }
         }
         else -> {}
       }

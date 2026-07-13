@@ -20,6 +20,7 @@ import co.typie.editor.FakeFfiEditor
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
+import co.typie.editor.sync.createTestDocumentEditingSession
 import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -35,6 +36,7 @@ class EditorInputEnabledDesktopTest {
     val fake = FakeFfiEditor()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val editor = Editor(fake, scope)
+    val session = createTestDocumentEditingSession(editor, scope)
 
     try {
       setContent {
@@ -48,7 +50,7 @@ class EditorInputEnabledDesktopTest {
               .testTag(InputTag)
               .focusRequester(focusRequester)
               .editorInput(
-                editor = editor,
+                session = session,
                 uiState = EditorUiState(),
                 platform = Platform.Desktop,
                 bringIntoViewRequests = bringIntoViewRequests,
@@ -70,6 +72,7 @@ class EditorInputEnabledDesktopTest {
 
       assertTrue(fake.enqueued.isEmpty())
     } finally {
+      session.stop()
       scope.cancel()
     }
   }

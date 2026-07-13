@@ -9,6 +9,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -42,6 +43,7 @@ internal class DocumentEditorLoad(
   private val terminalClaimed = AtomicBoolean(false)
   private val creation = AtomicReference<Deferred<Editor>?>(null)
   private val completedEditor = AtomicReference<Editor?>(null)
+  private val readyEditor = CompletableDeferred<Editor>()
 
   init {
     job.invokeOnCompletion { close() }
@@ -55,9 +57,18 @@ internal class DocumentEditorLoad(
     return deferred.await()
   }
 
+  suspend fun awaitReadyEditor(): Editor = readyEditor.await()
+
+  fun markEditorReady(editor: Editor) {
+    if (closed.load()) return
+    check(completedEditor.load() === editor) { "Only the loaded editor can become ready" }
+    readyEditor.complete(editor)
+  }
+
   fun close() {
     if (!closed.compareAndSet(expectedValue = false, newValue = true)) return
 
+    readyEditor.cancel(closedCancellation())
     abortIfUnclaimed()
     completedEditor.exchange(null)?.dispose()
     scope.cancel(closedCancellation())

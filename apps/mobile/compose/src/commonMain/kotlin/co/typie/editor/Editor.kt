@@ -145,8 +145,8 @@ internal constructor(
     focusManager?.clearFocus()
   }
 
-  internal fun trackLocalEdit(start: (CoroutineContext) -> Job) {
-    val localEdit = localEdits.register() ?: return
+  internal fun <T : Job> trackLocalEdit(start: (CoroutineContext) -> T): T? {
+    val localEdit = localEdits.register() ?: return null
     val completion =
       try {
         start(localEdit)
@@ -156,7 +156,7 @@ internal constructor(
       } catch (e: Throwable) {
         localEdit.fail(e)
         notifyFailure(e)
-        return
+        return null
       }
     completion.invokeOnCompletion { failure ->
       if (failure == null) {
@@ -165,6 +165,7 @@ internal constructor(
         localEdit.fail(failure)
       }
     }
+    return completion
   }
 
   internal fun quiesceLocalEdits(): LocalEditQuiescence = localEdits.quiesce()

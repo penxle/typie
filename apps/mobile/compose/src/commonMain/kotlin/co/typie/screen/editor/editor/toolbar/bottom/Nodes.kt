@@ -105,8 +105,8 @@ internal fun BottomToolbarNodes(
           when (val action = item.action) {
             is EditorToolbarNodeInsertAction.OpenPanel -> onBottomPanelRequest(action.panel)
             is EditorToolbarNodeInsertAction.SendMessage -> {
-              val currentEditor = runtime.editor ?: return@NodeInsertTile
-              currentEditor.trackLocalEdit { context ->
+              val session = runtime.session ?: return@NodeInsertTile
+              session.submit { currentEditor, context ->
                 currentEditor.scope.launch(context) {
                   currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
                     enqueue(action.message)

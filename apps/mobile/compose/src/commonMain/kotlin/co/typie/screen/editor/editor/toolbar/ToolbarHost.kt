@@ -238,8 +238,8 @@ internal fun EditorToolbarHost(
       return
     }
 
-    val editor = runtime.editor ?: return
-    editor.trackLocalEdit { context ->
+    val session = runtime.session ?: return
+    session.submit { editor, context ->
       editor.scope.launch(context) {
         val committedState =
           editor.awaitWithBringIntoView(bringIntoViewRequests) {

@@ -8,6 +8,10 @@ import co.typie.editor.sync.ws.DocumentSyncBaseline
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 
 private class ExpectedFinishFailure : RuntimeException()
@@ -36,6 +40,26 @@ private class FailingGraphIngest : GraphIngest {
 }
 
 class DocumentEditorLoadTest {
+  @Test
+  fun closingLoadCancelsReadyEditorWaiter() = runTest {
+    val load =
+      DocumentEditorLoad(
+        ingest = FailingGraphIngest(),
+        initialBaseline =
+          DocumentSyncBaseline(seq = "1", heads = ByteArray(0), durableHeads = ByteArray(0)),
+        pending = emptyList(),
+        parentScope = this,
+        onEditorError = { _, _ -> },
+      )
+    val ready = async(start = CoroutineStart.UNDISPATCHED) { load.awaitReadyEditor() }
+
+    assertFalse(ready.isCompleted)
+
+    load.close()
+
+    assertFailsWith<CancellationException> { ready.await() }
+  }
+
   @Test
   fun repeatedAwaitMemoizesTerminalFailureWithoutRefinishingIngest() = runTest {
     val ingest = FailingGraphIngest()

@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
@@ -55,7 +56,7 @@ private data class FindReplaceSearchInput(val query: String, val matchWholeWord:
 @Composable
 internal fun rememberEditorFindReplaceSession(
   documentLocked: Boolean,
-  editor: Editor?,
+  editingSession: DocumentEditingSession?,
   editorState: EditorState,
   bringIntoViewRequests: EditorBringIntoViewRequests,
 ): EditorFindReplaceSession {
@@ -63,6 +64,7 @@ internal fun rememberEditorFindReplaceSession(
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   val matchWholeWord = Preference.searchMatchWholeWord
+  val editor = editingSession?.editor
 
   DisposableEffect(editor) { onDispose { editor?.clearFindReplaceRanges() } }
 
@@ -110,8 +112,8 @@ internal fun rememberEditorFindReplaceSession(
       }
     },
     replace = replace@{
-        val activeEditor = editor ?: return@replace
-        activeEditor.trackLocalEdit { context ->
+        val activeSession = editingSession ?: return@replace
+        activeSession.submit { activeEditor, context ->
           activeEditor.scope.launch(context) {
             state.replaceActive(
               editor = activeEditor,
@@ -123,8 +125,8 @@ internal fun rememberEditorFindReplaceSession(
         }
       },
     replaceAll = replaceAll@{
-        val activeEditor = editor ?: return@replaceAll
-        activeEditor.trackLocalEdit { context ->
+        val activeSession = editingSession ?: return@replaceAll
+        activeSession.submit { activeEditor, context ->
           activeEditor.scope.launch(context) {
             state.replaceAllMatches(
               editor = activeEditor,

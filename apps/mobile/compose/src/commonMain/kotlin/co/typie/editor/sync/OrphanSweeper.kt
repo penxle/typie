@@ -25,17 +25,17 @@ class OrphanSweeper(
       val documentIds = store.listDocumentIds() - excluded
       for (documentId in documentIds) {
         catchingNonCancellation {
-          val records = store.load(documentId)
-          if (records.isEmpty()) return@catchingNonCancellation
-          val fingerprint = records.associate {
-            it.id to it.changeset.toByteString().sha256().hex()
+            val records = store.load(documentId)
+            if (records.isEmpty()) return@catchingNonCancellation
+            val fingerprint = records.associate {
+              it.id to it.changeset.toByteString().sha256().hex()
+            }
+            if (sweptFingerprints[documentId] == fingerprint) return@catchingNonCancellation
+            if (permanentFailures[documentId] == fingerprint) return@catchingNonCancellation
+            pushFn(documentId, records.map { it.changeset }.concatChangesets())
+            sweptFingerprints[documentId] = fingerprint
+            if (deleteOnSuccess) store.deleteMany(documentId, records.map { it.id })
           }
-          if (sweptFingerprints[documentId] == fingerprint) return@catchingNonCancellation
-          if (permanentFailures[documentId] == fingerprint) return@catchingNonCancellation
-          pushFn(documentId, records.map { it.changeset }.concatChangesets())
-          sweptFingerprints[documentId] = fingerprint
-          if (deleteOnSuccess) store.deleteMany(documentId, records.map { it.id })
-        }
           .onFailure {
             if (isPermanentSyncError(it)) {
               val records = store.load(documentId)
@@ -56,6 +56,6 @@ val orphanSweeper: OrphanSweeper by lazy {
   OrphanSweeper(
     store = ChangesetDeltaStore,
     pushFn = { documentId, payload -> SyncWs.connection.push(documentId, payload) },
-    openDocumentIds = { ActiveSyncEngines.openDocumentIds() },
+    openDocumentIds = { ActiveDocumentEditingSessions.openDocumentIds() },
   )
 }

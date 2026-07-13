@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.Message
@@ -52,7 +53,7 @@ internal class EditorSpellcheckSession(
 internal fun rememberEditorSpellcheckSession(
   documentId: String?,
   documentLocked: Boolean,
-  editor: Editor?,
+  editingSession: DocumentEditingSession?,
   editorState: EditorState,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   hideContextMenu: () -> Unit,
@@ -69,6 +70,7 @@ internal fun rememberEditorSpellcheckSession(
     viewModel(key = "editor-spellcheck:$id") { SpellcheckViewModel() }
   }
   val active = model?.active == true
+  val editor = editingSession?.editor
 
   fun setOverlayBottomOcclusion(value: Float) {
     bottomOcclusion = value.coerceAtLeast(0f)
@@ -321,13 +323,13 @@ internal fun rememberEditorSpellcheckSession(
     showCurrentResult = { id -> model?.setCurrent(id) },
     applySuggestion = applySuggestion@{ id, replacement ->
         val result = model?.results?.firstOrNull { it.id == id } ?: return@applySuggestion
-        val activeEditor = editor ?: return@applySuggestion
+        val activeSession = editingSession ?: return@applySuggestion
         if (documentLocked) {
           toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
           return@applySuggestion
         }
 
-        activeEditor.trackLocalEdit { context ->
+        activeSession.submit { activeEditor, context ->
           activeEditor.scope.launch(context) {
             activeEditor.replaceSpellcheckRangeText(
               id = id,
