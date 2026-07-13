@@ -1435,6 +1435,10 @@ mod incremental_tests {
 
         let mut view = make_view(800.0);
         view.layout(&state);
+        assert!(
+            view.toggle_fold(&state, fold),
+            "expand collapsed-by-default fold"
+        );
 
         let before_fold = cached_arc(&mut view, &state, fold);
         let before_unrelated = cached_arc(&mut view, &state, unrelated);
@@ -1481,6 +1485,10 @@ mod incremental_tests {
 
         let mut view = make_view(800.0);
         view.layout(&state);
+        assert!(
+            view.toggle_fold(&state, fold),
+            "expand collapsed-by-default fold"
+        );
 
         let before_fold = cached_arc(&mut view, &state, fold);
         let before_unrelated = cached_arc(&mut view, &state, unrelated);

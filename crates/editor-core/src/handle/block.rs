@@ -1,11 +1,14 @@
 use editor_commands::{self as commands};
-use editor_model::NodeType;
+use editor_crdt::Dot;
+use editor_model::{Node, NodeType};
+use editor_transaction::Transaction;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
 pub fn handle_block_op(editor: &mut Editor, op: BlockOp) -> Result<(), EditorError> {
+    let mut created_fold = None;
     editor.transact(|tr| {
         match op {
             BlockOp::ToggleBlockquote { variant } => commands::chain!(
@@ -35,15 +38,44 @@ pub fn handle_block_op(editor: &mut Editor, op: BlockOp) -> Result<(), EditorErr
                     commands::normalize_selected_blocks_in_callout(),
                 ),
             ),
-            BlockOp::WrapFold => commands::chain!(
-                tr,
-                commands::optional!(commands::materialize_gap_paragraph()),
-                commands::optional!(commands::materialize_synthetic_selection_blocks()),
-                commands::wrap_selected_blocks_in_fold(),
-            ),
+            BlockOp::WrapFold => {
+                let enclosing_before = selection_enclosing_fold(tr);
+                let applied = commands::chain!(
+                    tr,
+                    commands::optional!(commands::materialize_gap_paragraph()),
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                    commands::wrap_selected_blocks_in_fold(),
+                )?;
+                if applied {
+                    created_fold =
+                        selection_enclosing_fold(tr).filter(|id| Some(*id) != enclosing_before);
+                }
+                Ok(applied)
+            }
         }?;
         Ok(())
-    })
+    })?;
+
+    // Legacy parity: folds default collapsed, so a freshly created one is expanded explicitly.
+    if let Some(fold_id) = created_fold {
+        editor.set_fold_expanded(fold_id, true);
+    }
+    Ok(())
+}
+
+fn selection_enclosing_fold(tr: &Transaction) -> Option<Dot> {
+    let selection = tr.selection()?;
+    let view = tr.view();
+    let node = view.node(selection.head.node).or_else(|| {
+        view.leaf(selection.head.node)
+            .and_then(|leaf| leaf.parent())
+    })?;
+    if matches!(node.node(), Node::Fold(_)) {
+        return Some(node.id());
+    }
+    node.ancestors()
+        .find(|ancestor| matches!(ancestor.node(), Node::Fold(_)))
+        .map(|ancestor| ancestor.id())
 }
 
 #[cfg(test)]
@@ -303,6 +335,69 @@ mod tests {
             selection: (empty, 0) -> (p2, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn wrap_fold_expands_created_fold() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("Hello") } paragraph {} } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        editor.apply(block_message(BlockOp::WrapFold));
+
+        let fold = editor
+            .state()
+            .view()
+            .root()
+            .expect("test document has root")
+            .child_blocks()
+            .find(|block| block.node_type() == NodeType::Fold)
+            .expect("fold created")
+            .id();
+        assert!(
+            editor.fold_expanded(fold),
+            "freshly created fold must be expanded"
+        );
+    }
+
+    #[test]
+    fn wrap_fold_expands_only_the_inner_fold() {
+        let (initial, f1, fc, _p1) = state! {
+            doc {
+                root {
+                    f1: fold {
+                        fold_title { text("Outer") }
+                        fc: fold_content { p1: paragraph { text("Body") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        editor.apply(block_message(BlockOp::WrapFold));
+
+        let inner = editor
+            .state()
+            .view()
+            .node(fc)
+            .expect("fold content exists")
+            .child_blocks()
+            .find(|block| block.node_type() == NodeType::Fold)
+            .expect("inner fold created")
+            .id();
+        assert!(editor.fold_expanded(inner), "inner fold must be expanded");
+        assert!(
+            !editor.fold_expanded(f1),
+            "pre-existing outer fold keeps its collapsed default"
+        );
     }
 
     #[test]

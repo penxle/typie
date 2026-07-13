@@ -2603,10 +2603,10 @@ mod tests {
     // stops at the inner gap, not the fold's outer boundary.
     #[test]
     fn arrow_up_nested_callouts_stops_at_innermost_boundary_first() {
-        let (state, fc, ..) = state! {
+        let (state, f, fc, ..) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         fold_title { text("t") }
                         fc: fold_content {
                             callout { paragraph {} }
@@ -2620,6 +2620,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         let expected = gap_cursor_selection_at(fc, 1, &editor.state.view())
             .expect("inner between-callouts gap is valid");
@@ -2636,10 +2637,10 @@ mod tests {
 
     #[test]
     fn arrow_up_from_callout_at_fold_content_start_enters_inner_leading_gap() {
-        let (state, fc, ..) = state! {
+        let (state, f, fc, ..) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         fold_title {}
                         fc: fold_content {
                             callout { p1: paragraph {} }
@@ -2651,6 +2652,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         let expected = gap_cursor_selection_at(fc, 0, &editor.state.view())
             .expect("gap between fold_content start boundary and callout is valid");
@@ -2667,10 +2669,10 @@ mod tests {
 
     #[test]
     fn arrow_down_from_callout_at_fold_content_end_enters_inner_trailing_gap() {
-        let (state, fc, ..) = state! {
+        let (state, f, fc, ..) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         fold_title {}
                         fc: fold_content {
                             callout { p1: paragraph {} }
@@ -2682,6 +2684,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         let expected = gap_cursor_selection_at(fc, 1, &editor.state.view())
             .expect("gap between callout and fold_content end boundary is valid");
@@ -2730,10 +2733,10 @@ mod tests {
 
     #[test]
     fn arrow_down_from_inner_leading_gap_enters_callout_start() {
-        let (state, _fc, p1) = state! {
+        let (state, f, _fc, p1) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         fold_title {}
                         fc: fold_content {
                             callout { p1: paragraph { text("ab") } }
@@ -2745,6 +2748,7 @@ mod tests {
             selection: (fc, 0, <)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         arrow(
             &mut editor,
@@ -2764,10 +2768,10 @@ mod tests {
 
     #[test]
     fn arrow_up_from_inner_leading_gap_exits_to_fold_title() {
-        let (state, ft, ..) = state! {
+        let (state, f, ft, ..) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         ft: fold_title {}
                         fc: fold_content {
                             callout { p1: paragraph {} }
@@ -2779,6 +2783,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         arrow(
             &mut editor,
@@ -2815,10 +2820,10 @@ mod tests {
 
     #[test]
     fn arrow_up_from_inner_trailing_gap_enters_callout_end() {
-        let (state, _fc, p1) = state! {
+        let (state, f, _fc, p1) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         fold_title {}
                         fc: fold_content {
                             callout { p1: paragraph { text("ab") } }
@@ -2830,6 +2835,7 @@ mod tests {
             selection: (fc, 1, >)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         arrow(
             &mut editor,
@@ -2849,10 +2855,10 @@ mod tests {
 
     #[test]
     fn arrow_down_from_inner_trailing_gap_exits_to_next_paragraph() {
-        let (state, _fc, _p1, p2) = state! {
+        let (state, f, _fc, _p1, p2) = state! {
             doc {
                 root {
-                    fold {
+                    f: fold {
                         fold_title {}
                         fc: fold_content {
                             callout { p1: paragraph {} }
@@ -2864,6 +2870,7 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
+        editor.view.set_fold_state(&editor.state, f, true);
         editor.view.layout(&editor.state);
         arrow(
             &mut editor,

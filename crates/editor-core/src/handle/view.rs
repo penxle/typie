@@ -107,6 +107,25 @@ mod tests {
     }
 
     #[test]
+    fn fold_defaults_to_collapsed_on_load() {
+        let (initial, f1, ..) = state! {
+            doc { root {
+                f1: fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (ft1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        assert!(!editor.fold_expanded(f1), "folds load collapsed by default");
+    }
+
+    #[test]
     fn probe_toggle_fold_existing() {
         let (state, f1, ..) = state! {
             doc { root {
@@ -175,6 +194,10 @@ mod tests {
         editor.apply(Message::View {
             op: ViewOp::ToggleFold { id: f1 },
         });
+        assert!(editor.fold_expanded(f1), "first toggle expands the fold");
+        editor.apply(Message::View {
+            op: ViewOp::ToggleFold { id: f1 },
+        });
 
         assert_ne!(
             editor
@@ -203,6 +226,9 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
+        editor.apply(Message::View {
+            op: ViewOp::ToggleFold { id: f1 },
+        });
         set_pending_format(&mut editor);
 
         editor.apply(Message::View {
@@ -228,6 +254,9 @@ mod tests {
             event: SystemEvent::Initialize,
         });
 
+        editor.apply(Message::View {
+            op: ViewOp::ToggleFold { id: f1 },
+        });
         editor.apply(Message::View {
             op: ViewOp::ToggleFold { id: f1 },
         });
@@ -264,6 +293,9 @@ mod tests {
             event: SystemEvent::Initialize,
         });
 
+        editor.apply(Message::View {
+            op: ViewOp::ToggleFold { id: f1 },
+        });
         editor.apply(Message::View {
             op: ViewOp::ToggleFold { id: f1 },
         });

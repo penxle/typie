@@ -1271,6 +1271,13 @@ impl Editor {
         did_change
     }
 
+    pub(crate) fn set_fold_expanded(&mut self, id: Dot, expanded: bool) -> bool {
+        if self.view.fold_expanded(id) == expanded {
+            return false;
+        }
+        self.toggle_fold(id)
+    }
+
     pub(crate) fn fold_expanded(&self, id: Dot) -> bool {
         self.view.fold_expanded(id)
     }

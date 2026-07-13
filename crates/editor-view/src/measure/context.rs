@@ -12,7 +12,7 @@ pub(crate) struct MeasureContext {
 
 impl MeasureContext {
     pub fn fold_expanded(&self, node: &Dot) -> bool {
-        self.fold_states.get(node).copied().unwrap_or(true)
+        self.fold_states.get(node).copied().unwrap_or(false)
     }
 
     pub fn external_height(&self, node: &Dot) -> Option<f32> {
@@ -64,13 +64,13 @@ mod tests {
     fn fold_expanded_default_and_set() {
         let id = Dot::new(1, 1);
         let ctx = MeasureContext::default();
-        assert!(ctx.fold_expanded(&id));
+        assert!(!ctx.fold_expanded(&id));
 
-        let ctx_false = MeasureContext {
-            fold_states: HashMap::from([(id, false)]),
+        let ctx_true = MeasureContext {
+            fold_states: HashMap::from([(id, true)]),
             ..Default::default()
         };
-        assert!(!ctx_false.fold_expanded(&id));
+        assert!(ctx_true.fold_expanded(&id));
     }
 
     #[test]

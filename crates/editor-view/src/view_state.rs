@@ -43,7 +43,7 @@ impl ViewState {
     }
 
     pub fn fold_expanded(&self, node_id: Dot) -> bool {
-        self.fold_states.get(&node_id).copied().unwrap_or(true)
+        self.fold_states.get(&node_id).copied().unwrap_or(false)
     }
 
     pub fn external_height(&self, node_id: Dot) -> Option<f32> {
