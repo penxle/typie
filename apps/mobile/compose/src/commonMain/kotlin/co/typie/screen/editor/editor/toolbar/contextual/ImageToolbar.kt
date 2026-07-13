@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import co.touchlab.kermit.Logger
 import co.typie.domain.blob.BlobService
 import co.typie.editor.Editor
 import co.typie.editor.external.EditorImageAsset
@@ -97,6 +98,10 @@ internal fun rememberEditorImagePicker(commandScope: CoroutineScope): (nodeId: S
         val upload =
           file.toImageUploadOrNull()
             ?: run {
+              Logger.w {
+                "Picked file is not usable as an image: " +
+                  "mimeType=${file.mimeType}, width=${file.imageWidth}, height=${file.imageHeight}"
+              }
               file.close()
               return@mapNotNull null
             }

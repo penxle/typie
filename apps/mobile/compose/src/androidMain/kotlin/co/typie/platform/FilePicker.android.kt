@@ -97,8 +97,10 @@ private fun Context.decodeImageSizeIfNeeded(uri: Uri, mimeType: String?): Pair<I
   return when (mimeType?.substringBefore('/')) {
     "image" -> {
       val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-      contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-        ?: error("Unable to open selected image")
+      val stream = contentResolver.openInputStream(uri) ?: error("Unable to open selected image")
+      // decodeStream always returns null when inJustDecodeBounds is set; success is indicated by
+      // outWidth/outHeight instead.
+      stream.use { BitmapFactory.decodeStream(it, null, options) }
       val width = options.outWidth
       val height = options.outHeight
       if (width <= 0 || height <= 0) null else width to height

@@ -1,6 +1,7 @@
 package co.typie.platform
 
 import androidx.compose.runtime.Composable
+import co.touchlab.kermit.Logger
 import kotlinx.io.Source
 
 class PickedFile
@@ -54,6 +55,11 @@ expect fun rememberFilePicker(
 ): (mimeType: String) -> Unit
 
 internal fun aggregateSelectedFiles(files: List<Result<PickedFile>>): FilePickerResult {
+  files.forEach { file ->
+    file.exceptionOrNull()?.let { error ->
+      Logger.e(error) { "File picker failed to read a selected file" }
+    }
+  }
   val readableFiles = files.mapNotNull(Result<PickedFile>::getOrNull)
   if (readableFiles.isNotEmpty()) {
     return FilePickerResult.Selected(
