@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import { CROP_MARKER_SIZE, PAGE_RENDER_OVERSCAN_MARGIN } from '../constants';
   import { getEditorContext } from '../editor.svelte';
+  import { shouldKeepEmbedsWhileHidden, visibleExternalElements } from './external-element-visibility';
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
   import TableOverlay from './TableOverlay.svelte';
@@ -23,6 +24,9 @@
   // off-screen pages never build their fragments. Kept separate from the plain
   // `isVisible` so the imperative render effects are untouched.
   let overlaysVisible = $state(false);
+  // Embed iframes (e.g. a playing YouTube video) lose their state when unmounted,
+  // so pages holding embeds keep them mounted while scrolled off-screen.
+  let keepEmbedsWhileHidden = $state(false);
 
   const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
   const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
@@ -39,7 +43,8 @@
   // the few visible pages.
   const externalElements = $derived.by(() => {
     void ctx.editor?.tickRevision;
-    return overlaysVisible && ctx.editor ? ctx.editor.pageExternalElements(page) : [];
+    const editor = ctx.editor;
+    return editor ? visibleExternalElements(overlaysVisible, keepEmbedsWhileHidden, () => editor.pageExternalElements(page)) : [];
   });
   const tableOverlays = $derived.by(() => {
     void ctx.editor?.tickRevision;
@@ -133,6 +138,9 @@
             const observer = new IntersectionObserver(
               (entries) => {
                 isVisible = entries.at(-1)?.isIntersecting ?? isVisible;
+                if (overlaysVisible && !isVisible) {
+                  keepEmbedsWhileHidden = shouldKeepEmbedsWhileHidden(externalElements);
+                }
                 overlaysVisible = isVisible;
                 if (!isVisible) return;
                 if (needsResize) {
