@@ -45,7 +45,7 @@ internal class EditorSelectionHandleDragSession {
       return false
     }
 
-    val endpoints = context.editor.selectionEndpoints() ?: return false
+    val endpoints = context.editor.tickSelectionEndpoints ?: return false
     val handle =
       when (type) {
         EditorSelectionHandleType.From -> endpoints.from

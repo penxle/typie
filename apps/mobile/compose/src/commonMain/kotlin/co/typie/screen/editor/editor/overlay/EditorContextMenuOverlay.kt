@@ -310,7 +310,7 @@ internal fun resolveContextMenuAnchor(
   val gapPx = ContextMenuGap.value * density
 
   if (rangeSelection != null) {
-    val endpoints = editor.selectionEndpoints() ?: return null
+    val endpoints = editor.tickSelectionEndpoints ?: return null
     val fromRect = endpoints.from.rect
     val toRect = endpoints.to.rect
     val from =

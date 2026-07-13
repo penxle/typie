@@ -109,7 +109,7 @@ internal class EditorSelectionHandleGesture(
     val radiusPx = EditorSelectionHandleRadiusDp * density
     val stemWidthPx = EditorSelectionHandleStemWidthDp * density
     val touchTargetPx = EditorSelectionHandleTouchTargetDp * density
-    val endpoints = context.editor.selectionEndpoints() ?: return null
+    val endpoints = context.editor.tickSelectionEndpoints ?: return null
     return listOf(
         EditorSelectionHandleType.To to endpoints.to,
         EditorSelectionHandleType.From to endpoints.from,

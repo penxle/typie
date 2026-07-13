@@ -75,7 +75,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.ime(n.coerceAtMost(IME_READ_WINDOW), 0)?.let { ctx ->
+        editor.tickIme?.trimmedTo(n.coerceAtMost(IME_READ_WINDOW), 0)?.let { ctx ->
           ctx.text.substring(
             0,
             ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart),
@@ -91,7 +91,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.ime(0, n.coerceAtMost(IME_READ_WINDOW))?.let { ctx ->
+        editor.tickIme?.trimmedTo(0, n.coerceAtMost(IME_READ_WINDOW))?.let { ctx ->
           ctx.text.substring(
             ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
           )
@@ -103,7 +103,7 @@ internal class EditorInputConnection(
 
   override fun getSelectedText(flags: Int): CharSequence? {
     val result =
-      editor.ime(0, 0)?.let { ctx ->
+      editor.tickIme?.trimmedTo(0, 0)?.let { ctx ->
         val start = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart)
         val end = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
         ctx.text.substring(start, end).ifEmpty { null }
@@ -124,7 +124,7 @@ internal class EditorInputConnection(
       return null
     }
     val ctx =
-      editor.ime(
+      editor.tickIme?.trimmedTo(
         beforeLength.coerceAtMost(IME_READ_WINDOW),
         afterLength.coerceAtMost(IME_READ_WINDOW),
       )
@@ -197,7 +197,7 @@ internal class EditorInputConnection(
   }
 
   private fun projectAbsoluteUtf16Range(start: Int, end: Int): Pair<Int, Int> {
-    val ctx = editor.ime(IME_READ_WINDOW, IME_READ_WINDOW) ?: return start to end
+    val ctx = editor.tickIme ?: return start to end
     return ctx.projectAbsoluteUtf16Offset(start) to ctx.projectAbsoluteUtf16Offset(end)
   }
 

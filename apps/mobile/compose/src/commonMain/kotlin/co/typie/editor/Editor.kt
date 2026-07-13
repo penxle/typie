@@ -59,8 +59,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 // Window (flat chars each side of the selection) materialized into snapshot IME
@@ -79,11 +77,20 @@ internal constructor(
   var state: EditorState by mutableStateOf(EditorState.Initial)
     private set
 
+  // `state` lags render settlement on the await path; IME and pointer readers must see
+  // post-tick values like the live FFI reads they replaced, so every readSnapshot is
+  // published here immediately.
+  private var tickSnapshot: EditorState by mutableStateOf(EditorState.Initial)
+
   internal var inputRecorder: EditorInputRecorder? = null
 
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
   val placeholder: PlaceholderMetrics? by derivedStateOf { state.placeholder }
   val selection: Selection? by derivedStateOf { state.selection }
+  val tickIme: Ime? by derivedStateOf { tickSnapshot.ime }
+  val tickSelectionEndpoints: SelectionEndpoints? by derivedStateOf {
+    tickSnapshot.selectionEndpoints
+  }
   val pageSizes: List<Size> by derivedStateOf { state.pageSizes }
   val externalElements: List<ExternalElement> by derivedStateOf { state.externalElements }
   val tableOverlays: List<TableOverlay> by derivedStateOf { state.tableOverlays }
@@ -94,7 +101,7 @@ internal constructor(
   val ime: Ime? by derivedStateOf { state.ime }
   val lastHistoryTag by derivedStateOf { state.lastHistoryTag }
 
-  private val mutex: Mutex = Mutex()
+  private val mutex = PriorityMutex()
   private val versionCounter: AtomicLong = AtomicLong(0L)
   private val disposed: AtomicBoolean = AtomicBoolean(false)
   private val syncInProgress: AtomicBoolean = AtomicBoolean(false)
@@ -247,8 +254,7 @@ internal constructor(
     }
     try {
       runBlocking {
-        val events: List<EditorEvent>
-        mutex.withLock {
+        val events = mutex.withPriorityLock {
           if (disposed.load()) error("Editor disposed")
           val collector =
             object : EditorScope {
@@ -257,11 +263,12 @@ internal constructor(
               }
             }
           block(collector)
-          events = inner.tick()
+          val e = inner.tick()
           val version = versionCounter.addAndFetch(1L)
-          val snapshot = readSnapshot(version = version, events = events)
+          val snapshot = readSnapshot(version = version, events = e)
           beforeCommit?.invoke(snapshot)
           commit(snapshot)
+          e
         }
         emit(events)
       }
@@ -409,8 +416,6 @@ internal constructor(
 
   fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
 
-  fun ime(beforeLimit: Int, afterLimit: Int): Ime? = inner.ime(beforeLimit, afterLimit)
-
   fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
 
   fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = inner.cursorHitTest(page, x, y)
@@ -430,8 +435,6 @@ internal constructor(
         }
       }
     }
-
-  fun selectionEndpoints(): SelectionEndpoints? = inner.selectionEndpoints()
 
   fun copySelection(): ClipboardPayload? = inner.copySelection()
 
@@ -588,39 +591,42 @@ internal constructor(
         state.tableOverlays
       }
     val selectionChanged = state.selection != selection
-    return EditorState(
-      version = version,
-      documentRevision = state.documentRevision + if (documentChanged) 1L else 0L,
-      cursor = inner.cursor(),
-      placeholder = placeholder,
-      selection = selection,
-      selectionEndpoints = selectionEndpoints,
-      pageSizes = inner.pageSizes(),
-      externalElements = inner.externalElements(),
-      tableOverlays = tableOverlays,
-      rootAttrs = inner.rootAttrs(),
-      rootModifiers = inner.rootModifiers(),
-      modifierState = inner.modifierState(),
-      blockState = inner.blockState(),
-      ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW),
-      lastHistoryTag =
-        if (lastHistoryTagChanged || state.version == 0L) {
-          inner.lastHistoryTag()
-        } else {
-          state.lastHistoryTag
-        },
-      trackedRanges = trackedRanges,
-      trackedRangesContainingSelectionHead =
-        if (selection != null && selection.anchor == selection.head) {
-          if (selectionChanged || trackedRangesChanged) {
-            inner.trackedRangesContainingPosition(selection.head, null)
+    val snapshot =
+      EditorState(
+        version = version,
+        documentRevision = state.documentRevision + if (documentChanged) 1L else 0L,
+        cursor = inner.cursor(),
+        placeholder = placeholder,
+        selection = selection,
+        selectionEndpoints = selectionEndpoints,
+        pageSizes = inner.pageSizes(),
+        externalElements = inner.externalElements(),
+        tableOverlays = tableOverlays,
+        rootAttrs = inner.rootAttrs(),
+        rootModifiers = inner.rootModifiers(),
+        modifierState = inner.modifierState(),
+        blockState = inner.blockState(),
+        ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW),
+        lastHistoryTag =
+          if (lastHistoryTagChanged || state.version == 0L) {
+            inner.lastHistoryTag()
           } else {
-            state.trackedRangesContainingSelectionHead
-          }
-        } else {
-          emptyList()
-        },
-    )
+            state.lastHistoryTag
+          },
+        trackedRanges = trackedRanges,
+        trackedRangesContainingSelectionHead =
+          if (selection != null && selection.anchor == selection.head) {
+            if (selectionChanged || trackedRangesChanged) {
+              inner.trackedRangesContainingPosition(selection.head, null)
+            } else {
+              state.trackedRangesContainingSelectionHead
+            }
+          } else {
+            emptyList()
+          },
+      )
+    tickSnapshot = snapshot
+    return snapshot
   }
 
   private fun List<EditorEvent>.hasStateChangedField(field: StateField): Boolean = any { event ->

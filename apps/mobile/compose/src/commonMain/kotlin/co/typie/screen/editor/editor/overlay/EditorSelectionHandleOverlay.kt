@@ -60,7 +60,7 @@ internal fun resolveSelectionHandleOverlayPlacements(
     return null
   }
 
-  val endpoints = editor.selectionEndpoints() ?: return null
+  val endpoints = editor.tickSelectionEndpoints ?: return null
   val transform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
   val from =
     resolveSelectionHandleOverlayPlacement(
