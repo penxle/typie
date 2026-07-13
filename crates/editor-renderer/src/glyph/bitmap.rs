@@ -65,13 +65,15 @@ pub fn rasterize_bitmap(
             })
         }
         BitmapData::Png(png) => {
-            let mut rgba = decode_png_to_rgba(png)?;
-            premultiply_rgba_inplace(&mut rgba);
-            let data = if need_resize {
+            // resize_mitchell_rgba 는 straight-alpha 입력 전제(색상을 α-가중 후 재정규화)라
+            // premultiply 는 리사이즈 뒤에 해야 premul 불변식(rgb ≤ a)이 유지된다.
+            let rgba = decode_png_to_rgba(png)?;
+            let mut data = if need_resize {
                 resize_mitchell_rgba(ctx, &rgba, src_w, src_h, dst_w, dst_h)?
             } else {
                 rgba
             };
+            premultiply_rgba_inplace(&mut data);
             Some(RasterizedGlyph {
                 data: data.into(),
                 width: dst_w,
@@ -82,10 +84,13 @@ pub fn rasterize_bitmap(
             })
         }
         BitmapData::Bgra(bgra) => {
+            // CBDT 32-bit BGRA 는 스펙상 이미 premultiplied 데이터다.
             let mut rgba = decode_bgra_to_rgba(bgra, src_w, src_h)?;
-            premultiply_rgba_inplace(&mut rgba);
             let data = if need_resize {
-                resize_mitchell_rgba(ctx, &rgba, src_w, src_h, dst_w, dst_h)?
+                crate::backend::cpu::unpremultiply(&mut rgba);
+                let mut resized = resize_mitchell_rgba(ctx, &rgba, src_w, src_h, dst_w, dst_h)?;
+                premultiply_rgba_inplace(&mut resized);
+                resized
             } else {
                 rgba
             };
@@ -440,5 +445,135 @@ fn mitchell(x: f32) -> f32 {
         ((32. + x * (-60. + x * (36. - 7. * x))) / 18.).abs()
     } else {
         0.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ScaleContext, rasterize_bitmap};
+
+    // 8x8 RGBA PNG — 2px 투명 테두리 + 4x4 불투명 빨강 중심.
+    const TEST_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08, 0x08, 0x06, 0x00, 0x00, 0x00, 0xC4,
+        0x0F, 0xBE, 0x8B, 0x00, 0x00, 0x00, 0x14, 0x49, 0x44, 0x41, 0x54, 0x78, 0xDA, 0x63, 0x60,
+        0xA0, 0x1A, 0xF8, 0x0F, 0x44, 0xC8, 0x78, 0x20, 0x14, 0x90, 0x0D, 0x00, 0x71, 0x78, 0x1F,
+        0xE1, 0x54, 0xAD, 0x8B, 0xED, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42,
+        0x60, 0x82,
+    ];
+
+    fn push_u16(v: &mut Vec<u8>, x: u16) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+
+    fn push_u32(v: &mut Vec<u8>, x: u32) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+
+    /// gid 1 하나가 8x8 32-bit strike 에 들어 있는 최소 CBLC/CBDT sfnt.
+    fn synthetic_cbdt_font(image_format: u16, glyph_payload: &[u8]) -> Vec<u8> {
+        let mut cbdt = Vec::new();
+        push_u16(&mut cbdt, 3);
+        push_u16(&mut cbdt, 0);
+        let glyph_start = cbdt.len();
+        // smallGlyphMetrics: height, width, bearingX, bearingY, advance
+        cbdt.extend_from_slice(&[8u8, 8, 0, 8, 8]);
+        if image_format == 17 {
+            push_u32(&mut cbdt, glyph_payload.len() as u32);
+        }
+        cbdt.extend_from_slice(glyph_payload);
+        let glyph_len = (cbdt.len() - glyph_start) as u32;
+        while cbdt.len() % 4 != 0 {
+            cbdt.push(0);
+        }
+
+        let mut cblc = Vec::new();
+        push_u16(&mut cblc, 3);
+        push_u16(&mut cblc, 0);
+        push_u32(&mut cblc, 1); // numSizes
+        push_u32(&mut cblc, 56); // indexSubTableArrayOffset
+        push_u32(&mut cblc, 24); // indexTablesSize
+        push_u32(&mut cblc, 1); // numberOfIndexSubTables
+        push_u32(&mut cblc, 0); // colorRef
+        cblc.extend_from_slice(&[8, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // hori
+        cblc.extend_from_slice(&[0; 12]); // vert
+        push_u16(&mut cblc, 1); // startGlyphIndex
+        push_u16(&mut cblc, 1); // endGlyphIndex
+        cblc.extend_from_slice(&[8, 8, 32, 1]); // ppemX, ppemY, bitDepth, flags
+        push_u16(&mut cblc, 1); // firstGlyphIndex
+        push_u16(&mut cblc, 1); // lastGlyphIndex
+        push_u32(&mut cblc, 8); // additionalOffsetToIndexSubtable
+        push_u16(&mut cblc, 1); // indexFormat
+        push_u16(&mut cblc, image_format);
+        push_u32(&mut cblc, 4); // imageDataOffset
+        push_u32(&mut cblc, 0);
+        push_u32(&mut cblc, glyph_len);
+
+        let mut font = Vec::new();
+        push_u32(&mut font, 0x00010000);
+        push_u16(&mut font, 2); // numTables
+        push_u16(&mut font, 32);
+        push_u16(&mut font, 1);
+        push_u16(&mut font, 0);
+        let cbdt_off = (12 + 2 * 16) as u32;
+        let cblc_off = cbdt_off + cbdt.len() as u32;
+        for (tag, off, len) in [
+            (b"CBDT", cbdt_off, cbdt.len() as u32),
+            (b"CBLC", cblc_off, cblc.len() as u32),
+        ] {
+            font.extend_from_slice(tag);
+            push_u32(&mut font, 0);
+            push_u32(&mut font, off);
+            push_u32(&mut font, len);
+        }
+        font.extend_from_slice(&cbdt);
+        font.extend_from_slice(&cblc);
+        font
+    }
+
+    #[test]
+    fn png_downscale_keeps_premul_invariant_and_aa_ramp() {
+        let font = synthetic_cbdt_font(17, TEST_PNG);
+        let mut ctx = ScaleContext::new();
+        let raster = rasterize_bitmap(&mut ctx, &font, 1, 4.0).expect("png bitmap glyph");
+        assert_eq!((raster.width, raster.height), (4, 4));
+
+        let soft = raster
+            .data
+            .chunks_exact(4)
+            .filter(|px| px[3] > 0 && px[3] < 255)
+            .count();
+        assert!(soft > 0, "downscale must keep intermediate-alpha AA pixels");
+
+        for px in raster.data.chunks_exact(4) {
+            assert!(
+                px[0] <= px[3] && px[1] <= px[3] && px[2] <= px[3],
+                "straight-alpha leak: {px:?}"
+            );
+        }
+
+        // 순수 빨강 입력이므로 모든 픽셀에서 premul R == A, G/B == 0 이어야 한다.
+        let densest = raster.data.chunks_exact(4).max_by_key(|px| px[3]).unwrap();
+        assert!(
+            densest[3] > 150,
+            "center must stay mostly opaque: {densest:?}"
+        );
+        assert_eq!(densest[0], densest[3]);
+        assert_eq!(densest[1], 0);
+        assert_eq!(densest[2], 0);
+    }
+
+    #[test]
+    fn bgra_passthrough_is_not_premultiplied_again() {
+        // CBDT 32-bit BGRA 는 스펙상 이미 premultiplied 데이터다.
+        let mut payload = Vec::new();
+        for _ in 0..64 {
+            payload.extend_from_slice(&[10, 20, 30, 128]);
+        }
+        let font = synthetic_cbdt_font(1, &payload);
+        let mut ctx = ScaleContext::new();
+        let raster = rasterize_bitmap(&mut ctx, &font, 1, 8.0).expect("bgra bitmap glyph");
+        assert_eq!((raster.width, raster.height), (8, 8));
+        assert_eq!(&raster.data[..4], &[30, 20, 10, 128]);
     }
 }
