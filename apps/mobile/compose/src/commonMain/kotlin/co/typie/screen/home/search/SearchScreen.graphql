@@ -4,6 +4,8 @@ fragment SearchResultDocument_hit on SearchHitDocument {
   text
 
   document {
+    id
+
     entity {
       ...EntityRow_entity
       ...EntityRowParent_entity
@@ -15,6 +17,8 @@ fragment SearchResultFolder_hit on SearchHitFolder {
   name
 
   folder {
+    id
+
     entity {
       ...EntityRow_entity
       ...EntityRowParent_entity

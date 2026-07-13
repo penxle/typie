@@ -1,5 +1,7 @@
 query FontSettingsScreen_Query {
   me @catch(to: THROW) {
+    id
+
     documentFontFamilies {
       id
       familyName

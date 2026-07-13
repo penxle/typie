@@ -3,6 +3,7 @@ fragment EntityParentMeta_folder on Folder {
   name
 
   entity {
+    id
     ...EntityIcon_entity
   }
 }

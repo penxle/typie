@@ -14,10 +14,13 @@ fragment HomeScreen_ContinueWriting_document on Document {
     ...EntityIcon_entity
 
     ancestors {
+      id
+
       node {
         __typename
 
         ... on Folder {
+          id
           name
         }
       }
@@ -41,6 +44,8 @@ fragment HomeScreen_RecentDocumentRow_document on Document {
 }
 
 fragment HomeScreen_RecentFolder_folder on Folder {
+  id
+
   entity {
     ...EntityRow_entity
   }
@@ -48,6 +53,7 @@ fragment HomeScreen_RecentFolder_folder on Folder {
 
 query HomeScreen_Query($siteId: ID!) {
   site(siteId: $siteId) @catch(to: THROW) {
+    id
     name
   }
 
@@ -63,6 +69,7 @@ query HomeScreen_Query($siteId: ID!) {
     }
 
     recentlyViewedEntities(siteId: $siteId) {
+      id
       type
 
       node {

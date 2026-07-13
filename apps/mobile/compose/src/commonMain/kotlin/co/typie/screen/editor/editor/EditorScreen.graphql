@@ -48,8 +48,12 @@ query EditorScreen_Query($entityId: ID!) {
 
 query EditorScreen_AssetsByIds_Query($entityId: ID!, $ids: [ID!]!) {
   entity(entityId: $entityId) @catch(to: THROW) {
+    id
+
     node {
       ... on Document {
+        id
+
         assetsByIds(ids: $ids) {
           ...EditorExternalAsset_asset
         }

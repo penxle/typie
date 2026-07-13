@@ -1,13 +1,17 @@
 fragment EntityBreadcrumb_entity on Entity {
   site {
+    id
     name
   }
 
   ancestors {
+    id
+
     node {
       __typename
 
       ... on Folder {
+        id
         name
       }
     }

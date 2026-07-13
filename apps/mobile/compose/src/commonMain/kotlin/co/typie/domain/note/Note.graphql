@@ -44,6 +44,8 @@ query NoteEntityPicker_Search_Query($siteId: ID!, $query: String!) {
         text
 
         document {
+          id
+
           entity {
             ...NoteEntityPicker_entity
           }
@@ -54,6 +56,8 @@ query NoteEntityPicker_Search_Query($siteId: ID!, $query: String!) {
         name
 
         folder {
+          id
+
           entity {
             ...NoteEntityPicker_entity
           }
