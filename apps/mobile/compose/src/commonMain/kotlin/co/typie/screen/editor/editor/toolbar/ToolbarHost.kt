@@ -46,6 +46,8 @@ import co.typie.screen.editor.editor.toolbar.contextual.ImageResizeSecondaryTool
 import co.typie.screen.editor.editor.toolbar.contextual.TableAlignmentSecondaryToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.TableCellBackgroundSecondaryToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.TextOptionsToolbar
+import co.typie.screen.editor.editor.toolbar.contextual.rememberEditorFilePicker
+import co.typie.screen.editor.editor.toolbar.contextual.rememberEditorImagePicker
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.component.ResponsiveContainerDefaults
 import kotlinx.coroutines.launch
@@ -106,8 +108,15 @@ internal fun EditorToolbarHost(
       commentEnabled = commentEnabled,
       onCommentRequest = onCommentRequest,
     )
+  val pickImage = rememberEditorImagePicker(commandScope)
+  val pickFile = rememberEditorFilePicker(commandScope)
   val pages =
-    rememberEditorToolbarPages(toolbarContext = toolbarContext, textToolbarPage = textToolbarPage)
+    rememberEditorToolbarPages(
+      toolbarContext = toolbarContext,
+      textToolbarPage = textToolbarPage,
+      pickImage = pickImage,
+      pickFile = pickFile,
+    )
   val panel = inputState.panel
   val activeBottomPanel = panel?.panel
   val effectiveImeInset = effectiveImeInset(environment)

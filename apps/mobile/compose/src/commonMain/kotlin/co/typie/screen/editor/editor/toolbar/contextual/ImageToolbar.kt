@@ -1,6 +1,8 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import co.typie.domain.blob.BlobService
 import co.typie.editor.Editor
@@ -39,36 +41,40 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSecondary
 import co.typie.ui.component.toast.LocalToast
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-internal fun editorImageToolbarPage(image: PlainNode.Image?, nodeId: String?): EditorToolbarPage =
+internal fun editorImageToolbarPage(
+  image: PlainNode.Image?,
+  nodeId: String?,
+  pickImage: (nodeId: String) -> Unit,
+): EditorToolbarPage =
   EditorToolbarPage(
     key = EditorToolbarPageKey.Image,
     icon = Lucide.Image,
     contentDescription = "이미지 툴바",
     ownerNodeId = nodeId,
-    content = { scope -> EditorImageToolbar(scope = scope, image = image, nodeId = nodeId) },
+    content = { scope ->
+      EditorImageToolbar(scope = scope, image = image, nodeId = nodeId, pickImage = pickImage)
+    },
   )
 
+// Must be composed outside the toolbar's AnimatedVisibility: on Android the system picker hides
+// the IME, which unmounts the toolbar pages, and an ActivityResult launcher registered there
+// would be unregistered before the result arrives.
 @Composable
-private fun EditorImageToolbar(
-  scope: EditorToolbarPageScope,
-  image: PlainNode.Image?,
-  nodeId: String?,
-  modifier: Modifier = Modifier,
-) {
+internal fun rememberEditorImagePicker(commandScope: CoroutineScope): (nodeId: String) -> Unit {
   val toast = LocalToast.current
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val externalElementState = LocalEditorExternalElementState.current
   val imageState = externalElementState.images
-  val imageId = image?.id
-  val readyAsset = imageId?.let(imageState.assets::get)
-  val uploading = nodeId?.let { imageState.uploads.containsKey(it) } == true
-  val hasImage = imageId != null || uploading
+  val pendingNodeId = remember { mutableStateOf<String?>(null) }
 
   val picker =
     rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { result ->
+      val selectedNodeId = pendingNodeId.value
+      pendingNodeId.value = null
       val files =
         when (result) {
           FilePickerResult.Cancelled -> return@rememberFilePicker
@@ -83,12 +89,10 @@ private fun EditorImageToolbar(
             result.files
           }
         }
-      val selectedNodeId =
-        nodeId
-          ?: run {
-            files.forEach { it.close() }
-            return@rememberFilePicker
-          }
+      if (selectedNodeId == null) {
+        files.forEach { it.close() }
+        return@rememberFilePicker
+      }
       val imageUploads = files.mapNotNull { file ->
         val upload =
           file.toImageUploadOrNull()
@@ -106,93 +110,115 @@ private fun EditorImageToolbar(
       val (selectedImage, selectedUpload) = imageUploads.first()
       val restUploads = imageUploads.drop(1)
 
-      val uploadJob =
-        scope.commandScope.launch {
-          imageState.uploads[selectedNodeId] = selectedUpload
+      val uploadJob = commandScope.launch {
+        imageState.uploads[selectedNodeId] = selectedUpload
 
-          val restNodeIds =
+        val restNodeIds =
+          try {
+            insertImagePlaceholders(
+              editor = runtime.editor,
+              bringIntoViewRequests = bringIntoViewRequests,
+              count = restUploads.size,
+            )
+          } catch (error: CancellationException) {
+            throw error
+          } catch (_: Throwable) {
+            toast.error("이미지 업로드에 실패했어요.")
+            emptyList()
+          }
+
+        if (skippedImageCount > 0 || restNodeIds.size < restUploads.size) {
+          toast.error("일부 이미지를 삽입하지 못했어요.")
+        }
+
+        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+          imageState.uploads[newNodeId] = pending.second
+        }
+
+        fun launchUpload(targetNodeId: String, file: PickedFile, upload: EditorImageUpload) {
+          val job = launch {
             try {
-              insertImagePlaceholders(
-                editor = runtime.editor,
-                bringIntoViewRequests = bringIntoViewRequests,
-                count = restUploads.size,
+              // TODO(TR-38): Check restrictedBlob before starting image uploads and
+              // surface the
+              // plan upgrade flow instead of letting the upload proceed.
+              completeAttachmentOperation(
+                persist = { uploadImageAsset(file) },
+                isCurrent = { imageState.uploads[targetNodeId] === upload },
+                cache = externalElementState::put,
+                commit = { uploaded ->
+                  val editor = checkNotNull(runtime.editor) { "No active editor is available" }
+                  val committedState =
+                    editor.awaitWithBringIntoView(bringIntoViewRequests) {
+                      if (editor.ime?.composing != null) {
+                        enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+                      }
+                      enqueue(
+                        Message.Node(
+                          NodeOp.SetAttr(
+                            id = targetNodeId,
+                            attr = NodeAttr.Image(ImageNodeAttr.Id(uploaded.id)),
+                          )
+                        )
+                      )
+                      beforeCommit {
+                        bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                      }
+                    }
+                  checkNotNull(committedState) { "Editor image attrs did not commit" }
+                },
+                clearPending = {
+                  if (imageState.uploads[targetNodeId] === upload) {
+                    imageState.uploads.remove(targetNodeId)
+                  }
+                },
               )
             } catch (error: CancellationException) {
               throw error
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+              reportAttachmentFailure(AttachmentKind.Image, error)
               toast.error("이미지 업로드에 실패했어요.")
-              emptyList()
             }
-
-          if (skippedImageCount > 0 || restNodeIds.size < restUploads.size) {
-            toast.error("일부 이미지를 삽입하지 못했어요.")
           }
-
-          restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
-            imageState.uploads[newNodeId] = pending.second
-          }
-
-          fun launchUpload(targetNodeId: String, file: PickedFile, upload: EditorImageUpload) {
-            val job = launch {
-              try {
-                // TODO(TR-38): Check restrictedBlob before starting image uploads and
-                // surface the
-                // plan upgrade flow instead of letting the upload proceed.
-                completeAttachmentOperation(
-                  persist = { uploadImageAsset(file) },
-                  isCurrent = { imageState.uploads[targetNodeId] === upload },
-                  cache = externalElementState::put,
-                  commit = { uploaded ->
-                    val editor = checkNotNull(runtime.editor) { "No active editor is available" }
-                    val committedState =
-                      editor.awaitWithBringIntoView(bringIntoViewRequests) {
-                        if (editor.ime?.composing != null) {
-                          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
-                        }
-                        enqueue(
-                          Message.Node(
-                            NodeOp.SetAttr(
-                              id = targetNodeId,
-                              attr = NodeAttr.Image(ImageNodeAttr.Id(uploaded.id)),
-                            )
-                          )
-                        )
-                        beforeCommit {
-                          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
-                        }
-                      }
-                    checkNotNull(committedState) { "Editor image attrs did not commit" }
-                  },
-                  clearPending = {
-                    if (imageState.uploads[targetNodeId] === upload) {
-                      imageState.uploads.remove(targetNodeId)
-                    }
-                  },
-                )
-              } catch (error: CancellationException) {
-                throw error
-              } catch (error: Throwable) {
-                reportAttachmentFailure(AttachmentKind.Image, error)
-                toast.error("이미지 업로드에 실패했어요.")
-              }
-            }
-            job.invokeOnCompletion { file.close() }
-          }
-
-          launchUpload(targetNodeId = selectedNodeId, file = selectedImage, upload = selectedUpload)
-          restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
-            launchUpload(targetNodeId = newNodeId, file = pending.first, upload = pending.second)
-          }
+          job.invokeOnCompletion { file.close() }
         }
+
+        launchUpload(targetNodeId = selectedNodeId, file = selectedImage, upload = selectedUpload)
+        restNodeIds.zip(restUploads).forEach { (newNodeId, pending) ->
+          launchUpload(targetNodeId = newNodeId, file = pending.first, upload = pending.second)
+        }
+      }
       uploadJob.invokeOnCompletion { imageUploads.forEach { (file) -> file.close() } }
     }
+
+  return remember(picker) {
+    { nodeId ->
+      pendingNodeId.value = nodeId
+      picker("image/*")
+    }
+  }
+}
+
+@Composable
+private fun EditorImageToolbar(
+  scope: EditorToolbarPageScope,
+  image: PlainNode.Image?,
+  nodeId: String?,
+  pickImage: (nodeId: String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val externalElementState = LocalEditorExternalElementState.current
+  val imageState = externalElementState.images
+  val imageId = image?.id
+  val readyAsset = imageId?.let(imageState.assets::get)
+  val uploading = nodeId?.let { imageState.uploads.containsKey(it) } == true
+  val hasImage = imageId != null || uploading
 
   EditorToolbarRow(scope = scope, modifier = modifier) {
     if (!hasImage) {
       EditorToolbarButton(
         icon = Lucide.Image,
         contentDescription = "이미지 선택",
-        onClick = { picker("image/*") },
+        onClick = { nodeId?.let(pickImage) },
       )
     }
     if (readyAsset != null && nodeId != null) {
