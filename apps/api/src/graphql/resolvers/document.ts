@@ -948,6 +948,10 @@ builder.mutationFields((t) => ({
       v2: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      if (!input.v2) {
+        throw new TypieError({ code: 'v2_required' });
+      }
+
       await assertSitePermission({
         userId: ctx.session.userId,
         siteId: input.siteId,
@@ -1055,29 +1059,27 @@ builder.mutationFields((t) => ({
           userId: ctx.session.userId,
         });
 
-        if (input.v2) {
-          const { root, modifiers } = derivePlainRootFromPreset(preset);
-          await wasmFfi.use(async (host) => {
-            const plain = host.default_doc_with_preset(root, modifiers);
-            const graph = host.to_graph(plain);
-            const heads = host.heads(graph);
-            const text = host.extract_text(plain);
-            const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(plain);
-            const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
-            const characterCount = countCharacters(text);
+        const { root, modifiers } = derivePlainRootFromPreset(preset);
+        await wasmFfi.use(async (host) => {
+          const plain = host.default_doc_with_preset(root, modifiers);
+          const graph = host.to_graph(plain);
+          const heads = host.heads(graph);
+          const text = host.extract_text(plain);
+          const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(plain);
+          const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
+          const characterCount = countCharacters(text);
 
-            await tx.insert(DocumentBundles).values({ documentId: document.id, seq: 1, payload: graph });
-            await tx.insert(DocumentStates).values({
-              documentId: document.id,
-              json: plain,
-              text,
-              characterCount,
-              blobSize,
-              heads,
-              lastBundleSeq: 1,
-            });
+          await tx.insert(DocumentBundles).values({ documentId: document.id, seq: 1, payload: graph });
+          await tx.insert(DocumentStates).values({
+            documentId: document.id,
+            json: plain,
+            text,
+            characterCount,
+            blobSize,
+            heads,
+            lastBundleSeq: 1,
           });
-        }
+        });
 
         return document;
       });

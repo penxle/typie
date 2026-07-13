@@ -37,7 +37,17 @@ type Extra = { c: ServerContext; bootstrapBypassKeyHash?: string };
 const server = makeServer<{ session: string }, Extra>({
   /* eslint-disable @typescript-eslint/no-explicit-any */
   execute: (args: any) => args.rootValue.execute(args),
-  subscribe: (args: any) => args.rootValue.subscribe(args),
+  subscribe: async (args: any) => {
+    try {
+      return await args.rootValue.subscribe(args);
+    } catch (err) {
+      if (err instanceof GraphQLError) {
+        return { errors: [err] };
+      }
+
+      throw err;
+    }
+  },
   /* eslint-enable @typescript-eslint/no-explicit-any */
   onConnect: async (ctx) => {
     if (!ctx.connectionParams?.session) {

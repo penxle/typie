@@ -1,7 +1,7 @@
 import { EntityAvailability, EntityState, UserRole } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { eq } from 'drizzle-orm';
-import { db, Documents, Entities, firstOrThrow, Sites, Users, UserSessions } from '#/db/index.ts';
+import { db, Documents, Entities, first, firstOrThrow, Sites, Users, UserSessions } from '#/db/index.ts';
 
 type AssertAdminPermissionParams = {
   sessionId: string;
@@ -61,7 +61,11 @@ export const assertDocumentCommentAccess = async ({
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
     .innerJoin(Sites, eq(Entities.siteId, Sites.id))
     .where(eq(Documents.id, documentId))
-    .then(firstOrThrow);
+    .then(first);
+
+  if (!row) {
+    throw new TypieError({ code: 'not_found' });
+  }
 
   // 삭제된 엔티티에는 코멘트 접근 불가 (소유자/admin 포함)
   if (row.state !== EntityState.ACTIVE) {
