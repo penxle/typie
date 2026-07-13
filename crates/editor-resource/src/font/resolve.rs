@@ -1,6 +1,7 @@
 #[cfg(test)]
 use hashbrown::HashMap;
 
+use super::manifest::FontManifest;
 use super::registry::FontRegistry;
 use super::resolution::{Resolution, Target};
 use super::weight::match_weight;
@@ -49,8 +50,42 @@ fn weights_by_proximity(weights: &[u16], target: u16) -> Vec<u16> {
     result
 }
 
+/// Codepoints the shaper renders invisibly regardless of font support
+/// (ZWJ/ZWNJ, variation selectors, bidi controls, …). Must stay in sync with
+/// the shaper's default-ignorable set so cluster font matching never rejects a
+/// font over a codepoint the shaper would hide anyway.
+fn is_default_ignorable(cp: u32) -> bool {
+    match cp >> 16 {
+        0x00 => matches!(
+            cp,
+            0x00AD
+                | 0x034F
+                | 0x061C
+                | 0x115F..=0x1160
+                | 0x17B4..=0x17B5
+                | 0x180B..=0x180E
+                | 0x200B..=0x200F
+                | 0x202A..=0x202E
+                | 0x2060..=0x206F
+                | 0x3164
+                | 0xFE00..=0xFE0F
+                | 0xFEFF
+                | 0xFFA0
+                | 0xFFF0..=0xFFF8
+        ),
+        0x01 => matches!(cp, 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A),
+        0x0E => matches!(cp, 0xE0000..=0xE0FFF),
+        _ => false,
+    }
+}
+
 impl FontRegistry {
-    pub(crate) fn resolve_one(&self, family_id: u16, weight: u16, cp: u32) -> ResolveStep {
+    fn resolve_step_where(
+        &self,
+        family_id: u16,
+        weight: u16,
+        covers: impl Fn(&FontManifest) -> Option<u16>,
+    ) -> ResolveStep {
         if let Some(family) = self.family_name_opt(family_id)
             && let Some(ws) = self.weights(family)
         {
@@ -62,7 +97,7 @@ impl FontRegistry {
                         weight: w,
                     };
                 };
-                if let Some(cid) = manifest.chunk_id(cp) {
+                if let Some(cid) = covers(manifest) {
                     return ResolveStep::Target(ResolvedTarget {
                         family_id,
                         weight: w,
@@ -88,7 +123,7 @@ impl FontRegistry {
                     weight: fb_w,
                 };
             };
-            if let Some(cid) = manifest.chunk_id(cp) {
+            if let Some(cid) = covers(manifest) {
                 return ResolveStep::Target(ResolvedTarget {
                     family_id: fb_id,
                     weight: fb_w,
@@ -98,6 +133,10 @@ impl FontRegistry {
         }
 
         ResolveStep::NotCovered
+    }
+
+    pub(crate) fn resolve_one(&self, family_id: u16, weight: u16, cp: u32) -> ResolveStep {
+        self.resolve_step_where(family_id, weight, |manifest| manifest.chunk_id(cp))
     }
 
     #[cfg(test)]
@@ -144,6 +183,70 @@ impl FontRegistry {
                 target,
                 needs_base: false,
             }
+        }
+    }
+
+    /// Resolves a whole grapheme cluster to one font: the first family in the
+    /// chain covering every significant (non-default-ignorable) codepoint. If
+    /// no family covers them all, the cluster follows its base character so it
+    /// still maps atomically to a single font.
+    pub fn resolve_cluster(&self, family_id: u16, weight: u16, cps: &[u32]) -> Resolution {
+        let significant: Vec<u32> = cps
+            .iter()
+            .copied()
+            .filter(|&cp| !is_default_ignorable(cp))
+            .collect();
+
+        let Some(&first_significant) = significant.first() else {
+            return match cps.first() {
+                Some(&cp) => self.resolve(family_id, weight, cp),
+                None => Resolution::Missing,
+            };
+        };
+        if cps.len() == 1 {
+            return self.resolve(family_id, weight, first_significant);
+        }
+
+        let step = self.resolve_step_where(family_id, weight, |manifest| {
+            let cid = manifest.chunk_id(first_significant)?;
+            significant[1..]
+                .iter()
+                .all(|&cp| manifest.chunk_id(cp).is_some())
+                .then_some(cid)
+        });
+
+        match step {
+            ResolveStep::Target(t) => {
+                let target = Target {
+                    family_id: t.family_id,
+                    weight: t.weight,
+                    chunk_id: t.chunk_id,
+                };
+                if !self.is_base_loaded(target.family_id, target.weight) {
+                    return Resolution::Pending {
+                        target,
+                        needs_base: true,
+                    };
+                }
+                let manifest = self.manifest(target.family_id, target.weight);
+                let all_chunks_loaded = significant.iter().all(|&cp| {
+                    manifest.and_then(|m| m.chunk_id(cp)).is_none_or(|cid| {
+                        self.is_chunk_loaded(target.family_id, target.weight, cid)
+                    })
+                });
+                if all_chunks_loaded {
+                    Resolution::Ready(target)
+                } else {
+                    Resolution::Pending {
+                        target,
+                        needs_base: false,
+                    }
+                }
+            }
+            ResolveStep::AwaitManifest { family_id, weight } => {
+                Resolution::AwaitingManifest { family_id, weight }
+            }
+            ResolveStep::NotCovered => self.resolve(family_id, weight, first_significant),
         }
     }
 }
@@ -502,5 +605,83 @@ mod tests {
 
         reg.set_manifest(fb, 400, FontManifest::from_coverages(&[vec![0x60, 0x60]]));
         assert_eq!(reg.resolve(a, 400, 0x41), Resolution::Missing);
+    }
+
+    #[test]
+    fn default_ignorable_classification() {
+        for cp in [0x200C, 0x200D, 0xFE0E, 0xFE0F, 0x00AD, 0xE0001, 0x180B] {
+            assert!(is_default_ignorable(cp), "U+{cp:04X} must be ignorable");
+        }
+        for cp in ['a' as u32, '한' as u32, 0x1F636, 0x0301, 0x20E3] {
+            assert!(!is_default_ignorable(cp), "U+{cp:04X} must be significant");
+        }
+    }
+
+    // "E"(emoji 폰트 역할): chunk0=1F636, chunk1=FE0F 커버. base 로드 완료.
+    fn cluster_registry(loaded_chunks: Vec<bool>) -> (FontRegistry, u16) {
+        let mut reg = FontRegistry::new();
+        reg.set_fonts(vec![FontFamily {
+            name: "E".into(),
+            source: FontFamilySource::Default,
+            weights: vec![weight(400, "hE")],
+        }]);
+        let e = reg.intern_id("E").unwrap();
+        reg.set_manifest(
+            e,
+            400,
+            FontManifest::from_coverages(&[
+                vec![0x1F32B, 0x1F32B, 0x1F636, 0x1F636],
+                vec![0x200D, 0x200D, 0xFE0F, 0xFE0F],
+            ]),
+        );
+        let key = (e, 400u16);
+        reg.font_entries.insert(
+            key,
+            FontEntry {
+                data: Arc::new(FontData::new(vec![0u8; 20])),
+                split_offset: 8,
+            },
+        );
+        reg.font_versions.insert(key, 0);
+        reg.loaded_chunks.insert(key, loaded_chunks);
+        (reg, e)
+    }
+
+    #[test]
+    fn resolve_cluster_ready_ignores_unloaded_ignorable_chunks() {
+        // significant(1F636, 1F32B)의 chunk0만 로드되면 Ready — ZWJ/FE0F의
+        // chunk1은 per-codepoint 로딩이 이 가족에서 요청하지 않으므로 게이트에서
+        // 제외해야 영구 Pending에 빠지지 않는다.
+        let (reg, e) = cluster_registry(vec![true, false]);
+        let cps = [0x1F636, 0x200D, 0x1F32B, 0xFE0F];
+        assert!(matches!(
+            reg.resolve_cluster(e, 400, &cps),
+            Resolution::Ready(t) if t.family_id == e
+        ));
+    }
+
+    #[test]
+    fn resolve_cluster_pending_when_significant_chunk_unloaded() {
+        let (reg, e) = cluster_registry(vec![false, true]);
+        let cps = [0x1F636, 0x200D, 0x1F32B, 0xFE0F];
+        assert!(matches!(
+            reg.resolve_cluster(e, 400, &cps),
+            Resolution::Pending {
+                needs_base: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn resolve_cluster_uncovered_falls_back_to_base_codepoint() {
+        // 유효 codepoint 일부(0x41)가 미커버 → cluster는 base codepoint(1F636)
+        // 단독 해석으로 폴백한다.
+        let (reg, e) = cluster_registry(vec![true, true]);
+        let cps = [0x1F636, 0x41];
+        assert!(matches!(
+            reg.resolve_cluster(e, 400, &cps),
+            Resolution::Ready(t) if t.family_id == e
+        ));
     }
 }

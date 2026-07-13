@@ -2668,6 +2668,45 @@ mod tests {
     }
 
     #[test]
+    fn arrow_crosses_zwj_emoji_sequence_atomically() {
+        // "a😶‍🌫️b": offset 1(이모지 앞)에서 grapheme-right는 offset 5(이모지 뒤)로,
+        // 다시 grapheme-left는 offset 1로 — 커서가 시퀀스 내부(2~4)에 머물면 안 된다.
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("a\u{1F636}\u{200D}\u{1F32B}\u{FE0F}b") } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node, p1);
+        assert_eq!(
+            s.head.offset, 5,
+            "grapheme-right must skip the whole ZWJ sequence"
+        );
+
+        arrow(
+            &mut editor,
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        );
+        let s = editor.state().selection.expect("selection exists in test");
+        assert!(s.is_collapsed());
+        assert_eq!(s.head.node, p1);
+        assert_eq!(
+            s.head.offset, 1,
+            "grapheme-left must skip the whole ZWJ sequence"
+        );
+    }
+
+    #[test]
     fn arrow_right_from_inside_first_callout_enters_between_gap() {
         let (state, r, ..) = state! {
             doc {

@@ -442,4 +442,27 @@ mod tests {
         };
         assert_state_eq!(editor.state(), &expected);
     }
+
+    #[test]
+    fn delete_grapheme_backward_zwj_emoji_sequence() {
+        // "a😶‍🌫️b" = a + (U+1F636 ZWJ U+1F32B FE0F) + b = 6 codepoints, 3 graphemes
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("a\u{1F636}\u{200D}\u{1F32B}\u{FE0F}b") } } }
+            selection: (p1, 5)
+        };
+        let resource = Arc::new(Mutex::new(Resource::new_test()));
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+            },
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
 }

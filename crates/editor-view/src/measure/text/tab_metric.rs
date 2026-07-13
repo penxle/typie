@@ -21,7 +21,13 @@ pub fn tab_px(style: &ResolvedTextStyle, resource: &mut Resource) -> f32 {
         effective: &eff,
         style: style.clone(),
     }];
-    let style_runs = resolve_style_runs(space, &runs, &mut resource.font_registry);
+    let grapheme_segmenter = std::sync::Arc::clone(&resource.segmenters);
+    let style_runs = resolve_style_runs(
+        space,
+        &runs,
+        &mut resource.font_registry,
+        &grapheme_segmenter.grapheme,
+    );
     let layout = build_layout(
         space,
         &style_runs,

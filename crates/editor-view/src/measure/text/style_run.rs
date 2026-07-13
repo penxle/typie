@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use editor_resource::{FontRegistry, PLACEHOLDER_WEIGHT, Resolution};
+use icu_segmenter::GraphemeClusterSegmenter;
 
 use super::inline::TextRun;
 
@@ -14,17 +15,17 @@ pub(crate) struct StyleRun {
     pub line_height: f32,
 }
 
-pub(crate) fn resolve_font_family_weight(
+pub(crate) fn resolve_cluster_family_weight(
     font_registry: &FontRegistry,
     requested_family_id: u16,
     weight: u16,
-    codepoint: u32,
+    codepoints: &[u32],
 ) -> (u16, u16) {
     let placeholder_id = font_registry
         .placeholder_family_id()
         .expect("placeholder family must be registered before resolving style runs");
 
-    match font_registry.resolve(requested_family_id, weight, codepoint) {
+    match font_registry.resolve_cluster(requested_family_id, weight, codepoints) {
         Resolution::Ready(target) => (target.family_id, target.weight),
         Resolution::Pending {
             target,
@@ -42,21 +43,38 @@ pub(crate) fn resolve_style_runs(
     text: &str,
     runs: &[TextRun],
     font_registry: &mut FontRegistry,
+    grapheme_segmenter: &GraphemeClusterSegmenter,
 ) -> Vec<StyleRun> {
     let mut style_runs: Vec<StyleRun> = Vec::new();
+    let mut cluster_codepoints: Vec<u32> = Vec::new();
 
     for (run_index, run) in runs.iter().enumerate() {
         let requested_family_id = font_registry.intern(&run.style.font_family);
         let weight = run.style.font_weight;
 
+        // Font fallback is grapheme-cluster-atomic: splitting a cluster across
+        // families would make joined sequences (ZWJ emoji, keycaps) unshapeable.
         let run_text = &text[run.byte_range.clone()];
-        let mut byte_offset = run.byte_range.start;
+        let mut cluster_start = 0usize;
 
-        for ch in run_text.chars() {
-            let char_byte_end = byte_offset + ch.len_utf8();
+        for boundary in grapheme_segmenter
+            .as_borrowed()
+            .segment_str(run_text)
+            .filter(|&b| b > 0)
+        {
+            let cluster = &run_text[cluster_start..boundary];
+            cluster_codepoints.clear();
+            cluster_codepoints.extend(cluster.chars().map(|c| c as u32));
 
-            let (resolved_family, resolved_weight) =
-                resolve_font_family_weight(font_registry, requested_family_id, weight, ch as u32);
+            let (resolved_family, resolved_weight) = resolve_cluster_family_weight(
+                font_registry,
+                requested_family_id,
+                weight,
+                &cluster_codepoints,
+            );
+
+            let byte_start = run.byte_range.start + cluster_start;
+            let byte_end = run.byte_range.start + boundary;
 
             let can_merge = style_runs.last().is_some_and(|last: &StyleRun| {
                 last.family == resolved_family
@@ -65,15 +83,15 @@ pub(crate) fn resolve_style_runs(
                     && last.letter_spacing == run.style.letter_spacing
                     && last.line_height == run.style.line_height
                     && last.run_index == run_index
-                    && last.byte_range.end == byte_offset
+                    && last.byte_range.end == byte_start
             });
 
             if can_merge {
-                style_runs.last_mut().unwrap().byte_range.end = char_byte_end;
+                style_runs.last_mut().unwrap().byte_range.end = byte_end;
             } else {
                 style_runs.push(StyleRun {
                     run_index,
-                    byte_range: byte_offset..char_byte_end,
+                    byte_range: byte_start..byte_end,
                     family: resolved_family,
                     weight: resolved_weight,
                     font_size: run.style.font_size,
@@ -82,7 +100,7 @@ pub(crate) fn resolve_style_runs(
                 });
             }
 
-            byte_offset = char_byte_end;
+            cluster_start = boundary;
         }
     }
 
@@ -215,7 +233,8 @@ mod tests {
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let (text, runs, _tabs) = collect_text_runs(&para);
         let n_runs = runs.len();
-        let srs = resolve_style_runs(&text, &runs, reg);
+        let segmenter = GraphemeClusterSegmenter::new().static_to_owned();
+        let srs = resolve_style_runs(&text, &runs, reg, &segmenter);
         (text, srs, n_runs)
     }
 
@@ -450,5 +469,107 @@ mod tests {
         assert_eq!(srs[0].byte_range, 0..1);
         assert_eq!(srs[1].run_index, 1);
         assert_eq!(srs[1].byte_range, 1..2);
+    }
+
+    // "Text"(Default) + "Emoji"(Fallback) 두 가족을 주어진 coverage로 등록하고
+    // base/chunk를 로드 완료 상태로 만든다. coverage는 [start, end] 쌍의 평탄 목록.
+    fn registry_text_emoji(text_cov: &[u32], emoji_cov: &[u32]) -> FontRegistry {
+        let mut reg = FontRegistry::new();
+        reg.register_placeholder(&[0u8; 16]);
+        reg.set_fonts(vec![
+            family("Text", FontFamilySource::Default, &[400]),
+            family("Emoji", FontFamilySource::Fallback, &[400]),
+        ]);
+        for (name, cov) in [("Text", text_cov), ("Emoji", emoji_cov)] {
+            let fid = reg.intern_id(name).unwrap();
+            reg.set_manifest(fid, 400, FontManifest::from_coverages(&[cov.to_vec()]));
+            reg.force_loaded_for_test(fid, 400, 1);
+        }
+        reg
+    }
+
+    fn with_root_font(l: &mut DocLogs, name: &str) {
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(50, 1),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::FontFamily {
+                        value: name.to_string(),
+                    },
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn zwj_emoji_cluster_resolves_atomically_to_covering_family() {
+        // "a😶‍🌫️b": 본문 폰트가 ZWJ/FE0F를 cmap에 갖고 있어도 grapheme cluster는
+        // 통째로 이모지 폰트에 배정되어야 한다 — 시퀀스 중간에서 폰트가 갈리면
+        // 리가처가 원천 봉쇄된다.
+        let mut l = build_logs(vec![
+            ch('a'),
+            ch('\u{1F636}'),
+            ch('\u{200D}'),
+            ch('\u{1F32B}'),
+            ch('\u{FE0F}'),
+            ch('b'),
+        ]);
+        with_root_font(&mut l, "Text");
+        let mut reg = registry_text_emoji(
+            &[0x20, 0x7E, 0x200D, 0x200D, 0xFE0F, 0xFE0F],
+            &[
+                0x200D, 0x200D, 0xFE0F, 0xFE0F, 0x1F32B, 0x1F32B, 0x1F636, 0x1F636,
+            ],
+        );
+        let (_t, srs, _n) = style_runs_of(&l, &mut reg);
+        let text_id = reg.intern_id("Text").unwrap();
+        let emoji_id = reg.intern_id("Emoji").unwrap();
+
+        assert_eq!(
+            srs.len(),
+            3,
+            "a(text) | ZWJ 시퀀스(emoji) | b(text) 3개 run이어야 한다; got {:?}",
+            srs.iter()
+                .map(|s| (s.byte_range.clone(), s.family))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(srs[0].byte_range, 0..1);
+        assert_eq!(srs[0].family, text_id);
+        assert_eq!(srs[1].byte_range, 1..15);
+        assert_eq!(srs[1].family, emoji_id);
+        assert_eq!(srs[2].byte_range, 15..16);
+        assert_eq!(srs[2].family, text_id);
+    }
+
+    #[test]
+    fn keycap_cluster_prefers_family_covering_all_significant_codepoints() {
+        // "1️⃣" = '1' FE0F U+20E3: '1'만 커버하는 본문 폰트가 아니라, 유효
+        // codepoint('1', 20E3)를 모두 커버하는 이모지 폰트를 골라야 한다.
+        let mut l = build_logs(vec![ch('1'), ch('\u{FE0F}'), ch('\u{20E3}')]);
+        with_root_font(&mut l, "Text");
+        let mut reg =
+            registry_text_emoji(&[0x20, 0x7E], &[0x30, 0x39, 0xFE0F, 0xFE0F, 0x20E3, 0x20E3]);
+        let (_t, srs, _n) = style_runs_of(&l, &mut reg);
+        let emoji_id = reg.intern_id("Emoji").unwrap();
+
+        assert_eq!(srs.len(), 1, "단일 keycap cluster는 하나의 run이어야 한다");
+        assert_eq!(srs[0].family, emoji_id);
+        assert_eq!(srs[0].byte_range, 0..7);
+    }
+
+    #[test]
+    fn cluster_with_uncovered_mark_falls_back_to_base_char_family() {
+        // 'e' + U+0301: 결합 부호를 어느 폰트도 커버하지 못하면 cluster 전체가
+        // base 문자의 폰트로 배정된다 — placeholder로 쪼개지 않는다.
+        let mut l = build_logs(vec![ch('e'), ch('\u{0301}')]);
+        with_root_font(&mut l, "Text");
+        let mut reg = registry_text_emoji(&[0x20, 0x7E], &[0x1F300, 0x1FAFF]);
+        let (_t, srs, _n) = style_runs_of(&l, &mut reg);
+        let text_id = reg.intern_id("Text").unwrap();
+
+        assert_eq!(srs.len(), 1, "cluster는 통째로 하나의 run이어야 한다");
+        assert_eq!(srs[0].family, text_id);
+        assert_eq!(srs[0].byte_range, 0..3);
     }
 }

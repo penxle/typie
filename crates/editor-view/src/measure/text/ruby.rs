@@ -31,7 +31,7 @@ use crate::glyph_run::{Glyph, RubyAnnotation, RubyGlyphRun, Synthesis};
 
 use super::extract::ExtractedLine;
 use super::inline::RubyGroup;
-use super::style_run::resolve_font_family_weight;
+use super::style_run::resolve_cluster_family_weight;
 use crate::glyph_run::GlyphRun;
 
 #[derive(Debug)]
@@ -48,30 +48,40 @@ fn resolve_ruby_font_runs(
     resource: &mut Resource,
 ) -> Vec<RubyFontRun> {
     let requested_family_id = resource.font_registry.intern(family);
+    let segmenters = std::sync::Arc::clone(&resource.segmenters);
     let mut runs: Vec<RubyFontRun> = Vec::new();
-    let mut byte_offset = 0;
+    let mut cluster_codepoints: Vec<u32> = Vec::new();
+    let mut cluster_start = 0usize;
 
-    for ch in text.chars() {
-        let char_byte_end = byte_offset + ch.len_utf8();
-        let (family_id, resolved_weight) = resolve_font_family_weight(
+    for boundary in segmenters
+        .grapheme
+        .as_borrowed()
+        .segment_str(text)
+        .filter(|&b| b > 0)
+    {
+        let cluster = &text[cluster_start..boundary];
+        cluster_codepoints.clear();
+        cluster_codepoints.extend(cluster.chars().map(|c| c as u32));
+
+        let (family_id, resolved_weight) = resolve_cluster_family_weight(
             &resource.font_registry,
             requested_family_id,
             weight,
-            ch as u32,
+            &cluster_codepoints,
         );
         if let Some(last) = runs.last_mut()
             && last.family_id == family_id
             && last.weight == resolved_weight
         {
-            last.byte_range.end = char_byte_end;
+            last.byte_range.end = boundary;
         } else {
             runs.push(RubyFontRun {
-                byte_range: byte_offset..char_byte_end,
+                byte_range: cluster_start..boundary,
                 family_id,
                 weight: resolved_weight,
             });
         }
-        byte_offset = char_byte_end;
+        cluster_start = boundary;
     }
 
     runs
@@ -429,6 +439,24 @@ mod tests {
                 .map(|run| (run.family_id, run.weight))
                 .collect::<Vec<_>>(),
             vec![(primary, 400), (fallback, 700), (primary, 400)]
+        );
+    }
+
+    #[test]
+    fn ruby_grapheme_cluster_stays_in_one_font_run() {
+        // "A" + U+0301: 결합 부호를 어느 폰트도 커버하지 못해도 cluster는
+        // base 문자 'A'의 폰트(Primary)로 통째로 배정되어야 한다.
+        let mut resource = fallback_resource();
+        let primary = resource.font_registry.intern_id("Primary").unwrap();
+
+        let runs = resolve_ruby_font_runs("A\u{0301}", "Primary", 400, &mut resource);
+
+        assert_eq!(
+            runs.iter()
+                .map(|r| (r.byte_range.clone(), r.family_id, r.weight))
+                .collect::<Vec<_>>(),
+            vec![(0..3, primary, 400)],
+            "cluster가 폰트 경계로 쪼개지면 안 된다"
         );
     }
 

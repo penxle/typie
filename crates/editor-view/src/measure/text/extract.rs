@@ -41,30 +41,53 @@ struct LineTypographyMetrics {
     max_run_font_size: f32,
 }
 
-fn segment_graphemes(
-    cluster_text: &str,
-    cluster_advance: f32,
+/// Segments a run's full text into grapheme clusters and distributes cluster
+/// advances onto them. A grapheme spanning multiple shaping clusters (ZWJ emoji
+/// sequences) sums their advances; a cluster spanning multiple graphemes
+/// (ligatures like "fi") splits its advance evenly among them.
+fn segment_run_graphemes(
+    text: &str,
+    clusters: &[(Range<usize>, f32)],
     segmenter: &GraphemeClusterSegmenter,
 ) -> Vec<GraphemeSpan> {
-    let boundaries: Vec<usize> = segmenter
-        .as_borrowed()
-        .segment_str(cluster_text)
-        .filter(|&b| b > 0)
-        .collect();
-    let count = boundaries.len();
-    if count == 0 {
+    if text.is_empty() {
         return vec![];
     }
-    let per_grapheme = cluster_advance / count as f32;
-    let mut spans = Vec::with_capacity(count);
-    let mut prev = 0;
-    for b in boundaries {
-        let grapheme = &cluster_text[prev..b];
+    let boundaries: Vec<usize> = segmenter.as_borrowed().segment_str(text).collect();
+
+    let mut counts = vec![0usize; clusters.len()];
+    let mut ci = 0;
+    for w in boundaries.windows(2) {
+        let (start, end) = (w[0], w[1]);
+        while ci < clusters.len() && clusters[ci].0.end <= start {
+            ci += 1;
+        }
+        let mut cj = ci;
+        while cj < clusters.len() && clusters[cj].0.start < end {
+            counts[cj] += 1;
+            cj += 1;
+        }
+    }
+
+    let mut spans = Vec::with_capacity(boundaries.len().saturating_sub(1));
+    let mut ci = 0;
+    for w in boundaries.windows(2) {
+        let (start, end) = (w[0], w[1]);
+        while ci < clusters.len() && clusters[ci].0.end <= start {
+            ci += 1;
+        }
+        let mut advance = 0.0;
+        let mut cj = ci;
+        while cj < clusters.len() && clusters[cj].0.start < end {
+            if counts[cj] > 0 {
+                advance += clusters[cj].1 / counts[cj] as f32;
+            }
+            cj += 1;
+        }
         spans.push(GraphemeSpan {
-            advance: per_grapheme,
-            codepoints: grapheme.char_count() as u8,
+            advance,
+            codepoints: u8::try_from(text[start..end].char_count()).unwrap_or(u8::MAX),
         });
-        prev = b;
     }
     spans
 }
@@ -193,27 +216,55 @@ pub(crate) fn extract_lines(
 
                 let target_style_index = glyph_run.glyphs().next().map(|g| g.style_index());
 
+                // Every cluster of the run must land in exactly one extracted
+                // GlyphRun or its codepoints vanish from offset accounting.
+                // Glyphless clusters (ZWJ, variation selectors, ligature
+                // continuations) carry no style of their own, so attribute them
+                // to the nearest glyph-bearing cluster: the previous one, or the
+                // next one at the run head.
+                let raw: Vec<(Range<usize>, f32, Option<usize>)> = run
+                    .visual_clusters()
+                    .map(|c| {
+                        (
+                            c.text_range(),
+                            c.advance(),
+                            c.glyphs().next().map(|g| g.style_index()),
+                        )
+                    })
+                    .collect();
+                let mut styles: Vec<Option<usize>> = raw.iter().map(|(_, _, s)| *s).collect();
+                let mut carrier = None;
+                for style in styles.iter_mut() {
+                    match style {
+                        Some(s) => carrier = Some(*s),
+                        None => *style = carrier,
+                    }
+                }
+                let mut carrier = None;
+                for style in styles.iter_mut().rev() {
+                    match style {
+                        Some(s) => carrier = Some(*s),
+                        None => *style = carrier,
+                    }
+                }
+
                 let mut run_text = String::new();
-                let mut graphemes = Vec::new();
+                let mut clusters: Vec<(Range<usize>, f32)> = Vec::new();
                 let mut first_byte_start = None;
 
-                for cluster in run.visual_clusters() {
-                    let cluster_style_index = cluster.glyphs().next().map(|g| g.style_index());
-                    if cluster_style_index != target_style_index {
+                for ((cluster_range, advance, _), style) in raw.iter().zip(&styles) {
+                    if *style != target_style_index || cluster_range.is_empty() {
                         continue;
                     }
-
-                    let cluster_range = cluster.text_range();
-                    let cluster_text = &text[cluster_range.clone()];
-                    let advance = cluster.advance();
-
                     if first_byte_start.is_none() {
                         first_byte_start = Some(cluster_range.start);
                     }
-
-                    run_text.push_str(cluster_text);
-                    graphemes.extend(segment_graphemes(cluster_text, advance, grapheme_segmenter));
+                    let local_start = run_text.len();
+                    run_text.push_str(&text[cluster_range.clone()]);
+                    clusters.push((local_start..run_text.len(), *advance));
                 }
+
+                let graphemes = segment_run_graphemes(&run_text, &clusters, grapheme_segmenter);
 
                 let byte_start = first_byte_start.unwrap_or(0);
                 let run_index = glyph_run.style().brush.run_index;
@@ -568,7 +619,13 @@ mod tests {
             line_height: 1.6,
         };
         let strut = compute_strut(&mut resource, &base).expect("strut");
-        let style_runs = resolve_style_runs(&text, &runs, &mut resource.font_registry);
+        let segmenters = Arc::clone(&resource.segmenters);
+        let style_runs = resolve_style_runs(
+            &text,
+            &runs,
+            &mut resource.font_registry,
+            &segmenters.grapheme,
+        );
         let tab_boxes: Vec<(TabMark, f32)> = tabs
             .into_iter()
             .map(|t| {
@@ -604,6 +661,64 @@ mod tests {
 
     fn glyph_runs(lines: &[ExtractedLine]) -> Vec<&GlyphRun> {
         lines.iter().flat_map(|l| l.glyph_runs.iter()).collect()
+    }
+
+    #[test]
+    fn zwj_emoji_extracted_as_single_grapheme_with_lossless_offsets() {
+        // "a😶‍🌫️b" — U+1F636 ZWJ U+1F32B FE0F는 단일 grapheme(4 codepoints)로
+        // 추출되어야 하고, glyph 없는 클러스터(ZWJ/FE0F 등)의 codepoint가
+        // 유실되면 안 된다.
+        let l = build_logs(vec![
+            ch('a'),
+            ch('\u{1F636}'),
+            ch('\u{200D}'),
+            ch('\u{1F32B}'),
+            ch('\u{FE0F}'),
+            ch('b'),
+        ]);
+        let lines = pipeline_extract(&l);
+        let grs = glyph_runs(&lines);
+        assert!(!grs.is_empty());
+
+        let mut sorted: Vec<&&GlyphRun> = grs.iter().collect();
+        sorted.sort_by_key(|g| g.offset_range.start);
+
+        let full_text: String = sorted.iter().map(|g| g.text.as_str()).collect();
+        assert_eq!(
+            full_text, "a\u{1F636}\u{200D}\u{1F32B}\u{FE0F}b",
+            "모든 codepoint가 추출 결과에 보존되어야 한다"
+        );
+
+        let mut expected_start = 0usize;
+        for g in &sorted {
+            assert_eq!(
+                g.offset_range.start, expected_start,
+                "offset_range는 빈틈없이 이어져야 한다"
+            );
+            assert_eq!(
+                g.offset_range.len(),
+                g.text.char_count(),
+                "offset_range 길이는 run 텍스트 char 수와 일치해야 한다"
+            );
+            let grapheme_cp_sum: usize = g.graphemes.iter().map(|s| s.codepoints as usize).sum();
+            assert_eq!(
+                grapheme_cp_sum,
+                g.text.char_count(),
+                "grapheme codepoint 합은 run 텍스트 char 수와 일치해야 한다"
+            );
+            expected_start = g.offset_range.end;
+        }
+        assert_eq!(expected_start, 6, "총 6 codepoints를 커버해야 한다");
+
+        let emoji_run = sorted
+            .iter()
+            .find(|g| g.text.contains('\u{1F636}'))
+            .expect("emoji를 포함한 run이 있어야 한다");
+        assert!(
+            emoji_run.graphemes.iter().any(|s| s.codepoints == 4),
+            "ZWJ 시퀀스는 4-codepoint 단일 grapheme이어야 한다; got {:?}",
+            emoji_run.graphemes
+        );
     }
 
     #[test]
