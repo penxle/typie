@@ -1,0 +1,25 @@
+fragment TextReplacementLoader_user on User {
+  id
+
+  textReplacements {
+    __typename
+
+    ... on TextReplacement {
+      id
+      match
+      substitute
+      regex
+    }
+
+    ... on TextReplacementPreference {
+      id
+      state
+      textReplacement {
+        id
+        match
+        substitute
+        regex
+      }
+    }
+  }
+}

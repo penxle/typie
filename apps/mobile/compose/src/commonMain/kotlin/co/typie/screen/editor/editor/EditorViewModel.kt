@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.editor.FontLoader
+import co.typie.editor.TextReplacementLoader
 import co.typie.editor.external.EditorExternalAsset
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_AssetsByIds_Query
@@ -75,6 +76,9 @@ class EditorViewModel(val entityId: String) : ViewModel() {
         ?.fontLoader_Document
         ?.fontFamilies
         ?.map { it.fontLoader_FontFamily }
+    }
+    TextReplacementLoader.watchTextReplacements(viewModelScope) {
+      (query.state as? QueryState.Success)?.data?.me?.textReplacementLoader_user
     }
   }
 
@@ -290,7 +294,10 @@ class EditorViewModel(val entityId: String) : ViewModel() {
 
 private fun placeholderData() =
   EditorScreen_Query.Data(PlaceholderResolver) {
-    me = buildUser { preferences = JsonObject(emptyMap()) }
+    me = buildUser {
+      preferences = JsonObject(emptyMap())
+      textReplacements = emptyList()
+    }
     entity = buildEntity {
       id = "placeholder-editor-entity"
       type = EntityType.DOCUMENT

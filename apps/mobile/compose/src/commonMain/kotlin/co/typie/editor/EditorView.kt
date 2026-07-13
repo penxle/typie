@@ -145,6 +145,10 @@ internal fun EditorView(
         }
       }
     }
+    val autoSurroundEnabled = Preference.autoSurroundEnabled
+    LaunchedEffect(autoSurroundEnabled) {
+      PlatformModule.editorHost.setAutoSurroundEnabled(autoSurroundEnabled)
+    }
     LaunchedEffect(editor, editor.selection, uiState.focused) {
       val currentSelection = editor.selection
       val selectionCleared = previousSelection != null && currentSelection == null
