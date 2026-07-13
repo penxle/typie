@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import co.touchlab.kermit.Logger
 import co.typie.ext.pointerIgnore
 import co.typie.ext.thenIf
 import co.typie.route.Route
@@ -58,13 +59,17 @@ import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class AnimState {
   Idle,
   Push,
   Pop,
   Dragging,
+  PopGestureCommitted,
 }
 
 @Composable
@@ -131,6 +136,83 @@ fun NavigationStack(
   var lastDragAmount by remember { mutableStateOf(0f) }
   val nestedPopGestureSession = remember { NavigationPopGestureSession() }
 
+  fun clearRemovedRoutes(removedRoutes: List<Route>) {
+    removedRoutes.forEach { removedRoute ->
+      topBarState.clearRoute(removedRoute)
+      exitTopBarState.clearRoute(removedRoute)
+      bottomBarState?.clearRoute(removedRoute)
+      exitBottomBarState?.clearRoute(removedRoute)
+    }
+  }
+
+  suspend fun settleAtCurrentRoute() {
+    progress.snapTo(0f)
+    visibleRoute = navigator.current
+    behindRoute = null
+    animState = AnimState.Idle
+  }
+
+  suspend fun animateRemovalTo(target: Route): Boolean {
+    val requiresTransition = target != navigator.current
+    val continuesPopGesture =
+      animState == AnimState.PopGestureCommitted &&
+        behindRoute == target &&
+        transitionStyle != RouteTransitionStyle.Fade
+    if (!requiresTransition) {
+      if (animState == AnimState.PopGestureCommitted) {
+        progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+      }
+      settleAtCurrentRoute()
+    } else {
+      transitionStyle = visibleRoute.transitionStyleTo(target)
+      behindRoute = target
+      animState = AnimState.Pop
+      if (continuesPopGesture) {
+        progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
+      } else {
+        progress.snapTo(0f)
+        progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
+      }
+    }
+
+    if (!navigator.routeRemovals.activeSegmentIsCurrent()) {
+      navigator.routeRemovals.rollbackActiveSegment()
+      settleAtCurrentRoute()
+      return false
+    }
+
+    if (!requiresTransition) return true
+    val removedRoutes = navigator.performPopTo(target)
+    visibleRoute = navigator.current
+    behindRoute = null
+    animState = AnimState.Idle
+    clearRemovedRoutes(removedRoutes)
+    return true
+  }
+
+  suspend fun performProgressiveRemoval(target: Route): NavigationResult {
+    while (navigator.current != target) {
+      val targetIndex = navigator.stack.lastIndexOf(target)
+      check(targetIndex >= 0) { "Removal target is not in the navigation stack" }
+      val routesToRemove =
+        navigator.stack.subList(targetIndex + 1, navigator.stack.size).asReversed()
+      val segment = navigator.routeRemovals.prepareSegment(routesToRemove, target)
+      if (!animateRemovalTo(segment.destination)) continue
+
+      if (segment.blockedRoute == null) {
+        navigator.routeRemovals.commitSegment()
+        return NavigationResult.ReachedTarget
+      }
+
+      navigator.routeRemovals.commitReadyPrefix()
+      navigator.routeRemovals.resolveBlockedRoute()?.let {
+        return it
+      }
+    }
+    navigator.routeRemovals.commitSegment()
+    return NavigationResult.ReachedTarget
+  }
+
   fun startPopDrag() {
     val prev = navigator.previous ?: return
     transitionStyle = visibleRoute.transitionStyleTo(prev)
@@ -152,23 +234,30 @@ fun NavigationStack(
     val velocity = lastDragAmount * 1000f / 16f
     scope.launch {
       if (progress.value > 0.5f || velocity > 1000f) {
-        val poppedRoute = visibleRoute
-        navigator.requestPop()
-        progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
-        navigator.performPop()
-        navigator.consumePopRequest()
-        // 드래그 중 pop()/popTo()가 걸어둔 transitionCompletion 해제
-        navigator.completeTransition()
-        visibleRoute = navigator.current
-        topBarState.clearRoute(poppedRoute)
-        exitTopBarState.clearRoute(poppedRoute)
-        bottomBarState?.clearRoute(poppedRoute)
-        exitBottomBarState?.clearRoute(poppedRoute)
+        val target = navigator.previous
+        if (target != null) {
+          try {
+            animState = AnimState.PopGestureCommitted
+            if (navigator.pop() == NavigationResult.NotStarted) {
+              progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+              settleAtCurrentRoute()
+            }
+          } catch (e: CancellationException) {
+            withContext(NonCancellable) { settleAtCurrentRoute() }
+            throw e
+          } catch (e: Throwable) {
+            settleAtCurrentRoute()
+            Logger.e(e) { "Navigation gesture removal failed" }
+          }
+        } else {
+          progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+          settleAtCurrentRoute()
+        }
       } else {
         progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+        behindRoute = null
+        animState = AnimState.Idle
       }
-      behindRoute = null
-      animState = AnimState.Idle
     }
   }
 
@@ -193,6 +282,7 @@ fun NavigationStack(
             source != NestedScrollSource.UserInput ||
               nestedPopGestureSession.isClaimed ||
               !navigator.canPop ||
+              navigator.isTransitioning ||
               containerWidth <= 0f ||
               (animState != AnimState.Idle && animState != AnimState.Dragging)
           ) {
@@ -245,44 +335,43 @@ fun NavigationStack(
     }
   }
 
-  // requestPop: 애니메이션 먼저, 그 다음 상태 변경. 요청 시점에 전환/드래그 중이면
-  // 버리지 않고 보류했다가 Idle 복귀 시 처리한다 (드래그 커밋은 finishPopDrag가
-  // 직접 pop을 수행하고 요청을 소비하므로 여기로 오지 않는다).
+  // pop 요청은 이 collector가 애니메이션과 stack 변경을 함께 처리한다.
   LaunchedEffect(Unit) {
-    snapshotFlow { navigator.popRequested to animState }
-      .collect { (requested, currentAnimState) ->
-        if (requested && currentAnimState == AnimState.Idle) {
-          val popTarget = navigator.peekPopTarget()
-          val targetRoute = popTarget ?: navigator.previous
-          if (targetRoute == null) {
+    snapshotFlow { navigator.peekPopTarget() to animState }
+      .collect { (targetRoute, currentAnimState) ->
+        if (
+          targetRoute != null &&
+            (currentAnimState == AnimState.Idle ||
+              (currentAnimState == AnimState.PopGestureCommitted && targetRoute == behindRoute))
+        ) {
+          try {
+            val result = performProgressiveRemoval(targetRoute)
             navigator.consumePopRequest()
-            navigator.completeTransition()
-            return@collect
-          }
-
-          behindRoute = targetRoute
-          transitionStyle = visibleRoute.transitionStyleTo(targetRoute)
-          animState = AnimState.Pop
-          progress.snapTo(0f)
-          progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
-          val removedRoutes =
-            if (popTarget != null) {
-              navigator.performPopTo(popTarget)
-            } else {
-              navigator.performPop()
-              listOf(visibleRoute)
+            navigator.completeTransition(result = result)
+          } catch (e: Throwable) {
+            withContext(NonCancellable) {
+              val rollbackFailure =
+                try {
+                  navigator.routeRemovals.rollbackActiveSegment()
+                  null
+                } catch (throwable: Throwable) {
+                  throwable
+                }
+              val settleFailure =
+                try {
+                  settleAtCurrentRoute()
+                  null
+                } catch (throwable: Throwable) {
+                  throwable
+                }
+              listOfNotNull(rollbackFailure, settleFailure).forEach { cleanupFailure ->
+                if (cleanupFailure !== e) e.addSuppressed(cleanupFailure)
+              }
+              navigator.consumePopRequest()
+              navigator.completeTransition(e)
             }
-          navigator.consumePopRequest()
-          visibleRoute = navigator.current
-          behindRoute = null
-          animState = AnimState.Idle
-          removedRoutes.forEach { removedRoute ->
-            topBarState.clearRoute(removedRoute)
-            exitTopBarState.clearRoute(removedRoute)
-            bottomBarState?.clearRoute(removedRoute)
-            exitBottomBarState?.clearRoute(removedRoute)
+            if (e is CancellationException) throw e
           }
-          navigator.completeTransition()
         }
       }
   }
@@ -312,10 +401,7 @@ fun NavigationStack(
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
           visibleRoute = navigator.current
-          topBarState.clearRoute(poppedRoute)
-          exitTopBarState.clearRoute(poppedRoute)
-          bottomBarState?.clearRoute(poppedRoute)
-          exitBottomBarState?.clearRoute(poppedRoute)
+          clearRemovedRoutes(listOf(poppedRoute))
           navigator.completeTransition()
         }
       }
@@ -348,7 +434,8 @@ fun NavigationStack(
         AnimState.Push ->
           topBarState.navDirection =
             if (useSwitchTopBarTransition) NavDirection.Switch else NavDirection.Push
-        AnimState.Pop ->
+        AnimState.Pop,
+        AnimState.PopGestureCommitted ->
           topBarState.navDirection =
             if (useSwitchTopBarTransition) NavDirection.Switch else NavDirection.Pop
         AnimState.Dragging ->
@@ -415,6 +502,7 @@ fun NavigationStack(
                 when (animState) {
                   AnimState.Push -> 1f - progress.value
                   AnimState.Pop -> progress.value
+                  AnimState.PopGestureCommitted -> 0f
                   AnimState.Dragging -> if (navigator.popRequested) progress.value else 0f
                   AnimState.Idle -> 1f
                 }
@@ -435,7 +523,8 @@ fun NavigationStack(
                 alpha =
                   when (animState) {
                     AnimState.Push -> progress.value
-                    AnimState.Pop -> 1f - progress.value
+                    AnimState.Pop,
+                    AnimState.PopGestureCommitted -> 1f - progress.value
                     AnimState.Dragging -> 1f - progress.value
                     AnimState.Idle -> 0f
                   }
@@ -484,14 +573,16 @@ fun NavigationStack(
       val mainTopBar =
         when (animState) {
           // Pop: 나가는 화면은 exitTopBarState
-          AnimState.Pop -> exitTopBarState
+          AnimState.Pop,
+          AnimState.PopGestureCommitted -> exitTopBarState
           AnimState.Dragging -> if (navigator.popRequested) exitTopBarState else topBarState
           else -> topBarState
         }
       val mainBottomBar =
         if (bottomBarState != null && exitBottomBarState != null) {
           when (animState) {
-            AnimState.Pop -> exitBottomBarState
+            AnimState.Pop,
+            AnimState.PopGestureCommitted -> exitBottomBarState
             AnimState.Dragging -> if (navigator.popRequested) exitBottomBarState else bottomBarState
             else -> bottomBarState
           }
@@ -571,6 +662,7 @@ fun NavigationStack(
                   when (animState) {
                     AnimState.Push -> p
                     AnimState.Pop -> 1f - p
+                    AnimState.PopGestureCommitted -> 1f
                     AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
                     AnimState.Idle -> 1f
                   }
@@ -578,7 +670,8 @@ fun NavigationStack(
                 translationY =
                   when (animState) {
                     AnimState.Push -> containerHeight * (1f - p)
-                    AnimState.Pop -> containerHeight * p
+                    AnimState.Pop,
+                    AnimState.PopGestureCommitted -> containerHeight * p
                     AnimState.Dragging -> containerHeight * p
                     AnimState.Idle -> 0f
                   }

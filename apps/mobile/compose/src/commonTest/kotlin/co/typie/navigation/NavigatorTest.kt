@@ -8,6 +8,7 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -36,6 +37,36 @@ class NavigatorTest {
   }
 
   @Test
+  fun duplicateNavigateWaitsForTheActivePush() = runTest {
+    val nav = Navigator(Route.Home)
+    val folderRoute = Route.Folder("1")
+    val first = async { nav.navigate(folderRoute) }
+    advanceUntilIdle()
+    val second = async { nav.navigate(folderRoute) }
+    advanceUntilIdle()
+
+    assertFalse(first.isCompleted)
+    assertFalse(second.isCompleted)
+    nav.completeTransition()
+
+    assertEquals(NavigationResult.ReachedTarget, first.await())
+    assertEquals(NavigationResult.ReachedTarget, second.await())
+  }
+
+  @Test
+  fun differentNavigateDuringActivePushIsNotStarted() = runTest {
+    val nav = Navigator(Route.Home)
+    val push = async { nav.navigate(Route.Folder("1")) }
+    advanceUntilIdle()
+
+    val result = nav.navigate(Route.Space)
+    nav.completeTransition()
+    push.await()
+
+    assertEquals(NavigationResult.NotStarted, result)
+  }
+
+  @Test
   fun pop() = runTest {
     val nav = Navigator(Route.Home)
     navigateAndComplete(nav, Route.Folder("1"))
@@ -47,8 +78,75 @@ class NavigatorTest {
   @Test
   fun popAtRoot() = runTest {
     val nav = Navigator(Route.Home)
-    nav.pop()
+    assertEquals(NavigationResult.ReachedTarget, nav.pop())
     assertEquals(Route.Home, nav.current)
+  }
+
+  @Test
+  fun popReturnsStoppedAtFromRemovalOperation() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    navigateAndComplete(nav, editorRoute)
+    val result = async { nav.pop() }
+    advanceUntilIdle()
+
+    nav.consumePopRequest()
+    nav.completeTransition(result = NavigationResult.StoppedAt(editorRoute))
+
+    assertEquals(NavigationResult.StoppedAt(editorRoute), result.await())
+  }
+
+  @Test
+  fun overlappingPopWaitsForActiveRemovalResult() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    navigateAndComplete(nav, editorRoute)
+    val first = async { nav.pop() }
+    advanceUntilIdle()
+    val second = async { nav.pop() }
+    advanceUntilIdle()
+
+    assertFalse(first.isCompleted)
+    assertFalse(second.isCompleted)
+    nav.consumePopRequest()
+    nav.completeTransition(result = NavigationResult.StoppedAt(editorRoute))
+
+    assertEquals(NavigationResult.StoppedAt(editorRoute), first.await())
+    assertEquals(NavigationResult.StoppedAt(editorRoute), second.await())
+  }
+
+  @Test
+  fun navigateToCurrentDuringRemovalDoesNotReportAStableOutcome() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    navigateAndComplete(nav, editorRoute)
+    val removal = async { nav.pop() }
+    advanceUntilIdle()
+
+    val result = nav.navigate(editorRoute)
+    nav.consumePopRequest()
+    nav.completeTransition()
+    removal.await()
+
+    assertEquals(NavigationResult.NotStarted, result)
+  }
+
+  @Test
+  fun differentRemovalDuringActiveRemovalDoesNotReportAStableStop() = runTest {
+    val nav = Navigator(Route.Home)
+    val spaceRoute = Route.Space
+    val folderRoute = Route.Folder("1")
+    navigateAndComplete(nav, spaceRoute)
+    navigateAndComplete(nav, folderRoute)
+    val removal = async { nav.popTo(Route.Home) }
+    advanceUntilIdle()
+
+    val result = nav.pop()
+    nav.consumePopRequest()
+    nav.completeTransition()
+    removal.await()
+
+    assertEquals(NavigationResult.NotStarted, result)
   }
 
   @Test
@@ -66,7 +164,7 @@ class NavigatorTest {
   fun popToNotInStack() = runTest {
     val nav = Navigator(Route.Home)
     navigateAndComplete(nav, Route.Folder("1"))
-    nav.popTo(Route.Notes)
+    assertEquals(NavigationResult.NotStarted, nav.popTo(Route.Notes))
     assertEquals(Route.Folder("1"), nav.current)
     assertEquals(2, nav.stack.size)
   }
@@ -76,7 +174,12 @@ class NavigatorTest {
     val nav = Navigator(Route.Home)
     navigateAndComplete(nav, Route.Space)
     navigateAndComplete(nav, Route.Folder("1"))
-    nav.popToRoot()
+    val job = launch { nav.popToRoot() }
+    advanceUntilIdle()
+    nav.performPopTo(Route.Home)
+    nav.consumePopRequest()
+    nav.completeTransition()
+    job.join()
     assertEquals(Route.Home, nav.current)
     assertEquals(1, nav.stack.size)
   }
@@ -124,7 +227,7 @@ class NavigatorTest {
       val job = launch { nav.pop() }
       advanceUntilIdle()
       if (nav.popRequested) {
-        nav.performPop()
+        nav.previous?.let(nav::performPopTo)
         nav.consumePopRequest()
       }
       nav.completeTransition()

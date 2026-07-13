@@ -13,5 +13,14 @@ fun TopBarBackButton(
   onClick: (suspend () -> Unit)? = null,
 ) {
   val navigator = Nav.current
-  TopBarButton(icon = icon, onClick = onClick ?: { navigator.pop() }, modifier = modifier)
+  TopBarButton(
+    icon = icon,
+    onClick =
+      onClick
+        ?: {
+          navigator.pop()
+          Unit
+        },
+    modifier = modifier,
+  )
 }
