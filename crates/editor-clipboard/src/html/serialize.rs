@@ -6,6 +6,7 @@ use editor_resource::Resource;
 
 pub fn to_html(slice: &Slice, resource: &Resource) -> String {
     let mut out = String::new();
+    out.push_str(r#"<meta charset="utf-8">"#);
     let meta_json = serde_json::to_string(slice).expect("Slice serde");
     let meta_b64 = STANDARD.encode(meta_json.as_bytes());
     out.push_str(&format!(
@@ -253,6 +254,17 @@ mod tests {
         assert!(html.contains("data-version=\"1\""));
         assert!(html.contains("<div data-root>"));
         assert!(html.contains("</div>"));
+    }
+
+    #[test]
+    fn serialize_prepends_charset_meta() {
+        let slice = Slice {
+            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
+            open_start: 0,
+            open_end: 0,
+        };
+        let html = to_html(&slice, &Resource::new_test());
+        assert!(html.starts_with(r#"<meta charset="utf-8">"#));
     }
 
     #[test]

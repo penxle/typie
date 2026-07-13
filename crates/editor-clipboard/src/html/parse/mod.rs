@@ -469,8 +469,8 @@ mod tests {
             open_end: 0,
         };
         let html = original.to_html(&Resource::new_test());
-        let meta_end = html.find('>').expect("meta tag closes") + 1;
-        let body_only = &html[meta_end..];
+        let body_start = html.find("<div data-root>").expect("root div present");
+        let body_only = &html[body_start..];
         let parsed = Slice::from_html(body_only, &resource);
         let text_frag = &parsed.fragment.children[0].children[0];
         let bold_count = text_frag
@@ -1355,8 +1355,8 @@ mod tests {
             "serialized HTML must contain a tab char: {html}"
         );
         let resource = Resource::new_test();
-        let meta_end = html.find('>').expect("meta tag closes") + 1;
-        let body_only = &html[meta_end..];
+        let body_start = html.find("<div data-root>").expect("root div present");
+        let body_only = &html[body_start..];
         let parsed = Slice::from_html(body_only, &resource);
         fn has_tab(f: &editor_model::Fragment) -> bool {
             matches!(f.node, editor_model::PlainNode::Tab(_)) || f.children.iter().any(has_tab)
