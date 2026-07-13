@@ -188,6 +188,7 @@ private fun EditorOverlayPointerRouterTarget(
         .editorOverlayViewportWheelInput(
           viewportState = viewportState,
           interactionScope = interactionScope,
+          editorRectInOverlay = editorRectInOverlay,
           targetRectInOverlay = target.rectInOverlay,
         )
         .editorInteractions(
@@ -205,15 +206,21 @@ private fun EditorOverlayPointerRouterTarget(
 internal fun Modifier.editorOverlayViewportWheelInput(
   viewportState: EditorViewportState,
   interactionScope: EditorInteractionScope,
+  editorRectInOverlay: Rect,
   targetRectInOverlay: Rect,
-): Modifier =
-  editorPointerSignalWheelZoom(
+): Modifier {
+  val coordinateResolver =
+    EditorOverlayPointerTargetCoordinateResolver(
+      editorRectInOverlay = editorRectInOverlay,
+      targetRectInOverlay = targetRectInOverlay,
+    )
+  return editorPointerSignalWheelZoom(
       key1 = interactionScope,
       key2 = targetRectInOverlay,
       onZoomSessionStart = interactionScope::beginPointerSignalZoom,
       onZoom = { focalPosition, normalizedDelta ->
         interactionScope.updatePointerSignalZoom(
-          focalPosition = targetRectInOverlay.topLeft + focalPosition,
+          focalInEditorPx = coordinateResolver.positionForActivePointer(focalPosition),
           normalizedDelta = normalizedDelta,
         )
       },
@@ -252,11 +259,14 @@ internal fun Modifier.editorOverlayViewportWheelInput(
         }
       }
     }
+}
 
 internal class EditorOverlayPointerTargetCoordinateResolver(
   private val editorRectInOverlay: Rect,
   private val targetRectInOverlay: Rect,
 ) : EditorPointerCoordinateResolver {
+  override fun positionInRoot(position: Offset): Offset? = null
+
   override fun positionForPointerStart(position: Offset): Offset = positionInEditor(position)
 
   override fun positionForTapStart(position: Offset): Offset = positionInEditor(position)

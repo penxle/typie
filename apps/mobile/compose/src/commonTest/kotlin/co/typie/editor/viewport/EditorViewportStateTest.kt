@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 class EditorViewportStateTest {
   @Test
@@ -157,6 +158,189 @@ class EditorViewportStateTest {
     assertEquals(Offset(x = 50f, y = 50f), state.scrollOffset)
     assertEquals(1, state.lastScrollRevision)
     assertFalse(state.lastScrollWasAuto)
+  }
+
+  @Test
+  fun `zoom transform target reapplies once after measured bounds grow`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+
+    state.scrollToTransformTarget(
+      offset = Offset(x = 180f, y = 240f),
+      retainUntilMeasuredBounds = true,
+    )
+
+    assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
+    assertEquals(1, state.lastScrollRevision)
+    assertFalse(state.lastScrollWasAuto)
+
+    state.endTransform()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 180f, y = 240f), state.scrollOffset)
+    assertEquals(2, state.lastScrollRevision)
+
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 500f, height = 500f),
+    )
+
+    assertEquals(Offset(x = 180f, y = 240f), state.scrollOffset)
+    assertEquals(2, state.lastScrollRevision)
+  }
+
+  @Test
+  fun `same measured bounds consume retained zoom target without reviving it later`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+    state.scrollToTransformTarget(
+      offset = Offset(x = 180f, y = 240f),
+      retainUntilMeasuredBounds = true,
+    )
+    state.endTransform()
+
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
+
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
+    assertEquals(1, state.lastScrollRevision)
+  }
+
+  @Test
+  fun `focal-only transform update keeps the latest retained zoom target`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+
+    state.scrollToTransformTarget(
+      offset = Offset(x = 180f, y = 240f),
+      retainUntilMeasuredBounds = true,
+    )
+    state.scrollToTransformTarget(
+      offset = Offset(x = 160f, y = 220f),
+      retainUntilMeasuredBounds = false,
+    )
+    state.endTransform()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 160f, y = 220f), state.scrollOffset)
+  }
+
+  @Test
+  fun `focal-only transform target does not wait for measurement without a zoom change`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+
+    state.scrollToTransformTarget(
+      offset = Offset(x = 80f, y = 90f),
+      retainUntilMeasuredBounds = false,
+    )
+    state.endTransform()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 80f, y = 90f), state.scrollOffset)
+  }
+
+  @Test
+  fun `normal scroll after transform end invalidates retained zoom target`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+    state.scrollToTransformTarget(
+      offset = Offset(x = 180f, y = 240f),
+      retainUntilMeasuredBounds = true,
+    )
+    state.endTransform()
+
+    state.scrollTo(Offset(x = 40f, y = 50f))
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 40f, y = 50f), state.scrollOffset)
+  }
+
+  @Test
+  fun `unchanged animated scroll intent invalidates retained zoom target`() = runTest {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+    state.scrollToTransformTarget(
+      offset = Offset(x = 180f, y = 240f),
+      retainUntilMeasuredBounds = true,
+    )
+    state.endTransform()
+
+    state.animateScrollToY(targetY = 100f)
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
+  }
+
+  @Test
+  fun `new transform discards retained target from previous transform`() {
+    val state = EditorViewportState()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 200f, height = 200f),
+    )
+    state.beginTransform()
+    state.scrollToTransformTarget(
+      offset = Offset(x = 180f, y = 240f),
+      retainUntilMeasuredBounds = true,
+    )
+    state.endTransform()
+
+    state.beginTransform()
+    state.endTransform()
+    state.updateMeasuredBounds(
+      viewportSize = Size(width = 100f, height = 100f),
+      contentSize = Size(width = 400f, height = 400f),
+    )
+
+    assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
   }
 
   @Test

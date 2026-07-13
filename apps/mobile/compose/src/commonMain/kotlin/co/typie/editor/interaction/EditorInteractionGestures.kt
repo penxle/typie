@@ -12,10 +12,8 @@ import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandof
 import co.typie.editor.interaction.gestures.EditorTableHandleDragUpdate
 import co.typie.editor.interaction.gestures.EditorTableHandleGesture
 import co.typie.editor.interaction.gestures.EditorTapGesture
-import co.typie.editor.interaction.gestures.cancel
 import co.typie.editor.interaction.gestures.finish
 import co.typie.editor.interaction.gestures.handlePointerDown
-import co.typie.editor.interaction.gestures.handlePointerMove
 import co.typie.editor.interaction.gestures.handlePointerUp
 import co.typie.editor.interaction.gestures.handleTapTimer
 import co.typie.editor.interaction.gestures.primeModeAtPointerDown
@@ -64,18 +62,6 @@ internal class EditorInteractionGestures(
     context: EditorGestureContext,
   ): Boolean {
     tap.addPressedPointer(pointerId)
-    if (pinch.isPinching && !pinch.hasPointer(pointerId)) {
-      context.applyModeEvent(EditorInteractionEvent.PointerCancel)
-      return true
-    }
-
-    val wasPinching = pinch.isPinching
-    if (pinch.handlePointerDown(pointerId = pointerId, position = position, context = context)) {
-      if (!wasPinching) {
-        context.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
-      }
-      return true
-    }
 
     if (tap.hasActivePointer) {
       tap.cancelActivePointerAndIgnoreUntilAllPointersUp()
@@ -136,10 +122,6 @@ internal class EditorInteractionGestures(
     nowMillis: Long,
     context: EditorGestureContext,
   ): Boolean {
-    if (pinch.handlePointerMove(pointerId = pointerId, position = position, context = context)) {
-      return true
-    }
-
     if (longPress.isActivePointer(pointerId)) {
       return longPress.update(position = position, context = context)
     }
@@ -198,16 +180,6 @@ internal class EditorInteractionGestures(
       return longPress.finish(context = context)
     }
 
-    if (pinch.isPinching) {
-      if (pinch.handlePointerUp(pointerId = pointerId, context = context) && !pinch.isPinching) {
-        // TODO(editor-parity): legacy seeds pan-resume with the remaining pinch pointer so the
-        // viewport can continue scrolling after pinch ends. KMP pan-resume is not ported yet.
-        context.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
-      }
-      return true
-    }
-    pinch.handlePointerUp(pointerId = pointerId, context = context)
-
     if (tableHandle.activeDrag) {
       context.effects.cancelLongPressDispatch()
       tap.onPointerUp(
@@ -253,6 +225,25 @@ internal class EditorInteractionGestures(
       selectionConsumed ||
       pendingTableHandleConsumed ||
       pendingSelectionHandleConsumed
+  }
+
+  fun handlePinchSample(sample: EditorPinchSample, context: EditorGestureContext): Boolean {
+    val wasPinching = pinch.isPinching
+    if (!pinch.handleSample(sample = sample, context = context)) {
+      return false
+    }
+    if (!wasPinching) {
+      context.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
+    }
+    return true
+  }
+
+  fun endPinch(context: EditorGestureContext) {
+    if (pinch.end(context = context)) {
+      // TODO(editor-parity): legacy seeds pan-resume with the remaining pinch pointer so the
+      // viewport can continue scrolling after pinch ends. KMP pan-resume is not ported yet.
+      context.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
+    }
   }
 
   fun handleLongPressTimer(

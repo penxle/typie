@@ -55,6 +55,15 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
   @Test
+  fun `pinch sample uses the complete pair of physical root positions`() {
+    val sample = resolveEditorPinchSample(listOf(Offset(100f, 200f), Offset(500f, 500f)))
+
+    assertEquals(EditorPinchSample(focalInRootPx = Offset(300f, 350f), distancePx = 500f), sample)
+    assertNull(resolveEditorPinchSample(listOf(Offset.Zero)))
+    assertNull(resolveEditorPinchSample(listOf(Offset.Zero, Offset.Zero, Offset.Zero)))
+  }
+
+  @Test
   fun `pinch start cancels active pending tap stream`() =
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor()
@@ -78,6 +87,46 @@ class EditorInteractionControllerTest {
       assertEquals(1, host.cancelTapDispatchCount)
       assertEquals(1, host.pointerCancelCount)
       assertNull(controller.magnifierPosition)
+    }
+
+  @Test
+  fun `controller consumes one complete physical pinch sample at a time`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          semantics = viewportZoomEnabledSemantics(effects = host),
+        )
+      controller.updateTapSlop(8f)
+      controller.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 0L)
+
+      assertTrue(
+        controller.onPinchSample(
+          EditorPinchSample(focalInRootPx = Offset(60f, 20f), distancePx = 100f)
+        )
+      )
+      assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
+      assertEquals(1, host.pointerCancelCount)
+
+      assertTrue(
+        controller.onPinchSample(
+          EditorPinchSample(focalInRootPx = Offset(70f, 25f), distancePx = 120f)
+        )
+      )
+      assertTrue(
+        controller.onPinchSample(
+          EditorPinchSample(focalInRootPx = Offset(70f, 25f), distancePx = 0f)
+        )
+      )
+      assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
+      controller.onPinchEnd()
+
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
     }
 
   @Test
@@ -755,7 +804,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `second pinch pointer clears pending double tap drag from outside editor pointer path`() =
+  fun `physical pinch sample clears pending double tap drag`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -784,21 +833,12 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
 
       assertTrue(
-        controller.onPointerDown(
-          pointerId = 3L,
-          position = start + Offset(100f, 0f),
-          nowMillis = 130L,
-          tapEnabled = false,
+        controller.onPinchSample(
+          EditorPinchSample(focalInRootPx = start + Offset(50f, 0f), distancePx = 100f)
         )
       )
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
-      assertTrue(
-        controller.onPointerUp(
-          pointerId = 3L,
-          position = start + Offset(100f, 0f),
-          nowMillis = 135L,
-        )
-      )
+      controller.onPinchEnd()
 
       assertEquals(1, host.pointerCancelCount)
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
@@ -816,7 +856,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `third pinch pointer cancels active viewport zoom`() =
+  fun `pointer cancellation ends active viewport zoom`() =
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
@@ -830,32 +870,16 @@ class EditorInteractionControllerTest {
         )
       controller.updateTapSlop(8f)
 
-      assertFalse(
-        controller.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 0L)
-      )
       assertTrue(
-        controller.onPointerDown(
-          pointerId = 2L,
-          position = Offset(110f, 20f),
-          nowMillis = 10L,
-          tapEnabled = false,
+        controller.onPinchSample(
+          EditorPinchSample(focalInRootPx = Offset(60f, 20f), distancePx = 100f)
         )
       )
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
 
-      assertTrue(
-        controller.onPointerDown(
-          pointerId = 3L,
-          position = Offset(210f, 20f),
-          nowMillis = 20L,
-          tapEnabled = false,
-        )
-      )
+      controller.cancel()
 
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
-      assertFalse(
-        controller.onPointerMove(pointerId = 1L, position = Offset(20f, 20f), nowMillis = 30L)
-      )
     }
 
   @Test
@@ -2975,6 +2999,10 @@ class EditorInteractionControllerTest {
         EditorUiState().apply {
           updateDisplayZoom(1f)
           updatePageOffset(page = 0, offset = Offset.Zero)
+          updateEditorBounds(
+            boundsInRoot = ComposeRect(left = 0f, top = 0f, right = 720f, bottom = 2000f),
+            density = 1f,
+          )
         }
       zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = 720f)
 

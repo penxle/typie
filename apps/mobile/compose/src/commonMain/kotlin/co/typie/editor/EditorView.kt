@@ -29,8 +29,6 @@ import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.editorInput
-import co.typie.editor.interaction.LocalEditorInteractionScope
-import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.overlay.EditorCursorOverlay
 import co.typie.editor.overlay.EditorLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -59,7 +57,6 @@ internal fun EditorView(
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
-  val interactionScope = LocalEditorInteractionScope.current
   val zoomController = LocalEditorZoomController.current
   val displayZoom = zoomController.displayZoom
   val themeVariant = currentEditorThemeVariant()
@@ -179,10 +176,6 @@ internal fun EditorView(
           suppressSoftwareKeyboard = suppressSoftwareKeyboard,
         )
         .focusable()
-        .editorInteractions(
-          density = density.density,
-          interactionController = interactionScope.controller,
-        )
     ) {
       val pageSpacing =
         when (layoutSpec) {

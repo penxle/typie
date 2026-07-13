@@ -1,19 +1,22 @@
 package co.typie.editor.body
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import co.typie.editor.runtime.EditorBoundsInContainer
+import co.typie.editor.runtime.EditorUiState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class EditorExtensionAreaPointerCoordinateResolverTest {
   @Test
-  fun `start inside editor bounds is not forwarded by extension area`() {
+  fun `single interaction boundary owns starts inside editor bounds`() {
     val resolver = resolver()
 
-    assertNull(resolver.positionForTapStart(Offset(60f, 100f)))
-    assertNull(resolver.positionForPointerStart(Offset(60f, 100f)))
+    assertEquals(Offset(20f, 20f), resolver.positionForTapStart(Offset(60f, 100f)))
+    assertEquals(Offset(20f, 20f), resolver.positionForPointerStart(Offset(60f, 100f)))
     assertEquals(Offset(20f, 20f), resolver.positionForActivePointer(Offset(60f, 100f)))
+    assertEquals(Offset(160f, 300f), resolver.positionInRoot(Offset(60f, 100f)))
   }
 
   @Test
@@ -24,6 +27,7 @@ class EditorExtensionAreaPointerCoordinateResolverTest {
     assertEquals(Offset.Zero, resolver.positionForPointerStart(Offset.Zero))
     assertEquals(Offset(320f, 480f), resolver.positionForTapStart(Offset(500f, 700f)))
     assertEquals(Offset(320f, 480f), resolver.positionForPointerStart(Offset(500f, 700f)))
+    assertEquals(Offset(600f, 900f), resolver.positionInRoot(Offset(500f, 700f)))
   }
 
   @Test
@@ -55,7 +59,25 @@ class EditorExtensionAreaPointerCoordinateResolverTest {
   ): EditorExtensionAreaPointerCoordinateResolver =
     EditorExtensionAreaPointerCoordinateResolver(
       layoutSpec = layoutSpec,
-      bounds = bounds,
+      uiState =
+        EditorUiState().apply {
+          updateExtensionAreaBounds(
+            boundsInRoot = Rect(left = 100f, top = 200f, right = 1100f, bottom = 1600f),
+            density = density,
+          )
+          if (bounds.isValid) {
+            updateEditorBounds(
+              boundsInRoot =
+                Rect(
+                  left = 100f + bounds.x * density,
+                  top = 200f + bounds.y * density,
+                  right = 100f + (bounds.x + bounds.width) * density,
+                  bottom = 200f + (bounds.y + bounds.height) * density,
+                ),
+              density = density,
+            )
+          }
+        },
       density = density,
     )
 

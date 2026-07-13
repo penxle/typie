@@ -16,7 +16,11 @@ import co.typie.editor.ffi.InputModifiers
 
 private const val EditorTapSlopDp = 8f
 
+internal data class EditorPinchSample(val focalInRootPx: Offset, val distancePx: Float)
+
 internal interface EditorPointerCoordinateResolver {
+  fun positionInRoot(position: Offset): Offset?
+
   fun positionForPointerStart(position: Offset): Offset?
 
   fun positionForTapStart(position: Offset): Offset?
@@ -24,18 +28,10 @@ internal interface EditorPointerCoordinateResolver {
   fun positionForActivePointer(position: Offset): Offset?
 }
 
-private data object DirectEditorPointerCoordinateResolver : EditorPointerCoordinateResolver {
-  override fun positionForPointerStart(position: Offset): Offset = position
-
-  override fun positionForTapStart(position: Offset): Offset = position
-
-  override fun positionForActivePointer(position: Offset): Offset = position
-}
-
 internal fun Modifier.editorInteractions(
   density: Float,
   interactionController: EditorInteractionController,
-  coordinateResolver: EditorPointerCoordinateResolver = DirectEditorPointerCoordinateResolver,
+  coordinateResolver: EditorPointerCoordinateResolver,
 ): Modifier =
   this then
     EditorInteractionsElement(
@@ -69,6 +65,7 @@ private class EditorInteractionsNode(
   var interactionController: EditorInteractionController,
 ) : Modifier.Node(), PointerInputModifierNode {
   private val pointerOwnership = EditorPointerOwnership()
+  private var ignorePinchPointersUntilAllUp = false
 
   override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
     if (pass != PointerEventPass.Main) {
@@ -76,11 +73,42 @@ private class EditorInteractionsNode(
     }
 
     if (density <= 0f) {
-      cancelInteractionIfOwnedPointer()
+      cancelInteractionIfActive()
       return
     }
 
     interactionController.updateTapSlop(tapSlopPx = EditorTapSlopDp * density)
+
+    val pressedChanges = pointerEvent.changes.filter { it.pressed }
+    if (ignorePinchPointersUntilAllUp) {
+      if (pressedChanges.isEmpty()) {
+        ignorePinchPointersUntilAllUp = false
+      }
+      pointerEvent.changes.forEach { it.consume() }
+      return
+    }
+    if (interactionController.isPinching && pressedChanges.size != 2) {
+      if (pressedChanges.size > 2) {
+        interactionController.cancel()
+      } else {
+        interactionController.onPinchEnd()
+      }
+      pointerOwnership.reset()
+      ignorePinchPointersUntilAllUp = pressedChanges.isNotEmpty()
+      pointerEvent.changes.forEach { it.consume() }
+      return
+    }
+    if (pressedChanges.size == 2) {
+      val positionsInRoot = pressedChanges.mapNotNull { change ->
+        coordinateResolver.positionInRoot(change.position)
+      }
+      val sample = resolveEditorPinchSample(positionsInRoot)
+      if (sample != null && interactionController.onPinchSample(sample)) {
+        pointerOwnership.reset()
+        pointerEvent.changes.forEach { it.consume() }
+        return
+      }
+    }
 
     pointerEvent.changes
       .filter { it.pressed && !it.previousPressed }
@@ -143,16 +171,21 @@ private class EditorInteractionsNode(
   }
 
   override fun onCancelPointerInput() {
-    cancelInteractionIfOwnedPointer()
+    cancelInteractionIfActive()
   }
 
   private fun cancelInteraction() {
     pointerOwnership.reset()
+    ignorePinchPointersUntilAllUp = false
     interactionController.cancel()
   }
 
-  private fun cancelInteractionIfOwnedPointer() {
-    if (pointerOwnership.hasPointers) {
+  private fun cancelInteractionIfActive() {
+    if (
+      pointerOwnership.hasPointers ||
+        interactionController.isPinching ||
+        ignorePinchPointersUntilAllUp
+    ) {
       cancelInteraction()
     }
   }
@@ -166,9 +199,21 @@ private class EditorInteractionsNode(
   }
 
   override fun onDetach() {
-    cancelInteractionIfOwnedPointer()
+    cancelInteractionIfActive()
     super.onDetach()
   }
+}
+
+internal fun resolveEditorPinchSample(positionsInRoot: List<Offset>): EditorPinchSample? {
+  if (positionsInRoot.size != 2) {
+    return null
+  }
+  val first = positionsInRoot[0]
+  val second = positionsInRoot[1]
+  return EditorPinchSample(
+    focalInRootPx = (first + second) / 2f,
+    distancePx = (first - second).getDistance(),
+  )
 }
 
 private fun PointerEvent.inputModifiers(): InputModifiers {

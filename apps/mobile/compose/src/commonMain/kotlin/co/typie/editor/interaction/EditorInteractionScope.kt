@@ -98,9 +98,9 @@ internal class EditorInteractionScope(
     return true
   }
 
-  fun updatePointerSignalZoom(focalPosition: Offset, normalizedDelta: Float): Boolean =
+  fun updatePointerSignalZoom(focalInEditorPx: Offset, normalizedDelta: Float): Boolean =
     semantics.viewportZoom.updatePointerSignal(
-      focalPx = focalPosition,
+      focalInEditorPx = focalInEditorPx,
       normalizedDelta = normalizedDelta,
     )
 

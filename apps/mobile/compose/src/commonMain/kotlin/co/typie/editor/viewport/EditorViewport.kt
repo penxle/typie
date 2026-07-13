@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolveMeasuredPageLength
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ffi.Size as PageSize
 import kotlin.math.abs
@@ -60,6 +61,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   private var pendingRestoredScrollOffset: Offset? = initialScrollOffset.takeIf {
     it != Offset.Zero
   }
+  private var retainedTransformScrollTarget: Offset? = null
 
   var scrollOffset by mutableStateOf(Offset.Zero)
     private set
@@ -88,6 +90,9 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   val persistedScrollOffset: Offset
     get() = pendingRestoredScrollOffset ?: scrollOffset
 
+  val effectiveTransformScrollTarget: Offset
+    get() = retainedTransformScrollTarget ?: scrollOffset
+
   val maxScrollX: Float
     get() = (contentSize.width - viewportSize.width).coerceAtLeast(0f)
 
@@ -101,6 +106,9 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     Snapshot.withoutReadObservation {
       viewportSizeChanged = this.viewportSize != resolvedViewportSize
       if (this.viewportSize == resolvedViewportSize && this.contentSize == resolvedContentSize) {
+        if (pendingRestoredScrollOffset == null) {
+          applyRetainedTransformScrollTarget()
+        }
         return@withoutReadObservation
       }
 
@@ -115,6 +123,9 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
       if (applyPendingRestoredScrollOffset()) {
         return@withoutReadObservation
       }
+      if (applyRetainedTransformScrollTarget()) {
+        return@withoutReadObservation
+      }
       clampScrollOffset()
     }
     return viewportSizeChanged
@@ -125,6 +136,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
       return Offset.Zero
     }
 
+    retainedTransformScrollTarget = null
     pendingRestoredScrollOffset = null
     val nextScrollOffset = scrollOffset + delta
     val resolvedScrollOffset = nextScrollOffset.coerceToBounds()
@@ -142,6 +154,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   }
 
   fun scrollToY(targetY: Float, isAutoScroll: Boolean = false) {
+    invalidateRetainedTransformScrollTargetAfterTransform()
     pendingRestoredScrollOffset = null
     val resolvedY = resolveScrollY(targetY)
     if (scrollOffset.y == resolvedY) {
@@ -156,6 +169,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   }
 
   suspend fun animateScrollToY(targetY: Float, isAutoScroll: Boolean = false) {
+    invalidateRetainedTransformScrollTargetAfterTransform()
     pendingRestoredScrollOffset = null
     val resolvedY = resolveScrollY(targetY)
     if (scrollOffset.y == resolvedY) {
@@ -170,6 +184,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
   }
 
   fun scrollTo(offset: Offset, isAutoScroll: Boolean = false) {
+    invalidateRetainedTransformScrollTargetAfterTransform()
     pendingRestoredScrollOffset = null
     val resolvedScrollOffset = offset.coerceToBounds()
     if (scrollOffset == resolvedScrollOffset) {
@@ -189,7 +204,26 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     return scrollOffset.y - beforeY
   }
 
+  fun scrollToTransformTarget(offset: Offset, retainUntilMeasuredBounds: Boolean) {
+    pendingRestoredScrollOffset = null
+    if (retainUntilMeasuredBounds || retainedTransformScrollTarget != null) {
+      retainedTransformScrollTarget = offset
+    }
+
+    val resolvedScrollOffset = offset.coerceToBounds()
+    if (scrollOffset == resolvedScrollOffset) {
+      return
+    }
+
+    setScrollOffset(
+      nextScrollOffset = resolvedScrollOffset,
+      isAutoScroll = false,
+      emitScrollEvent = true,
+    )
+  }
+
   fun beginTransform() {
+    retainedTransformScrollTarget = null
     isTransforming = true
   }
 
@@ -228,12 +262,34 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     }
 
     pendingRestoredScrollOffset = null
+    retainedTransformScrollTarget = null
     setScrollOffset(
       nextScrollOffset = pendingScrollOffset.coerceToBounds(),
       isAutoScroll = null,
       emitScrollEvent = false,
     )
     return true
+  }
+
+  private fun applyRetainedTransformScrollTarget(): Boolean {
+    val retainedScrollTarget = retainedTransformScrollTarget ?: return false
+    if (!hasResolvedBounds()) {
+      return false
+    }
+
+    retainedTransformScrollTarget = null
+    setScrollOffset(
+      nextScrollOffset = retainedScrollTarget.coerceToBounds(),
+      isAutoScroll = false,
+      emitScrollEvent = true,
+    )
+    return true
+  }
+
+  private fun invalidateRetainedTransformScrollTargetAfterTransform() {
+    if (!isTransforming) {
+      retainedTransformScrollTarget = null
+    }
   }
 
   private fun setScrollOffset(
@@ -326,22 +382,14 @@ private fun Offset.consumeCrossAxisDelta(requested: Offset): Offset =
 
 private fun Offset.isDominantRightPan(): Boolean = x > 0f && abs(x) > abs(y)
 
-internal data class EditorZoomViewportScrollOffset(
-  val horizontalScroll: Float,
-  val verticalScroll: Float,
-)
-
-internal fun resolveZoomViewportScrollOffset(
-  layoutSpec: EditorDocumentLayoutSpec,
+internal fun resolveZoomAnchorDisplayPosition(
+  layoutSpec: EditorDocumentLayoutSpec.Paginated,
   anchor: EditorViewportAnchor,
-  focalX: Float,
-  focalY: Float,
   displayZoom: Float,
-  currentHorizontalScroll: Float,
-  currentVerticalScroll: Float,
+  viewportWidth: Float,
   pageSizes: List<PageSize>,
   density: Float = 0f,
-): EditorZoomViewportScrollOffset? {
+): Offset? {
   if (anchor.page !in pageSizes.indices) {
     return null
   }
@@ -352,50 +400,30 @@ internal fun resolveZoomViewportScrollOffset(
     } else {
       1f
     }
-  val anchorX = anchor.x * effectiveDisplayZoom
-  val anchorPageTop =
+  val pageTrackWidth =
+    resolveMeasuredPageLength(
+      length = layoutSpec.pageWidth,
+      displayZoom = effectiveDisplayZoom,
+      density = density,
+    )
+  val pageWidth =
+    resolveMeasuredPageLength(
+      length = pageSizes[anchor.page].width,
+      displayZoom = effectiveDisplayZoom,
+      density = density,
+    )
+  val contentWidth = max(viewportWidth, pageTrackWidth)
+  val pageLeft = ((contentWidth - pageWidth) / 2f).coerceAtLeast(0f)
+  val pageTop =
     layoutSpec.resolvePageContentTop(
       page = anchor.page,
       pageSizes = pageSizes,
       displayZoom = effectiveDisplayZoom,
       density = density,
     ) ?: return null
-  val anchorY = anchorPageTop + anchor.y * effectiveDisplayZoom
 
-  return EditorZoomViewportScrollOffset(
-    horizontalScroll = currentHorizontalScroll + anchorX - focalX,
-    verticalScroll = currentVerticalScroll + anchorY - focalY,
-  )
-}
-
-internal fun syncViewportToZoomAnchor(
-  viewportState: EditorViewportState,
-  layoutSpec: EditorDocumentLayoutSpec,
-  pageSizes: List<PageSize>,
-  anchor: EditorViewportAnchor,
-  focalX: Float,
-  focalY: Float,
-  displayZoom: Float,
-  density: Float = 0f,
-  isAutoScroll: Boolean = false,
-) {
-  val currentHorizontalScroll = viewportState.scrollOffset.x
-  val currentVerticalScroll = viewportState.scrollOffset.y
-  val scrollOffset =
-    resolveZoomViewportScrollOffset(
-      layoutSpec = layoutSpec,
-      anchor = anchor,
-      focalX = focalX,
-      focalY = focalY,
-      displayZoom = displayZoom,
-      currentHorizontalScroll = currentHorizontalScroll,
-      currentVerticalScroll = currentVerticalScroll,
-      pageSizes = pageSizes,
-      density = density,
-    ) ?: return
-
-  viewportState.scrollTo(
-    offset = Offset(x = scrollOffset.horizontalScroll, y = scrollOffset.verticalScroll),
-    isAutoScroll = isAutoScroll,
+  return Offset(
+    x = pageLeft + anchor.x * effectiveDisplayZoom,
+    y = pageTop + anchor.y * effectiveDisplayZoom,
   )
 }

@@ -11,6 +11,7 @@ import co.typie.editor.interaction.EditorPointerCoordinateResolver
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.runtime.EditorBoundsInContainer
+import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 
@@ -25,7 +26,6 @@ internal fun EditorExtensionArea(
   val editor = runtime.editor
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
-  val editorBounds = uiState.editorBoundsInContainer
   val densityValue = density.density
   val extensionAreaModifier =
     if (editor != null) {
@@ -35,7 +35,7 @@ internal fun EditorExtensionArea(
         coordinateResolver =
           EditorExtensionAreaPointerCoordinateResolver(
             layoutSpec = layoutSpec,
-            bounds = editorBounds,
+            uiState = uiState,
             density = densityValue,
           ),
       )
@@ -48,18 +48,21 @@ internal fun EditorExtensionArea(
 
 internal data class EditorExtensionAreaPointerCoordinateResolver(
   private val layoutSpec: EditorDocumentLayoutSpec,
-  private val bounds: EditorBoundsInContainer,
+  private val uiState: EditorUiState,
   private val density: Float,
 ) : EditorPointerCoordinateResolver {
+  private val bounds: EditorBoundsInContainer
+    get() = uiState.editorBoundsInContainer
+
+  override fun positionInRoot(position: Offset): Offset? =
+    uiState.extensionAreaRectInRoot()?.topLeft?.plus(position)
+
   override fun positionForPointerStart(position: Offset): Offset? {
-    if (!isOutsideEditorBounds(position)) {
-      return null
-    }
     return positionForActivePointer(position)
   }
 
   override fun positionForTapStart(position: Offset): Offset? {
-    if (layoutSpec !is EditorDocumentLayoutSpec.Continuous || !isOutsideEditorBounds(position)) {
+    if (layoutSpec !is EditorDocumentLayoutSpec.Continuous && isOutsideEditorBounds(position)) {
       return null
     }
     return positionForActivePointer(position)

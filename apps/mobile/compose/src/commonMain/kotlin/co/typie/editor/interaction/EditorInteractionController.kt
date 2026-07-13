@@ -63,6 +63,9 @@ internal class EditorInteractionController(
   val isIgnoringUntilAllPointersUp: Boolean
     get() = gestures.isIgnoringUntilAllPointersUp
 
+  val isPinching: Boolean
+    get() = gestures.pinch.isPinching
+
   val selectionHandleGesture: EditorSelectionHandleGesture
     get() = gestures.selectionHandle
 
@@ -122,6 +125,17 @@ internal class EditorInteractionController(
     } else {
       false
     }
+
+  fun onPinchSample(sample: EditorPinchSample): Boolean =
+    if (ensurePointerInputEnabled()) {
+      gestures.handlePinchSample(sample = sample, context = gestureContext)
+    } else {
+      false
+    }
+
+  fun onPinchEnd() {
+    gestures.endPinch(context = gestureContext)
+  }
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
     if (ensurePointerInputEnabled()) {

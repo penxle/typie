@@ -629,6 +629,7 @@ private fun TableColumnResizeHandle(
         .editorOverlayViewportWheelInput(
           viewportState = viewportState,
           interactionScope = interactionScope,
+          editorRectInOverlay = editorRectInOverlay,
           targetRectInOverlay = rect,
         )
         .editorInteractions(

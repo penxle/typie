@@ -1105,7 +1105,21 @@ fun EditorScreen(entityId: String) {
         rememberEditorDebugWheelZoomModifier(
           state = screenState,
           onZoomSessionStart = interactionScope::beginPointerSignalZoom,
-          onZoom = interactionScope::updatePointerSignalZoom,
+          onZoom = { focalInContainerPx, normalizedDelta ->
+            val focalInEditorDp =
+              uiState.containerToEditorLocal(
+                x = focalInContainerPx.x / density,
+                y = focalInContainerPx.y / density,
+              )
+            if (focalInEditorDp == null) {
+              false
+            } else {
+              interactionScope.updatePointerSignalZoom(
+                focalInEditorPx = focalInEditorDp * density,
+                normalizedDelta = normalizedDelta,
+              )
+            }
+          },
           onZoomSessionEnd = interactionScope::endPointerSignalZoom,
         )
       } else {
