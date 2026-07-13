@@ -4,7 +4,9 @@ use editor_model::{Fragment, PlainNode, Schema};
 pub fn to_text(slice: &Slice) -> String {
     let mut out = String::new();
     let mut context = TextContext::default();
-    walk(&slice.fragment, &mut out, &mut context);
+    for fragment in &slice.content {
+        walk(fragment, &mut out, &mut context);
+    }
     out
 }
 

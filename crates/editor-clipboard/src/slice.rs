@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, Fragment, LeafView, Modifier, ModifierType, NodeView, OwnModifier,
-    PlainNode, PlainRootNode, PlainTextNode,
+    ChildView, DocView, Fragment, LeafView, Modifier, ModifierType, NodeType, NodeView,
+    OwnModifier, PlainNode, PlainTextNode,
 };
 use editor_resource::Resource;
 use editor_state::State;
@@ -17,11 +17,10 @@ use crate::text::parse as text_parse;
 use crate::text::serialize as text_serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Slice {
-    pub fragment: Fragment,
-    #[serde(default)]
+    pub content: Vec<Fragment>,
     pub open_start: u32,
-    #[serde(default)]
     pub open_end: u32,
 }
 
@@ -49,11 +48,20 @@ impl Slice {
             (to_block_depth.saturating_sub(common_depth)) as u32 + to.is_inline_position() as u32;
 
         let fragment = build_fragment(state, &common_nv, &rs);
-        Some(Slice {
-            fragment,
-            open_start,
-            open_end,
-        })
+
+        if can_use_as_slice_roots(&fragment.children) {
+            Some(Slice::new(
+                fragment.children,
+                open_start.saturating_sub(1),
+                open_end.saturating_sub(1),
+            ))
+        } else {
+            Some(Slice::new(
+                vec![fragment],
+                open_start.max(1),
+                open_end.max(1),
+            ))
+        }
     }
 
     pub fn to_text(&self) -> String {
@@ -79,12 +87,24 @@ impl Slice {
         }
     }
 
+    pub fn new(content: Vec<Fragment>, open_start: u32, open_end: u32) -> Self {
+        if content.is_empty() {
+            Self {
+                content,
+                open_start: 0,
+                open_end: 0,
+            }
+        } else {
+            Self {
+                content,
+                open_start,
+                open_end,
+            }
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.fragment.children.is_empty()
-            && !matches!(
-                self.fragment.node,
-                PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_)
-            )
+        self.content.is_empty()
     }
 
     pub fn to_payload(&self, resource: &Resource) -> ClipboardPayload {
@@ -93,6 +113,19 @@ impl Slice {
             text: self.to_text(),
         }
     }
+}
+
+fn can_use_as_slice_roots(fragments: &[Fragment]) -> bool {
+    !fragments.is_empty()
+        && (fragments
+            .iter()
+            .all(|fragment| fragment.node.as_type().spec().inline)
+            || fragments.iter().all(|fragment| {
+                NodeType::Root
+                    .spec()
+                    .content
+                    .matches(fragment.node.as_type())
+            }))
 }
 
 fn common_ancestor(view: &DocView, rs: &ResolvedSelection) -> Option<Dot> {
@@ -261,11 +294,7 @@ fn build_fragment(state: &State, nv: &NodeView, rs: &ResolvedSelection) -> Fragm
 
 fn extract_cell_rect(state: &State, view: &DocView, rect: &CellRect) -> Slice {
     let Some(table) = view.node(rect.table_id()) else {
-        return Slice {
-            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
-            open_start: 0,
-            open_end: 0,
-        };
+        return Slice::new(vec![], 0, 0);
     };
     let mut rows: Vec<Fragment> = Vec::new();
     for r in rect.rows().clone() {
@@ -294,16 +323,7 @@ fn extract_cell_rect(state: &State, view: &DocView, rect: &CellRect) -> Slice {
         carry: vec![],
         children: rows,
     };
-    Slice {
-        fragment: Fragment {
-            node: PlainNode::Root(PlainRootNode::default()),
-            modifiers: vec![],
-            carry: vec![],
-            children: vec![table_frag],
-        },
-        open_start: 0,
-        open_end: 0,
-    }
+    Slice::new(vec![table_frag], 0, 0)
 }
 
 #[cfg(test)]
@@ -349,20 +369,16 @@ mod tests {
 
     #[test]
     fn is_empty_recognizes_bare_container() {
-        let slice = Slice {
-            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
-            open_start: 0,
-            open_end: 0,
-        };
+        let slice = Slice::new(vec![], 0, 0);
         assert!(slice.is_empty());
     }
 
     #[test]
     fn is_empty_keeps_text_leaf_non_empty() {
         let slice = Slice {
-            fragment: Fragment::leaf(PlainNode::Text(PlainTextNode {
+            content: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: "hello".into(),
-            })),
+            }))],
             open_start: 0,
             open_end: 0,
         };
@@ -372,7 +388,9 @@ mod tests {
     #[test]
     fn is_empty_keeps_tab_leaf_non_empty() {
         let slice = Slice {
-            fragment: Fragment::leaf(PlainNode::Tab(editor_model::PlainTabNode::default())),
+            content: vec![Fragment::leaf(PlainNode::Tab(
+                editor_model::PlainTabNode::default(),
+            ))],
             open_start: 0,
             open_end: 0,
         };
@@ -380,20 +398,16 @@ mod tests {
     }
 
     #[test]
-    fn extract_inline_within_single_textblock_wraps_in_open_textblock() {
-        // No more text-node identity: an inline selection within one textblock
-        // yields the (carved) textblock fragment with both edges open so paste
-        // merges the run inline.
+    fn extract_inline_within_single_textblock_is_bare_inline() {
         let (s, ..) = state! {
             doc { root { p1: paragraph { text("Hello World") } } }
             selection: (p1, 1) -> (p1, 4)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.open_start, 1);
-        assert_eq!(slice.open_end, 1);
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
-        assert_eq!(slice.fragment.children.len(), 1);
-        if let editor_model::PlainNode::Text(t) = &slice.fragment.children[0].node {
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
+        if let editor_model::PlainNode::Text(t) = &slice.content[0].node {
             assert_eq!(t.text, "ell");
         } else {
             panic!("expected text run child");
@@ -401,7 +415,33 @@ mod tests {
     }
 
     #[test]
-    fn extract_inline_within_fold_title_wraps_in_open_textblock() {
+    fn extract_all_inline_content_drops_source_block_context() {
+        let (state, ..) = state! {
+            doc { root {
+                p1: paragraph [alignment(editor_model::Alignment::Center)] carry([bold]) {
+                    text("Hello")
+                }
+            } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Text(_)));
+        assert!(slice.content[0].carry.is_empty());
+        assert!(
+            slice.content[0]
+                .modifiers
+                .iter()
+                .all(|modifier| !matches!(modifier, Modifier::Alignment { .. }))
+        );
+    }
+
+    #[test]
+    fn extract_inline_within_fold_title_is_bare_inline() {
         let (s, ..) = state! {
             doc { root { fold {
                 ft1: fold_title { text("Hello World") }
@@ -410,15 +450,66 @@ mod tests {
             selection: (ft1, 1) -> (ft1, 4)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.open_start, 1);
-        assert_eq!(slice.open_end, 1);
-        assert!(matches!(slice.fragment.node, PlainNode::FoldTitle(_)));
-        assert_eq!(slice.fragment.children.len(), 1);
-        if let editor_model::PlainNode::Text(t) = &slice.fragment.children[0].node {
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
+        if let editor_model::PlainNode::Text(t) = &slice.content[0].node {
             assert_eq!(t.text, "ell");
         } else {
             panic!("expected text run child");
         }
+    }
+
+    #[test]
+    fn extract_closed_callout_child_does_not_include_fold_content_context() {
+        let (state, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("title") }
+                    content: fold_content {
+                        paragraph { text("inside") }
+                        callout { paragraph { text("moved") } }
+                    }
+                }
+                paragraph { text("after") }
+            } }
+            selection: (content, 1) -> (content, 2)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Callout(_)));
+    }
+
+    #[test]
+    fn extract_portable_children_drops_non_root_common_context() {
+        let (state, ..) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content {
+                        p1: paragraph { text("first") }
+                        p2: paragraph { text("second") }
+                    }
+                }
+            } }
+            selection: (p1, 2) -> (p2, 3)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert_eq!(slice.content.len(), 2);
+        assert!(
+            slice
+                .content
+                .iter()
+                .all(|fragment| matches!(fragment.node, PlainNode::Paragraph(_)))
+        );
     }
 
     #[test]
@@ -437,10 +528,35 @@ mod tests {
         assert_eq!(slice.open_start, 3);
         assert_eq!(slice.open_end, 3);
         assert!(matches!(
-            slice.fragment.node,
+            slice.content[0].node,
             editor_model::PlainNode::BulletList(_)
         ));
-        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(slice.content[0].children.len(), 2);
+    }
+
+    #[test]
+    fn extract_complete_list_item_retains_open_list_context() {
+        let (state, ..) = state! {
+            doc { root {
+                list: bullet_list {
+                    list_item { paragraph { text("first") } }
+                    list_item { paragraph { text("second") } }
+                }
+            } }
+            selection: (list, 0) -> (list, 1)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::BulletList(_)));
+        assert_eq!(slice.content[0].children.len(), 1);
+        assert!(matches!(
+            slice.content[0].children[0].node,
+            PlainNode::ListItem(_)
+        ));
     }
 
     #[test]
@@ -459,13 +575,9 @@ mod tests {
         let slice = Slice::extract(&s).expect("non-collapsed");
         assert_eq!(slice.open_start, 0);
         assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
         assert!(matches!(
-            slice.fragment.node,
-            editor_model::PlainNode::Root(_)
-        ));
-        assert_eq!(slice.fragment.children.len(), 1);
-        assert!(matches!(
-            slice.fragment.children[0].node,
+            slice.content[0].node,
             editor_model::PlainNode::Image(_)
         ));
     }
@@ -483,22 +595,12 @@ mod tests {
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
 
-        assert_eq!(slice.open_start, 2);
-        assert_eq!(slice.open_end, 2);
-        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
-        assert_eq!(slice.fragment.children.len(), 3);
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::Paragraph(_)
-        ));
-        assert!(matches!(
-            slice.fragment.children[1].node,
-            PlainNode::Image(_)
-        ));
-        assert!(matches!(
-            slice.fragment.children[2].node,
-            PlainNode::Paragraph(_)
-        ));
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert_eq!(slice.content.len(), 3);
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
+        assert!(matches!(slice.content[1].node, PlainNode::Image(_)));
+        assert!(matches!(slice.content[2].node, PlainNode::Paragraph(_)));
     }
 
     #[test]
@@ -513,15 +615,15 @@ mod tests {
             selection: (root, 0) -> (root, 1)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.fragment.children.len(), 1);
-        let PlainNode::Callout(plain) = &slice.fragment.children[0].node else {
+        assert_eq!(slice.content.len(), 1);
+        let PlainNode::Callout(plain) = &slice.content[0].node else {
             panic!("expected callout fragment");
         };
         assert_eq!(plain.variant, CalloutVariant::Warning);
     }
 
     #[test]
-    fn extract_across_paragraphs_open_two() {
+    fn extract_across_paragraphs_opens_edge_paragraphs() {
         let (s, ..) = state! {
             doc { root {
                 p1: paragraph { text("abc") }
@@ -530,13 +632,9 @@ mod tests {
             selection: (p1, 1) -> (p2, 2)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.open_start, 2);
-        assert_eq!(slice.open_end, 2);
-        assert!(matches!(
-            slice.fragment.node,
-            editor_model::PlainNode::Root(_)
-        ));
-        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert_eq!(slice.content.len(), 2);
     }
 
     #[test]
@@ -549,12 +647,10 @@ mod tests {
             selection: (p1, 1) -> (p2, 0)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
-        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(slice.content.len(), 2);
         assert!(
             slice
-                .fragment
-                .children
+                .content
                 .iter()
                 .all(|child| matches!(child.node, PlainNode::Paragraph(_)))
         );
@@ -572,15 +668,15 @@ mod tests {
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
 
-        assert_eq!(slice.fragment.children.len(), 2);
+        assert_eq!(slice.content.len(), 2);
         assert!(
-            slice.fragment.children[0]
+            slice.content[0]
                 .modifiers
                 .iter()
                 .any(|m| matches!(m, Modifier::Bold))
         );
         assert!(
-            slice.fragment.children[1]
+            slice.content[1]
                 .modifiers
                 .iter()
                 .any(|m| matches!(m, Modifier::Italic))
@@ -607,11 +703,10 @@ mod tests {
 
         let slice = Slice::extract(&s).expect("non-collapsed");
 
-        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
-        assert_eq!(slice.open_start, 2);
+        assert_eq!(slice.open_start, 1);
         assert_eq!(slice.open_end, 0);
-        assert_eq!(slice.fragment.children.len(), 1);
-        let paragraph = &slice.fragment.children[0];
+        assert_eq!(slice.content.len(), 1);
+        let paragraph = &slice.content[0];
         assert!(matches!(paragraph.node, PlainNode::Paragraph(_)));
         assert!(paragraph.children.is_empty());
     }
@@ -648,7 +743,7 @@ mod tests {
     #[test]
     fn from_payload_text_only() {
         let parsed = Slice::from_payload(None, "hello\n\nworld", &Resource::new_test());
-        assert_eq!(parsed.fragment.children.len(), 3);
+        assert_eq!(parsed.content.len(), 3);
     }
 
     #[test]
@@ -672,9 +767,8 @@ mod tests {
             ..state
         };
         let slice = Slice::extract(&state).expect("cell-rect must extract");
-        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
-        assert_eq!(slice.fragment.children.len(), 1);
-        let table = &slice.fragment.children[0];
+        assert_eq!(slice.content.len(), 1);
+        let table = &slice.content[0];
         assert!(matches!(table.node, PlainNode::Table(_)));
         assert_eq!(table.children.len(), 2);
         for row in &table.children {
@@ -704,7 +798,7 @@ mod tests {
             ..state
         };
         let slice = Slice::extract(&state).unwrap();
-        let table = &slice.fragment.children[0];
+        let table = &slice.content[0];
         assert_eq!(table.children.len(), 1);
         assert_eq!(table.children[0].children.len(), 2);
     }
@@ -724,9 +818,8 @@ mod tests {
             Position::new(para, 3),
         )));
         let slice = Slice::extract(&s).expect("non-collapsed");
-        let para = &slice.fragment;
-        let tab_frag = para
-            .children
+        let tab_frag = slice
+            .content
             .iter()
             .find(|c| matches!(c.node, PlainNode::Tab(_)))
             .expect("Tab must appear in extracted slice");
@@ -755,7 +848,7 @@ mod tests {
             ..state
         };
         let slice = Slice::extract(&state).unwrap();
-        let table = &slice.fragment.children[0];
+        let table = &slice.content[0];
         assert_eq!(table.children.len(), 1);
         assert_eq!(table.children[0].children.len(), 1);
     }
@@ -782,13 +875,21 @@ mod tests {
     #[test]
     fn extract_closed_block_fills_carry() {
         let (s, ..) = state! {
-            doc { r: root { p1: paragraph carry([bold]) { text("X") } } }
+            doc { r: root {
+                p1: paragraph [alignment(editor_model::Alignment::Center)] carry([bold]) {
+                    text("X")
+                }
+            } }
             selection: (r, 0, >) -> (r, 1, <)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
-        let para = &slice.fragment.children[0];
+        let para = &slice.content[0];
         assert!(matches!(para.node, PlainNode::Paragraph(_)));
+        assert!(
+            para.modifiers
+                .iter()
+                .any(|modifier| matches!(modifier, Modifier::Alignment { .. }))
+        );
         assert!(
             para.carry.iter().any(|m| matches!(m, Modifier::Bold)),
             "a fully-contained block carries its carry modifiers into the fragment, got {:?}",
@@ -803,25 +904,27 @@ mod tests {
             selection: (p1, 1) -> (p1, 3)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert!(matches!(slice.fragment.node, PlainNode::Paragraph(_)));
         assert!(
-            slice.fragment.carry.is_empty(),
-            "an open (partial) block fragment discards carry, got {:?}",
-            slice.fragment.carry
+            slice
+                .content
+                .iter()
+                .all(|fragment| fragment.carry.is_empty()),
+            "bare inline fragments discard source block carry, got {:?}",
+            slice.content
         );
     }
 
     #[test]
     fn slice_without_carry_round_trips_and_defaults_empty() {
         let slice = Slice {
-            fragment: Fragment {
+            content: vec![Fragment {
                 node: PlainNode::Paragraph(editor_model::PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
                 children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                     text: "hi".into(),
                 }))],
-            },
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -845,7 +948,7 @@ mod tests {
 
         let resource = Resource::new_test();
         let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
-        let para = &parsed.fragment.children[0];
+        let para = &parsed.content[0];
         assert!(
             para.carry.iter().any(|m| matches!(m, Modifier::Bold)),
             "carry survives the data-slice-v2 payload wire, got {:?}",

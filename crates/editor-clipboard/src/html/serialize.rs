@@ -13,8 +13,8 @@ pub fn to_html(slice: &Slice, resource: &Resource) -> String {
         r#"<meta data-slice-v2="{meta_b64}" data-version="1">"#,
     ));
     out.push_str("<div data-root>");
-    for child in &slice.fragment.children {
-        serialize_node(child, resource, &mut out);
+    for fragment in &slice.content {
+        serialize_node(fragment, resource, &mut out);
     }
     out.push_str("</div>");
     out
@@ -238,17 +238,13 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, PlainTextNode,
     };
     use editor_state::{Position, Selection};
 
     #[test]
     fn serialize_empty_slice_with_meta() {
-        let slice = Slice {
-            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
-            open_start: 0,
-            open_end: 0,
-        };
+        let slice = Slice::new(vec![], 0, 0);
         let html = to_html(&slice, &Resource::new_test());
         assert!(html.contains("data-slice-v2="));
         assert!(html.contains("data-version=\"1\""));
@@ -281,22 +277,17 @@ mod tests {
     #[test]
     fn serialize_text_with_bold_and_italic() {
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![
-                        Fragment::leaf(PlainNode::Text(PlainTextNode {
-                            text: "bold italic".into(),
-                        }))
-                        .with_modifiers(vec![Modifier::Bold, Modifier::Italic]),
-                    ],
-                }],
-            },
+                children: vec![
+                    Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "bold italic".into(),
+                    }))
+                    .with_modifiers(vec![Modifier::Bold, Modifier::Italic]),
+                ],
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -307,27 +298,22 @@ mod tests {
     #[test]
     fn serialize_text_with_style_modifiers() {
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![
-                        Fragment::leaf(PlainNode::Text(PlainTextNode {
-                            text: "styled".into(),
-                        }))
-                        .with_modifiers(vec![
-                            Modifier::FontSize { value: 1600 },
-                            Modifier::TextColor {
-                                value: "#ff0000".into(),
-                            },
-                        ]),
-                    ],
-                }],
-            },
+                children: vec![
+                    Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "styled".into(),
+                    }))
+                    .with_modifiers(vec![
+                        Modifier::FontSize { value: 1600 },
+                        Modifier::TextColor {
+                            value: "#ff0000".into(),
+                        },
+                    ]),
+                ],
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -341,29 +327,24 @@ mod tests {
     #[test]
     fn serialize_palette_keys_resolve_to_theme_hex() {
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![
-                        Fragment::leaf(PlainNode::Text(PlainTextNode {
-                            text: "colored".into(),
-                        }))
-                        .with_modifiers(vec![
-                            Modifier::TextColor {
-                                value: "red".into(),
-                            },
-                            Modifier::BackgroundColor {
-                                value: "yellow".into(),
-                            },
-                        ]),
-                    ],
-                }],
-            },
+                children: vec![
+                    Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "colored".into(),
+                    }))
+                    .with_modifiers(vec![
+                        Modifier::TextColor {
+                            value: "red".into(),
+                        },
+                        Modifier::BackgroundColor {
+                            value: "yellow".into(),
+                        },
+                    ]),
+                ],
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -377,26 +358,19 @@ mod tests {
     #[test]
     fn serialize_background_none_resolves_to_transparent() {
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![
-                        Fragment::leaf(PlainNode::Text(PlainTextNode {
-                            text: "plain".into(),
-                        }))
-                        .with_modifiers(vec![
-                            Modifier::BackgroundColor {
-                                value: "none".into(),
-                            },
-                        ]),
-                    ],
-                }],
-            },
+                children: vec![
+                    Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "plain".into(),
+                    }))
+                    .with_modifiers(vec![Modifier::BackgroundColor {
+                        value: "none".into(),
+                    }]),
+                ],
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -410,24 +384,19 @@ mod tests {
     #[test]
     fn serialize_text_with_link() {
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![
-                        Fragment::leaf(PlainNode::Text(PlainTextNode {
-                            text: "click".into(),
-                        }))
-                        .with_modifiers(vec![Modifier::Link {
-                            href: "https://example.com".into(),
-                        }]),
-                    ],
-                }],
-            },
+                children: vec![
+                    Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "click".into(),
+                    }))
+                    .with_modifiers(vec![Modifier::Link {
+                        href: "https://example.com".into(),
+                    }]),
+                ],
+            }],
             open_start: 0,
             open_end: 0,
         };

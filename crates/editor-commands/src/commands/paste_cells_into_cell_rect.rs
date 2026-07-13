@@ -104,7 +104,7 @@ pub fn paste_cells_into_cell_rect(tr: &mut Transaction, slice: Slice) -> Command
 }
 
 fn extract_source_rows(slice: &Slice) -> Option<Vec<Vec<Fragment>>> {
-    let table = find_table_fragment(&slice.fragment)?;
+    let table = slice.content.iter().find_map(find_table_fragment)?;
     let mut rows: Vec<Vec<Fragment>> = Vec::new();
     for r in &table.children {
         if !matches!(r.node, PlainNode::TableRow(_)) {

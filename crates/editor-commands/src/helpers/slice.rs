@@ -106,13 +106,16 @@ pub(crate) fn insert_slice_at_position(
     let position = materialize_position_block(tr, position)?;
     let in_textblock = position_in_textblock(tr, &position);
     if in_textblock {
+        let slice = open_slice_for_textblock_parent(tr, &position, &slice).unwrap_or(slice);
         let mode = build_inline_mode(tr, &position, provenance)?;
         if let Some(fragments) =
             inline_content_fragments_for_textblock_insert(tr, &position, &slice)
         {
             insert_content_as_inline_at_position(tr, position, fragments, &mode)
-        } else {
+        } else if can_split_textblock_at_position(tr, &position) {
             insert_blocks_in_textblock_at_position(tr, position, &slice, &mode)
+        } else {
+            Ok(None)
         }
     } else {
         insert_blocks_at_block_boundary(tr, position, &slice)
@@ -127,26 +130,7 @@ fn position_in_textblock(tr: &Transaction, position: &Position) -> bool {
 }
 
 fn top_level_fragments(slice: &Slice) -> Vec<&Fragment> {
-    match &slice.fragment.node {
-        PlainNode::Root(_) => slice.fragment.children.iter().collect(),
-        _ => vec![&slice.fragment],
-    }
-}
-
-fn open_content_fragments(mut fragments: Vec<&Fragment>, open_depth: u32) -> Vec<&Fragment> {
-    for _ in 0..open_depth {
-        let mut next = Vec::new();
-        for fragment in fragments {
-            if Schema::node_spec(fragment.node.as_type()).is_leaf() || fragment.children.is_empty()
-            {
-                next.push(fragment);
-            } else {
-                next.extend(fragment.children.iter());
-            }
-        }
-        fragments = next;
-    }
-    fragments
+    slice.content.iter().collect()
 }
 
 fn fragments_fit_parent(parent_type: NodeType, fragments: &[&Fragment]) -> bool {
@@ -179,6 +163,36 @@ fn can_split_textblock_for_structural_insert(view: &DocView, textblock_id: Dot) 
     parent.spec().content.matches_sequence(&child_types)
 }
 
+fn can_split_textblock_at_position(tr: &Transaction, position: &Position) -> bool {
+    let view = tr.state().view();
+    find_ancestor_textblock(&view, position.node)
+        .is_some_and(|textblock| can_split_textblock_for_structural_insert(&view, textblock))
+}
+
+fn open_slice_for_textblock_parent(
+    tr: &Transaction,
+    position: &Position,
+    slice: &Slice,
+) -> Option<Slice> {
+    let view = tr.state().view();
+    let textblock_id = find_ancestor_textblock(&view, position.node)?;
+    if !can_split_textblock_for_structural_insert(&view, textblock_id) {
+        return None;
+    }
+    let parent_type = view.node(textblock_id)?.parent()?.node_type();
+    let (content, open_start, open_end) = open_fragments_for_parent(
+        top_level_fragments(slice),
+        slice.open_start,
+        slice.open_end,
+        parent_type,
+    )?;
+    Some(Slice::new(
+        content.into_iter().cloned().collect(),
+        open_start,
+        open_end,
+    ))
+}
+
 fn inline_content_fragments_for_textblock_insert<'a>(
     tr: &Transaction,
     position: &Position,
@@ -196,13 +210,17 @@ fn inline_content_fragments_for_textblock_insert<'a>(
         return Some(top_level);
     }
 
-    if slice.open_start == 0 {
+    if slice.open_start == 0 && slice.open_end == 0 {
         return None;
     }
 
-    let open_content = open_content_fragments(top_level.clone(), slice.open_start);
-    if !fragments_are_inline(&open_content) || !fragments_fit_parent(textblock_type, &open_content)
-    {
+    let (open_content, _, _) = open_fragments_for_parent(
+        top_level.clone(),
+        slice.open_start,
+        slice.open_end,
+        textblock_type,
+    )?;
+    if !fragments_are_inline(&open_content) {
         return None;
     }
 
@@ -357,10 +375,7 @@ fn insert_blocks_in_textblock(
     let p2_id = block_child_id(tr, container_id, textblock_index + 1)
         .ok_or_else(|| CommandError::Corrupted("split produced no right half".into()))?;
 
-    let blocks: Vec<&Fragment> = match &slice.fragment.node {
-        PlainNode::Root(_) => slice.fragment.children.iter().collect(),
-        _ => vec![&slice.fragment],
-    };
+    let blocks: Vec<&Fragment> = slice.content.iter().collect();
 
     let merge_start = slice.open_start > 0
         && blocks
@@ -554,10 +569,9 @@ fn insert_blocks_at_block_boundary(
         .node(container_id)
         .ok_or(CommandError::NodeNotFound(container_id))?
         .node_type();
-    let blocks = block_boundary_fragments(slice, container_type);
-    if blocks.is_empty() {
+    let Some(blocks) = block_boundary_fragments(slice, container_type) else {
         return Ok(None);
-    }
+    };
 
     let block_count = blocks.len();
     tr.batch(|tr| {
@@ -589,22 +603,89 @@ fn insert_blocks_at_block_boundary(
     )))
 }
 
-fn block_boundary_fragments(slice: &Slice, container_type: NodeType) -> Vec<Fragment> {
+fn block_boundary_fragments(slice: &Slice, container_type: NodeType) -> Option<Vec<Fragment>> {
     let top_level = top_level_fragments(slice);
     if fragments_are_inline(&top_level)
         && Schema::node_spec(container_type)
             .content
             .matches(NodeType::Paragraph)
     {
-        return vec![Fragment {
+        return Some(vec![Fragment {
             node: PlainNode::Paragraph(PlainParagraphNode::default()),
             modifiers: vec![],
             carry: vec![],
             children: top_level.into_iter().cloned().collect(),
-        }];
+        }]);
     }
 
-    top_level.into_iter().cloned().collect()
+    open_fragments_for_parent(top_level, slice.open_start, slice.open_end, container_type)
+        .map(|(fragments, _, _)| fragments.into_iter().cloned().collect())
+}
+
+fn open_fragments_for_parent<'a>(
+    mut candidates: Vec<&'a Fragment>,
+    mut open_start: u32,
+    mut open_end: u32,
+    parent_type: NodeType,
+) -> Option<(Vec<&'a Fragment>, u32, u32)> {
+    let content = &Schema::node_spec(parent_type).content;
+    loop {
+        if candidates.is_empty() {
+            return None;
+        }
+        if fragments_fit_parent(parent_type, &candidates) {
+            return Some((candidates, open_start, open_end));
+        }
+
+        let first_rejected = !content.matches(candidates.first()?.node.as_type());
+        let last_rejected = !content.matches(candidates.last()?.node.as_type());
+        if !first_rejected && !last_rejected {
+            return None;
+        }
+
+        if candidates.len() == 1 {
+            let can_open_start = first_rejected && open_start > 0;
+            let can_open_end = last_rejected && open_end > 0;
+            if !can_open_start && !can_open_end {
+                return None;
+            }
+            let only = candidates.pop()?;
+            if only.children.is_empty() {
+                return None;
+            }
+            candidates.extend(&only.children);
+            if can_open_start {
+                open_start -= 1;
+            }
+            if can_open_end {
+                open_end -= 1;
+            }
+            continue;
+        }
+
+        if first_rejected {
+            if open_start == 0 {
+                return None;
+            }
+            let first = candidates.remove(0);
+            if first.children.is_empty() {
+                return None;
+            }
+            candidates.splice(0..0, &first.children);
+            open_start -= 1;
+        }
+        if last_rejected {
+            if open_end == 0 {
+                return None;
+            }
+            let last = candidates.pop()?;
+            if last.children.is_empty() {
+                return None;
+            }
+            candidates.extend(&last.children);
+            open_end -= 1;
+        }
+    }
 }
 
 fn selection_over_inserted_blocks(

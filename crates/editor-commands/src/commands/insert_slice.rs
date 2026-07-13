@@ -34,8 +34,8 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        Alignment, ChildView, Fragment, Modifier, NodeType, PlainFoldTitleNode, PlainNode,
-        PlainParagraphNode, PlainRootNode, PlainTextNode,
+        Alignment, ChildView, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode,
+        PlainTextNode,
     };
     use editor_resource::Resource;
     use editor_state::{Position, Selection, State};
@@ -70,21 +70,16 @@ mod tests {
 
     fn root_with_paragraph(text: &str) -> Slice {
         Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                        text: text.into(),
-                    }))],
-                }],
-            },
-            open_start: 2,
-            open_end: 2,
+                children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                    text: text.into(),
+                }))],
+            }],
+            open_start: 1,
+            open_end: 1,
         }
     }
 
@@ -101,16 +96,14 @@ mod tests {
 
     fn open_fold_title_slice(text: &str) -> Slice {
         Slice {
-            fragment: Fragment {
-                node: PlainNode::FoldTitle(PlainFoldTitleNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Text(PlainTextNode { text: text.into() }),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                    text: text.into(),
-                }))],
-            },
-            open_start: 1,
-            open_end: 1,
+                children: vec![],
+            }],
+            open_start: 0,
+            open_end: 0,
         }
     }
 
@@ -120,11 +113,7 @@ mod tests {
             doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 2)
         };
-        let empty = Slice {
-            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
-            open_start: 0,
-            open_end: 0,
-        };
+        let empty = Slice::new(vec![], 0, 0);
         let (actual, ..) = transact_fail!(initial.clone(), |tr| insert_slice(
             &mut tr,
             empty,
@@ -165,12 +154,7 @@ mod tests {
             children: vec![],
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![empty_paragraph(), empty_paragraph()],
-            },
+            content: vec![empty_paragraph(), empty_paragraph()],
             open_start: 1,
             open_end: 1,
         };
@@ -216,9 +200,46 @@ mod tests {
     }
 
     #[test]
+    fn insert_bare_inline_at_block_boundary_materializes_default_paragraph() {
+        let (source, ..) = state! {
+            doc { root {
+                source: paragraph [alignment(Alignment::Right)] carry([italic]) {
+                    text("XY") [bold]
+                }
+            } }
+            selection: (source, 0) -> (source, 2)
+        };
+        let slice = Slice::extract(&source).expect("non-collapsed");
+        assert!(
+            slice
+                .content
+                .iter()
+                .all(|fragment| fragment.carry.is_empty())
+        );
+
+        let (initial, ..) = state! {
+            doc { root: root { paragraph { text("Z") } } }
+            selection: (root, 1, >)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("Z") }
+                inserted: paragraph { text("XY") [bold] }
+            } }
+            selection: (inserted, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn insert_open_paragraph_text_into_fold_title_uses_open_inline_content() {
         let (source, ..) = state! {
-            doc { root { p1: paragraph { text("body") } } }
+            doc { root { p1: paragraph { text("body") [bold] } } }
             selection: (p1, 0) -> (p1, 4)
         };
         let slice = Slice::extract(&source).expect("non-collapsed");
@@ -246,6 +267,34 @@ mod tests {
     }
 
     #[test]
+    fn insert_plain_text_slice_into_fold_title_opens_paragraph_context() {
+        let slice = Slice::from_text("body");
+        assert_eq!((slice.open_start, slice.open_end), (1, 1));
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
+
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 5)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+        let (expected, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("titlebody") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 9)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn insert_open_fold_title_text_into_paragraph_uses_open_inline_content() {
         let (initial, ..) = state! {
             doc { root { p: paragraph {} } }
@@ -264,6 +313,34 @@ mod tests {
     }
 
     #[test]
+    fn open_edge_inline_fallback_does_not_flatten_closed_middle_textblock() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 5)
+        };
+        let slice = Slice {
+            content: vec![
+                paragraph_fragment("A"),
+                paragraph_fragment("M"),
+                paragraph_fragment("B"),
+            ],
+            open_start: 1,
+            open_end: 1,
+        };
+
+        let (actual, ..) = transact_fail!(initial.clone(), |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        assert_state_eq!(&actual, &initial);
+    }
+
+    #[test]
     fn insert_block_slice_into_paragraph_preserves_block_structure() {
         use editor_model::{PlainBulletListNode, PlainListItemNode};
         let (initial, ..) = state! {
@@ -271,22 +348,17 @@ mod tests {
             selection: (p1, 5)
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::BulletList(PlainBulletListNode::default()),
                 modifiers: vec![],
                 carry: vec![],
                 children: vec![Fragment {
-                    node: PlainNode::BulletList(PlainBulletListNode::default()),
+                    node: PlainNode::ListItem(PlainListItemNode::default()),
                     modifiers: vec![],
                     carry: vec![],
-                    children: vec![Fragment {
-                        node: PlainNode::ListItem(PlainListItemNode::default()),
-                        modifiers: vec![],
-                        carry: vec![],
-                        children: vec![paragraph_fragment("X")],
-                    }],
+                    children: vec![paragraph_fragment("X")],
                 }],
-            },
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -369,12 +441,7 @@ mod tests {
             selection: (r, 1, >)
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![paragraph_fragment("X"), paragraph_fragment("Y")],
-            },
+            content: vec![paragraph_fragment("X"), paragraph_fragment("Y")],
             open_start: 0,
             open_end: 0,
         };
@@ -403,25 +470,20 @@ mod tests {
             selection: (p1, 0)
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![
-                    Fragment {
-                        node: PlainNode::Callout(PlainCalloutNode::default()),
-                        modifiers: vec![],
-                        carry: vec![],
-                        children: vec![paragraph_fragment("1")],
-                    },
-                    Fragment {
-                        node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                        modifiers: vec![],
-                        carry: vec![],
-                        children: vec![],
-                    },
-                ],
-            },
+            content: vec![
+                Fragment {
+                    node: PlainNode::Callout(PlainCalloutNode::default()),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![paragraph_fragment("1")],
+                },
+                Fragment {
+                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![],
+                },
+            ],
             open_start: 0,
             open_end: 0,
         };
@@ -447,14 +509,9 @@ mod tests {
             selection: (p1, 5)
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![paragraph_fragment("first"), paragraph_fragment("second")],
-            },
-            open_start: 2,
-            open_end: 2,
+            content: vec![paragraph_fragment("first"), paragraph_fragment("second")],
+            open_start: 1,
+            open_end: 1,
         };
         let (actual, ..) = transact!(initial, |tr| insert_slice(
             &mut tr,
@@ -472,6 +529,76 @@ mod tests {
     }
 
     #[test]
+    fn structural_insert_opens_only_edge_paragraphs_and_preserves_closed_middle() {
+        let (initial, ..) = state! {
+            doc { root { p1: paragraph { text("xy") } } }
+            selection: (p1, 1)
+        };
+        let slice = Slice {
+            content: vec![
+                paragraph_fragment("A"),
+                Fragment {
+                    node: NodeType::Callout.into_node().to_plain(),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![paragraph_fragment("M")],
+                },
+                paragraph_fragment("B"),
+            ],
+            open_start: 1,
+            open_end: 1,
+        };
+
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("xA") }
+                callout { paragraph { text("M") } }
+                p2: paragraph { text("By") }
+            } }
+            selection: (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn structural_insert_opens_compatible_outer_context_before_merging_textblock_edges() {
+        let (initial, ..) = state! {
+            doc { root { blockquote { p1: paragraph { text("xy") } } } }
+            selection: (p1, 1)
+        };
+        let slice = Slice {
+            content: vec![Fragment {
+                node: NodeType::Blockquote.into_node().to_plain(),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![paragraph_fragment("A"), paragraph_fragment("B")],
+            }],
+            open_start: 2,
+            open_end: 2,
+        };
+
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root { blockquote {
+                paragraph { text("xA") }
+                p2: paragraph { text("By") }
+            } } }
+            selection: (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn insert_image_at_text_middle_splits_paragraph_and_inserts() {
         use editor_model::PlainImageNode;
         let (initial, ..) = state! {
@@ -479,12 +606,7 @@ mod tests {
             selection: (p1, 3)
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
-            },
+            content: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             open_start: 0,
             open_end: 0,
         };
@@ -512,12 +634,7 @@ mod tests {
             selection: (p1, 0)
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
-            },
+            content: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             open_start: 0,
             open_end: 0,
         };
@@ -559,12 +676,7 @@ mod tests {
         );
 
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
-            },
+            content: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             open_start: 0,
             open_end: 0,
         };
@@ -594,24 +706,19 @@ mod tests {
             pending_modifiers: [bold]
         };
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
                 children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
+                    node: PlainNode::Text(PlainTextNode { text: "XY".into() }),
+                    modifiers: vec![Modifier::Italic],
                     carry: vec![],
-                    children: vec![Fragment {
-                        node: PlainNode::Text(PlainTextNode { text: "XY".into() }),
-                        modifiers: vec![Modifier::Italic],
-                        carry: vec![],
-                        children: vec![],
-                    }],
+                    children: vec![],
                 }],
-            },
-            open_start: 2,
-            open_end: 2,
+            }],
+            open_start: 1,
+            open_end: 1,
         };
         let (actual, ..) = transact!(initial, |tr| insert_slice(
             &mut tr,
@@ -648,7 +755,7 @@ mod tests {
         };
         let original = Slice::extract(&source).expect("non-collapsed");
         assert!(
-            original.fragment.children[3]
+            original.content[3]
                 .carry
                 .iter()
                 .any(|m| matches!(m, Modifier::Bold)),
@@ -675,7 +782,7 @@ mod tests {
             Slice::extract(&pasted).expect("re-extract pasted blocks")
         };
         assert_eq!(
-            reextracted.fragment.children, original.fragment.children,
+            reextracted.content, original.content,
             "paint, block format, and carry all survive the copy-paste round trip"
         );
     }
@@ -690,19 +797,16 @@ mod tests {
         };
         let original = Slice::extract(&source).expect("non-collapsed");
         assert!(
-            original.fragment.children[0]
-                .modifiers
-                .iter()
-                .any(|m| matches!(
-                    m,
-                    Modifier::Alignment {
-                        value: Alignment::Center
-                    }
-                )),
+            original.content[0].modifiers.iter().any(|m| matches!(
+                m,
+                Modifier::Alignment {
+                    value: Alignment::Center
+                }
+            )),
             "sanity: extracted paragraph is center-aligned"
         );
         assert!(
-            original.fragment.children[0]
+            original.content[0]
                 .carry
                 .iter()
                 .any(|m| matches!(m, Modifier::Bold)),
@@ -749,7 +853,7 @@ mod tests {
         let payload = original.to_payload(&Resource::new_test());
         let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &Resource::new_test());
         assert!(
-            matches!(parsed.fragment.children[0].node, PlainNode::Image(_)),
+            matches!(parsed.content[0].node, PlainNode::Image(_)),
             "sanity: payload carries the image"
         );
 
@@ -796,8 +900,10 @@ mod tests {
         };
         let open = Slice::extract(&src).expect("non-collapsed");
         assert!(
-            open.fragment.carry.is_empty(),
-            "sanity: an open (inline) fragment carries no carry"
+            open.content
+                .iter()
+                .all(|fragment| fragment.carry.is_empty()),
+            "sanity: bare inline fragments carry no block carry"
         );
 
         let (initial, p1, ..) = state! {

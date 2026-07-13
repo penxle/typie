@@ -11,7 +11,6 @@ pub mod walker;
 use crate::slice::Slice;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use editor_model::{Fragment, PlainNode, PlainRootNode};
 use editor_resource::Resource;
 use scraper::{Html, Selector};
 use std::sync::OnceLock;
@@ -66,16 +65,11 @@ fn fallback_body_parse(doc: &Html, resource: &Resource) -> Slice {
     for child in body.children() {
         crate::html::parse::walker::walk(child, &mut children, &[], &[], &sheet, resource);
     }
-    Slice {
-        fragment: Fragment {
-            node: PlainNode::Root(PlainRootNode::default()),
-            modifiers: vec![],
-            carry: vec![],
-            children: crate::html::parse::schema_normalize::normalize(children),
-        },
-        open_start: 0,
-        open_end: 0,
-    }
+    Slice::new(
+        crate::html::parse::schema_normalize::normalize(children),
+        0,
+        0,
+    )
 }
 
 #[cfg(test)]
@@ -84,7 +78,9 @@ mod tests {
     use crate::test_doc::DocBuilder;
     use editor_crdt::Dot;
     use editor_macros::state;
-    use editor_model::{AtomLeaf, Modifier, NodeType, PlainParagraphNode, PlainTextNode};
+    use editor_model::{
+        AtomLeaf, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, PlainTextNode,
+    };
     use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource, ThemeVariant};
     use editor_state::{Position, Selection};
 
@@ -121,7 +117,7 @@ mod tests {
         let stripped = &html[html.find("<div data-root>").unwrap()..];
 
         let parsed = Slice::from_html(stripped, &resource);
-        let colors: Vec<String> = parsed.fragment.children[0]
+        let colors: Vec<String> = parsed.content[0]
             .children
             .iter()
             .filter_map(|f| {
@@ -138,20 +134,16 @@ mod tests {
     fn from_html_body_paragraph() {
         let html = "<p>Hello</p>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        assert!(matches!(slice.fragment.node, PlainNode::Root(_)));
-        assert_eq!(slice.fragment.children.len(), 1);
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::Paragraph(_)
-        ));
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
     }
 
     #[test]
     fn from_html_ignores_apple_interchange_newline_break() {
         let html = r#"<p>Hello</p><br class="Apple-interchange-newline">"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        assert_eq!(slice.fragment.children.len(), 1);
-        let p = &slice.fragment.children[0];
+        assert_eq!(slice.content.len(), 1);
+        let p = &slice.content[0];
         assert!(matches!(p.node, PlainNode::Paragraph(_)));
         assert_eq!(p.children.len(), 1);
         assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "Hello"));
@@ -161,7 +153,7 @@ mod tests {
     fn from_html_text_newline_is_ignored() {
         let html = "<p style=\"white-space:break-spaces\"><span>a\nb</span></p>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        let p = &slice.fragment.children[0];
+        let p = &slice.content[0];
         assert_eq!(p.children.len(), 1);
         assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "ab"));
     }
@@ -170,7 +162,7 @@ mod tests {
     fn from_html_trailing_text_newline_is_ignored() {
         let html = "<p style=\"white-space:break-spaces\"><span>a\n</span></p>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        let p = &slice.fragment.children[0];
+        let p = &slice.content[0];
         assert_eq!(p.children.len(), 1);
         assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "a"));
     }
@@ -179,7 +171,7 @@ mod tests {
     fn from_html_text_crlf_is_ignored() {
         let html = "<p><span>a\r\nb\rc</span></p>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        let p = &slice.fragment.children[0];
+        let p = &slice.content[0];
         assert_eq!(p.children.len(), 1);
         assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "abc"));
     }
@@ -188,7 +180,7 @@ mod tests {
     fn from_html_br_still_becomes_hard_break() {
         let html = "<p>a<br>b</p>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        let p = &slice.fragment.children[0];
+        let p = &slice.content[0];
         assert_eq!(p.children.len(), 3);
         assert!(matches!(&p.children[0].node, PlainNode::Text(t) if t.text == "a"));
         assert!(matches!(p.children[1].node, PlainNode::HardBreak(_)));
@@ -199,7 +191,7 @@ mod tests {
     fn from_html_bold_italic_modifiers() {
         let html = "<p><strong><em>hi</em></strong></p>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        let p = &slice.fragment.children[0];
+        let p = &slice.content[0];
         let text_frag = &p.children[0];
         assert!(matches!(text_frag.node, PlainNode::Text(_)));
         let mods: std::collections::HashSet<_> = text_frag.modifiers.iter().collect();
@@ -211,46 +203,34 @@ mod tests {
     fn from_html_text_in_root_wrapped_in_paragraph() {
         let html = "hello";
         let slice = Slice::from_html(html, &Resource::new_test());
-        assert_eq!(slice.fragment.children.len(), 1);
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::Paragraph(_)
-        ));
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
     }
 
     #[test]
     fn from_html_orphan_li_wrapped_in_ul() {
         let html = "<li>a</li>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::BulletList(_)
-        ));
+        assert!(matches!(slice.content[0].node, PlainNode::BulletList(_)));
     }
 
     #[test]
     fn from_html_orphan_tr_wrapped_in_table() {
         let html = "<tr><td>a</td></tr>";
         let slice = Slice::from_html(html, &Resource::new_test());
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::Table(_)
-        ));
+        assert!(matches!(slice.content[0].node, PlainNode::Table(_)));
     }
 
     #[test]
     fn from_html_invalid_meta_falls_back_to_body() {
         let html = r#"<meta data-slice-v2="!!!notbase64!!!" data-version="1"><div data-root><p>hello</p></div>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        assert_eq!(slice.fragment.children.len(), 1);
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::Paragraph(_)
-        ));
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
     }
 
     #[test]
-    fn from_html_legacy_v1_meta_attribute_is_unrecognized_and_falls_back() {
+    fn from_html_legacy_meta_attribute_is_unrecognized_and_falls_back() {
         let (s, ..) = state! {
             doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 0) -> (p1, 5)
@@ -262,20 +242,17 @@ mod tests {
         let slice = Slice::from_html(&legacy_html, &Resource::new_test());
         assert_ne!(
             slice, original,
-            "a v1-named meta payload must not be decoded as the current schema"
+            "a legacy-named meta payload must not be decoded as the current schema"
         );
-        assert_eq!(slice.fragment.children.len(), 1);
-        assert!(matches!(
-            slice.fragment.children[0].node,
-            PlainNode::Paragraph(_)
-        ));
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
     }
 
     #[test]
     fn from_html_callout_variant_restored() {
         let html = r#"<aside data-callout data-variant="warning"><p>warn</p></aside>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        let aside = &slice.fragment.children[0];
+        let aside = &slice.content[0];
         if let PlainNode::Callout(c) = &aside.node {
             assert!(matches!(c.variant, editor_model::CalloutVariant::Warning));
         } else {
@@ -287,7 +264,7 @@ mod tests {
     fn from_html_inline_style_to_modifiers() {
         let html = r#"<p><span style="font-weight:700;color:#ff0000;text-decoration:underline">x</span></p>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         let mods: Vec<_> = text_frag.modifiers.iter().collect();
         assert!(
             mods.iter()
@@ -304,7 +281,7 @@ mod tests {
     fn parse_strong_span_font_weight_does_not_duplicate_bold() {
         let html = r#"<p><strong><span style="font-weight:700">x</span></strong></p>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         let bold_count = text_frag
             .modifiers
             .iter()
@@ -326,7 +303,7 @@ mod tests {
     fn parse_em_span_font_style_does_not_duplicate_italic() {
         let html = r#"<p><em><span style="font-style:italic">x</span></em></p>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         let italic_count = text_frag
             .modifiers
             .iter()
@@ -339,7 +316,7 @@ mod tests {
     fn parse_u_span_text_decoration_does_not_duplicate_underline() {
         let html = r#"<p><u><span style="text-decoration:underline">x</span></u></p>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         let underline_count = text_frag
             .modifiers
             .iter()
@@ -352,7 +329,7 @@ mod tests {
     fn parse_s_span_text_decoration_does_not_duplicate_strikethrough() {
         let html = r#"<p><s><span style="text-decoration:line-through">x</span></s></p>"#;
         let slice = Slice::from_html(html, &Resource::new_test());
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         let strike_count = text_frag
             .modifiers
             .iter()
@@ -380,7 +357,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:700">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         assert!(
             text_frag
                 .modifiers
@@ -410,7 +387,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:700">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let text_frag = &slice.fragment.children[0].children[0];
+        let text_frag = &slice.content[0].children[0];
         assert!(
             text_frag
                 .modifiers
@@ -445,26 +422,21 @@ mod tests {
             ],
         }]);
         let original = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
+            content: vec![Fragment {
+                node: PlainNode::Paragraph(PlainParagraphNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![
-                        Fragment::leaf(PlainNode::Text(PlainTextNode { text: "x".into() }))
-                            .with_modifiers(vec![
-                                Modifier::FontFamily {
-                                    value: "Pretendard".into(),
-                                },
-                                Modifier::Bold,
-                                Modifier::FontWeight { value: 700 },
-                            ]),
-                    ],
-                }],
-            },
+                children: vec![
+                    Fragment::leaf(PlainNode::Text(PlainTextNode { text: "x".into() }))
+                        .with_modifiers(vec![
+                            Modifier::FontFamily {
+                                value: "Pretendard".into(),
+                            },
+                            Modifier::Bold,
+                            Modifier::FontWeight { value: 700 },
+                        ]),
+                ],
+            }],
             open_start: 0,
             open_end: 0,
         };
@@ -472,7 +444,7 @@ mod tests {
         let body_start = html.find("<div data-root>").expect("root div present");
         let body_only = &html[body_start..];
         let parsed = Slice::from_html(body_only, &resource);
-        let text_frag = &parsed.fragment.children[0].children[0];
+        let text_frag = &parsed.content[0].children[0];
         let bold_count = text_frag
             .modifiers
             .iter()
@@ -505,7 +477,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font:italic bold 16px Arial">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(t.modifiers.iter().any(|m| matches!(m, Modifier::Italic)));
         assert!(
             t.modifiers
@@ -525,7 +497,7 @@ mod tests {
         );
     }
 
-    fn find_text(root: &Fragment) -> Option<&Fragment> {
+    fn find_text(slice: &Slice) -> Option<&Fragment> {
         fn rec(f: &Fragment) -> Option<&Fragment> {
             if matches!(f.node, PlainNode::Text(_)) {
                 return Some(f);
@@ -537,7 +509,7 @@ mod tests {
             }
             None
         }
-        rec(root)
+        slice.content.iter().find_map(rec)
     }
 
     #[test]
@@ -546,7 +518,7 @@ mod tests {
             r#"<div style="color:red"><p>x</p></div>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -560,7 +532,7 @@ mod tests {
             r#"<div style="color:red"><p style="color:blue">x</p></div>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -579,7 +551,7 @@ mod tests {
             r#"<div style="background:yellow"><p>x</p></div>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -593,7 +565,7 @@ mod tests {
             r#"<style>.a { color: red; }</style><div class="a"><p>x</p></div>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -607,7 +579,7 @@ mod tests {
             r#"<style>p { color: red; }</style><p style="color:blue">x</p>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -621,7 +593,7 @@ mod tests {
             r#"<style>p { color: blue; } .c { color: red; }</style><p class="c">x</p>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -635,7 +607,7 @@ mod tests {
             r#"<a href="https://a.com"><span>nested</span></a>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -649,7 +621,7 @@ mod tests {
             r#"<p><a href="https://a.com">a</a><span>b</span></p>"#,
             &Resource::new_test(),
         );
-        let p = &s.fragment.children[0];
+        let p = &s.content[0];
         let mut ta: Option<&Fragment> = None;
         let mut tb: Option<&Fragment> = None;
         fn collect<'a>(
@@ -700,14 +672,14 @@ mod tests {
             }
             None
         }
-        let p = find_block(&s.fragment).unwrap();
+        let p = s.content.iter().find_map(find_block).unwrap();
         assert!(p.modifiers.iter().any(|m| matches!(
             m,
             Modifier::Alignment {
                 value: editor_model::Alignment::Center
             }
         )));
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             !t.modifiers
                 .iter()
@@ -721,7 +693,7 @@ mod tests {
             r#"<p style="color:red !important">x</p>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             !t.modifiers
                 .iter()
@@ -735,7 +707,7 @@ mod tests {
             r#"<style>p { color: red !important; }</style><p>x</p>"#,
             &Resource::new_test(),
         );
-        let t = find_text(&s.fragment).unwrap();
+        let t = find_text(&s).unwrap();
         assert!(
             !t.modifiers
                 .iter()
@@ -746,7 +718,7 @@ mod tests {
     #[test]
     fn orphan_tr_wraps() {
         let s = Slice::from_html("<tr><td>a</td></tr>", &Resource::new_test());
-        assert!(matches!(s.fragment.children[0].node, PlainNode::Table(_)));
+        assert!(matches!(s.content[0].node, PlainNode::Table(_)));
     }
 
     fn register_test_family(resource: &mut Resource, name: &str) {
@@ -765,7 +737,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="color:rgb(192,0,0)">red text</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -780,7 +752,7 @@ mod tests {
         register_test_family(&mut resource, "Pretendard");
         let html = r#"<p><span style="font-family:'Arial', Pretendard, sans-serif">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -794,7 +766,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="font-family:Calibri">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             !t.modifiers
                 .iter()
@@ -822,7 +794,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:350">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -836,7 +808,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="font-size:16px">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -850,7 +822,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="font-size:1.5rem">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -865,7 +837,7 @@ mod tests {
         resource.theme.set_variant(ThemeVariant::DarkBlack);
         let html = r#"<p><span style="color:#ffffff">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         let key = t
             .modifiers
             .iter()
@@ -885,7 +857,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="background-color:transparent">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -899,7 +871,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="letter-spacing:normal">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -913,7 +885,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="letter-spacing:0.07em">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -941,7 +913,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong>x</strong></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         let bold_count = t
             .modifiers
             .iter()
@@ -971,7 +943,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong>x</strong></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         let bold_count = t
             .modifiers
             .iter()
@@ -996,7 +968,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><strong>x</strong></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(t.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
         assert!(
             !t.modifiers
@@ -1024,7 +996,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:800">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1056,7 +1028,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:900">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1084,7 +1056,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:600">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1112,7 +1084,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:300">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1126,7 +1098,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="font-family:Calibri;font-weight:800">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1144,7 +1116,7 @@ mod tests {
         let resource = Resource::new_test();
         let html = r#"<p><span style="font-family:Calibri;font-weight:300">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1167,7 +1139,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong><span style="font-weight:normal">x</span></strong></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1193,7 +1165,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong><span style="font-family:Calibri;font-weight:normal">x</span></strong></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1225,7 +1197,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><strong style="font-weight:400">x</strong></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1253,7 +1225,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard"><span style="font-weight:bolder">x</span></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1285,7 +1257,7 @@ mod tests {
         }]);
         let html = r#"<p><span style="font-family:Pretendard;font-weight:700"><span style="font-weight:lighter">x</span></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1327,7 +1299,7 @@ mod tests {
         ]);
         let html = r#"<p><span style="font-family:OnlyLight"><strong><span style="font-family:Heavy;font-weight:bolder">x</span></strong></span></p>"#;
         let slice = Slice::from_html(html, &resource);
-        let t = find_text(&slice.fragment).unwrap();
+        let t = find_text(&slice).unwrap();
         assert!(
             t.modifiers
                 .iter()
@@ -1362,7 +1334,7 @@ mod tests {
             matches!(f.node, editor_model::PlainNode::Tab(_)) || f.children.iter().any(has_tab)
         }
         assert!(
-            has_tab(&parsed.fragment),
+            parsed.content.iter().any(has_tab),
             "parsed HTML must contain a Tab node"
         );
     }

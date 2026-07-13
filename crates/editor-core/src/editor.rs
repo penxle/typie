@@ -4057,6 +4057,62 @@ mod tests {
     }
 
     #[test]
+    fn internal_drop_moves_only_selected_callout_out_of_fold_content() {
+        let (initial, root, _content, _after) = state! {
+            doc {
+                root: root {
+                    fold {
+                        fold_title { text("title") }
+                        content: fold_content {
+                            paragraph { text("inside") }
+                            callout { paragraph { text("moved") } }
+                        }
+                    }
+                    after: paragraph { text("after") }
+                }
+            }
+            selection: (content, 1) -> (content, 2)
+        };
+        let slice = editor_clipboard::Slice::extract(&initial).expect("callout slice");
+        assert_eq!((slice.open_start, slice.open_end), (0, 0));
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Callout(_)));
+
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let source = editor.state().selection.expect("callout selection");
+
+        crate::handle::apply_drop_for_test(
+            &mut editor,
+            Position::new(root, 1),
+            DndDropPayload::InternalSelection,
+            InputModifiers::default(),
+            Some(source),
+        )
+        .expect("callout move should succeed");
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    fold {
+                        fold_title { text("title") }
+                        fold_content {
+                            paragraph { text("inside") }
+                            paragraph {}
+                        }
+                    }
+                    callout { paragraph { text("moved") } }
+                    paragraph { text("after") }
+                }
+            }
+            selection: none
+        };
+        editor_state::assert_doc_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn normalize_gap_phantom_some_for_leading_unit() {
         let (state, ..) = state! {
             doc { root: root { image paragraph { text("b") } } }
@@ -4408,17 +4464,9 @@ mod tests {
         let slice = Slice::extract(&state).expect("Slice::extract must succeed");
 
         // Print slice content for debugging
-        eprintln!("slice fragment node: {:?}", slice.fragment.node);
-        eprintln!(
-            "slice fragment modifiers count: {}",
-            slice.fragment.modifiers.len()
-        );
-        for m in &slice.fragment.modifiers {
-            eprintln!("  root modifier: {:?}", m);
-        }
-        for (i, child) in slice.fragment.children.iter().enumerate() {
+        for (i, child) in slice.content.iter().enumerate() {
             eprintln!(
-                "  child[{}]: {:?}, modifiers: {:?}",
+                "  root[{}]: {:?}, modifiers: {:?}",
                 i, child.node, child.modifiers
             );
             for (j, gc) in child.children.iter().enumerate() {

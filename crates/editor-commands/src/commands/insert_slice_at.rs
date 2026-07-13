@@ -21,8 +21,8 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        ChildView, DocView, Fragment, NodeType, PlainImageNode, PlainNode, PlainParagraphNode,
-        PlainRootNode, PlainTextNode,
+        ChildView, DocView, Fragment, NodeType, PlainBulletListNode, PlainImageNode,
+        PlainListItemNode, PlainNode, PlainParagraphNode, PlainTextNode,
     };
     use editor_state::{Affinity, Position, Selection};
     use editor_transaction::Transaction;
@@ -31,12 +31,7 @@ mod tests {
 
     fn image_slice() -> Slice {
         Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
-            },
+            content: vec![Fragment::leaf(PlainNode::Image(PlainImageNode::default()))],
             open_start: 0,
             open_end: 0,
         }
@@ -50,6 +45,24 @@ mod tests {
             children: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
                 text: text.into(),
             }))],
+        }
+    }
+
+    fn open_bullet_list_slice(text: &str, open_start: u32, open_end: u32) -> Slice {
+        Slice {
+            content: vec![Fragment {
+                node: PlainNode::BulletList(PlainBulletListNode::default()),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![Fragment {
+                    node: PlainNode::ListItem(PlainListItemNode::default()),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![paragraph_fragment(text)],
+                }],
+            }],
+            open_start,
+            open_end,
         }
     }
 
@@ -69,6 +82,21 @@ mod tests {
             .unwrap()
             .child_blocks()
             .map(|b| b.inline_text())
+            .collect()
+    }
+
+    fn list_item_texts(view: &DocView, list: Dot) -> Vec<String> {
+        view.node(list)
+            .unwrap()
+            .child_blocks()
+            .map(|item| {
+                item.descendants()
+                    .filter_map(|child| match child {
+                        ChildView::Leaf(leaf) => leaf.as_char(),
+                        ChildView::Block(_) => None,
+                    })
+                    .collect()
+            })
             .collect()
     }
 
@@ -216,12 +244,7 @@ mod tests {
         };
         let root = initial.view().root().unwrap().id();
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![paragraph_fragment("A"), paragraph_fragment("B")],
-            },
+            content: vec![paragraph_fragment("A"), paragraph_fragment("B")],
             open_start: 0,
             open_end: 0,
         };
@@ -272,14 +295,9 @@ mod tests {
         };
         let root = initial.view().root().unwrap().id();
         let slice = Slice {
-            fragment: Fragment {
-                node: PlainNode::Root(PlainRootNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: vec![paragraph_fragment("first"), paragraph_fragment("second")],
-            },
-            open_start: 2,
-            open_end: 2,
+            content: vec![paragraph_fragment("first"), paragraph_fragment("second")],
+            open_start: 1,
+            open_end: 1,
         };
 
         let mut tr = Transaction::new(&initial);
@@ -315,6 +333,120 @@ mod tests {
                 },
             )
         );
+    }
+
+    #[test]
+    fn insert_open_list_context_merges_items_at_list_boundary() {
+        let (initial, list) = state! {
+            doc { root {
+                list: bullet_list {
+                    list_item { paragraph { text("A") } }
+                    list_item { paragraph { text("C") } }
+                }
+                paragraph {}
+            } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(list, 1),
+            open_bullet_list_slice("B", 1, 1),
+            SliceProvenance::Formatted,
+        )
+        .expect("command succeeds");
+        assert!(inserted.is_some());
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let list = view.node(list).expect("list remains");
+        assert_eq!(list.child_blocks().count(), 3);
+        assert_eq!(list_item_texts(&view, list.id()), ["A", "B", "C"]);
+    }
+
+    #[test]
+    fn insert_open_list_context_with_only_start_edge_open_merges_item() {
+        let (initial, list) = state! {
+            doc { root {
+                list: bullet_list { list_item { paragraph { text("A") } } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+
+        assert!(
+            insert_slice_at(
+                &mut tr,
+                Position::new(list, 1),
+                open_bullet_list_slice("B", 3, 0),
+                SliceProvenance::Formatted,
+            )
+            .expect("command succeeds")
+            .is_some()
+        );
+        let (actual, ..) = tr.commit();
+
+        assert_eq!(list_item_texts(&actual.view(), list), ["A", "B"]);
+    }
+
+    #[test]
+    fn insert_open_list_context_with_only_end_edge_open_merges_item() {
+        let (initial, list) = state! {
+            doc { root {
+                list: bullet_list { list_item { paragraph { text("A") } } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+
+        assert!(
+            insert_slice_at(
+                &mut tr,
+                Position::new(list, 1),
+                open_bullet_list_slice("B", 0, 3),
+                SliceProvenance::Formatted,
+            )
+            .expect("command succeeds")
+            .is_some()
+        );
+        let (actual, ..) = tr.commit();
+
+        assert_eq!(list_item_texts(&actual.view(), list), ["A", "B"]);
+    }
+
+    #[test]
+    fn block_boundary_rejects_closed_invalid_root_without_unwrapping() {
+        let (initial, root) = state! {
+            doc { root: root { paragraph {} } }
+            selection: none
+        };
+        let slice = Slice {
+            content: vec![Fragment {
+                node: NodeType::FoldContent.into_node().to_plain(),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![paragraph_fragment("inside")],
+            }],
+            open_start: 0,
+            open_end: 0,
+        };
+        let mut tr = Transaction::new(&initial);
+
+        assert!(
+            insert_slice_at(
+                &mut tr,
+                Position::new(root, 0),
+                slice,
+                SliceProvenance::Formatted,
+            )
+            .expect("invalid insertion is a no-op")
+            .is_none()
+        );
+        let (actual, ..) = tr.commit();
+        assert_eq!(kinds(&actual.view(), root), vec![NodeType::Paragraph]);
     }
 
     #[test]

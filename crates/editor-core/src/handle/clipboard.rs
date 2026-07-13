@@ -213,7 +213,7 @@ fn slice_has_table(slice: &Slice) -> bool {
         }
         f.children.iter().any(walk)
     }
-    walk(&slice.fragment)
+    slice.content.iter().any(walk)
 }
 
 #[cfg(test)]

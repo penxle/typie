@@ -97,10 +97,7 @@ fn cell_plain_paint(tr: &Transaction, cell_id: Dot, pending: &PendingModifiers) 
 }
 
 fn slice_to_cell_blocks(slice: &Slice) -> Vec<Fragment> {
-    let top_children: Vec<&Fragment> = match &slice.fragment.node {
-        PlainNode::Root(_) => slice.fragment.children.iter().collect(),
-        _ => vec![&slice.fragment],
-    };
+    let top_children: Vec<&Fragment> = slice.content.iter().collect();
 
     let mut out: Vec<Fragment> = Vec::new();
     let mut inline_run: Vec<Fragment> = Vec::new();

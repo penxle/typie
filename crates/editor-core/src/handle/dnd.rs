@@ -6,7 +6,7 @@ use editor_clipboard::Slice;
 use editor_commands::{self as commands};
 use editor_model::{
     ChildView, ContextExpr, DocView, Fragment, Node, NodeType, PlainFileNode, PlainImageNode,
-    PlainNode, PlainRootNode, Schema,
+    PlainNode, Schema,
 };
 use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
 use editor_view::DropTarget;
@@ -350,7 +350,7 @@ fn slice_content_fits_target_context(view: &DocView, position: Position, slice: 
         }
         fragment.children.iter().all(|c| check(c, base))
     }
-    check(&slice.fragment, &base)
+    slice.content.iter().all(|fragment| check(fragment, &base))
 }
 
 fn drop_slice_at(
@@ -478,14 +478,5 @@ fn files_slice(image_count: u32, file_count: u32) -> Slice {
         children.push(Fragment::leaf(PlainNode::File(PlainFileNode { id: None })));
     }
 
-    Slice {
-        fragment: Fragment {
-            node: PlainNode::Root(PlainRootNode::default()),
-            modifiers: vec![],
-            carry: vec![],
-            children,
-        },
-        open_start: 0,
-        open_end: 0,
-    }
+    Slice::new(children, 0, 0)
 }
