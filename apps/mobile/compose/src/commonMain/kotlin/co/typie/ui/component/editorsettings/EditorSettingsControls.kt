@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -21,10 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.typie.editor.DefaultRootPaginatedLayout
 import co.typie.editor.EditorOption
-import co.typie.editor.EditorTheme
 import co.typie.editor.EditorValues
-import co.typie.editor.ResolvedEditorTheme
-import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.matchWeight
@@ -56,8 +52,6 @@ internal data class EditorStyleSettings(
   val fontFamily: String = "Pretendard",
   val fontSize: Int = 1200,
   val fontWeight: Int = 400,
-  val textColor: String = "black",
-  val backgroundColor: String = "none",
   val letterSpacing: Int = 0,
   val lineHeight: Int = 160,
   val paragraphIndent: Int = 100,
@@ -69,8 +63,6 @@ internal fun List<EditorModifier>?.toEditorStyleSettings(): EditorStyleSettings 
     fontFamily = firstModifier<EditorModifier.FontFamily>()?.value ?: "Pretendard",
     fontSize = firstModifier<EditorModifier.FontSize>()?.value ?: 1200,
     fontWeight = firstModifier<EditorModifier.FontWeight>()?.value ?: 400,
-    textColor = firstModifier<EditorModifier.TextColor>()?.value ?: "black",
-    backgroundColor = firstModifier<EditorModifier.BackgroundColor>()?.value ?: "none",
     letterSpacing = firstModifier<EditorModifier.LetterSpacing>()?.value ?: 0,
     lineHeight = firstModifier<EditorModifier.LineHeight>()?.value ?: 160,
     paragraphIndent = firstModifier<EditorModifier.ParagraphIndent>()?.value ?: 100,
@@ -85,8 +77,6 @@ internal fun EditorStyleSettings.toEditorModifiers(): List<EditorModifier> =
     EditorModifier.FontFamily(fontFamily),
     EditorModifier.FontSize(fontSize),
     EditorModifier.FontWeight(fontWeight),
-    EditorModifier.TextColor(textColor),
-    EditorModifier.BackgroundColor(backgroundColor),
     EditorModifier.LetterSpacing(letterSpacing),
     EditorModifier.LineHeight(lineHeight),
     EditorModifier.ParagraphIndent(paragraphIndent),
@@ -99,10 +89,6 @@ internal fun EditorStyleSettings.changedEditorModifiersFrom(
   if (fontFamily != previous.fontFamily) add(EditorModifier.FontFamily(fontFamily))
   if (fontSize != previous.fontSize) add(EditorModifier.FontSize(fontSize))
   if (fontWeight != previous.fontWeight) add(EditorModifier.FontWeight(fontWeight))
-  if (textColor != previous.textColor) add(EditorModifier.TextColor(textColor))
-  if (backgroundColor != previous.backgroundColor) {
-    add(EditorModifier.BackgroundColor(backgroundColor))
-  }
   if (letterSpacing != previous.letterSpacing) add(EditorModifier.LetterSpacing(letterSpacing))
   if (lineHeight != previous.lineHeight) add(EditorModifier.LineHeight(lineHeight))
   if (paragraphIndent != previous.paragraphIndent) {
@@ -141,7 +127,6 @@ internal fun EditorSettingsBasicStyleSection(
   style: EditorStyleSettings,
   fontFamilies: List<EditorSettingsFontFamily_family>,
   sheet: Sheet,
-  editorTheme: ResolvedEditorTheme,
   onStyleChange: suspend (EditorStyleSettings) -> Unit,
 ) {
   EditorSettingsSection(title = "기본 서식") {
@@ -160,14 +145,6 @@ internal fun EditorSettingsBasicStyleSection(
     EditorLetterSpacingSlider(style = style, onStyleChange = onStyleChange)
     CardDivider()
     EditorLineHeightSlider(style = style, onStyleChange = onStyleChange)
-    CardDivider()
-    EditorTextColorRow(style = style, editorTheme = editorTheme, onStyleChange = onStyleChange)
-    CardDivider()
-    EditorBackgroundColorRow(
-      style = style,
-      editorTheme = editorTheme,
-      onStyleChange = onStyleChange,
-    )
   }
 }
 
@@ -196,25 +173,6 @@ internal fun EditorSettingsDetailLayoutSection(
     EditorParagraphIndentRow(style = style, label = "첫 줄 들여쓰기", onStyleChange = onStyleChange)
     CardDivider()
     EditorBlockGapRow(style = style, label = "문단 사이 간격", onStyleChange = onStyleChange)
-  }
-}
-
-@Composable
-internal fun EditorSettingsColorSection(
-  style: EditorStyleSettings,
-  onStyleChange: suspend (EditorStyleSettings) -> Unit,
-) {
-  val variant = currentEditorThemeVariant()
-  val editorTheme = remember(variant) { EditorTheme.resolve(variant) }
-
-  EditorSettingsSection(title = "색상") {
-    EditorTextColorRow(style = style, editorTheme = editorTheme, onStyleChange = onStyleChange)
-    CardDivider()
-    EditorBackgroundColorRow(
-      style = style,
-      editorTheme = editorTheme,
-      onStyleChange = onStyleChange,
-    )
   }
 }
 
@@ -564,40 +522,6 @@ private fun EditorLineHeightSlider(
     unitSuffix = "%",
     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
   )
-}
-
-@Composable
-private fun EditorTextColorRow(
-  style: EditorStyleSettings,
-  editorTheme: ResolvedEditorTheme,
-  onStyleChange: suspend (EditorStyleSettings) -> Unit,
-) {
-  EditorSettingsRow(label = "글자 색") {
-    EditorSettingsSwatchRow(
-      options = EditorValues.textColor,
-      selected = style.textColor,
-      onSelect = { onStyleChange(style.copy(textColor = it)) },
-      theme = editorTheme,
-      cornerRadius = 50.dp,
-    )
-  }
-}
-
-@Composable
-private fun EditorBackgroundColorRow(
-  style: EditorStyleSettings,
-  editorTheme: ResolvedEditorTheme,
-  onStyleChange: suspend (EditorStyleSettings) -> Unit,
-) {
-  EditorSettingsRow(label = "배경 색") {
-    EditorSettingsSwatchRow(
-      options = EditorValues.textBackgroundColor,
-      selected = style.backgroundColor,
-      onSelect = { onStyleChange(style.copy(backgroundColor = it)) },
-      theme = editorTheme,
-      cornerRadius = AppShapes.sm * 2,
-    )
-  }
 }
 
 @Composable

@@ -33,7 +33,6 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.editorsettings.EditorSettingsColorSection
 import co.typie.ui.component.editorsettings.EditorSettingsFontSection
 import co.typie.ui.component.editorsettings.EditorSettingsLayoutSection
 import co.typie.ui.component.editorsettings.EditorSettingsSectionDivider
@@ -135,10 +134,6 @@ fun PresetSettingsScreen() {
 
         EditorSettingsSectionDivider()
 
-        EditorSettingsColorSection(style = style, onStyleChange = ::saveStyle)
-
-        EditorSettingsSectionDivider()
-
         EditorSettingsLayoutSection(layout = layout, sheet = sheet, onLayoutChange = ::saveLayout)
       }
 
@@ -197,8 +192,6 @@ private fun Preset.toEditorStyleSettings(): EditorStyleSettings =
     fontFamily = fontFamily,
     fontSize = fontSize,
     fontWeight = fontWeight,
-    textColor = textColor,
-    backgroundColor = backgroundColor,
     letterSpacing = letterSpacing,
     lineHeight = lineHeight,
     paragraphIndent = paragraphIndent,
@@ -210,8 +203,6 @@ private fun Preset.withStyle(style: EditorStyleSettings): Preset =
     fontFamily = style.fontFamily,
     fontSize = style.fontSize,
     fontWeight = style.fontWeight,
-    textColor = style.textColor,
-    backgroundColor = style.backgroundColor,
     letterSpacing = style.letterSpacing,
     lineHeight = style.lineHeight,
     paragraphIndent = style.paragraphIndent,

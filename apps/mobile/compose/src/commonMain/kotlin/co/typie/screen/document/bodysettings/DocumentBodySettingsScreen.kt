@@ -29,7 +29,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.DefaultRootPaginatedLayout
 import co.typie.editor.Editor
 import co.typie.editor.EditorScope
-import co.typie.editor.EditorTheme
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.enqueueRootLayoutMode
 import co.typie.editor.enqueueRootModifier
@@ -114,7 +113,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
       }
     var bodyStyle by remember(document.id) { mutableStateOf<EditorStyleSettings?>(null) }
     val editorThemeVariant = currentEditorThemeVariant()
-    val editorTheme = remember(editorThemeVariant) { EditorTheme.resolve(editorThemeVariant) }
     var layout by remember(document.id) { mutableStateOf<LayoutMode?>(null) }
     val resolvedBodyStyle = bodyStyle ?: EditorStyleSettings()
     val resolvedLayout = layout ?: DefaultRootPaginatedLayout
@@ -228,7 +226,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
             style = resolvedBodyStyle,
             fontFamilies = model.fontFamilies,
             sheet = sheet,
-            editorTheme = editorTheme,
             onStyleChange = ::saveStyle,
           )
 
