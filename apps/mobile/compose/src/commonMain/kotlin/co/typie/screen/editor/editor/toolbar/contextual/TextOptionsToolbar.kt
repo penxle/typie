@@ -61,6 +61,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierState
+import co.typie.editor.ffi.ModifierType
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.graphql.type.FontState
 import co.typie.icons.Lucide
@@ -163,7 +164,7 @@ private fun TextOptionsContent(
       TextBackgroundColorOptions(
         currentValue = modifierState?.backgroundColor.backgroundColorCurrentValue(),
         editorTheme = editorTheme,
-        onSelect = { sendSet(sendMessages, EditorModifier.BackgroundColor(it)) },
+        onSelect = { sendMessages(listOf(textBackgroundColorMessage(it))) },
       )
     TextOptionMode.FontFamily ->
       FontFamilyOptions(
@@ -550,6 +551,15 @@ private fun FontSizeInputDialog(initialValue: Int) {
 private fun sendSet(sendMessages: (List<Message>) -> Unit, modifier: EditorModifier) {
   sendMessages(listOf(Message.Modifier(ModifierOp.Set(modifier))))
 }
+
+internal fun textBackgroundColorMessage(value: String): Message =
+  Message.Modifier(
+    if (value == "none") {
+      ModifierOp.Edit(modifierType = ModifierType.BackgroundColor, modifier = null)
+    } else {
+      ModifierOp.Set(EditorModifier.BackgroundColor(value))
+    }
+  )
 
 private fun List<EditorOption<Int>>.withCurrent(
   currentValue: Int?,
