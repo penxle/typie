@@ -57,7 +57,7 @@ internal object EditorImeCommandNormalizer {
             FlatImeOp.ClearComposition
           }
         } else {
-          command.toFlatImeOp()
+          command.toFlatImeOp(ime)
         } ?: continue
       ops += op
       hasActiveComposition =
@@ -103,11 +103,20 @@ internal object EditorImeCommandNormalizer {
     }
   }
 
-  private fun EditCommand.toFlatImeOp(): FlatImeOp? =
+  private fun EditCommand.toFlatImeOp(ime: Ime?): FlatImeOp? =
     when (this) {
       is SetComposingTextCommand -> FlatImeOp.Compose(text)
-      is SetSelectionCommand -> FlatImeOp.SetSelection(start, end)
-      is SetComposingRegionCommand -> FlatImeOp.SetComposition(start, end)
+      is SetSelectionCommand ->
+        ime?.let {
+          FlatImeOp.SetSelection(it.projectWindowUtf16Index(start), it.projectWindowUtf16Index(end))
+        }
+      is SetComposingRegionCommand ->
+        ime?.let {
+          FlatImeOp.SetComposition(
+            it.projectWindowUtf16Index(start),
+            it.projectWindowUtf16Index(end),
+          )
+        }
       is DeleteSurroundingTextCommand ->
         FlatImeOp.DeleteSurroundingUtf16(lengthBeforeCursor, lengthAfterCursor)
 

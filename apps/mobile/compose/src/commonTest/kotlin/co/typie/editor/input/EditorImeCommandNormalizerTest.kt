@@ -2,6 +2,7 @@ package co.typie.editor.input
 
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
+import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import co.typie.editor.ffi.Direction
@@ -137,6 +138,109 @@ class EditorImeCommandNormalizerTest {
       EditorImeCommandNormalizer.normalize(listOf(SetSelectionCommand(0, 3)), ime = ime)
 
     assertEquals(listOf(Message.Selection(SelectionOp.SetFlat(start = 20, end = 22))), messages)
+  }
+
+  @Test
+  fun `mixed selection and commit batch projects window-relative offsets to absolute`() {
+    val ime =
+      Ime(
+        text = "텐데. ㅎㅇ",
+        windowStart = 4559,
+        selection = ImeRange(4565, 4565),
+        composing = null,
+      )
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(
+          SetSelectionCommand(4, 6),
+          CommitTextCommand("", 0),
+          CommitTextCommand("ㅎ", 1),
+          CommitTextCommand("아", 1),
+        ),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(
+            FlatImeOp.SetSelection(4563, 4565),
+            FlatImeOp.Compose(""),
+            FlatImeOp.CommitAsIs,
+            FlatImeOp.Compose("ㅎ"),
+            FlatImeOp.CommitAsIs,
+            FlatImeOp.Compose("아"),
+            FlatImeOp.CommitAsIs,
+          )
+        )
+      ),
+      messages,
+    )
+  }
+
+  @Test
+  fun `mixed batch selection offsets convert utf16 indices to code point offsets`() {
+    val ime =
+      Ime(
+        text = "a😀b",
+        windowStart = 10,
+        selection = ImeRange(13, 13),
+        composing = null,
+      )
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetSelectionCommand(1, 3), CommitTextCommand("x", 1)),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(FlatImeOp.SetSelection(11, 12), FlatImeOp.Compose("x"), FlatImeOp.CommitAsIs)
+        )
+      ),
+      messages,
+    )
+  }
+
+  @Test
+  fun `mixed batch composing region projects window-relative offsets to absolute`() {
+    val ime =
+      Ime(
+        text = "텐데. ㅎㅇ",
+        windowStart = 4559,
+        selection = ImeRange(4565, 4565),
+        composing = null,
+      )
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetComposingRegionCommand(4, 6), SetComposingTextCommand("화", 1)),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(
+        Message.TextInput(listOf(FlatImeOp.SetComposition(4563, 4565), FlatImeOp.Compose("화")))
+      ),
+      messages,
+    )
+  }
+
+  @Test
+  fun `mixed batch selection command without ime snapshot is dropped`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetSelectionCommand(0, 2), CommitTextCommand("x", 1)),
+        ime = null,
+      )
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("x"), FlatImeOp.CommitAsIs))),
+      messages,
+    )
   }
 
   @Test

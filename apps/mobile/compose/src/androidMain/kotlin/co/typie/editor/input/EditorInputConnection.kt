@@ -76,7 +76,10 @@ internal class EditorInputConnection(
         null
       } else {
         editor.ime(n.coerceAtMost(IME_READ_WINDOW), 0)?.let { ctx ->
-          ctx.text.substring(0, ctx.selection.start - ctx.windowStart)
+          ctx.text.substring(
+            0,
+            ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart),
+          )
         }
       }
     recordRead("getTextBeforeCursor", "n=$n, flags=$flags", result)
@@ -89,7 +92,9 @@ internal class EditorInputConnection(
         null
       } else {
         editor.ime(0, n.coerceAtMost(IME_READ_WINDOW))?.let { ctx ->
-          ctx.text.substring(ctx.selection.end - ctx.windowStart)
+          ctx.text.substring(
+            ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
+          )
         }
       }
     recordRead("getTextAfterCursor", "n=$n, flags=$flags", result)
@@ -99,8 +104,8 @@ internal class EditorInputConnection(
   override fun getSelectedText(flags: Int): CharSequence? {
     val result =
       editor.ime(0, 0)?.let { ctx ->
-        val start = ctx.selection.start - ctx.windowStart
-        val end = ctx.selection.end - ctx.windowStart
+        val start = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart)
+        val end = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
         ctx.text.substring(start, end).ifEmpty { null }
       }
     recordRead("getSelectedText", "flags=$flags", result)
@@ -127,8 +132,8 @@ internal class EditorInputConnection(
       recordRead("getSurroundingText", args, null)
       return null
     }
-    val selStart = ctx.selection.start - ctx.windowStart
-    val selEnd = ctx.selection.end - ctx.windowStart
+    val selStart = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart)
+    val selEnd = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
     recordRead(
       "getSurroundingText",
       args,
@@ -161,7 +166,8 @@ internal class EditorInputConnection(
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     recordCall("setComposingRegion", "start=$start, end=$end")
-    batch.enqueue(FlatImeOp.SetComposition(start, end))
+    val (projectedStart, projectedEnd) = projectAbsoluteUtf16Range(start, end)
+    batch.enqueue(FlatImeOp.SetComposition(projectedStart, projectedEnd))
     return true
   }
 
@@ -185,8 +191,14 @@ internal class EditorInputConnection(
 
   override fun setSelection(start: Int, end: Int): Boolean {
     recordCall("setSelection", "start=$start, end=$end")
-    batch.enqueue(FlatImeOp.SetSelection(start, end))
+    val (projectedStart, projectedEnd) = projectAbsoluteUtf16Range(start, end)
+    batch.enqueue(FlatImeOp.SetSelection(projectedStart, projectedEnd))
     return true
+  }
+
+  private fun projectAbsoluteUtf16Range(start: Int, end: Int): Pair<Int, Int> {
+    val ctx = editor.ime(IME_READ_WINDOW, IME_READ_WINDOW) ?: return start to end
+    return ctx.projectAbsoluteUtf16Offset(start) to ctx.projectAbsoluteUtf16Offset(end)
   }
 
   override fun sendKeyEvent(event: KeyEvent?): Boolean {
