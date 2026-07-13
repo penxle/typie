@@ -53,6 +53,105 @@ impl ContentExpr {
         self.validate(types).is_ok()
     }
 
+    /// Returns the deterministic additions needed to make `supplied` valid.
+    /// Existing nodes are never removed, reordered, or replaced.
+    pub fn completion_insertions(&self, supplied: &[NodeType]) -> Option<Vec<(usize, NodeType)>> {
+        if self.matches_sequence(supplied) {
+            return Some(vec![]);
+        }
+
+        let insertions = self.compute_insertions(supplied);
+        let mut completed = supplied.to_vec();
+        for &(index, node_type) in &insertions {
+            if index > completed.len() {
+                return None;
+            }
+            completed.insert(index, node_type);
+        }
+
+        self.matches_sequence(&completed).then_some(insertions)
+    }
+
+    fn compute_insertions(&self, supplied: &[NodeType]) -> Vec<(usize, NodeType)> {
+        match self {
+            Self::Empty | Self::Any | Self::ZeroOrMore(_) | Self::Optional(_) => vec![],
+            Self::Single(node_type) => supplied
+                .is_empty()
+                .then_some((0, *node_type))
+                .into_iter()
+                .collect(),
+            Self::OneOrMore(inner) => supplied
+                .is_empty()
+                .then(|| (0, Self::first_type(inner)))
+                .into_iter()
+                .collect(),
+            Self::Choice(choices) => supplied
+                .is_empty()
+                .then(|| (0, Self::first_type(&choices[0])))
+                .into_iter()
+                .collect(),
+            Self::Seq(exprs) => Self::compute_seq_insertions(exprs, supplied),
+        }
+    }
+
+    fn compute_seq_insertions(
+        exprs: &[ContentExpr],
+        supplied: &[NodeType],
+    ) -> Vec<(usize, NodeType)> {
+        let mut insertions = Vec::new();
+        let mut supplied_index = 0;
+
+        for expr in exprs {
+            match expr {
+                Self::Single(node_type) => {
+                    if supplied.get(supplied_index) == Some(node_type) {
+                        supplied_index += 1;
+                    } else {
+                        insertions.push((supplied_index + insertions.len(), *node_type));
+                    }
+                }
+                Self::ZeroOrMore(inner) | Self::OneOrMore(inner) => {
+                    let mut consumed = 0;
+                    while supplied
+                        .get(supplied_index)
+                        .is_some_and(|node_type| inner.matches(*node_type))
+                    {
+                        supplied_index += 1;
+                        consumed += 1;
+                    }
+
+                    if matches!(expr, Self::OneOrMore(_)) && consumed == 0 {
+                        insertions
+                            .push((supplied_index + insertions.len(), Self::first_type(inner)));
+                    }
+                }
+                Self::Optional(inner)
+                    if supplied
+                        .get(supplied_index)
+                        .is_some_and(|node_type| inner.matches(*node_type)) =>
+                {
+                    supplied_index += 1;
+                }
+                Self::Optional(_) => {}
+                _ => {}
+            }
+        }
+
+        insertions
+    }
+
+    fn first_type(expr: &ContentExpr) -> NodeType {
+        match expr {
+            Self::Single(node_type) => *node_type,
+            Self::Choice(choices) => Self::first_type(&choices[0]),
+            Self::OneOrMore(inner) | Self::ZeroOrMore(inner) | Self::Optional(inner) => {
+                Self::first_type(inner)
+            }
+            Self::Seq(exprs) => Self::first_type(&exprs[0]),
+            Self::Empty | Self::Any => unreachable!("Empty/Any content has no type"),
+        }
+    }
+
     /// Whether `node_type` may appear freely (any count, any position relative
     /// to peers in the same repeatable group) — i.e. it is inside a `ZeroOrMore`
     /// or `OneOrMore`. Types only reachable through `Single`/`Optional`/fixed
@@ -266,5 +365,50 @@ impl ContentExpr {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn completion_insertions_returns_empty_for_valid_sequence() {
+        let content = &NodeType::Fold.spec().content;
+
+        assert_eq!(
+            content.completion_insertions(&[NodeType::FoldTitle, NodeType::FoldContent]),
+            Some(vec![])
+        );
+    }
+
+    #[test]
+    fn completion_insertions_adds_required_children_without_reordering_supplied_nodes() {
+        let fold = &NodeType::Fold.spec().content;
+        let list_item = &NodeType::ListItem.spec().content;
+
+        assert_eq!(
+            fold.completion_insertions(&[NodeType::FoldTitle]),
+            Some(vec![(1, NodeType::FoldContent)])
+        );
+        assert_eq!(
+            list_item.completion_insertions(&[NodeType::BulletList]),
+            Some(vec![(0, NodeType::Paragraph)])
+        );
+    }
+
+    #[test]
+    fn completion_insertions_rejects_sequences_that_require_removal_or_reordering() {
+        let paragraph = &NodeType::Paragraph.spec().content;
+        let fold = &NodeType::Fold.spec().content;
+
+        assert_eq!(
+            paragraph.completion_insertions(&[NodeType::PageBreak, NodeType::Text]),
+            None
+        );
+        assert_eq!(
+            fold.completion_insertions(&[NodeType::FoldContent, NodeType::FoldTitle]),
+            None
+        );
     }
 }

@@ -12,7 +12,10 @@ pub fn fulfill(node: &NodeView) -> Vec<Step> {
         return vec![];
     }
 
-    let insertions = compute_insertions(&spec.content, &child_types);
+    let insertions = spec
+        .content
+        .completion_insertions(&child_types)
+        .unwrap_or_default();
     let total_children = node.child_count();
     insertions
         .into_iter()
@@ -48,81 +51,6 @@ fn known_child_types(node: &NodeView) -> (Vec<NodeType>, Vec<usize>) {
         real_indices.push(i);
     }
     (types, real_indices)
-}
-
-fn compute_insertions(content: &ContentExpr, existing: &[NodeType]) -> Vec<(usize, NodeType)> {
-    match content {
-        ContentExpr::Empty
-        | ContentExpr::Any
-        | ContentExpr::ZeroOrMore(_)
-        | ContentExpr::Optional(_) => vec![],
-
-        ContentExpr::Single(t) => {
-            if existing.is_empty() {
-                vec![(0, *t)]
-            } else {
-                vec![]
-            }
-        }
-
-        ContentExpr::OneOrMore(inner) => {
-            if existing.is_empty() {
-                vec![(0, first_type(inner))]
-            } else {
-                vec![]
-            }
-        }
-
-        ContentExpr::Choice(choices) => {
-            if existing.is_empty() {
-                vec![(0, first_type(&choices[0]))]
-            } else {
-                vec![]
-            }
-        }
-
-        ContentExpr::Seq(exprs) => compute_seq_insertions(exprs, existing),
-    }
-}
-
-/// Handle Seq patterns. Walk through expressions and existing children in parallel.
-fn compute_seq_insertions(exprs: &[ContentExpr], existing: &[NodeType]) -> Vec<(usize, NodeType)> {
-    let mut insertions = Vec::new();
-    let mut existing_idx = 0;
-
-    for expr in exprs.iter() {
-        match expr {
-            ContentExpr::Single(t) => {
-                if existing_idx < existing.len() && existing[existing_idx] == *t {
-                    existing_idx += 1;
-                } else {
-                    insertions.push((existing_idx + insertions.len(), *t));
-                }
-            }
-            ContentExpr::ZeroOrMore(inner) | ContentExpr::OneOrMore(inner) => {
-                let is_one_or_more = matches!(expr, ContentExpr::OneOrMore(_));
-
-                let mut consumed = 0;
-                while existing_idx < existing.len() && inner.matches(existing[existing_idx]) {
-                    existing_idx += 1;
-                    consumed += 1;
-                }
-
-                if is_one_or_more && consumed == 0 {
-                    insertions.push((existing_idx + insertions.len(), first_type(inner)));
-                }
-            }
-            ContentExpr::Optional(inner)
-                if existing_idx < existing.len() && inner.matches(existing[existing_idx]) =>
-            {
-                existing_idx += 1;
-            }
-            ContentExpr::Optional(_) => {}
-            _ => {}
-        }
-    }
-
-    insertions
 }
 
 fn first_type(expr: &ContentExpr) -> NodeType {
@@ -253,21 +181,17 @@ mod tests {
     /// (the missing type sorts after every known child, so the repair index
     /// falls back to `total_children`). This oracle instead hits `Some(_)`: an
     /// interior real_indices lookup succeeds because the missing child must be
-    /// inserted *before* an already-present known child, with an Unknown
-    /// placeholder sitting between the two known children (`[Known, Unknown,
-    /// Known]`). Physical order here is deliberately [FoldContent, Unknown,
-    /// FoldTitle] — wrong content-order, so `fulfill` must still insert the
-    /// missing FoldTitle, and it must land at real index 0 (immediately before
-    /// the physically-first FoldContent), not appended at the tail.
+    /// inserted *before* an already-present known child. Physical order here
+    /// is [FoldContent, Unknown], so `fulfill` must insert the missing FoldTitle
+    /// at real index 0, not append it after the Unknown.
     #[test]
-    fn fulfill_remaps_insertion_index_via_real_indices_hit_between_unknowns() {
+    fn fulfill_remaps_insertion_index_via_real_indices_hit_before_unknown() {
         use editor_crdt::Dot;
         use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
 
         let fold_id = Dot::new(1, 0);
         let content_id = Dot::new(1, 1);
         let unknown_id = Dot::new(1, 2);
-        let title_id = Dot::new(1, 3);
 
         let mut nodes = editor_model::imbl::HashMap::new();
         nodes.insert(
@@ -276,11 +200,7 @@ mod tests {
                 id: fold_id,
                 node_type: NodeType::Fold,
                 attrs: vec![],
-                children: ChildList::from(vec![
-                    Child::Block(content_id),
-                    Child::Block(unknown_id),
-                    Child::Block(title_id),
-                ]),
+                children: ChildList::from(vec![Child::Block(content_id), Child::Block(unknown_id)]),
             },
         );
         nodes.insert(
@@ -301,16 +221,6 @@ mod tests {
                 children: ChildList::new(),
             },
         );
-        nodes.insert(
-            title_id,
-            BlockNode {
-                id: title_id,
-                node_type: NodeType::FoldTitle,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
-
         let doc = ProjectedDoc {
             tree: BlockTree {
                 nodes,
@@ -342,7 +252,7 @@ mod tests {
     /// regression that dropped the `real_indices` remap entirely (using the
     /// filtered index directly as the real index) would slip through both
     /// unnoticed. This oracle puts the Unknown *before* the insertion point
-    /// (`[Unknown, FoldContent, FoldTitle]`), so the real index (1, past the
+    /// (`[Unknown, FoldContent]`), so the real index (1, past the
     /// Unknown) diverges from the filtered index (0, Unknown excluded) —
     /// only the `real_indices` lookup, not the raw filtered index, produces
     /// the expected step.
@@ -354,7 +264,6 @@ mod tests {
         let fold_id = Dot::new(1, 0);
         let unknown_id = Dot::new(1, 1);
         let content_id = Dot::new(1, 2);
-        let title_id = Dot::new(1, 3);
 
         let mut nodes = editor_model::imbl::HashMap::new();
         nodes.insert(
@@ -363,11 +272,7 @@ mod tests {
                 id: fold_id,
                 node_type: NodeType::Fold,
                 attrs: vec![],
-                children: ChildList::from(vec![
-                    Child::Block(unknown_id),
-                    Child::Block(content_id),
-                    Child::Block(title_id),
-                ]),
+                children: ChildList::from(vec![Child::Block(unknown_id), Child::Block(content_id)]),
             },
         );
         nodes.insert(
@@ -388,16 +293,6 @@ mod tests {
                 children: ChildList::new(),
             },
         );
-        nodes.insert(
-            title_id,
-            BlockNode {
-                id: title_id,
-                node_type: NodeType::FoldTitle,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
-
         let doc = ProjectedDoc {
             tree: BlockTree {
                 nodes,

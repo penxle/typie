@@ -254,11 +254,7 @@ mod tests {
 
     #[test]
     fn serialize_prepends_charset_meta() {
-        let slice = Slice {
-            fragment: Fragment::leaf(PlainNode::Root(PlainRootNode::default())),
-            open_start: 0,
-            open_end: 0,
-        };
+        let slice = Slice::new(vec![], 0, 0);
         let html = to_html(&slice, &Resource::new_test());
         assert!(html.starts_with(r#"<meta charset="utf-8">"#));
     }
