@@ -113,6 +113,7 @@ kotlin {
       baseName = "Compose"
       isStatic = true
       binaryOption("bundleId", "co.typie.compose")
+      freeCompilerArgs += "-Xbackend-threads=0"
     }
   }
 
