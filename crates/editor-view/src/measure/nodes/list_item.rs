@@ -24,7 +24,7 @@ const MARKER_RECT_MIN_RATIO: f32 = 1.25;
 const MARKER_OUTER_GAP_RATIO: f32 = 0.5;
 
 fn list_item_max_font_size(node: &NodeView, base: &ResolvedTextStyle) -> f32 {
-    let mut max = base.font_size;
+    let mut max: Option<f32> = None;
     // Every char leaf in the subtree is an inline child of `node` or one of its
     // descendant blocks; each block serves its leaves' effective maps from segments.
     let blocks = std::iter::once(*node).chain(node.descendants().filter_map(|d| match d {
@@ -38,13 +38,11 @@ fn list_item_max_font_size(node: &NodeView, base: &ResolvedTextStyle) -> f32 {
                     &it.effective.values().cloned().collect::<Vec<_>>(),
                 )
                 .font_size;
-                if fs > max {
-                    max = fs;
-                }
+                max = Some(max.map_or(fs, |m| m.max(fs)));
             }
         }
     }
-    max
+    max.unwrap_or(base.font_size)
 }
 
 struct MarkerShape {
@@ -537,6 +535,93 @@ mod tests {
         assert!(
             (plain_max - base.font_size).abs() < 0.01,
             "plain list item max font size should equal base: {plain_max}"
+        );
+    }
+
+    #[test]
+    fn max_font_size_follows_all_small_chars() {
+        let (mut doc, li_dot, ch_dot) = ordered_list_doc_single();
+        doc.spans = SpanLog::new()
+            .apply(
+                Dot::ROOT,
+                SpanOp::AddSpan {
+                    start: Anchor {
+                        id: ch_dot,
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id: ch_dot,
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::FontSize { value: 600 },
+                },
+            )
+            .unwrap();
+
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let li = get_list_item(&view, li_dot);
+        let base = default_style();
+
+        let max_fs = list_item_max_font_size(&li, &base);
+        let expected = 600.0 / 100.0 * (96.0 / 72.0);
+        assert!(
+            (max_fs - expected).abs() < 0.01,
+            "marker size must follow the item's actual max font size (expected {expected}, got {max_fs})"
+        );
+    }
+
+    #[test]
+    fn max_font_size_falls_back_to_base_for_empty_item() {
+        let root = Dot::ROOT;
+        let ol = Dot::new(3, 1);
+        let li = Dot::new(3, 2);
+        let para = Dot::new(3, 3);
+        let para_root = Dot::new(3, 4);
+        let items = vec![
+            (
+                ol,
+                SeqItem::Block {
+                    node_type: NodeType::OrderedList,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                li,
+                SeqItem::Block {
+                    node_type: NodeType::ListItem,
+                    parents: vec![root, ol],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, ol, li],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para_root,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let li_node = get_list_item(&view, li);
+        let base = default_style();
+
+        let max_fs = list_item_max_font_size(&li_node, &base);
+        assert!(
+            (max_fs - base.font_size).abs() < 0.01,
+            "empty item must fall back to base font size (got {max_fs})"
         );
     }
 

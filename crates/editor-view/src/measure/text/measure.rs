@@ -776,6 +776,114 @@ mod tests {
         measure_paragraph(&para, width, Alignment::Left, 0.0, pending, None, &mut res)
     }
 
+    fn font_size_span(spans: SpanLog, op_seq: u64, target: Dot, value: u32) -> SpanLog {
+        spans
+            .apply(
+                Dot::new(70, op_seq),
+                SpanOp::AddSpan {
+                    start: anc(target, Bias::Before),
+                    end: anc(target, Bias::After),
+                    modifier: Modifier::FontSize { value },
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn line_height_scales_with_span_font_size() {
+        let height_for = |value: u32| {
+            let mut l = build_logs(vec![ch('a')]);
+            l.spans = font_size_span(SpanLog::new(), 1, leaf(0), value);
+            measure(&l, 1.0e6).1
+        };
+        let h6 = height_for(600);
+        let h12 = height_for(1200);
+        let h24 = height_for(2400);
+        assert!(
+            (h6 - h12 / 2.0).abs() < 0.01,
+            "6pt line must be half of 12pt (h6={h6}, h12={h12})"
+        );
+        assert!(
+            (h24 - h12 * 2.0).abs() < 0.01,
+            "24pt line must be double of 12pt (h24={h24}, h12={h12})"
+        );
+    }
+
+    #[test]
+    fn span_below_document_default_scales() {
+        let mut l = build_logs(vec![ch('a')]);
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(60, 1),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::FontSize { value: 2400 },
+                },
+            )
+            .unwrap();
+        l.spans = font_size_span(SpanLog::new(), 1, leaf(0), 1200);
+        let (_, h) = measure(&l, 1.0e6);
+
+        let mut l12 = build_logs(vec![ch('a')]);
+        l12.spans = font_size_span(SpanLog::new(), 1, leaf(0), 1200);
+        let (_, h12) = measure(&l12, 1.0e6);
+
+        assert!(
+            (h - h12).abs() < 0.01,
+            "12pt span in a 24pt-default document must match a plain 12pt line (h={h}, h12={h12})"
+        );
+    }
+
+    #[test]
+    fn mixed_size_line_uses_max_run() {
+        let mut l = build_logs(vec![ch('a'), ch('b')]);
+        l.spans = font_size_span(
+            font_size_span(SpanLog::new(), 1, leaf(0), 600),
+            2,
+            leaf(1),
+            1000,
+        );
+        let (lines, h) = measure(&l, 1.0e6);
+        assert_eq!(lines.len(), 1);
+
+        let mut l10 = build_logs(vec![ch('b')]);
+        l10.spans = font_size_span(SpanLog::new(), 1, leaf(0), 1000);
+        let (_, h10) = measure(&l10, 1.0e6);
+
+        assert!(
+            (h - h10).abs() < 0.01,
+            "mixed 6pt+10pt line must match a 10pt-only line (h={h}, h10={h10})"
+        );
+
+        let (_, h_default) = measure(&build_logs(vec![ch('b')]), 1.0e6);
+        assert!(
+            h < h_default,
+            "10pt frame must be below the document-default frame (h={h}, h_default={h_default})"
+        );
+    }
+
+    #[test]
+    fn trailing_empty_segment_keeps_paragraph_size() {
+        let mut l = build_logs(vec![ch('a'), hb()]);
+        l.spans = font_size_span(SpanLog::new(), 1, leaf(0), 600);
+        let (lines, _) = measure(&l, 1.0e6);
+        assert_eq!(lines.len(), 2);
+
+        let (empty_lines, _) = measure(&build_logs(vec![]), 1.0e6);
+        assert!(
+            (lines[1].height - empty_lines[0].height).abs() < 0.01,
+            "empty segment keeps the paragraph-size strut (got {}, want {})",
+            lines[1].height,
+            empty_lines[0].height
+        );
+        assert!(
+            lines[0].height < lines[1].height,
+            "6pt text line must be shorter than the paragraph-size strut line (text={}, strut={})",
+            lines[0].height,
+            lines[1].height
+        );
+    }
+
     #[test]
     fn empty_paragraph_pending_font_size_grows_strut() {
         let l = build_logs(vec![]);

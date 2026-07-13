@@ -75,7 +75,8 @@ fn max_run_font_size(line: &parley::layout::Line<TextBrush>, base_font_size: f32
             parley::PositionedLayoutItem::GlyphRun(gr) => Some(gr.run().font_size()),
             _ => None,
         })
-        .fold(base_font_size, f32::max)
+        .reduce(f32::max)
+        .unwrap_or(base_font_size)
 }
 
 fn resolve_line_typography_metrics(
@@ -85,7 +86,7 @@ fn resolve_line_typography_metrics(
     max_run_font_size: f32,
 ) -> LineTypographyMetrics {
     let safe_base_font_size = base_font_size.max(1.0);
-    let line_font_size = max_run_font_size.max(safe_base_font_size);
+    let line_font_size = max_run_font_size.max(1.0);
 
     let mut ascent = (strut.ascent.max(0.0) / safe_base_font_size) * line_font_size;
     let mut descent = (strut.descent.max(0.0) / safe_base_font_size) * line_font_size;
