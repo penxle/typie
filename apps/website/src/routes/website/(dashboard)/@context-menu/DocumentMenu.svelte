@@ -10,7 +10,6 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import ArrowUpFromLineIcon from '~icons/lucide/arrow-up-from-line';
   import BlendIcon from '~icons/lucide/blend';
   import ClipboardCopyIcon from '~icons/lucide/clipboard-copy';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
@@ -315,35 +314,6 @@
     `),
   );
 
-  const [convertDocumentToV2] = createMutation(
-    graphql(`
-      mutation DocumentMenu_ConvertDocumentToV2_Mutation($input: ConvertDocumentToV2Input!) {
-        convertDocumentToV2(input: $input) {
-          id
-        }
-      }
-    `),
-  );
-
-  const handleConvertToV2 = async () => {
-    try {
-      await convertDocumentToV2({ input: { documentId: document.id } });
-      mixpanel.track('convert_document_to_v2', { via });
-      Toast.success('v2 문서로 변환되었습니다');
-      location.reload();
-    } catch (err) {
-      const error = unwrapError(err);
-      const code = error instanceof TypieError ? error.code : null;
-      if (code === 'already_migrated') {
-        Toast.error('이미 v2 문서입니다');
-      } else if (code === 'document_busy') {
-        Toast.error('문서가 사용 중입니다. 잠시 후 다시 시도해주세요');
-      } else {
-        Toast.error('변환에 실패했습니다');
-      }
-    }
-  };
-
   const getUpperOrder = () => {
     const el = globalThis.document.querySelector<HTMLElement>(`[data-id="${entity.id}"]`);
     if (!el) return;
@@ -496,23 +466,6 @@
 </MenuItem>
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
-
-{#if app.preference.current.experimental_v2EditorEnabled}
-  <MenuItem
-    icon={ArrowUpFromLineIcon}
-    onclick={() => {
-      Dialog.confirm({
-        title: 'v2 문서로 변환',
-        message: '이 문서를 v2 에디터 문서로 변환합니다. 문서 내용과 코멘트가 이관됩니다.',
-        action: 'primary',
-        actionLabel: '변환',
-        actionHandler: handleConvertToV2,
-      });
-    }}
-  >
-    v2로 변환
-  </MenuItem>
-{/if}
 
 {#if via === 'tree'}
   <MenuItem

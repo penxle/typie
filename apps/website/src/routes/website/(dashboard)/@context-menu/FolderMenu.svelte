@@ -494,25 +494,17 @@
       return;
     }
 
-    if (app.preference.current.experimental_v2EditorEnabled) {
-      app.state.editorSelectContext = {
+    const resp = await createDocument({
+      input: {
         siteId: entity.site.id,
         parentEntityId: entity.id,
-        via,
-        onComplete: open,
-      };
-    } else {
-      const resp = await createDocument({
-        input: {
-          siteId: entity.site.id,
-          parentEntityId: entity.id,
-        },
-      });
+        v2: true,
+      },
+    });
 
-      mixpanel.track('create_child_document', { via });
-      open();
-      await goto(`/${resp.createDocument.entity.slug}`);
-    }
+    mixpanel.track('create_child_document', { via });
+    open();
+    await goto(`/${resp.createDocument.entity.slug}`);
   }}
 >
   하위 문서 생성

@@ -196,17 +196,10 @@
           return;
         }
 
-        if (app.preference.current.experimental_v2EditorEnabled) {
-          app.state.editorSelectContext = {
-            siteId: currentSiteId,
-            via: 'command_palette',
-          };
-          return;
-        }
-
         const resp = await createDocument({
           input: {
             siteId: currentSiteId,
+            v2: true,
           },
         });
 

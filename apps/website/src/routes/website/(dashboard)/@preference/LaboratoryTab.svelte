@@ -2,10 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Switch } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
-  import mixpanel from 'mixpanel-browser';
-  import { SettingsCard, SettingsRow } from '$lib/components';
+  import { SettingsCard } from '$lib/components';
   import { graphql } from '$mearie';
   import type { DashboardLayout_PreferenceModal_LaboratoryTab_user$key } from '$mearie';
 
@@ -24,8 +21,6 @@
     `),
     () => user$key,
   );
-
-  const app = getAppContext();
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -40,28 +35,6 @@
   </div>
 
   <SettingsCard>
-    <SettingsRow>
-      {#snippet label()}
-        v2 에디터 사용
-      {/snippet}
-      {#snippet description()}
-        타이피 팀에서 새롭게 준비중인 에디터를 미리 체험해 볼 수 있어요.
-        <br />
-        아직 모든 기능 개발이 완료되지 않아, 실사용에는 적합하지 않아요.
-        <br />
-        새 문서를 만들 때 v2 에디터를 선택해 체험해보세요.
-      {/snippet}
-      {#snippet value()}
-        <Switch
-          onchange={() => {
-            mixpanel.track('toggle_experimental_feature', {
-              feature: 'v2_editor',
-              enabled: app.preference.current.experimental_v2EditorEnabled,
-            });
-          }}
-          bind:checked={app.preference.current.experimental_v2EditorEnabled}
-        />
-      {/snippet}
-    </SettingsRow>
+    <div class={css({ padding: '16px', fontSize: '14px', color: 'text.muted' })}>현재 활성화된 실험실 기능이 없어요.</div>
   </SettingsCard>
 </div>

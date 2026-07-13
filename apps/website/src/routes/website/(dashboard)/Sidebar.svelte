@@ -636,27 +636,18 @@
 
             const { lowerOrder, upperOrder } = getAdjacentOrders();
 
-            if (app.preference.current.experimental_v2EditorEnabled) {
-              app.state.editorSelectContext = {
+            const resp = await createDocument({
+              input: {
                 siteId: site.id,
                 parentEntityId: app.state.ancestors.at(-1),
                 lowerOrder,
                 upperOrder,
-                via: 'tree',
-              };
-            } else {
-              const resp = await createDocument({
-                input: {
-                  siteId: site.id,
-                  parentEntityId: app.state.ancestors.at(-1),
-                  lowerOrder,
-                  upperOrder,
-                },
-              });
+                v2: true,
+              },
+            });
 
-              mixpanel.track('create_document', { via: 'tree' });
-              await goto(`/${resp.createDocument.entity.slug}`);
-            }
+            mixpanel.track('create_document', { via: 'tree' });
+            await goto(`/${resp.createDocument.entity.slug}`);
           }}
           type="button"
           use:tooltip={{ message: '새 문서 생성' }}
