@@ -166,7 +166,15 @@ internal class EditorInputConnection(
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     recordCall("setComposingRegion", "start=$start, end=$end")
-    val (projectedStart, projectedEnd) = projectAbsoluteUtf16Range(start, end)
+    // AOSP BaseInputConnection swaps reversed ranges and discards zero-length
+    // composing spans, so an empty region clears the composition instead of
+    // anchoring it (Samsung HoneyBoard sends (0,0) when recomposing).
+    if (start == end) {
+      batch.enqueue(FlatImeOp.ClearComposition)
+      return true
+    }
+    val (projectedStart, projectedEnd) =
+      projectAbsoluteUtf16Range(minOf(start, end), maxOf(start, end))
     batch.enqueue(FlatImeOp.SetComposition(projectedStart, projectedEnd))
     return true
   }

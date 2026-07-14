@@ -591,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_bold_during_empty_composition_seeds_first_composed_char() {
+    fn toggle_bold_after_empty_set_region_seeds_first_composed_char() {
         let resource = Arc::new(Mutex::new(make_resource([("Pretendard", vec![400, 700])])));
         let (state, p1) = state! {
             doc {
@@ -622,10 +622,8 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(editor_state::Composition {
-                start: flat,
-                end: flat
-            })
+            None,
+            "empty SetRegion never persists composition"
         );
 
         let before_text = {

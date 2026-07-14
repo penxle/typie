@@ -111,11 +111,17 @@ internal object EditorImeCommandNormalizer {
           FlatImeOp.SetSelection(it.projectWindowUtf16Index(start), it.projectWindowUtf16Index(end))
         }
       is SetComposingRegionCommand ->
-        ime?.let {
-          FlatImeOp.SetComposition(
-            it.projectWindowUtf16Index(start),
-            it.projectWindowUtf16Index(end),
-          )
+        // InputConnection.setComposingRegion semantics: reversed ranges swap
+        // and a zero-length region clears the composition.
+        if (start == end) {
+          FlatImeOp.ClearComposition
+        } else {
+          ime?.let {
+            FlatImeOp.SetComposition(
+              it.projectWindowUtf16Index(minOf(start, end)),
+              it.projectWindowUtf16Index(maxOf(start, end)),
+            )
+          }
         }
       is DeleteSurroundingTextCommand ->
         FlatImeOp.DeleteSurroundingUtf16(lengthBeforeCursor, lengthAfterCursor)

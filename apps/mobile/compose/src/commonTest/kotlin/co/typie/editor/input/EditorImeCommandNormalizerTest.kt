@@ -230,6 +230,38 @@ class EditorImeCommandNormalizerTest {
   }
 
   @Test
+  fun `zero-length composing region clears composition`() {
+    val ime = Ime(text = "가나다", windowStart = 0, selection = ImeRange(3, 3), composing = null)
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetComposingRegionCommand(0, 0), SetComposingTextCommand("라", 1)),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.ClearComposition, FlatImeOp.Compose("라")))),
+      messages,
+    )
+  }
+
+  @Test
+  fun `reversed composing region swaps to ordered range`() {
+    val ime = Ime(text = "가나다", windowStart = 0, selection = ImeRange(3, 3), composing = null)
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetComposingRegionCommand(3, 1), SetComposingTextCommand("라", 1)),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.SetComposition(1, 3), FlatImeOp.Compose("라")))),
+      messages,
+    )
+  }
+
+  @Test
   fun `mixed batch selection command without ime snapshot is dropped`() {
     val messages =
       EditorImeCommandNormalizer.normalize(

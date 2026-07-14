@@ -18,6 +18,7 @@ aisettings
 amazonses
 androidx
 anifantakis
+aosp
 apollographql
 argb
 batang

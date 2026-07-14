@@ -49,7 +49,10 @@ fn seed_composition_paint(
 }
 
 fn composition_range_valid(view: &DocView, start: usize, end: usize) -> bool {
-    if start > end || end > flat_size(view) {
+    // AOSP parity: a zero-length composing region cannot exist in stock
+    // editors (zero-length composing spans are discarded), so empty ranges
+    // never persist as composition state.
+    if start >= end || end > flat_size(view) {
         return false;
     }
     flat_segments_in_range(view, start..end)
@@ -498,7 +501,8 @@ impl FlatImeState {
                 self.apply_surrounding_deletes(del_start, base_before, base_after, del_end)
             }
             FlatImeOp::SetComposition { start, end } => {
-                self.comp = Some((*start, *end));
+                let (start, end) = (*start.min(end), *start.max(end));
+                self.comp = Some((start, end));
                 None
             }
             FlatImeOp::ClearComposition | FlatImeOp::CommitAsIs => {
@@ -1030,19 +1034,24 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 // Without structural replay the reduced coordinates match the
                 // document 1:1, so the reduced selection is authoritative
                 // (e.g. a delete before the composing text keeps the caret at
-                // the composition, not at the deletion site).
+                // the composition, not at the deletion site). If the document
+                // size disagrees with the reduced buffer, the edit was dropped
+                // (e.g. a rejected replacement), so the reduced selection is
+                // meaningless — keep the caret where it is.
                 if has_text_delta && composition_text_start.is_none() {
                     let doc = tr.view();
-                    let current = tr.selection().and_then(|s| {
-                        let anchor = s.anchor.resolve(&doc)?.to_flat();
-                        let head = s.head.resolve(&doc)?.to_flat();
-                        Some((anchor.min(head), anchor.max(head)))
-                    });
-                    if current != Some((result.sel_start, result.sel_end))
-                        && let Ok(sel) =
-                            selection_from_flat_range(&doc, result.sel_start, result.sel_end)
-                    {
-                        commands::set_selection(tr, sel)?;
+                    if flat_size(&doc) == result.text.len() {
+                        let current = tr.selection().and_then(|s| {
+                            let anchor = s.anchor.resolve(&doc)?.to_flat();
+                            let head = s.head.resolve(&doc)?.to_flat();
+                            Some((anchor.min(head), anchor.max(head)))
+                        });
+                        if current != Some((result.sel_start, result.sel_end))
+                            && let Ok(sel) =
+                                selection_from_flat_range(&doc, result.sel_start, result.sel_end)
+                        {
+                            commands::set_selection(tr, sel)?;
+                        }
                     }
                 }
 
@@ -1157,16 +1166,16 @@ mod tests {
     }
 
     #[test]
-    fn composition_range_valid_accepts_empty_range() {
+    fn composition_range_valid_rejects_empty_range() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0)
         };
         let view = state.view();
-        // O=0, hello=1..6, C=6; empty ranges are valid anchors for composition
-        assert!(composition_range_valid(&view, 1, 1));
-        assert!(composition_range_valid(&view, 4, 4));
-        assert!(composition_range_valid(&view, 6, 6));
+        // O=0, hello=1..6, C=6; empty ranges never persist as composition
+        assert!(!composition_range_valid(&view, 1, 1));
+        assert!(!composition_range_valid(&view, 4, 4));
+        assert!(!composition_range_valid(&view, 6, 6));
     }
 
     #[test]
@@ -1424,6 +1433,128 @@ mod tests {
             ops: vec![FlatImeOp::SetComposition { start: 3, end: 4 }],
         });
         assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn set_region_empty_range_does_not_persist_composition() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetComposition { start: 0, end: 0 }],
+        });
+        assert_eq!(editor.state().composition, None);
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn empty_set_region_then_compose_inserts_at_cursor() {
+        // Samsung HoneyBoard post-backspace recompose sends
+        // setComposingRegion(0,0) and then setComposingText(word) as separate
+        // dispatches while the cursor sits far from position 0; the compose
+        // must target the cursor, not position 0.
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetComposition { start: 0, end: 0 }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "한".into() }],
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose {
+                text: "한글".into(),
+            }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("hello한글") } } }
+            selection: (p1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 6, end: 8 })
+        );
+    }
+
+    #[test]
+    fn batched_empty_set_region_anchors_compose() {
+        // Web IME adapter contract: [set_composition(n,n), compose] in one
+        // batch anchors the compose at n even when n differs from the cursor.
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition { start: 3, end: 3 },
+                FlatImeOp::Compose { text: "X".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("heXllo") } } }
+            selection: (p1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 3, end: 4 })
+        );
+    }
+
+    #[test]
+    fn set_region_reversed_range_normalizes_order() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition { start: 5, end: 2 },
+                FlatImeOp::Compose { text: "X".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("hXo") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+    }
+
+    #[test]
+    fn rejected_newline_compose_keeps_caret() {
+        // replace_range_with_text rejects newline-bearing replacements; the
+        // dropped edit must not move the caret to reduced coordinates.
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose {
+                text: "a\nb".into(),
+            }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
@@ -2082,7 +2213,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_composition_start_overlays_and_consumes_pending() {
+    fn empty_set_region_keeps_pending_for_first_composed_char() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("하") } } }
             selection: (p1, 1)
@@ -2108,8 +2239,8 @@ mod tests {
             }],
         });
         assert!(
-            editor.state().pending_modifiers.is_empty(),
-            "pending consumed at empty composition start"
+            !editor.state().pending_modifiers.is_empty(),
+            "pending survives the empty SetRegion and is consumed at first compose"
         );
 
         editor.apply(Message::TextInput {
@@ -3703,7 +3834,7 @@ mod tests {
     }
 
     #[test]
-    fn update_with_stale_composition_at_leading_gap_materializes_and_inserts() {
+    fn update_after_empty_set_region_at_leading_gap_materializes_and_inserts() {
         let (state, ..) = state! {
             doc { r: root { image paragraph { text("b") } } }
             selection: (r, 0, <)
@@ -3714,8 +3845,8 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 0 }),
-            "precondition: SetRegion at gap leaves stale empty composition"
+            None,
+            "precondition: empty SetRegion never persists composition"
         );
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
@@ -3801,7 +3932,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_with_stale_composition_at_leading_gap_materializes_and_inserts() {
+    fn commit_after_empty_set_region_at_leading_gap_materializes_and_inserts() {
         let (state, ..) = state! {
             doc { r: root { image paragraph { text("b") } } }
             selection: (r, 0, <)
@@ -3812,8 +3943,8 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 0 }),
-            "precondition: SetRegion at gap leaves stale empty composition"
+            None,
+            "precondition: empty SetRegion never persists composition"
         );
         editor.apply(Message::TextInput {
             ops: vec![
@@ -3909,19 +4040,14 @@ mod tests {
             selection: (r, 0, <)
         };
         assert_state_eq!(editor.state(), &expected);
-        // SetComposition reduces snapshot.comp to Some((0,0)); handle_flat_ime
-        // applies that via a separate transact at the end since
-        // result.comp != initial.comp. Pin this explicitly so a refactor
-        // can't silently regress the "state-only Flat op survives the gap
-        // gate" property.
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 0, end: 0 })
-        );
+        // Pin the "state-only Flat op survives the gap gate" property: the op
+        // must not materialize the gap, and the empty region must not persist
+        // as composition (AOSP parity).
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
-    fn flat_ime_compose_with_stale_composition_at_leading_gap_materializes_and_composes() {
+    fn flat_ime_compose_after_empty_set_region_at_leading_gap_materializes_and_composes() {
         let (state, ..) = state! {
             doc { r: root { image paragraph { text("b") } } }
             selection: (r, 0, <)
@@ -3932,8 +4058,8 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 0 }),
-            "precondition: SetRegion at gap leaves stale empty composition"
+            None,
+            "precondition: empty SetRegion never persists composition"
         );
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
@@ -3950,7 +4076,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_with_stale_composition_at_leading_gap_preserves_unit() {
+    fn clear_after_empty_set_region_at_leading_gap_preserves_unit() {
         let (state, ..) = state! {
             doc { r: root { image paragraph { text("b") } } }
             selection: (r, 0, <)
@@ -3961,8 +4087,8 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 0 }),
-            "precondition: SetRegion at gap leaves stale empty composition"
+            None,
+            "precondition: empty SetRegion never persists composition"
         );
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::ClearComposition],
@@ -3990,10 +4116,7 @@ mod tests {
             selection: (r, 0, <)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 0, end: 0 })
-        );
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
@@ -4410,10 +4533,7 @@ mod tests {
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::Compose { text: "".into() }],
         });
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 5, end: 5 })
-        );
+        assert_eq!(editor.state().composition, None);
         editor.enqueue(Message::TextInput {
             ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
                 before: 1,
@@ -4429,10 +4549,7 @@ mod tests {
             selection: (p1, 2, <)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 3, end: 3 })
-        );
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
@@ -4466,10 +4583,7 @@ mod tests {
             selection: (p1, 2, <)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 3, end: 3 })
-        );
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
