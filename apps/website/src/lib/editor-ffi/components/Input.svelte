@@ -114,7 +114,10 @@
     }}
     oncopy={handle(editor, handleCopy)}
     oncut={(e) => {
-      if (editor.readOnly) return;
+      if (editor.readOnly) {
+        editor.editBlockedHandler?.();
+        return;
+      }
       handleCut(editor, e);
     }}
     onfocus={syncInput}
@@ -124,11 +127,17 @@
       editor.flush();
     }}
     onkeydown={(e) => {
+      if (editor.readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        editor.editBlockedHandler?.();
+      }
       handleKeyDown(editor, e);
       editor.flush();
     }}
     onpaste={(e) => {
-      if (editor.readOnly) return;
+      if (editor.readOnly) {
+        editor.editBlockedHandler?.();
+        return;
+      }
       handlePaste(editor, e);
     }}
     readonly={editor.readOnly}

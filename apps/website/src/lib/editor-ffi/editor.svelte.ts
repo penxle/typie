@@ -498,6 +498,7 @@ export class Editor {
 
   readOnly = $state(false);
   protectContent = $state(false);
+  editBlockedHandler: (() => void) | null = null;
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { uploadId: string; url: string; width: number; height: number }>());
@@ -998,7 +999,11 @@ export class Editor {
   }
 
   async requestCut(): Promise<void> {
-    if (this.isSelectionCollapsed || this.readOnly) return;
+    if (this.isSelectionCollapsed) return;
+    if (this.readOnly) {
+      this.editBlockedHandler?.();
+      return;
+    }
     const payload = this.copySelection();
     if (!payload) return;
     await writeClipboardPayload(payload.html, payload.text);
@@ -1006,7 +1011,10 @@ export class Editor {
   }
 
   async requestPaste(): Promise<void> {
-    if (this.readOnly) return;
+    if (this.readOnly) {
+      this.editBlockedHandler?.();
+      return;
+    }
     const result = await readClipboardRich();
     if (!result) return;
     // HTML-only clipboard is intentionally accepted here (the WASM Paste op handles text: '' with non-empty html); diverges from handlePaste which gates on text being present.
@@ -1016,20 +1024,29 @@ export class Editor {
   }
 
   async requestPasteTextOnly(): Promise<void> {
-    if (this.readOnly) return;
+    if (this.readOnly) {
+      this.editBlockedHandler?.();
+      return;
+    }
     const result = await readClipboardRich();
     if (!result || result.text === '') return;
     this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
   }
 
   insertTemplateFragment(changesets: Uint8Array): void {
-    if (this.readOnly) return;
+    if (this.readOnly) {
+      this.editBlockedHandler?.();
+      return;
+    }
     this.#wasm.insert_template_fragment(changesets);
     this.#requestWasmTick();
   }
 
   handleRepasteAsText(): void {
-    if (this.readOnly) return;
+    if (this.readOnly) {
+      this.editBlockedHandler?.();
+      return;
+    }
     this.enqueue({ type: 'clipboard', op: { type: 'repaste_as_text' } });
     this.focus();
   }
@@ -1225,6 +1242,7 @@ export class Editor {
 
   enqueue(message: Message) {
     if (this.readOnly && isMutatingMessage(message)) {
+      this.editBlockedHandler?.();
       return;
     }
     this.#wasm.enqueue(message);

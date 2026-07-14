@@ -676,6 +676,23 @@
   let showEditLockedToast = $state(false);
   let lockedToastTimer: ReturnType<typeof setTimeout> | null = null;
 
+  $effect(() => {
+    const editor = ctx.liveEditor;
+    if (!editor) return;
+
+    editor.editBlockedHandler = () => {
+      if (!document?.locked || showEditLockedToast) return;
+      showEditLockedToast = true;
+      lockedToastTimer = setTimeout(() => {
+        showEditLockedToast = false;
+      }, 5000);
+    };
+
+    return () => {
+      editor.editBlockedHandler = null;
+    };
+  });
+
   function toggleEditLock() {
     if (!query.data.me.subscription) return;
 
