@@ -317,6 +317,7 @@ export const createSpellcheck =
         const key = `spellcheck:${rapidhash(normalized.text)}`;
 
         let xml: string | null;
+        let providerXml: string | undefined;
         try {
           xml = await dependencies.cacheGet(key);
         } catch (err) {
@@ -325,19 +326,12 @@ export const createSpellcheck =
         signal?.throwIfAborted();
 
         if (!xml) {
-          let providerXml: string;
           try {
             providerXml = await dependencies.requestXml(normalized.text, signal);
           } catch (err) {
             throw asChunkError(err, 'provider-request', chunkIndex, chunks.length, signal);
           }
           xml = providerXml;
-          signal?.throwIfAborted();
-          try {
-            await dependencies.cacheSet(key, CACHE_TTL_SECONDS, providerXml);
-          } catch (err) {
-            throw asChunkError(err, 'cache-write', chunkIndex, chunks.length, signal);
-          }
           signal?.throwIfAborted();
         }
 
@@ -347,11 +341,22 @@ export const createSpellcheck =
         } catch (err) {
           throw asChunkError(err, 'parse', chunkIndex, chunks.length, signal);
         }
+        let result: SpellingError[];
         try {
-          return mapChunkResponse(parsed, chunk, normalized);
+          result = mapChunkResponse(parsed, chunk, normalized);
         } catch (err) {
           throw asChunkError(err, 'provider-response', chunkIndex, chunks.length, signal);
         }
+
+        if (providerXml !== undefined) {
+          try {
+            await dependencies.cacheSet(key, CACHE_TTL_SECONDS, providerXml);
+          } catch (err) {
+            throw asChunkError(err, 'cache-write', chunkIndex, chunks.length, signal);
+          }
+          signal?.throwIfAborted();
+        }
+        return result;
       },
       { concurrency: MAX_CONCURRENCY },
     );

@@ -8,6 +8,7 @@ const NO_ERROR = '문법 및 철자 오류가 발견되지 않았습니다.';
 
 const response = (body: string) => `<PnuNlpSpeller><PnuErrorWordList>${body}</PnuErrorWordList></PnuNlpSpeller>`;
 const noErrorXml = response(`<Error>${NO_ERROR}</Error>`);
+const providerErrorXml = response('<Error>temporary provider failure</Error>');
 const wordXml = response('<PnuErrorWord><nErrorIdx>0</nErrorIdx><m_nStart>0</m_nStart><m_nEnd>1</m_nEnd></PnuErrorWord>');
 
 const createDependencies = (overrides: Partial<SpellcheckDependencies> = {}): SpellcheckDependencies => ({
@@ -67,6 +68,23 @@ test('a later chunk failure rejects the whole check', async () => {
   const text = `${'a'.repeat(300)}\n${'b'.repeat(300)}`;
 
   await assert.rejects(() => check(text));
+});
+
+test('provider responses are cached only after successful interpretation', async () => {
+  const cache = new Map<string, string>();
+  let requestCount = 0;
+  const check = createSpellcheck({
+    cacheGet: async (key) => cache.get(key) ?? null,
+    cacheSet: async (key, _ttlSeconds, value) => {
+      cache.set(key, value);
+    },
+    requestXml: async () => (++requestCount === 1 ? providerErrorXml : noErrorXml),
+  });
+
+  await assert.rejects(() => check('문장'));
+  assert.deepEqual(await check('문장'), []);
+  assert.deepEqual(await check('문장'), []);
+  assert.equal(requestCount, 2);
 });
 
 test('request abort preserves the exact signal reason', async () => {
