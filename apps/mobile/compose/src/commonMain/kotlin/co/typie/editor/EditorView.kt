@@ -179,6 +179,7 @@ internal fun EditorView(
           platform = platform,
           bringIntoViewRequests = bringIntoViewRequests,
           suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+          clipboard = PlatformModule.clipboard,
         )
         .focusable()
     ) {

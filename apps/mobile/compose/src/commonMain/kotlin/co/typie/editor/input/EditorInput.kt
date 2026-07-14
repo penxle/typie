@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.KeyInputModifierNode
@@ -40,7 +41,6 @@ import co.typie.ext.notifyTextInputFocusChanged
 import co.typie.ext.registerTextInputClient
 import co.typie.platform.Clipboard
 import co.typie.platform.Platform
-import co.typie.platform.PlatformModule
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -54,6 +54,7 @@ internal fun Modifier.editorInput(
   bringIntoViewRequests: EditorBringIntoViewRequests,
   enabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean,
+  clipboard: Clipboard,
 ): Modifier =
   this then
     EditorInputElement(
@@ -63,6 +64,7 @@ internal fun Modifier.editorInput(
       bringIntoViewRequests = bringIntoViewRequests,
       enabled = enabled,
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+      clipboard = clipboard,
     )
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -93,6 +95,25 @@ internal fun shouldRestartEditorInputSession(
 internal fun requiresRawKeyTextFallback(platform: Platform): Boolean =
   platform == Platform.Android || platform == Platform.Desktop
 
+private val COMPOSITION_COMMITTING_NAVIGATION_KEYS =
+  setOf(
+    ComposeKey.DirectionLeft,
+    ComposeKey.DirectionRight,
+    ComposeKey.DirectionUp,
+    ComposeKey.DirectionDown,
+    ComposeKey.MoveHome,
+    ComposeKey.MoveEnd,
+    ComposeKey.PageUp,
+    ComposeKey.PageDown,
+  )
+
+// Android delivers hardware keys to the view only after the IME has declined them, so a
+// blocked navigation key would leave the composition (and every following arrow) stuck.
+// Other platforms deliver raw key events even while the IME is still consuming them
+// (e.g. candidate navigation), so bindings stay blocked during composition there.
+internal fun commitsCompositionBeforeKeyBinding(platform: Platform, key: ComposeKey): Boolean =
+  platform == Platform.Android && key in COMPOSITION_COMMITTING_NAVIGATION_KEYS
+
 internal fun fixedLocalCaretTextFieldRectInRoot(
   focusedRectInRoot: Rect?,
   textClippingRectInRoot: Rect?,
@@ -115,6 +136,7 @@ private data class EditorInputElement(
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val enabled: Boolean,
   private val suppressSoftwareKeyboard: Boolean,
+  private val clipboard: Clipboard,
 ) : ModifierNodeElement<EditorInputNode>() {
   override fun create(): EditorInputNode =
     EditorInputNode(
@@ -124,6 +146,7 @@ private data class EditorInputElement(
       bringIntoViewRequests = bringIntoViewRequests,
       enabled = enabled,
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+      clipboard = clipboard,
     )
 
   override fun update(node: EditorInputNode) {
@@ -131,6 +154,7 @@ private data class EditorInputElement(
     node.uiState = uiState
     node.updatePlatform(platform)
     node.bringIntoViewRequests = bringIntoViewRequests
+    node.clipboard = clipboard
     node.updateInputPolicy(enabled = enabled, suppressSoftwareKeyboard = suppressSoftwareKeyboard)
   }
 }
@@ -143,6 +167,7 @@ internal class EditorInputNode(
   var bringIntoViewRequests: EditorBringIntoViewRequests,
   enabled: Boolean,
   suppressSoftwareKeyboard: Boolean,
+  var clipboard: Clipboard,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private var focused = false
@@ -186,7 +211,8 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     submit { sessionEditor, context ->
@@ -230,7 +256,8 @@ internal class EditorInputNode(
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor.syncWithBringIntoView(bringIntoViewRequests) {
@@ -321,7 +348,8 @@ internal class EditorInputNode(
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
-      if (editor.ime?.composing != null) {
+      val composing = editor.ime?.composing != null
+      if (composing && !commitsCompositionBeforeKeyBinding(platform, event.key)) {
         recordHardwareKey(
           event = event,
           stage = "onKeyEvent",
@@ -330,6 +358,12 @@ internal class EditorInputNode(
           consumed = true,
         )
         return true
+      }
+      if (composing) {
+        dispatchSync(
+          listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
+          bringIntoViewTarget = null,
+        )
       }
       if (platformInputBridge.shouldConsumeKeyEvent(event)) {
         recordHardwareKey(
@@ -348,7 +382,7 @@ internal class EditorInputNode(
         blockedByComposition = false,
         consumed = true,
       )
-      dispatchBinding(binding, PlatformModule.clipboard)
+      dispatchBinding(binding, clipboard)
       return true
     }
     if (!requiresRawKeyTextFallback(platform)) {
@@ -393,7 +427,7 @@ internal class EditorInputNode(
   override fun onPreKeyEvent(event: KeyEvent): Boolean {
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
-    if (editor.ime?.composing != null) {
+    if (editor.ime?.composing != null && !commitsCompositionBeforeKeyBinding(platform, event.key)) {
       recordHardwareKey(
         event = event,
         stage = "onPreKeyEvent",
@@ -408,7 +442,7 @@ internal class EditorInputNode(
         event = event,
         editorState = { editor.state },
         inputCoroutineScope = coroutineScope,
-        bindingMessages = { with(binding) { editor.action(PlatformModule.clipboard) } },
+        bindingMessages = { with(binding) { editor.action(clipboard) } },
         commit = { messages ->
           dispatchBindingMessages(
             messages = messages,
