@@ -57,6 +57,9 @@ internal class EnrollPlanViewModel : ViewModel() {
   var products by mutableStateOf<List<PurchaseProduct>>(emptyList())
     private set
 
+  var productsUnavailable by mutableStateOf(false)
+    private set
+
   val monthlyProduct by derivedStateOf { products.firstOrNull { it.planId == "pl0fl1map" } }
   val yearlyProduct by derivedStateOf { products.firstOrNull { it.planId == "pl0fl1yap" } }
 
@@ -64,14 +67,21 @@ internal class EnrollPlanViewModel : ViewModel() {
     viewModelScope.launch {
       launch { PlatformModule.purchaseService.events.collect { handlePurchaseEvent(it) } }
 
-      when (PlatformModule.platform) {
-        Platform.iOS -> {
-          products = PlatformModule.purchaseService.queryProducts(listOf("pl0fl1map", "pl0fl1yap"))
+      try {
+        when (PlatformModule.platform) {
+          Platform.iOS -> {
+            products =
+              PlatformModule.purchaseService.queryProducts(listOf("pl0fl1map", "pl0fl1yap"))
+          }
+          Platform.Android -> {
+            products = PlatformModule.purchaseService.queryProducts(listOf("plan.full"))
+          }
+          else -> {}
         }
-        Platform.Android -> {
-          products = PlatformModule.purchaseService.queryProducts(listOf("plan.full"))
-        }
-        else -> {}
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        productsUnavailable = true
       }
     }
   }

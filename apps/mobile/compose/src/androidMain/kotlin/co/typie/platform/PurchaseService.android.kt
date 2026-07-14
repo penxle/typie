@@ -16,6 +16,7 @@ import kotlin.collections.mapNotNull
 import kotlin.collections.orEmpty
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -54,7 +55,13 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
   override val events: SharedFlow<PurchaseEvent> = _events
 
   override suspend fun launch() {
-    ensureConnected()
+    try {
+      ensureConnected()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      // best effort
+    }
   }
 
   override suspend fun queryProducts(productIds: List<String>): List<PurchaseProduct> {
@@ -133,6 +140,10 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
         billingClient.startConnection(
           object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
+              if (!continuation.isActive) {
+                return
+              }
+
               if (result.responseCode == BillingResponseCode.OK) {
                 continuation.resume(Unit)
               } else {

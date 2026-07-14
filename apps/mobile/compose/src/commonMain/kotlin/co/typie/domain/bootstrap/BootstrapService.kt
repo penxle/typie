@@ -54,7 +54,13 @@ object BootstrapService {
       }
     }
 
-    PlatformModule.purchaseService.launch()
+    try {
+      PlatformModule.purchaseService.launch()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      // best effort
+    }
 
     state = BootstrapState.Ready
   }

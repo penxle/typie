@@ -217,19 +217,32 @@ fun EnrollPlanScreen() {
               )
             }
 
-            SubscriptionPurchaseRow(
-              label = "1개월 구독하기",
-              product = model.monthlyProduct,
-              isActive = subscription?.planId == "PL0FL1MAP",
-              onClick = { loader.runWith { context(context) { model.purchase(it) } } },
-            )
+            if (model.productsUnavailable) {
+              Box(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+              ) {
+                Text(
+                  text = "지금은 스토어 결제를 이용할 수 없어요",
+                  style = AppTheme.typography.action,
+                  color = AppTheme.colors.textMuted,
+                )
+              }
+            } else {
+              SubscriptionPurchaseRow(
+                label = "1개월 구독하기",
+                product = model.monthlyProduct,
+                isActive = subscription?.planId == "PL0FL1MAP",
+                onClick = { loader.runWith { context(context) { model.purchase(it) } } },
+              )
 
-            SubscriptionPurchaseRow(
-              label = "1년 구독하기",
-              product = model.yearlyProduct,
-              isActive = subscription?.planId == "PL0FL1YAP",
-              onClick = { loader.runWith { context(context) { model.purchase(it) } } },
-            )
+              SubscriptionPurchaseRow(
+                label = "1년 구독하기",
+                product = model.yearlyProduct,
+                isActive = subscription?.planId == "PL0FL1YAP",
+                onClick = { loader.runWith { context(context) { model.purchase(it) } } },
+              )
+            }
           }
         }
       }
