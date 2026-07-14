@@ -705,7 +705,7 @@ mod tests {
                 .iter()
                 .all(|child| matches!(child.node, PlainNode::Paragraph(_)))
         );
-        assert_eq!(slice.to_text(), "\n\n");
+        assert_eq!(slice.to_text(), "\n");
     }
 
     #[test]
@@ -772,7 +772,7 @@ mod tests {
             selection: (p1, 1) -> (p2, 1)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.to_text(), "\n\nb");
+        assert_eq!(slice.to_text(), "\nb");
     }
 
     #[test]

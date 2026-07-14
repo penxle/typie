@@ -106,6 +106,17 @@ mod tests {
     }
 
     #[test]
+    fn from_text_consecutive_blank_lines_become_matching_empty_paragraphs() {
+        let slice = Slice::from_text("a\n\n\n\nb");
+        assert_eq!(slice.content.len(), 5);
+        assert_eq!(paragraph_text(&slice.content[0]), "a");
+        for empty in &slice.content[1..4] {
+            assert!(empty.children.is_empty());
+        }
+        assert_eq!(paragraph_text(&slice.content[4]), "b");
+    }
+
+    #[test]
     fn from_text_single_newline_splits_paragraph() {
         let slice = Slice::from_text("line1\nline2");
         assert_eq!(slice.content.len(), 2);

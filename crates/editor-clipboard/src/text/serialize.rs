@@ -37,12 +37,8 @@ fn is_textblock_node(n: &PlainNode) -> bool {
 }
 
 fn separate_textblock(out: &mut String, context: &mut TextContext) {
-    if context.seen_textblock && !out.ends_with("\n\n") {
-        if out.ends_with('\n') {
-            out.push('\n');
-        } else {
-            out.push_str("\n\n");
-        }
+    if context.seen_textblock {
+        out.push('\n');
     }
     context.seen_textblock = true;
 }
@@ -122,7 +118,74 @@ mod tests {
             Position::new(p2, 6),
         )));
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), "first\nline\n\nsecond");
+        assert_eq!(slice.to_text(), "first\nline\nsecond");
+    }
+
+    #[test]
+    fn to_text_preserves_consecutive_empty_paragraph_run() {
+        let (s, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                paragraph {}
+                paragraph {}
+                paragraph {}
+                paragraph { text("b") }
+                paragraph {}
+                paragraph { text("c") }
+            } }
+            selection: (r, 0, >) -> (r, 7, <)
+        };
+        let slice = Slice::extract(&s).unwrap();
+        assert_eq!(slice.to_text(), "a\n\n\n\nb\n\nc");
+    }
+
+    #[test]
+    fn to_text_trailing_hardbreak_reads_as_empty_line() {
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let p1 = b.block(NodeType::Paragraph, &[root]);
+        b.text("a");
+        b.atom(AtomLeaf::HardBreak, &[]);
+        let p2 = b.block(NodeType::Paragraph, &[root]);
+        b.text("b");
+        let s = b.finish(Some(Selection::new(
+            Position::new(p1, 0),
+            Position::new(p2, 1),
+        )));
+        let slice = Slice::extract(&s).unwrap();
+        assert_eq!(slice.to_text(), "a\n\nb");
+    }
+
+    #[test]
+    fn to_text_from_text_roundtrip_preserves_gaps_without_hardbreaks() {
+        let (s, ..) = state! {
+            doc { r: root {
+                paragraph { text("a") }
+                paragraph {}
+                paragraph {}
+                paragraph {}
+                paragraph { text("b") }
+                paragraph {}
+                paragraph { text("c") }
+            } }
+            selection: (r, 0, >) -> (r, 7, <)
+        };
+        let original = Slice::extract(&s).unwrap();
+        let reparsed = Slice::from_text(&original.to_text());
+        let texts: Vec<String> = reparsed
+            .content
+            .iter()
+            .map(|p| {
+                p.children
+                    .iter()
+                    .filter_map(|c| match &c.node {
+                        PlainNode::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .collect();
+        assert_eq!(texts, ["a", "", "", "", "b", "", "c"]);
     }
 
     #[test]
