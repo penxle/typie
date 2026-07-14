@@ -103,22 +103,39 @@ pub(crate) fn insert_slice_at_position(
         return Ok(None);
     }
 
-    let position = materialize_position_block(tr, position)?;
     let in_textblock = position_in_textblock(tr, &position);
     if in_textblock {
-        let slice = open_slice_for_textblock_parent(tr, &position, &slice).unwrap_or(slice);
-        let mode = build_inline_mode(tr, &position, provenance)?;
+        let opened = open_slice_for_textblock_parent(tr, &position, &slice);
+        let candidate = opened.as_ref().unwrap_or(&slice);
         if let Some(fragments) =
-            inline_content_fragments_for_textblock_insert(tr, &position, &slice)
+            inline_content_fragments_for_textblock_insert(tr, &position, candidate)
         {
-            insert_content_as_inline_at_position(tr, position, fragments, &mode)
-        } else if can_split_textblock_at_position(tr, &position) {
-            insert_blocks_in_textblock_at_position(tr, position, &slice, &mode)
-        } else {
-            Ok(None)
+            if !fragments.iter().copied().any(is_insertable_inline_fragment) {
+                return Ok(None);
+            }
+            let position = materialize_position_block(tr, position)?;
+            let mode = build_inline_mode(tr, &position, provenance)?;
+            return insert_content_as_inline_at_position(tr, position, fragments, &mode);
         }
+
+        let Some(slice) = opened else {
+            return Ok(None);
+        };
+        let position = materialize_position_block(tr, position)?;
+        let mode = build_inline_mode(tr, &position, provenance)?;
+        insert_blocks_in_textblock_at_position(tr, position, &slice, &mode)
     } else {
-        insert_blocks_at_block_boundary(tr, position, &slice)
+        let container_type = tr
+            .state()
+            .view()
+            .node(position.node)
+            .ok_or(CommandError::NodeNotFound(position.node))?
+            .node_type();
+        let Some(blocks) = block_boundary_fragments(&slice, container_type) else {
+            return Ok(None);
+        };
+        let position = materialize_position_block(tr, position)?;
+        insert_blocks_at_block_boundary(tr, position, blocks)
     }
 }
 
@@ -161,12 +178,6 @@ fn can_split_textblock_for_structural_insert(view: &DocView, textblock_id: Dot) 
     let mut child_types: Vec<NodeType> = parent.children().map(|c| child_node_type(&c)).collect();
     child_types.insert(index + 1, textblock.node_type());
     parent.spec().content.matches_sequence(&child_types)
-}
-
-fn can_split_textblock_at_position(tr: &Transaction, position: &Position) -> bool {
-    let view = tr.state().view();
-    find_ancestor_textblock(&view, position.node)
-        .is_some_and(|textblock| can_split_textblock_for_structural_insert(&view, textblock))
 }
 
 fn open_slice_for_textblock_parent(
@@ -296,6 +307,14 @@ fn insert_inline_fragments(
         }
     }
     Ok(any_change)
+}
+
+fn is_insertable_inline_fragment(fragment: &Fragment) -> bool {
+    match &fragment.node {
+        PlainNode::Text(t) => !t.text.is_empty(),
+        PlainNode::HardBreak(_) | PlainNode::Tab(_) => true,
+        _ => false,
+    }
 }
 
 #[derive(Clone)]
@@ -559,20 +578,10 @@ fn position_at_start_of_block(tr: &Transaction, block_id: Dot) -> Result<Positio
 fn insert_blocks_at_block_boundary(
     tr: &mut Transaction,
     position: Position,
-    slice: &Slice,
+    blocks: Vec<Fragment>,
 ) -> Result<Option<Selection>, CommandError> {
     let container_id = position.node;
     let base_index = position.offset;
-    let container_type = tr
-        .state()
-        .view()
-        .node(container_id)
-        .ok_or(CommandError::NodeNotFound(container_id))?
-        .node_type();
-    let Some(blocks) = block_boundary_fragments(slice, container_type) else {
-        return Ok(None);
-    };
-
     let block_count = blocks.len();
     tr.batch(|tr| {
         for (offset, block) in blocks.iter().enumerate() {

@@ -21,13 +21,14 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        ChildView, DocView, Fragment, NodeType, PlainBulletListNode, PlainImageNode,
-        PlainListItemNode, PlainNode, PlainParagraphNode, PlainTextNode,
+        ChildView, DocView, Fragment, NodeType, PlainBulletListNode, PlainHorizontalRuleNode,
+        PlainImageNode, PlainListItemNode, PlainNode, PlainParagraphNode, PlainTextNode,
     };
     use editor_state::{Affinity, Position, Selection};
     use editor_transaction::Transaction;
 
     use super::*;
+    use crate::test_utils::*;
 
     fn image_slice() -> Slice {
         Slice {
@@ -35,6 +36,48 @@ mod tests {
             open_start: 0,
             open_end: 0,
         }
+    }
+
+    fn horizontal_rule_slice() -> Slice {
+        Slice {
+            content: vec![Fragment::leaf(PlainNode::HorizontalRule(
+                PlainHorizontalRuleNode::default(),
+            ))],
+            open_start: 0,
+            open_end: 0,
+        }
+    }
+
+    fn empty_text_slice() -> Slice {
+        Slice {
+            content: vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                text: String::new(),
+            }))],
+            open_start: 0,
+            open_end: 0,
+        }
+    }
+
+    fn assert_rejected_slice_preserves_synthetic_target(
+        initial: editor_state::State,
+        target: Dot,
+        slice: Slice,
+    ) {
+        assert!(target.is_synthetic(), "fixture target must be synthetic");
+        let mut tr = Transaction::new(&initial);
+        assert!(
+            insert_slice_at(
+                &mut tr,
+                Position::new(target, 0),
+                slice,
+                SliceProvenance::Formatted,
+            )
+            .expect("invalid insertion is a no-op")
+            .is_none()
+        );
+        let (actual, ..) = tr.commit();
+        assert_state_eq!(&actual, &initial);
+        assert!(actual.view().node(target).is_some());
     }
 
     fn paragraph_fragment(text: &str) -> Fragment {
@@ -447,6 +490,44 @@ mod tests {
         );
         let (actual, ..) = tr.commit();
         assert_eq!(kinds(&actual.view(), root), vec![NodeType::Paragraph]);
+    }
+
+    #[test]
+    fn rejected_slice_does_not_materialize_or_split_synthetic_textblock() {
+        let (initial, ..) = state! {
+            doc { root { blockquote paragraph {} } }
+            selection: none
+        };
+        let target = {
+            let view = initial.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|block| block.node_type() == NodeType::Blockquote)
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .id()
+        };
+        assert_rejected_slice_preserves_synthetic_target(initial, target, horizontal_rule_slice());
+    }
+
+    #[test]
+    fn rejected_empty_inline_slice_does_not_materialize_synthetic_textblock() {
+        let (initial, ..) = state! {
+            doc { root { image } }
+            selection: none
+        };
+        let target = initial
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|block| block.node_type() == NodeType::Paragraph)
+            .unwrap()
+            .id();
+        assert_rejected_slice_preserves_synthetic_target(initial, target, empty_text_slice());
     }
 
     #[test]
