@@ -36,7 +36,8 @@ class AiSettingsViewModel : ViewModel() {
     private set
 
   val aiOptIn by derivedStateOf {
-    json.decodeFromJsonElement<AiPreferences>(query.data.me.preferences).aiOptIn
+    runCatching { json.decodeFromJsonElement<AiPreferences>(query.data.me.preferences).aiOptIn }
+      .getOrDefault(false)
   }
 
   suspend fun updateAiOptIn(enabled: Boolean): Result<Unit, Nothing> {

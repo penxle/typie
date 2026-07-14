@@ -22,6 +22,7 @@ import io.ktor.client.request.parameter
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.http.parameters
+import io.ktor.serialization.ContentConvertException
 import io.ktor.utils.io.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -145,12 +146,16 @@ object AuthService {
 
       response.body<TokenResponse>().accessToken
     } catch (e: ClientRequestException) {
-      val error = e.response.body<TokenError>().error
+      val error =
+        runCatching { e.response.body<TokenError>().error }.getOrNull()
+          ?: error("/token: HTTP ${e.response.status.value}")
       if (error == "invalid_grant") {
         throw InvalidCredentialsException()
       } else {
         error("/token: $error")
       }
+    } catch (e: ContentConvertException) {
+      error("/token: malformed response (${e.message})")
     }
   }
 

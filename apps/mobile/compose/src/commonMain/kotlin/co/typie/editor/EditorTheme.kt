@@ -4,11 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.generated.resources.Res
+import co.typie.serialization.json
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 @Serializable
 data class EditorThemeData(
@@ -60,7 +60,7 @@ private fun parseHexColor(hex: String): Color {
 object EditorTheme {
   private val data: EditorThemeData by lazy {
     runBlocking {
-      Json.decodeFromString<EditorThemeData>(
+      json.decodeFromString<EditorThemeData>(
         Res.readBytes("files/editor/theme.json").decodeToString()
       )
     }

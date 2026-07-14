@@ -600,7 +600,7 @@
         timestamp: number;
       }
     >
-  >('typie:selections:v3', {});
+  >('typie:selections:v4', {});
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -778,16 +778,20 @@
     const saved = selectionsStore.current[documentId];
 
     if (saved?.selection) {
-      ctx.editor?.enqueue({
-        type: 'selection',
-        op: {
-          type: 'set_frozen',
-          selection: saved.selection,
-        },
-      });
-      ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
-      if (focused) {
-        ctx.editor?.focus();
+      try {
+        ctx.editor?.enqueue({
+          type: 'selection',
+          op: {
+            type: 'set_frozen',
+            selection: saved.selection,
+          },
+        });
+        ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
+        if (focused) {
+          ctx.editor?.focus();
+        }
+      } catch {
+        selectionsStore.current = { ...selectionsStore.current, [documentId]: { timestamp: Date.now() } };
       }
     }
 

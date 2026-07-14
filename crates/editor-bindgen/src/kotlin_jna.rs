@@ -99,6 +99,10 @@ fn generate_jna_class(
 
         out.push_str("        } catch (e: NativeEditorException) {\n");
         out.push_str("            throw EditorException(e.message ?: \"Unknown editor error\")\n");
+        out.push_str("        } catch (e: kotlinx.serialization.SerializationException) {\n");
+        out.push_str(
+            "            throw EditorException(e.message ?: \"Malformed editor payload\")\n",
+        );
         out.push_str("        }\n");
         out.push_str("    }\n");
     }

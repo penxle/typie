@@ -38,6 +38,16 @@ fn generate_ios_wrapper(
         .iter()
         .any(|m| matches!(&m.return_type, FfiReturnType::Vec(FfiScalarReturn::Primitive(p)) if p == "u8"));
 
+    let needs_json_decode = iface.methods.iter().any(|m| {
+        !m.is_constructor
+            && matches!(
+                &m.return_type,
+                FfiReturnType::Complex(_)
+                    | FfiReturnType::Vec(FfiScalarReturn::Complex(_))
+                    | FfiReturnType::Option(FfiScalarReturn::Complex(_))
+            )
+    });
+
     w.line("@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)");
     w.line("");
     w.line(&format!("package {}", PACKAGE));
@@ -69,6 +79,15 @@ fn generate_ios_wrapper(
     w.line("");
     w.line("private val json = Json { ignoreUnknownKeys = true }");
     w.line("");
+    if needs_json_decode {
+        w.line("private inline fun <reified T> decodeEditorPayload(payload: String): T =");
+        w.line("    try {");
+        w.line("        json.decodeFromString(payload)");
+        w.line("    } catch (e: kotlinx.serialization.SerializationException) {");
+        w.line("        throw EditorException(e.message ?: \"Malformed editor payload\")");
+        w.line("    }");
+        w.line("");
+    }
 
     w.open_block(&format!(
         "class Ios{}(private val native: Swift{}) : {}",
@@ -219,7 +238,7 @@ fn generate_method(
             emit_pre_call_conversions(w, &method.params);
             w.line(&format!("val result = {}", native_call));
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-            w.line("json.decodeFromString(result!!)");
+            w.line("decodeEditorPayload(result!!)");
         }
         FfiReturnType::Vec(inner) => match inner {
             FfiScalarReturn::Primitive(p) if p == "u8" => {
@@ -242,7 +261,7 @@ fn generate_method(
                 emit_pre_call_conversions(w, &method.params);
                 w.line(&format!("val result = {}", native_call));
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-                w.line("@Suppress(\"UNCHECKED_CAST\") (result!! as List<String>).map { json.decodeFromString(it) }");
+                w.line("@Suppress(\"UNCHECKED_CAST\") (result!! as List<String>).map { decodeEditorPayload(it) }");
             }
             FfiScalarReturn::Owned(name) => {
                 emit_pre_call_conversions(w, &method.params);
@@ -272,7 +291,7 @@ fn generate_method(
                 emit_pre_call_conversions(w, &method.params);
                 w.line(&format!("val result = {}", native_call));
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-                w.line("result?.let { json.decodeFromString(it) }");
+                w.line("result?.let { decodeEditorPayload(it) }");
             }
             FfiScalarReturn::Owned(name) => {
                 emit_pre_call_conversions(w, &method.params);
@@ -739,7 +758,7 @@ mod tests {
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
         assert!(output.contains("@Suppress(\"UNCHECKED_CAST\")"));
         assert!(output.contains("result!! as List<String>"));
-        assert!(output.contains(".map { json.decodeFromString(it) }"));
+        assert!(output.contains(".map { decodeEditorPayload(it) }"));
     }
 
     #[test]
@@ -833,7 +852,7 @@ mod tests {
             )],
         };
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
-        assert!(output.contains("result?.let { json.decodeFromString(it) }"));
+        assert!(output.contains("result?.let { decodeEditorPayload(it) }"));
     }
 
     #[test]

@@ -51,7 +51,10 @@ internal class PresetSettingsViewModel : ViewModel() {
   }
 
   val preset by derivedStateOf {
-    json.decodeFromJsonElement<PresetPreferences>(query.data.me.preferences).template ?: Preset()
+    runCatching {
+        json.decodeFromJsonElement<PresetPreferences>(query.data.me.preferences).template
+      }
+      .getOrNull() ?: Preset()
   }
 
   val fontFamilies by derivedStateOf {
