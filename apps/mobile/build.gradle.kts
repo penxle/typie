@@ -20,5 +20,6 @@ plugins {
   alias(libs.plugins.buildkonfig) apply false
   alias(libs.plugins.detekt) apply false
   alias(libs.plugins.sentry) apply false
+  alias(libs.plugins.sentryAndroid) apply false
   alias(libs.plugins.google.services) apply false
 }

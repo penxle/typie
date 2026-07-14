@@ -9,6 +9,7 @@ plugins {
   alias(libs.plugins.compose.multiplatform)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.google.services)
+  alias(libs.plugins.sentryAndroid)
 }
 
 kotlin {
@@ -79,4 +80,18 @@ android {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+}
+
+val sentryAuthToken = providers.environmentVariable("SENTRY_AUTH_TOKEN")
+
+sentry {
+  org = "typie"
+  projectName = "app2"
+  authToken = sentryAuthToken
+  autoUploadProguardMapping = sentryAuthToken.map { true }.orElse(false)
+  telemetry = false
+
+  // The KMP SDK pins its own sentry-android version.
+  autoInstallation { enabled = false }
+  tracingInstrumentation { enabled = false }
 }
