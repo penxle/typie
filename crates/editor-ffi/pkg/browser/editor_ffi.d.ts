@@ -352,6 +352,14 @@ export interface Position {
     affinity: Affinity;
 }
 
+export interface ProseTrackedRangeRegistration {
+    id: string;
+    group: string;
+    start: number;
+    end: number;
+    metadata?: string;
+}
+
 export interface RawTextReplacementRule {
     id: string;
     matchPattern: string;
@@ -522,7 +530,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -602,6 +610,8 @@ export type PlainNode = ({ type: "root" } & PlainRootNode) | ({ type: "paragraph
 
 export type PointerStyle = "default" | "text" | "pointer";
 
+export type ProseRangeInstallOutcome = { type: "applied" } | { type: "text_mismatch" } | { type: "invalid_ranges"; indices: number[] } | { type: "invalid_request" };
+
 export type RootNodeAttr = { type: "layout_mode"; value: LayoutMode };
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
@@ -630,7 +640,7 @@ export type TextNodeAttr = void;
 
 export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
 
-export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "set_group"; id: string; group: string } | { type: "clear_group"; group: string } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean; z_index?: number } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
+export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "set_group"; id: string; group: string } | { type: "clear_group"; group: string } | { type: "replace_groups_from_prose"; expected_text: string; groups: string[]; ranges: ProseTrackedRangeRegistration[] } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean; z_index?: number } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
 
 export type TrackedRangeReplaceOutcome = "replaced" | "unknown_id" | "invalid" | "text_mismatch" | "invalid_replacement";
 
