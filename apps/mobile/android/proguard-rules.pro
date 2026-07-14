@@ -13,6 +13,11 @@
 -dontwarn org.conscrypt.*
 -dontwarn org.openjsse.**
 
+# Naver Login SDK ships no keep rules of its own (naver/naveridlogin-sdk-android#34).
+# R8 full mode decides the unused NidProfileService Retrofit proxy cast can never
+# succeed and rewrites NidServiceLocator.<clinit> into an unconditional throw.
+-keep class com.navercorp.nid.** { *; }
+
 # Retrofit with R8 full mode (bundled with the Kakao SDK guide above).
 -if interface * { @retrofit2.http.* <methods>; }
 -keep,allowobfuscation interface <1>
