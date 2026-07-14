@@ -122,6 +122,6 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 internal actual fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean =
   true
 
-internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
+internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: Editor) {
   // iOS: pull-based via request.value — no explicit notification needed
 }

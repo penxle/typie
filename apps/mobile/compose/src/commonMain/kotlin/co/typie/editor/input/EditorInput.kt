@@ -540,11 +540,14 @@ internal class EditorInputNode(
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,
                 )
               launch {
-                notifyImeSelectionChanged(editor)
-                snapshotFlow { editor.selection to editor.cursor }
+                notifyImeStateChanged(editor)
+                // tickIme covers window text/composing changes that leave the
+                // selection untouched (e.g. remote edits after the cursor), so
+                // extracted-text monitors never go stale.
+                snapshotFlow { Triple(editor.selection, editor.cursor, editor.tickIme) }
                   .distinctUntilChanged()
                   .drop(1) // initial emission already handled above
-                  .collect { notifyImeSelectionChanged(editor) }
+                  .collect { notifyImeStateChanged(editor) }
               }
 
               startInputMethod(request)
@@ -569,4 +572,4 @@ internal class EditorInputNode(
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal expect fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor)
+internal expect fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: Editor)

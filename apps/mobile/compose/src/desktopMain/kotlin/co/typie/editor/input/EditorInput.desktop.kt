@@ -99,7 +99,7 @@ internal actual fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppress
   false
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
+internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: Editor) {
   // Desktop Skiko: pull-based via request.value — no explicit notification needed.
 }
 

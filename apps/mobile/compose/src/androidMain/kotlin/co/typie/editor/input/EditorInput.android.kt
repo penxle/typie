@@ -15,7 +15,7 @@ import co.typie.editor.Editor
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import java.util.WeakHashMap
 
-// Keyed per editor so notifyImeSelectionChanged can forward extracted-text
+// Keyed per editor so notifyImeStateChanged can forward extracted-text
 // updates for the active connection; the holder never references the editor,
 // keeping the weak keys collectible.
 private val editorImeExtractMonitors = WeakHashMap<Editor, ImeExtractMonitor>()
@@ -68,7 +68,7 @@ internal actual fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppress
   false
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
+internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: Editor) {
   val androidView = view
 
   fun update() {
