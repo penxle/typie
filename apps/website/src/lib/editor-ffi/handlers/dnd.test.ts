@@ -73,6 +73,14 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     enqueue,
     flush,
     focus: vi.fn(),
+    gesture: {
+      isDoubleTapSelectionDragActive: false,
+      gestureActive: false,
+      isReadOnlyTouchDragCandidate: vi.fn(() => false),
+      isReadOnlyTouchDragArmed: vi.fn(() => false),
+      handleNativeDragStart: vi.fn(),
+      handleNativeDragEnd: vi.fn(),
+    },
   };
 
   return {
@@ -137,6 +145,45 @@ describe('handleDragStart', () => {
 
   it('보호 문서의 read-only 드래그는 dataTransfer 에 쓰지 않고 차단한다', () => {
     const { ctx } = createCtx({ readOnly: true, protectContent: true });
+    const dataTransfer = createDataTransfer();
+    const event = createDragEvent(dataTransfer);
+
+    handleDragStart(ctx, event);
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
+  });
+
+  it('blocks a read-only touch drag while the gesture is active but not armed', () => {
+    const { ctx, editor } = createCtx({ readOnly: true });
+    editor.gesture.gestureActive = true;
+    const dataTransfer = createDataTransfer();
+    const event = createDragEvent(dataTransfer);
+
+    handleDragStart(ctx, event);
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
+  });
+
+  it('starts an armed read-only touch drag and notifies the gesture controller', () => {
+    const { ctx, editor } = createCtx({ readOnly: true });
+    editor.gesture.gestureActive = true;
+    editor.gesture.isReadOnlyTouchDragCandidate = vi.fn(() => true);
+    editor.gesture.isReadOnlyTouchDragArmed = vi.fn(() => true);
+    const dataTransfer = createDataTransfer();
+    const event = createDragEvent(dataTransfer);
+
+    handleDragStart(ctx, event);
+
+    expect(editor.gesture.handleNativeDragStart).toHaveBeenCalledTimes(1);
+    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('blocks a native drag while a double-tap selection drag is active', () => {
+    const { ctx, editor } = createCtx();
+    editor.gesture.isDoubleTapSelectionDragActive = true;
     const dataTransfer = createDataTransfer();
     const event = createDragEvent(dataTransfer);
 

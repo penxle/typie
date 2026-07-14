@@ -19,6 +19,7 @@
   import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from '../handlers/dnd';
   import { handleClick, handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
+  import { touchPanLock } from '../touch-pan-lock';
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Input from './Input.svelte';
@@ -259,18 +260,24 @@
           style:cursor
           style:min-width={editorMinWidth}
           style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
-          class={css({
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            flexGrow: '1',
-            width: 'full',
-            userSelect: 'none',
-            ...(isPaginated && {
-              rowGap: 'var(--page-gap)',
-            }),
-          })}
+          class={css(
+            {
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              flexGrow: '1',
+              width: 'full',
+              userSelect: 'none',
+              ...(isPaginated && {
+                rowGap: 'var(--page-gap)',
+              }),
+            },
+            ctx.editor.readOnly && {
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+            },
+          )}
           draggable={ctx.editor.isSelectionCollapsed ? undefined : true}
           onclick={handle(ctx.editor, handleClick)}
           oncontextmenu={handle(ctx.editor, handleContextMenu)}
@@ -293,6 +300,7 @@
           onpointerup={handle(ctx.editor, handlePointerUp)}
           role="textbox"
           tabindex={0}
+          use:touchPanLock={ctx.editor.gesture.panLockActive}
         >
           {#each ctx.editor.pageSizes as { width, height }, i (i)}
             <Page backingHeight={ctx.editor.pageBackingSizes[i]?.height ?? height} {height} page={i} {width} />

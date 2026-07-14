@@ -1,13 +1,15 @@
 import {
+  DOUBLE_TAP_DISTANCE_PX,
+  DOUBLE_TAP_INTERVAL_MS,
   LONG_PRESS_CANCEL_DISTANCE_PX,
   LONG_PRESS_MS,
   NATIVE_CONTEXTMENU_SUPPRESS_AFTER_LONGPRESS_MS,
+  TOUCH_DRAG_START_DISTANCE_PX,
   TOUCH_MENU_ESTIMATED_HEIGHT,
   TOUCH_MENU_VIEWPORT_PADDING,
 } from './constants';
 import { EditorEdgeAutoScroll } from './edge-auto-scroll';
-import { tryHandleInteractiveHit } from './handlers/pointer';
-import type { InputModifiers, Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
+import type { Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
 export type SelectionHandleKind = 'from' | 'to';
@@ -120,7 +122,7 @@ export const computeSelectionHandleVisual = ({ kind, anchorRect }: SelectionHand
   };
 };
 
-type Phase = 'idle' | 'pressing' | 'tapMoved' | 'longPressed' | 'handleDragging';
+type Phase = 'idle' | 'pressing' | 'doubleTapPending' | 'doubleTapDragging' | 'handleDragging' | 'dndArmed';
 
 type ResolvedTouchPoint = {
   page: number;
@@ -128,15 +130,18 @@ type ResolvedTouchPoint = {
   y: number;
 };
 
-type DeferredDown = {
-  page: number;
+type PressRecord = {
+  time: number;
   x: number;
   y: number;
-  count: number;
-  modifiers: InputModifiers;
+  selectionHit: boolean;
 };
 
-const ZERO_MODIFIERS: InputModifiers = { shift: false, ctrl: false, alt: false, meta: false };
+type TapRecord = {
+  time: number;
+  x: number;
+  y: number;
+};
 
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }): number => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -144,14 +149,20 @@ export class TouchGestureController {
   #editor: Editor;
   #phase: Phase = $state('idle');
   #pressGeneration = 0;
-  #activePointerId: number | null = null;
-  #pressStart: { x: number; y: number; time: number } | null = null;
+  #activePointerId: number | null = $state(null);
+  #press: PressRecord | null = null;
+  #lastTap: TapRecord | null = null;
   #lastClientPoint: { x: number; y: number } | null = null;
-  #pendingDown: DeferredDown | null = null;
+  #doubleTapStart: { x: number; y: number } | null = null;
   #pendingSelectionHandleType: SelectionHandleKind | null = null;
   #dragAnchor: Position | null = null;
   #baseSelection: Selection | undefined;
-  #selectionHit = false;
+  #suppressTapOnPointerUp = false;
+  #movedPastTapThreshold = false;
+  #readOnlyDragStarted = false;
+  #dragArmed = false;
+  #dragCandidate = false;
+  #wasTouchMenuOpenOnPointerDown = false;
   #longPressTimer: ReturnType<typeof setTimeout> | null = null;
   #suppressNativeContextMenuUntil = 0;
   #edgeAutoScroll = new EditorEdgeAutoScroll();
@@ -160,34 +171,43 @@ export class TouchGestureController {
     this.#editor = editor;
   }
 
-  #onLongPressFire(generation: number): void {
-    if (this.#phase !== 'pressing' || generation !== this.#pressGeneration) return;
-    this.#phase = 'longPressed';
-
-    if (this.#selectionHit) {
-      this.#pendingDown = null;
-      this.#requestTouchMenuOpen(generation);
-      return;
-    }
-
-    const down = this.#pendingDown;
-    this.#pendingDown = null;
-    if (!down) {
-      this.#requestTouchMenuOpen(generation);
-      return;
-    }
-
+  #selectWordAt(point: ResolvedTouchPoint): void {
     this.#editor.enqueue({
       type: 'selection',
-      op: { type: 'select_unit_at', page: down.page, x: down.x, y: down.y, unit: 'word' },
+      op: { type: 'select_unit_at', page: point.page, x: point.x, y: point.y, unit: 'word' },
     });
     this.#editor.flush();
 
-    const fallbackPoint = this.#lastClientPoint ? { x: this.#lastClientPoint.x, y: this.#lastClientPoint.y } : null;
+    const selection = this.#editor.selection;
+    if (selection && !this.#editor.isSelectionCollapsed) {
+      this.#dragAnchor = selection.anchor;
+      this.#baseSelection = selection;
+    } else {
+      this.#dragAnchor = null;
+      this.#baseSelection = undefined;
+    }
+  }
 
-    requestAnimationFrame(() => {
-      this.#requestTouchMenuOpen(generation, fallbackPoint);
-    });
+  #onLongPressFire(generation: number): void {
+    if (this.#phase !== 'pressing' || generation !== this.#pressGeneration || !this.#press) return;
+
+    const point = this.#lastClientPoint ?? this.#press;
+    const local = this.#editor.clientToLocal(point.x, point.y);
+    if (!local) return;
+
+    if (this.#press.selectionHit) {
+      this.#phase = 'dndArmed';
+      this.#dragCandidate = true;
+      this.#dragArmed = true;
+      this.#suppressTapOnPointerUp = true;
+      this.#updateEdgeAutoScroll();
+      return;
+    }
+
+    this.#selectWordAt(local);
+    this.#phase = 'doubleTapPending';
+    this.#doubleTapStart = { x: point.x, y: point.y };
+    this.#suppressTapOnPointerUp = true;
   }
 
   #requestTouchMenuOpen(generation: number, fallbackPoint: { x: number; y: number } | null = this.#lastClientPoint): void {
@@ -251,26 +271,6 @@ export class TouchGestureController {
     });
   }
 
-  #flushDeferredDown(): boolean {
-    const down = this.#pendingDown;
-    if (!down) return false;
-    this.#pendingDown = null;
-
-    const hit = this.#editor.interactiveHitTest(down.page, down.x, down.y);
-    if (hit && tryHandleInteractiveHit(this.#editor, hit, { x: down.x, y: down.y })) {
-      return false;
-    }
-    this.#editor.enqueue({
-      type: 'selection',
-      op: { type: 'set_at', page: down.page, x: down.x, y: down.y },
-    });
-    this.#editor.flush();
-    const selection = this.#editor.selection;
-    this.#dragAnchor = selection?.anchor ?? null;
-    this.#baseSelection = undefined;
-    return true;
-  }
-
   #routeMoveToWasm(e: PointerEvent): boolean {
     return this.#routeMoveToClientPoint(e.clientX, e.clientY);
   }
@@ -294,7 +294,7 @@ export class TouchGestureController {
   }
 
   #updateEdgeAutoScroll(): void {
-    if ((this.#phase !== 'tapMoved' && this.#phase !== 'handleDragging') || !this.#lastClientPoint) {
+    if (!this.#shouldAutoScroll() || !this.#lastClientPoint) {
       this.#edgeAutoScroll.stop();
       return;
     }
@@ -304,11 +304,15 @@ export class TouchGestureController {
       { clientX: this.#lastClientPoint.x, clientY: this.#lastClientPoint.y },
       (clientX, clientY) => {
         this.#lastClientPoint = { x: clientX, y: clientY };
-        if ((this.#phase === 'tapMoved' || this.#phase === 'handleDragging') && this.#routeMoveToClientPoint(clientX, clientY)) {
+        if ((this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') && this.#routeMoveToClientPoint(clientX, clientY)) {
           this.#editor.flush();
         }
       },
     );
+  }
+
+  #shouldAutoScroll(): boolean {
+    return this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging' || this.#phase === 'dndArmed';
   }
 
   #clearLongPressTimer(): void {
@@ -320,51 +324,131 @@ export class TouchGestureController {
     this.#longPressTimer = null;
   }
 
-  #reset(): void {
+  #clearNativeSelection(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      // ignore
+    }
+  }
+
+  #resetSession(): void {
     this.#clearLongPressTimer();
     this.#phase = 'idle';
     this.#activePointerId = null;
-    this.#pressStart = null;
+    this.#press = null;
     this.#lastClientPoint = null;
-    this.#pendingDown = null;
+    this.#doubleTapStart = null;
     this.#pendingSelectionHandleType = null;
     this.#dragAnchor = null;
     this.#baseSelection = undefined;
-    this.#selectionHit = false;
+    this.#suppressTapOnPointerUp = false;
+    this.#movedPastTapThreshold = false;
+    this.#readOnlyDragStarted = false;
+    this.#dragArmed = false;
+    this.#dragCandidate = false;
+    this.#wasTouchMenuOpenOnPointerDown = false;
     this.#edgeAutoScroll.stop();
   }
 
   get gestureActive(): boolean {
-    return this.#editor.readOnly && this.#phase !== 'idle';
+    return this.#editor.readOnly && (this.#activePointerId !== null || this.#phase !== 'idle');
+  }
+
+  get panLockActive(): boolean {
+    if (!this.#editor.readOnly) {
+      return false;
+    }
+
+    return (
+      this.#phase === 'doubleTapPending' ||
+      this.#phase === 'doubleTapDragging' ||
+      this.#phase === 'handleDragging' ||
+      this.#phase === 'dndArmed'
+    );
+  }
+
+  get isDoubleTapSelectionDragActive(): boolean {
+    return this.#phase === 'doubleTapPending' || this.#phase === 'doubleTapDragging';
   }
 
   shouldSuppressNativeContextMenu(): boolean {
     return performance.now() < this.#suppressNativeContextMenuUntil;
   }
 
+  isReadOnlyTouchDragArmed(): boolean {
+    return this.#dragArmed;
+  }
+
+  isReadOnlyTouchDragCandidate(): boolean {
+    return this.#dragCandidate;
+  }
+
   handlePointerDown(e: PointerEvent, resolved: ResolvedTouchPoint | null, selectionHandleType: SelectionHandleKind | null = null): void {
     if (!e.isPrimary) return;
+
+    this.#clearNativeSelection();
+
+    if (this.#activePointerId !== null && this.#activePointerId !== e.pointerId) {
+      this.cancelSession();
+      return;
+    }
 
     this.#pressGeneration++;
     const generation = this.#pressGeneration;
     const selectionHandleEndpoints = selectionHandleType ? this.#editor.selectionEndpoints() : null;
 
     this.#activePointerId = e.pointerId;
-    this.#pressStart = { x: e.clientX, y: e.clientY, time: performance.now() };
+    this.#press = {
+      time: performance.now(),
+      x: e.clientX,
+      y: e.clientY,
+      selectionHit: resolved ? this.#editor.selectionHitTest(resolved.page, resolved.x, resolved.y) : false,
+    };
     this.#lastClientPoint = { x: e.clientX, y: e.clientY };
-    this.#selectionHit = resolved ? this.#editor.selectionHitTest(resolved.page, resolved.x, resolved.y) : false;
-    this.#pendingDown = resolved ? { page: resolved.page, x: resolved.x, y: resolved.y, count: 1, modifiers: ZERO_MODIFIERS } : null;
+    this.#doubleTapStart = null;
     this.#pendingSelectionHandleType = selectionHandleEndpoints ? selectionHandleType : null;
     this.#dragAnchor =
       selectionHandleType === 'from' ? (selectionHandleEndpoints?.to_position ?? null) : (selectionHandleEndpoints?.from_position ?? null);
     this.#baseSelection = undefined;
+    this.#suppressTapOnPointerUp = false;
+    this.#movedPastTapThreshold = false;
+    this.#readOnlyDragStarted = false;
+    this.#dragArmed = false;
+    this.#dragCandidate = false;
+    this.#edgeAutoScroll.stop();
+    this.#clearLongPressTimer();
     this.#phase = 'pressing';
     this.#suppressNativeContextMenuUntil = performance.now() + LONG_PRESS_MS + NATIVE_CONTEXTMENU_SUPPRESS_AFTER_LONGPRESS_MS;
-    this.#clearLongPressTimer();
+    this.#wasTouchMenuOpenOnPointerDown = this.#editor.contextMenu.isOpen && this.#editor.contextMenu.source === 'touch';
+    if (this.#wasTouchMenuOpenOnPointerDown) {
+      this.#editor.closeContextMenu();
+    }
+
     if (this.#pendingSelectionHandleType) {
+      this.#lastTap = null;
       this.#editor.closeContextMenu();
       return;
     }
+
+    const isDoubleTap =
+      this.#lastTap !== null &&
+      this.#press.time - this.#lastTap.time <= DOUBLE_TAP_INTERVAL_MS &&
+      distance(this.#lastTap, this.#press) <= DOUBLE_TAP_DISTANCE_PX;
+
+    if (isDoubleTap && resolved) {
+      this.#selectWordAt(resolved);
+      this.#phase = 'doubleTapPending';
+      this.#doubleTapStart = { x: e.clientX, y: e.clientY };
+      this.#suppressTapOnPointerUp = true;
+      this.#lastTap = null;
+      return;
+    }
+
     this.#longPressTimer = setTimeout(() => {
       this.#onLongPressFire(generation);
     }, LONG_PRESS_MS);
@@ -375,70 +459,147 @@ export class TouchGestureController {
     this.#lastClientPoint = { x: e.clientX, y: e.clientY };
 
     if (this.#phase === 'pressing') {
-      if (this.#pressStart && distance(this.#pressStart, { x: e.clientX, y: e.clientY }) > LONG_PRESS_CANCEL_DISTANCE_PX) {
+      if (this.#pendingSelectionHandleType && this.#press) {
+        if (distance(this.#press, this.#lastClientPoint) < TOUCH_DRAG_START_DISTANCE_PX) {
+          return;
+        }
+
+        this.#movedPastTapThreshold = true;
         this.#clearLongPressTimer();
-        if (this.#pendingSelectionHandleType) {
-          this.#pendingDown = null;
-          this.#phase = 'handleDragging';
-          if (this.#routeMoveToWasm(e)) {
-            this.#editor.flush();
-          }
-          this.#updateEdgeAutoScroll();
-          e.preventDefault();
-          return;
+        this.#phase = 'handleDragging';
+        if (this.#routeMoveToWasm(e)) {
+          this.#editor.flush();
         }
-        const downEnqueued = this.#flushDeferredDown();
-        if (!downEnqueued) {
-          this.#reset();
-          return;
-        }
-        this.#phase = 'tapMoved';
-        this.#routeMoveToWasm(e);
         this.#updateEdgeAutoScroll();
+        e.preventDefault();
+        return;
+      }
+
+      if (this.#press && distance(this.#press, this.#lastClientPoint) > LONG_PRESS_CANCEL_DISTANCE_PX) {
+        this.#movedPastTapThreshold = true;
+        this.#clearLongPressTimer();
+        this.#dragCandidate = false;
       }
       return;
     }
 
-    if (this.#phase === 'tapMoved' || this.#phase === 'handleDragging') {
-      this.#routeMoveToWasm(e);
+    if (this.#phase === 'doubleTapPending') {
+      e.preventDefault();
+      const start = this.#doubleTapStart;
+      if (!start) return;
+
+      if (distance(start, this.#lastClientPoint) < TOUCH_DRAG_START_DISTANCE_PX) {
+        return;
+      }
+
+      this.#phase = 'doubleTapDragging';
+    }
+
+    if (this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') {
+      if (this.#routeMoveToWasm(e)) {
+        this.#editor.flush();
+      }
       this.#updateEdgeAutoScroll();
+      e.preventDefault();
       return;
+    }
+
+    if (this.#phase === 'dndArmed') {
+      this.#updateEdgeAutoScroll();
     }
   }
 
   handlePointerUp(e: PointerEvent): void {
     if (this.#activePointerId !== e.pointerId) return;
 
+    this.#lastClientPoint = { x: e.clientX, y: e.clientY };
+    this.#clearLongPressTimer();
+    this.#edgeAutoScroll.stop();
+
     switch (this.#phase) {
-      case 'pressing': {
-        this.#clearLongPressTimer();
-        this.#flushDeferredDown();
-        break;
-      }
-      case 'tapMoved': {
-        break;
-      }
+      case 'doubleTapDragging':
       case 'handleDragging': {
         if (this.#routeMoveToWasm(e)) {
           this.#editor.flush();
         }
         this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
+        this.#lastTap = null;
         break;
       }
-      case 'longPressed': {
+      case 'doubleTapPending': {
+        this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
+        this.#lastTap = null;
+        break;
+      }
+      case 'dndArmed': {
+        if (!this.#readOnlyDragStarted) {
+          this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
+        }
+        this.#lastTap = null;
+        break;
+      }
+      case 'pressing': {
+        if (!this.#suppressTapOnPointerUp && !this.#movedPastTapThreshold && this.#press) {
+          const local = this.#editor.clientToLocal(e.clientX, e.clientY);
+          if (local) {
+            if (this.#editor.selectionHitTest(local.page, local.x, local.y)) {
+              if (!this.#wasTouchMenuOpenOnPointerDown) {
+                this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
+              }
+            } else {
+              this.#editor.enqueue({
+                type: 'selection',
+                op: { type: 'set_at', page: local.page, x: local.x, y: local.y },
+              });
+              this.#editor.flush();
+              this.#editor.closeContextMenu();
+            }
+            this.#lastTap = { time: performance.now(), x: e.clientX, y: e.clientY };
+          } else {
+            this.#editor.closeContextMenu();
+            this.#lastTap = null;
+          }
+        } else {
+          this.#lastTap = null;
+        }
         break;
       }
       case 'idle': {
         break;
       }
     }
-    this.#reset();
+    this.#resetSession();
   }
 
   handlePointerCancel(e: PointerEvent): void {
-    if (this.#activePointerId !== e.pointerId) return;
+    if (this.#activePointerId !== null && this.#activePointerId !== e.pointerId) return;
 
-    this.#reset();
+    this.cancelSession();
+  }
+
+  handleNativeDragStart(): void {
+    if (this.#phase !== 'dndArmed') {
+      return;
+    }
+
+    this.#readOnlyDragStarted = true;
+    this.#editor.closeContextMenu();
+    this.#clearLongPressTimer();
+    this.#edgeAutoScroll.stop();
+  }
+
+  handleNativeDragEnd(): void {
+    this.#readOnlyDragStarted = false;
+    this.#resetSession();
+  }
+
+  resetReadOnlyTouchState(): void {
+    this.cancelSession();
+  }
+
+  cancelSession(): void {
+    this.#lastTap = null;
+    this.#resetSession();
   }
 
   handleSelectionHandlePointerDown(type: SelectionHandleKind, e: PointerEvent): void {
@@ -456,7 +617,6 @@ export class TouchGestureController {
   }
 
   destroy(): void {
-    this.#clearLongPressTimer();
-    this.#reset();
+    this.cancelSession();
   }
 }

@@ -70,6 +70,7 @@
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest('[data-editor-touch-context-menu]')) return;
+    if (ctx.editor?.extensionAreaEl?.contains(target)) return;
     clearPressedAction();
     ctx.editor?.closeContextMenu();
   };

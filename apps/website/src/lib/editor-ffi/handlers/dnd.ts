@@ -121,6 +121,11 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
     return;
   }
 
+  if (editor.gesture.isDoubleTapSelectionDragActive) {
+    event.preventDefault();
+    return;
+  }
+
   if (editor.readOnly && editor.protectContent) {
     event.preventDefault();
     return;
@@ -130,6 +135,19 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
   if (!local || !editor.selectionHitTest(local.page, local.x, local.y)) {
     event.preventDefault();
     return;
+  }
+
+  const isReadOnlyTouchDrag = editor.readOnly && editor.gesture.gestureActive;
+  const canStartReadOnlyTouchDrag =
+    editor.readOnly && editor.gesture.isReadOnlyTouchDragCandidate() && editor.gesture.isReadOnlyTouchDragArmed();
+
+  if (isReadOnlyTouchDrag && !canStartReadOnlyTouchDrag) {
+    event.preventDefault();
+    return;
+  }
+
+  if (canStartReadOnlyTouchDrag) {
+    editor.gesture.handleNativeDragStart();
   }
 
   const payload = editor.copySelection();
@@ -262,6 +280,7 @@ export const handleDragEnd = (ctx: EditorContext) => {
   if (!editor) return;
   internalDndEditors.delete(editor);
   stopDndEdgeAutoScroll(editor);
+  editor.gesture.handleNativeDragEnd();
   editor.endNativeDragAdmission({ restoreFocus: false });
   editor.enqueue({ type: 'dnd', op: { type: 'end' } });
   editor.flush();

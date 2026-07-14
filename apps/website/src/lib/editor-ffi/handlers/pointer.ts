@@ -36,17 +36,23 @@ export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, loc
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
   const selectionHandleType = selectionHandleKindFromTarget(e.target);
-  if (selectionHandleType && e.pointerType !== 'touch') {
+  const isReadOnlyTouch = editor.readOnly && e.pointerType === 'touch';
+  if (selectionHandleType && !isReadOnlyTouch) {
     return;
   }
 
-  if (e.pointerType === 'touch') {
-    const local = editor.clientToLocal(e.clientX, e.clientY);
-    const resolved = local ? { page: local.page, x: local.x, y: local.y } : null;
+  if (isReadOnlyTouch) {
     if (selectionHandleType) {
       e.preventDefault();
     }
-    e.currentTarget.setPointerCapture(e.pointerId);
+    const local = editor.clientToLocal(e.clientX, e.clientY);
+    const resolved = local ? { page: local.page, x: local.x, y: local.y } : null;
+    if (!selectionHandleType && resolved) {
+      const hit = editor.interactiveHitTest(resolved.page, resolved.x, resolved.y);
+      if (hit && tryHandleInteractiveHit(editor, hit, { x: resolved.x, y: resolved.y })) {
+        return;
+      }
+    }
     editor.gesture.handlePointerDown(e, resolved, selectionHandleType);
     return;
   }
@@ -119,7 +125,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (e.pointerType === 'touch') {
+  if (editor.readOnly && e.pointerType === 'touch') {
     editor.gesture.handlePointerMove(e);
     return;
   }
@@ -140,7 +146,7 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (e.pointerType === 'touch') {
+  if (editor.readOnly && e.pointerType === 'touch') {
     editor.gesture.handlePointerUp(e);
     return;
   }
@@ -171,7 +177,7 @@ export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor,
 };
 
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (e.pointerType === 'touch') {
+  if (editor.readOnly && e.pointerType === 'touch') {
     editor.gesture.handlePointerCancel(e);
     return;
   }

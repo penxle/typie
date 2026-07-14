@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LONG_PRESS_MS } from './constants';
 import { computeSelectionHandleVisual, computeTouchContextMenuPosition, TouchGestureController } from './gesture.svelte';
-import type { SelectionEndpoints } from '@typie/editor-ffi/browser';
+import type { Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 
 const pageRect = (left: number, top: number, width: number, height: number): DOMRect =>
   ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
@@ -126,15 +126,22 @@ const makePointerEvent = ({
   }) as unknown as PointerEvent;
 
 const createGestureEditor = () => {
-  const selection = endpoints(
+  const selectionEndpoints = endpoints(
     { page_idx: 0, x: 100, y: 200, width: 50, height: 20 },
     { page_idx: 0, x: 200, y: 200, width: 30, height: 20 },
   );
+  const selection: Selection = {
+    anchor: { node: 'text', offset: 0, affinity: 'downstream' },
+    head: { node: 'text', offset: 5, affinity: 'downstream' },
+  } as Selection;
   const menuItems = [{ label: '링크 열기', onclick: vi.fn() }];
 
   return {
     selection,
+    selectionEndpointsValue: selectionEndpoints,
     readOnly: true,
+    isSelectionCollapsed: false,
+    contextMenu: { isOpen: false, source: null as string | null },
     pageSizes: [{ width: 800, height: 1000 }],
     pageEls: {
       0: {
@@ -142,7 +149,7 @@ const createGestureEditor = () => {
       },
     },
     safeDisplayZoom: vi.fn(() => 1),
-    selectionEndpoints: vi.fn(() => selection),
+    selectionEndpoints: vi.fn(() => selectionEndpoints),
     selectionHitTest: vi.fn(() => true),
     interactiveHitTest: vi.fn(() => ({ type: 'text' })),
     collectContextMenuContributions: vi.fn(() => menuItems),
@@ -152,6 +159,14 @@ const createGestureEditor = () => {
     enqueue: vi.fn(),
     flush: vi.fn(),
   };
+};
+
+const expectedMenuOpen = {
+  x: 165,
+  y: 200,
+  source: 'touch',
+  placement: 'top',
+  extraItems: [{ label: '링크 열기', onclick: expect.any(Function) }],
 };
 
 describe('TouchGestureController', () => {
@@ -168,25 +183,192 @@ describe('TouchGestureController', () => {
     vi.unstubAllGlobals();
   });
 
-  it('includes context menu contributions when long-press opens a touch menu on a selection', () => {
+  it('lets a pan gesture pass through without creating a selection', () => {
     const editor = createGestureEditor();
     const controller = new TouchGestureController(editor as never);
 
     controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerMove(makePointerEvent({ clientY: 240 }));
+    controller.handlePointerUp(makePointerEvent({ clientY: 260 }));
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('cancels the long press once movement exceeds the threshold', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerMove(makePointerEvent({ clientY: 240 }));
     vi.advanceTimersByTime(LONG_PRESS_MS);
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('keeps the pan lock released while pressing', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+
+    expect(controller.panLockActive).toBe(false);
+  });
+
+  it('collapses the selection on a tap outside of it', () => {
+    const editor = createGestureEditor();
+    editor.selectionHitTest = vi.fn(() => false);
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: { type: 'set_at', page: 0, x: 120, y: 220 },
+    });
+    expect(editor.closeContextMenu).toHaveBeenCalled();
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('opens the touch menu when tapping the selection', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+  });
+
+  it('closes without reopening when tapping the selection while the menu is open', () => {
+    const editor = createGestureEditor();
+    editor.contextMenu = { isOpen: true, source: 'touch' };
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+
+    expect(editor.closeContextMenu).toHaveBeenCalled();
+
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('selects a word on long press and opens the menu on release', () => {
+    const editor = createGestureEditor();
+    editor.selectionHitTest = vi.fn(() => false);
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: { type: 'select_unit_at', page: 0, x: 120, y: 220, unit: 'word' },
+    });
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+
+    controller.handlePointerUp(makePointerEvent());
 
     expect(editor.collectContextMenuContributions).toHaveBeenCalledWith({
       hit: { type: 'text' },
       clientX: 110,
       clientY: 220,
     });
-    expect(editor.openContextMenu).toHaveBeenCalledWith({
-      x: 165,
-      y: 200,
-      source: 'touch',
-      placement: 'top',
-      extraItems: [{ label: '링크 열기', onclick: expect.any(Function) }],
+    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+  });
+
+  it('extends the selection by word when dragging after a long press', () => {
+    const editor = createGestureEditor();
+    editor.selectionHitTest = vi.fn(() => false);
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    controller.handlePointerMove(makePointerEvent({ clientX: 150 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: editor.selection.anchor,
+        head_page: 0,
+        head_x: 120,
+        head_y: 220,
+        base_selection: editor.selection,
+        allow_collapse: false,
+      },
     });
+
+    controller.handlePointerUp(makePointerEvent({ clientX: 150 }));
+
+    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+  });
+
+  it('arms a native drag instead of selecting on long press over the selection', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(controller.isReadOnlyTouchDragArmed()).toBe(true);
+    expect(controller.isReadOnlyTouchDragCandidate()).toBe(true);
+    expect(controller.panLockActive).toBe(true);
+
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+  });
+
+  it('skips the release menu when a native drag started while armed', () => {
+    const editor = createGestureEditor();
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    controller.handleNativeDragStart();
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('selects a word on double tap and extends while dragging', () => {
+    const editor = createGestureEditor();
+    editor.selectionHitTest = vi.fn(() => false);
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerUp(makePointerEvent());
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: { type: 'select_unit_at', page: 0, x: 120, y: 220, unit: 'word' },
+    });
+    expect(controller.panLockActive).toBe(true);
+
+    controller.handlePointerMove(makePointerEvent({ clientX: 150 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: editor.selection.anchor,
+        head_page: 0,
+        head_x: 120,
+        head_y: 220,
+        base_selection: editor.selection,
+        allow_collapse: false,
+      },
+    });
+
+    controller.handlePointerUp(makePointerEvent({ clientX: 150 }));
+
+    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
   });
 
   it('extends the selection from a dragged handle and reopens the touch menu on pointer up', () => {
@@ -202,7 +384,7 @@ describe('TouchGestureController', () => {
       type: 'selection',
       op: {
         type: 'extend_to',
-        anchor: editor.selection.to_position,
+        anchor: editor.selectionEndpointsValue.to_position,
         head_page: 0,
         head_x: 250,
         head_y: 240,
@@ -211,17 +393,12 @@ describe('TouchGestureController', () => {
       },
     });
     expect(editor.flush).toHaveBeenCalled();
-    expect(editor.openContextMenu).toHaveBeenLastCalledWith({
-      x: 165,
-      y: 200,
-      source: 'touch',
-      placement: 'top',
-      extraItems: [{ label: '링크 열기', onclick: expect.any(Function) }],
-    });
+    expect(editor.openContextMenu).toHaveBeenLastCalledWith(expectedMenuOpen);
   });
 
   it('routes a handle tap that never drags through the regular tap collapse path', () => {
     const editor = createGestureEditor();
+    editor.selectionHitTest = vi.fn(() => false);
     const controller = new TouchGestureController(editor as never);
 
     controller.handleSelectionHandlePointerDown('from', makePointerEvent({ clientX: 110, clientY: 220 }));

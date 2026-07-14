@@ -73,13 +73,15 @@ const createEditor = ({
   selectionHit = false,
   isSelectionCollapsed = true,
   selection = collapsedSelection,
+  readOnly = false,
 }: {
   selectionHit?: boolean;
   isSelectionCollapsed?: boolean;
   selection?: typeof collapsedSelection | typeof rangeSelection | undefined;
+  readOnly?: boolean;
 } = {}) => {
   return {
-    readOnly: false,
+    readOnly,
     isSelectionCollapsed,
     selection,
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
@@ -215,6 +217,42 @@ describe('pointer native drag admission', () => {
     handlePointerDown(editor, createPointerEvent({ target }));
 
     expect(editor.suspendToolbarSync).not.toHaveBeenCalled();
+  });
+
+  it('routes read-only touch pointers to the gesture controller without capturing', () => {
+    const editor = createEditor({ readOnly: true });
+    const target = createPointerTarget();
+    const down = { ...createPointerEvent({ target }), pointerType: 'touch' } as unknown as PointerEvent & { currentTarget: HTMLElement };
+
+    handlePointerDown(editor, down);
+
+    expect(editor.gesture.handlePointerDown).toHaveBeenCalledWith(down, { page: 0, x: 10, y: 20 }, null);
+    expect(target.setPointerCapture).not.toHaveBeenCalled();
+    expect(editor.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('toggles a fold on read-only touch down without starting a gesture', () => {
+    const editor = createEditor({ readOnly: true });
+    editor.interactiveHitTest = vi.fn(() => ({ type: 'fold_title', id: 'fold-1' })) as unknown as Editor['interactiveHitTest'];
+    const target = createPointerTarget();
+    const down = { ...createPointerEvent({ target }), pointerType: 'touch' } as unknown as PointerEvent & { currentTarget: HTMLElement };
+
+    handlePointerDown(editor, down);
+
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'view', op: { type: 'toggle_fold', id: 'fold-1' } });
+    expect(editor.gesture.handlePointerDown).not.toHaveBeenCalled();
+  });
+
+  it('sends edit-mode touch pointers through the regular pointer path', () => {
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: true });
+    const down = { ...createPointerEvent({ target }), pointerType: 'touch' } as unknown as PointerEvent & { currentTarget: HTMLElement };
+
+    handlePointerDown(editor, down);
+
+    expect(editor.gesture.handlePointerDown).not.toHaveBeenCalled();
+    expect(target.setPointerCapture).toHaveBeenCalledWith(1);
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
   });
 
   it('allows collapse for regular drag selection extension', () => {
