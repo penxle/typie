@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { filter, pipe } from 'graphql-yoga';
 import { db, DocumentComments, DocumentCommentThreads, Documents, Entities, firstOrThrow, TableCode, validateDbId } from '#/db/index.ts';
 import { pubsub } from '#/pubsub.ts';
+import { normalizeStableSelection } from '#/utils/comment-selection.ts';
 import { assertDocumentCommentAccess } from '#/utils/permission.ts';
 import { builder } from '../builder.ts';
 import { Document, DocumentComment, DocumentCommentThread, User } from '../objects.ts';
@@ -120,7 +121,7 @@ builder.mutationFields((t) => ({
           .values({
             documentId: input.documentId,
             userId: ctx.session.userId,
-            selection: input.selection,
+            selection: normalizeStableSelection(input.selection),
           })
           .returning()
           .then(firstOrThrow);

@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { eq } from 'drizzle-orm';
 import { db, DocumentComments, DocumentCommentThreads, DocumentContents, DocumentStates, first, firstOrThrow } from '#/db/index.ts';
+import { normalizeStableSelection } from '#/utils/comment-selection.ts';
 import { calculateBlobSizeFromAssetIds, countCharacters, extractAssetIdsFromPlainDoc, insertFreshV2Content } from '#/utils/entity.ts';
 import {
   collectLegacyTextChars,
@@ -147,7 +148,7 @@ export const migrateDocumentToV2 = async (
           .values({
             documentId,
             userId: head.user_id,
-            selection: anchors[index],
+            selection: normalizeStableSelection(anchors[index]),
             createdAt: dayjs(head.created_at),
             updatedAt: dayjs(tail.created_at),
           })
