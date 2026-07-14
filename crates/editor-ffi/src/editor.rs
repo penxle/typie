@@ -806,42 +806,12 @@ impl Editor {
         start: u32,
         end: u32,
     ) -> EditorResult<Option<Complex<editor_state::Selection>>> {
-        use editor_state::{
-            Affinity, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-        };
-
         self.with_inner(|inner| {
             let view = inner.editor.state().view();
             let prose = editor_state::prose(&view);
-            let Some(flat) = prose.to_flat_range((start as usize)..(end as usize)) else {
-                return Ok(None);
-            };
-            let Some(anchor_rp) = ResolvedPosition::from_flat(&view, flat.start) else {
-                return Ok(None);
-            };
-            let Some(head_rp) = ResolvedPosition::from_flat(&view, flat.end) else {
-                return Ok(None);
-            };
-
-            let (anchor_aff, head_aff) = if start == end {
-                (Affinity::Downstream, Affinity::Downstream)
-            } else {
-                (Affinity::Downstream, Affinity::Upstream)
-            };
-
-            let selection = Selection {
-                anchor: Position {
-                    node: anchor_rp.node(),
-                    offset: anchor_rp.offset(),
-                    affinity: anchor_aff,
-                },
-                head: Position {
-                    node: head_rp.node(),
-                    offset: head_rp.offset(),
-                    affinity: head_aff,
-                },
-            };
-            Ok(Some(selection).into_ffi()?)
+            Ok(prose
+                .to_selection(&view, (start as usize)..(end as usize))
+                .into_ffi()?)
         })
     }
 }

@@ -76,7 +76,7 @@ internal fun SpellcheckOverlay(
 ) {
   val model = session.model ?: return
   val results = model.results
-  val checked = model.check.data != null
+  val checked = model.ready
   var displayedResults by remember { mutableStateOf<List<SpellcheckResult>>(emptyList()) }
   val resultIds = results.mapTo(mutableSetOf()) { it.id }
   val displayedResultIds = displayedResults.mapTo(mutableSetOf()) { it.id }

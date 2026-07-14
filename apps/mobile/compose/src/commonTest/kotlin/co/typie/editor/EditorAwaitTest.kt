@@ -8,6 +8,8 @@ import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.ProseRangeInstallOutcome
+import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
@@ -40,6 +42,14 @@ import kotlinx.coroutines.withContext
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
 
 private fun renderInvalidated(): EditorEvent = EditorEvent.RenderInvalidated
+
+private fun proseRange(
+  id: String,
+  group: String,
+  start: Int,
+  end: Int,
+): ProseTrackedRangeRegistration =
+  ProseTrackedRangeRegistration(id = id, group = group, start = start, end = end)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorAwaitTest {
@@ -77,6 +87,109 @@ class EditorAwaitTest {
 
       assertEquals(listOf(sampleMessage), fake.enqueued)
       assertEquals(1, fake.tickCount)
+    }
+
+  @Test
+  fun prose_range_install_returns_the_single_result() =
+    runTest(dispatcher) {
+      lateinit var fake: FakeFfiEditor
+      fake =
+        FakeFfiEditor(
+          onTick = {
+            listOf(EditorEvent.ProseRangeInstallResult(outcome = ProseRangeInstallOutcome.Applied))
+          }
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      val result =
+        editor.replaceTrackedRangeGroupsFromProse(
+          expectedText = "hello",
+          groups = listOf("spellcheck"),
+          ranges = listOf(proseRange("result", "spellcheck", 0, 5)),
+          isCurrent = { true },
+        )
+
+      assertEquals(ProseRangeInstallOutcome.Applied, result)
+      assertEquals(1, fake.tickCount)
+    }
+
+  @Test
+  fun prose_range_install_rejects_before_enqueue_when_admission_rejects() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+
+      val result =
+        editor.replaceTrackedRangeGroupsFromProse(
+          expectedText = "hello",
+          groups = listOf("spellcheck"),
+          ranges = listOf(proseRange("result", "spellcheck", 0, 5)),
+          isCurrent = { false },
+        )
+
+      assertEquals(null, result)
+      assertEquals(emptyList(), fake.enqueued)
+      assertEquals(0, fake.tickCount)
+      assertEquals(0L, editor.state.version)
+    }
+
+  @Test
+  fun prose_range_install_becomes_superseded_when_admission_changes_after_tick() =
+    runTest(dispatcher) {
+      var current = true
+      lateinit var fake: FakeFfiEditor
+      fake =
+        FakeFfiEditor(
+          onTick = {
+            current = false
+            listOf(EditorEvent.ProseRangeInstallResult(outcome = ProseRangeInstallOutcome.Applied))
+          }
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      val result =
+        editor.replaceTrackedRangeGroupsFromProse(
+          expectedText = "hello",
+          groups = listOf("spellcheck"),
+          ranges = listOf(proseRange("result", "spellcheck", 0, 5)),
+          isCurrent = { current },
+        )
+
+      assertEquals(null, result)
+      assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun prose_range_install_missing_or_duplicate_result_is_a_contract_failure() =
+    runTest(dispatcher) {
+      val missing = Editor(FakeFfiEditor(), this, dispatcher)
+      assertFailsWith<IllegalStateException> {
+        missing.replaceTrackedRangeGroupsFromProse(
+          expectedText = "hello",
+          groups = listOf("spellcheck"),
+          ranges = emptyList(),
+          isCurrent = { true },
+        )
+      }
+
+      lateinit var fake: FakeFfiEditor
+      fake =
+        FakeFfiEditor(
+          onTick = {
+            List(2) {
+              EditorEvent.ProseRangeInstallResult(outcome = ProseRangeInstallOutcome.Applied)
+            }
+          }
+        )
+      val duplicate = Editor(fake, this, dispatcher)
+      assertFailsWith<IllegalStateException> {
+        duplicate.replaceTrackedRangeGroupsFromProse(
+          expectedText = "hello",
+          groups = listOf("spellcheck"),
+          ranges = emptyList(),
+          isCurrent = { true },
+        )
+      }
     }
 
   @Test

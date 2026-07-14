@@ -1,10 +1,11 @@
 use editor_commands::{self as commands};
 use editor_state::StableSelection;
 use editor_view::GroupDecoration;
+use hashbrown::HashSet;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::event::{EditorEvent, TrackedRangeReplaceOutcome};
+use crate::event::{EditorEvent, ProseRangeInstallOutcome, TrackedRangeReplaceOutcome};
 use crate::message::*;
 use crate::state_field::StateField;
 use crate::tracked_range::TrackedRange;
@@ -84,6 +85,16 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 reg.clear_group(&group);
             });
         }
+        TrackedRangeOp::ReplaceGroupsFromProse {
+            expected_text,
+            groups,
+            ranges,
+        } => {
+            let outcome = handle_replace_groups_from_prose(editor, expected_text, groups, ranges);
+            if !editor.is_probing() {
+                editor.push_event(EditorEvent::ProseRangeInstallResult { outcome });
+            }
+        }
         TrackedRangeOp::Invalidate { id } => {
             let would_change = editor
                 .tracked_ranges()
@@ -124,6 +135,83 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
         }
     }
     Ok(())
+}
+
+fn handle_replace_groups_from_prose(
+    editor: &mut Editor,
+    expected_text: String,
+    groups: Vec<String>,
+    ranges: Vec<ProseTrackedRangeRegistration>,
+) -> ProseRangeInstallOutcome {
+    let view = editor.state().view();
+    let prose = editor_state::prose(&view);
+    if prose.text() != expected_text {
+        return ProseRangeInstallOutcome::TextMismatch;
+    }
+
+    let invalid_request = {
+        let target_groups: HashSet<&str> = groups.iter().map(String::as_str).collect();
+        let unique_ids: HashSet<&str> = ranges.iter().map(|range| range.id.as_str()).collect();
+        target_groups.len() != groups.len()
+            || unique_ids.len() != ranges.len()
+            || ranges
+                .iter()
+                .any(|range| !target_groups.contains(range.group.as_str()))
+            || ranges.iter().any(|range| {
+                editor
+                    .tracked_ranges()
+                    .get(&range.id)
+                    .is_some_and(|existing| !target_groups.contains(existing.group.as_str()))
+            })
+    };
+
+    if invalid_request {
+        return ProseRangeInstallOutcome::InvalidRequest;
+    }
+
+    let mut invalid_indices = Vec::new();
+    let mut prepared = Vec::with_capacity(ranges.len());
+    for (index, registration) in ranges.into_iter().enumerate() {
+        let selection = (registration.start < registration.end)
+            .then(|| {
+                prose.to_selection(
+                    &view,
+                    (registration.start as usize)..(registration.end as usize),
+                )
+            })
+            .flatten()
+            .filter(|selection| selection.resolve(&view).is_some());
+        let Some(selection) = selection else {
+            invalid_indices.push(index as u32);
+            continue;
+        };
+        let stable = StableSelection::capture(&selection, &view);
+        prepared.push(TrackedRange::new(
+            registration.id,
+            registration.group,
+            stable,
+            registration.metadata,
+            editor.state(),
+        ));
+    }
+    drop(view);
+
+    if !invalid_indices.is_empty() {
+        return ProseRangeInstallOutcome::InvalidRanges {
+            indices: invalid_indices,
+        };
+    }
+
+    let mut next = editor.tracked_ranges().clone();
+    for group in groups {
+        next.clear_group(&group);
+    }
+    for range in prepared {
+        next.add(range);
+    }
+    let would_change = editor.tracked_ranges() != &next;
+    commit_or_probe(editor, would_change, move |registry| *registry = next);
+    ProseRangeInstallOutcome::Applied
 }
 
 fn handle_replace_text(
@@ -268,6 +356,43 @@ mod tests {
         }
     }
 
+    fn prose_registration(
+        id: &str,
+        group: &str,
+        start: u32,
+        end: u32,
+    ) -> ProseTrackedRangeRegistration {
+        ProseTrackedRangeRegistration {
+            id: id.into(),
+            group: group.into(),
+            start,
+            end,
+            metadata: String::new(),
+        }
+    }
+
+    fn replace_groups_from_prose(
+        expected_text: &str,
+        ranges: Vec<ProseTrackedRangeRegistration>,
+    ) -> Message {
+        Message::TrackedRange {
+            op: TrackedRangeOp::ReplaceGroupsFromProse {
+                expected_text: expected_text.into(),
+                groups: vec!["g1".into(), "g2".into()],
+                ranges,
+            },
+        }
+    }
+
+    fn assert_install_outcome(events: &[EditorEvent], expected: ProseRangeInstallOutcome) {
+        assert!(events.iter().any(|event| {
+            matches!(
+                event,
+                EditorEvent::ProseRangeInstallResult { outcome } if outcome == &expected
+            )
+        }));
+    }
+
     #[test]
     fn add_inserts_range_and_emits_state_changed() {
         let (state, ..) = state! {
@@ -364,6 +489,202 @@ mod tests {
             op: TrackedRangeOp::ClearGroup { group: "g1".into() },
         });
         assert_eq!(editor.tracked_ranges().len(), 0);
+    }
+
+    #[test]
+    fn replace_groups_from_prose_is_atomic_and_preserves_other_groups() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let selection = state.selection.unwrap();
+        let mut editor = Editor::new_test(state);
+        editor.apply(add_op("old", selection));
+        editor.apply(Message::TrackedRange {
+            op: TrackedRangeOp::Add {
+                id: "other".into(),
+                group: "other".into(),
+                selection,
+                metadata: String::new(),
+            },
+        });
+
+        let events = editor.apply(replace_groups_from_prose(
+            "hello world",
+            vec![prose_registration("new", "g2", 6, 11)],
+        ));
+
+        assert!(!editor.tracked_ranges().contains("old"));
+        assert!(editor.tracked_ranges().contains("new"));
+        assert!(editor.tracked_ranges().contains("other"));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, EditorEvent::StateChanged { fields } if fields.contains(&StateField::TrackedRanges)))
+                .count(),
+            1
+        );
+        assert_install_outcome(&events, ProseRangeInstallOutcome::Applied);
+    }
+
+    #[test]
+    fn text_mismatch_and_invalid_ranges_leave_registry_unchanged() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let selection = state.selection.unwrap();
+        let mut editor = Editor::new_test(state);
+        editor.apply(add_op("old", selection));
+        let before = editor.tracked_ranges().clone();
+
+        let mismatch = editor.apply(replace_groups_from_prose(
+            "stale",
+            vec![prose_registration("new", "g1", 0, 5)],
+        ));
+        assert_eq!(editor.tracked_ranges(), &before);
+        assert_install_outcome(&mismatch, ProseRangeInstallOutcome::TextMismatch);
+
+        let invalid = editor.apply(replace_groups_from_prose(
+            "hello",
+            vec![
+                prose_registration("empty", "g1", 2, 2),
+                prose_registration("outside", "g2", 0, 9),
+            ],
+        ));
+        assert_eq!(editor.tracked_ranges(), &before);
+        assert_install_outcome(
+            &invalid,
+            ProseRangeInstallOutcome::InvalidRanges {
+                indices: vec![0, 1],
+            },
+        );
+    }
+
+    #[test]
+    fn text_mismatch_takes_precedence_over_invalid_request() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(replace_groups_from_prose(
+            "stale",
+            vec![prose_registration("new", "outside", 0, 5)],
+        ));
+
+        assert_install_outcome(&events, ProseRangeInstallOutcome::TextMismatch);
+    }
+
+    #[test]
+    fn invalid_install_request_leaves_registry_unchanged() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let selection = state.selection.unwrap();
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TrackedRange {
+            op: TrackedRangeOp::Add {
+                id: "outside".into(),
+                group: "other".into(),
+                selection,
+                metadata: String::new(),
+            },
+        });
+        let before = editor.tracked_ranges().clone();
+        let requests = [
+            (
+                vec!["g1".into(), "g1".into()],
+                vec![prose_registration("new", "g1", 0, 5)],
+            ),
+            (
+                vec!["g1".into(), "g2".into()],
+                vec![
+                    prose_registration("new", "g1", 0, 2),
+                    prose_registration("new", "g2", 2, 5),
+                ],
+            ),
+            (
+                vec!["g1".into(), "g2".into()],
+                vec![prose_registration("new", "other", 0, 5)],
+            ),
+            (
+                vec!["g1".into(), "g2".into()],
+                vec![prose_registration("outside", "g1", 0, 5)],
+            ),
+        ];
+
+        for (groups, ranges) in requests {
+            let events = editor.apply(Message::TrackedRange {
+                op: TrackedRangeOp::ReplaceGroupsFromProse {
+                    expected_text: "hello".into(),
+                    groups,
+                    ranges,
+                },
+            });
+            assert_eq!(editor.tracked_ranges(), &before);
+            assert_install_outcome(&events, ProseRangeInstallOutcome::InvalidRequest);
+        }
+    }
+
+    #[test]
+    fn matching_empty_install_atomically_clears_target_groups() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let selection = state.selection.unwrap();
+        let mut editor = Editor::new_test(state);
+        editor.apply(add_op("old", selection));
+
+        let events = editor.apply(replace_groups_from_prose("hello", vec![]));
+
+        assert!(editor.tracked_ranges().is_empty());
+        assert_install_outcome(&events, ProseRangeInstallOutcome::Applied);
+    }
+
+    #[test]
+    fn queued_document_edit_is_observed_at_install_position() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+        editor.enqueue(replace_groups_from_prose(
+            "hello",
+            vec![prose_registration("new", "g1", 0, 5)],
+        ));
+
+        let events = editor.tick().expect("tick");
+
+        assert!(editor.tracked_ranges().is_empty());
+        assert_install_outcome(&events, ProseRangeInstallOutcome::TextMismatch);
+    }
+
+    #[test]
+    fn document_edit_after_install_keeps_the_applied_result_ordering() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.enqueue(replace_groups_from_prose(
+            "hello",
+            vec![prose_registration("new", "g1", 0, 5)],
+        ));
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+
+        let events = editor.tick().expect("tick");
+
+        assert!(editor.tracked_ranges().contains("new"));
+        assert_install_outcome(&events, ProseRangeInstallOutcome::Applied);
     }
 
     #[test]

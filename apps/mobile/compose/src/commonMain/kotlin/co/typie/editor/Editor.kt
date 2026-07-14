@@ -22,6 +22,8 @@ import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
+import co.typie.editor.ffi.ProseRangeInstallOutcome
+import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.SearchOptions
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
@@ -31,6 +33,7 @@ import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.ThemeVariant
+import co.typie.editor.ffi.TrackedRangeOp
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.EditorInputRecorder
 import co.typie.editor.sync.MissingBytes
@@ -65,6 +68,12 @@ import kotlinx.coroutines.withContext
 // state; consumers resolve absolute offsets through Ime.windowStart, so a bounded
 // window only limits how much surrounding text the IME can observe.
 private const val IME_SNAPSHOT_WINDOW = 4096
+
+private data class EditorAwaitTick<T>(
+  val events: List<EditorEvent>,
+  val snapshot: EditorState,
+  val value: T,
+)
 
 @OptIn(ExperimentalAtomicApi::class)
 class Editor
@@ -179,7 +188,7 @@ internal constructor(
 
   suspend fun await(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
     try {
-      awaitOrThrow(beforeCommit = beforeCommit, block = block)
+      awaitOrThrow(beforeCommit = beforeCommit, mapEvents = { Unit }, block = block)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Throwable) {
@@ -188,10 +197,12 @@ internal constructor(
     }
   }
 
-  private suspend fun awaitOrThrow(
+  private suspend fun <T : Any> awaitOrThrow(
     beforeCommit: ((EditorState) -> Unit)? = null,
+    admit: () -> Boolean = { true },
+    mapEvents: (List<EditorEvent>) -> T,
     block: EditorScope.() -> Unit,
-  ) {
+  ): T? {
     val messages = mutableListOf<Message>()
     val collector =
       object : EditorScope {
@@ -200,20 +211,23 @@ internal constructor(
         }
       }
     block(collector)
-    if (messages.isEmpty()) return
+    if (messages.isEmpty()) return mapEvents(emptyList())
 
-    localEdits.run {
-      val (events, snapshot) =
+    return localEdits.run {
+      val tick: EditorAwaitTick<T>? =
         withContext(NonCancellable + dispatcher) {
           mutex.withLock {
             if (disposed.load()) throw CancellationException("Editor disposed")
+            if (!admit()) return@withLock null
             for (m in messages) inner.enqueue(m)
             val e = inner.tick()
             val version = versionCounter.addAndFetch(1L)
             val s = readSnapshot(version = version, events = e)
-            e to s
+            EditorAwaitTick(events = e, snapshot = s, value = mapEvents(e))
           }
         }
+      if (tick == null) return@run null
+      val (events, snapshot, value) = tick
 
       val pending: PendingSettle? =
         if (events.any { it is EditorEvent.RenderInvalidated }) {
@@ -241,6 +255,7 @@ internal constructor(
           }
         }
       }
+      value
     }
   }
 
@@ -320,6 +335,63 @@ internal constructor(
 
   suspend fun proseToSelection(start: Int, end: Int): Selection? =
     readInner(defaultValue = { null }) { it.proseToSelection(start, end) }
+
+  internal suspend fun replaceTrackedRangeGroupsFromProse(
+    expectedText: String,
+    groups: List<String>,
+    ranges: List<ProseTrackedRangeRegistration>,
+    isCurrent: () -> Boolean,
+  ): ProseRangeInstallOutcome? {
+    try {
+      val outcome =
+        awaitOrThrow(
+          admit = isCurrent,
+          mapEvents = { events ->
+            val matches = events.filterIsInstance<EditorEvent.ProseRangeInstallResult>()
+            check(matches.size == 1) {
+              "Expected exactly one prose range install result, got ${matches.size}"
+            }
+            matches.single().outcome
+          },
+        ) {
+          enqueue(
+            Message.TrackedRange(
+              TrackedRangeOp.ReplaceGroupsFromProse(
+                expectedText = expectedText,
+                groups = groups,
+                ranges = ranges,
+              )
+            )
+          )
+        }
+      return outcome?.takeIf { isCurrent() }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      throw e
+    }
+  }
+
+  internal suspend fun clearTrackedRangeGroups(
+    groups: List<String>,
+    admit: () -> Boolean = { true },
+  ): Boolean {
+    try {
+      val result =
+        awaitOrThrow(admit = admit, mapEvents = { Unit }) {
+          groups.forEach { group ->
+            enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = group)))
+          }
+        }
+      return result != null
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      throw e
+    }
+  }
 
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
@@ -768,7 +840,7 @@ internal constructor(
             EditorRegistry.register(editor)
             try {
               PlatformModule.editorHost.setThemeVariant(themeVariant)
-              editor.awaitOrThrow {
+              editor.awaitOrThrow(mapEvents = { Unit }) {
                 enqueue(Message.System(SystemEvent.ThemeVariantChanged))
                 enqueue(Message.System(SystemEvent.Initialize))
               }

@@ -5,11 +5,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.contract.LoadableState
 import co.typie.graphql.Apollo
-import co.typie.graphql.LoadableMutation
 import co.typie.graphql.Spellcheck_CheckSpelling_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.CheckSpellingDocumentV2Input
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 internal data class SpellcheckResult(
   val id: String,
@@ -27,13 +34,41 @@ internal data class RawSpellcheckResult(
   val explanation: String,
 )
 
-internal class SpellcheckViewModel : ViewModel() {
-  val check = LoadableMutation<Spellcheck_CheckSpelling_Mutation.Data>()
+internal data class PendingSpellcheck(val sourceText: String, val run: SpellcheckRun)
+
+@OptIn(ExperimentalAtomicApi::class)
+internal class SpellcheckRun {
+  private val valid = AtomicBoolean(true)
+
+  fun isValid(): Boolean = valid.load()
+
+  fun invalidate(): Boolean = valid.compareAndSet(expectedValue = true, newValue = false)
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+internal class SpellcheckViewModel(
+  private val request: suspend (documentId: String, text: String) -> List<RawSpellcheckResult> =
+    ::requestSpellcheck
+) : ViewModel() {
+  private var checkJob: Job? = null
+  private val currentRun = AtomicReference<SpellcheckRun?>(null)
+
+  var readiness: LoadableState<Unit> by mutableStateOf(LoadableState.Idle)
+    private set
+
+  val loading: Boolean
+    get() = readiness is LoadableState.Loading
+
+  val ready: Boolean
+    get() = readiness is LoadableState.Success
+
+  val error: Throwable?
+    get() = (readiness as? LoadableState.Error)?.exception
 
   var active by mutableStateOf(false)
     private set
 
-  var pendingCheckText by mutableStateOf<String?>(null)
+  var pendingCheck by mutableStateOf<PendingSpellcheck?>(null)
     private set
 
   var results by mutableStateOf<List<SpellcheckResult>>(emptyList())
@@ -52,55 +87,109 @@ internal class SpellcheckViewModel : ViewModel() {
     active = true
   }
 
-  fun exitMode(resetLoader: Boolean = true) {
+  fun exitMode() {
     active = false
-    clear(resetLoader = resetLoader)
+    resetCheck()
   }
 
   fun runCheck(
     documentId: String,
-    text: String,
-    onRawResults: (List<RawSpellcheckResult>) -> Unit,
-    onError: (Throwable) -> Unit,
+    sourceText: suspend () -> String,
+    beforeRequest: suspend (SpellcheckRun, String) -> Unit,
+    prepareResults:
+      suspend (List<RawSpellcheckResult>, SpellcheckRun, String) -> List<SpellcheckResult>,
+    onReady: (List<SpellcheckResult>) -> Unit,
+    onError: suspend (Throwable, SpellcheckRun) -> Unit,
   ) {
-    check.run(
-      scope = viewModelScope,
-      replaceInFlight = true,
-      block = {
-        Apollo.executeMutation(
-          Spellcheck_CheckSpelling_Mutation(
-            input = CheckSpellingDocumentV2Input(documentId = documentId, text = text)
-          )
-        )
-      },
-      onSuccess = { data ->
-        onRawResults(
-          data.checkSpellingDocumentV2.map { item ->
-            RawSpellcheckResult(
-              id = item.id,
-              start = item.start,
-              end = item.end,
-              context = item.context,
-              corrections = item.corrections,
-              explanation = item.explanation,
-            )
+    if (loading) return
+
+    clearResults()
+    pendingCheck = null
+    val run = SpellcheckRun()
+    currentRun.exchange(run)?.invalidate()
+    readiness = LoadableState.Loading
+    val nextJob =
+      viewModelScope.launch(start = CoroutineStart.LAZY) {
+        try {
+          val text = sourceText()
+          ensureCurrent(run)
+          pendingCheck = PendingSpellcheck(sourceText = text, run = run)
+          beforeRequest(run, text)
+          ensureCurrent(run)
+          val rawResults = request(documentId, text)
+          ensureCurrent(run)
+          val prepared = prepareResults(rawResults, run, text)
+          ensureCurrent(run)
+          replaceResults(prepared)
+          pendingCheck = null
+          onReady(prepared)
+          ensureCurrent(run)
+          readiness = LoadableState.Success(Unit)
+        } catch (error: CancellationException) {
+          throw error
+        } catch (error: Throwable) {
+          if (!beginCleanup(run)) return@launch
+          try {
+            clearResults()
+            if (pendingCheck?.run === run) pendingCheck = null
+            val finalError =
+              try {
+                onError(error, run)
+                error
+              } catch (cleanupCancellation: CancellationException) {
+                throw cleanupCancellation
+              } catch (cleanupError: Throwable) {
+                cleanupError
+              }
+            if (ownsCleanup(run) && loading) {
+              readiness = LoadableState.Error(finalError)
+            }
+          } finally {
+            finishCleanup(run)
           }
-        )
-      },
-      onError = onError,
-    )
+        } finally {
+          if (checkJob === coroutineContext[Job]) checkJob = null
+        }
+      }
+    checkJob = nextJob
+    nextJob.start()
   }
 
-  fun prepareCheck(sourceText: String) {
-    clear(resetLoader = false)
-    pendingCheckText = sourceText
+  fun isCurrent(run: SpellcheckRun): Boolean = currentRun.load() === run && run.isValid()
+
+  fun ownsCleanup(run: SpellcheckRun): Boolean = currentRun.load() === run && !run.isValid()
+
+  fun hasNoActiveRun(): Boolean = currentRun.load()?.isValid() != true
+
+  fun cancelCheck(run: SpellcheckRun): Boolean {
+    if (!beginCleanup(run)) return false
+    checkJob?.cancel()
+    checkJob = null
+    if (pendingCheck?.run === run) pendingCheck = null
+    readiness = LoadableState.Idle
+    return true
   }
 
-  fun isPendingCheckStale(sourceText: String, currentText: String): Boolean =
-    pendingCheckText != sourceText || currentText != sourceText
+  fun finishCleanup(run: SpellcheckRun) {
+    if (ownsCleanup(run)) currentRun.compareAndSet(expectedValue = run, newValue = null)
+  }
 
-  fun clearPendingCheck() {
-    pendingCheckText = null
+  private fun ensureCurrent(run: SpellcheckRun) {
+    if (!isCurrent(run)) throw CancellationException("Spellcheck run superseded")
+  }
+
+  private fun beginCleanup(run: SpellcheckRun): Boolean {
+    if (currentRun.load() !== run) return false
+    return run.invalidate()
+  }
+
+  private fun resetCheck() {
+    currentRun.exchange(null)?.invalidate()
+    checkJob?.cancel()
+    checkJob = null
+    readiness = LoadableState.Idle
+    clearResults()
+    pendingCheck = null
   }
 
   fun replaceResults(nextResults: List<SpellcheckResult>) {
@@ -108,22 +197,6 @@ internal class SpellcheckViewModel : ViewModel() {
     currentCardId = nextResults.firstOrNull()?.id
     activeRangeId = currentCardId
     expanded = false
-  }
-
-  fun clear(resetLoader: Boolean = true) {
-    if (resetLoader) {
-      check.reset()
-    }
-    results = emptyList()
-    currentCardId = null
-    activeRangeId = null
-    expanded = false
-    pendingCheckText = null
-  }
-
-  fun cancelCheck() {
-    pendingCheckText = null
-    check.cancel()
   }
 
   fun updateExpanded(nextExpanded: Boolean) {
@@ -195,4 +268,29 @@ internal class SpellcheckViewModel : ViewModel() {
   }
 
   private fun List<SpellcheckResult>.idSet(): Set<String> = mapTo(mutableSetOf()) { it.id }
+
+  private fun clearResults() {
+    results = emptyList()
+    currentCardId = null
+    activeRangeId = null
+    expanded = false
+  }
 }
+
+private suspend fun requestSpellcheck(documentId: String, text: String): List<RawSpellcheckResult> =
+  Apollo.executeMutation(
+      Spellcheck_CheckSpelling_Mutation(
+        input = CheckSpellingDocumentV2Input(documentId = documentId, text = text)
+      )
+    )
+    .checkSpellingDocumentV2
+    .map { item ->
+      RawSpellcheckResult(
+        id = item.id,
+        start = item.start,
+        end = item.end,
+        context = item.context,
+        corrections = item.corrections,
+        explanation = item.explanation,
+      )
+    }

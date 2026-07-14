@@ -365,6 +365,18 @@ pub struct SearchOptions {
 }
 
 #[ffi]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ProseTrackedRangeRegistration {
+    pub id: String,
+    pub group: String,
+    pub start: u32,
+    pub end: u32,
+    #[serde(default)]
+    pub metadata: String,
+}
+
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TrackedRangeOp {
@@ -391,6 +403,11 @@ pub enum TrackedRangeOp {
     },
     ClearGroup {
         group: String,
+    },
+    ReplaceGroupsFromProse {
+        expected_text: String,
+        groups: Vec<String>,
+        ranges: Vec<ProseTrackedRangeRegistration>,
     },
     Invalidate {
         id: String,

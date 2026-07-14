@@ -3,7 +3,10 @@ use std::ops::Range;
 use editor_crdt::Dot;
 use editor_model::DocView;
 
-use crate::{FlatSegment, flat_segments};
+use crate::{
+    Affinity, FlatSegment, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
+    flat_segments,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProseRun {
@@ -51,6 +54,30 @@ impl ProseText {
         let start = self.locate(range.start, Bias::Right)?;
         let end = self.locate(range.end, Bias::Left)?;
         Some(start..end)
+    }
+
+    pub fn to_selection(&self, view: &DocView, range: Range<usize>) -> Option<Selection> {
+        let collapsed = range.start == range.end;
+        let flat = self.to_flat_range(range)?;
+        let anchor = ResolvedPosition::from_flat(view, flat.start)?;
+        let head = ResolvedPosition::from_flat(view, flat.end)?;
+
+        Some(Selection {
+            anchor: Position {
+                node: anchor.node(),
+                offset: anchor.offset(),
+                affinity: Affinity::Downstream,
+            },
+            head: Position {
+                node: head.node(),
+                offset: head.offset(),
+                affinity: if collapsed {
+                    Affinity::Downstream
+                } else {
+                    Affinity::Upstream
+                },
+            },
+        })
     }
 
     fn locate(&self, plain_pos: usize, bias: Bias) -> Option<usize> {
@@ -200,5 +227,28 @@ impl EmitState {
             plain_len: self.plain_len,
             runs: self.runs,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ResolvedPositionFlatExt;
+    use editor_macros::state;
+
+    #[test]
+    fn maps_multibyte_prose_range_to_semantic_selection() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("한😀글") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        let prose = prose(&view);
+
+        let selection = prose.to_selection(&view, 0..2).expect("mapped selection");
+        let resolved = selection.resolve(&view).expect("resolved selection");
+        let flat = resolved.from().to_flat()..resolved.to().to_flat();
+
+        assert_eq!(crate::flat_text(&view, flat), "한😀");
     }
 }

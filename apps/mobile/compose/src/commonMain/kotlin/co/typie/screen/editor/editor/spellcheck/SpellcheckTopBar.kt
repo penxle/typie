@@ -58,7 +58,7 @@ internal fun SpellcheckTopBarLeading(session: EditorSpellcheckSession) {
 @Composable
 internal fun SpellcheckTopBarCenter(session: EditorSpellcheckSession) {
   val model = session.model ?: return
-  val count = if (model.check.data != null) model.results.size else null
+  val count = if (model.ready) model.results.size else null
   var displayedCount by remember { mutableStateOf(count) }
   val shape = AppShapes.rounded(AppShapes.full)
 
@@ -112,7 +112,7 @@ internal fun SpellcheckTopBarCenter(session: EditorSpellcheckSession) {
 
 @Composable
 internal fun SpellcheckTopBarTrailing(session: EditorSpellcheckSession) {
-  val loading = session.model?.check?.loading == true
+  val loading = session.model?.loading == true
 
   if (loading) {
     SpellcheckTopBarSpinner()

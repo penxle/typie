@@ -27,9 +27,12 @@ import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import kotlin.math.max
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Stable
 internal class EditorSpellcheckSession(
@@ -103,68 +106,70 @@ internal fun rememberEditorSpellcheckSession(
     val activeDocumentId = documentId
     val activeEditor = editor ?: return
 
-    scope.launch {
-      val sourceText = activeEditor.proseText()
-      activeModel.prepareCheck(sourceText)
-      activeEditor.installSpellcheckDecorations()
-      activeEditor.clearSpellcheckRanges()
-      activeModel.runCheck(
-        documentId = activeDocumentId,
-        text = sourceText,
-        onRawResults = { rawResults ->
-          scope.launch {
-            if (activeModel.isPendingCheckStale(sourceText, activeEditor.proseText())) {
-              activeModel.cancelCheck()
+    activeModel.runCheck(
+      documentId = activeDocumentId,
+      sourceText = activeEditor::proseText,
+      beforeRequest = { run, _ ->
+        activeEditor.installSpellcheckDecorations()
+        val cleared = activeEditor.clearSpellcheckRanges(admit = { activeModel.isCurrent(run) })
+        if (!cleared) throw CancellationException("Spellcheck run superseded")
+      },
+      prepareResults = { rawResults, run, sourceText ->
+        when (
+          activeEditor.installSpellcheckRangesFromProse(
+            expectedText = sourceText,
+            items = rawResults,
+            isCurrent = { activeModel.isCurrent(run) },
+          )
+        ) {
+          SpellcheckRangeInstallResult.Ready ->
+            rawResults.map(RawSpellcheckResult::toSpellcheckResult)
+          SpellcheckRangeInstallResult.Superseded ->
+            throw CancellationException("Spellcheck run superseded")
+          SpellcheckRangeInstallResult.StaleCurrent -> {
+            if (activeModel.cancelCheck(run)) {
               if (activeModel.active) {
                 toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
               }
-              return@launch
+              activeModel.finishCleanup(run)
             }
-            activeModel.clearPendingCheck()
-            val mapped = rawResults.mapNotNull { raw ->
-              val selection =
-                activeEditor.proseToSelection(raw.start, raw.end) ?: return@mapNotNull null
-              raw to selection
-            }
-            val results = mapped.map { (raw, _) -> raw.toSpellcheckResult() }
-            activeModel.replaceResults(results)
-            lastSelectionMappedToSpellcheck = activeEditor.state.selection
-            if (results.isEmpty()) {
-              setOverlayBottomOcclusion(0f)
-            } else {
-              updateCompactOverlayHeightForRange(activeModel.activeRangeId)
-            }
-            activeEditor.setSpellcheckRanges(
-              mapped.map { (raw, selection) ->
-                SpellcheckRangeRegistration(id = raw.id, selection = selection)
-              }
-            )
-            updateActiveRangeDecoration()
-            requestRangeIntoView(activeModel.activeRangeId)
-            if (results.isEmpty()) {
-              toast.show(ToastType.Success, "맞춤법 오류가 없습니다.")
-            }
+            throw CancellationException("Spellcheck source changed")
           }
-        },
-        onError = {
-          scope.launch {
-            val stale = activeModel.isPendingCheckStale(sourceText, activeEditor.proseText())
-            activeModel.clearPendingCheck()
-            when {
-              stale && activeModel.active ->
-                toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
-              activeModel.active -> toast.show(ToastType.Error, "맞춤법 검사에 실패했어요.")
-            }
-          }
-        },
-      )
+        }
+      },
+      onReady = { results ->
+        lastSelectionMappedToSpellcheck = activeEditor.state.selection
+        if (results.isEmpty()) {
+          setOverlayBottomOcclusion(0f)
+        } else {
+          updateCompactOverlayHeightForRange(activeModel.activeRangeId)
+        }
+        requestRangeIntoView(activeModel.activeRangeId)
+        if (results.isEmpty()) {
+          toast.show(ToastType.Success, "맞춤법 오류가 없습니다.")
+        }
+      },
+      onError = { _, run ->
+        val cleared = activeEditor.clearSpellcheckRanges(admit = { activeModel.ownsCleanup(run) })
+        if (cleared && activeModel.ownsCleanup(run) && activeModel.active) {
+          toast.show(ToastType.Error, "맞춤법 검사에 실패했어요.")
+        }
+      },
+    )
+  }
+
+  fun scheduleRangeClear(activeEditor: Editor?, activeModel: SpellcheckViewModel?) {
+    if (activeEditor == null || activeModel == null) return
+    activeEditor.scope.launch {
+      activeEditor.clearSpellcheckRanges(admit = activeModel::hasNoActiveRun)
     }
   }
 
   fun close() {
     val activeEditor = editor
-    model?.exitMode(resetLoader = true)
-    activeEditor?.clearSpellcheckRanges()
+    val activeModel = model
+    activeModel?.exitMode()
+    scheduleRangeClear(activeEditor, activeModel)
     occlusionReleaseJob?.cancel()
     occlusionReleaseJob = null
     if (bottomOcclusion > 0f) {
@@ -178,8 +183,9 @@ internal fun rememberEditorSpellcheckSession(
 
   fun disposeEditor(activeEditor: Editor?) {
     if (activeEditor == null) return
-    model?.exitMode(resetLoader = true)
-    activeEditor.clearSpellcheckRanges()
+    val activeModel = model
+    activeModel?.exitMode()
+    scheduleRangeClear(activeEditor, activeModel)
     occlusionReleaseJob?.cancel()
     occlusionReleaseJob = null
     bottomOcclusion = 0f
@@ -195,15 +201,26 @@ internal fun rememberEditorSpellcheckSession(
     }
   }
 
-  LaunchedEffect(active, editorState.version) {
+  LaunchedEffect(active, editorState.documentRevision) {
     val activeModel = model ?: return@LaunchedEffect
-    val expectedText = activeModel.pendingCheckText ?: return@LaunchedEffect
+    val pendingCheck = activeModel.pendingCheck ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
-    if (!active || !activeModel.check.loading) return@LaunchedEffect
-    if (activeEditor.proseText() == expectedText) return@LaunchedEffect
+    if (!active || !activeModel.loading) return@LaunchedEffect
+    if (activeEditor.proseText() == pendingCheck.sourceText) return@LaunchedEffect
 
-    activeModel.cancelCheck()
-    toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
+    val run = pendingCheck.run
+    if (!activeModel.cancelCheck(run)) return@LaunchedEffect
+    try {
+      val cleared =
+        withContext(NonCancellable) {
+          activeEditor.clearSpellcheckRanges(admit = { activeModel.ownsCleanup(run) })
+        }
+      if (cleared && activeModel.ownsCleanup(run) && activeModel.active) {
+        toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
+      }
+    } finally {
+      activeModel.finishCleanup(run)
+    }
   }
 
   LaunchedEffect(
@@ -308,7 +325,7 @@ internal fun rememberEditorSpellcheckSession(
     close = ::close,
     rerun = rerun@{
         val activeModel = model ?: return@rerun
-        if (!activeModel.active) return@rerun
+        if (!activeModel.active || activeModel.loading) return@rerun
         activeModel.updateExpanded(false)
         runCheck()
       },
