@@ -329,8 +329,19 @@ private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
   }
 
   fun commitText(text: String) {
-    pendingOps.add(FlatImeOp.Compose(text))
-    pendingOps.add(FlatImeOp.CommitAsIs)
+    // The editor has no inline newline: multi-line commits (e.g. keyboard
+    // clipboard suggestions) become paragraph splits via the enter key path.
+    val segments = text.replace("\r\n", "\n").replace('\r', '\n').split("\n")
+    segments.forEachIndexed { index, segment ->
+      if (index > 0) {
+        flushOpsToPendingMessages()
+        pendingMessages.add(Message.Key(FfiKeyEvent(Key.Enter)))
+      }
+      if (segment.isNotEmpty() || index == 0) {
+        pendingOps.add(FlatImeOp.Compose(segment))
+        pendingOps.add(FlatImeOp.CommitAsIs)
+      }
+    }
     flushIfReady()
   }
 

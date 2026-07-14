@@ -80,6 +80,51 @@ describe('ImeInputAdapter', () => {
     ]);
   });
 
+  it('splits a multi-line text insertion into paragraph splits via enter keys', () => {
+    const harness = createImeHarness(context(''));
+
+    harness.beforeTextInput('a\nb');
+    harness.applyNativeInput('a\nb', 3);
+
+    expect(harness.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 20, end: 20 },
+          { type: 'replace_selection', text: 'a' },
+        ],
+      },
+      { type: 'key', event: { key: 'enter' } },
+      {
+        type: 'text_input',
+        ops: [{ type: 'replace_selection', text: 'b' }],
+      },
+    ]);
+  });
+
+  it('normalizes carriage returns and keeps empty lines in multi-line insertions', () => {
+    const harness = createImeHarness(context(''));
+
+    harness.beforeTextInput('a\r\n\rb');
+    harness.applyNativeInput('a\r\n\rb', 5);
+
+    expect(harness.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_selection', start: 20, end: 20 },
+          { type: 'replace_selection', text: 'a' },
+        ],
+      },
+      { type: 'key', event: { key: 'enter' } },
+      { type: 'key', event: { key: 'enter' } },
+      {
+        type: 'text_input',
+        ops: [{ type: 'replace_selection', text: 'b' }],
+      },
+    ]);
+  });
+
   it('anchors repeated-character insertions to the beforeinput collapsed selection', () => {
     const input = createInput();
     const messages: Message[] = [];

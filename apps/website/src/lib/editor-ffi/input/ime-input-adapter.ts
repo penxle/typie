@@ -204,10 +204,19 @@ export class ImeInputAdapter {
       isCollapsedRange(intent.replacementCandidate)
         ? intent.replacementCandidate
         : { start: diff.start, end: diff.end };
+    // The editor has no inline newline: multi-line insertions become
+    // paragraph splits via the enter key path.
+    const segments = diff.insertedText.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
     const messages = textInputMessage([
       { type: 'set_selection', start: replacement.start, end: replacement.end },
-      { type: 'replace_selection', text: diff.insertedText },
+      { type: 'replace_selection', text: segments[0] },
     ]);
+    for (const segment of segments.slice(1)) {
+      messages.push({ type: 'key', event: { key: 'enter' } });
+      if (segment.length > 0) {
+        messages.push(...textInputMessage([{ type: 'replace_selection', text: segment }]));
+      }
+    }
     this.#deps.enqueue(messages);
     this.#context = updateContextFromInputElement(context, input, null);
   }

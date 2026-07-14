@@ -82,6 +82,54 @@ class EditorImeCommandNormalizerTest {
   }
 
   @Test
+  fun `multi-line commit splits into paragraphs via enter keys`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("foo\nbar", 1)), ime = null)
+
+    assertEquals(
+      listOf(
+        Message.TextInput(listOf(FlatImeOp.Compose("foo"), FlatImeOp.CommitAsIs)),
+        Message.Key(KeyEvent(Key.Enter)),
+        Message.TextInput(listOf(FlatImeOp.Compose("bar"), FlatImeOp.CommitAsIs)),
+      ),
+      messages,
+    )
+  }
+
+  @Test
+  fun `multi-line commit normalizes carriage returns and keeps empty lines`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("a\r\n\rb", 1)), ime = null)
+
+    assertEquals(
+      listOf(
+        Message.TextInput(listOf(FlatImeOp.Compose("a"), FlatImeOp.CommitAsIs)),
+        Message.Key(KeyEvent(Key.Enter)),
+        Message.Key(KeyEvent(Key.Enter)),
+        Message.TextInput(listOf(FlatImeOp.Compose("b"), FlatImeOp.CommitAsIs)),
+      ),
+      messages,
+    )
+  }
+
+  @Test
+  fun `multi-line commit with leading newline still replaces active preedit`() {
+    val ime =
+      Ime(text = "가", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
+    val messages =
+      EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("\nfoo", 1)), ime = ime)
+
+    assertEquals(
+      listOf(
+        Message.TextInput(listOf(FlatImeOp.Compose(""), FlatImeOp.CommitAsIs)),
+        Message.Key(KeyEvent(Key.Enter)),
+        Message.TextInput(listOf(FlatImeOp.Compose("foo"), FlatImeOp.CommitAsIs)),
+      ),
+      messages,
+    )
+  }
+
+  @Test
   fun `finish composing command clears composition without active preedit`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(FinishComposingTextCommand()), ime = null)

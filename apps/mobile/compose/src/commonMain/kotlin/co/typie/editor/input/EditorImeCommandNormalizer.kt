@@ -34,17 +34,31 @@ internal object EditorImeCommandNormalizer {
 
     for (command in commands) {
       if (command is CommitTextCommand) {
-        if (command.text == "\n") {
+        val text = command.text.replace("\r\n", "\n").replace('\r', '\n')
+        if (text == "\n") {
           if (ops.isNotEmpty()) {
             messages += Message.TextInput(ops.toList())
             ops.clear()
           }
 
           messages += Message.Key(KeyEvent(Key.Enter))
-        } else {
-          ops += FlatImeOp.Compose(command.text)
-          ops += FlatImeOp.CommitAsIs
-          hasActiveComposition = false
+          continue
+        }
+        // The editor has no inline newline: multi-line commits become
+        // paragraph splits via the enter key path.
+        text.split("\n").forEachIndexed { index, segment ->
+          if (index > 0) {
+            if (ops.isNotEmpty()) {
+              messages += Message.TextInput(ops.toList())
+              ops.clear()
+            }
+            messages += Message.Key(KeyEvent(Key.Enter))
+          }
+          if (segment.isNotEmpty() || index == 0) {
+            ops += FlatImeOp.Compose(segment)
+            ops += FlatImeOp.CommitAsIs
+            hasActiveComposition = false
+          }
         }
         continue
       }
