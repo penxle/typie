@@ -26,6 +26,16 @@ platform :ios do
       xcargs: "CURRENT_PROJECT_VERSION=#{latest_build_number + 1}",
     )
 
+    if ENV["SENTRY_AUTH_TOKEN"]
+      sentry_debug_files_upload(
+        org_slug: "typie",
+        project_slug: "app2",
+        path: lane_context[SharedValues::DSYM_OUTPUT_PATH],
+      )
+    else
+      UI.important("SENTRY_AUTH_TOKEN is not set; skipping Sentry dSYM upload")
+    end
+
     upload_to_testflight(
       notify_external_testers: false,
     )
