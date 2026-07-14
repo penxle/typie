@@ -980,11 +980,18 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                     }
                 }
 
-                let composition = match (result.comp, composition_text_start) {
+                // Without structural replay the reduced coordinates are only
+                // meaningful when the document agrees with the reduced buffer;
+                // a dropped edit (e.g. a rejected replacement) leaves them
+                // pointing at unrelated text.
+                let reduced_applied = flat_size(&tr.view()) == result.text.len();
+
+                // None = leave the current composition untouched.
+                let composition_update = match (result.comp, composition_text_start) {
                     // A structural replay rebuilds flat coordinates, so a composing
                     // region the IME placed outside the replayed insert has no
                     // mapping; drop it rather than fail the whole edit.
-                    (Some((start, end)), Some(text_start)) => (|| {
+                    (Some((start, end)), Some(text_start)) => Some((|| {
                         // Text before the replayed range keeps its flat
                         // coordinates, so a composing region there needs no
                         // remap.
@@ -1008,50 +1015,50 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                             start: inserted_start + relative_start,
                             end: inserted_start + relative_end,
                         })
-                    })(),
-                    (Some((start, end)), None) => Some(Composition { start, end }),
-                    (None, _) => None,
+                    })()),
+                    (Some((start, end)), None) => {
+                        reduced_applied.then_some(Some(Composition { start, end }))
+                    }
+                    (None, _) => Some(None),
                 };
-                let composition = composition.filter(|composition| {
-                    composition_range_valid(&tr.view(), composition.start, composition.end)
-                });
 
-                if composition.is_some() || tr.composition().is_some() {
-                    tr.set_composition(composition)?;
-                }
+                if let Some(composition) = composition_update {
+                    let composition = composition.filter(|composition| {
+                        composition_range_valid(&tr.view(), composition.start, composition.end)
+                    });
 
-                if sidecar_before.is_none()
-                    && let Some(comp) = composition
-                {
-                    let mut paint =
-                        seed_composition_paint(&tr.state().projected, comp.start, comp.end);
-                    apply_pending(&mut paint, tr.pending_modifiers());
-                    tr.clear_pending_format()?;
-                    let paint: Vec<Modifier> = paint.into_values().collect();
-                    tr.update_meta(|m| m.composition_paint = Some(paint));
+                    if composition.is_some() || tr.composition().is_some() {
+                        tr.set_composition(composition)?;
+                    }
+
+                    if sidecar_before.is_none()
+                        && let Some(comp) = composition
+                    {
+                        let mut paint =
+                            seed_composition_paint(&tr.state().projected, comp.start, comp.end);
+                        apply_pending(&mut paint, tr.pending_modifiers());
+                        tr.clear_pending_format()?;
+                        let paint: Vec<Modifier> = paint.into_values().collect();
+                        tr.update_meta(|m| m.composition_paint = Some(paint));
+                    }
                 }
 
                 // Without structural replay the reduced coordinates match the
                 // document 1:1, so the reduced selection is authoritative
                 // (e.g. a delete before the composing text keeps the caret at
-                // the composition, not at the deletion site). If the document
-                // size disagrees with the reduced buffer, the edit was dropped
-                // (e.g. a rejected replacement), so the reduced selection is
-                // meaningless — keep the caret where it is.
-                if has_text_delta && composition_text_start.is_none() {
+                // the composition, not at the deletion site).
+                if has_text_delta && composition_text_start.is_none() && reduced_applied {
                     let doc = tr.view();
-                    if flat_size(&doc) == result.text.len() {
-                        let current = tr.selection().and_then(|s| {
-                            let anchor = s.anchor.resolve(&doc)?.to_flat();
-                            let head = s.head.resolve(&doc)?.to_flat();
-                            Some((anchor.min(head), anchor.max(head)))
-                        });
-                        if current != Some((result.sel_start, result.sel_end))
-                            && let Ok(sel) =
-                                selection_from_flat_range(&doc, result.sel_start, result.sel_end)
-                        {
-                            commands::set_selection(tr, sel)?;
-                        }
+                    let current = tr.selection().and_then(|s| {
+                        let anchor = s.anchor.resolve(&doc)?.to_flat();
+                        let head = s.head.resolve(&doc)?.to_flat();
+                        Some((anchor.min(head), anchor.max(head)))
+                    });
+                    if current != Some((result.sel_start, result.sel_end))
+                        && let Ok(sel) =
+                            selection_from_flat_range(&doc, result.sel_start, result.sel_end)
+                    {
+                        commands::set_selection(tr, sel)?;
                     }
                 }
 
@@ -1537,12 +1544,14 @@ mod tests {
     }
 
     #[test]
-    fn rejected_newline_compose_keeps_caret() {
+    fn rejected_newline_compose_leaves_state_untouched() {
         // replace_range_with_text rejects newline-bearing replacements; the
-        // dropped edit must not move the caret to reduced coordinates.
+        // dropped edit must not move the caret to reduced coordinates, mark
+        // untouched document text as composing, or consume pending modifiers.
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
+            pending_modifiers: [bold]
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::TextInput {
@@ -1553,8 +1562,40 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
+            pending_modifiers: [bold]
         };
         assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn rejected_newline_compose_keeps_prior_composition() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("하하하") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetComposition { start: 2, end: 3 }],
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose {
+                text: "a\nb".into(),
+            }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("하하하") } } }
+            selection: (p1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 2, end: 3 })
+        );
     }
 
     #[test]
