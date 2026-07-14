@@ -13,6 +13,12 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import java.util.WeakHashMap
+
+// Keyed per editor so notifyImeSelectionChanged can forward extracted-text
+// updates for the active connection; the holder never references the editor,
+// keeping the weak keys collectible.
+private val editorImeExtractMonitors = WeakHashMap<Editor, ImeExtractMonitor>()
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
@@ -25,6 +31,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   suppressSoftwareKeyboard: Boolean,
 ): PlatformTextInputMethodRequest {
   val androidView = view
+  val extractMonitor = ImeExtractMonitor()
+  editorImeExtractMonitors[editor] = extractMonitor
   return PlatformTextInputMethodRequest { outAttrs ->
     outAttrs.inputType =
       InputType.TYPE_CLASS_TEXT or
@@ -32,13 +40,14 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
     outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
     val ctx = editor.tickIme
-    outAttrs.initialSelStart = ctx?.selection?.start ?: -1
-    outAttrs.initialSelEnd = ctx?.selection?.end ?: -1
+    outAttrs.initialSelStart = ctx?.let { it.absoluteUtf16Offset(it.selection.start) } ?: -1
+    outAttrs.initialSelEnd = ctx?.let { it.absoluteUtf16Offset(it.selection.end) } ?: -1
     val connection =
       EditorInputConnection(
         editor = editor,
         view = androidView,
         bringIntoViewRequests = bringIntoViewRequests,
+        extractMonitor = extractMonitor,
       )
     if (suppressSoftwareKeyboard) {
       androidView.post { hideEditorSoftwareKeyboard(androidView) }
@@ -67,10 +76,10 @@ internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(edit
       androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         ?: return
     val ctx = editor.tickIme
-    val selStart = ctx?.selection?.start ?: -1
-    val selEnd = ctx?.selection?.end ?: -1
-    val composingStart = ctx?.composing?.start ?: -1
-    val composingEnd = ctx?.composing?.end ?: -1
+    val selStart = ctx?.let { it.absoluteUtf16Offset(it.selection.start) } ?: -1
+    val selEnd = ctx?.let { it.absoluteUtf16Offset(it.selection.end) } ?: -1
+    val composingStart = ctx?.composing?.let { ctx.absoluteUtf16Offset(it.start) } ?: -1
+    val composingEnd = ctx?.composing?.let { ctx.absoluteUtf16Offset(it.end) } ?: -1
     editor.inputRecorder?.record { seq, t ->
       RecordedInputEntry.UpdateSelection(
         seq = seq,
@@ -80,6 +89,10 @@ internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(edit
         composingStart = composingStart,
         composingEnd = composingEnd,
       )
+    }
+    val extractToken = editorImeExtractMonitors[editor]?.token
+    if (extractToken != null && ctx != null) {
+      imm.updateExtractedText(androidView, extractToken, ctx.extract().toExtractedText())
     }
     imm.updateSelection(androidView, selStart, selEnd, composingStart, composingEnd)
   }

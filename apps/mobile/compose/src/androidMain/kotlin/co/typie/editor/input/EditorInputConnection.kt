@@ -32,10 +32,17 @@ import java.util.function.IntConsumer
 // key) from forcing a full-document text materialization on every read.
 private const val IME_READ_WINDOW = 4096
 
+// Samsung keyboards use getExtractedText as the source of truth for their
+// internal editing-state model; monitoring spans connections within a session.
+internal class ImeExtractMonitor {
+  var token: Int? = null
+}
+
 internal class EditorInputConnection(
   private val editor: Editor,
   private val view: View,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
+  private val extractMonitor: ImeExtractMonitor,
 ) : InputConnection {
   private val batch = ImeEditBatch { messages ->
     val recorder = editor.inputRecorder
@@ -144,7 +151,20 @@ internal class EditorInputConnection(
 
   override fun getCursorCapsMode(reqModes: Int): Int = 0
 
-  override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? = null
+  override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? {
+    if (request != null && (flags and InputConnection.GET_EXTRACTED_TEXT_MONITOR) != 0) {
+      extractMonitor.token = request.token
+    }
+    val extract = editor.tickIme?.extract()
+    recordRead(
+      "getExtractedText",
+      "token=${request?.token}, flags=$flags",
+      extract?.let {
+        "startOffset=${it.startOffset}, sel=${it.selectionStart}..${it.selectionEnd}, textLength=${it.text.length}"
+      },
+    )
+    return extract?.toExtractedText()
+  }
 
   override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
@@ -252,6 +272,7 @@ internal class EditorInputConnection(
 
   override fun closeConnection() {
     recordCall("closeConnection", "")
+    extractMonitor.token = null
     batch.closeConnection(hasActiveComposition = editor.ime?.composing != null)
   }
 
@@ -290,6 +311,17 @@ internal class EditorInputConnection(
 
   override fun setImeConsumesInput(imeConsumesInput: Boolean): Boolean = false
 }
+
+internal fun ImeExtract.toExtractedText(): ExtractedText =
+  ExtractedText().also {
+    it.text = text
+    it.startOffset = startOffset
+    it.partialStartOffset = -1
+    it.partialEndOffset = -1
+    it.selectionStart = selectionStart
+    it.selectionEnd = selectionEnd
+    it.flags = if (selectionStart != selectionEnd) ExtractedText.FLAG_SELECTING else 0
+  }
 
 private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
   private var batchLevel = 0

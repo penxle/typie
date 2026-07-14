@@ -13,6 +13,9 @@ internal fun Ime.projectAbsoluteUtf16Offset(offset: Int): Int {
   return windowStart + text.codePointOffsetAtUtf16Index(relative)
 }
 
+internal fun Ime.absoluteUtf16Offset(flatOffset: Int): Int =
+  windowStart + text.utf16IndexAtCodePointOffset(flatOffset - windowStart)
+
 internal fun String.codePointOffsetAtUtf16Index(index: Int): Int {
   var utf16Index = 0
   var codePointOffset = 0
