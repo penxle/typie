@@ -4,6 +4,25 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 val versionProps = Properties().apply { load(rootProject.file("version.properties").reader()) }
 val debugKeystore = file("keystore-debug.jks")
 
+val doppler: String =
+  listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/doppler").firstOrNull { file(it).exists() }
+    ?: "doppler"
+
+val dopplerSecrets: Map<String, String> by lazy {
+  val output =
+    providers
+      .exec {
+        commandLine(doppler, "secrets", "download", "-c", "dev", "--no-file", "--format", "json")
+      }
+      .standardOutput
+      .asText
+      .get()
+  @Suppress("UNCHECKED_CAST")
+  groovy.json.JsonSlurper().parseText(output) as Map<String, String>
+}
+
+fun env(key: String): String = System.getenv(key) ?: dopplerSecrets[key] ?: error("$key is not set")
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.multiplatform)
@@ -42,6 +61,8 @@ android {
     targetSdk = libs.versions.android.targetSdk.get().toInt()
     versionCode = (findProperty("versionCode") as? String)?.toInt() ?: 1
     versionName = versionProps["versionName"] as String
+
+    manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = env("KAKAO_NATIVE_APP_KEY")
   }
 
   sourceSets["main"].jniLibs.directories.add("src/main/jniLibs")
