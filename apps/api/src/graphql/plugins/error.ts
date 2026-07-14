@@ -6,7 +6,7 @@ import { GraphQLError, print } from 'graphql';
 import { dev } from '#/env.ts';
 import { truncateVariables } from './utils.ts';
 import type { AsyncIterableIteratorOrValue, ExecutionResult } from '@envelop/core';
-import type { Plugin } from 'graphql-yoga';
+import type { Plugin, YogaInitialContext } from 'graphql-yoga';
 import type { Context } from '#/context.ts';
 
 const log = logger.getChild('graphql');
@@ -17,6 +17,19 @@ type OperationInfo = {
   query?: string;
   userId?: string;
   ip?: string;
+  signal?: AbortSignal;
+};
+
+const isRequestAbort = (error: unknown, signal?: AbortSignal): boolean => {
+  if (!signal?.aborted) return false;
+  if (Object.is(error, signal.reason)) return true;
+  if (error instanceof GraphQLError && error.originalError) {
+    return isRequestAbort(error.originalError, signal);
+  }
+  if (typeof error !== 'object' || error === null) return false;
+  // GraphQL wraps non-Error resolver throws, including string AbortSignal reasons.
+  if ('thrownValue' in error && Object.is(error.thrownValue, signal.reason)) return true;
+  return 'name' in error && error.name === 'AbortError';
 };
 
 class UnexpectedError extends GraphQLError {
@@ -61,6 +74,9 @@ class UnexpectedError extends GraphQLError {
 }
 
 const transformError = (error: unknown, operation?: OperationInfo): GraphQLError => {
+  if (isRequestAbort(error, operation?.signal)) {
+    return new TypieError({ code: 'request_aborted', status: 499 });
+  }
   if (error instanceof TypieError) {
     return error;
   }
@@ -107,15 +123,16 @@ const extractOperationInfo = (args: {
   operationName?: string | null;
   variableValues?: Readonly<Record<string, unknown>> | null;
   document: Parameters<typeof print>[0];
-  contextValue?: unknown;
+  contextValue?: YogaInitialContext & Context;
 }): OperationInfo => {
-  const context = args.contextValue as Context | undefined;
+  const context = args.contextValue;
   return {
     operationName: args.operationName,
     variableValues: truncateVariables(args.variableValues as Record<string, unknown> | null | undefined),
     query: print(args.document),
     userId: context?.session?.userId,
     ip: context?.ip,
+    signal: context?.request?.signal,
   };
 };
 
