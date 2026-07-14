@@ -14,6 +14,10 @@ use super::{
 use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
 
+mod page_break;
+
+use page_break::{insert_terminal_page_break_from_edge, prepare_page_breaks_for_position};
+
 enum InlineMode {
     Formatted,
     Plain(Vec<Modifier>),
@@ -102,6 +106,10 @@ pub(crate) fn insert_slice_at_position(
     if slice.is_empty() {
         return Ok(None);
     }
+    let (slice, trailing_block_context) = prepare_page_breaks_for_position(tr, &position, slice);
+    if slice.is_empty() {
+        return Ok(None);
+    }
 
     let in_textblock = position_in_textblock(tr, &position);
     if in_textblock {
@@ -110,7 +118,8 @@ pub(crate) fn insert_slice_at_position(
         if let Some(fragments) =
             inline_content_fragments_for_textblock_insert(tr, &position, candidate)
         {
-            if !fragments.iter().copied().any(is_insertable_inline_fragment) {
+            let fragments: Vec<Fragment> = fragments.into_iter().cloned().collect();
+            if !fragments.iter().any(is_insertable_inline_fragment) {
                 return Ok(None);
             }
             let position = materialize_position_block(tr, position)?;
@@ -135,7 +144,7 @@ pub(crate) fn insert_slice_at_position(
             return Ok(None);
         };
         let position = materialize_position_block(tr, position)?;
-        insert_blocks_at_block_boundary(tr, position, blocks)
+        insert_blocks_at_block_boundary(tr, position, blocks, trailing_block_context)
     }
 }
 
@@ -247,10 +256,9 @@ fn inline_content_fragments_for_textblock_insert<'a>(
 fn insert_content_as_inline_at_position(
     tr: &mut Transaction,
     position: Position,
-    fragments: Vec<&Fragment>,
+    fragments: Vec<Fragment>,
     mode: &InlineMode,
 ) -> Result<Option<Selection>, CommandError> {
-    let fragments: Vec<Fragment> = fragments.into_iter().cloned().collect();
     if fragments.is_empty() {
         return Ok(None);
     }
@@ -416,6 +424,7 @@ fn insert_blocks_in_textblock(
 
     let mut last_caret: Option<Position> = None;
     let mut inserted_range = InsertedRange::default();
+    let mut terminal_page_break_start: Option<Position> = None;
 
     if merge_start {
         let first = blocks[0];
@@ -429,11 +438,15 @@ fn insert_blocks_in_textblock(
             .expect("selection preserved through mutations")
             .head;
         let inserted = insert_inline_fragments(tr, &inline, mode)?;
+        let inserted_page_break = insert_terminal_page_break_from_edge(tr, textblock_id, &inline)?;
         let end = tr
             .selection()
             .expect("selection preserved through mutations")
             .head;
-        if inserted {
+        if inserted_page_break {
+            terminal_page_break_start = Some(start);
+            last_caret = Some(end);
+        } else if inserted {
             inserted_range.include_position_range(start, end);
             last_caret = Some(end);
         }
@@ -487,6 +500,13 @@ fn insert_blocks_in_textblock(
         }
     }
 
+    let keep_trailing_page_break_context = terminal_page_break_start.is_some();
+    if let Some(start) = terminal_page_break_start {
+        let end = position_at_start_of_block(tr, p2_id)?;
+        inserted_range.include_position_range(start, end);
+        last_caret = Some(end);
+    }
+
     let safe_to_remove = |tr: &Transaction, target: Dot| -> bool {
         let view = tr.state().view();
         let Some(target_node) = view.node(target) else {
@@ -512,7 +532,7 @@ fn insert_blocks_in_textblock(
     if !merge_start && safe_to_remove(tr, textblock_id) {
         tr.remove_subtree(textblock_id)?;
     }
-    if !merge_end && safe_to_remove(tr, p2_id) {
+    if !merge_end && !keep_trailing_page_break_context && safe_to_remove(tr, p2_id) {
         tr.remove_subtree(p2_id)?;
     }
 
@@ -579,14 +599,23 @@ fn insert_blocks_at_block_boundary(
     tr: &mut Transaction,
     position: Position,
     blocks: Vec<Fragment>,
+    trailing_block_context: Option<Fragment>,
 ) -> Result<Option<Selection>, CommandError> {
     let container_id = position.node;
     let base_index = position.offset;
-    let block_count = blocks.len();
+    let payload_block_count = blocks.len();
+    let inserted_block_count = payload_block_count + usize::from(trailing_block_context.is_some());
     tr.batch(|tr| {
         for (offset, block) in blocks.iter().enumerate() {
             let subtree = block.clone().into_subtree();
             tr.insert_subtree(container_id, base_index + offset, subtree)?;
+        }
+        if let Some(context) = &trailing_block_context {
+            tr.insert_subtree(
+                container_id,
+                base_index + payload_block_count,
+                context.clone().into_subtree(),
+            )?;
         }
         let steps = {
             let view = tr.state().view();
@@ -598,7 +627,7 @@ fn insert_blocks_at_block_boundary(
         Ok::<(), CommandError>(())
     })?;
 
-    if let Some(id) = block_child_id(tr, container_id, base_index + block_count - 1)
+    if let Some(id) = block_child_id(tr, container_id, base_index + inserted_block_count - 1)
         && let Ok(mut final_pos) = position_at_end_of_block(tr, id)
     {
         final_pos.affinity = Affinity::Downstream;
@@ -608,7 +637,7 @@ fn insert_blocks_at_block_boundary(
     Ok(Some(selection_over_inserted_blocks(
         container_id,
         base_index,
-        block_count,
+        payload_block_count,
     )))
 }
 

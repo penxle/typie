@@ -1001,6 +1001,66 @@ mod tests {
     }
 
     #[test]
+    fn paste_page_break_slice_in_root_paragraph_splits_at_terminal() {
+        let (source, ..) = state! {
+            doc { root { p1: paragraph { text("lo") page_break } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let payload = Slice::extract(&source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
+        let (target, ..) = state! {
+            doc { root { p1: paragraph { text("World") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("Worlo") page_break }
+                p2: paragraph { text("ld") }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn paste_page_break_only_into_nested_selection_preserves_selection() {
+        let (source, ..) = state! {
+            doc { root { p1: paragraph { text("a") page_break } } }
+            selection: (p1, 1) -> (p1, 2)
+        };
+        let payload = Slice::extract(&source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
+        let (target, ..) = state! {
+            doc { root {
+                blockquote { p2: paragraph { text("Nested") } }
+                paragraph {}
+            } }
+            selection: (p2, 1) -> (p2, 4)
+        };
+        let mut editor = Editor::new_test(target.clone());
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        assert_state_eq!(editor.state(), &target);
+    }
+
+    #[test]
     fn paste_html_sets_paste_html_tag() {
         let (s_source, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }

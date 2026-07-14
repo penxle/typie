@@ -1,7 +1,9 @@
-use editor_model::{ChildView, Node, NodeType, PlainNode, PlainPageBreakNode, Subtree};
+use editor_model::{ChildView, Node};
 use editor_transaction::Transaction;
 
-use crate::helpers::{find_ancestor_textblock, prev_sibling};
+use crate::helpers::{
+    find_ancestor_textblock, insert_terminal_page_break_into_root_paragraph, prev_sibling,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandResult {
@@ -13,7 +15,7 @@ pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandRes
     }
     let pos = selection.head;
 
-    let (prev_id, insert_index) = {
+    let prev_id = {
         let view = tr.state().view();
         let Some(paragraph_id) = find_ancestor_textblock(&view, pos.node) else {
             return Ok(false);
@@ -42,23 +44,10 @@ pub fn insert_page_break_into_prev_paragraph(tr: &mut Transaction) -> CommandRes
         if !matches!(prev.node(), Node::Paragraph(_)) {
             return Ok(false);
         }
-        let has_page_break = prev.children().any(
-            |child| matches!(child, ChildView::Leaf(l) if l.node_type() == NodeType::PageBreak),
-        );
-        if has_page_break {
-            return Ok(false);
-        }
-
-        (prev.id(), prev.children().count())
+        prev.id()
     };
 
-    tr.insert_subtree(
-        prev_id,
-        insert_index,
-        Subtree::leaf(PlainNode::PageBreak(PlainPageBreakNode::default())),
-    )?;
-
-    Ok(true)
+    insert_terminal_page_break_into_root_paragraph(tr, prev_id)
 }
 
 #[cfg(test)]

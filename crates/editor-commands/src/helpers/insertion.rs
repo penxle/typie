@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use editor_common::StrExt;
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, Modifier, ModifierType, PlainHardBreakNode, PlainNode, PlainTabNode, PlainTextNode,
-    Subtree,
+    ChildView, Modifier, ModifierType, Node, NodeType, PlainHardBreakNode, PlainNode,
+    PlainPageBreakNode, PlainTabNode, PlainTextNode, Subtree,
 };
 use editor_state::{Affinity, PendingModifiers, Position, Selection};
 use editor_transaction::{Step, Transaction};
@@ -320,6 +320,40 @@ pub(crate) fn materialize_caret_block(tr: &mut Transaction) -> Result<(), Comman
     })))?;
 
     Ok(())
+}
+
+pub(crate) fn insert_terminal_page_break_into_root_paragraph(
+    tr: &mut Transaction,
+    paragraph_id: Dot,
+) -> CommandResult {
+    let insert_index = {
+        let view = tr.state().view();
+        let Some(paragraph) = view.node(paragraph_id) else {
+            return Ok(false);
+        };
+        if !matches!(paragraph.node(), Node::Paragraph(_)) {
+            return Ok(false);
+        }
+        if paragraph
+            .parent()
+            .is_none_or(|parent| parent.id() != Dot::ROOT)
+        {
+            return Ok(false);
+        }
+        if paragraph.children().any(
+            |child| matches!(child, ChildView::Leaf(leaf) if leaf.node_type() == NodeType::PageBreak),
+        ) {
+            return Ok(false);
+        }
+        paragraph.children().count()
+    };
+
+    tr.insert_subtree(
+        paragraph_id,
+        insert_index,
+        Subtree::leaf(PlainNode::PageBreak(PlainPageBreakNode::default())),
+    )?;
+    Ok(true)
 }
 
 fn caret_paint(tr: &Transaction, block: Dot, offset: usize) -> Vec<Modifier> {

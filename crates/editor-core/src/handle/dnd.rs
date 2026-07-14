@@ -4,10 +4,7 @@ use crate::error::EditorError;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
-use editor_model::{
-    ChildView, ContextExpr, DocView, Fragment, Node, NodeType, PlainFileNode, PlainImageNode,
-    PlainNode, Schema,
-};
+use editor_model::{ChildView, DocView, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode};
 use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
 use editor_view::DropTarget;
 
@@ -319,40 +316,6 @@ pub(crate) fn apply_drop_for_test(
     apply_drop(editor, position, payload, modifiers, source)
 }
 
-/// A drop is rejected when the slice carries a leaf whose schema context cannot
-/// be satisfied at the drop target (e.g. a `page_break`, valid only directly
-/// under `Root > Paragraph`, dropped into a paragraph nested in a blockquote).
-/// Without this the inline-insert path silently relocates or drops such a leaf,
-/// so the probe would wrongly accept the drop.
-fn slice_content_fits_target_context(view: &DocView, position: Position, slice: &Slice) -> bool {
-    let mut textblock = view.node(position.node);
-    while let Some(node) = &textblock {
-        if node.spec().is_textblock() {
-            break;
-        }
-        textblock = node.parent();
-    }
-    let Some(textblock) = textblock else {
-        return true;
-    };
-    let mut base: Vec<NodeType> = textblock.ancestors().map(|a| a.node_type()).collect();
-    base.reverse();
-
-    fn check(fragment: &Fragment, base: &[NodeType]) -> bool {
-        let ty = fragment.node.as_type();
-        let spec = Schema::node_spec(ty);
-        if spec.is_leaf() && spec.context != ContextExpr::Any {
-            let mut path = base.to_vec();
-            path.push(ty);
-            if !spec.context.matches(&path) {
-                return false;
-            }
-        }
-        fragment.children.iter().all(|c| check(c, base))
-    }
-    slice.content.iter().all(|fragment| check(fragment, &base))
-}
-
 fn drop_slice_at(
     editor: &mut Editor,
     position: Position,
@@ -360,9 +323,6 @@ fn drop_slice_at(
     provenance: commands::types::SliceProvenance,
     selection: SelectionAfterDrop,
 ) -> Result<(), EditorError> {
-    if !slice_content_fits_target_context(&editor.state.view(), position, &slice) {
-        return Ok(());
-    }
     editor.transact(|tr| {
         let inserted_selection =
             commands::insert_slice_at(tr, position, slice.clone(), provenance)?;
@@ -424,10 +384,6 @@ fn drop_internal_selection_at(
         return Ok(());
     };
 
-    if !slice_content_fits_target_context(&editor.state.view(), position, &slice) {
-        return Ok(());
-    }
-
     if copy {
         return drop_slice_at(
             editor,
@@ -441,6 +397,7 @@ fn drop_internal_selection_at(
     let stable_target =
         StableSelection::capture(&Selection::collapsed(position), &editor.state.view());
     editor.transact(|tr| {
+        let savepoint = tr.savepoint();
         commands::set_selection(tr, source)?;
         commands::delete_selection(tr)?;
 
@@ -450,15 +407,20 @@ fn drop_internal_selection_at(
             stable_target.resolve(&ctx)
         };
         let Some(target) = resolved_target.map(|sel| sel.head) else {
+            tr.rollback(savepoint);
             return Ok(());
         };
-        if let Some(inserted_selection) = commands::insert_slice_at(
+        let Some(inserted_selection) = commands::insert_slice_at(
             tr,
             target,
             slice.clone(),
             commands::types::SliceProvenance::Formatted,
-        )? && !inserted_selection.is_collapsed()
-        {
+        )?
+        else {
+            tr.rollback(savepoint);
+            return Ok(());
+        };
+        if !inserted_selection.is_collapsed() {
             commands::set_selection(tr, inserted_selection)?;
         }
         Ok(())

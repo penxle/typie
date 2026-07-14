@@ -441,6 +441,57 @@ mod tests {
     }
 
     #[test]
+    fn extract_page_break_only_is_bare_inline() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("lo") page_break } } }
+            selection: (p1, 2) -> (p1, 3)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::PageBreak(_)));
+    }
+
+    #[test]
+    fn extract_text_through_page_break_is_bare_inline() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("lo") page_break } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 2);
+        assert!(matches!(slice.content[0].node, PlainNode::Text(_)));
+        assert!(matches!(slice.content[1].node, PlainNode::PageBreak(_)));
+    }
+
+    #[test]
+    fn extract_whole_page_break_paragraph_keeps_closed_block() {
+        let (state, ..) = state! {
+            doc { root: root { paragraph { text("lo") page_break } paragraph {} } }
+            selection: (root, 0) -> (root, 1)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!(slice.open_start, 0);
+        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.content.len(), 1);
+        assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
+        assert_eq!(slice.content[0].children.len(), 2);
+        assert!(matches!(
+            slice.content[0].children[1].node,
+            PlainNode::PageBreak(_)
+        ));
+    }
+
+    #[test]
     fn extract_inline_within_fold_title_is_bare_inline() {
         let (s, ..) = state! {
             doc { root { fold {

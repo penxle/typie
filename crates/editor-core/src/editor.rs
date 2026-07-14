@@ -3425,6 +3425,41 @@ mod tests {
     }
 
     #[test]
+    fn internal_dnd_text_and_page_break_source_allows_nested_inline_drop_indicator() {
+        let (initial, _p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("a") page_break }
+                blockquote { p2: paragraph { text("inside") } }
+                paragraph {}
+            } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p2, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        assert!(editor.drop_indicator_for_test().is_some());
+    }
+
+    #[test]
     fn internal_dnd_page_break_source_allows_root_inline_drop_indicator() {
         let (initial, _p1, p2) = state! {
             doc { root {
@@ -4011,6 +4046,104 @@ mod tests {
         let (expected, _p1_e) = state! {
             doc { root { p1: paragraph { text("hello worldhello") } } }
             selection: (p1, 11) -> (p1, 16)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn internal_drop_moves_text_and_discards_page_break_at_nested_destination() {
+        let (initial, _p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("a") page_break }
+                blockquote { p2: paragraph { text("inside") } }
+                paragraph {}
+            } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let source = initial.selection.expect("source selection");
+        let mut editor = Editor::new_test(initial);
+
+        crate::handle::apply_drop_for_test(
+            &mut editor,
+            Position::new(p2, 2),
+            DndDropPayload::InternalSelection,
+            InputModifiers::default(),
+            Some(source),
+        )
+        .expect("drop succeeds");
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph {}
+                blockquote { p2: paragraph { text("inaside") } }
+                paragraph {}
+            } }
+            selection: (p2, 2) -> (p2, 3)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn internal_drop_page_break_only_nested_preserves_source() {
+        let (initial, _p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("a") page_break }
+                blockquote { p2: paragraph { text("inside") } }
+                paragraph {}
+            } }
+            selection: (p1, 1) -> (p1, 2)
+        };
+        let source = initial.selection.expect("source selection");
+        let mut editor = Editor::new_test(initial.clone());
+
+        crate::handle::apply_drop_for_test(
+            &mut editor,
+            Position::new(p2, 2),
+            DndDropPayload::InternalSelection,
+            InputModifiers::default(),
+            Some(source),
+        )
+        .expect("drop is a no-op");
+
+        editor_state::assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn external_drop_inserts_text_and_discards_page_break_at_nested_destination() {
+        let (source, ..) = state! {
+            doc { root { p1: paragraph { text("a") page_break } } }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let payload = Slice::extract(&source)
+            .unwrap()
+            .to_payload(&Resource::new_test());
+        let (target, p2) = state! {
+            doc { root {
+                blockquote { p2: paragraph { text("inside") } }
+                paragraph {}
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(target);
+
+        crate::handle::apply_drop_for_test(
+            &mut editor,
+            Position::new(p2, 2),
+            DndDropPayload::Text {
+                text: payload.text,
+                html: Some(payload.html),
+            },
+            InputModifiers::default(),
+            None,
+        )
+        .expect("drop succeeds");
+
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { p2: paragraph { text("inaside") } }
+                paragraph {}
+            } }
+            selection: (p2, 2) -> (p2, 3)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
     }
