@@ -62,8 +62,12 @@ import co.typie.graphql.type.DocumentType
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.navigation.NavigationResult
+import co.typie.navigation.PreparedAdjacentRemoval
+import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.isOk
 import co.typie.result.onOk
+import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.storage.Preference
@@ -135,25 +139,19 @@ fun DocumentScreen(entityId: String) {
 
     val targetRoute = nav.stack.getOrNull(nav.stack.lastIndex - 2)
     if (targetRoute != null) {
-      nav.popTo(targetRoute)
+      return nav.popTo(targetRoute) is NavigationResult.ReachedTarget
     } else {
-      nav.pop()
-    }
-    return true
-  }
-
-  suspend fun popAfterDelete() {
-    withContext(NonCancellable) {
-      if (!popDocumentAndMatchingEditorIfPresent()) {
-        nav.pop()
-      }
+      return nav.pop() is NavigationResult.ReachedTarget
     }
   }
 
   suspend fun replaceWithDuplicatedEditor(duplicatedEntityId: String) {
     withContext(NonCancellable) {
-      popDocumentAndMatchingEditorIfPresent()
-      nav.navigate(Route.Editor(duplicatedEntityId))
+      val hasMatchingEditor = nav.previous == Route.Editor(entityId)
+      if (hasMatchingEditor && !popDocumentAndMatchingEditorIfPresent()) return@withContext
+      if (nav.navigate(Route.Editor(duplicatedEntityId)) !is NavigationResult.ReachedTarget) {
+        return@withContext
+      }
       toast.success("문서를 복제했어요.")
     }
   }
@@ -323,7 +321,7 @@ fun DocumentScreen(entityId: String) {
     }
     val deleteDocument: suspend () -> Unit = {
       if (!loading) {
-        val result =
+        val confirmation =
           dialog.confirm(
             title = "문서 삭제",
             message =
@@ -331,10 +329,41 @@ fun DocumentScreen(entityId: String) {
             confirmText = "삭제하기",
             confirmIsDestructive = true,
           )
-        if (result is DialogResult.Resolved) {
-          val deleteResult = model.deleteDocument(document.id).withDefaultExceptionHandler(toast)
-          if (deleteResult.isOk) {
-            popAfterDelete()
+        if (confirmation is DialogResult.Resolved) {
+          val documentRoute = Route.Document(entityId)
+          val editorRoute = Route.Editor(entityId)
+          val matchingEditorPresent = nav.current == documentRoute && nav.previous == editorRoute
+          if (!matchingEditorPresent) {
+            val deleteResult = model.deleteDocument(document.id).withDefaultExceptionHandler(toast)
+            if (deleteResult.isOk) {
+              withContext(NonCancellable) { nav.pop() }
+            }
+          } else {
+            val preparation =
+              result<PreparedAdjacentRemoval?, Nothing> {
+                  nav.prepareAdjacentRemoval(documentRoute, editorRoute)
+                }
+                .withDefaultExceptionHandler(toast)
+            preparation.onOk { prepared ->
+              if (prepared == null) {
+                toast.error(DEFAULT_ERROR_MESSAGE)
+                return@onOk
+              }
+
+              var removalCommitted = false
+              try {
+                val deleteResult =
+                  model.deleteDocument(document.id).withDefaultExceptionHandler(toast)
+                if (deleteResult.isOk) {
+                  withContext(NonCancellable) { nav.commitAdjacentRemoval(prepared) }
+                  removalCommitted = true
+                }
+              } finally {
+                if (!removalCommitted) {
+                  nav.rollbackAdjacentRemoval(prepared)
+                }
+              }
+            }
           }
         }
       }

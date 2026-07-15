@@ -4,9 +4,11 @@ import co.typie.route.Route
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -210,6 +212,197 @@ class NavigatorTest {
     assertNotSame(originalStore, recreatedStore)
   }
 
+  @Test
+  fun preparedAdjacentRemovalCommitsExactDocumentEditorPair() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    nav.routeRemovals.register(
+      editorRoute,
+      RecordingNavigatorInterceptor(RouteRemovalPreparation.Ready),
+    )
+
+    val prepared = assertNotNull(nav.prepareAdjacentRemoval(documentRoute, editorRoute))
+
+    assertTrue(nav.isTransitioning)
+    val commit = async { nav.commitAdjacentRemoval(prepared) }
+    advanceUntilIdle()
+
+    assertEquals(documentRoute, nav.current)
+    assertTrue(nav.popRequested)
+    assertEquals(RouteRemovalPolicy.BypassInterceptors, nav.peekRemovalPolicy())
+    val target = assertNotNull(nav.peekPopTarget())
+    val removedRoutes = nav.performPopTo(target)
+    nav.consumePopRequest()
+    nav.completeTransition()
+
+    assertEquals(NavigationResult.ReachedTarget, commit.await())
+    assertEquals(listOf(documentRoute, editorRoute), removedRoutes)
+    assertEquals(Route.Home, nav.current)
+    assertFalse(nav.isTransitioning)
+  }
+
+  @Test
+  fun adjacentRemovalDoesNotProvideDelayedPresentationCallback() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    var receivedDelayedCallback = true
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    nav.routeRemovals.register(
+      editorRoute,
+      object : RouteRemovalInterceptor {
+        override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation {
+          receivedDelayedCallback = onDelayed != null
+          return RouteRemovalPreparation.Ready
+        }
+
+        override suspend fun resolveDecision(): RouteRemovalDecision =
+          RouteRemovalDecision.CancelRemoval
+
+        override suspend fun rollback() = Unit
+      },
+    )
+
+    val prepared = assertNotNull(nav.prepareAdjacentRemoval(documentRoute, editorRoute))
+
+    assertFalse(receivedDelayedCallback)
+    nav.rollbackAdjacentRemoval(prepared)
+  }
+
+  @Test
+  fun navigateToCurrentDuringAdjacentRemovalPreparationIsNotStarted() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    nav.routeRemovals.register(
+      editorRoute,
+      RecordingNavigatorInterceptor(RouteRemovalPreparation.Ready),
+    )
+    val prepared = assertNotNull(nav.prepareAdjacentRemoval(documentRoute, editorRoute))
+
+    assertEquals(NavigationResult.NotStarted, nav.navigate(documentRoute))
+
+    nav.rollbackAdjacentRemoval(prepared)
+  }
+
+  @Test
+  fun adjacentRemovalRollbackKeepsPairAndReleasesNavigationLease() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    val interceptor = RecordingNavigatorInterceptor(RouteRemovalPreparation.Ready)
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    nav.routeRemovals.register(editorRoute, interceptor)
+    val prepared = assertNotNull(nav.prepareAdjacentRemoval(documentRoute, editorRoute))
+
+    nav.rollbackAdjacentRemoval(prepared)
+
+    assertEquals(documentRoute, nav.current)
+    assertEquals(editorRoute, nav.previous)
+    assertEquals(1, interceptor.rollbacks)
+    assertFalse(nav.isTransitioning)
+    navigateAndComplete(nav, Route.Space)
+    assertEquals(Route.Space, nav.current)
+  }
+
+  @Test
+  fun adjacentRemovalStillCommitsAfterEditorInterceptorReplacement() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    nav.routeRemovals.register(
+      editorRoute,
+      RecordingNavigatorInterceptor(RouteRemovalPreparation.Ready),
+    )
+    val prepared = assertNotNull(nav.prepareAdjacentRemoval(documentRoute, editorRoute))
+
+    nav.routeRemovals.register(
+      editorRoute,
+      RecordingNavigatorInterceptor(RouteRemovalPreparation.Ready),
+    )
+    val commit = async { nav.commitAdjacentRemoval(prepared) }
+    advanceUntilIdle()
+
+    assertEquals(documentRoute, nav.current)
+    val target = assertNotNull(nav.peekPopTarget())
+    nav.performPopTo(target)
+    nav.consumePopRequest()
+    nav.completeTransition()
+
+    assertEquals(NavigationResult.ReachedTarget, commit.await())
+    assertEquals(Route.Home, nav.current)
+    assertFalse(nav.isTransitioning)
+  }
+
+  @Test
+  fun adjacentRemovalPreparationFailsIfInterceptorIsReplacedWhilePreparing() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    val preparationStarted = CompletableDeferred<Unit>()
+    val releasePreparation = CompletableDeferred<Unit>()
+    var rollbacks = 0
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    nav.routeRemovals.register(
+      editorRoute,
+      object : RouteRemovalInterceptor {
+        override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation {
+          preparationStarted.complete(Unit)
+          releasePreparation.await()
+          return RouteRemovalPreparation.Ready
+        }
+
+        override suspend fun resolveDecision(): RouteRemovalDecision =
+          RouteRemovalDecision.CancelRemoval
+
+        override suspend fun rollback() {
+          rollbacks++
+        }
+      },
+    )
+
+    val preparation = async { nav.prepareAdjacentRemoval(documentRoute, editorRoute) }
+    advanceUntilIdle()
+    assertTrue(preparationStarted.isCompleted)
+    nav.routeRemovals.register(
+      editorRoute,
+      RecordingNavigatorInterceptor(RouteRemovalPreparation.Ready),
+    )
+    releasePreparation.complete(Unit)
+    advanceUntilIdle()
+
+    assertNull(preparation.await())
+    assertEquals(1, rollbacks)
+    assertFalse(nav.isTransitioning)
+  }
+
+  @Test
+  fun failedAdjacentPreparationKeepsBothRoutes() = runTest {
+    val nav = Navigator(Route.Home)
+    val editorRoute = Route.Editor("1")
+    val documentRoute = Route.Document("1")
+    navigateAndComplete(nav, editorRoute)
+    navigateAndComplete(nav, documentRoute)
+    val interceptor = RecordingNavigatorInterceptor(RouteRemovalPreparation.NeedsDecision)
+    nav.routeRemovals.register(editorRoute, interceptor)
+
+    assertNull(nav.prepareAdjacentRemoval(documentRoute, editorRoute))
+    assertEquals(documentRoute, nav.current)
+    assertEquals(editorRoute, nav.previous)
+    assertEquals(1, interceptor.rollbacks)
+    assertFalse(nav.isTransitioning)
+  }
+
   context(testScope: TestScope)
   private suspend fun navigateAndComplete(nav: Navigator, route: Route) {
     with(testScope) {
@@ -250,5 +443,19 @@ class NavigatorTest {
       advanceUntilIdle()
       job.join()
     }
+  }
+}
+
+private class RecordingNavigatorInterceptor(private val preparation: RouteRemovalPreparation) :
+  RouteRemovalInterceptor {
+  var rollbacks = 0
+
+  override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation =
+    preparation
+
+  override suspend fun resolveDecision(): RouteRemovalDecision = RouteRemovalDecision.CancelRemoval
+
+  override suspend fun rollback() {
+    rollbacks++
   }
 }

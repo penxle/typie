@@ -15,7 +15,7 @@ internal enum class RouteRemovalDecision {
 }
 
 internal interface RouteRemovalInterceptor {
-  suspend fun prepare(): RouteRemovalPreparation
+  suspend fun prepare(onDelayed: (suspend () -> Unit)? = null): RouteRemovalPreparation
 
   suspend fun resolveDecision(): RouteRemovalDecision
 
@@ -33,6 +33,7 @@ internal class RouteRemovalCoordinator {
   private val interceptors = mutableMapOf<Route, RegisteredInterceptor>()
   private val approvedRoutes = mutableListOf<PreparedRoute>()
   private val preparedRoutes = mutableListOf<PreparedRoute>()
+  private var preparingRoute: PreparedRoute? = null
   private var blockedRoute: PreparedRoute? = null
 
   fun register(route: Route, interceptor: RouteRemovalInterceptor): () -> Unit {
@@ -48,17 +49,22 @@ internal class RouteRemovalCoordinator {
   fun activeSegmentIsCurrent(): Boolean {
     val preparedCurrent = preparedRoutes.all { interceptors[it.route] === it.registration }
     val approvedRoutesCurrent = approvedRoutes.all { interceptors[it.route] === it.registration }
+    val preparing = preparingRoute
     val blocked = blockedRoute
     return preparedCurrent &&
       approvedRoutesCurrent &&
+      (preparing == null || interceptors[preparing.route] === preparing.registration) &&
       (blocked == null || interceptors[blocked.route] === blocked.registration)
   }
+
+  fun hasInterceptor(route: Route): Boolean = route in interceptors
 
   suspend fun prepareSegment(
     routesToRemove: List<Route>,
     requestedTarget: Route,
+    onDelayed: (suspend (Route) -> Unit)? = null,
   ): PreparedRemovalSegment {
-    check(preparedRoutes.isEmpty() && blockedRoute == null) {
+    check(preparedRoutes.isEmpty() && preparingRoute == null && blockedRoute == null) {
       "A route removal segment is already active"
     }
 
@@ -73,13 +79,16 @@ internal class RouteRemovalCoordinator {
         }
 
         val preparedRoute = PreparedRoute(route, registration)
+        preparingRoute = preparedRoute
         val preparation =
           try {
-            registration.interceptor.prepare()
+            registration.interceptor.prepare(onDelayed?.let { callback -> { callback(route) } })
           } catch (throwable: Throwable) {
+            if (preparingRoute === preparedRoute) preparingRoute = null
             throwable.addCleanupFailure(rollbackRoutes(listOf(preparedRoute)))
             throw throwable
           }
+        if (preparingRoute === preparedRoute) preparingRoute = null
         when (preparation) {
           RouteRemovalPreparation.Ready -> preparedRoutes += preparedRoute
           RouteRemovalPreparation.NeedsDecision -> {
@@ -104,6 +113,7 @@ internal class RouteRemovalCoordinator {
 
   /** Called after an unblocked segment has actually left the stack. */
   fun commitSegment() {
+    check(preparingRoute == null) { "A route removal preparation is still active" }
     preparedRoutes.clear()
     blockedRoute = null
     approvedRoutes.clear()
@@ -137,10 +147,12 @@ internal class RouteRemovalCoordinator {
   suspend fun rollbackActiveSegment() {
     val routes = buildList {
       blockedRoute?.let(::add)
+      preparingRoute?.let(::add)
       addAll(preparedRoutes.asReversed())
       addAll(approvedRoutes.asReversed())
     }
     blockedRoute = null
+    preparingRoute = null
     preparedRoutes.clear()
     approvedRoutes.clear()
     rollbackRoutes(routes)?.let { throw it }

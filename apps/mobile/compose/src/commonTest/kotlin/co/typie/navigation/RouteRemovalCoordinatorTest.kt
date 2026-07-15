@@ -5,10 +5,57 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 
 class RouteRemovalCoordinatorTest {
+  @Test
+  fun delayedPreparationRemainsOwnedWhileRouteBecomesVisible() = runTest {
+    val coordinator = RouteRemovalCoordinator()
+    val editorRoute = Route.Editor("editor")
+    var delayedRoute: Route? = null
+    var currentDuringDelayed = false
+    val editor =
+      RecordingRemovalInterceptor(
+        preparation = RouteRemovalPreparation.Ready,
+        onPrepare = { onDelayed -> checkNotNull(onDelayed).invoke() },
+      )
+    coordinator.register(editorRoute, editor)
+
+    val segment =
+      coordinator.prepareSegment(
+        routesToRemove = listOf(editorRoute),
+        requestedTarget = Route.Home,
+        onDelayed = { route ->
+          delayedRoute = route
+          currentDuringDelayed = coordinator.activeSegmentIsCurrent()
+        },
+      )
+
+    assertEquals(editorRoute, delayedRoute)
+    assertTrue(currentDuringDelayed)
+    assertEquals(Route.Home, segment.destination)
+  }
+
+  @Test
+  fun preparationWithoutDelayedCallbackDoesNotProvidePresentationHook() = runTest {
+    val coordinator = RouteRemovalCoordinator()
+    val editorRoute = Route.Editor("editor")
+    var receivedCallback = true
+    coordinator.register(
+      editorRoute,
+      RecordingRemovalInterceptor(
+        preparation = RouteRemovalPreparation.Ready,
+        onPrepare = { onDelayed -> receivedCallback = onDelayed != null },
+      ),
+    )
+
+    coordinator.prepareSegment(listOf(editorRoute), Route.Home)
+
+    assertEquals(false, receivedCallback)
+  }
+
   @Test
   fun hiddenFailureStopsAtEditorAfterCommittingReadyPrefix() = runTest {
     val coordinator = RouteRemovalCoordinator()
@@ -217,13 +264,15 @@ private class RecordingRemovalInterceptor(
   private val preparation: RouteRemovalPreparation,
   private val preparationFailure: Throwable? = null,
   private val rollbackFailure: Throwable? = null,
+  private val onPrepare: suspend ((suspend () -> Unit)?) -> Unit = {},
 ) : RouteRemovalInterceptor {
   var decision: RouteRemovalDecision = RouteRemovalDecision.CancelRemoval
   var prepares: Int = 0
   var rollbacks: Int = 0
 
-  override suspend fun prepare(): RouteRemovalPreparation {
+  override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation {
     prepares++
+    onPrepare(onDelayed)
     preparationFailure?.let { throw it }
     return preparation
   }

@@ -107,6 +107,8 @@ import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
+import co.typie.navigation.NavigationResult
+import co.typie.navigation.RouteRemovalDecision
 import co.typie.platform.PlatformModule
 import co.typie.platform.connectivityService
 import co.typie.route.Route
@@ -175,7 +177,9 @@ import co.typie.serialization.json
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.LocalPopoverOverlayState
 import co.typie.ui.component.sheet.LocalSheet
@@ -461,8 +465,7 @@ fun EditorScreen(entityId: String) {
                       uiState = uiState,
                       flushDrafts = { model.flush() },
                     )
-                    nav.navigate(target)
-                    delivered = nav.current == target
+                    delivered = nav.navigate(target) is NavigationResult.ReachedTarget
                   } finally {
                     if (!delivered) {
                       DocumentCharacterCountSnapshots.remove(entityId)
@@ -500,6 +503,71 @@ fun EditorScreen(entityId: String) {
   }
 
   val activeEditor = runtime.editor
+  var savingToastId by remember(entityId, toast) { mutableStateOf<Long?>(null) }
+
+  fun dismissSavingToast() {
+    val id = savingToastId ?: return
+    savingToastId = null
+    if (toast.state?.id == id) toast.dismiss()
+  }
+
+  val leaveInterceptor =
+    remember(activeEditor, editingSession, dialog, toast) {
+      activeEditor?.let { editor ->
+        val session = editingSession?.takeIf { it.editor === editor } ?: return@remember null
+        var restoreFocusAfterRollback = false
+        EditorRouteLeaveInterceptor(
+          finalizeInput = {
+            restoreFocusAfterRollback = uiState.focused
+            runtime.blur()
+            uiState.updateFocus(false)
+            editor.sync { enqueue(Message.System(SystemEvent.SetFocused(false))) }
+            runtime.deactivateScene()
+          },
+          restoreInput = {
+            val shouldRestoreFocus = restoreFocusAfterRollback
+            restoreFocusAfterRollback = false
+            if (
+              shouldRestoreFocus &&
+                nav.current == Route.Editor(entityId) &&
+                runtime.editor === editor
+            ) {
+              runtime.focus()
+            }
+          },
+          beginClose = session::beginClose,
+          showDelayedFeedback = {
+            toast.show(ToastType.Loading, "저장 중…")
+            savingToastId = toast.state?.id
+          },
+          hideDelayedFeedback = { dismissSavingToast() },
+          resolveDecision = {
+            val result =
+              dialog.confirm(
+                title = "저장을 완료하지 못했어요",
+                message = "지금 닫으면 최근 변경사항을 잃을 수 있어요.",
+                confirmText = "저장하지 않고 닫기",
+                cancelText = "계속 편집",
+                confirmIsDestructive = true,
+              )
+            if (result is DialogResult.Resolved) {
+              RouteRemovalDecision.ProceedWithRemoval
+            } else {
+              RouteRemovalDecision.CancelRemoval
+            }
+          },
+        )
+      }
+    }
+  DisposableEffect(nav, entityId, leaveInterceptor) {
+    val unregister = leaveInterceptor?.let {
+      nav.routeRemovals.register(Route.Editor(entityId), it)
+    }
+    onDispose {
+      unregister?.invoke()
+      dismissSavingToast()
+    }
+  }
 
   LaunchedEffect(documentId, loaderRetryGeneration) {
     val currentDocumentId = documentId ?: return@LaunchedEffect

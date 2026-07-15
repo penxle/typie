@@ -33,6 +33,7 @@ class Navigator(startRoute: Route) {
 
   private val viewModelStores = mutableMapOf<Route, ViewModelStore>()
   internal val routeRemovals = RouteRemovalCoordinator()
+  private var removalLeaseActive by mutableStateOf(false)
 
   val current: Route
     get() = _stack.last()
@@ -47,13 +48,14 @@ class Navigator(startRoute: Route) {
     private set
 
   private var pendingPopTarget: Route? by mutableStateOf(null)
+  private var pendingRemovalPolicy = RouteRemovalPolicy.Intercept
   val popRequested: Boolean
     get() = pendingPopTarget != null
 
   private var transitionCompletion: CompletableDeferred<NavigationResult>? = null
 
   val isTransitioning: Boolean
-    get() = transitionCompletion?.isActive == true
+    get() = transitionCompletion?.isActive == true || removalLeaseActive
 
   fun viewModelStoreFor(route: Route): ViewModelStore {
     return viewModelStores.getOrPut(route) { ViewModelStore() }
@@ -91,9 +93,74 @@ class Navigator(startRoute: Route) {
 
   internal fun consumePopRequest() {
     pendingPopTarget = null
+    pendingRemovalPolicy = RouteRemovalPolicy.Intercept
   }
 
   internal fun peekPopTarget(): Route? = pendingPopTarget
+
+  internal fun peekRemovalPolicy(): RouteRemovalPolicy = pendingRemovalPolicy
+
+  internal suspend fun prepareAdjacentRemoval(
+    currentRoute: Route,
+    adjacentRoute: Route,
+  ): PreparedAdjacentRemoval? {
+    if (isTransitioning || current != currentRoute || previous != adjacentRoute) {
+      return null
+    }
+    if (!routeRemovals.hasInterceptor(adjacentRoute)) {
+      return null
+    }
+
+    removalLeaseActive = true
+    return try {
+      val target =
+        _stack.getOrNull(_stack.lastIndex - 2) ?: return null.also { removalLeaseActive = false }
+      val segment =
+        routeRemovals.prepareSegment(
+          routesToRemove = listOf(adjacentRoute),
+          requestedTarget = target,
+        )
+      if (segment.blockedRoute != null || !routeRemovals.activeSegmentIsCurrent()) {
+        routeRemovals.rollbackActiveSegment()
+        removalLeaseActive = false
+        null
+      } else {
+        PreparedAdjacentRemoval(
+          currentRoute = currentRoute,
+          adjacentRoute = adjacentRoute,
+          targetRoute = target,
+        )
+      }
+    } catch (throwable: Throwable) {
+      removalLeaseActive = false
+      throw throwable
+    }
+  }
+
+  internal suspend fun commitAdjacentRemoval(prepared: PreparedAdjacentRemoval): NavigationResult {
+    check(!prepared.consumed) { "Prepared adjacent removal was already consumed" }
+    check(removalLeaseActive) { "Adjacent removal lease is not active" }
+    check(current == prepared.currentRoute && previous == prepared.adjacentRoute) {
+      "Prepared Document/Editor pair is no longer adjacent"
+    }
+    routeRemovals.commitSegment()
+    prepared.consumed = true
+    removalLeaseActive = false
+    return requestRemoval(
+      target = prepared.targetRoute,
+      policy = RouteRemovalPolicy.BypassInterceptors,
+    )
+  }
+
+  internal suspend fun rollbackAdjacentRemoval(prepared: PreparedAdjacentRemoval) {
+    if (prepared.consumed) return
+    prepared.consumed = true
+    try {
+      routeRemovals.rollbackActiveSegment()
+    } finally {
+      removalLeaseActive = false
+    }
+  }
 
   internal fun performPopTo(route: Route): List<Route> {
     val index = _stack.lastIndexOf(route)
@@ -119,7 +186,10 @@ class Navigator(startRoute: Route) {
 
   suspend fun popToRoot(): NavigationResult = popTo(_stack.first())
 
-  private suspend fun requestRemoval(target: Route): NavigationResult {
+  private suspend fun requestRemoval(
+    target: Route,
+    policy: RouteRemovalPolicy = RouteRemovalPolicy.Intercept,
+  ): NavigationResult {
     val activeTransition = transitionCompletion
     if (activeTransition?.isActive == true) {
       return if (popRequested && pendingPopTarget == target) {
@@ -128,13 +198,17 @@ class Navigator(startRoute: Route) {
         NavigationResult.NotStarted
       }
     }
+    if (removalLeaseActive) return NavigationResult.NotStarted
+
     val deferred = CompletableDeferred<NavigationResult>()
     transitionCompletion = deferred
+    pendingRemovalPolicy = policy
     pendingPopTarget = target
     return deferred.await()
   }
 
   private suspend fun resultForCurrentRoute(): NavigationResult {
+    if (removalLeaseActive) return NavigationResult.NotStarted
     val activeTransition = transitionCompletion
     return when {
       activeTransition?.isActive != true -> NavigationResult.ReachedTarget
@@ -147,4 +221,18 @@ class Navigator(startRoute: Route) {
     viewModelStores.values.forEach { it.clear() }
     viewModelStores.clear()
   }
+}
+
+internal enum class RouteRemovalPolicy {
+  Intercept,
+  BypassInterceptors,
+}
+
+internal class PreparedAdjacentRemoval
+internal constructor(
+  internal val currentRoute: Route,
+  internal val adjacentRoute: Route,
+  internal val targetRoute: Route,
+) {
+  internal var consumed = false
 }

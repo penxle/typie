@@ -60,7 +60,11 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -152,7 +156,15 @@ fun NavigationStack(
     animState = AnimState.Idle
   }
 
-  suspend fun animateRemovalTo(target: Route): Boolean {
+  fun commitRemovalTo(target: Route) {
+    val removedRoutes = navigator.performPopTo(target)
+    visibleRoute = navigator.current
+    behindRoute = null
+    animState = AnimState.Idle
+    clearRemovedRoutes(removedRoutes)
+  }
+
+  suspend fun animateRemovalTo(target: Route, verifyPreparedSegment: Boolean = true): Boolean {
     val requiresTransition = target != navigator.current
     val continuesPopGesture =
       animState == AnimState.PopGestureCommitted &&
@@ -175,18 +187,14 @@ fun NavigationStack(
       }
     }
 
-    if (!navigator.routeRemovals.activeSegmentIsCurrent()) {
+    if (verifyPreparedSegment && !navigator.routeRemovals.activeSegmentIsCurrent()) {
       navigator.routeRemovals.rollbackActiveSegment()
       settleAtCurrentRoute()
       return false
     }
 
     if (!requiresTransition) return true
-    val removedRoutes = navigator.performPopTo(target)
-    visibleRoute = navigator.current
-    behindRoute = null
-    animState = AnimState.Idle
-    clearRemovedRoutes(removedRoutes)
+    commitRemovalTo(target)
     return true
   }
 
@@ -196,7 +204,11 @@ fun NavigationStack(
       check(targetIndex >= 0) { "Removal target is not in the navigation stack" }
       val routesToRemove =
         navigator.stack.subList(targetIndex + 1, navigator.stack.size).asReversed()
-      val segment = navigator.routeRemovals.prepareSegment(routesToRemove, target)
+      val segment =
+        navigator.routeRemovals.prepareSegment(routesToRemove, target) { delayedRoute ->
+          animateRemovalTo(delayedRoute, verifyPreparedSegment = false)
+          navigator.routeRemovals.commitReadyPrefix()
+        }
       if (!animateRemovalTo(segment.destination)) continue
 
       if (segment.blockedRoute == null) {
@@ -211,6 +223,76 @@ fun NavigationStack(
     }
     navigator.routeRemovals.commitSegment()
     return NavigationResult.ReachedTarget
+  }
+
+  suspend fun performCommittedGestureRemoval(target: Route): NavigationResult = coroutineScope {
+    var delayed = false
+    val exitAnimation =
+      async(start = CoroutineStart.UNDISPATCHED) {
+        progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
+      }
+
+    suspend fun settleGestureAtCurrentRoute() {
+      exitAnimation.cancelAndJoin()
+      progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+      settleAtCurrentRoute()
+    }
+
+    suspend fun rollbackGestureAndRetry(): NavigationResult {
+      try {
+        navigator.routeRemovals.rollbackActiveSegment()
+      } finally {
+        settleGestureAtCurrentRoute()
+      }
+      return performProgressiveRemoval(target)
+    }
+
+    try {
+      val targetIndex = navigator.stack.lastIndexOf(target)
+      check(targetIndex >= 0) { "Removal target is not in the navigation stack" }
+      val routesToRemove =
+        navigator.stack.subList(targetIndex + 1, navigator.stack.size).asReversed()
+      val segment =
+        navigator.routeRemovals.prepareSegment(routesToRemove, target) {
+          settleGestureAtCurrentRoute()
+          delayed = true
+        }
+
+      if (!navigator.routeRemovals.activeSegmentIsCurrent()) {
+        return@coroutineScope rollbackGestureAndRetry()
+      }
+
+      if (segment.blockedRoute == null) {
+        if (delayed) {
+          if (!animateRemovalTo(target)) {
+            return@coroutineScope performProgressiveRemoval(target)
+          }
+        } else {
+          exitAnimation.await()
+        }
+        if (!navigator.routeRemovals.activeSegmentIsCurrent()) {
+          return@coroutineScope rollbackGestureAndRetry()
+        }
+
+        if (!delayed) commitRemovalTo(target)
+        navigator.routeRemovals.commitSegment()
+        return@coroutineScope NavigationResult.ReachedTarget
+      }
+
+      if (!delayed) settleGestureAtCurrentRoute()
+      if (!navigator.routeRemovals.activeSegmentIsCurrent()) {
+        return@coroutineScope rollbackGestureAndRetry()
+      }
+
+      navigator.routeRemovals.commitReadyPrefix()
+      navigator.routeRemovals.resolveBlockedRoute()?.let {
+        return@coroutineScope it
+      }
+      performProgressiveRemoval(target)
+    } catch (throwable: Throwable) {
+      withContext(NonCancellable) { settleGestureAtCurrentRoute() }
+      throw throwable
+    }
   }
 
   fun startPopDrag() {
@@ -352,30 +434,54 @@ fun NavigationStack(
               (currentAnimState == AnimState.PopGestureCommitted && targetRoute == behindRoute))
         ) {
           try {
-            val result = performProgressiveRemoval(targetRoute)
+            val result =
+              when (navigator.peekRemovalPolicy()) {
+                RouteRemovalPolicy.Intercept ->
+                  if (
+                    currentAnimState == AnimState.PopGestureCommitted && targetRoute == behindRoute
+                  ) {
+                    performCommittedGestureRemoval(targetRoute)
+                  } else {
+                    performProgressiveRemoval(targetRoute)
+                  }
+                RouteRemovalPolicy.BypassInterceptors -> {
+                  check(animateRemovalTo(targetRoute))
+                  NavigationResult.ReachedTarget
+                }
+              }
             navigator.consumePopRequest()
             navigator.completeTransition(result = result)
           } catch (e: Throwable) {
             withContext(NonCancellable) {
-              val rollbackFailure =
-                try {
-                  navigator.routeRemovals.rollbackActiveSegment()
-                  null
-                } catch (throwable: Throwable) {
-                  throwable
+              if (navigator.peekRemovalPolicy() == RouteRemovalPolicy.BypassInterceptors) {
+                // Server deletion already succeeded. Do not strand the deleted document because
+                // presentation failed; finish the exact prepared removal without another prompt.
+                val removedRoutes = navigator.performPopTo(targetRoute)
+                settleAtCurrentRoute()
+                clearRemovedRoutes(removedRoutes)
+                navigator.consumePopRequest()
+                navigator.completeTransition()
+              } else {
+                val rollbackFailure =
+                  try {
+                    navigator.routeRemovals.rollbackActiveSegment()
+                    null
+                  } catch (throwable: Throwable) {
+                    throwable
+                  }
+                val settleFailure =
+                  try {
+                    settleAtCurrentRoute()
+                    null
+                  } catch (throwable: Throwable) {
+                    throwable
+                  }
+                listOfNotNull(rollbackFailure, settleFailure).forEach { cleanupFailure ->
+                  if (cleanupFailure !== e) e.addSuppressed(cleanupFailure)
                 }
-              val settleFailure =
-                try {
-                  settleAtCurrentRoute()
-                  null
-                } catch (throwable: Throwable) {
-                  throwable
-                }
-              listOfNotNull(rollbackFailure, settleFailure).forEach { cleanupFailure ->
-                if (cleanupFailure !== e) e.addSuppressed(cleanupFailure)
+                navigator.consumePopRequest()
+                navigator.completeTransition(e)
               }
-              navigator.consumePopRequest()
-              navigator.completeTransition(e)
             }
             if (e is CancellationException) throw e
           }
