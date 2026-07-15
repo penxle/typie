@@ -213,6 +213,10 @@ struct FlatImeState {
 struct FlatImeReduction {
     state: FlatImeState,
     text_change: Option<FlatImeTextChange>,
+    // Change before common-prefix trimming: intent detection (auto surround)
+    // must see the full replacement — trimming swallows a leading trigger
+    // char that matches the selection's first character.
+    untrimmed_text_change: Option<FlatImeTextChange>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -635,26 +639,29 @@ impl FlatImeState {
         } else {
             None
         };
-        let text_change = match text_change {
+        let (text_change, untrimmed_text_change) = match text_change {
             Some(change) => {
-                let change = change.without_reinserted_boundary_tokens(&initial_text);
-                Some(if self.comp.is_none() {
-                    change.without_common_text_prefix(&initial_text)
+                let untrimmed = change.without_reinserted_boundary_tokens(&initial_text);
+                let trimmed = if self.comp.is_none() {
+                    untrimmed.clone().without_common_text_prefix(&initial_text)
                 } else {
-                    change
-                })
+                    untrimmed.clone()
+                };
+                (Some(trimmed), Some(untrimmed))
             }
             None if initial_text == self.text => {
-                Some(FlatImeTextChange::collapsed_at(initial_sel_start))
+                let change = FlatImeTextChange::collapsed_at(initial_sel_start);
+                (Some(change.clone()), Some(change))
             }
             // A batch with disjoint text edits cannot be represented as one safe
             // flat replacement. Ignore it instead of widening the edited range.
-            None => None,
+            None => (None, None),
         };
 
         FlatImeReduction {
             state: self,
             text_change,
+            untrimmed_text_change,
         }
     }
 }
@@ -806,6 +813,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         };
 
         let result = reduced.state;
+        let untrimmed_text_change = reduced.untrimmed_text_change;
         let Some(text_change) = reduced.text_change else {
             return Ok(false);
         };
@@ -823,6 +831,31 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
         if text_change.inserts_token() {
             return Ok(false);
+        }
+
+        // Auto surround: a committed trigger char that replaces exactly the
+        // pre-batch selection wraps it instead of replacing it (parity with
+        // the InsertionOp::Text path in insertion.rs). Detection uses the
+        // untrimmed change: prefix trimming hides a trigger that matches the
+        // selection's first character.
+        if let Some(surround_change) = &untrimmed_text_change
+            && initial.sel_start < initial.sel_end
+            && surround_change.replace_start == initial.sel_start
+            && surround_change.replace_end == initial.sel_end
+            && !surround_change.insert.is_empty()
+            && result.comp.is_none()
+            && editor.state().composition.is_none()
+            && editor.resource.lock().unwrap().auto_surround_enabled
+        {
+            let text: String = surround_change.insert.iter().collect();
+            let mut surround_applied = false;
+            editor.transact(|tr| {
+                surround_applied = commands::auto_surround(tr, &text)?;
+                Ok(())
+            })?;
+            if surround_applied {
+                return Ok(false);
+            }
         }
 
         let delta = analyze_delta(
@@ -3192,6 +3225,172 @@ mod tests {
         assert_eq!(
             editor.state().composition,
             Some(Composition { start: 4, end: 5 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_replace_selection_with_trigger_auto_surrounds() {
+        // Web host shape: typing "(" over a selection arrives as
+        // [SetSelection, ReplaceSelection].
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::SetSelection { start: 1, end: 6 },
+                FlatImeOp::ReplaceSelection { text: "(".into() },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(안녕하세요)") } } }
+            selection: (p1, 0) -> (p1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_commit_with_trigger_auto_surrounds() {
+        // Mobile host shape: soft-keyboard commitText("(") arrives as
+        // [Compose, CommitAsIs].
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::Compose { text: "(".into() },
+                FlatImeOp::CommitAsIs,
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(안녕하세요)") } } }
+            selection: (p1, 0) -> (p1, 7)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_trigger_over_selection_sharing_first_char_auto_surrounds() {
+        // The selection's first char equals the typed trigger: common-prefix
+        // trimming must not hide the replacement from surround detection.
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("(안녕") } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::SetSelection { start: 1, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "(".into() },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("((안녕)") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_trigger_over_identical_trigger_selection_auto_surrounds() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("(") } } }
+            selection: (p1, 0) -> (p1, 1)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::Compose { text: "(".into() },
+                FlatImeOp::CommitAsIs,
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(()") } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_auto_surround_disabled_replaces_selection() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let mut editor = editor_with_resource(s);
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .set_auto_surround_enabled(false);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection { start: 1, end: 6 },
+                FlatImeOp::ReplaceSelection { text: "(".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(") } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_composing_trigger_over_selection_does_not_surround() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let editor = apply_flat_ime_ops(s, vec![FlatImeOp::Compose { text: "(".into() }]);
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("(") } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
+    }
+
+    #[test]
+    fn flat_ime_non_trigger_replace_selection_replaces() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        let editor = apply_flat_ime_ops(
+            s,
+            vec![
+                FlatImeOp::SetSelection { start: 1, end: 6 },
+                FlatImeOp::ReplaceSelection { text: "x".into() },
+            ],
+        );
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("x") } } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn probe_flat_ime_auto_surround() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("안녕하세요") } } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+        assert_probe_predicts_apply(
+            state,
+            Message::TextInput {
+                ops: vec![
+                    FlatImeOp::SetSelection { start: 1, end: 6 },
+                    FlatImeOp::ReplaceSelection { text: "(".into() },
+                ],
+            },
         );
     }
 
