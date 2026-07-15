@@ -9,17 +9,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import co.typie.graphql.Apollo
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
 import co.typie.navigation.Nav
 import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
-import co.typie.navigation.Navigator
 import co.typie.route.Route
 import co.typie.storage.Preference
 import co.typie.ui.component.bottombar.BottomBarState
@@ -30,8 +27,10 @@ import kotlinx.coroutines.flow.collect
 
 @Composable
 fun MainShell(content: @Composable (Route) -> Unit) {
-  var currentTab by remember { mutableStateOf(Tab.entries.first()) }
-  val navigators = remember { Tab.entries.associateWith { Navigator(it.route) } }
+  val navState =
+    rememberSaveable(saver = MainNavigationStateSaver) { MainNavigationState.initial() }
+  var currentTab by navState::currentTab
+  val navigators = navState.navigators
   val activeNavigator = navigators[currentTab]!!
 
   val topBarState = remember { TopBarState() }

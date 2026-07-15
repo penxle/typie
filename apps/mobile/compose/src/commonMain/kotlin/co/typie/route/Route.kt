@@ -1,73 +1,76 @@
 package co.typie.route
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 sealed interface Route {
-  data object Home : Route
+  @Serializable data object Home : Route
 
-  data object Search : Route
+  @Serializable data object Search : Route
 
-  data object Space : Route
+  @Serializable data object Space : Route
 
-  data object Notes : Route
+  @Serializable data object Notes : Route
 
-  data object More : Route
+  @Serializable data object More : Route
 
-  data object Stats : Route
+  @Serializable data object Stats : Route
 
-  data object CurrentPlan : Route
+  @Serializable data object CurrentPlan : Route
 
-  data object EnrollPlan : Route
+  @Serializable data object EnrollPlan : Route
 
-  data object CancelPlan : Route
+  @Serializable data object CancelPlan : Route
 
-  data object UpdateEmail : Route
+  @Serializable data object UpdateEmail : Route
 
-  data object UpdateProfile : Route
+  @Serializable data object UpdateProfile : Route
 
-  data object UpdatePassword : Route
+  @Serializable data object UpdatePassword : Route
 
-  data object SocialAccounts : Route
+  @Serializable data object SocialAccounts : Route
 
-  data object ProfileSettings : Route
+  @Serializable data object ProfileSettings : Route
 
-  data object SecuritySettings : Route
+  @Serializable data object SecuritySettings : Route
 
-  data object DeleteUser : Route
+  @Serializable data object DeleteUser : Route
 
-  data object Referral : Route
+  @Serializable data object Referral : Route
 
-  data object Settings : Route
+  @Serializable data object Settings : Route
 
-  data object Feedback : Route
+  @Serializable data object Feedback : Route
 
-  data object OssLicenses : Route
+  @Serializable data object OssLicenses : Route
 
-  data object FontSettings : Route
+  @Serializable data object FontSettings : Route
 
-  data object EditorSettings : Route
+  @Serializable data object EditorSettings : Route
 
-  data object PresetSettings : Route
+  @Serializable data object PresetSettings : Route
 
-  data object TextReplacements : Route
+  @Serializable data object TextReplacements : Route
 
-  data object WidgetSettings : Route
+  @Serializable data object WidgetSettings : Route
 
-  data object AiSettings : Route
+  @Serializable data object AiSettings : Route
 
-  data object SpaceSettings : Route
+  @Serializable data object SpaceSettings : Route
 
-  data class Trash(val entityId: String? = null) : Route
+  @Serializable data class Trash(val entityId: String? = null) : Route
 
-  data class Folder(val entityId: String) : Route
+  @Serializable data class Folder(val entityId: String) : Route
 
-  data class FolderDetails(val entityId: String) : Route
+  @Serializable data class FolderDetails(val entityId: String) : Route
 
-  data class Editor(val entityId: String) : Route
+  @Serializable data class Editor(val entityId: String) : Route
 
-  data class Document(val entityId: String) : Route
+  @Serializable data class Document(val entityId: String) : Route
 
-  data class DocumentBodySettings(val entityId: String) : Route
+  @Serializable data class DocumentBodySettings(val entityId: String) : Route
 
-  data object Login : Route
+  @Serializable data object Login : Route
 }
 
 enum class RouteTransitionStyle {

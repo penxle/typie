@@ -23,6 +23,10 @@ sealed interface NavigationResult {
 }
 
 class Navigator(startRoute: Route) {
+  internal constructor(stack: List<Route>) : this(stack.first()) {
+    _stack.addAll(stack.drop(1))
+  }
+
   private val _stack = mutableStateListOf(startRoute)
   val stack: List<Route>
     get() = _stack
