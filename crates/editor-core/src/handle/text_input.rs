@@ -3319,7 +3319,7 @@ mod tests {
             doc { root { blockquote { p1: paragraph { text("") } } paragraph {} } }
             selection: (p1, 0)
         };
-        let editor = Editor::new_test(s);
+        let mut editor = Editor::new_test(s);
         let ctx = editor.ime(100, 100).unwrap().unwrap();
         assert!(
             !ctx.text.is_empty(),

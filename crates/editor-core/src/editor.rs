@@ -161,12 +161,23 @@ pub struct Editor {
     pub(crate) requested_manifests: HashMap<(u16, u16), ManifestRequestClass>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
+    // Anchored IME window (flat offsets). Keyboards compare the exposed window
+    // against their own prediction of it (iOS resets Hangul composition on
+    // mismatch), so the window must not re-center around the selection on
+    // every pull; see `ime()`.
+    ime_window_anchor: Option<ImeWindowAnchor>,
     mode: Mode,
     // Selection mark rects for the current (selection, render_epoch), shared by
     // the per-page render signatures and the selection mark. Interaction
     // geometry stays separate because external elements are host-painted but
     // still selectable.
     selection_mark_rects_cache: SelectionMarkRectsCache,
+}
+
+#[derive(Clone, Copy)]
+struct ImeWindowAnchor {
+    start: usize,
+    last_sel_start: usize,
 }
 
 struct ProbeGuard<'e> {
@@ -229,6 +240,7 @@ impl Editor {
             requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
+            ime_window_anchor: None,
             mode: Mode::Apply,
             selection_mark_rects_cache: Mutex::new(None),
         }
@@ -519,7 +531,11 @@ impl Editor {
             .pointer_style_at(&self.state, page_idx, x, y, read_only)
     }
 
-    pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Option<Ime>, EditorError> {
+    pub fn ime(
+        &mut self,
+        before_limit: usize,
+        after_limit: usize,
+    ) -> Result<Option<Ime>, EditorError> {
         let state = self.state();
         let doc = state.view();
         let doc_size = editor_state::flat_size(&doc);
@@ -545,13 +561,50 @@ impl Editor {
             .to_flat();
         let (sel_start, sel_end) = (anchor_flat.min(head_flat), anchor_flat.max(head_flat));
 
-        let window_start = sel_start.saturating_sub(before_limit);
+        // Keep the window start anchored across keyboard edits: IMEs predict the
+        // window's next content by applying their own edits to it (iOS resets
+        // Hangul composition whenever the pulled value diverges from that
+        // prediction), and a window re-centered around the selection diverges on
+        // every length-changing edit. Re-anchoring is itself such a divergence,
+        // so outside the [limit, 2×limit] before-context band it is deferred
+        // while a composition may be active — visible composition state, or a
+        // selection delta shaped like a composition edit ({-1, 0, +1}; Hangul
+        // composition is invisible to the editor) — and happens at moments that
+        // already diverge for the IME (jumps, Enter, rewrites). Two violations
+        // re-anchor unconditionally: the window no longer contains the cursor,
+        // and the hard cap that keeps the window bounded.
+        let natural_start = sel_start.saturating_sub(before_limit);
+        let window_start = match self.ime_window_anchor {
+            Some(anchor) => {
+                let kept = anchor.start;
+                let within_band =
+                    kept <= natural_start && sel_start - kept <= before_limit.saturating_mul(2);
+                if within_band {
+                    kept
+                } else {
+                    let must_re_anchor =
+                        kept > sel_start || sel_start - kept > before_limit.saturating_mul(16);
+                    let composition_may_be_active = state.composition.is_some()
+                        || sel_start.abs_diff(anchor.last_sel_start) <= 1;
+                    if !must_re_anchor && composition_may_be_active {
+                        kept
+                    } else {
+                        natural_start
+                    }
+                }
+            }
+            None => natural_start,
+        };
         let window_end = sel_end.saturating_add(after_limit).min(doc_size);
 
         let text = editor_state::flat_text(&doc, window_start..window_end);
         let composing = state.composition.map(|c| ImeRange {
             start: c.start,
             end: c.end,
+        });
+        self.ime_window_anchor = Some(ImeWindowAnchor {
+            start: window_start,
+            last_sel_start: sel_start,
         });
 
         Ok(Some(Ime {
@@ -1825,6 +1878,7 @@ impl Editor {
             requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
+            ime_window_anchor: None,
             mode: Mode::Apply,
             selection_mark_rects_cache: Mutex::new(None),
         };
@@ -2514,7 +2568,7 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: none
         };
-        let editor = Editor::new_test(state);
+        let mut editor = Editor::new_test(state);
         assert!(editor.ime(usize::MAX, usize::MAX).unwrap().is_none());
     }
 
@@ -2524,7 +2578,7 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        let editor = Editor::new_test(state);
+        let mut editor = Editor::new_test(state);
         let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
         // flat: O(p)=0, "hello"=1..6, C(p)=6 → flat_size=7
         // (p1,2) → flat 3; window covers full doc [0,7)
@@ -2541,7 +2595,7 @@ mod tests {
             doc { root { p1: paragraph { text("hello world") } } }
             selection: (p1, 6)
         };
-        let editor = Editor::new_test(state);
+        let mut editor = Editor::new_test(state);
         let ctx = editor.ime(3, 3).unwrap().unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
         // (p1,6) → flat 7; window [7-3, 7+3) = [4, 10) → "lo wor"
@@ -2557,7 +2611,7 @@ mod tests {
             doc { root { p1: paragraph { text("hello world") } } }
             selection: (p1, 2) -> (p1, 8)
         };
-        let editor = Editor::new_test(state);
+        let mut editor = Editor::new_test(state);
         let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
         // (p1,2)→flat 3, (p1,8)→flat 9; window covers full doc [0,13)
@@ -2567,12 +2621,184 @@ mod tests {
     }
 
     #[test]
+    fn ime_window_start_stays_anchored_while_typing() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        // flat: O(p)=0, "hello world"=1..12, C(p)=12; (p1,6) → flat 7
+        let before = editor.ime(3, 3).unwrap().unwrap();
+        assert_eq!(before.window_start, 4);
+        assert_eq!(before.text, "lo wor");
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
+        });
+
+        // The window start must not re-center: the pulled window must equal the
+        // previous window with the edit applied verbatim (the IME's prediction).
+        let after = editor.ime(3, 3).unwrap().unwrap();
+        assert_eq!(after.window_start, 4);
+        let cursor = before.selection.start - before.window_start;
+        let mut predicted = before.text.clone();
+        predicted.insert_str(
+            predicted
+                .char_indices()
+                .nth(cursor)
+                .map_or(predicted.len(), |(i, _)| i),
+            "X",
+        );
+        // Window end extends past the new cursor by the after-limit, pulling in
+        // one more trailing char than the previous window exposed.
+        assert!(after.text.starts_with(&predicted));
+        assert_eq!(after.selection.start, before.selection.start + 1);
+    }
+
+    #[test]
+    fn ime_window_defers_re_anchor_past_soft_cap_while_typing() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+
+        // Contiguous typing (+1 deltas) may be mid-composition, so crossing the
+        // soft cap (2×limit) must not re-anchor: the window keeps matching the
+        // IME's prediction of it.
+        for i in 0..6 {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
+            });
+            let ctx = editor.ime(3, 3).unwrap().unwrap();
+            assert_eq!(ctx.window_start, 4, "kept through insert #{}", i + 1);
+        }
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().selection.start, 13);
+    }
+
+    #[test]
+    fn ime_window_re_anchors_on_jump_after_soft_cap() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+
+        // Push the before-context past the soft cap with contiguous typing;
+        // production pulls the window every tick, so pull per keystroke.
+        for _ in 0..4 {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
+            });
+            assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+        }
+
+        // A selection jump landing outside the band already diverges from the
+        // IME's prediction (it resets composition anyway), so the deferred
+        // re-anchor happens here. "hello XXXXworld": (p1,14) → flat 15.
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p1, 14)),
+            },
+        });
+        let ctx = editor.ime(3, 3).unwrap().unwrap();
+        assert_eq!(ctx.selection.start, 15);
+        assert_eq!(ctx.window_start, 12);
+    }
+
+    #[test]
+    fn ime_window_defers_backward_re_anchor_while_composing() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        // Fresh anchor at the band floor: before-context is exactly the limit.
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "X".into() }],
+        });
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+
+        // A single batch deleting two chars before the composition moves the
+        // selection by -2 (not a contiguous delta), dropping the before-context
+        // below the limit — but the active composition defers the re-anchor.
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                },
+            ],
+        });
+        let ctx = editor.ime(3, 3).unwrap().unwrap();
+        assert!(editor.state().composition.is_some());
+        assert_eq!(ctx.selection.start, 6);
+        assert_eq!(ctx.window_start, 4);
+    }
+
+    #[test]
+    fn ime_window_hard_cap_forces_re_anchor_during_contiguous_typing() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+
+        // Contiguous typing defers up to the hard cap (16×limit = 48): kept
+        // while sel - anchor ≤ 48, i.e. through sel = 52 (45 inserts from 7).
+        for _ in 0..45 {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
+            });
+            assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+        }
+        // The 46th insert pushes the context to 49 > 48 and forces the bounded
+        // re-anchor even though the delta still looks like typing.
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
+        });
+        let ctx = editor.ime(3, 3).unwrap().unwrap();
+        assert_eq!(ctx.selection.start, 53);
+        assert_eq!(ctx.window_start, 50);
+    }
+
+    #[test]
+    fn ime_window_re_anchors_on_backward_selection_jump() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        assert_eq!(editor.ime(3, 3).unwrap().unwrap().window_start, 4);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p1, 1)),
+            },
+        });
+
+        // flat 2; the anchor (4) no longer covers the requested before-context.
+        let ctx = editor.ime(3, 3).unwrap().unwrap();
+        assert_eq!(ctx.selection.start, 2);
+        assert_eq!(ctx.window_start, 0);
+    }
+
+    #[test]
     fn input_context_empty_blockquote_has_tokens() {
         let (state, _p1) = state! {
             doc { root { blockquote { p1: paragraph { text("") } } paragraph {} } }
             selection: (p1, 0)
         };
-        let editor = Editor::new_test(state);
+        let mut editor = Editor::new_test(state);
         let ctx = editor.ime(100, 100).unwrap().unwrap();
         assert!(
             !ctx.text.is_empty(),
