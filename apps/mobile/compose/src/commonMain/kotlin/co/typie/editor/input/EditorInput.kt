@@ -225,21 +225,28 @@ internal class EditorInputNode(
     }
   }
 
-  private val bindingCoalescer by lazy {
-    EditorKeyBindingCoalescer(
-      scope = coroutineScope,
-      resolveMessages = { binding, clipboard -> with(binding) { editor.action(clipboard) } },
-      dispatch = { messages, bringIntoViewTarget ->
-        dispatchBindingMessages(messages = messages, bringIntoViewTarget = bringIntoViewTarget)
-      },
-    )
+  // The coalescer worker lives in the attach-epoch coroutineScope, which is
+  // cancelled whenever the node detaches (movable content moves reattach the
+  // same node instance), so it must be rebuilt per attach instead of lazily.
+  private var bindingCoalescer: EditorKeyBindingCoalescer? = null
+
+  override fun onAttach() {
+    bindingCoalescer =
+      EditorKeyBindingCoalescer(
+        scope = coroutineScope,
+        resolveMessages = { binding, clipboard -> with(binding) { editor.action(clipboard) } },
+        dispatch = { messages, bringIntoViewTarget ->
+          dispatchBindingMessages(messages = messages, bringIntoViewTarget = bringIntoViewTarget)
+        },
+      )
   }
 
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
+    val coalescer = bindingCoalescer ?: return
     if (binding.coalescible) {
-      submit { _, localEdit -> bindingCoalescer.submit(binding, clipboard, localEdit) }
+      submit { _, localEdit -> coalescer.submit(binding, clipboard, localEdit) }
     } else {
-      coroutineScope.launch { bindingCoalescer.submit(binding, clipboard).await() }
+      coroutineScope.launch { coalescer.submit(binding, clipboard).await() }
     }
   }
 
@@ -562,6 +569,7 @@ internal class EditorInputNode(
   }
 
   override fun onDetach() {
+    bindingCoalescer = null
     focused = false
     platformInputBridge.reset()
     notifyTextInputFocusChanged(this, false)

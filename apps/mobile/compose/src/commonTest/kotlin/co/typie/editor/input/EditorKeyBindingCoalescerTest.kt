@@ -266,4 +266,17 @@ class EditorKeyBindingCoalescerTest {
       assertTrue(active.isCancelled)
       assertTrue(queued.isCancelled)
     }
+
+  @Test
+  fun `submit after worker stop fails the completion instead of throwing`() =
+    runCoalescerTest { harness ->
+      testScheduler.runCurrent()
+      harness.cancel()
+      testScheduler.advanceUntilIdle()
+
+      val late = harness.submit(moveMessage(1))
+
+      assertTrue(late.isCancelled)
+      assertEquals(emptyList(), harness.dispatched)
+    }
 }

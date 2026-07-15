@@ -93,7 +93,14 @@ internal class EditorKeyBindingCoalescer(
     localEditContext: CoroutineContext? = null,
   ): Deferred<Unit> {
     val submission = Submission(binding, clipboard, localEditContext, CompletableDeferred())
-    submissions.trySend(submission).getOrThrow()
+    val result = submissions.trySend(submission)
+    if (result.isClosed) {
+      // Callers sit outside any coroutine (hardware key handlers), so a stopped
+      // worker must surface as a failed completion, never a synchronous throw.
+      submission.fail(
+        result.exceptionOrNull() ?: CancellationException("Editor key binding coalescer stopped")
+      )
+    }
     return submission.completion
   }
 
