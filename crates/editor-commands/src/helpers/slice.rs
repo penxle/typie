@@ -16,7 +16,10 @@ use crate::{CommandError, CommandResult};
 
 mod page_break;
 
-use page_break::{insert_terminal_page_break_from_edge, prepare_page_breaks_for_position};
+use page_break::{
+    insert_terminal_page_break_from_edge, paragraph_ends_with_page_break,
+    prepare_page_breaks_for_position,
+};
 
 enum InlineMode {
     Formatted,
@@ -106,7 +109,7 @@ pub(crate) fn insert_slice_at_position(
     if slice.is_empty() {
         return Ok(None);
     }
-    let (slice, trailing_block_context) = prepare_page_breaks_for_position(tr, &position, slice);
+    let slice = prepare_page_breaks_for_position(tr, &position, slice);
     if slice.is_empty() {
         return Ok(None);
     }
@@ -144,7 +147,7 @@ pub(crate) fn insert_slice_at_position(
             return Ok(None);
         };
         let position = materialize_position_block(tr, position)?;
-        insert_blocks_at_block_boundary(tr, position, blocks, trailing_block_context)
+        insert_blocks_at_block_boundary(tr, position, blocks)
     }
 }
 
@@ -412,7 +415,13 @@ fn insert_blocks_in_textblock(
         && blocks
             .last()
             .is_some_and(|b| same_textblock_type(&b.node, p2_id, tr));
-    let merge_end_into_start = merge_start && merge_end && blocks.len() == 1;
+    let terminal_page_break_edge = merge_start
+        && blocks.len() == 1
+        && blocks
+            .first()
+            .is_some_and(|fragment| paragraph_ends_with_page_break(fragment));
+    let merge_end_into_start =
+        merge_start && merge_end && blocks.len() == 1 && !terminal_page_break_edge;
 
     let middle_start = if merge_start { 1 } else { 0 };
     let middle_end = if merge_end {
@@ -420,7 +429,10 @@ fn insert_blocks_in_textblock(
     } else {
         blocks.len()
     };
-    let merge_end = merge_end && !merge_end_into_start && middle_end >= middle_start;
+    let merge_end = merge_end
+        && !merge_end_into_start
+        && !terminal_page_break_edge
+        && middle_end >= middle_start;
 
     let mut last_caret: Option<Position> = None;
     let mut inserted_range = InsertedRange::default();
@@ -500,13 +512,6 @@ fn insert_blocks_in_textblock(
         }
     }
 
-    let keep_trailing_page_break_context = terminal_page_break_start.is_some();
-    if let Some(start) = terminal_page_break_start {
-        let end = position_at_start_of_block(tr, p2_id)?;
-        inserted_range.include_position_range(start, end);
-        last_caret = Some(end);
-    }
-
     let safe_to_remove = |tr: &Transaction, target: Dot| -> bool {
         let view = tr.state().view();
         let Some(target_node) = view.node(target) else {
@@ -532,7 +537,14 @@ fn insert_blocks_in_textblock(
     if !merge_start && safe_to_remove(tr, textblock_id) {
         tr.remove_subtree(textblock_id)?;
     }
-    if !merge_end && !keep_trailing_page_break_context && safe_to_remove(tr, p2_id) {
+    let p2_is_last_child = {
+        let view = tr.state().view();
+        view.node(container_id)
+            .and_then(|container| container.last_child())
+            .is_some_and(|child| matches!(child, ChildView::Block(block) if block.id() == p2_id))
+    };
+    let can_remove_p2 = terminal_page_break_start.is_none() || p2_is_last_child;
+    if !merge_end && can_remove_p2 && safe_to_remove(tr, p2_id) {
         tr.remove_subtree(p2_id)?;
     }
 
@@ -543,6 +555,14 @@ fn insert_blocks_in_textblock(
             .unwrap_or_default()
     };
     tr.apply_steps(steps)?;
+
+    if let Some(start) = terminal_page_break_start {
+        let following_id = block_child_id(tr, container_id, textblock_index + 1)
+            .ok_or_else(|| CommandError::Corrupted("PageBreak has no following block".into()))?;
+        let end = position_at_start_of_block(tr, following_id)?;
+        inserted_range.include_position_range(start, end);
+        last_caret = Some(end);
+    }
 
     let mut final_pos = match last_caret {
         Some(p) => p,
@@ -599,23 +619,15 @@ fn insert_blocks_at_block_boundary(
     tr: &mut Transaction,
     position: Position,
     blocks: Vec<Fragment>,
-    trailing_block_context: Option<Fragment>,
 ) -> Result<Option<Selection>, CommandError> {
     let container_id = position.node;
     let base_index = position.offset;
-    let payload_block_count = blocks.len();
-    let inserted_block_count = payload_block_count + usize::from(trailing_block_context.is_some());
+    let block_count = blocks.len();
+    let terminal_page_break = blocks.last().is_some_and(paragraph_ends_with_page_break);
     tr.batch(|tr| {
         for (offset, block) in blocks.iter().enumerate() {
             let subtree = block.clone().into_subtree();
             tr.insert_subtree(container_id, base_index + offset, subtree)?;
-        }
-        if let Some(context) = &trailing_block_context {
-            tr.insert_subtree(
-                container_id,
-                base_index + payload_block_count,
-                context.clone().into_subtree(),
-            )?;
         }
         let steps = {
             let view = tr.state().view();
@@ -627,9 +639,17 @@ fn insert_blocks_at_block_boundary(
         Ok::<(), CommandError>(())
     })?;
 
-    if let Some(id) = block_child_id(tr, container_id, base_index + inserted_block_count - 1)
-        && let Ok(mut final_pos) = position_at_end_of_block(tr, id)
-    {
+    let trailing_synthetic = terminal_page_break
+        .then(|| block_child_id(tr, container_id, base_index + block_count))
+        .flatten()
+        .filter(|id| id.is_synthetic());
+    let final_position = trailing_synthetic
+        .and_then(|id| position_at_start_of_block(tr, id).ok())
+        .or_else(|| {
+            block_child_id(tr, container_id, base_index + block_count - 1)
+                .and_then(|id| position_at_end_of_block(tr, id).ok())
+        });
+    if let Some(mut final_pos) = final_position {
         final_pos.affinity = Affinity::Downstream;
         tr.set_selection(Some(Selection::collapsed(final_pos)))?;
     }
@@ -637,7 +657,7 @@ fn insert_blocks_at_block_boundary(
     Ok(Some(selection_over_inserted_blocks(
         container_id,
         base_index,
-        payload_block_count,
+        block_count,
     )))
 }
 

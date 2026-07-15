@@ -202,6 +202,34 @@ fn first_type(e: &ContentExpr) -> NodeType {
     }
 }
 
+fn last_known_child(children: &[RawChild]) -> Option<&RawChild> {
+    children.iter().rev().find(|child| {
+        child
+            .as_child_type()
+            .is_some_and(|node_type| node_type != NodeType::Unknown)
+    })
+}
+
+fn complete_root_trailing_editable_paragraph(node: &mut RawNode) {
+    if node.node_type != NodeType::Root {
+        return;
+    }
+    let Some(RawChild::Block(paragraph)) = last_known_child(&node.children) else {
+        return;
+    };
+    if paragraph.node_type != NodeType::Paragraph
+        || last_known_child(&paragraph.children).and_then(RawChild::as_child_type)
+            != Some(NodeType::PageBreak)
+    {
+        return;
+    }
+    node.children.push(RawChild::Block(scaffold_block(
+        NodeType::Paragraph,
+        0,
+        node.id,
+    )));
+}
+
 fn drop_context_invalid_here(node: &mut RawNode, path: &[NodeType]) {
     node.children.retain(|c| {
         let Some(t) = c.as_child_type() else {
@@ -278,6 +306,7 @@ pub fn normalize_content_shallow(node: &mut RawNode, ancestors: &[NodeType]) {
             repair_preserving_unknown(node, repair_general);
         }
     }
+    complete_root_trailing_editable_paragraph(node);
     path.pop();
 }
 
@@ -319,6 +348,7 @@ fn normalize_node(node: &mut RawNode, path: &mut Vec<NodeType>) {
     if node.node_type == NodeType::Table {
         normalize_grid(node);
     }
+    complete_root_trailing_editable_paragraph(node);
     path.pop();
 }
 
@@ -327,10 +357,22 @@ mod tests {
     use editor_crdt::Dot;
 
     use super::*;
-    use crate::seq::{AtomLeaf, BlockTree, flatten, validate_block_tree as validate_flat};
+    use crate::seq::{AtomLeaf, BlockTree, validate_block_tree as validate_flat};
 
     fn valid(t: &RawTree) -> Result<(), crate::SchemaError> {
         validate_flat(&BlockTree::from_raw(t))
+    }
+
+    fn find_leaf(tree: &RawTree, id: Dot) -> Option<&super::super::SeqItem> {
+        fn in_node(node: &RawNode, id: Dot) -> Option<&super::super::SeqItem> {
+            node.children.iter().find_map(|child| match child {
+                RawChild::Leaf { id: leaf_id, item } if *leaf_id == id => Some(item),
+                RawChild::Block(block) => in_node(block, id),
+                RawChild::Leaf { .. } => None,
+            })
+        }
+
+        tree.roots.iter().find_map(|root| in_node(root, id))
     }
 
     fn fold(kids: Vec<(u64, NodeType)>) -> RawNode {
@@ -408,6 +450,104 @@ mod tests {
         assert!(matches!(
             &node.children[1],
             RawChild::Block(b) if b.node_type == NodeType::Paragraph && b.id.is_synthetic()
+        ));
+    }
+
+    #[test]
+    fn normalize_root_adds_trailing_paragraph_after_page_break() {
+        let paragraph_id = Dot::new(1, 1);
+        let tree = RawTree {
+            roots: vec![RawNode {
+                attrs: vec![],
+                id: Dot::ROOT,
+                node_type: NodeType::Root,
+                children: vec![RawChild::Block(RawNode {
+                    attrs: vec![],
+                    id: paragraph_id,
+                    node_type: NodeType::Paragraph,
+                    children: vec![RawChild::Leaf {
+                        id: Dot::new(1, 2),
+                        item: super::super::SeqItem::Atom(AtomLeaf::PageBreak),
+                    }],
+                })],
+            }],
+        };
+
+        let normalized = normalize(tree);
+        let root = &normalized.roots[0];
+
+        assert_eq!(root.children.len(), 2);
+        assert!(matches!(
+            &root.children[0],
+            RawChild::Block(paragraph) if paragraph.id == paragraph_id
+        ));
+        assert!(matches!(
+            &root.children[1],
+            RawChild::Block(paragraph)
+                if paragraph.node_type == NodeType::Paragraph && paragraph.id.is_synthetic()
+        ));
+    }
+
+    #[test]
+    fn normalize_content_shallow_adds_trailing_paragraph_after_page_break() {
+        let mut root = RawNode {
+            attrs: vec![],
+            id: Dot::ROOT,
+            node_type: NodeType::Root,
+            children: vec![RawChild::Block(RawNode {
+                attrs: vec![],
+                id: Dot::new(1, 1),
+                node_type: NodeType::Paragraph,
+                children: vec![RawChild::Leaf {
+                    id: Dot::new(1, 2),
+                    item: super::super::SeqItem::Atom(AtomLeaf::PageBreak),
+                }],
+            })],
+        };
+
+        normalize_content_shallow(&mut root, &[]);
+
+        assert!(matches!(
+            &root.children[..],
+            [RawChild::Block(_), RawChild::Block(paragraph)]
+                if paragraph.node_type == NodeType::Paragraph && paragraph.id.is_synthetic()
+        ));
+    }
+
+    #[test]
+    fn normalize_root_ignores_unknown_after_terminal_page_break() {
+        let tree = RawTree {
+            roots: vec![RawNode {
+                attrs: vec![],
+                id: Dot::ROOT,
+                node_type: NodeType::Root,
+                children: vec![RawChild::Block(RawNode {
+                    attrs: vec![],
+                    id: Dot::new(1, 1),
+                    node_type: NodeType::Paragraph,
+                    children: vec![
+                        RawChild::Leaf {
+                            id: Dot::new(1, 2),
+                            item: super::super::SeqItem::Atom(AtomLeaf::PageBreak),
+                        },
+                        RawChild::Leaf {
+                            id: Dot::new(1, 3),
+                            item: super::super::SeqItem::Unknown {
+                                tag: 999,
+                                bytes: vec![],
+                            },
+                        },
+                    ],
+                })],
+            }],
+        };
+
+        let normalized = normalize(tree);
+
+        assert!(matches!(
+            &normalized.roots[0].children[..],
+            [RawChild::Block(_), RawChild::Block(paragraph)]
+                if paragraph.node_type == NodeType::Paragraph && paragraph.id.is_synthetic()
         ));
     }
 
@@ -858,18 +998,19 @@ mod tests {
             ],
         };
         let out = normalize(RawTree { roots: vec![node] });
-        let flat = flatten(&out);
         assert!(
-            flat.iter().any(|(d, item)| *d == unknown
-                && matches!(item, super::super::SeqItem::Unknown { tag: 999, .. })),
+            matches!(
+                find_leaf(&out, unknown),
+                Some(super::super::SeqItem::Unknown { tag: 999, .. })
+            ),
             "normalize가 unknown 리프를 드롭/변형하면 안 된다"
         );
         assert!(
-            flat.iter().any(|(d, _)| *d == pb1),
+            find_leaf(&out, pb1).is_some(),
             "매치되는 첫 PageBreak는 유지"
         );
         assert!(
-            !flat.iter().any(|(d, _)| *d == pb2),
+            find_leaf(&out, pb2).is_none(),
             "unmatched-drop 경로가 실제로 두번째 PageBreak를 드롭해야 이 케이스가 유의미하다"
         );
     }
@@ -1198,24 +1339,22 @@ mod tests {
             ],
         };
         let out = normalize(RawTree { roots: vec![node] });
-        let flat = flatten(&out);
         assert!(
-            flat.iter().any(|(d, item)| *d == block_atom_unknown
-                && matches!(
-                    item,
-                    super::super::SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Unknown(_),
-                        ..
-                    }
-                )),
+            matches!(
+                find_leaf(&out, block_atom_unknown),
+                Some(super::super::SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Unknown(_),
+                    ..
+                })
+            ),
             "an AtomLeaf::Unknown-bearing leaf must survive normalize unmodified"
         );
         assert!(
-            flat.iter().any(|(d, _)| *d == pb1),
+            find_leaf(&out, pb1).is_some(),
             "matching first PageBreak kept"
         );
         assert!(
-            !flat.iter().any(|(d, _)| *d == pb2),
+            find_leaf(&out, pb2).is_none(),
             "unmatched-drop must still drop the extra PageBreak"
         );
         assert!(valid(&out).is_ok());

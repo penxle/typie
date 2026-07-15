@@ -163,6 +163,13 @@ mod tests {
             .collect()
     }
 
+    fn assert_trailing_paragraph_is_synthetic(state: &editor_state::State) {
+        let view = state.view();
+        let trailing = view.root().unwrap().child_blocks().last().unwrap();
+        assert_eq!(trailing.node_type(), NodeType::Paragraph);
+        assert!(trailing.id().is_synthetic());
+    }
+
     fn block_texts(view: &DocView, root: Dot) -> Vec<String> {
         view.node(root)
             .unwrap()
@@ -697,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_page_break_slice_at_root_paragraph_end_creates_following_paragraph() {
+    fn insert_page_break_slice_at_root_paragraph_end_uses_synthetic_following_paragraph() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("World") } } }
             selection: none
@@ -722,6 +729,7 @@ mod tests {
             selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
+        assert_trailing_paragraph_is_synthetic(&actual);
         assert!(!inserted.is_collapsed());
     }
 
@@ -751,6 +759,7 @@ mod tests {
             selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
+        assert_trailing_paragraph_is_synthetic(&actual);
         assert!(!inserted.is_collapsed());
     }
 
@@ -823,6 +832,7 @@ mod tests {
             selection: (p3, 0)
         };
         assert_state_eq!(&actual, &expected);
+        assert_trailing_paragraph_is_synthetic(&actual);
         assert_eq!(
             inserted,
             Selection::new(

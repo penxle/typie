@@ -90,6 +90,38 @@ fn collect_subtree_nodes(tree: &BlockTree, node: &BlockNode, out: &mut Vec<Dot>)
     }
 }
 
+fn last_known_child_for_shallow_root_repair(
+    tree: &BlockTree,
+    block: &BlockNode,
+) -> Option<RawChild> {
+    (0..block.children.len())
+        .rev()
+        .find_map(|index| match block.children.get(index)? {
+            Child::Leaf { id, item }
+                if item
+                    .as_child_type()
+                    .is_some_and(|ty| ty != NodeType::Unknown) =>
+            {
+                Some(RawChild::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                })
+            }
+            Child::Block(id) => tree
+                .get(*id)
+                .filter(|child| child.node_type != NodeType::Unknown)
+                .map(|child| {
+                    RawChild::Block(RawNode {
+                        id: child.id,
+                        node_type: child.node_type,
+                        attrs: child.attrs.clone(),
+                        children: Vec::new(),
+                    })
+                }),
+            Child::Leaf { .. } => None,
+        })
+}
+
 type BlockLeafPlan = Vec<(Dot, Vec<(Dot, Option<NodeType>)>)>;
 
 /// Plan the index/derivation entries for a freshly re-projected (nested scratch)
@@ -771,11 +803,12 @@ impl ProjectedState {
     }
 
     /// Re-establish the Root's own schema content rule on the flat tree by running the
-    /// nested `normalize_content_shallow` over a shallow (direct-children-only) view of
-    /// the root and reconciling the result back: existing blocks keep their real flat
-    /// subtree, newly scaffolded blocks are grafted in (and returned for indexing), and
-    /// rule-dropped blocks are forgotten. The Root rule only ever appends/drops direct
-    /// children, so an empty-children shallow view is faithful.
+    /// nested `normalize_content_shallow` over a shallow view of the root and reconciling
+    /// the result back: existing blocks keep their real flat subtree, newly scaffolded
+    /// blocks are grafted in (and returned for indexing), and rule-dropped blocks are
+    /// forgotten. The last direct Paragraph carries its last schema-known child so
+    /// Root-level completion can distinguish a terminal PageBreak from an editable
+    /// trailing Paragraph without cloning the Paragraph's full content.
     fn repair_root_content_shallow(&mut self) -> Vec<RawNode> {
         let root_id = self.projected.tree.root;
         let Some(root) = self.projected.tree.get(root_id) else {
@@ -787,6 +820,11 @@ impl ProjectedState {
             attrs: root.attrs.clone(),
             children: Vec::new(),
         };
+        let last_root_block = last_known_child_for_shallow_root_repair(&self.projected.tree, root)
+            .and_then(|child| match child {
+                RawChild::Block(block) => Some(block.id),
+                RawChild::Leaf { .. } => None,
+            });
         for c in &root.children {
             match c {
                 Child::Leaf { id, item } => shallow.children.push(RawChild::Leaf {
@@ -794,17 +832,28 @@ impl ProjectedState {
                     item: item.clone(),
                 }),
                 Child::Block(id) => {
-                    let (nt, attrs) = self
-                        .projected
-                        .tree
-                        .get(*id)
+                    let block = self.projected.tree.get(*id);
+                    let (nt, attrs) = block
                         .map(|b| (b.node_type, b.attrs.clone()))
                         .unwrap_or((NodeType::Paragraph, Vec::new()));
+                    let children = if Some(*id) == last_root_block && nt == NodeType::Paragraph {
+                        block
+                            .and_then(|block| {
+                                last_known_child_for_shallow_root_repair(
+                                    &self.projected.tree,
+                                    block,
+                                )
+                            })
+                            .into_iter()
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
                     shallow.children.push(RawChild::Block(RawNode {
                         id: *id,
                         node_type: nt,
                         attrs,
-                        children: Vec::new(),
+                        children,
                     }));
                 }
             }
@@ -2467,6 +2516,62 @@ mod tests {
         assert_eq!(p.node_type(), NodeType::Paragraph);
         assert_eq!(p.inline_text(), "Hi");
         assert!(state.block_modifiers().modifiers_of(Dot::ROOT).is_empty());
+    }
+
+    #[test]
+    fn terminal_page_break_warm_projection_adds_synthetic_trailing_paragraph() {
+        use editor_model::AtomLeaf;
+
+        let mut warm = ProjectedState::empty();
+        let _ = warm.take_layout_dirty();
+
+        warm.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Atom(AtomLeaf::PageBreak),
+        }))
+        .unwrap();
+
+        let children: Vec<(NodeType, Dot)> = warm
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|block| (block.node_type(), block.id()))
+            .collect();
+        assert_eq!(children.len(), 2);
+        assert_eq!(children[1].0, NodeType::Paragraph);
+        assert!(children[1].1.is_synthetic());
+        assert!(!matches!(warm.take_layout_dirty(), LayoutDirty::Full));
+
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(warm.projected(), cold.projected());
+    }
+
+    #[test]
+    fn unknown_root_block_after_page_break_does_not_hide_trailing_completion() {
+        use editor_model::AtomLeaf;
+
+        let mut warm = ProjectedState::empty();
+        warm.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Atom(AtomLeaf::PageBreak),
+        }))
+        .unwrap();
+        warm.apply(seq_block(2, NodeType::Unknown, vec![Dot::ROOT]))
+            .unwrap();
+
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(warm.projected(), cold.projected());
+        assert!(
+            warm.view()
+                .root()
+                .unwrap()
+                .child_blocks()
+                .last()
+                .unwrap()
+                .id()
+                .is_synthetic()
+        );
     }
 
     #[test]

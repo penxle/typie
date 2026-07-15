@@ -12,9 +12,9 @@ pub(super) fn prepare_page_breaks_for_position(
     tr: &Transaction,
     position: &Position,
     slice: Slice,
-) -> (Slice, Option<Fragment>) {
+) -> Slice {
     if !contains_page_break(&slice.content) {
-        return (slice, None);
+        return slice;
     }
 
     let in_textblock = position_in_textblock(tr, position);
@@ -31,23 +31,16 @@ pub(super) fn prepare_page_breaks_for_position(
     let content = sanitized.fragments;
 
     if content.is_empty() {
-        return (Slice::new(vec![], 0, 0), None);
+        return Slice::new(vec![], 0, 0);
     }
 
     let terminal_bare_page_break =
         top_level_inline && content.last().is_some_and(is_page_break_fragment);
     if root_textblock && terminal_bare_page_break {
-        return (
-            Slice::new(
-                vec![paragraph_with_children(content), empty_paragraph_fragment()],
-                1,
-                1,
-            ),
-            None,
-        );
+        return Slice::new(vec![paragraph_with_children(content)], 1, 1);
     }
 
-    let mut prepared = if root_boundary && top_level_inline {
+    if root_boundary && top_level_inline {
         Slice::new(vec![paragraph_with_children(content)], 0, 0)
     } else {
         Slice::new(
@@ -55,32 +48,7 @@ pub(super) fn prepare_page_breaks_for_position(
             slice.open_start.min(sanitized.open_start),
             slice.open_end.min(sanitized.open_end),
         )
-    };
-
-    if root_textblock
-        && prepared.open_end > 0
-        && prepared
-            .content
-            .last()
-            .is_some_and(paragraph_ends_with_page_break)
-    {
-        prepared.content.push(empty_paragraph_fragment());
-        prepared.open_end = 1;
     }
-
-    let trailing_block_context = if root_boundary
-        && root_boundary_is_at_end(tr, position)
-        && prepared
-            .content
-            .last()
-            .is_some_and(paragraph_ends_with_page_break)
-    {
-        Some(empty_paragraph_fragment())
-    } else {
-        None
-    };
-
-    (prepared, trailing_block_context)
 }
 
 pub(super) fn insert_terminal_page_break_from_edge(
@@ -204,7 +172,7 @@ fn contains_page_break(fragments: &[Fragment]) -> bool {
         .any(|fragment| is_page_break_fragment(fragment) || contains_page_break(&fragment.children))
 }
 
-fn paragraph_ends_with_page_break(fragment: &Fragment) -> bool {
+pub(super) fn paragraph_ends_with_page_break(fragment: &Fragment) -> bool {
     fragment.node.as_type() == NodeType::Paragraph
         && fragment.children.last().is_some_and(is_page_break_fragment)
 }
@@ -216,17 +184,6 @@ fn paragraph_with_children(children: Vec<Fragment>) -> Fragment {
         carry: vec![],
         children,
     }
-}
-
-fn empty_paragraph_fragment() -> Fragment {
-    paragraph_with_children(vec![])
-}
-
-fn root_boundary_is_at_end(tr: &Transaction, position: &Position) -> bool {
-    tr.state()
-        .view()
-        .root()
-        .is_some_and(|root| position.offset >= root.children().count())
 }
 
 fn position_is_in_root_paragraph(tr: &Transaction, position: &Position) -> bool {
