@@ -63,4 +63,42 @@ class EditorImeWindowTest {
     assertEquals("abc", trimmed.text)
     assertEquals(0, trimmed.windowStart)
   }
+
+  @Test
+  fun hugeLimitsClampToTheWindowWithoutOverflow() {
+    val ime =
+      Ime(
+        text = "가".repeat(5000),
+        windowStart = 100,
+        selection = ImeRange(4600, 4600),
+        composing = null,
+      )
+
+    assertSame(ime, ime.trimmedTo(beforeLimit = 1 shl 24, afterLimit = 1 shl 24))
+  }
+
+  @Test
+  fun beforeReadPrefixLengthEqualsTheWindowRelativeSelection() {
+    // Keyboards derive absolute positions from the length of huge before-cursor
+    // reads, so the untrimmed prefix length must equal the window-relative
+    // selection we report elsewhere — including when the anchored window keeps
+    // more than the legacy 4096 chars of before-context.
+    val ime =
+      Ime(
+        text = "가".repeat(6000),
+        windowStart = 0,
+        selection = ImeRange(4500, 4500),
+        composing = null,
+      )
+
+    val ctx = ime.trimmedTo(beforeLimit = 1 shl 24, afterLimit = 0)
+    val prefix =
+      ctx.text.substring(
+        0,
+        ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart),
+      )
+
+    assertEquals(ime.windowUtf16Offset(ime.selection.start), prefix.length)
+    assertEquals(4500, prefix.length)
+  }
 }

@@ -27,10 +27,12 @@ import co.typie.editor.scroll.syncWithBringIntoView
 import java.util.concurrent.Executor
 import java.util.function.IntConsumer
 
-// InputConnection text reads may legally return less context than requested; a
-// bounded window keeps IMEs that ask for the whole document (n=Int.MAX_VALUE per
-// key) from forcing a full-document text materialization on every read.
-private const val IME_READ_WINDOW = 4096
+// Reads are bounded by the ime window itself, and keyboards derive absolute
+// positions from read lengths (e.g. getTextBeforeCursor(Int.MAX_VALUE)), so
+// reads must never be capped below the window — the returned prefix length is
+// the window-relative cursor position. This clamp only keeps huge requested
+// lengths from overflowing the Int arithmetic in the window trim.
+private const val IME_READ_OVERFLOW_GUARD = 1 shl 24
 
 // Samsung keyboards use getExtractedText as the source of truth for their
 // internal editing-state model; monitoring spans connections within a session.
@@ -82,7 +84,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.tickIme?.trimmedTo(n.coerceAtMost(IME_READ_WINDOW), 0)?.let { ctx ->
+        editor.tickIme?.trimmedTo(n.coerceAtMost(IME_READ_OVERFLOW_GUARD), 0)?.let { ctx ->
           ctx.text.substring(
             0,
             ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart),
@@ -98,7 +100,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.tickIme?.trimmedTo(0, n.coerceAtMost(IME_READ_WINDOW))?.let { ctx ->
+        editor.tickIme?.trimmedTo(0, n.coerceAtMost(IME_READ_OVERFLOW_GUARD))?.let { ctx ->
           ctx.text.substring(
             ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
           )
@@ -133,8 +135,8 @@ internal class EditorInputConnection(
     val full = editor.tickIme
     val ctx =
       full?.trimmedTo(
-        beforeLength.coerceAtMost(IME_READ_WINDOW),
-        afterLength.coerceAtMost(IME_READ_WINDOW),
+        beforeLength.coerceAtMost(IME_READ_OVERFLOW_GUARD),
+        afterLength.coerceAtMost(IME_READ_OVERFLOW_GUARD),
       )
     if (full == null || ctx == null) {
       recordRead("getSurroundingText", args, null)
