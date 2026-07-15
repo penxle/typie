@@ -674,21 +674,33 @@ fn count_closes(chars: &[char]) -> usize {
     chars.iter().filter(|&&c| c == FLAT_CLOSE).count()
 }
 
+// Structural subset of the Key::Backspace / Key::Delete chains in
+// handle/key.rs — keep in sync.
 fn structural_backward(tr: &mut Transaction) -> CommandResult {
     commands::first!(
         tr,
+        commands::delete_page_break_backward(),
+        commands::lift_empty_list_item(),
+        commands::merge_list_item_backward(),
+        commands::lift_first_list_item(),
+        commands::join_paragraph_backward_into_prev_list_item(),
         commands::join_paragraph_backward(),
         commands::sink_paragraph_backward(),
         commands::lift_first_paragraph(),
+        commands::delete_empty_paragraph_backward(),
     )
 }
 
 fn structural_forward(tr: &mut Transaction) -> CommandResult {
     commands::first!(
         tr,
+        commands::delete_page_break_forward(),
+        commands::merge_list_item_forward(),
+        commands::join_next_paragraph_forward_into_list_item(),
         commands::join_paragraph_forward(),
         commands::lift_last_paragraph(),
         commands::lift_paragraph_forward(),
+        commands::delete_empty_paragraph_forward(),
     )
 }
 
@@ -956,15 +968,20 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                             }
 
                             if delta.end_tokens > 0 {
+                                let previous_selection = tr.selection();
                                 if !deletes_body {
                                     set_selection_at_flat(tr, delta.replace_end)?;
                                 }
                                 for _ in 0..delta.end_tokens {
-                                    structural_forward(tr)?;
+                                    if !structural_forward(tr)? {
+                                        tr.set_selection(previous_selection)?;
+                                        break;
+                                    }
                                 }
                             }
 
                             if delta.start_tokens > 0 {
+                                let previous_selection = tr.selection();
                                 let selection_ready = if deletes_body {
                                     true
                                 } else {
@@ -972,7 +989,6 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                                 };
 
                                 if selection_ready {
-                                    let previous_selection = tr.selection();
                                     for _ in 0..delta.start_tokens {
                                         if !structural_backward(tr)? {
                                             tr.set_selection(previous_selection)?;
@@ -3436,7 +3452,7 @@ mod tests {
     }
 
     #[test]
-    fn structural_backward_merge_drops_front_trailing_page_break() {
+    fn structural_backward_removes_prev_trailing_page_break_before_join() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -3452,19 +3468,17 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    m: paragraph {
-                        text("AB")
-                        text("CD")
-                    }
+                    paragraph { text("AB") }
+                    cur: paragraph { text("CD") }
                 }
             }
-            selection: (m, 2, <)
+            selection: (cur, 0)
         };
         assert_state_eq!(actual, expected);
     }
 
     #[test]
-    fn structural_forward_merge_drops_front_trailing_page_break() {
+    fn structural_forward_removes_trailing_page_break_before_join() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -3480,13 +3494,11 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    m: paragraph {
-                        text("AB")
-                        text("CD")
-                    }
+                    p1: paragraph { text("AB") }
+                    paragraph { text("CD") }
                 }
             }
-            selection: (m, 2)
+            selection: (p1, 2)
         };
         assert_state_eq!(actual, expected);
     }
@@ -5002,5 +5014,204 @@ mod tests {
         };
         assert_state_eq!(editor.state(), &expected);
         assert_eq!(editor.state().composition, None);
+    }
+
+    fn ios_backspace_ops(start: usize, end: usize) -> Vec<FlatImeOp> {
+        vec![
+            FlatImeOp::SetSelection { start, end },
+            FlatImeOp::Compose { text: "".into() },
+            FlatImeOp::CommitAsIs,
+        ]
+    }
+
+    fn key_message(k: Key) -> Message {
+        Message::Key {
+            event: KeyEvent {
+                key: k,
+                modifiers: InputModifiers::default(),
+            },
+        }
+    }
+
+    #[test]
+    fn flat_ime_token_delete_lifts_empty_first_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph {} } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(2, 3),
+        });
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {} paragraph {} } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_token_delete_backward_matches_key_backspace_between_list_items() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p2: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(7, 8),
+        });
+        key_editor.apply(key_message(Key::Backspace));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_backward_matches_key_backspace_after_list() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { paragraph { text("A") } } }
+                    p2: paragraph { text("B") }
+                }
+            }
+            selection: (p2, 0)
+        };
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(7, 8),
+        });
+        key_editor.apply(key_message(Key::Backspace));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_forward_matches_key_delete_between_list_items() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                        list_item { paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(4, 5),
+        });
+        key_editor.apply(key_message(Key::Delete));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_backward_matches_key_backspace_after_page_break() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph { text("A") page_break }
+                    p2: paragraph { text("B") }
+                }
+            }
+            selection: (p2, 0)
+        };
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(4, 5),
+        });
+        key_editor.apply(key_message(Key::Backspace));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_forward_matches_key_delete_before_page_break_boundary() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("A") page_break }
+                    paragraph { text("B") }
+                }
+            }
+            selection: (p1, 2)
+        };
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(3, 4),
+        });
+        key_editor.apply(key_message(Key::Delete));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_failed_backward_token_delete_keeps_selection() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph {} } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(1, 2),
+        });
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph {} } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_failed_forward_token_delete_keeps_selection() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph {} } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(4, 5),
+        });
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph {} } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 }
