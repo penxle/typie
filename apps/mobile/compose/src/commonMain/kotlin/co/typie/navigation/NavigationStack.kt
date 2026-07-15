@@ -136,6 +136,8 @@ fun NavigationStack(
 
   var lastDragAmount by remember { mutableStateOf(0f) }
   val popNestedScroll = remember { NavigationPopNestedScroll() }
+  val backGestureZoneWidth by rememberUpdatedState(systemBackGestureZoneWidth())
+  var predictiveBackActive by remember { mutableStateOf(false) }
 
   fun clearRemovedRoutes(removedRoutes: List<Route>) {
     removedRoutes.forEach { removedRoute ->
@@ -300,6 +302,17 @@ fun NavigationStack(
     scope.launch { progress.snapTo(0f) }
   }
 
+  suspend fun startPredictiveBackDrag(): Boolean {
+    if (navigator.isTransitioning || animState != AnimState.Idle) return false
+    val prev = navigator.previous ?: return false
+    transitionStyle = visibleRoute.transitionStyleTo(prev)
+    behindRoute = prev
+    animState = AnimState.Dragging
+    predictiveBackActive = true
+    progress.snapTo(0f)
+    return true
+  }
+
   fun updatePopDrag(dragAmount: Float) {
     lastDragAmount = dragAmount
     scope.launch {
@@ -308,29 +321,33 @@ fun NavigationStack(
     }
   }
 
+  suspend fun commitPopDrag() {
+    val target = navigator.previous
+    if (target != null) {
+      try {
+        animState = AnimState.PopGestureCommitted
+        if (navigator.pop() == NavigationResult.NotStarted) {
+          progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+          settleAtCurrentRoute()
+        }
+      } catch (e: CancellationException) {
+        withContext(NonCancellable) { settleAtCurrentRoute() }
+        throw e
+      } catch (e: Throwable) {
+        settleAtCurrentRoute()
+        Logger.e(e) { "Navigation gesture removal failed" }
+      }
+    } else {
+      progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+      settleAtCurrentRoute()
+    }
+  }
+
   fun finishPopDrag() {
     val velocity = lastDragAmount * 1000f / 16f
     scope.launch {
       if (progress.value > 0.5f || velocity > 1000f) {
-        val target = navigator.previous
-        if (target != null) {
-          try {
-            animState = AnimState.PopGestureCommitted
-            if (navigator.pop() == NavigationResult.NotStarted) {
-              progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-              settleAtCurrentRoute()
-            }
-          } catch (e: CancellationException) {
-            withContext(NonCancellable) { settleAtCurrentRoute() }
-            throw e
-          } catch (e: Throwable) {
-            settleAtCurrentRoute()
-            Logger.e(e) { "Navigation gesture removal failed" }
-          }
-        } else {
-          progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-          settleAtCurrentRoute()
-        }
+        commitPopDrag()
       } else {
         progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
         behindRoute = null
@@ -352,6 +369,7 @@ fun NavigationStack(
     canStart = {
       navigator.canPop &&
         !navigator.isTransitioning &&
+        !predictiveBackActive &&
         containerWidth > 0f &&
         (animState == AnimState.Idle || animState == AnimState.Dragging)
     },
@@ -468,7 +486,32 @@ fun NavigationStack(
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
     }
   CompositionLocalProvider(*animationProviders.toTypedArray()) {
-    PlatformBackHandler(enabled = navigator.canPop) { scope.launch { navigator.pop() } }
+    PlatformPredictiveBackHandler(enabled = navigator.canPop) { events ->
+      var interactive = false
+      try {
+        events.collect { value ->
+          if (!interactive) {
+            interactive = startPredictiveBackDrag()
+          }
+          if (interactive) {
+            progress.snapTo(value)
+          }
+        }
+      } catch (e: CancellationException) {
+        if (interactive) {
+          predictiveBackActive = false
+          cancelPopDrag()
+        }
+        throw e
+      }
+      if (interactive) {
+        predictiveBackActive = false
+        animState = AnimState.PopGestureCommitted
+        scope.launch { commitPopDrag() }
+      } else {
+        scope.launch { navigator.pop() }
+      }
+    }
     Box(
       modifier
         .fillMaxSize()
@@ -480,8 +523,13 @@ fun NavigationStack(
           awaitPointerEventScope {
             while (true) {
               val event = awaitPointerEvent(PointerEventPass.Initial)
+              val pressedCount = event.changes.count { change -> change.pressed }
+              val down =
+                if (pressedCount == 1) event.changes.fastFirstOrNull { change -> change.pressed }
+                else null
               popNestedScroll.updatePressedPointerCount(
-                event.changes.count { change -> change.pressed }
+                count = pressedCount,
+                downInSystemBackZone = down != null && down.position.x < backGestureZoneWidth,
               )
             }
           }
@@ -676,6 +724,8 @@ fun NavigationStack(
                   if (abs(dx) > slop || abs(dy) > slop) {
                     if (
                       popNestedScroll.isMultiTouchRejected ||
+                        popNestedScroll.isSystemBackZoneRejected ||
+                        predictiveBackActive ||
                         !popGestureSession.tryClaim(
                           initialDrag = Offset(dx, dy),
                           childConsumed = change.isConsumed,
@@ -808,6 +858,8 @@ fun NavigationStack(
                 if (abs(dx) > slop || abs(dy) > slop) {
                   if (
                     popNestedScroll.isMultiTouchRejected ||
+                      popNestedScroll.isSystemBackZoneRejected ||
+                      predictiveBackActive ||
                       !popGestureSession.tryClaim(
                         initialDrag = Offset(dx, dy),
                         childConsumed = change.isConsumed,

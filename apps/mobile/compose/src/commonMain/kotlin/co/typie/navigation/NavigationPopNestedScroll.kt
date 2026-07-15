@@ -16,6 +16,9 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
   val isMultiTouchRejected: Boolean
     get() = gestureSession.isMultiTouchRejected
 
+  val isSystemBackZoneRejected: Boolean
+    get() = gestureSession.isSystemBackZoneRejected
+
   fun update(
     canStart: () -> Boolean,
     onStart: () -> Unit,
@@ -30,8 +33,8 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
     this.onCancel = onCancel
   }
 
-  fun updatePressedPointerCount(count: Int) {
-    if (gestureSession.updatePressedPointerCount(count)) {
+  fun updatePressedPointerCount(count: Int, downInSystemBackZone: Boolean = false) {
+    if (gestureSession.updatePressedPointerCount(count, downInSystemBackZone)) {
       onCancel()
     }
   }

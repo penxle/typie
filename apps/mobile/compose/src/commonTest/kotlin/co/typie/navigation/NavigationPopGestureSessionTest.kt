@@ -46,6 +46,23 @@ class NavigationPopGestureSessionTest {
   }
 
   @Test
+  fun downInSystemBackZoneRejectsClaimsUntilNextGesture() {
+    val session = NavigationPopGestureSession()
+
+    session.updatePressedPointerCount(1, downInSystemBackZone = true)
+    assertTrue(session.isSystemBackZoneRejected)
+    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    session.reset()
+    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    session.updatePressedPointerCount(0)
+    session.updatePressedPointerCount(1)
+    assertFalse(session.isSystemBackZoneRejected)
+    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+  }
+
+  @Test
   fun claimedSessionSurvivesAllUpUntilNestedScrollTerminal() {
     val session = NavigationPopGestureSession()
 

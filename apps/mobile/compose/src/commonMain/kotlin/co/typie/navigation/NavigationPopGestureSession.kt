@@ -6,6 +6,7 @@ import kotlin.math.abs
 internal class NavigationPopGestureSession {
   private var state = State.Possible
   private var multiTouchRejected = false
+  private var systemBackZoneRejected = false
   private var pressedPointerCount = 0
 
   val isClaimed: Boolean
@@ -14,8 +15,11 @@ internal class NavigationPopGestureSession {
   val isMultiTouchRejected: Boolean
     get() = multiTouchRejected
 
+  val isSystemBackZoneRejected: Boolean
+    get() = systemBackZoneRejected
+
   fun tryClaim(initialDrag: Offset, childConsumed: Boolean): Boolean {
-    if (multiTouchRejected || state != State.Possible) {
+    if (multiTouchRejected || systemBackZoneRejected || state != State.Possible) {
       return false
     }
     if (initialDrag == Offset.Zero && !childConsumed) {
@@ -30,7 +34,7 @@ internal class NavigationPopGestureSession {
     return isClaimed
   }
 
-  fun updatePressedPointerCount(count: Int): Boolean {
+  fun updatePressedPointerCount(count: Int, downInSystemBackZone: Boolean = false): Boolean {
     val wasMultiTouchRejected = multiTouchRejected
     val previousCount = pressedPointerCount
     pressedPointerCount = count
@@ -41,6 +45,7 @@ internal class NavigationPopGestureSession {
       }
       count == 1 && previousCount == 0 -> {
         multiTouchRejected = false
+        systemBackZoneRejected = downInSystemBackZone
         if (state != State.Claimed) {
           state = State.Possible
         }
