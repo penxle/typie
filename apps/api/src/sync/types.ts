@@ -17,6 +17,7 @@ export type SyncDeps = {
   consumeTicket: (ticket: string) => Promise<SyncSession | null>;
   checkDocumentAccess: (userId: string, documentId: string) => Promise<DocumentAccess>;
   checkWritable: (userId: string) => Promise<boolean>;
+  markWriterActive: (userId: string) => Promise<void>;
   getCollectedSeq: (documentId: string) => Promise<string | null>;
   readBundleRow: (documentId: string, rowId: string) => Promise<BundleRow | null>;
   readBundlesAfter: (documentId: string, afterSeq: number, limit: number) => Promise<BundleRow[]>;

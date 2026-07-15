@@ -52,6 +52,7 @@ export const handlePush = async (
       durableHeads: durableHeadsB64,
     });
     await ctx.deps.enqueueCollect(message.documentId);
+    await ctx.deps.markWriterActive(ctx.session.userId);
   }
 
   await send({ t: 'push-ack', id: message.id, heads, durableHeads });

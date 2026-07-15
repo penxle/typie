@@ -66,6 +66,16 @@ test('push: 잘못된 페이로드는 permanent 오류, append 없음', async ()
   assert.equal(entries.length, 0);
 });
 
+test('push: 실제 쓰기만 활성 작가 기록을 갱신한다', async () => {
+  const deps = new FakeSyncDeps();
+  deps.liveHeads.set('D1', Uint8Array.of(0x01));
+  const { send } = collectSend();
+  await handlePush(ctx(deps), { id: 'r1', documentId: 'D1', changesets: new Uint8Array() }, send);
+  assert.deepEqual(deps.writerActivity, []);
+  await handlePush(ctx(deps), { id: 'r2', documentId: 'D1', changesets: Uint8Array.of(9) }, send);
+  assert.deepEqual(deps.writerActivity, ['U1']);
+});
+
 test('push: opsCount 0(빈 번들)은 append/publish 없이 현재 heads로 ack', async () => {
   const deps = new FakeSyncDeps();
   deps.liveHeads.set('D1', Uint8Array.of(0x01));

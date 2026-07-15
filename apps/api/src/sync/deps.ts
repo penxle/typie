@@ -56,6 +56,10 @@ export const createProductionDeps = (): SyncDeps => ({
 
   checkWritable: async (userId) => await hasActiveSubscription({ userId }),
 
+  markWriterActive: async (userId) => {
+    await redis.zadd('writers:active', Date.now(), userId);
+  },
+
   getCollectedSeq,
 
   readBundleRow: async (documentId, rowId) => {

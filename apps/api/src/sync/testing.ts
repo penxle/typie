@@ -50,6 +50,7 @@ export class FakeSyncDeps implements SyncDeps {
   collectJobs: string[] = [];
   writable = true;
   checkWritableCalls = 0;
+  writerActivity: string[] = [];
 
   consumeTicket = async (ticket: string): Promise<SyncSession | null> => {
     const session = this.tickets.get(ticket) ?? null;
@@ -63,6 +64,10 @@ export class FakeSyncDeps implements SyncDeps {
   checkWritable = async (_userId: string): Promise<boolean> => {
     this.checkWritableCalls++;
     return this.writable;
+  };
+
+  markWriterActive = async (userId: string): Promise<void> => {
+    this.writerActivity.push(userId);
   };
 
   getCollectedSeq = async (documentId: string): Promise<string | null> => this.collectedSeq.get(documentId) ?? null;
