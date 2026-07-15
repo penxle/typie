@@ -24,6 +24,8 @@ internal class EditorTableHandleGesture(
     },
   private val session: EditorTableHandleDragSession = EditorTableHandleDragSession(),
 ) {
+  private var dragSlop = 0f
+
   val pendingDrag: Boolean
     get() = session.pendingDrag
 
@@ -32,6 +34,13 @@ internal class EditorTableHandleGesture(
 
   val dragging: Boolean
     get() = session.dragging
+
+  fun updateDragSlop(dragSlop: Float) {
+    this.dragSlop = dragSlop.coerceAtLeast(0f)
+  }
+
+  fun shouldStartDrag(position: Offset): Boolean =
+    session.hasMovedPastSlop(touchPosition = position, dragSlop = dragSlop)
 
   fun hitTest(position: Offset): Boolean {
     val context = contextProvider()

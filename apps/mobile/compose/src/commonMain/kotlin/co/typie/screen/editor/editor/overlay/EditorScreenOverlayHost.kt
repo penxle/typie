@@ -114,19 +114,6 @@ internal fun EditorScreenOverlayHost(
       val editor = runtime.editor
       if (editor != null) {
         if (editorRectInViewport != null) {
-          EditorTableColumnResizeOverlay(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInViewport,
-            density = density.density,
-            viewportState = viewportState,
-          )
-          EditorTableCellSelectionOverlay(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInViewport,
-            density = density.density,
-          )
           EditorTableAxisSelectionOverlay(
             editor = editor,
             uiState = uiState,
@@ -134,19 +121,6 @@ internal fun EditorScreenOverlayHost(
             overlaySize = overlayBounds.size,
             density = density.density,
             onTableAxisActionsRequest = onTableAxisActionsRequest,
-          )
-          EditorSelectionHandleOverlay(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInViewport,
-            density = density.density,
-          )
-          EditorOverlayPointerRouter(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInViewport,
-            density = density.density,
-            viewportState = viewportState,
           )
         }
 

@@ -366,6 +366,16 @@ internal fun consumeEditorViewportWheelPan(
       )
   )
 
+internal fun editorViewportWheelScrollDeltaPx(scrollDelta: Offset, density: Float): Offset =
+  if (density > 0f) {
+    Offset(
+      x = -scrollDelta.x * EditorViewportWheelPanScale * density,
+      y = -scrollDelta.y * EditorViewportWheelPanScale * density,
+    )
+  } else {
+    Offset.Zero
+  }
+
 internal fun normalizeEditorViewportWheelZoomDelta(delta: Float): Float =
   if (delta.isFinite()) {
     delta * EditorViewportWheelZoomScale

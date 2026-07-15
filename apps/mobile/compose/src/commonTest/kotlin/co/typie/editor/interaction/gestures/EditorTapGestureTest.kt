@@ -142,25 +142,17 @@ class EditorTapGestureTest {
   }
 
   @Test
-  fun `second pointer cancels active tap and ignores until every pointer is up`() {
+  fun `cancelling active stream clears only the active tap candidate`() {
     val gesture = EditorTapGesture(tapSlopPx = 8f)
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
-    gesture.addPressedPointer(2L)
-    gesture.cancelActivePointerAndIgnoreUntilAllPointersUp()
+    assertTrue(gesture.cancelActivePointerStream())
 
-    assertTrue(gesture.isIgnoringUntilAllPointersUp)
     assertFalse(gesture.canDispatchTapTimer)
-
-    gesture.onPointerUp(pointerId = 1L, position = Offset.Zero, nowMillis = 160L)
-    assertTrue(gesture.isIgnoringUntilAllPointersUp)
-
-    gesture.onPointerUp(pointerId = 2L, position = Offset(4f, 4f), nowMillis = 170L)
-    assertFalse(gesture.isIgnoringUntilAllPointersUp)
+    assertFalse(gesture.cancelActivePointerStream())
   }
 
   private fun EditorTapGesture.startPendingTap(pointerId: Long, position: Offset) {
-    addPressedPointer(pointerId)
     startActivePointer(pointerId = pointerId, position = position)
     markTapPending()
   }

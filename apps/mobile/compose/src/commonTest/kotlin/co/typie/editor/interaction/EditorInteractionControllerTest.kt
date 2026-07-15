@@ -3,6 +3,7 @@ package co.typie.editor.interaction
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
+import androidx.compose.ui.unit.Velocity
 import co.typie.editor.Editor
 import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
@@ -33,7 +34,7 @@ import co.typie.editor.ffi.TableOverlayCellSelection
 import co.typie.editor.ffi.TableOverlayColumn
 import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.ffi.ViewOp
-import co.typie.editor.interaction.gestures.EditorSelectionHandleType
+import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
@@ -83,7 +84,6 @@ class EditorInteractionControllerTest {
       controller.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
 
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
-      assertFalse(controller.hasActivePointer)
       assertEquals(1, host.cancelTapDispatchCount)
       assertEquals(1, host.pointerCancelCount)
       assertNull(controller.magnifierPosition)
@@ -130,7 +130,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `tap rejected by page admission does not advance consecutive tap history`() =
+  fun `tap rejected by page eligibility does not advance consecutive tap history`() =
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
       val host = TestHost(this)
@@ -144,11 +144,8 @@ class EditorInteractionControllerTest {
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
 
-      host.point = PagePoint(page = -1, x = 10f, y = 20f)
-      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L, tapEnabled = false)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
-
-      host.point = PagePoint(page = 0, x = 10f, y = 20f)
 
       assertFalse(controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L))
       assertEquals(250L + 120L, host.scheduledTapDispatchAtMillis)
@@ -964,15 +961,12 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(12f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.From, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.From, down))
-      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
       assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
 
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.From, Offset(22f, 50f))
-      )
+      assertTrue(controller.moveSelectionHandlePointer(Offset(22f, 50f)))
 
       val extend =
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
@@ -984,7 +978,7 @@ class EditorInteractionControllerTest {
       assertFalse(extend.allowCollapse)
       assertEquals(Offset(20f, 44f), controller.magnifierPosition)
 
-      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.From))
+      assertTrue(controller.upSelectionHandlePointer())
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
       assertNull(controller.magnifierPosition)
@@ -1019,12 +1013,9 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
 
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 50f))
-      )
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 50f)))
 
       val extend =
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
@@ -1034,7 +1025,7 @@ class EditorInteractionControllerTest {
       assertNull(extend.baseSelection)
       assertFalse(extend.allowCollapse)
 
-      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+      assertTrue(controller.upSelectionHandlePointer())
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
     }
@@ -1068,14 +1059,11 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
 
       host.point = null
 
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(200f, -40f))
-      )
+      assertTrue(controller.moveSelectionHandlePointer(Offset(200f, -40f)))
       assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
@@ -1110,16 +1098,13 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 50f))
-      )
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 50f)))
       assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
       assertEquals(Offset(50f, 44f), controller.magnifierPosition)
 
-      controller.handleSelectionHandleDragCancel()
+      controller.cancel()
 
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
@@ -1160,12 +1145,9 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 50f))
-      )
-      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 50f)))
+      assertTrue(controller.upSelectionHandlePointer())
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
 
       selection = committedSelection
@@ -1209,11 +1191,8 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 95f))
-      )
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
       fake.enqueued.clear()
 
       advanceTimeBy(16)
@@ -1227,7 +1206,7 @@ class EditorInteractionControllerTest {
       assertNull(extend.baseSelection)
       assertFalse(extend.allowCollapse)
 
-      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+      assertTrue(controller.upSelectionHandlePointer())
     }
 
   @Test
@@ -1259,11 +1238,8 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(12f, 24f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.From, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.From, down))
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.From, Offset(16f, 30f))
-      )
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(16f, 30f)))
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(endpoints.toPosition, extend.anchor)
@@ -1298,13 +1274,10 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 95f))
-      )
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
 
-      controller.handleSelectionHandleDragCancel()
+      controller.cancel()
       fake.enqueued.clear()
       advanceTimeBy(16)
       runCurrent()
@@ -1339,11 +1312,8 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
-      assertTrue(controller.handleSelectionHandleDragStart(EditorSelectionHandleType.To, down))
-      assertTrue(
-        controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, Offset(52f, 95f))
-      )
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
       fake.enqueued.clear()
 
       advanceTimeBy(16)
@@ -1353,7 +1323,7 @@ class EditorInteractionControllerTest {
       assertEquals(100f, extend.headY)
       assertFalse(extend.allowCollapse)
 
-      assertTrue(controller.handleSelectionHandleDragEnd(EditorSelectionHandleType.To))
+      assertTrue(controller.upSelectionHandlePointer())
     }
 
   @Test
@@ -1364,7 +1334,11 @@ class EditorInteractionControllerTest {
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val fake = FakeFfiEditor(selectionProvider = { selection })
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -1377,15 +1351,15 @@ class EditorInteractionControllerTest {
         )
       val down = Offset(42f, 30f)
 
-      assertTrue(controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, down))
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
 
-      assertFalse(controller.handleSelectionHandleDragUpdate(EditorSelectionHandleType.To, down))
+      assertTrue(controller.moveSelectionHandlePointer(down))
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
       assertNull(controller.magnifierPosition)
 
-      controller.handleSelectionHandleDragCancel()
+      controller.cancel()
 
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
@@ -1510,6 +1484,62 @@ class EditorInteractionControllerTest {
       )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `self fling catch takes precedence over selection handle candidate`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { selectionEndpoints() },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val driver = TestPanGestureDriver(shouldCatchTouch = true)
+      val down = Offset(42f, 30f)
+      controller.updateTapSlop(8f)
+
+      assertTrue(
+        controller.onPointerDown(
+          pointerId = 1L,
+          position = down,
+          nowMillis = 0L,
+          panPosition = down,
+          panDriver = driver,
+        )
+      )
+
+      assertEquals(1, driver.startCount)
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.scrollGestureLockActive)
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 1L,
+          position = Offset(43f, 30f),
+          panPosition = Offset(43f, 30f),
+          nowMillis = 20L,
+        )
+      )
+      assertEquals(EditorInteractionMode.Panning, controller.interactionMode)
+      assertEquals(listOf(Offset(1f, 0f)), driver.updates)
+
+      controller.cancel()
     }
 
   @Test
@@ -2118,9 +2148,7 @@ class EditorInteractionControllerTest {
       assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
       assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
 
-      assertFalse(
-        controller.handleSelectionHandleDragDown(EditorSelectionHandleType.To, Offset(42f, 30f))
-      )
+      assertFalse(controller.canApplyModeEvent(EditorInteractionEvent.SelectionHandleDragStart))
       assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
 
@@ -2129,28 +2157,14 @@ class EditorInteractionControllerTest {
       assertFalse(host.scrollGestureLockActive)
     }
 
-  private fun EditorInteractionController.handleSelectionHandleDragDown(
-    type: EditorSelectionHandleType,
-    position: Offset,
-  ): Boolean = selectionHandleGesture.handleDragDown(type = type, position = position)
+  private fun EditorInteractionController.pointerDownOnSelectionHandle(position: Offset): Boolean =
+    onPointerDown(pointerId = SelectionHandleTestPointerId, position = position, nowMillis = 0L)
 
-  private fun EditorInteractionController.handleSelectionHandleDragStart(
-    type: EditorSelectionHandleType,
-    position: Offset,
-  ): Boolean = selectionHandleGesture.handleDragStart(type = type, position = position)
+  private fun EditorInteractionController.moveSelectionHandlePointer(position: Offset): Boolean =
+    onPointerMove(pointerId = SelectionHandleTestPointerId, position = position, nowMillis = 16L)
 
-  private fun EditorInteractionController.handleSelectionHandleDragUpdate(
-    type: EditorSelectionHandleType,
-    position: Offset,
-  ): Boolean = selectionHandleGesture.handleDragUpdate(type = type, position = position)
-
-  private fun EditorInteractionController.handleSelectionHandleDragEnd(
-    type: EditorSelectionHandleType
-  ): Boolean = selectionHandleGesture.handleDragEnd(type = type)
-
-  private fun EditorInteractionController.handleSelectionHandleDragCancel() {
-    selectionHandleGesture.cancel()
-  }
+  private fun EditorInteractionController.upSelectionHandlePointer(): Boolean =
+    onPointerUp(pointerId = SelectionHandleTestPointerId, position = Offset.Zero, nowMillis = 32L)
 
   @Test
   fun `pending double tap drag locks scroll gesture until pointer up`() =
@@ -2884,6 +2898,29 @@ class EditorInteractionControllerTest {
       )
     }
 
+  private class TestPanGestureDriver(override val shouldCatchTouch: Boolean) :
+    EditorPanGestureDriver {
+    override val touchSlop: Float = 8f
+    override val maximumFlingVelocity: Float = 10_000f
+    var startCount = 0
+    val updates = mutableListOf<Offset>()
+
+    override fun start(): Boolean {
+      startCount += 1
+      return true
+    }
+
+    override fun markPanStarted() = Unit
+
+    override fun update(delta: Offset) {
+      updates += delta
+    }
+
+    override fun end(velocity: Velocity) = Unit
+
+    override fun cancel() = Unit
+  }
+
   private class TestHost(private val scope: TestScope) :
     EditorInteractionEffects, EditorInteractionGeometry {
     override var density: Float = 1f
@@ -2900,6 +2937,10 @@ class EditorInteractionControllerTest {
     var edgeAutoScrollViewport: EditorEdgeAutoScrollViewport? = null
     var edgeAutoScrollConsumedDelta = Offset.Zero
     val requestedBringIntoViewVersions = mutableListOf<Long>()
+
+    override fun resolveInteractionPosition(positionInSurface: Offset): Offset = positionInSurface
+
+    override fun isTapEligible(positionInSurface: Offset): Boolean = true
 
     override fun resolvePoint(positionInNode: Offset): PagePoint? {
       if (density <= 0f) {
@@ -2974,6 +3015,8 @@ class EditorInteractionControllerTest {
   }
 
   private companion object {
+    const val SelectionHandleTestPointerId = 1L
+
     fun viewportZoomEnabledSemantics(
       effects: EditorInteractionEffects
     ): EditorInteractionSemantics {

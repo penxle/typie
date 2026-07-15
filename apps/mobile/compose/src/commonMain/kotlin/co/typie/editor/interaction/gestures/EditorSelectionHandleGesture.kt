@@ -82,6 +82,8 @@ internal class EditorSelectionHandleGesture(
   private val contextProvider: () -> EditorGestureContext,
   private val session: EditorSelectionHandleDragSession = EditorSelectionHandleDragSession(),
 ) {
+  private var dragSlop = 0f
+
   val pendingDrag: Boolean
     get() = session.pendingDrag
 
@@ -93,6 +95,13 @@ internal class EditorSelectionHandleGesture(
 
   val activeType: EditorSelectionHandleType?
     get() = session.activeType
+
+  fun updateDragSlop(dragSlop: Float) {
+    this.dragSlop = dragSlop.coerceAtLeast(0f)
+  }
+
+  fun shouldStartDrag(type: EditorSelectionHandleType, position: Offset): Boolean =
+    session.hasMovedPastSlop(type = type, touchPosition = position, dragSlop = dragSlop)
 
   fun hitTest(position: Offset): EditorSelectionHandleType? {
     val context = contextProvider()

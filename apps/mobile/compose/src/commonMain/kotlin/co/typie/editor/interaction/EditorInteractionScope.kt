@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
+import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
@@ -31,6 +32,7 @@ internal class EditorInteractionScope(
   private var uiState: EditorUiState? = null
   private var visibleArea: EditorVisibleArea? = null
   private var viewportState: EditorViewportState? = null
+  private var extensionAreaTapEnabled = true
   override var density: Float = 0f
     private set
 
@@ -63,6 +65,7 @@ internal class EditorInteractionScope(
     density: Float,
     scrollGestureLockState: ScrollGestureLockState,
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
+    layoutSpec: EditorDocumentLayoutSpec? = null,
     pointerInputEnabled: () -> Boolean = { true },
     onSelectionHaptic: () -> Unit,
     onRequestSoftwareKeyboard: () -> Unit,
@@ -77,6 +80,8 @@ internal class EditorInteractionScope(
     this.onSelectionHaptic = onSelectionHaptic
     this.onRequestSoftwareKeyboard = onRequestSoftwareKeyboard
     this.pointerInputEnabled = pointerInputEnabled
+    extensionAreaTapEnabled =
+      layoutSpec == null || layoutSpec is EditorDocumentLayoutSpec.Continuous
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
 
@@ -85,28 +90,6 @@ internal class EditorInteractionScope(
       return
     }
     controller.onEditorStateChanged(state)
-  }
-
-  fun beginPointerSignalZoom(): Boolean {
-    if (!controller.canApplyModeEvent(EditorInteractionEvent.ViewportZoomStart)) {
-      return false
-    }
-    if (!semantics.viewportZoom.beginPointerSignal()) {
-      return false
-    }
-    controller.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
-    return true
-  }
-
-  fun updatePointerSignalZoom(focalInEditorPx: Offset, normalizedDelta: Float): Boolean =
-    semantics.viewportZoom.updatePointerSignal(
-      focalInEditorPx = focalInEditorPx,
-      normalizedDelta = normalizedDelta,
-    )
-
-  fun endPointerSignalZoom() {
-    semantics.viewportZoom.end()
-    controller.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
   }
 
   fun reset() {
@@ -123,7 +106,42 @@ internal class EditorInteractionScope(
     onSelectionHaptic = null
     onRequestSoftwareKeyboard = null
     pointerInputEnabled = { true }
+    extensionAreaTapEnabled = true
     scrollGestureLockState = null
+  }
+
+  override fun resolveInteractionPosition(positionInSurface: Offset): Offset? {
+    if (editor == null) {
+      return null
+    }
+    val bounds = uiState?.editorBoundsInContainer ?: return null
+    if (!bounds.isValid || density <= 0f) {
+      return null
+    }
+
+    return Offset(
+      x = positionInSurface.x - bounds.x * density,
+      y = positionInSurface.y - bounds.y * density,
+    )
+  }
+
+  override fun isTapEligible(positionInSurface: Offset): Boolean {
+    if (editor == null || density <= 0f) {
+      return false
+    }
+    val bounds = uiState?.editorBoundsInContainer ?: return false
+    if (!bounds.isValid) {
+      return false
+    }
+    if (extensionAreaTapEnabled) {
+      return true
+    }
+    val x = positionInSurface.x / density
+    val y = positionInSurface.y / density
+    return x >= bounds.x &&
+      x <= bounds.x + bounds.width &&
+      y >= bounds.y &&
+      y <= bounds.y + bounds.height
   }
 
   override fun resolvePoint(positionInNode: Offset): PagePoint? {

@@ -7,6 +7,7 @@ import co.typie.editor.interaction.semantics.EditorEdgeAutoScrollSemantic
 import co.typie.editor.interaction.semantics.EditorMagnifierSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionExpansionSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionHapticSemantic
+import co.typie.editor.interaction.semantics.EditorTableColumnResizeSemantic
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemantic
 
 internal class EditorInteractionSemantics(
@@ -16,6 +17,7 @@ internal class EditorInteractionSemantics(
   val viewportZoom: EditorViewportZoomSemantic = EditorViewportZoomSemantic(),
   val magnifier: EditorMagnifierSemantic = EditorMagnifierSemantic(),
   val edgeAutoScroll: EditorEdgeAutoScrollSemantic = EditorEdgeAutoScrollSemantic(),
+  val tableColumnResize: EditorTableColumnResizeSemantic = EditorTableColumnResizeSemantic(),
   val selectionHaptic: EditorSelectionHapticSemantic =
     EditorSelectionHapticSemantic(effects = effects),
 ) {
@@ -29,6 +31,7 @@ internal class EditorInteractionSemantics(
     viewportZoom.reset()
     magnifier.reset()
     edgeAutoScroll.reset()
+    tableColumnResize.reset()
     selectionHaptic.reset()
   }
 }

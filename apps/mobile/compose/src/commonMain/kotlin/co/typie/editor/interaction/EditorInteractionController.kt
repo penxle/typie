@@ -7,7 +7,8 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.InputModifiers
-import co.typie.editor.interaction.gestures.EditorSelectionHandleGesture
+import co.typie.editor.interaction.gestures.EditorPanGestureDriver
+import co.typie.editor.interaction.semantics.EditorTableColumnResizePresentation
 import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
 
@@ -57,30 +58,26 @@ internal class EditorInteractionController(
   val interactionMode: EditorInteractionMode
     get() = mode
 
-  val hasActivePointer: Boolean
-    get() = gestures.hasActivePointer
-
-  val isIgnoringUntilAllPointersUp: Boolean
-    get() = gestures.isIgnoringUntilAllPointersUp
-
-  val isPinching: Boolean
-    get() = gestures.pinch.isPinching
-
-  val selectionHandleGesture: EditorSelectionHandleGesture
-    get() = gestures.selectionHandle
-
   val magnifierPosition: Offset?
     get() = semantics.magnifier.position
+
+  val tableColumnResizePresentation: EditorTableColumnResizePresentation
+    get() = semantics.tableColumnResize.presentation
 
   fun updateTapSlop(tapSlopPx: Float) {
     gestures.updateTapSlop(tapSlopPx)
   }
 
-  fun clearTapHistory() {
-    gestures.clearTapHistory()
+  fun updateColumnResizeSlop(dragSlopPx: Float) {
+    gestures.updateColumnResizeSlop(dragSlopPx)
   }
 
   fun canApplyModeEvent(event: EditorInteractionEvent): Boolean = mode.canApply(event)
+
+  fun resolveInteractionPosition(positionInSurface: Offset): Offset? =
+    geometry.resolveInteractionPosition(positionInSurface)
+
+  fun isTapEligible(positionInSurface: Offset): Boolean = geometry.isTapEligible(positionInSurface)
 
   fun onPointerDown(
     pointerId: Long,
@@ -88,6 +85,9 @@ internal class EditorInteractionController(
     nowMillis: Long,
     tapEnabled: Boolean = true,
     inputModifiers: InputModifiers = InputModifiers(),
+    panPosition: Offset = position,
+    panDriver: EditorPanGestureDriver? = null,
+    hasEditorPosition: Boolean = true,
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerDown(
@@ -96,29 +96,48 @@ internal class EditorInteractionController(
         nowMillis = nowMillis,
         tapEnabled = tapEnabled,
         inputModifiers = inputModifiers,
+        panPosition = panPosition,
+        panDriver = panDriver,
+        hasEditorPosition = hasEditorPosition,
         context = gestureContext,
       )
     } else {
       false
     }
 
-  fun onPointerMove(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
+  fun onPointerMove(
+    pointerId: Long,
+    position: Offset,
+    nowMillis: Long,
+    panPosition: Offset = position,
+    pressed: Boolean = true,
+    consumed: Boolean = false,
+  ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerMove(
         pointerId = pointerId,
         position = position,
+        panPosition = panPosition,
         nowMillis = nowMillis,
+        pressed = pressed,
+        consumed = consumed,
         context = gestureContext,
       )
     } else {
       false
     }
 
-  fun onPointerUp(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
+  fun onPointerUp(
+    pointerId: Long,
+    position: Offset,
+    nowMillis: Long,
+    panPosition: Offset = position,
+  ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerUp(
         pointerId = pointerId,
         position = position,
+        panPosition = panPosition,
         nowMillis = nowMillis,
         context = gestureContext,
       )
@@ -133,8 +152,46 @@ internal class EditorInteractionController(
       false
     }
 
-  fun onPinchEnd() {
-    gestures.endPinch(context = gestureContext)
+  fun onPinchEnd(): Boolean = gestures.endPinch(context = gestureContext)
+
+  fun endPinchAndResumeViewportPan(
+    pointerId: Long,
+    position: Offset,
+    nowMillis: Long,
+    driver: EditorPanGestureDriver,
+  ): Boolean {
+    if (!ensurePointerInputEnabled()) {
+      return false
+    }
+    return gestures.endPinchAndResumeViewportPan(
+      pointerId = pointerId,
+      position = position,
+      nowMillis = nowMillis,
+      driver = driver,
+      context = gestureContext,
+    )
+  }
+
+  fun beginPointerSignalZoom(): Boolean =
+    if (ensurePointerInputEnabled()) {
+      gestures.beginPointerSignalZoom(context = gestureContext)
+    } else {
+      false
+    }
+
+  fun updatePointerSignalZoom(focalInEditorPx: Offset, normalizedDelta: Float): Boolean =
+    if (ensurePointerInputEnabled()) {
+      gestures.updatePointerSignalZoom(
+        focalInEditorPx = focalInEditorPx,
+        normalizedDelta = normalizedDelta,
+        context = gestureContext,
+      )
+    } else {
+      false
+    }
+
+  fun endPointerSignalZoom() {
+    gestures.endPointerSignalZoom(context = gestureContext)
   }
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =

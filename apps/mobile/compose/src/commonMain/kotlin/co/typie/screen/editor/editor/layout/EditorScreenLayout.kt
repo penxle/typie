@@ -1,7 +1,7 @@
 package co.typie.screen.editor.editor.layout
 
 import androidx.compose.foundation.gestures.Scrollable2DState
-import androidx.compose.foundation.gestures.scrollable2D
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -21,18 +21,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.isCtrlPressed
-import androidx.compose.ui.input.pointer.isMetaPressed
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.interaction.EditorScreenPointerSequence
+import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.editorInteractions
+import co.typie.editor.interaction.observeEditorScreenPointerSequence
+import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
@@ -42,7 +46,7 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
-import co.typie.editor.viewport.consumeEditorViewportWheelPan
+import co.typie.navigation.LocalNavigationPopNestedScrollCancel
 import co.typie.navigation.navigationPopNestedScroll
 import co.typie.screen.editor.editor.overlay.editorMagnifier
 import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
@@ -66,6 +70,8 @@ private enum class EditorScreenLayoutSlot {
 
 private const val EditorViewportScrollAnchorTolerance = 1f
 
+private object EditorViewportNestedScrollConnection : NestedScrollConnection
+
 internal enum class EditorViewportScrollReconcileMode {
   Disabled,
   KeepVisibleAnchor,
@@ -85,7 +91,7 @@ internal fun EditorScreenLayout(
   onViewportWheelScroll: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
-  body: @Composable () -> Unit,
+  body: @Composable (Modifier) -> Unit,
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
   overlay: @Composable () -> Unit = {},
   toolbar: @Composable () -> Unit,
@@ -93,8 +99,15 @@ internal fun EditorScreenLayout(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
+  val viewConfiguration = LocalViewConfiguration.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val interactionScope = LocalEditorInteractionScope.current
+  val uiState = LocalEditorUiState.current
   val toolbarBackdropHazeState = LocalHazeState.current
+  val cancelNavigationPopNestedScroll = LocalNavigationPopNestedScrollCancel.current
+  val viewportNestedScrollDispatcher = remember { NestedScrollDispatcher() }
+  val screenPointerSequence = remember { EditorScreenPointerSequence() }
+  val viewportFlingBehavior = ScrollableDefaults.flingBehavior()
   val scrollReconcileState = remember { EditorViewportScrollReconcileState() }
   val coroutineScope = rememberCoroutineScope()
   var smoothScrollJob by remember { mutableStateOf<Job?>(null) }
@@ -125,11 +138,28 @@ internal fun EditorScreenLayout(
 
   SubcomposeLayout(
     modifier =
-      modifier.fillMaxSize().editorMagnifier(magnifierPlacement).onGloballyPositioned { coordinates
-        ->
-        layoutBoundsInRoot = coordinates.unclippedBoundsInRoot()
-      }
+      modifier
+        .fillMaxSize()
+        .observeEditorScreenPointerSequence(screenPointerSequence)
+        .editorMagnifier(magnifierPlacement)
+        .onGloballyPositioned { coordinates ->
+          layoutBoundsInRoot = coordinates.unclippedBoundsInRoot()
+        }
   ) { constraints ->
+    val editorInteractionModifier =
+      Modifier.editorInteractions(
+        interactionController = interactionScope.controller,
+        screenPointerSequence = screenPointerSequence,
+        scrollableState = viewportScrollableState,
+        nestedScrollDispatcher = viewportNestedScrollDispatcher,
+        flingBehavior = viewportFlingBehavior,
+        touchSlop = viewConfiguration.touchSlop,
+        maximumFlingVelocity = viewConfiguration.maximumFlingVelocity,
+        density = density.density,
+        enabled = viewportInputEnabled,
+        onViewportWheelScroll = onViewportWheelScroll,
+        onPanCancel = { cancelNavigationPopNestedScroll?.invoke() },
+      )
     val viewportWidth = constraints.maxWidth / density.density
     val resolvedContentWidth =
       resolveEditorViewportContentWidth(
@@ -150,23 +180,13 @@ internal fun EditorScreenLayout(
       )
     val viewportContentPlaceables =
       subcompose(EditorScreenLayoutSlot.ViewportContent) {
-          val viewportInputModifier =
-            if (viewportInputEnabled) {
-              Modifier.scrollable2D(state = viewportScrollableState)
-                .editorViewportWheelScroll(
-                  viewportState = state.viewportState,
-                  onScrollConsumed = onViewportWheelScroll,
-                )
-            } else {
-              Modifier
-            }
           Layout(
             modifier =
               Modifier.fillMaxSize()
                 .clipToBounds()
                 .hazeSource(toolbarBackdropHazeState)
                 .navigationPopNestedScroll()
-                .then(viewportInputModifier),
+                .nestedScroll(EditorViewportNestedScrollConnection, viewportNestedScrollDispatcher),
             content = {
               Column {
                 Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
@@ -176,7 +196,7 @@ internal fun EditorScreenLayout(
                       translationX = -state.viewportState.scrollOffset.x * density.density
                     }
                 ) {
-                  body()
+                  body(editorInteractionModifier)
                 }
               }
             },
@@ -494,45 +514,3 @@ internal fun resolveEditorViewportContentConstraints(
     maxHeight = Constraints.Infinity,
   )
 }
-
-private fun Modifier.editorViewportWheelScroll(
-  viewportState: EditorViewportState,
-  onScrollConsumed: () -> Unit,
-): Modifier =
-  pointerInput(viewportState, onScrollConsumed) {
-    awaitPointerEventScope {
-      while (true) {
-        val event = awaitPointerEvent(PointerEventPass.Main)
-        if (event.type != PointerEventType.Scroll) {
-          continue
-        }
-        if (event.keyboardModifiers.isCtrlPressed || event.keyboardModifiers.isMetaPressed) {
-          continue
-        }
-
-        val scrollDelta =
-          event.changes.fold(Offset.Zero) { delta, change ->
-            if (change.isConsumed) {
-              delta
-            } else {
-              delta + change.scrollDelta
-            }
-          }
-        if (scrollDelta == Offset.Zero) {
-          continue
-        }
-
-        // DesktopScrollTranslation turns mouse drags into synthetic wheel events; handle those
-        // here
-        // as the same viewport pan path because scrollable2D currently has no wheel handling.
-        viewportState.updateScrollableInteractionInProgress(true)
-        val consumed =
-          consumeEditorViewportWheelPan(viewportState = viewportState, scrollDelta = scrollDelta)
-        viewportState.updateScrollableInteractionInProgress(false)
-        if (consumed != Offset.Zero) {
-          onScrollConsumed()
-          event.changes.forEach { it.consume() }
-        }
-      }
-    }
-  }

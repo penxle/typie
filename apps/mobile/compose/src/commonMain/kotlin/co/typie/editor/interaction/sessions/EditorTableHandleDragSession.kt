@@ -20,6 +20,11 @@ internal class EditorTableHandleDragSession {
   val activeContext: EditorTableHandleDragContext?
     get() = dragContext
 
+  fun hasMovedPastSlop(touchPosition: Offset, dragSlop: Float): Boolean {
+    val pending = pendingContext ?: return false
+    return (touchPosition - pending.touchPosition).getDistance() > dragSlop
+  }
+
   fun beginPending(touchPosition: Offset): Boolean {
     if (activeDrag) {
       return false

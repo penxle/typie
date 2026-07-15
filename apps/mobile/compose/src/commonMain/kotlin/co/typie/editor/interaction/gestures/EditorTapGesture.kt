@@ -29,22 +29,14 @@ internal class EditorTapGesture(
   private val consecutiveTapMaxIntervalMillis: Long = ConsecutiveTapMaxIntervalMillis,
   private val consecutiveTapMaxDistancePx: Float = ConsecutiveTapMaxDistancePx,
 ) {
-  private val pressedPointerIds = mutableSetOf<Long>()
   private var activePointerId: Long? = null
   private var downPosition = Offset.Zero
   private var movedPastTapSlop = false
   private var tapDispatched = false
-  private var ignoringUntilAllPointersUp = false
   private var activeInputModifiers = InputModifiers()
   private var lastTapTimeMillis: Long? = null
   private var lastTapPosition: Offset? = null
   private var contextMenuVisibleAtPointerDown = false
-
-  val pressedPointerCount: Int
-    get() = pressedPointerIds.size
-
-  val isIgnoringUntilAllPointersUp: Boolean
-    get() = ignoringUntilAllPointersUp
 
   val hasActivePointer: Boolean
     get() = activePointerId != null
@@ -56,15 +48,10 @@ internal class EditorTapGesture(
     get() = activeInputModifiers
 
   val canDispatchTapTimer: Boolean
-    get() =
-      activePointerId != null && !movedPastTapSlop && !tapDispatched && !ignoringUntilAllPointersUp
+    get() = activePointerId != null && !movedPastTapSlop && !tapDispatched
 
   fun updateTapSlop(tapSlopPx: Float) {
     this.tapSlopPx = tapSlopPx
-  }
-
-  fun addPressedPointer(pointerId: Long) {
-    pressedPointerIds += pointerId
   }
 
   fun startActivePointer(
@@ -79,13 +66,8 @@ internal class EditorTapGesture(
     tapDispatched = false
   }
 
-  fun cancelActivePointerAndIgnoreUntilAllPointersUp() {
-    clearActivePointer()
-    ignoringUntilAllPointersUp = true
-  }
-
   fun onPointerMove(pointerId: Long, position: Offset): Boolean {
-    if (ignoringUntilAllPointersUp || activePointerId != pointerId) {
+    if (activePointerId != pointerId) {
       return false
     }
     if ((position - downPosition).getDistance() > tapSlopPx) {
@@ -104,7 +86,7 @@ internal class EditorTapGesture(
   }
 
   fun shouldConsumePointerUp(pointerId: Long, canFinish: Boolean): Boolean =
-    canFinish && !ignoringUntilAllPointersUp && activePointerId == pointerId && !movedPastTapSlop
+    canFinish && activePointerId == pointerId && !movedPastTapSlop
 
   fun onPointerUp(
     pointerId: Long,
@@ -112,14 +94,6 @@ internal class EditorTapGesture(
     nowMillis: Long,
     canFinish: Boolean = true,
   ): Int? {
-    pressedPointerIds -= pointerId
-    if (ignoringUntilAllPointersUp) {
-      if (pressedPointerIds.isEmpty()) {
-        ignoringUntilAllPointersUp = false
-      }
-      return null
-    }
-
     if (activePointerId != pointerId) {
       return null
     }
@@ -141,15 +115,11 @@ internal class EditorTapGesture(
   fun cancelActivePointerStream(): Boolean {
     val hadActivePointer = activePointerId != null
     clearActivePointer()
-    pressedPointerIds.clear()
-    ignoringUntilAllPointersUp = false
     return hadActivePointer
   }
 
   fun reset() {
     clearActivePointer()
-    pressedPointerIds.clear()
-    ignoringUntilAllPointersUp = false
     lastTapTimeMillis = null
     lastTapPosition = null
     contextMenuVisibleAtPointerDown = false
@@ -208,7 +178,7 @@ internal fun EditorTapGesture.handlePointerDown(
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ): Boolean {
-  if (!tapEnabled || context.mode.isViewportZooming || isIgnoringUntilAllPointersUp) {
+  if (!tapEnabled || context.mode.isViewportZooming) {
     return false
   }
 

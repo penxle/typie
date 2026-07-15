@@ -12,6 +12,13 @@ import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.resolveTableCellSelectionGeometry
 import co.typie.editor.interaction.resolveTableCellSelectionRange
+import co.typie.editor.interaction.semantics.dragDeltaToPageDelta
+import co.typie.editor.interaction.semantics.resizeTableColumnWidths
+import co.typie.editor.interaction.semantics.resolveTableColumnResizeTarget
+import co.typie.editor.interaction.semantics.resolveTableResizeCommittedDelta
+import co.typie.editor.interaction.semantics.resolveTableResizePreviewDelta
+import co.typie.editor.interaction.semantics.resolveTableResizeProportion
+import co.typie.editor.interaction.semantics.splitTableColumnResizeHitRects
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

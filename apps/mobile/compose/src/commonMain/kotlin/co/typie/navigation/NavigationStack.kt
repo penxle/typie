@@ -328,10 +328,17 @@ fun NavigationStack(
 
   fun cancelPopDrag() {
     nestedPopGestureSession.reset()
+    if (animState != AnimState.Dragging) return
     scope.launch {
       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
       behindRoute = null
       animState = AnimState.Idle
+    }
+  }
+
+  fun cancelNestedPopDrag() {
+    if (nestedPopGestureSession.isClaimed) {
+      cancelPopDrag()
     }
   }
 
@@ -413,6 +420,7 @@ fun NavigationStack(
   val animationProviders =
     buildList<ProvidedValue<*>> {
       add(Nav provides navigator)
+      add(LocalNavigationPopNestedScrollCancel provides ::cancelNestedPopDrag)
       add(LocalNavigationPopNestedScrollConnection provides popNestedScrollConnection)
       add(LocalTopBarAnimationSource provides topBarState)
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
@@ -420,10 +428,26 @@ fun NavigationStack(
   CompositionLocalProvider(*animationProviders.toTypedArray()) {
     PlatformBackHandler(enabled = navigator.canPop) { scope.launch { navigator.pop() } }
     Box(
-      modifier.fillMaxSize().onSizeChanged {
-        containerWidth = it.width.toFloat()
-        containerHeight = it.height.toFloat()
-      }
+      modifier
+        .fillMaxSize()
+        .onSizeChanged {
+          containerWidth = it.width.toFloat()
+          containerHeight = it.height.toFloat()
+        }
+        .pointerInput(nestedPopGestureSession) {
+          awaitPointerEventScope {
+            while (true) {
+              val event = awaitPointerEvent(PointerEventPass.Initial)
+              val beganMultiTouch =
+                nestedPopGestureSession.updatePressedPointerCount(
+                  event.changes.count { change -> change.pressed }
+                )
+              if (beganMultiTouch && animState == AnimState.Dragging) {
+                cancelPopDrag()
+              }
+            }
+          }
+        }
     ) {
       val useFadeTransition = transitionStyle == RouteTransitionStyle.Fade
       val useVerticalTransition = transitionStyle == RouteTransitionStyle.VerticalSlide
@@ -597,6 +621,7 @@ fun NavigationStack(
               val slop = viewConfiguration.touchSlop
               awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                if (navigator.isTransitioning) return@awaitEachGesture
                 val popGestureSession = NavigationPopGestureSession()
                 if (animState != AnimState.Idle && animState != AnimState.Dragging)
                   return@awaitEachGesture
@@ -612,10 +637,11 @@ fun NavigationStack(
                   val dy = change.position.y - down.position.y
                   if (abs(dx) > slop || abs(dy) > slop) {
                     if (
-                      !popGestureSession.tryClaim(
-                        initialDrag = Offset(dx, dy),
-                        childConsumed = change.isConsumed,
-                      )
+                      nestedPopGestureSession.isMultiTouchRejected ||
+                        !popGestureSession.tryClaim(
+                          initialDrag = Offset(dx, dy),
+                          childConsumed = change.isConsumed,
+                        )
                     ) {
                       return@awaitEachGesture
                     }
@@ -625,6 +651,7 @@ fun NavigationStack(
                         ?: return@awaitEachGesture
                     if (!confirmChange.pressed) return@awaitEachGesture
                     if (confirmChange.isConsumed) return@awaitEachGesture
+                    if (nestedPopGestureSession.isMultiTouchRejected) return@awaitEachGesture
                     if (confirmEvent.changes.count { it.pressed } != 1) return@awaitEachGesture
                     confirmChange.consume()
                     overSlopX = confirmChange.position.x - down.position.x
@@ -637,6 +664,11 @@ fun NavigationStack(
                 // 자식 scrollable이 이 포인터를 take over하지 못하도록 우리가 계속 consume.
                 var dragging = true
                 while (dragging) {
+                  if (nestedPopGestureSession.isMultiTouchRejected) {
+                    // Close after progress updates that may have been queued before root rejection.
+                    cancelPopDrag()
+                    return@awaitEachGesture
+                  }
                   val event = awaitPointerEvent(PointerEventPass.Main)
                   if (event.changes.count { it.pressed } > 1) {
                     cancelPopDrag()
@@ -723,6 +755,7 @@ fun NavigationStack(
             val slop = viewConfiguration.touchSlop
             awaitEachGesture {
               val down = awaitFirstDown(requireUnconsumed = false)
+              if (navigator.isTransitioning) return@awaitEachGesture
               val popGestureSession = NavigationPopGestureSession()
               var overSlopX = 0f
               var claimed = false
@@ -736,10 +769,11 @@ fun NavigationStack(
                 val dy = change.position.y - down.position.y
                 if (abs(dx) > slop || abs(dy) > slop) {
                   if (
-                    !popGestureSession.tryClaim(
-                      initialDrag = Offset(dx, dy),
-                      childConsumed = change.isConsumed,
-                    )
+                    nestedPopGestureSession.isMultiTouchRejected ||
+                      !popGestureSession.tryClaim(
+                        initialDrag = Offset(dx, dy),
+                        childConsumed = change.isConsumed,
+                      )
                   ) {
                     return@awaitEachGesture
                   }
@@ -752,6 +786,11 @@ fun NavigationStack(
               updatePopDrag(overSlopX)
               var dragging = true
               while (dragging) {
+                if (nestedPopGestureSession.isMultiTouchRejected) {
+                  // Close after progress updates that may have been queued before root rejection.
+                  cancelPopDrag()
+                  return@awaitEachGesture
+                }
                 val event = awaitPointerEvent(PointerEventPass.Main)
                 if (event.changes.count { it.pressed } > 1) {
                   cancelPopDrag()

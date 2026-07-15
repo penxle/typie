@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -24,11 +25,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.overlay.EditorExtensionAreaLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.sync.DocumentEditorLoad
+import co.typie.screen.editor.editor.overlay.EditorSelectionHandleOverlay
+import co.typie.screen.editor.editor.overlay.EditorTableCellSelectionOverlay
+import co.typie.screen.editor.editor.overlay.EditorTableColumnResizeOverlay
 import co.typie.storage.Preference
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
@@ -42,6 +47,7 @@ internal fun EditorBody(
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
+  interactionModifier: Modifier = Modifier,
   editorInputEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
@@ -51,6 +57,7 @@ internal fun EditorBody(
   val density = LocalDensity.current
   val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
+  val interactionScope = LocalEditorInteractionScope.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
@@ -68,7 +75,7 @@ internal fun EditorBody(
     }
 
   Box(modifier = modifier.fillMaxWidth()) {
-    EditorExtensionArea(layoutSpec = layoutSpec, modifier = containerModifier) {
+    EditorExtensionArea(modifier = containerModifier.then(interactionModifier)) {
       if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
         EditorExtensionAreaLineHighlightOverlay(
           cursor = editor?.cursor,
@@ -148,6 +155,35 @@ internal fun EditorBody(
             )
           }
         }
+      }
+      val editorBounds = uiState.editorBoundsInContainer
+      if (editor != null && editorBounds.isValid && density.density > 0f) {
+        val editorRectInSurface =
+          Rect(
+            left = editorBounds.x * density.density,
+            top = editorBounds.y * density.density,
+            right = (editorBounds.x + editorBounds.width) * density.density,
+            bottom = (editorBounds.y + editorBounds.height) * density.density,
+          )
+        EditorTableColumnResizeOverlay(
+          editor = editor,
+          uiState = uiState,
+          geometry = interactionScope,
+          editorOffsetInSurface = editorRectInSurface.topLeft,
+          presentation = interactionScope.controller.tableColumnResizePresentation,
+        )
+        EditorTableCellSelectionOverlay(
+          editor = editor,
+          uiState = uiState,
+          editorRectInOverlay = editorRectInSurface,
+          density = density.density,
+        )
+        EditorSelectionHandleOverlay(
+          editor = editor,
+          uiState = uiState,
+          editorRectInOverlay = editorRectInSurface,
+          density = density.density,
+        )
       }
     }
 

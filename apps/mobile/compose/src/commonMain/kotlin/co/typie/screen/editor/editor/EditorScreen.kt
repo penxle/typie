@@ -170,7 +170,6 @@ import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
 import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
 import co.typie.screen.editor.editor.toolbar.trustedImeBottomInset
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
-import co.typie.screen.editor.editor.viewport.rememberEditorDebugWheelZoomModifier
 import co.typie.screen.settings.aisettings.AiPreferences
 import co.typie.serialization.json
 import co.typie.storage.Preference
@@ -1097,6 +1096,7 @@ fun EditorScreen(entityId: String) {
         density = density,
         scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
+        layoutSpec = layoutSpec,
         pointerInputEnabled = { editorReady && !popoverOverlayState.isOutsideDismissGestureActive },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
         onRequestSoftwareKeyboard = {
@@ -1109,38 +1109,6 @@ fun EditorScreen(entityId: String) {
       uiState.contextMenu.onEditorStateChanged(editorState)
       uiState.contextMenu.showAfterSelectionCommitIfRequested(editorState)
     }
-    val paginatedLayout = layoutSpec as? EditorDocumentLayoutSpec.Paginated
-    val debugWheelZoomModifier =
-      if (
-        PlatformModule.platform == co.typie.platform.Platform.Desktop &&
-          editorReady &&
-          paginatedLayout != null &&
-          density > 0f
-      ) {
-        rememberEditorDebugWheelZoomModifier(
-          state = screenState,
-          onZoomSessionStart = interactionScope::beginPointerSignalZoom,
-          onZoom = { focalInContainerPx, normalizedDelta ->
-            val focalInEditorDp =
-              uiState.containerToEditorLocal(
-                x = focalInContainerPx.x / density,
-                y = focalInContainerPx.y / density,
-              )
-            if (focalInEditorDp == null) {
-              false
-            } else {
-              interactionScope.updatePointerSignalZoom(
-                focalInEditorPx = focalInEditorDp * density,
-                normalizedDelta = normalizedDelta,
-              )
-            }
-          },
-          onZoomSessionEnd = interactionScope::endPointerSignalZoom,
-        )
-      } else {
-        Modifier
-      }
-
     LaunchedEffect(screenState.viewportState, viewportScrollableState) {
       snapshotFlow { viewportScrollableState.isScrollInProgress }
         .collectLatest(screenState.viewportState::updateScrollableInteractionInProgress)
@@ -1300,7 +1268,7 @@ fun EditorScreen(entityId: String) {
             }
           }
         },
-        body = {
+        body = { editorInteractionModifier ->
           val editorLoad = editorLoadState
           if (editorLoad != null) {
             EditorBody(
@@ -1308,7 +1276,8 @@ fun EditorScreen(entityId: String) {
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
-              modifier = Modifier.then(debugWheelZoomModifier),
+              modifier = Modifier,
+              interactionModifier = editorInteractionModifier,
               editorInputEnabled = editorReady && editorInputEnabledByToolbar,
               suppressSoftwareKeyboard = !editorReady || editorSuppressesSoftwareKeyboard,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,

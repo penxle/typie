@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor.overlay
 
+import androidx.compose.foundation.gestures.Scrollable2DState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.changedToUp
@@ -49,8 +53,12 @@ import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TableOverlayCellSelection
 import co.typie.editor.ffi.TableOverlayColumn
 import co.typie.editor.ffi.TableOverlayRow
+import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.EditorInteractionScope
+import co.typie.editor.interaction.EditorScreenPointerSequence
 import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.editorInteractions
+import co.typie.editor.interaction.observeEditorScreenPointerSequence
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
@@ -59,8 +67,8 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
-import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.ScrollGestureLockState
 import co.typie.platform.Platform
 import co.typie.ui.theme.LightAppShadows
@@ -82,7 +90,235 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
 
 @OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class, ExperimentalCoroutinesApi::class)
-class EditorOverlayPointerRouterDesktopTest {
+class EditorDocumentManipulationDesktopTest {
+  @Test
+  fun selectionHandleAndPagePointersStartOnePinch() = runComposeUiTest {
+    val selection =
+      Selection(
+        anchor = Position("text", 0, Affinity.Downstream),
+        head = Position("text", 5, Affinity.Downstream),
+      )
+    val endpoints =
+      SelectionEndpoints(
+        from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 4f, height = 8f)),
+        to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+        fromPosition = Position("text", 0, Affinity.Downstream),
+        toPosition = Position("text", 5, Affinity.Downstream),
+      )
+    val pageSizes = listOf(Size(width = 120f, height = 120f))
+    val layoutSpec =
+      EditorDocumentLayoutSpec.Paginated(
+        pageWidth = 120f,
+        pageHeight = 120f,
+        pageMarginTop = 0f,
+        pageMarginBottom = 0f,
+        pageMarginLeft = 0f,
+        pageMarginRight = 0f,
+      )
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        selectionEndpointsProvider = { endpoints },
+        pageSizesProvider = { pageSizes },
+      )
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val uiState =
+      EditorUiState().apply {
+        updateFocus(true)
+        updateDisplayZoom(1f)
+        updatePageOffset(page = 0, offset = Offset.Zero)
+        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateEditorBounds(TestRootRect, density = 1f)
+      }
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    val viewportState = EditorViewportState()
+    val zoomController =
+      EditorZoomController().apply { syncLayout(layoutSpec = layoutSpec, viewportWidth = 120f) }
+    val viewportZoomConfig =
+      EditorViewportZoomSemanticConfig(
+        layoutSpec = layoutSpec,
+        zoomController = zoomController,
+        viewportState = viewportState,
+        uiState = uiState,
+        pageSizes = pageSizes,
+        viewportWidth = 120f,
+        density = 1f,
+        onZoomSnap = {},
+      )
+    lateinit var interactionScope: EditorInteractionScope
+    editor.sync {}
+    try {
+      setOverlayHostContent(
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+        viewportState = viewportState,
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        viewportZoomConfig = viewportZoomConfig,
+        onInteractionScope = { interactionScope = it },
+      )
+      waitForIdle()
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(pointerId = 0, position = Offset(x = 42f, y = 30f))
+        down(pointerId = 1, position = Offset(x = 90f, y = 90f))
+      }
+      waitForIdle()
+
+      assertEquals(
+        EditorInteractionMode.ViewportZooming,
+        interactionScope.controller.interactionMode,
+      )
+
+      onNodeWithTag(RootTag).performTouchInput {
+        up(pointerId = 1)
+        up(pointerId = 0)
+      }
+    } finally {
+      runtime.clear(editor)
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun tableCellHandleAndPagePointersStartOnePinch() = runComposeUiTest {
+    val selection =
+      Selection(
+        anchor = Position("cell-text", 0, Affinity.Downstream),
+        head = Position("cell-text", 0, Affinity.Downstream),
+      )
+    val pageSizes = listOf(Size(width = 120f, height = 120f))
+    val layoutSpec = testPaginatedLayoutSpec()
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        pageSizesProvider = { pageSizes },
+        tableOverlaysProvider = {
+          listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+        },
+      )
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val uiState = focusedTestUiState()
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    val viewportState = EditorViewportState()
+    val viewportZoomConfig =
+      testViewportZoomConfig(
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        uiState = uiState,
+        viewportState = viewportState,
+      )
+    lateinit var interactionScope: EditorInteractionScope
+    editor.sync {}
+    try {
+      setOverlayHostContent(
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+        viewportState = viewportState,
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        viewportZoomConfig = viewportZoomConfig,
+        onInteractionScope = { interactionScope = it },
+      )
+      waitForIdle()
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(pointerId = 0, position = Offset(x = 60f, y = 60f))
+        down(pointerId = 1, position = Offset(x = 100f, y = 20f))
+      }
+      waitForIdle()
+
+      assertEquals(
+        EditorInteractionMode.ViewportZooming,
+        interactionScope.controller.interactionMode,
+      )
+
+      onNodeWithTag(RootTag).performTouchInput {
+        up(pointerId = 1)
+        up(pointerId = 0)
+      }
+    } finally {
+      runtime.clear(editor)
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun pinchTakeoverCancelsColumnResizeWithoutCommit() = runComposeUiTest {
+    val selection =
+      Selection(
+        anchor = Position("cell-text", 0, Affinity.Downstream),
+        head = Position("cell-text", 0, Affinity.Downstream),
+      )
+    val pageSizes = listOf(Size(width = 120f, height = 120f))
+    val layoutSpec = testPaginatedLayoutSpec()
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        pageSizesProvider = { pageSizes },
+        tableOverlaysProvider = {
+          listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+        },
+      )
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val uiState = focusedTestUiState()
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    val viewportState = EditorViewportState()
+    val viewportZoomConfig =
+      testViewportZoomConfig(
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        uiState = uiState,
+        viewportState = viewportState,
+      )
+    lateinit var interactionScope: EditorInteractionScope
+    editor.sync {}
+    try {
+      setOverlayHostContent(
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+        viewportState = viewportState,
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        viewportZoomConfig = viewportZoomConfig,
+        onInteractionScope = { interactionScope = it },
+      )
+      waitForIdle()
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(pointerId = 0, position = Offset(x = 60f, y = 30f))
+        moveTo(pointerId = 0, position = Offset(x = 80f, y = 30f))
+        down(pointerId = 1, position = Offset(x = 100f, y = 100f))
+      }
+      waitForIdle()
+
+      assertEquals(
+        EditorInteractionMode.ViewportZooming,
+        interactionScope.controller.interactionMode,
+      )
+      assertTrue(fake.enqueued.filterIsInstance<Message.Node>().isEmpty())
+
+      onNodeWithTag(RootTag).performTouchInput {
+        up(pointerId = 1)
+        up(pointerId = 0)
+      }
+      waitForIdle()
+      assertTrue(fake.enqueued.filterIsInstance<Message.Node>().isEmpty())
+    } finally {
+      runtime.clear(editor)
+      scope.cancel()
+    }
+  }
+
   @Test
   fun selectionHandleRoutesDragBeforeLowerPointerOverlay() = runComposeUiTest {
     val selection =
@@ -138,7 +374,90 @@ class EditorOverlayPointerRouterDesktopTest {
   }
 
   @Test
-  fun selectionHandleForwardsWheelScrollToViewport() = runComposeUiTest {
+  fun paginatedSelectionHandleUsesUnclampedCoordinatesOutsidePageBounds() = runComposeUiTest {
+    val selection =
+      Selection(
+        anchor = Position("text", 0, Affinity.Downstream),
+        head = Position("text", 5, Affinity.Downstream),
+      )
+    val endpoints =
+      SelectionEndpoints(
+        from = PageRect(pageIdx = 0, rect = Rect(x = 0f, y = 20f, width = 4f, height = 8f)),
+        to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 4f, height = 8f)),
+        fromPosition = Position("text", 0, Affinity.Downstream),
+        toPosition = Position("text", 5, Affinity.Downstream),
+      )
+    val pageSizes = listOf(Size(width = 80f, height = 120f))
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        selectionEndpointsProvider = { endpoints },
+        pageSizesProvider = { pageSizes },
+      )
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val uiState =
+      EditorUiState().apply {
+        updateFocus(true)
+        updatePageOffset(page = 0, offset = Offset.Zero)
+        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateEditorBounds(
+          ComposeRect(
+            offset = Offset(x = 40f, y = 0f),
+            size = ComposeSize(width = 80f, height = 120f),
+          ),
+          density = 1f,
+        )
+      }
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    editor.sync {}
+    try {
+      setOverlayHostContent(
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 80f,
+            pageHeight = 120f,
+            pageMarginTop = 0f,
+            pageMarginBottom = 0f,
+            pageMarginLeft = 0f,
+            pageMarginRight = 0f,
+          ),
+        pageSizes = pageSizes,
+      )
+      waitForIdle()
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(Offset(x = 0f, y = 20f))
+        moveTo(Offset(x = 10f, y = 40f))
+        up()
+      }
+      waitForIdle()
+      assertTrue(fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(Offset(x = 20f, y = 20f))
+        moveTo(Offset(x = 30f, y = 40f))
+        up()
+      }
+      waitForIdle()
+
+      val extend =
+        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+      assertEquals(endpoints.toPosition, extend.anchor)
+      assertEquals(10f, extend.headX)
+      assertEquals(44f, extend.headY)
+    } finally {
+      runtime.clear(editor)
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun selectionHandleAreaWheelScrollsViewport() = runComposeUiTest {
     val selection =
       Selection(
         anchor = Position("text", 0, Affinity.Downstream),
@@ -197,7 +516,7 @@ class EditorOverlayPointerRouterDesktopTest {
   }
 
   @Test
-  fun selectionHandleForwardsModifiedWheelScrollToViewportZoom() = runComposeUiTest {
+  fun selectionHandleAreaModifiedWheelZoomsViewport() = runComposeUiTest {
     val selection =
       Selection(
         anchor = Position("text", 0, Affinity.Downstream),
@@ -289,7 +608,7 @@ class EditorOverlayPointerRouterDesktopTest {
   }
 
   @Test
-  fun focusedOverlayRouterDoesNotBlockLowerPointerSurfaceOutsideHandleTargets() = runComposeUiTest {
+  fun documentHandleVisualsDoNotBlockPointerInputOutsideHandleTargets() = runComposeUiTest {
     val selection =
       Selection(
         anchor = Position("text", 0, Affinity.Downstream),
@@ -592,7 +911,13 @@ class EditorOverlayPointerRouterDesktopTest {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
         updateExtensionAreaBounds(TestRootRect, density = 1f)
-        updateEditorBounds(TestRootRect, density = 1f)
+        updateEditorBounds(
+          ComposeRect(
+            offset = Offset(x = 20f, y = 20f),
+            size = ComposeSize(width = 120f, height = 120f),
+          ),
+          density = 1f,
+        )
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     editor.sync {}
@@ -601,8 +926,8 @@ class EditorOverlayPointerRouterDesktopTest {
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
-        down(Offset(x = 60f, y = 30f))
-        moveTo(Offset(x = 80f, y = 30f))
+        down(Offset(x = 80f, y = 50f))
+        moveTo(Offset(x = 100f, y = 50f))
         up()
       }
       waitUntil { fake.enqueued.filterIsInstance<Message.Node>().isNotEmpty() }
@@ -661,7 +986,7 @@ class EditorOverlayPointerRouterDesktopTest {
       assertEquals(
         listOf(
           Message.Node(
-            NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(widths = listOf(0.55f, 0.45f)))
+            NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(widths = listOf(0.6f, 0.4f)))
           )
         ),
         fake.enqueued.filterIsInstance<Message.Node>(),
@@ -786,6 +1111,7 @@ class EditorOverlayPointerRouterDesktopTest {
     displayZoom: Float = 1f,
     viewportZoomConfig: EditorViewportZoomSemanticConfig? = null,
     onLowerPointerDown: () -> Unit = {},
+    onInteractionScope: (EditorInteractionScope) -> Unit = {},
   ) {
     setContent {
       val interactionScope = remember {
@@ -795,6 +1121,18 @@ class EditorOverlayPointerRouterDesktopTest {
       val visibleArea = remember { EditorVisibleArea(viewport = TestRootSize) }
       val bringIntoViewRequests = remember { EditorBringIntoViewRequests() }
       val scrollGestureLockState = remember { ScrollGestureLockState() }
+      val screenPointerSequence = remember { EditorScreenPointerSequence() }
+      val nestedScrollDispatcher = remember { NestedScrollDispatcher() }
+      val scrollableState =
+        remember(rememberedViewportState) {
+          Scrollable2DState { delta ->
+            consumeEditorViewportTouchPan(
+              viewportState = rememberedViewportState,
+              deltaPx = delta,
+              density = 1f,
+            )
+          }
+        }
 
       SideEffect {
         rememberedViewportState.updateMeasuredBounds(
@@ -803,6 +1141,7 @@ class EditorOverlayPointerRouterDesktopTest {
         )
       }
       SideEffect {
+        onInteractionScope(interactionScope)
         interactionScope.update(
           editor = editor,
           bringIntoViewRequests = bringIntoViewRequests,
@@ -812,6 +1151,7 @@ class EditorOverlayPointerRouterDesktopTest {
           density = 1f,
           scrollGestureLockState = scrollGestureLockState,
           viewportZoomConfig = viewportZoomConfig,
+          layoutSpec = layoutSpec,
           onSelectionHaptic = {},
           onRequestSoftwareKeyboard = {},
         )
@@ -827,21 +1167,99 @@ class EditorOverlayPointerRouterDesktopTest {
         LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
         LocalEditorInteractionScope provides interactionScope,
       ) {
-        Box(Modifier.testTag(RootTag).size(120.dp)) {
-          LowerPointerOverlay(onPointerDown = onLowerPointerDown)
-          EditorScreenOverlayHost(
-            viewportState = rememberedViewportState,
-            visibleArea = visibleArea,
-            autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea = visibleArea),
-            layoutSpec = layoutSpec,
-            pageSizes = pageSizes,
-            displayZoom = displayZoom,
-            onTableAxisActionsRequest = { _, _ -> },
-            modifier = Modifier.fillMaxSize(),
-          )
+        Box(
+          Modifier.testTag(RootTag)
+            .size(120.dp)
+            .observeEditorScreenPointerSequence(screenPointerSequence)
+        ) {
+          Box(
+            Modifier.fillMaxSize()
+              .nestedScroll(object : NestedScrollConnection {}, nestedScrollDispatcher)
+              .editorInteractions(
+                interactionController = interactionScope.controller,
+                screenPointerSequence = screenPointerSequence,
+                scrollableState = scrollableState,
+                nestedScrollDispatcher = nestedScrollDispatcher,
+                touchSlop = 8f,
+                density = 1f,
+              )
+          ) {
+            LowerPointerOverlay(onPointerDown = onLowerPointerDown)
+            EditorTableColumnResizeOverlay(
+              editor = editor,
+              uiState = uiState,
+              geometry = interactionScope,
+              editorOffsetInSurface =
+                uiState.editorBoundsInContainer.let { bounds -> Offset(bounds.x, bounds.y) },
+              presentation = interactionScope.controller.tableColumnResizePresentation,
+            )
+            EditorTableCellSelectionOverlay(
+              editor = editor,
+              uiState = uiState,
+              editorRectInOverlay = uiState.editorRectInSurface(),
+              density = 1f,
+            )
+            EditorSelectionHandleOverlay(
+              editor = editor,
+              uiState = uiState,
+              editorRectInOverlay = uiState.editorRectInSurface(),
+              density = 1f,
+            )
+          }
         }
       }
     }
+  }
+
+  private fun focusedTestUiState(): EditorUiState =
+    EditorUiState().apply {
+      updateFocus(true)
+      updateDisplayZoom(1f)
+      updatePageOffset(page = 0, offset = Offset.Zero)
+      updateExtensionAreaBounds(TestRootRect, density = 1f)
+      updateEditorBounds(TestRootRect, density = 1f)
+    }
+
+  private fun EditorUiState.editorRectInSurface(): ComposeRect =
+    editorBoundsInContainer.let { bounds ->
+      ComposeRect(
+        left = bounds.x,
+        top = bounds.y,
+        right = bounds.x + bounds.width,
+        bottom = bounds.y + bounds.height,
+      )
+    }
+
+  private fun testPaginatedLayoutSpec(): EditorDocumentLayoutSpec.Paginated =
+    EditorDocumentLayoutSpec.Paginated(
+      pageWidth = 120f,
+      pageHeight = 120f,
+      pageMarginTop = 0f,
+      pageMarginBottom = 0f,
+      pageMarginLeft = 0f,
+      pageMarginRight = 0f,
+    )
+
+  private fun testViewportZoomConfig(
+    layoutSpec: EditorDocumentLayoutSpec.Paginated,
+    pageSizes: List<Size>,
+    uiState: EditorUiState,
+    viewportState: EditorViewportState,
+  ): EditorViewportZoomSemanticConfig {
+    val zoomController =
+      EditorZoomController().apply {
+        syncLayout(layoutSpec = layoutSpec, viewportWidth = TestRootSize.width)
+      }
+    return EditorViewportZoomSemanticConfig(
+      layoutSpec = layoutSpec,
+      zoomController = zoomController,
+      viewportState = viewportState,
+      uiState = uiState,
+      pageSizes = pageSizes,
+      viewportWidth = TestRootSize.width,
+      density = 1f,
+      onZoomSnap = {},
+    )
   }
 
   @Composable
@@ -866,7 +1284,7 @@ class EditorOverlayPointerRouterDesktopTest {
   }
 
   private companion object {
-    const val RootTag = "editor-overlay-pointer-router-root"
+    const val RootTag = "editor-document-manipulation-root"
     val TestRootSize = ComposeSize(width = 120f, height = 120f)
     val TestRootRect = ComposeRect(Offset.Zero, TestRootSize)
 

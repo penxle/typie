@@ -28,6 +28,15 @@ internal class EditorSelectionHandleDragSession {
 
   fun isActiveType(type: EditorSelectionHandleType): Boolean = dragContext?.type == type
 
+  fun hasMovedPastSlop(
+    type: EditorSelectionHandleType,
+    touchPosition: Offset,
+    dragSlop: Float,
+  ): Boolean {
+    val pending = pendingContext?.takeIf { it.type == type } ?: return false
+    return (touchPosition - pending.touchPosition).getDistance() > dragSlop
+  }
+
   fun beginPending(type: EditorSelectionHandleType, touchPosition: Offset): Boolean {
     if (activeDrag) {
       return false

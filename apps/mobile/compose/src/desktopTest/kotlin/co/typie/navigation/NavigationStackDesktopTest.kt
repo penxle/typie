@@ -98,10 +98,39 @@ class NavigationStackDesktopTest {
       },
     )
 
+  @Test
+  fun directEdgeSwipeStillPops() =
+    assertGesturePops(
+      scrollConsumer = { Offset.Zero },
+      gesture = {
+        down(Offset(x = 10f, y = center.y))
+        moveBy(Offset(x = 220f, y = 0f))
+        up()
+      },
+    )
+
+  @Test
+  fun pageAndEdgePointersCannotResumeAsBackSwipe() =
+    assertGestureDoesNotPop(
+      scrollConsumer = { Offset.Zero },
+      gesture = {
+        down(pointerId = 0, position = center)
+        down(pointerId = 1, position = Offset(x = 10f, y = center.y))
+        up(pointerId = 0)
+        moveBy(pointerId = 1, delta = Offset(x = 220f, y = 0f))
+        up(pointerId = 1)
+      },
+    )
+
   private fun assertGestureDoesNotPop(
     scrollConsumer: (Offset) -> Offset,
     gesture: TouchInjectionScope.() -> Unit,
   ) = assertGestureResult(scrollConsumer, shouldPop = false, gesture)
+
+  private fun assertGesturePops(
+    scrollConsumer: (Offset) -> Offset,
+    gesture: TouchInjectionScope.() -> Unit,
+  ) = assertGestureResult(scrollConsumer, shouldPop = true, gesture)
 
   private fun assertGesturesPop(
     scrollConsumer: (Offset) -> Offset,

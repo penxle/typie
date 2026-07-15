@@ -14,4 +14,48 @@ class NavigationPopGestureSessionTest {
 
     assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
   }
+
+  @Test
+  fun multiTouchRejectsClaimsUntilEveryPointerIsUp() {
+    val session = NavigationPopGestureSession()
+
+    session.updatePressedPointerCount(1)
+    session.updatePressedPointerCount(2)
+    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    session.reset()
+    session.updatePressedPointerCount(1)
+    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    session.updatePressedPointerCount(0)
+    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    session.updatePressedPointerCount(1)
+    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+  }
+
+  @Test
+  fun multiTouchRejectsAnAlreadyClaimedSession() {
+    val session = NavigationPopGestureSession()
+
+    session.updatePressedPointerCount(1)
+    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    assertTrue(session.updatePressedPointerCount(2))
+    assertFalse(session.isClaimed)
+  }
+
+  @Test
+  fun claimedSessionSurvivesAllUpUntilNestedScrollTerminal() {
+    val session = NavigationPopGestureSession()
+
+    session.updatePressedPointerCount(1)
+    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+
+    session.updatePressedPointerCount(0)
+    assertTrue(session.isClaimed)
+
+    session.reset()
+    assertFalse(session.isClaimed)
+  }
 }
