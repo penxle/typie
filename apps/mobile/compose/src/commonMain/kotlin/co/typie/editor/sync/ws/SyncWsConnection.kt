@@ -198,7 +198,16 @@ class SyncWsConnection(
       }
     if (disposed) return
 
-    val newSocket = socketFactory()
+    val newSocket =
+      try {
+        socketFactory()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Logger.w(e) { "SyncWsConnection: socket connect failed" }
+        scheduleReconnect()
+        return
+      }
     if (disposed) {
       newSocket.close()
       return
@@ -222,12 +231,19 @@ class SyncWsConnection(
     }
 
     senderJob = scope.launch {
-      newSocket.send(
-        encodeClientMessage(WsClientMessage.Hello(ticket = ticket, clientId = clientId))
-      )
-      helloAck.await()
-      for (message in sendChannel) {
-        newSocket.send(encodeClientMessage(message))
+      try {
+        newSocket.send(
+          encodeClientMessage(WsClientMessage.Hello(ticket = ticket, clientId = clientId))
+        )
+        helloAck.await()
+        for (message in sendChannel) {
+          newSocket.send(encodeClientMessage(message))
+        }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Logger.w(e) { "SyncWsConnection: send failed" }
+        newSocket.close()
       }
     }
   }

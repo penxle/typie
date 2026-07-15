@@ -1,5 +1,6 @@
 package co.typie.editor.sync.ws
 
+import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.graphql.WebSocketSession
 import co.typie.network.Http
@@ -10,8 +11,10 @@ import io.ktor.http.HttpHeaders
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
+import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +43,14 @@ private constructor(
       } catch (e: CancellationException) {
         throw e
       } catch (_: Throwable) {}
-      val reason = session.closeReason.await()
+      val reason =
+        try {
+          session.closeReason.await()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (_: Throwable) {
+          null
+        }
       closedDeferred.complete(
         SyncWsSocketClosed(code = reason?.code?.toInt() ?: 1000, reason = reason?.message ?: "")
       )
@@ -65,7 +75,12 @@ private constructor(
 }
 
 object SyncWs {
-  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private val exceptionHandler = CoroutineExceptionHandler { _, e ->
+    Logger.e(e) { "SyncWs: uncaught exception" }
+    Sentry.captureException(e)
+  }
+  private val scope =
+    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)
 
   val connection: SyncWsConnection by lazy {
     SyncWsConnection(

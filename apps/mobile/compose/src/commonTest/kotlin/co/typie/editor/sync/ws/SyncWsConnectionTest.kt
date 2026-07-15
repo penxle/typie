@@ -343,6 +343,65 @@ class SyncWsConnectionTest {
   }
 
   @Test
+  fun socketConnectFailureSchedulesReconnectInsteadOfFailingScope() = runTest {
+    val sockets = mutableListOf<FakeSyncWsSocket>()
+    var connectAttempts = 0
+    val connection =
+      SyncWsConnection(
+        socketFactory = {
+          connectAttempts += 1
+          if (connectAttempts == 1) throw RuntimeException("connect failed")
+          FakeSyncWsSocket().also { sockets.add(it) }
+        },
+        fetchTicket = { "TK" },
+        scope = CoroutineScope(coroutineContext),
+        reconnectBaseMs = 1_000,
+      )
+    val pushDeferred = async { connection.push("D1", byteArrayOf(1)) }
+    runCurrent()
+    assertEquals(1, connectAttempts)
+    assertTrue(sockets.isEmpty())
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, connectAttempts)
+    val socket = sockets.single()
+    handshake(socket)
+
+    val push = assertIs<WsClientMessage.Push>(socket.lastOf("push"))
+    socket.serverSend(
+      WsServerMessage.PushAck(id = push.id, heads = ByteArray(0), durableHeads = ByteArray(0))
+    )
+    pushDeferred.await()
+    connection.dispose()
+  }
+
+  @Test
+  fun sendFailureClosesSocketAndRejectsPendingInsteadOfFailingScope() = runTest {
+    val (connection, sockets) = harness()
+    val pushDeferred = async { connection.push("D1", byteArrayOf(1)) }
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+
+    val push = assertIs<WsClientMessage.Push>(socket.lastOf("push"))
+    socket.serverSend(
+      WsServerMessage.PushAck(id = push.id, heads = ByteArray(0), durableHeads = ByteArray(0))
+    )
+    pushDeferred.await()
+
+    socket.sendError = RuntimeException("write abort")
+    val pushResult = async { runCatching { connection.push("D1", byteArrayOf(2)) } }
+    runCurrent()
+
+    val error = assertIs<SyncWsException>(pushResult.await().exceptionOrNull())
+    assertEquals("connection_lost", error.code)
+    assertTrue(socket.closed.isCompleted)
+    assertEquals(1, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
   fun detachThenAttachArriveInWireOrder() = runTest {
     val (connection, sockets) = harness()
     connection.registerChannel("D1") {}

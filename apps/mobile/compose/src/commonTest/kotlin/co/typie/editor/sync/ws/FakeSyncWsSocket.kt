@@ -89,6 +89,7 @@ internal fun serverMessageTypeOf(message: WsServerMessage): String =
 
 internal class FakeSyncWsSocket : SyncWsSocket {
   val sent = mutableListOf<WsClientMessage>()
+  var sendError: Throwable? = null
   private val closedDeferred = CompletableDeferred<SyncWsSocketClosed>()
   private val incomingFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
 
@@ -96,6 +97,7 @@ internal class FakeSyncWsSocket : SyncWsSocket {
   override val closed: Deferred<SyncWsSocketClosed> = closedDeferred
 
   override suspend fun send(bytes: ByteArray) {
+    sendError?.let { throw it }
     decodeClientMessageForFake(bytes)?.let { sent.add(it) }
   }
 
