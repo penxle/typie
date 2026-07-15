@@ -3,8 +3,10 @@ package co.typie.domain.preflight
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.network.Http
+import co.typie.network.isRecoverableNetworkError
 import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
@@ -43,7 +45,10 @@ object PreflightService {
         } catch (e: CancellationException) {
           throw e
         } catch (e: Exception) {
-          Sentry.captureException(e)
+          Logger.w(e) { "PreflightService: check failed" }
+          if (!e.isRecoverableNetworkError()) {
+            Sentry.captureException(e)
+          }
           if (state is PreflightState.NotReady) {
             state = PreflightState.Unavailable
           }

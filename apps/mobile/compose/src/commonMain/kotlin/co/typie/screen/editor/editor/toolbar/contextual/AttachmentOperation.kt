@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.toolbar.contextual
 
 import co.touchlab.kermit.Logger
 import co.typie.domain.blob.BlobUploadException
+import co.typie.network.isRecoverableNetworkError
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 
@@ -68,5 +69,7 @@ internal fun reportAttachmentFailure(kind: AttachmentKind, error: Throwable) {
     }
   val cause = error.cause ?: error
   Logger.e(cause) { "Attachment failed: kind=${kind.name}, stage=$stage" }
-  Sentry.captureException(cause)
+  if (!cause.isRecoverableNetworkError()) {
+    Sentry.captureException(cause)
+  }
 }

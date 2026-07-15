@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import co.touchlab.kermit.Logger
 import co.typie.contract.Loadable
+import co.typie.network.isRecoverableNetworkError
 import co.typie.platform.AppLifecycleService
 import co.typie.platform.AppLifecycleState
 import co.typie.platform.ConnectivityService
@@ -13,8 +14,6 @@ import co.typie.platform.appLifecycleService as defaultAppLifecycleService
 import co.typie.platform.connectivityService as defaultConnectivityService
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
-import com.apollographql.apollo.exception.ApolloNetworkException
-import com.apollographql.apollo.exception.ApolloOfflineException
 import com.apollographql.apollo.exception.CacheMissException
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
@@ -88,9 +87,9 @@ internal constructor(
   init {
     stateScope.launch {
       snapshotFlow {
-          val shouldSkip = skip()
-          shouldSkip to if (shouldSkip) null else query()
-        }
+        val shouldSkip = skip()
+        shouldSkip to if (shouldSkip) null else query()
+      }
         .distinctUntilChanged()
         .collect { (shouldSkip, query) ->
           if (shouldSkip) {
@@ -176,7 +175,9 @@ internal constructor(
     runCatching {
       Logger.e { "GraphQL error (${query.name()}): ${error.message ?: "unknown error"}" }
     }
-    runCatching { Sentry.captureException(error) }
+    if (!error.isRecoverableNetworkError()) {
+      runCatching { Sentry.captureException(error) }
+    }
 
     if (error.isRecoverableNetworkError() && recoveryGeneration > attemptRecoveryGeneration) {
       refetch()
@@ -193,9 +194,6 @@ internal constructor(
     }
   }
 }
-
-private fun Throwable.isRecoverableNetworkError(): Boolean =
-  this is ApolloNetworkException || this is ApolloOfflineException
 
 fun <D : Query.Data> ApolloClient.watchQuery(
   scope: CoroutineScope,

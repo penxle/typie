@@ -1,6 +1,6 @@
 package co.typie.graphql
 
-import co.touchlab.kermit.Logger.Companion.e
+import co.touchlab.kermit.Logger
 import co.typie.network.Http
 import com.apollographql.apollo.api.http.HttpHeader
 import com.apollographql.apollo.network.websocket.WebSocket
@@ -14,7 +14,6 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
-import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +71,7 @@ object KtorWebSocketEngine : WebSocketEngine {
           } catch (e: CancellationException) {
             throw e
           } catch (e: Exception) {
-            Sentry.captureException(e)
+            Logger.w(e) { "KtorWebSocketEngine: socket failed" }
             listener.onClosed(code = 1006, reason = "Network error: ${e.message}")
             sendFrameChannel.close()
           }

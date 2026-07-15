@@ -89,10 +89,12 @@ private constructor(
   }
 }
 
+internal class SyncWsUncaughtException(cause: Throwable) : RuntimeException(cause)
+
 object SyncWs {
   private val exceptionHandler = CoroutineExceptionHandler { _, e ->
     Logger.e(e) { "SyncWs: uncaught exception" }
-    Sentry.captureException(e)
+    Sentry.captureException(SyncWsUncaughtException(e))
   }
   private val scope =
     CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)

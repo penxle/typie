@@ -1,6 +1,7 @@
 package co.typie.domain.pushnotification
 
 import androidx.compose.runtime.snapshotFlow
+import co.touchlab.kermit.Logger
 import co.typie.domain.auth.AuthService
 import co.typie.domain.auth.AuthState
 import co.typie.domain.bootstrap.BootstrapService
@@ -9,6 +10,7 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.PushNotificationService_RegisterPushNotificationToken_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.RegisterPushNotificationTokenInput
+import co.typie.network.isRecoverableNetworkError
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -49,7 +51,10 @@ object PushNotificationService {
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      Sentry.captureException(e)
+      Logger.w(e) { "PushNotificationService: token fetch failed" }
+      if (!e.isRecoverableNetworkError()) {
+        Sentry.captureException(e)
+      }
     }
   }
 
@@ -63,7 +68,10 @@ object PushNotificationService {
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      Sentry.captureException(e)
+      Logger.w(e) { "PushNotificationService: token registration failed" }
+      if (!e.isRecoverableNetworkError()) {
+        Sentry.captureException(e)
+      }
     }
   }
 

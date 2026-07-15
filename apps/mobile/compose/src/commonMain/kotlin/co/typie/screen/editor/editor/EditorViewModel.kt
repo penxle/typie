@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.touchlab.kermit.Logger
 import co.typie.editor.FontLoader
 import co.typie.editor.TextReplacementLoader
 import co.typie.editor.external.EditorExternalAsset
@@ -26,6 +27,7 @@ import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.ViewEntityInput
 import co.typie.graphql.watchQuery
+import co.typie.network.isRecoverableNetworkError
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
 import io.sentry.kotlin.multiplatform.Sentry
@@ -193,7 +195,10 @@ class EditorViewModel(val entityId: String) : ViewModel() {
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
-        Sentry.captureException(e)
+        Logger.w(e) { "EditorViewModel: view entity failed" }
+        if (!e.isRecoverableNetworkError()) {
+          Sentry.captureException(e)
+        }
       }
     }
   }
@@ -261,7 +266,10 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     } catch (e: Exception) {
       // TODO(editor-parity): 에디터 에러 UX가 정리되면 header 저장 실패를 화면 안에서
       // 노출해야 한다.
-      Sentry.captureException(e)
+      Logger.w(e) { "EditorViewModel: header save failed" }
+      if (!e.isRecoverableNetworkError()) {
+        Sentry.captureException(e)
+      }
       null
     }
   }
