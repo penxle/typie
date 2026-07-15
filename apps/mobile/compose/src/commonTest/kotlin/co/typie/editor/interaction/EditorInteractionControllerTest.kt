@@ -2489,6 +2489,69 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `fresh pan can start after long press ends`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.iOS },
+        )
+      val driver = TestPanGestureDriver(shouldCatchTouch = false)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 0L,
+        touchPanDriver = driver,
+      )
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertTrue(
+        controller.onPointerUp(
+          pointerId = 1L,
+          position = start,
+          positionInRoot = start,
+          nowMillis = 520L,
+        )
+      )
+
+      controller.onPointerDown(
+        pointerId = 2L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 600L,
+        touchPanDriver = driver,
+      )
+      assertFalse(
+        controller.onPointerMove(
+          pointerId = 2L,
+          position = start + Offset(4f, 0f),
+          positionInRoot = start + Offset(4f, 0f),
+          nowMillis = 610L,
+        )
+      )
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 2L,
+          position = start + Offset(12f, 0f),
+          positionInRoot = start + Offset(12f, 0f),
+          nowMillis = 620L,
+        )
+      )
+
+      assertEquals(EditorInteractionMode.Panning, controller.interactionMode)
+      assertEquals(listOf(Offset(4f, 0f)), driver.updates)
+    }
+
+  @Test
   fun `android long press uses engine cursor hit result for cursor mode admission`() =
     runTest(StandardTestDispatcher()) {
       val fake =

@@ -454,6 +454,7 @@ internal class EditorInteractionGestures(
     }
     val started = longPress.start(pointerId = pointerId, position = position, context = context)
     if (started) {
+      pan.cancel(context = context)
       tap.markTapDispatched()
       if (longPress.isWordSelection) {
         tap.clearTapHistory()
