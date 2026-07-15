@@ -231,7 +231,7 @@ describe('pointer native drag admission', () => {
     expect(editor.enqueue).not.toHaveBeenCalled();
   });
 
-  it('toggles a fold on read-only touch down without starting a gesture', () => {
+  it('does not toggle a fold on read-only touch down and starts a gesture instead', () => {
     const editor = createEditor({ readOnly: true });
     editor.interactiveHitTest = vi.fn(() => ({ type: 'fold_title', id: 'fold-1' })) as unknown as Editor['interactiveHitTest'];
     const target = createPointerTarget();
@@ -239,8 +239,8 @@ describe('pointer native drag admission', () => {
 
     handlePointerDown(editor, down);
 
-    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'view', op: { type: 'toggle_fold', id: 'fold-1' } });
-    expect(editor.gesture.handlePointerDown).not.toHaveBeenCalled();
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.gesture.handlePointerDown).toHaveBeenCalledWith(down, { page: 0, x: 10, y: 20 }, null);
   });
 
   it('sends edit-mode touch pointers through the regular pointer path', () => {

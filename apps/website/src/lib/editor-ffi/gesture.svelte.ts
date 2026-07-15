@@ -9,6 +9,7 @@ import {
   TOUCH_MENU_VIEWPORT_PADDING,
 } from './constants';
 import { EditorEdgeAutoScroll } from './edge-auto-scroll';
+import { tryHandleInteractiveHit } from './handlers/pointer';
 import type { Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
@@ -542,6 +543,14 @@ export class TouchGestureController {
         if (!this.#suppressTapOnPointerUp && !this.#movedPastTapThreshold && this.#press) {
           const local = this.#editor.clientToLocal(e.clientX, e.clientY);
           if (local) {
+            const hit = this.#editor.interactiveHitTest(local.page, local.x, local.y);
+            if (hit && tryHandleInteractiveHit(this.#editor, hit, { x: local.x, y: local.y })) {
+              this.#editor.flush();
+              this.#editor.closeContextMenu();
+              this.#lastTap = null;
+              break;
+            }
+
             if (this.#editor.selectionHitTest(local.page, local.x, local.y)) {
               if (!this.#wasTouchMenuOpenOnPointerDown) {
                 this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);

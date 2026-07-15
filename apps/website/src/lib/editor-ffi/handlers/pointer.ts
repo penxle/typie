@@ -47,12 +47,6 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
     }
     const local = editor.clientToLocal(e.clientX, e.clientY);
     const resolved = local ? { page: local.page, x: local.x, y: local.y } : null;
-    if (!selectionHandleType && resolved) {
-      const hit = editor.interactiveHitTest(resolved.page, resolved.x, resolved.y);
-      if (hit && tryHandleInteractiveHit(editor, hit, { x: resolved.x, y: resolved.y })) {
-        return;
-      }
-    }
     editor.gesture.handlePointerDown(e, resolved, selectionHandleType);
     return;
   }

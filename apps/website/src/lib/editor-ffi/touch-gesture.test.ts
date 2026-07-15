@@ -410,6 +410,48 @@ describe('TouchGestureController', () => {
     });
     expect(editor.openContextMenu).not.toHaveBeenCalled();
   });
+
+  it('toggles a fold only when the tap is released without movement', () => {
+    const editor = createGestureEditor();
+    editor.interactiveHitTest = vi.fn(() => ({ type: 'fold_title', id: 'fold-1' }));
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    expect(editor.enqueue).not.toHaveBeenCalled();
+
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.enqueue).toHaveBeenCalledTimes(1);
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'view', op: { type: 'toggle_fold', id: 'fold-1' } });
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('does not toggle a fold when the touch moves past the tap threshold', () => {
+    const editor = createGestureEditor();
+    editor.interactiveHitTest = vi.fn(() => ({ type: 'fold_title', id: 'fold-1' }));
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerMove(makePointerEvent({ clientY: 240 }));
+    controller.handlePointerUp(makePointerEvent({ clientY: 260 }));
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('toggles a fold again on a quick second tap instead of double-tap selecting', () => {
+    const editor = createGestureEditor();
+    editor.interactiveHitTest = vi.fn(() => ({ type: 'fold_title', id: 'fold-1' }));
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerUp(makePointerEvent());
+    controller.handlePointerDown(makePointerEvent(), { page: 0, x: 120, y: 220 });
+    controller.handlePointerUp(makePointerEvent());
+
+    expect(editor.enqueue).toHaveBeenCalledTimes(2);
+    expect(editor.enqueue).toHaveBeenNthCalledWith(1, { type: 'view', op: { type: 'toggle_fold', id: 'fold-1' } });
+    expect(editor.enqueue).toHaveBeenNthCalledWith(2, { type: 'view', op: { type: 'toggle_fold', id: 'fold-1' } });
+  });
 });
 
 describe('computeSelectionHandleVisual', () => {
