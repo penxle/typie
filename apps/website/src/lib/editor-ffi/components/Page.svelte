@@ -174,7 +174,7 @@
     {/each}
 
     {#each tableOverlays as overlay (`${overlay.table_id}-${overlay.page_idx}-${overlay.rows[0]?.index ?? 0}`)}
-      <TableOverlay {overlay} />
+      <TableOverlay {overlay} readOnly={ctx.editor?.readOnly ?? false} />
     {/each}
 
     <LinkOverlay links={linkRects} />
