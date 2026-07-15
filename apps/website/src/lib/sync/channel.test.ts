@@ -14,6 +14,7 @@ const setup = () => {
       return socket;
     },
     fetchTicket: async () => 'TK',
+    pingIntervalMs: 120_000,
   });
   const channels = new DocumentChannels(connection, 10);
   return { channels, connection, sockets };
@@ -362,6 +363,94 @@ describe('DocumentChannels', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(sockets[0].sent.filter((m) => m.t === 'attach').length).toBe(attachCountAfterResubscribe);
+  });
+
+  test('attach-ack 워치독: 응답 없는 attach는 probe 후 detach+재attach한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { channels, sockets } = setup();
+      const s = subscriber();
+      channels.subscribe('D1', s.sub);
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+      await vi.waitFor(() => expect(sockets[0].sent.filter((m) => m.t === 'attach').length).toBe(1));
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sockets[0].lastOf('ping')).toBeDefined();
+      sockets[0].serverSend({ t: 'pong' });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(sockets[0].sent.filter((m) => m.t === 'detach').length).toBe(1);
+      expect(sockets[0].sent.filter((m) => m.t === 'attach').length).toBe(2);
+
+      sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+      sockets[0].serverSend(chunk('D1', 'B1', 1, 0, Uint8Array.of(1)));
+      sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '1-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+      await vi.waitFor(() => expect(s.events).toEqual(['snapshot']));
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(sockets[0].sent.filter((m) => m.t === 'attach').length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('attach-ack 워치독: 죽은 연결이면 소켓을 버리고 재연결에서 재attach한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { channels, sockets } = setup();
+      const s = subscriber();
+      channels.subscribe('D1', s.sub);
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+      await vi.waitFor(() => expect(sockets[0].sent.filter((m) => m.t === 'attach').length).toBe(1));
+      sockets[0].closeCompletes = false;
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sockets[0].lastOf('ping')).toBeDefined();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(sockets[0].closed).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets.length).toBe(2);
+      sockets[1].serverOpen();
+      await vi.waitFor(() => expect(sockets[1].lastOf('hello')).toBeDefined());
+      sockets[1].serverSend({ t: 'hello-ack', capabilities: [] });
+      await vi.waitFor(() => expect(sockets[1].sent.filter((m) => m.t === 'attach').length).toBe(1));
+
+      sockets[1].serverSend({ t: 'attach-ack', documentId: 'D1' });
+      sockets[1].serverSend(chunk('D1', 'B1', 1, 0, Uint8Array.of(1)));
+      sockets[1].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '1-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+      await vi.waitFor(() => expect(s.events).toEqual(['snapshot']));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('연결이 protocol error로 닫히면 구독자에 permanent 에러가 전파되고 재구독으로 회복한다', async () => {
+    const { channels, sockets } = setup();
+    const s = subscriber();
+    channels.subscribe('D1', s.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].sent.filter((m) => m.t === 'attach').length).toBe(1));
+
+    sockets[0].serverClose(4003);
+    await vi.waitFor(() => expect(s.events).toEqual(['error:connection_permanent_protocol_error']));
+
+    const s2 = subscriber();
+    channels.subscribe('D1', s2.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(2), { timeout: 3000 });
+    await handshake(sockets[1]);
+    await vi.waitFor(() => expect(sockets[1].sent.filter((m) => m.t === 'attach').length).toBe(1));
+    sockets[1].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[1].serverSend(chunk('D1', 'B1', 1, 0, Uint8Array.of(1)));
+    sockets[1].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '1-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    await vi.waitFor(() => expect(s2.events).toEqual(['snapshot']));
   });
 
   test('빈 문서(seq="") snapshot-end로 live가 된 채널은 재연결 시 sinceSeq: ""로 재attach한다', async () => {

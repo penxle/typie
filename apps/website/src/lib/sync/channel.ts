@@ -23,6 +23,7 @@ type ChannelState = {
   awaitingAck: boolean;
   retryAttempts: number;
   retryTimer: ReturnType<typeof setTimeout> | null;
+  ackTimer: ReturnType<typeof setTimeout> | null;
   unregister: () => void;
 };
 
@@ -40,10 +41,12 @@ export class DocumentChannels {
   private readonly connection: SyncConnection;
   private readonly channels = new Map<string, ChannelState>();
   private readonly retryBaseMs: number;
+  private readonly attachAckTimeoutMs: number;
 
-  constructor(connection: SyncConnection, retryBaseMs = 1000) {
+  constructor(connection: SyncConnection, retryBaseMs = 1000, attachAckTimeoutMs = 10_000) {
     this.connection = connection;
     this.retryBaseMs = retryBaseMs;
+    this.attachAckTimeoutMs = attachAckTimeoutMs;
     this.connection.onReconnected(() => {
       for (const channel of this.channels.values()) this.reattach(channel);
     });
@@ -61,6 +64,7 @@ export class DocumentChannels {
       clearTimeout(channel.retryTimer);
       channel.retryTimer = null;
     }
+    this.armAckWatchdog(channel);
     if (channel.snapshotDone) {
       this.connection.sendAttach(channel.documentId, { sinceSeq: channel.sinceSeq ?? '' });
       return;
@@ -77,10 +81,32 @@ export class DocumentChannels {
     this.resetSnapshot(channel);
     channel.snapshotDone = false;
     channel.awaitingAck = true;
+    this.armAckWatchdog(channel);
     if (this.connection.ready) {
       this.connection.sendDetach(channel.documentId);
       this.connection.sendAttach(channel.documentId, {});
     }
+  }
+
+  private clearAckWatchdog(channel: ChannelState): void {
+    if (channel.ackTimer) clearTimeout(channel.ackTimer);
+    channel.ackTimer = null;
+  }
+
+  private armAckWatchdog(channel: ChannelState): void {
+    this.clearAckWatchdog(channel);
+    channel.ackTimer = setTimeout(() => {
+      channel.ackTimer = null;
+      void this.handleAckTimeout(channel);
+    }, this.attachAckTimeoutMs);
+  }
+
+  private async handleAckTimeout(channel: ChannelState): Promise<void> {
+    if (this.channels.get(channel.documentId) !== channel) return;
+    await this.connection.ensureLive();
+    if (this.channels.get(channel.documentId) !== channel) return;
+    if (this.connection.ready) this.connection.sendDetach(channel.documentId);
+    this.reattach(channel);
   }
 
   private scheduleRetry(channel: ChannelState): void {
@@ -103,6 +129,7 @@ export class DocumentChannels {
     switch (message.t) {
       case 'attach-ack': {
         channel.awaitingAck = false;
+        this.clearAckWatchdog(channel);
         return;
       }
       case 'snapshot-chunk': {
@@ -169,11 +196,13 @@ export class DocumentChannels {
         return;
       }
       case 'reload': {
+        this.clearAckWatchdog(channel);
         for (const state of channel.subscribers) state.subscriber.onReload();
         return;
       }
       case 'error': {
         if (message.scope !== 'document') return;
+        this.clearAckWatchdog(channel);
         if (message.permanent) {
           if (channel.retryTimer) clearTimeout(channel.retryTimer);
           for (const state of channel.subscribers) state.subscriber.onPermanentError(message.code);
@@ -197,13 +226,7 @@ export class DocumentChannels {
 
     if (channel) {
       channel.subscribers.add(state);
-      this.resetSnapshot(channel);
-      channel.snapshotDone = false;
-      channel.awaitingAck = true;
-      if (this.connection.ready) {
-        this.connection.sendDetach(documentId);
-        this.connection.sendAttach(documentId, {});
-      }
+      this.restartChannel(channel);
     } else {
       const created: ChannelState = {
         documentId,
@@ -217,11 +240,13 @@ export class DocumentChannels {
         awaitingAck: false,
         retryAttempts: 0,
         retryTimer: null,
+        ackTimer: null,
         // eslint-disable-next-line @typescript-eslint/no-empty-function -- overwritten immediately below; registerChannel's handler must close over `created`
         unregister: () => {},
       };
       created.unregister = this.connection.registerChannel(documentId, (message) => this.handle(created, message));
       this.channels.set(documentId, created);
+      this.armAckWatchdog(created);
       this.connection.sendAttach(documentId, {});
     }
 
@@ -231,6 +256,7 @@ export class DocumentChannels {
       current.subscribers.delete(state);
       if (current.subscribers.size === 0) {
         if (current.retryTimer) clearTimeout(current.retryTimer);
+        this.clearAckWatchdog(current);
         current.unregister();
         this.channels.delete(documentId);
         this.connection.sendDetach(documentId);

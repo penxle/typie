@@ -90,6 +90,13 @@ internal fun serverMessageTypeOf(message: WsServerMessage): String =
 internal class FakeSyncWsSocket : SyncWsSocket {
   val sent = mutableListOf<WsClientMessage>()
   var sendError: Throwable? = null
+  var closeCompletes = true
+  var closeCalls = 0
+    private set
+
+  var terminateCalls = 0
+    private set
+
   private val closedDeferred = CompletableDeferred<SyncWsSocketClosed>()
   private val incomingFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
 
@@ -102,7 +109,13 @@ internal class FakeSyncWsSocket : SyncWsSocket {
   }
 
   override fun close() {
-    closedDeferred.complete(SyncWsSocketClosed(code = 1000, reason = ""))
+    closeCalls += 1
+    if (closeCompletes) closedDeferred.complete(SyncWsSocketClosed(code = 1000, reason = ""))
+  }
+
+  override fun terminate() {
+    terminateCalls += 1
+    closedDeferred.complete(SyncWsSocketClosed(code = 1006, reason = "terminated"))
   }
 
   fun serverSend(message: WsServerMessage) {

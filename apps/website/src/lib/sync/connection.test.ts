@@ -167,20 +167,264 @@ describe('SyncConnection', () => {
     await vi.waitFor(() => expect(reconnects).toBe(2));
   });
 
-  test('ping: 서버 pong 2회 무응답 시 소켓을 닫고 재연결한다', async () => {
+  test('ping: pong 데드라인을 넘기면 브라우저 onclose 없이도 소켓을 버리고 재연결한다', async () => {
     vi.useFakeTimers();
     try {
       const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
       connection.sendAttach('D1', {});
       await vi.waitFor(() => expect(sockets.length).toBe(1));
       sockets[0].serverOpen();
       await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
       sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+      sockets[0].closeCompletes = false;
+
       await vi.advanceTimersByTimeAsync(30_000);
       expect(sockets[0].lastOf('ping')).toBeDefined();
-      await vi.advanceTimersByTimeAsync(30_000);
-      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sockets[0].closed).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(10_000);
       expect(sockets[0].closed).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('ping: 데드라인 내 pong이 오면 연결을 유지한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sockets[0].sent.filter((m) => m.t === 'ping').length).toBe(1);
+      sockets[0].serverSend({ t: 'pong' });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sockets[0].sent.filter((m) => m.t === 'ping').length).toBe(2);
+      expect(sockets[0].closed).toBeNull();
+      expect(sockets.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('ping: pong이 아니어도 수신 트래픽이 있으면 산 것으로 본다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sockets[0].lastOf('ping')).toBeDefined();
+      sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sockets[0].closed).toBeNull();
+      expect(sockets.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('hello-ack가 기한 내 오지 않으면 소켓을 버리고 재연결한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sockets[0].closed).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('onForeground: 죽은 소켓은 probe 실패 후 즉시 버리고 재연결한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+      sockets[0].closeCompletes = false;
+
+      connection.onForeground();
+      expect(sockets[0].lastOf('ping')).toBeDefined();
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(sockets[0].closed).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('onForeground: 건강한 소켓은 유지한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+
+      connection.onForeground();
+      sockets[0].serverSend({ t: 'pong' });
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(sockets[0].closed).toBeNull();
+      expect(sockets.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('protocol error(4003) 서버 close는 즉시 terminal: 재연결 없이 permanent를 전파한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      const received: string[] = [];
+      connection.registerChannel('D1', (m) => received.push(`${m.t}:${m.t === 'error' ? String(m.permanent) : ''}`));
+      const pushPromise = connection.push('D1', Uint8Array.of(1));
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+
+      sockets[0].serverClose(4003);
+      await expect(pushPromise).rejects.toMatchObject({ code: 'connection_permanent_protocol_error', permanent: true });
+      expect(received).toContain('error:true');
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sockets.length).toBe(1);
+      await expect(connection.push('D1', Uint8Array.of(2))).rejects.toMatchObject({ permanent: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('auth failed(4001) 1회는 transient: 새 티켓으로 재연결한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+
+      sockets[0].serverClose(4001);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('auth failed(4001) 3연속이면 terminal이 된다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      const received: string[] = [];
+      connection.registerChannel('D1', (m) => received.push(m.t));
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+
+      sockets[0].serverClose(4001);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sockets.length).toBe(2);
+
+      sockets[1].serverClose(4001);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sockets.length).toBe(3);
+
+      sockets[2].serverClose(4001);
+      expect(received).toEqual(['error']);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sockets.length).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('terminal 후 새 문서 채널 등록이 terminal을 해제하고 재연결을 허용한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+
+      sockets[0].serverClose(4003);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sockets.length).toBe(1);
+
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D2', () => {});
+      connection.sendAttach('D2', {});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sockets.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('onForeground: 재연결 백오프 대기를 건너뛰고 즉시 연결한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, sockets } = setup();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op handler, message routing isn't under test here
+      connection.registerChannel('D1', () => {});
+      connection.sendAttach('D1', {});
+      await vi.waitFor(() => expect(sockets.length).toBe(1));
+      sockets[0].serverOpen();
+      await vi.waitFor(() => expect(sockets[0].lastOf('hello')).toBeDefined());
+      sockets[0].serverSend({ t: 'hello-ack', capabilities: [] });
+
+      sockets[0].serverClose(1006);
+      expect(sockets.length).toBe(1);
+
+      connection.onForeground();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sockets.length).toBe(2);
     } finally {
       vi.useRealTimers();
     }

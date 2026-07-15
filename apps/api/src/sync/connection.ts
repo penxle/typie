@@ -9,6 +9,7 @@ export const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 export const PUSH_BUCKET_CAPACITY = 300;
 export const PUSH_BUCKET_REFILL_PER_SECOND = 5;
 export const FRAME_WARN_BYTES = 1024 * 1024;
+export const HELLO_TIMEOUT_MS = 15_000;
 
 const log = logger.getChild('sync');
 
@@ -31,12 +32,18 @@ export class SyncConnection {
   #writable: boolean | undefined;
   #queue: Promise<void> = Promise.resolve();
   #destroyed = false;
+  #helloTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(options: { deps: SyncDeps; socket: SyncSocket; now?: () => number }) {
+  constructor(options: { deps: SyncDeps; socket: SyncSocket; now?: () => number; helloTimeoutMs?: number }) {
     this.#deps = options.deps;
     this.#socket = options.socket;
     this.#now = options.now ?? Date.now;
     this.#pushRefilledAt = this.#now();
+    this.#helloTimer = setTimeout(() => {
+      this.#helloTimer = null;
+      if (!this.#session) this.#close(CLOSE_PROTOCOL_ERROR, 'hello timeout');
+    }, options.helloTimeoutMs ?? HELLO_TIMEOUT_MS);
+    this.#helloTimer.unref?.();
   }
 
   async #process(data: Uint8Array): Promise<void> {
@@ -102,6 +109,10 @@ export class SyncConnection {
     }
     this.#session = session;
     this.#clientId = message.clientId;
+    if (this.#helloTimer) {
+      clearTimeout(this.#helloTimer);
+      this.#helloTimer = null;
+    }
     await this.#send({ t: 'hello-ack', capabilities: [] });
   }
 
@@ -246,6 +257,10 @@ export class SyncConnection {
 
   destroy(): void {
     this.#destroyed = true;
+    if (this.#helloTimer) {
+      clearTimeout(this.#helloTimer);
+      this.#helloTimer = null;
+    }
     for (const channel of this.#channels.values()) channel.stop();
     this.#channels.clear();
   }

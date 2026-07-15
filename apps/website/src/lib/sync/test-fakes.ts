@@ -8,6 +8,7 @@ export class FakeWebSocket implements SyncSocketLike {
   binaryType = 'arraybuffer';
   sent: ClientMessage[] = [];
   closed: { code?: number; reason?: string } | null = null;
+  closeCompletes = true;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: ArrayBuffer }) => void) | null = null;
   onclose: ((event: { code: number }) => void) | null = null;
@@ -19,7 +20,7 @@ export class FakeWebSocket implements SyncSocketLike {
 
   close(code?: number, reason?: string): void {
     this.closed = { code, reason };
-    this.onclose?.({ code: code ?? 1000 });
+    if (this.closeCompletes) this.onclose?.({ code: code ?? 1000 });
   }
 
   serverOpen(): void {

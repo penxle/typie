@@ -27,6 +27,7 @@ import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.orphanSweeper
+import co.typie.editor.sync.ws.SyncWs
 import co.typie.platform.appLifecycleService
 import co.typie.platform.connectivityService
 import co.typie.route.AuthRoutes
@@ -98,6 +99,7 @@ fun RootShell() {
       when (event) {
         Lifecycle.Event.ON_START -> {
           appLifecycleService.update(foreground = true)
+          SyncWs.onAppForeground()
           lifecycleScope.launch { orphanSweeper.sweep() }
         }
         Lifecycle.Event.ON_STOP -> {

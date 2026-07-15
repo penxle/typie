@@ -44,6 +44,7 @@ class DocumentWsChannel(
   private val connection: SyncWsConnection,
   private val documentId: String,
   private val scope: CoroutineScope,
+  private val attachAckTimeoutMs: Long = 10_000,
   private val onEvicted: () -> Unit = {},
 ) {
   private companion object {
@@ -71,6 +72,7 @@ class DocumentWsChannel(
   private var liveSeq: String? = null
   private var retryAttempts = 0
   private var retryJob: Job? = null
+  private var attachWatchdogJob: Job? = null
   private var permanentlyFailed = false
 
   private val unregisterChannelHandler =
@@ -122,6 +124,8 @@ class DocumentWsChannel(
 
   private fun handleAttachAck() {
     awaitingAck = false
+    attachWatchdogJob?.cancel()
+    attachWatchdogJob = null
   }
 
   private fun handleSnapshotChunk(message: WsServerMessage.SnapshotChunk) {
@@ -207,6 +211,8 @@ class DocumentWsChannel(
   }
 
   private fun handleError(message: WsServerMessage.WsError) {
+    attachWatchdogJob?.cancel()
+    attachWatchdogJob = null
     if (message.permanent) {
       permanentlyFailed = true
       retryJob?.cancel()
@@ -249,6 +255,21 @@ class DocumentWsChannel(
       }
       else -> connection.sendAttach(documentId, null, null)
     }
+    armAttachWatchdog()
+  }
+
+  private fun armAttachWatchdog() {
+    attachWatchdogJob?.cancel()
+    attachWatchdogJob = scope.launch {
+      delay(attachAckTimeoutMs)
+      if (!awaitingAck || permanentlyFailed) return@launch
+      if (_events.subscriptionCount.value == 0) return@launch
+      connection.ensureLive()
+      if (!awaitingAck || permanentlyFailed) return@launch
+      if (_events.subscriptionCount.value == 0) return@launch
+      connection.sendDetach(documentId)
+      reattach()
+    }
   }
 
   private fun restartGeneration() {
@@ -263,6 +284,7 @@ class DocumentWsChannel(
     awaitingAck = true
     connection.sendDetach(documentId)
     connection.sendAttach(documentId, null, null)
+    armAttachWatchdog()
   }
 
   private fun onFirstSubscriberAttached() {
@@ -279,6 +301,8 @@ class DocumentWsChannel(
     retryJob?.cancel()
     retryJob = null
     retryAttempts = 0
+    attachWatchdogJob?.cancel()
+    attachWatchdogJob = null
     permanentlyFailed = false
     unregisterChannelHandler()
     unregisterReconnectedHandler()

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class SyncWsSocketClosed(val code: Int, val reason: String)
 
@@ -25,6 +26,8 @@ interface SyncWsSocket {
   suspend fun send(bytes: ByteArray)
 
   fun close()
+
+  fun terminate()
 
   val incoming: Flow<ByteArray>
   val closed: Deferred<SyncWsSocketClosed>
@@ -40,10 +43,12 @@ class SyncWsConnection(
   private val pingIntervalMs: Long = 30_000,
   private val reconnectBaseMs: Long = 1_000,
   private val idleTimeoutMs: Long = 60_000,
+  private val pongTimeoutMs: Long = 10_000,
+  private val probeTimeoutMs: Long = 5_000,
+  private val helloTimeoutMs: Long = 10_000,
 ) {
   private companion object {
     const val RECONNECT_CAP_MS = 30_000L
-    const val PING_MAX_MISSES = 2
     const val PROTOCOL_ERROR_CLOSE_CODE = 4003
     const val AUTH_FAILED_CLOSE_CODE = 4001
     const val AUTH_FAILED_MAX_STREAK = 3
@@ -63,9 +68,9 @@ class SyncWsConnection(
 
   private var attempts = 0
   private var requestSeq = 0
-  private var missedPongs = 0
   private var authFailedStreak = 0
   private var lastCloseCode: Int? = null
+  private var livenessWait: CompletableDeferred<Unit>? = null
 
   private val pending = mutableMapOf<String, CompletableDeferred<WsServerMessage>>()
   private val channelHandlers = mutableMapOf<String, MutableList<(WsServerMessage) -> Unit>>()
@@ -79,6 +84,8 @@ class SyncWsConnection(
   private var pingJob: Job? = null
   private var idleJob: Job? = null
   private var reconnectJob: Job? = null
+  private var helloWatchdogJob: Job? = null
+  private var probeJob: Job? = null
 
   suspend fun push(documentId: String, changesets: ByteArray): PushResult {
     val response = request { id ->
@@ -149,6 +156,10 @@ class SyncWsConnection(
     reconnectJob = null
     idleJob?.cancel()
     idleJob = null
+    helloWatchdogJob?.cancel()
+    helloWatchdogJob = null
+    probeJob?.cancel()
+    probeJob = null
     stopPing()
     senderJob?.cancel()
     senderJob = null
@@ -215,7 +226,6 @@ class SyncWsConnection(
 
     socket = newSocket
     ready = false
-    missedPongs = 0
     val helloAck = CompletableDeferred<Unit>()
     helloAckDeferred = helloAck
 
@@ -246,13 +256,22 @@ class SyncWsConnection(
         newSocket.close()
       }
     }
+
+    helloWatchdogJob = scope.launch {
+      val acked = withTimeoutOrNull(helloTimeoutMs) { helloAck.await() }
+      if (acked == null && socket === newSocket) {
+        Logger.w { "SyncWsConnection: hello ack timeout, terminating socket" }
+        newSocket.terminate()
+      }
+    }
   }
 
   private fun dispatch(message: WsServerMessage, sourceSocket: SyncWsSocket) {
     if (sourceSocket !== socket) return
+    livenessWait?.complete(Unit)
     when (message) {
       is WsServerMessage.HelloAck -> handleHelloAck()
-      is WsServerMessage.Pong -> missedPongs = 0
+      is WsServerMessage.Pong -> {}
       is WsServerMessage.PushAck -> resolvePending(message.id, message)
       is WsServerMessage.PullAck -> resolvePending(message.id, message)
       is WsServerMessage.WsError -> handleError(message)
@@ -305,6 +324,12 @@ class SyncWsConnection(
     socket = null
     ready = false
     helloAckDeferred = null
+    helloWatchdogJob?.cancel()
+    helloWatchdogJob = null
+    probeJob?.cancel()
+    probeJob = null
+    livenessWait?.complete(Unit)
+    livenessWait = null
     stopPing()
     idleJob?.cancel()
     idleJob = null
@@ -415,17 +440,18 @@ class SyncWsConnection(
   }
 
   private fun startPing() {
-    missedPongs = 0
     pingJob?.cancel()
     pingJob = scope.launch {
       while (true) {
         delay(pingIntervalMs)
-        if (missedPongs >= PING_MAX_MISSES) {
-          socket?.close()
+        val target = socket ?: break
+        if (!awaitLiveness(pongTimeoutMs)) {
+          if (socket === target) {
+            Logger.w { "SyncWsConnection: pong timeout, terminating socket" }
+            target.terminate()
+          }
           break
         }
-        missedPongs += 1
-        sendChannel.trySend(WsClientMessage.Ping())
       }
     }
   }
@@ -433,7 +459,41 @@ class SyncWsConnection(
   private fun stopPing() {
     pingJob?.cancel()
     pingJob = null
-    missedPongs = 0
+  }
+
+  private suspend fun awaitLiveness(timeoutMs: Long): Boolean {
+    val wait = livenessWait ?: CompletableDeferred<Unit>().also { livenessWait = it }
+    sendChannel.trySend(WsClientMessage.Ping())
+    val alive = withTimeoutOrNull(timeoutMs) { wait.await() } != null
+    if (livenessWait === wait) livenessWait = null
+    return alive
+  }
+
+  suspend fun ensureLive() {
+    if (disposed || terminal) return
+    val target = socket ?: return
+    if (!ready) return
+    if (!awaitLiveness(probeTimeoutMs) && socket === target) {
+      Logger.w { "SyncWsConnection: liveness probe failed, terminating socket" }
+      target.terminate()
+    }
+  }
+
+  fun onAppForeground() {
+    if (disposed || terminal) return
+    if (socket == null) {
+      if (reconnectJob != null) {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        attempts = 0
+        ensureConnected()
+      }
+      return
+    }
+    if (probeJob?.isActive == true) return
+    val job = scope.launch { ensureLive() }
+    probeJob = job
+    job.invokeOnCompletion { if (probeJob === job) probeJob = null }
   }
 
   private fun recomputeIdle() {

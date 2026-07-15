@@ -829,6 +829,70 @@ class DocumentWsChannelTest {
   }
 
   @Test
+  fun attachAckTimeoutOnLiveConnectionDetachesAndReattaches() = runTest {
+    val (_, channel, sockets) = harness()
+    val events = mutableListOf<AttachEvent>()
+    collectJob(channel.freshSubscribe(), events)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Attach })
+
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertIs<WsClientMessage.Ping>(socket.lastOf("ping"))
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Attach })
+
+    socket.serverSend(WsServerMessage.Pong())
+    runCurrent()
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Detach })
+    assertEquals(2, socket.sent.count { it is WsClientMessage.Attach })
+
+    socket.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+    socket.serverSend(chunk("B1", 1, 0, byteArrayOf(1)))
+    socket.serverSend(snapshotEnd("1-0"))
+    runCurrent()
+    assertEquals(listOf(chunkS("B1", 1, 0, byteArrayOf(1)), endS("1-0")), events.snapshots())
+
+    advanceTimeBy(60_000)
+    runCurrent()
+    assertEquals(2, socket.sent.count { it is WsClientMessage.Attach })
+  }
+
+  @Test
+  fun attachAckTimeoutOnDeadConnectionTerminatesThenReattachesAfterReconnect() = runTest {
+    val (_, channel, sockets) = harness()
+    val events = mutableListOf<AttachEvent>()
+    collectJob(channel.freshSubscribe(), events)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+    assertEquals(1, socket0.sent.count { it is WsClientMessage.Attach })
+
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertIs<WsClientMessage.Ping>(socket0.lastOf("ping"))
+
+    advanceTimeBy(5_000)
+    runCurrent()
+    assertTrue(socket0.closed.isCompleted)
+    assertEquals(1, socket0.terminateCalls)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, sockets.size)
+    val socket1 = sockets[1]
+    handshake(socket1)
+    assertEquals(1, socket1.sent.count { it is WsClientMessage.Attach })
+
+    socket1.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+    socket1.serverSend(chunk("B1", 1, 0, byteArrayOf(1)))
+    socket1.serverSend(snapshotEnd("1-0"))
+    runCurrent()
+    assertEquals(listOf(chunkS("B1", 1, 0, byteArrayOf(1)), endS("1-0")), events.snapshots())
+  }
+
+  @Test
   fun onEvictedFiresOnceOnLastDetachAndReplacementChannelAttachesIndependently() = runTest {
     val (connection, _, sockets) = harness()
     var evictedCount = 0

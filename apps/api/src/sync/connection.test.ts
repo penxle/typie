@@ -19,11 +19,11 @@ class FakeSocket implements SyncSocket {
   bufferedAmount = (): number => this.buffered;
 }
 
-const setup = (options: { now?: () => number } = {}) => {
+const setup = (options: { now?: () => number; helloTimeoutMs?: number } = {}) => {
   const deps = new FakeSyncDeps();
   deps.tickets.set('TK', { sessionId: 'S1', userId: 'U1', deviceId: 'DEV1' });
   const socket = new FakeSocket();
-  const connection = new SyncConnection({ deps, socket, now: options.now });
+  const connection = new SyncConnection({ deps, socket, now: options.now, helloTimeoutMs: options.helloTimeoutMs });
   const dispatch = (message: ClientMessage) => connection.handleMessage(encodeMessage(message));
   return { deps, socket, connection, dispatch };
 };
@@ -49,6 +49,19 @@ test('hello 전 다른 메시지 → close 4003', async () => {
   const d = setup();
   await d.dispatch({ t: 'ping' });
   assert.equal(d.socket.closed?.code, 4003);
+});
+
+test('hello 타임아웃: 기한 내 hello가 없으면 close 4003', async () => {
+  const d = setup({ helloTimeoutMs: 20 });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(d.socket.closed?.code, 4003);
+});
+
+test('hello 타임아웃: 기한 내 hello가 오면 유지된다', async () => {
+  const d = setup({ helloTimeoutMs: 20 });
+  await hello(d);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(d.socket.closed, null);
 });
 
 test('중복 hello → close 4003', async () => {

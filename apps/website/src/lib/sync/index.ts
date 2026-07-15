@@ -25,10 +25,19 @@ let connection: SyncConnection | null = null;
 let channels: DocumentChannels | null = null;
 
 export const getSyncConnection = (): SyncConnection => {
-  connection ??= new SyncConnection({
-    createSocket: () => new WebSocket(`${env.PUBLIC_WS_URL}/sync`, SUBPROTOCOL) as unknown as SyncSocketLike,
-    fetchTicket,
-  });
+  if (!connection) {
+    const created = new SyncConnection({
+      createSocket: () => new WebSocket(`${env.PUBLIC_WS_URL}/sync`, SUBPROTOCOL) as unknown as SyncSocketLike,
+      fetchTicket,
+    });
+    connection = created;
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') created.onForeground();
+      });
+      window.addEventListener('online', () => created.onForeground());
+    }
+  }
   return connection;
 };
 

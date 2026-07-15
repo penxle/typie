@@ -19,9 +19,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private class KtorSyncWsSocket
 private constructor(
@@ -41,13 +44,14 @@ private constructor(
           if (frame is Frame.Binary) incomingFlow.emit(frame.readBytes())
         }
       } catch (e: CancellationException) {
-        throw e
+        if (!isActive) throw e
       } catch (_: Throwable) {}
       val reason =
         try {
-          session.closeReason.await()
+          withTimeoutOrNull(CLOSE_REASON_TIMEOUT_MS) { session.closeReason.await() }
         } catch (e: CancellationException) {
-          throw e
+          if (!isActive) throw e
+          null
         } catch (_: Throwable) {
           null
         }
@@ -62,10 +66,21 @@ private constructor(
   }
 
   override fun close() {
-    scope.launch { runCatching { session.close() } }
+    scope.launch {
+      runCatching { session.close() }
+      if (withTimeoutOrNull(CLOSE_GRACE_MS) { closedDeferred.await() } == null) terminate()
+    }
+  }
+
+  override fun terminate() {
+    closedDeferred.complete(SyncWsSocketClosed(code = 1006, reason = "terminated"))
+    session.cancel()
   }
 
   companion object {
+    private const val CLOSE_GRACE_MS = 5_000L
+    private const val CLOSE_REASON_TIMEOUT_MS = 5_000L
+
     suspend fun connect(url: String, scope: CoroutineScope): SyncWsSocket {
       val session =
         Http.webSocketSession(url) { header(HttpHeaders.SecWebSocketProtocol, SYNC_WS_SUBPROTOCOL) }
@@ -82,13 +97,14 @@ object SyncWs {
   private val scope =
     CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)
 
-  val connection: SyncWsConnection by lazy {
+  private val connectionDelegate = lazy {
     SyncWsConnection(
       socketFactory = { KtorSyncWsSocket.connect(url = "${Konfig.WS_URL}/sync", scope = scope) },
       fetchTicket = { WebSocketSession.create() },
       scope = scope,
     )
   }
+  val connection: SyncWsConnection by connectionDelegate
 
   private val channels = mutableMapOf<String, DocumentWsChannel>()
 
@@ -105,5 +121,9 @@ object SyncWs {
   fun retryDocument(documentId: String) {
     channels.remove(documentId)
     connection.resetTerminal()
+  }
+
+  fun onAppForeground() {
+    if (connectionDelegate.isInitialized()) connection.onAppForeground()
   }
 }

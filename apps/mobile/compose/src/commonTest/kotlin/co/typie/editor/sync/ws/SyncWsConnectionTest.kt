@@ -23,6 +23,9 @@ private fun TestScope.harness(
   pingIntervalMs: Long = 30_000,
   reconnectBaseMs: Long = 1_000,
   idleTimeoutMs: Long = 60_000,
+  pongTimeoutMs: Long = 10_000,
+  probeTimeoutMs: Long = 5_000,
+  helloTimeoutMs: Long = 10_000,
 ): ConnectionHarness {
   val sockets = mutableListOf<FakeSyncWsSocket>()
   var ticketSeq = 0
@@ -38,6 +41,9 @@ private fun TestScope.harness(
       pingIntervalMs = pingIntervalMs,
       reconnectBaseMs = reconnectBaseMs,
       idleTimeoutMs = idleTimeoutMs,
+      pongTimeoutMs = pongTimeoutMs,
+      probeTimeoutMs = probeTimeoutMs,
+      helloTimeoutMs = helloTimeoutMs,
     )
   return ConnectionHarness(connection, sockets)
 }
@@ -164,7 +170,7 @@ class SyncWsConnectionTest {
   }
 
   @Test
-  fun pingTwoMissedPongsClosesSocketAndReconnects() = runTest {
+  fun pongDeadlineMissTerminatesSocketAndReconnects() = runTest {
     val (connection, sockets) = harness(pingIntervalMs = 30_000, reconnectBaseMs = 1_000)
     connection.registerChannel("D1") {}
     connection.sendAttach("D1", null, null)
@@ -175,12 +181,179 @@ class SyncWsConnectionTest {
     advanceTimeBy(30_000)
     runCurrent()
     assertIs<WsClientMessage.Ping>(socket0.lastOf("ping"))
+    assertFalse(socket0.closed.isCompleted)
+
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertTrue(socket0.closed.isCompleted)
+    assertEquals(1, socket0.terminateCalls)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun pongWithinDeadlineKeepsConnectionAlive() = runTest {
+    val (connection, sockets) = harness(pingIntervalMs = 30_000)
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
 
     advanceTimeBy(30_000)
     runCurrent()
+    assertEquals(1, socket0.sent.count { it is WsClientMessage.Ping })
+    socket0.serverSend(WsServerMessage.Pong())
+    runCurrent()
+
     advanceTimeBy(30_000)
     runCurrent()
+    assertEquals(2, socket0.sent.count { it is WsClientMessage.Ping })
+    assertFalse(socket0.closed.isCompleted)
+    assertEquals(1, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun anyInboundTrafficSatisfiesPongDeadline() = runTest {
+    val (connection, sockets) = harness(pingIntervalMs = 30_000)
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+
+    advanceTimeBy(30_000)
+    runCurrent()
+    socket0.serverSend(WsServerMessage.AttachAck(documentId = "D1"))
+    runCurrent()
+
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertFalse(socket0.closed.isCompleted)
+    assertEquals(1, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun helloAckTimeoutTerminatesSocketAndReconnects() = runTest {
+    val (connection, sockets) = harness(reconnectBaseMs = 1_000, helloTimeoutMs = 10_000)
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    assertIs<WsClientMessage.Hello>(socket0.lastOf("hello"))
+
+    advanceTimeBy(10_000)
+    runCurrent()
     assertTrue(socket0.closed.isCompleted)
+    assertEquals(1, socket0.terminateCalls)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, sockets.size)
+    val socket1 = sockets[1]
+    handshake(socket1)
+    assertFalse(socket1.closed.isCompleted)
+    connection.dispose()
+  }
+
+  @Test
+  fun foregroundProbeTerminatesDeadSocketAndReconnects() = runTest {
+    val (connection, sockets) = harness(reconnectBaseMs = 1_000, probeTimeoutMs = 5_000)
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+
+    connection.onAppForeground()
+    runCurrent()
+    assertIs<WsClientMessage.Ping>(socket0.lastOf("ping"))
+
+    advanceTimeBy(5_000)
+    runCurrent()
+    assertTrue(socket0.closed.isCompleted)
+    assertEquals(1, socket0.terminateCalls)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun foregroundProbeKeepsHealthySocket() = runTest {
+    val (connection, sockets) = harness()
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+
+    connection.onAppForeground()
+    runCurrent()
+    socket0.serverSend(WsServerMessage.Pong())
+    runCurrent()
+
+    advanceTimeBy(5_000)
+    runCurrent()
+    assertFalse(socket0.closed.isCompleted)
+    assertEquals(0, socket0.terminateCalls)
+    assertEquals(1, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun foregroundSkipsReconnectBackoff() = runTest {
+    val (connection, sockets) = harness(reconnectBaseMs = 30_000)
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    handshake(sockets[0])
+
+    sockets[0].serverClose(1006)
+    runCurrent()
+    assertEquals(1, sockets.size)
+
+    connection.onAppForeground()
+    runCurrent()
+    assertEquals(2, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun halfOpenSocketAfterIdleCloseIsTerminatedByPingLoop() = runTest {
+    val (connection, sockets) =
+      harness(pingIntervalMs = 120_000, idleTimeoutMs = 60_000, reconnectBaseMs = 1_000)
+    val off = connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+
+    socket0.closeCompletes = false
+    off()
+    runCurrent()
+    advanceTimeBy(60_000)
+    runCurrent()
+    assertEquals(1, socket0.closeCalls)
+    assertFalse(socket0.closed.isCompleted)
+
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    assertIs<WsClientMessage.Attach>(socket0.lastOf("attach"))
+
+    advanceTimeBy(60_000)
+    runCurrent()
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertTrue(socket0.closed.isCompleted)
+    assertEquals(1, socket0.terminateCalls)
 
     advanceTimeBy(1_000)
     runCurrent()
