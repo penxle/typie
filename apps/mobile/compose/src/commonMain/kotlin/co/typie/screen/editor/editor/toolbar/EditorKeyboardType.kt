@@ -24,6 +24,7 @@ internal data class EditorKeyboardState(
   val imeFrameVisible: Boolean = false,
   val imeHideEventVersion: Int = 0,
   val presentation: EditorKeyboardPresentation = EditorKeyboardPresentation.Hidden,
+  val hardwareKeyboardAttached: Boolean = type == EditorKeyboardType.Hardware,
 ) {
   val usesImeInset: Boolean
     get() = type == EditorKeyboardType.Software || imeFrameVisible

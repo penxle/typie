@@ -185,6 +185,21 @@ internal class EditorToolbarInputState {
       return emptyList()
     }
 
+    if (
+      previousIme.visible &&
+        !imeVisible &&
+        panel == null &&
+        environment.focused &&
+        environment.keyboardType == EditorKeyboardType.Software &&
+        !environment.keyboardState.hardwareKeyboardAttached &&
+        !environment.panelTransitionRunning
+    ) {
+      keyboardRestoreInset = null
+      rememberedKeyboardInset = 0.dp
+      previousIme = currentIme
+      return listOf(EditorInputEffect.ClearFocus)
+    }
+
     var currentPanel = panel
     if (
       imeHideEvent && !previousIme.visible && !imeVisible && !environment.panelTransitionRunning

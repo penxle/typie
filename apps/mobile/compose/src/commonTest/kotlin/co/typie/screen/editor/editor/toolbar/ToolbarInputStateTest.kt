@@ -202,6 +202,115 @@ class ToolbarInputStateTest {
   }
 
   @Test
+  fun system_ime_dismiss_while_editor_focused_clears_focus() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    val effects = state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
+
+    assertEquals(listOf(EditorInputEffect.ClearFocus), effects)
+    assertEquals(null, state.keyboardRestoreInset)
+    assertEquals(0.dp, state.rememberedKeyboardInset)
+    assertEquals(0.dp, state.retainedKeyboardInset())
+
+    val focusCleared =
+      state.onEnvironmentChanged(toolbarInputEnvironment(focused = false, imeBottom = 0.dp))
+
+    assertEquals(emptyList(), focusCleared)
+  }
+
+  @Test
+  fun system_ime_dismiss_keeps_focus_while_panel_open() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanel.Insert), keyboardVisible)
+    val effects = state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
+
+    assertEquals(EditorToolbarBottomPanel.Insert, state.activeBottomPanel)
+    assertEquals(emptyList(), effects)
+  }
+
+  @Test
+  fun system_ime_dismiss_during_panel_transition_does_not_clear_focus() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    val effects =
+      state.onEnvironmentChanged(
+        toolbarInputEnvironment(imeBottom = 0.dp, panelTransitionRunning = true)
+      )
+
+    assertEquals(emptyList(), effects)
+  }
+
+  @Test
+  fun system_ime_dismiss_with_hardware_keyboard_keeps_focus() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible =
+      toolbarInputEnvironment(
+        imeBottom = 320.dp,
+        keyboardState =
+          EditorKeyboardState(type = EditorKeyboardType.Hardware, imeFrameVisible = true),
+      )
+
+    state.onEnvironmentChanged(keyboardVisible)
+    val effects =
+      state.onEnvironmentChanged(
+        toolbarInputEnvironment(
+          imeBottom = 0.dp,
+          keyboardState = EditorKeyboardState(EditorKeyboardType.Hardware),
+        )
+      )
+
+    assertEquals(emptyList(), effects)
+  }
+
+  @Test
+  fun system_ime_dismiss_keeps_focus_when_hardware_keyboard_attached_before_type_updates() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    val effects =
+      state.onEnvironmentChanged(
+        toolbarInputEnvironment(
+          imeBottom = 0.dp,
+          keyboardState =
+            EditorKeyboardState(
+              type = EditorKeyboardType.Software,
+              hardwareKeyboardAttached = true,
+            ),
+        )
+      )
+
+    assertEquals(emptyList(), effects)
+  }
+
+  @Test
+  fun system_ime_dismiss_during_keyboard_restore_clears_focus_and_restore() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanel.Insert), keyboardVisible)
+
+    val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
+    state.onEnvironmentChanged(keyboardHidden)
+    state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
+    state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 95.dp))
+
+    val effects = state.onEnvironmentChanged(keyboardHidden)
+
+    assertEquals(listOf(EditorInputEffect.ClearFocus), effects)
+    assertEquals(null, state.keyboardRestoreInset)
+    assertEquals(0.dp, state.rememberedKeyboardInset)
+  }
+
+  @Test
   fun retained_keyboard_inset_does_not_present_toolbar_without_editor_focus() {
     val environment = toolbarInputEnvironment(focused = false, imeBottom = 320.dp)
 
