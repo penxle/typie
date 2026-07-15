@@ -130,23 +130,27 @@ internal class EditorInputConnection(
       recordRead("getSurroundingText", args, null)
       return null
     }
+    val full = editor.tickIme
     val ctx =
-      editor.tickIme?.trimmedTo(
+      full?.trimmedTo(
         beforeLength.coerceAtMost(IME_READ_WINDOW),
         afterLength.coerceAtMost(IME_READ_WINDOW),
       )
-    if (ctx == null) {
+    if (full == null || ctx == null) {
       recordRead("getSurroundingText", args, null)
       return null
     }
     val selStart = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart)
     val selEnd = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
+    // Window-relative world: the offset locates the trimmed text within the
+    // window presented as the whole document.
+    val offset = full.windowUtf16Offset(ctx.windowStart)
     recordRead(
       "getSurroundingText",
       args,
-      "text=${ctx.text}, selStart=$selStart, selEnd=$selEnd, offset=${ctx.windowStart}",
+      "text=${ctx.text}, selStart=$selStart, selEnd=$selEnd, offset=$offset",
     )
-    return SurroundingText(ctx.text, selStart, selEnd, ctx.windowStart)
+    return SurroundingText(ctx.text, selStart, selEnd, offset)
   }
 
   override fun getCursorCapsMode(reqModes: Int): Int = 0
@@ -159,9 +163,7 @@ internal class EditorInputConnection(
     recordRead(
       "getExtractedText",
       "token=${request?.token}, flags=$flags",
-      extract?.let {
-        "startOffset=${it.startOffset}, sel=${it.selectionStart}..${it.selectionEnd}, textLength=${it.text.length}"
-      },
+      extract?.let { "sel=${it.selectionStart}..${it.selectionEnd}, textLength=${it.text.length}" },
     )
     return extract?.toExtractedText()
   }
@@ -186,16 +188,11 @@ internal class EditorInputConnection(
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     recordCall("setComposingRegion", "start=$start, end=$end")
-    // AOSP BaseInputConnection swaps reversed ranges and discards zero-length
-    // composing spans, so an empty region clears the composition instead of
-    // anchoring it (Samsung HoneyBoard sends (0,0) when recomposing).
-    if (start == end) {
-      batch.enqueue(FlatImeOp.ClearComposition)
-      return true
+    when (val decision = resolveComposingRegion(editor.tickIme, start, end)) {
+      is ComposingRegionDecision.Set ->
+        batch.enqueue(FlatImeOp.SetComposition(decision.start, decision.end))
+      ComposingRegionDecision.Clear -> batch.enqueue(FlatImeOp.ClearComposition)
     }
-    val (projectedStart, projectedEnd) =
-      projectAbsoluteUtf16Range(minOf(start, end), maxOf(start, end))
-    batch.enqueue(FlatImeOp.SetComposition(projectedStart, projectedEnd))
     return true
   }
 
@@ -219,14 +216,11 @@ internal class EditorInputConnection(
 
   override fun setSelection(start: Int, end: Int): Boolean {
     recordCall("setSelection", "start=$start, end=$end")
-    val (projectedStart, projectedEnd) = projectAbsoluteUtf16Range(start, end)
-    batch.enqueue(FlatImeOp.SetSelection(projectedStart, projectedEnd))
+    val ctx = editor.tickIme ?: return true
+    batch.enqueue(
+      FlatImeOp.SetSelection(ctx.projectWindowUtf16Index(start), ctx.projectWindowUtf16Index(end))
+    )
     return true
-  }
-
-  private fun projectAbsoluteUtf16Range(start: Int, end: Int): Pair<Int, Int> {
-    val ctx = editor.tickIme ?: return start to end
-    return ctx.projectAbsoluteUtf16Offset(start) to ctx.projectAbsoluteUtf16Offset(end)
   }
 
   override fun sendKeyEvent(event: KeyEvent?): Boolean {
@@ -315,7 +309,8 @@ internal class EditorInputConnection(
 internal fun ImeExtract.toExtractedText(): ExtractedText =
   ExtractedText().also {
     it.text = text
-    it.startOffset = startOffset
+    // Window-relative world: the window is the whole presented document.
+    it.startOffset = 0
     it.partialStartOffset = -1
     it.partialEndOffset = -1
     it.selectionStart = selectionStart

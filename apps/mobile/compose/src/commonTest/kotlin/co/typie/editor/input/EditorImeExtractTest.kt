@@ -13,18 +13,16 @@ class EditorImeExtractTest {
     val extract = ime.extract()
 
     assertEquals("가나다라", extract.text)
-    assertEquals(0, extract.startOffset)
     assertEquals(2, extract.selectionStart)
     assertEquals(3, extract.selectionEnd)
   }
 
   @Test
-  fun `extract keeps flat window start for windowed documents`() {
+  fun `extract selection is window-relative for windowed documents`() {
     val ime = Ime(text = "다라마", windowStart = 100, selection = ImeRange(101, 101), composing = null)
 
     val extract = ime.extract()
 
-    assertEquals(100, extract.startOffset)
     assertEquals(1, extract.selectionStart)
     assertEquals(1, extract.selectionEnd)
   }
@@ -42,29 +40,13 @@ class EditorImeExtractTest {
   }
 
   @Test
-  fun `extract absolute offsets roundtrip through the incoming projection`() {
+  fun `extract selection roundtrips through the incoming window projection`() {
     val ime =
       Ime(text = "a😀가나", windowStart = 100, selection = ImeRange(103, 104), composing = null)
 
     val extract = ime.extract()
 
-    assertEquals(
-      ime.selection.start,
-      ime.projectAbsoluteUtf16Offset(extract.startOffset + extract.selectionStart),
-    )
-    assertEquals(
-      ime.selection.end,
-      ime.projectAbsoluteUtf16Offset(extract.startOffset + extract.selectionEnd),
-    )
-  }
-
-  @Test
-  fun `absolute utf16 offset is the inverse of the incoming projection`() {
-    val ime =
-      Ime(text = "a😀가나", windowStart = 100, selection = ImeRange(100, 104), composing = null)
-
-    for (flat in 100..104) {
-      assertEquals(flat, ime.projectAbsoluteUtf16Offset(ime.absoluteUtf16Offset(flat)))
-    }
+    assertEquals(ime.selection.start, ime.projectWindowUtf16Index(extract.selectionStart))
+    assertEquals(ime.selection.end, ime.projectWindowUtf16Index(extract.selectionEnd))
   }
 }

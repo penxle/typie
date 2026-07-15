@@ -4,17 +4,17 @@ package co.typie.editor.input
 
 import co.typie.editor.ffi.Ime
 
+// The Android boundary presents the window as the whole document: every
+// coordinate exposed to or accepted from the keyboard is a UTF-16 index
+// within the window text. Keyboards are only ever validated against stock
+// editors that expose the full text, so a window-relative world (where the
+// exposed prefix length, the reported selection, and extracted-text offsets
+// all agree) is the only coordinate dialect they all speak.
 internal fun Ime.projectWindowUtf16Index(index: Int): Int =
   windowStart + text.codePointOffsetAtUtf16Index(index)
 
-internal fun Ime.projectAbsoluteUtf16Offset(offset: Int): Int {
-  val relative = offset - windowStart
-  if (relative < 0 || relative > text.length) return offset
-  return windowStart + text.codePointOffsetAtUtf16Index(relative)
-}
-
-internal fun Ime.absoluteUtf16Offset(flatOffset: Int): Int =
-  windowStart + text.utf16IndexAtCodePointOffset(flatOffset - windowStart)
+internal fun Ime.windowUtf16Offset(flatOffset: Int): Int =
+  text.utf16IndexAtCodePointOffset(flatOffset - windowStart)
 
 internal fun String.codePointOffsetAtUtf16Index(index: Int): Int {
   var utf16Index = 0

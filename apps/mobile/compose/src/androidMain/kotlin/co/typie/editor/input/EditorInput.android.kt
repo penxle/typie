@@ -40,8 +40,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
     outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
     val ctx = editor.tickIme
-    outAttrs.initialSelStart = ctx?.let { it.absoluteUtf16Offset(it.selection.start) } ?: -1
-    outAttrs.initialSelEnd = ctx?.let { it.absoluteUtf16Offset(it.selection.end) } ?: -1
+    outAttrs.initialSelStart = ctx?.let { it.windowUtf16Offset(it.selection.start) } ?: -1
+    outAttrs.initialSelEnd = ctx?.let { it.windowUtf16Offset(it.selection.end) } ?: -1
     val connection =
       EditorInputConnection(
         editor = editor,
@@ -76,10 +76,10 @@ internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: 
       androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         ?: return
     val ctx = editor.tickIme
-    val selStart = ctx?.let { it.absoluteUtf16Offset(it.selection.start) } ?: -1
-    val selEnd = ctx?.let { it.absoluteUtf16Offset(it.selection.end) } ?: -1
-    val composingStart = ctx?.composing?.let { ctx.absoluteUtf16Offset(it.start) } ?: -1
-    val composingEnd = ctx?.composing?.let { ctx.absoluteUtf16Offset(it.end) } ?: -1
+    val selStart = ctx?.let { it.windowUtf16Offset(it.selection.start) } ?: -1
+    val selEnd = ctx?.let { it.windowUtf16Offset(it.selection.end) } ?: -1
+    val composingStart = ctx?.composing?.let { ctx.windowUtf16Offset(it.start) } ?: -1
+    val composingEnd = ctx?.composing?.let { ctx.windowUtf16Offset(it.end) } ?: -1
     editor.inputRecorder?.record { seq, t ->
       RecordedInputEntry.UpdateSelection(
         seq = seq,
