@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 
 data class PushResult(val heads: ByteArray, val durableHeads: ByteArray)
 
@@ -67,6 +68,8 @@ class SyncEngine(
   private var inflight = false
   private var persistTail: Deferred<Result<Unit>> = CompletableDeferred(Result.success(Unit))
   private var persistQueued = false
+  private var pushTail: Deferred<Result<Unit>> = CompletableDeferred(Result.success(Unit))
+  private var pushQueued = false
   private val flushWaiters = mutableListOf<CompletableDeferred<Unit>>()
   private var flushAfterInflight = false
   private var idleJob: Job? = null
@@ -155,6 +158,57 @@ class SyncEngine(
     setDurableHeads(result.durableHeads)
   }
 
+  private fun pushFresh(): Deferred<Result<Unit>> {
+    if (pushQueued) return pushTail
+    pushQueued = true
+    val previous = pushTail
+    val run =
+      scope.async(start = CoroutineStart.UNDISPATCHED) {
+        previous.await()
+        pushQueued = false
+        catchingNonCancellation {
+          if (stopped) return@catchingNonCancellation
+          drain()
+        }
+      }
+    pushTail = run
+    return run
+  }
+
+  private suspend fun frontierCoveredBy(heads: ByteArray): Boolean {
+    val missing = editor.missingChangesetsFor(heads)
+    return missing.bytes.isEmpty() && missing.withheld == 0
+  }
+
+  private suspend fun currentFrontierIsProtected(): Boolean =
+    frontierCoveredBy(capturedHeads) || frontierCoveredBy(confirmedHeads)
+
+  private fun captureWithOneRetry(): Deferred<Result<Unit>> =
+    scope.async(start = CoroutineStart.UNDISPATCHED) {
+      val first = catchingNonCancellation { capture() }
+      if (currentFrontierIsProtected()) return@async Result.success(Unit)
+      if (first.isSuccess) return@async first
+
+      val retry = catchingNonCancellation { capture() }
+      if (currentFrontierIsProtected()) Result.success(Unit) else retry
+    }
+
+  private fun checkpointFailure(
+    captureResult: Result<Unit>,
+    pushResult: Result<Unit>,
+  ): Result<Unit> {
+    val captureFailure = captureResult.exceptionOrNull()
+    val pushFailure = pushResult.exceptionOrNull()
+    val failure =
+      captureFailure
+        ?: pushFailure
+        ?: IllegalStateException("Current editor frontier is not protected")
+    if (captureFailure != null && pushFailure != null && pushFailure !== failure) {
+      failure.addSuppressed(pushFailure)
+    }
+    return Result.failure(failure)
+  }
+
   private suspend fun prune() {
     if (stopped) return
     val missing = editor.missingChangesetsFor(durableHeads)
@@ -208,7 +262,7 @@ class SyncEngine(
         captureFailuresFlow.value += 1
       }
       if (stopped) return
-      drain()
+      pushFresh().await().getOrThrow()
       if (stopped) return
       captureError?.let { throw it }
       finishSuccess(startedAt)
@@ -287,6 +341,40 @@ class SyncEngine(
     capture()
   }
 
+  suspend fun checkpointCurrentFrontier(): Result<Unit> =
+    try {
+      checkpointCurrentFrontierUnchecked()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      Result.failure(e)
+    }
+
+  private suspend fun checkpointCurrentFrontierUnchecked(): Result<Unit> {
+    if (currentFrontierIsProtected()) return Result.success(Unit)
+
+    val capture = captureWithOneRetry()
+    val push = pushFresh()
+    var captureResult: Result<Unit>? = null
+    var pushResult: Result<Unit>? = null
+
+    while (true) {
+      if (currentFrontierIsProtected()) return Result.success(Unit)
+      if (captureResult != null && pushResult != null) {
+        return checkpointFailure(captureResult, pushResult)
+      }
+
+      select {
+        if (captureResult == null) {
+          capture.onAwait { captureResult = it }
+        }
+        if (pushResult == null) {
+          push.onAwait { pushResult = it }
+        }
+      }
+    }
+  }
+
   suspend fun flushNow() {
     if (inflight) {
       val waiter = CompletableDeferred<Unit>()
@@ -294,7 +382,7 @@ class SyncEngine(
       waiter.await()
     }
     capture()
-    drain()
+    pushFresh().await().getOrThrow()
   }
 
   fun schedule() {

@@ -1,7 +1,7 @@
 package co.typie.screen.editor.editor
 
 import co.typie.editor.DocumentEditingClose
-import co.typie.editor.LocalDurabilityResult
+import co.typie.editor.EditingCheckpointResult
 import co.typie.navigation.RouteRemovalDecision
 import co.typie.navigation.RouteRemovalInterceptor
 import co.typie.navigation.RouteRemovalPreparation
@@ -16,7 +16,7 @@ internal class EditorRouteLeaveInterceptor(
   private val beginClose: () -> DocumentEditingClose,
   private val resolveDecision: suspend () -> RouteRemovalDecision,
   private val delayedFeedbackMillis: Long = DEFAULT_DELAYED_FEEDBACK_MILLIS,
-  private val localDurabilityWatchdogMillis: Long = DEFAULT_LOCAL_DURABILITY_WATCHDOG_MILLIS,
+  private val checkpointWatchdogMillis: Long = DEFAULT_CHECKPOINT_WATCHDOG_MILLIS,
   private val showDelayedFeedback: () -> Unit = {},
   private val hideDelayedFeedback: () -> Unit = {},
 ) : RouteRemovalInterceptor {
@@ -39,7 +39,7 @@ internal class EditorRouteLeaveInterceptor(
       }
     close = currentClose
 
-    return if (awaitLocalDurability(currentClose, onDelayed)) {
+    return if (awaitCheckpoint(currentClose, onDelayed)) {
       RouteRemovalPreparation.Ready
     } else {
       RouteRemovalPreparation.NeedsDecision
@@ -62,14 +62,15 @@ internal class EditorRouteLeaveInterceptor(
     }
   }
 
-  private suspend fun awaitLocalDurability(
+  private suspend fun awaitCheckpoint(
     close: DocumentEditingClose,
     onDelayed: (suspend () -> Unit)? = null,
   ): Boolean {
-    suspend fun awaitResult(): Boolean = awaitLocalDurabilityWithOneRetry(close)
+    suspend fun awaitResult(): Boolean =
+      close.awaitCheckpoint() == EditingCheckpointResult.Protected
 
     return try {
-      withTimeoutOrNull(localDurabilityWatchdogMillis) {
+      withTimeoutOrNull(checkpointWatchdogMillis) {
         if (onDelayed == null) return@withTimeoutOrNull awaitResult()
 
         coroutineScope {
@@ -88,16 +89,6 @@ internal class EditorRouteLeaveInterceptor(
     }
   }
 
-  private suspend fun awaitLocalDurabilityWithOneRetry(close: DocumentEditingClose): Boolean {
-    val first = close.awaitLocalDurability()
-    return when {
-      first == LocalDurabilityResult.Captured -> true
-      first is LocalDurabilityResult.CaptureFailed ->
-        close.retryLocalDurability() == LocalDurabilityResult.Captured
-      else -> false
-    }
-  }
-
   private fun hideDelayedFeedbackIfVisible() {
     if (!delayedFeedbackVisible) return
     delayedFeedbackVisible = false
@@ -106,6 +97,6 @@ internal class EditorRouteLeaveInterceptor(
 
   private companion object {
     const val DEFAULT_DELAYED_FEEDBACK_MILLIS = 350L
-    const val DEFAULT_LOCAL_DURABILITY_WATCHDOG_MILLIS = 3_000L
+    const val DEFAULT_CHECKPOINT_WATCHDOG_MILLIS = 3_000L
   }
 }

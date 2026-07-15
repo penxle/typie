@@ -36,9 +36,12 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DocumentEditingSessionTest {
-  private class FakeTransport : SyncTransport {
-    override suspend fun push(changesets: ByteArray): PushResult =
+  private class FakeTransport(
+    private val pushFn: suspend (ByteArray) -> PushResult = {
       PushResult(heads = enc(), durableHeads = enc())
+    }
+  ) : SyncTransport {
+    override suspend fun push(changesets: ByteArray): PushResult = pushFn(changesets)
 
     override suspend fun pull(sinceSeq: String?): PullResult =
       PullResult(
@@ -62,8 +65,9 @@ class DocumentEditingSessionTest {
     store: FakeDeltaStore = FakeDeltaStore(),
     syncEditor: FakeSyncEditor = FakeSyncEditor(),
     editor: Editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)),
+    pushFn: suspend (ByteArray) -> PushResult = { PushResult(heads = enc(), durableHeads = enc()) },
   ): Harness {
-    val transport = FakeTransport()
+    val transport = FakeTransport(pushFn)
     val scope = CoroutineScope(coroutineContext)
     val engine =
       SyncEngine(
@@ -94,6 +98,47 @@ class DocumentEditingSessionTest {
         scope = scope,
       )
     return Harness(editor = editor, session = session, store = store)
+  }
+
+  @Test
+  fun closeSucceedsThroughExactLiveAckWhenLocalCaptureFails() = runTest {
+    val store = FakeDeltaStore()
+    store.onPut = { throw IllegalStateException("disk unavailable") }
+    val syncEditor = FakeSyncEditor()
+    val (_, session) =
+      harness(
+        store = store,
+        syncEditor = syncEditor,
+        pushFn = { PushResult(heads = enc(1), durableHeads = enc()) },
+      )
+    runCurrent()
+    syncEditor.known.add(1)
+
+    val result = session.beginClose().awaitCheckpoint()
+
+    assertEquals(EditingCheckpointResult.Protected, result)
+  }
+
+  @Test
+  fun editFailureRemainsTerminalWhenLiveAckProtectsCommittedState() = runTest {
+    val store = FakeDeltaStore()
+    store.onPut = { throw IllegalStateException("disk unavailable") }
+    val failure = IllegalStateException("edit failed")
+    val syncEditor = FakeSyncEditor()
+    val (_, session) =
+      harness(
+        store = store,
+        syncEditor = syncEditor,
+        pushFn = { PushResult(heads = enc(1), durableHeads = enc()) },
+      )
+    runCurrent()
+    syncEditor.known.add(1)
+    session.submit { _, _ -> CompletableDeferred<Unit>().apply { completeExceptionally(failure) } }
+
+    val result = session.beginClose().awaitCheckpoint()
+
+    assertTrue(result is EditingCheckpointResult.EditFailed)
+    assertEquals(failure, result.cause)
   }
 
   @Test
@@ -149,7 +194,7 @@ class DocumentEditingSessionTest {
     assertFalse(started)
 
     val close = session.beginClose()
-    val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitLocalDurability() }
+    val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitCheckpoint() }
 
     assertNull(session.submit { _, context -> async(context) {} })
     assertFalse(result.isCompleted)
@@ -161,7 +206,43 @@ class DocumentEditingSessionTest {
     gate.complete(Unit)
     advanceUntilIdle()
 
-    assertEquals(LocalDurabilityResult.Captured, result.await())
+    assertEquals(EditingCheckpointResult.Protected, result.await())
+  }
+
+  @Test
+  fun closeCapturesFinalAcceptedEditInPendingStore() = runTest {
+    val syncEditor = FakeSyncEditor()
+    val editor =
+      Editor(
+        FakeFfiEditor(
+          onTick = {
+            syncEditor.known.add(1)
+            listOf(EditorEvent.StateChanged(listOf(StateField.Doc)))
+          }
+        ),
+        this,
+        StandardTestDispatcher(testScheduler),
+      )
+    val (_, session, store) = harness(syncEditor = syncEditor, editor = editor)
+    val gate = CompletableDeferred<Unit>()
+    val accepted = session.submit { sessionEditor, context ->
+      async(context = context) {
+        gate.await()
+        sessionEditor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      }
+    }
+    assertNotNull(accepted)
+
+    val close = session.beginClose()
+    val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitCheckpoint() }
+    runCurrent()
+    assertFalse(result.isCompleted)
+
+    gate.complete(Unit)
+    advanceUntilIdle()
+
+    assertEquals(EditingCheckpointResult.Protected, result.await())
+    assertEquals(listOf("1"), store.load("doc").map { it.id })
   }
 
   @Test
@@ -190,7 +271,7 @@ class DocumentEditingSessionTest {
       }
     }
     val close = session.beginClose()
-    val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitLocalDurability() }
+    val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitCheckpoint() }
 
     session.stop()
     testScheduler.runCurrent()
@@ -200,104 +281,83 @@ class DocumentEditingSessionTest {
     advanceUntilIdle()
 
     assertTrue(completedWhenStopped)
-    assertEquals(LocalDurabilityResult.SessionStopped, result.await())
+    assertEquals(EditingCheckpointResult.SessionStopped, result.await())
   }
 
   @Test
-  fun retryAfterCaptureFailureStartsOneSerializedAttempt() = runTest {
-    var failing = true
-    var loads = 0
+  fun cancelledCloseKeepsCompletedCheckpointResult() = runTest {
+    var puts = 0
     val store = FakeDeltaStore()
-    val (_, session) = harness(store)
-    store.onLoad = {
-      loads += 1
-      if (failing) throw IllegalStateException("disk unavailable")
-      emptyList()
-    }
-    val close = session.beginClose()
-
-    assertTrue(close.awaitLocalDurability() is LocalDurabilityResult.CaptureFailed)
-    val loadsAfterFailure = loads
-    failing = false
-
-    val firstRetry = async { close.retryLocalDurability() }
-    val secondRetry = async { close.retryLocalDurability() }
-    advanceUntilIdle()
-
-    assertEquals(LocalDurabilityResult.Captured, firstRetry.await())
-    assertEquals(LocalDurabilityResult.Captured, secondRetry.await())
-    assertEquals(loadsAfterFailure + 1, loads)
-  }
-
-  @Test
-  fun cancelledCloseCannotStartAnotherCaptureAttempt() = runTest {
-    var loads = 0
-    val store = FakeDeltaStore()
-    val (_, session) = harness(store)
-    store.onLoad = {
-      loads += 1
+    val syncEditor = FakeSyncEditor()
+    val (_, session) = harness(store = store, syncEditor = syncEditor)
+    runCurrent()
+    syncEditor.known.add(1)
+    store.onPut = {
+      puts += 1
       throw IllegalStateException("disk unavailable")
     }
     val close = session.beginClose()
-    val failure = close.awaitLocalDurability()
+    val failure = close.awaitCheckpoint()
     close.cancel()
 
-    assertEquals(failure, close.retryLocalDurability())
-    assertEquals(1, loads)
+    assertEquals(failure, close.awaitCheckpoint())
+    assertTrue(failure is EditingCheckpointResult.ProtectionFailed)
+    assertEquals(2, puts)
     assertNotNull(session.submit { _, context -> async(context) {} })
   }
 
   @Test
   fun editFailureStillCapturesCommittedEditorState() = runTest {
-    var loads = 0
     val store = FakeDeltaStore()
-    val (_, session) = harness(store)
-    store.onLoad = {
-      loads += 1
-      emptyList()
-    }
+    val syncEditor = FakeSyncEditor()
+    val (_, session) = harness(store = store, syncEditor = syncEditor)
+    runCurrent()
+    syncEditor.known.add(1)
     val failure = IllegalStateException("edit failed")
 
     session.submit { _, _ -> CompletableDeferred<Unit>().apply { completeExceptionally(failure) } }
 
-    val result = session.beginClose().awaitLocalDurability()
+    val result = session.beginClose().awaitCheckpoint()
 
-    assertTrue(result is LocalDurabilityResult.EditFailed)
+    assertTrue(result is EditingCheckpointResult.EditFailed)
     assertEquals(failure, result.cause)
-    assertEquals(1, loads)
+    assertEquals(listOf("1"), store.load("doc").map { it.id })
   }
 
   @Test
   fun repeatedAwaitsShareOneCaptureAttempt() = runTest {
-    var loads = 0
+    var puts = 0
     val store = FakeDeltaStore()
-    val (_, session) = harness(store)
-    store.onLoad = {
-      loads += 1
-      emptyList()
-    }
+    val syncEditor = FakeSyncEditor()
+    val (_, session) = harness(store = store, syncEditor = syncEditor)
+    runCurrent()
+    syncEditor.known.add(1)
+    store.onPut = { puts += 1 }
     val close = session.beginClose()
 
-    val first = async { close.awaitLocalDurability() }
-    val second = async { close.awaitLocalDurability() }
+    val first = async { close.awaitCheckpoint() }
+    val second = async { close.awaitCheckpoint() }
     advanceUntilIdle()
 
-    assertEquals(LocalDurabilityResult.Captured, first.await())
-    assertEquals(LocalDurabilityResult.Captured, second.await())
-    assertEquals(1, loads)
+    assertEquals(EditingCheckpointResult.Protected, first.await())
+    assertEquals(EditingCheckpointResult.Protected, second.await())
+    assertEquals(1, puts)
   }
 
   @Test
   fun cancellingAwaiterDoesNotCancelSessionOwnedCapture() = runTest {
     val captureGate = CompletableDeferred<Unit>()
     val store = FakeDeltaStore()
-    val (_, session) = harness(store)
+    val syncEditor = FakeSyncEditor()
+    val (_, session) = harness(store = store, syncEditor = syncEditor)
+    runCurrent()
+    syncEditor.known.add(1)
     store.onLoad = {
       captureGate.await()
       emptyList()
     }
     val close = session.beginClose()
-    val first = async { close.awaitLocalDurability() }
+    val first = async { close.awaitCheckpoint() }
 
     testScheduler.runCurrent()
     assertFalse(first.isCompleted)
@@ -309,6 +369,6 @@ class DocumentEditingSessionTest {
     captureGate.complete(Unit)
     advanceUntilIdle()
 
-    assertEquals(LocalDurabilityResult.Captured, close.awaitLocalDurability())
+    assertEquals(EditingCheckpointResult.Protected, close.awaitCheckpoint())
   }
 }

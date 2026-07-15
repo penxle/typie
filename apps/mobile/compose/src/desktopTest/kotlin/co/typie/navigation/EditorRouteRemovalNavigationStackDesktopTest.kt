@@ -10,8 +10,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import co.typie.editor.DocumentEditingClose
+import co.typie.editor.EditingCheckpointResult
 import co.typie.editor.EditorLocalEditCoordinator
-import co.typie.editor.LocalDurabilityResult
 import co.typie.route.Route
 import co.typie.screen.editor.editor.EditorRouteLeaveInterceptor
 import co.typie.ui.component.topbar.TopBarState
@@ -43,19 +43,16 @@ class EditorRouteRemovalNavigationStackDesktopTest {
         beginClose = {
           val quiescence = localEdits.quiesce()
           object : DocumentEditingClose {
-            override suspend fun awaitLocalDurability(): LocalDurabilityResult {
+            override suspend fun awaitCheckpoint(): EditingCheckpointResult {
               barrierStarted.complete(Unit)
               val editResult = quiescence.await()
               captureStarted.complete(Unit)
               releaseCapture.await()
               return editResult.fold(
-                onSuccess = { LocalDurabilityResult.Captured },
-                onFailure = { LocalDurabilityResult.EditFailed(it) },
+                onSuccess = { EditingCheckpointResult.Protected },
+                onFailure = { EditingCheckpointResult.EditFailed(it) },
               )
             }
-
-            override suspend fun retryLocalDurability(): LocalDurabilityResult =
-              LocalDurabilityResult.Captured
 
             override fun cancel() {
               quiescence.resume()

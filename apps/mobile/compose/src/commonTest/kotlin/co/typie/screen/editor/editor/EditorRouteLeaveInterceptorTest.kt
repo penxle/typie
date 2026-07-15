@@ -1,7 +1,7 @@
 package co.typie.screen.editor.editor
 
 import co.typie.editor.DocumentEditingClose
-import co.typie.editor.LocalDurabilityResult
+import co.typie.editor.EditingCheckpointResult
 import co.typie.navigation.RouteRemovalDecision
 import co.typie.navigation.RouteRemovalPreparation
 import kotlin.test.Test
@@ -25,7 +25,7 @@ class EditorRouteLeaveInterceptorTest {
     var restored = 0
     val interceptor =
       interceptor(
-        awaitResult = { LocalDurabilityResult.EditFailed(IllegalStateException("edit")) },
+        awaitResult = { EditingCheckpointResult.EditFailed(IllegalStateException("edit")) },
         onCancel = { cancelled++ },
         restoreInput = { restored++ },
       )
@@ -54,26 +54,23 @@ class EditorRouteLeaveInterceptorTest {
   }
 
   @Test
-  fun localDurabilityWaitIsBounded() = runTest {
+  fun checkpointWaitIsBounded() = runTest {
     val interceptor =
-      interceptor(awaitResult = { awaitCancellation() }, localDurabilityWatchdogMillis = 10)
+      interceptor(awaitResult = { awaitCancellation() }, checkpointWatchdogMillis = 10)
 
     assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
     assertEquals(10L, currentTime)
   }
 
   @Test
-  fun defaultLocalDurabilityWatchdogExpiresAtThreeSeconds() = runTest {
+  fun defaultCheckpointWatchdogExpiresAtThreeSeconds() = runTest {
     val interceptor =
       EditorRouteLeaveInterceptor(
         finalizeInput = {},
         restoreInput = {},
         beginClose = {
           object : DocumentEditingClose {
-            override suspend fun awaitLocalDurability(): LocalDurabilityResult = awaitCancellation()
-
-            override suspend fun retryLocalDurability(): LocalDurabilityResult =
-              error("A timeout must not start a retry")
+            override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitCancellation()
 
             override fun cancel() = Unit
           }
@@ -87,15 +84,15 @@ class EditorRouteLeaveInterceptorTest {
 
   @Test
   fun delayedFeedbackStartsAtSoftThresholdAndSuccessStillAllowsRemoval() = runTest {
-    val durability = CompletableDeferred<LocalDurabilityResult>()
+    val checkpoint = CompletableDeferred<EditingCheckpointResult>()
     var delayed = 0
     var shown = 0
     var hidden = 0
     val interceptor =
       interceptor(
-        awaitResult = { durability.await() },
+        awaitResult = { checkpoint.await() },
         delayedFeedbackMillis = 10,
-        localDurabilityWatchdogMillis = 30,
+        checkpointWatchdogMillis = 30,
         showDelayedFeedback = { shown++ },
         hideDelayedFeedback = { hidden++ },
       )
@@ -114,38 +111,32 @@ class EditorRouteLeaveInterceptorTest {
     assertEquals(1, shown)
     assertFalse(preparation.isCompleted)
 
-    durability.complete(LocalDurabilityResult.Captured)
+    checkpoint.complete(EditingCheckpointResult.Protected)
     assertEquals(RouteRemovalPreparation.Ready, preparation.await())
     assertEquals(1, hidden)
   }
 
   @Test
-  fun captureRetryContinuesAcrossSoftThresholdWithoutRestarting() = runTest {
-    val failure = LocalDurabilityResult.CaptureFailed(IllegalStateException("still unavailable"))
-    val retryCompletion = CompletableDeferred<LocalDurabilityResult>()
-    var retries = 0
+  fun checkpointWaitContinuesAcrossSoftThresholdWithoutRestarting() = runTest {
+    val checkpoint = CompletableDeferred<EditingCheckpointResult>()
+    var waits = 0
     val interceptor =
       interceptor(
-        awaitResult = { failure },
-        retryResult = {
-          retries++
-          retryCompletion.await()
+        awaitResult = {
+          waits++
+          checkpoint.await()
         },
         delayedFeedbackMillis = 10,
-        localDurabilityWatchdogMillis = 30,
+        checkpointWatchdogMillis = 30,
       )
 
     val preparation = async { interceptor.prepare(onDelayed = {}) }
-    runCurrent()
-    assertEquals(1, retries)
-
     advanceTimeBy(10)
     runCurrent()
-    assertEquals(1, retries)
 
-    retryCompletion.complete(failure)
-    assertEquals(RouteRemovalPreparation.NeedsDecision, preparation.await())
-    assertEquals(1, retries)
+    assertEquals(1, waits)
+    checkpoint.complete(EditingCheckpointResult.Protected)
+    assertEquals(RouteRemovalPreparation.Ready, preparation.await())
   }
 
   @Test
@@ -155,7 +146,7 @@ class EditorRouteLeaveInterceptorTest {
       interceptor(
         awaitResult = { awaitCancellation() },
         delayedFeedbackMillis = 10,
-        localDurabilityWatchdogMillis = 20,
+        checkpointWatchdogMillis = 20,
         showDelayedFeedback = { shown++ },
       )
 
@@ -166,15 +157,15 @@ class EditorRouteLeaveInterceptorTest {
 
   @Test
   fun rollbackDismissesVisibleDelayedFeedbackOnce() = runTest {
-    val durability = CompletableDeferred<LocalDurabilityResult>()
+    val checkpoint = CompletableDeferred<EditingCheckpointResult>()
     var shown = 0
     var hidden = 0
     val interceptor =
       interceptor(
-        awaitResult = { durability.await() },
-        onCancel = { durability.complete(LocalDurabilityResult.SessionStopped) },
+        awaitResult = { checkpoint.await() },
+        onCancel = { checkpoint.complete(EditingCheckpointResult.SessionStopped) },
         delayedFeedbackMillis = 10,
-        localDurabilityWatchdogMillis = 30,
+        checkpointWatchdogMillis = 30,
         showDelayedFeedback = { shown++ },
         hideDelayedFeedback = { hidden++ },
       )
@@ -190,27 +181,12 @@ class EditorRouteLeaveInterceptorTest {
   }
 
   @Test
-  fun retriesCaptureFailureOnceBeforeAllowingRemoval() = runTest {
-    var retries = 0
+  fun protectionFailureNeedsDecision() = runTest {
     val interceptor =
       interceptor(
-        awaitResult = { LocalDurabilityResult.CaptureFailed(IllegalStateException("disk")) },
-        retryResult = {
-          retries++
-          LocalDurabilityResult.Captured
-        },
-      )
-
-    assertEquals(RouteRemovalPreparation.Ready, interceptor.prepare())
-    assertEquals(1, retries)
-  }
-
-  @Test
-  fun twoCaptureFailuresNeedDecision() = runTest {
-    val interceptor =
-      interceptor(
-        awaitResult = { LocalDurabilityResult.CaptureFailed(IllegalStateException("unprotected")) },
-        retryResult = { LocalDurabilityResult.CaptureFailed(IllegalStateException("unprotected")) },
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("unprotected"))
+        }
       )
 
     assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
@@ -218,12 +194,11 @@ class EditorRouteLeaveInterceptorTest {
 }
 
 private fun interceptor(
-  awaitResult: suspend () -> LocalDurabilityResult = { LocalDurabilityResult.Captured },
-  retryResult: suspend () -> LocalDurabilityResult = { LocalDurabilityResult.Captured },
+  awaitResult: suspend () -> EditingCheckpointResult = { EditingCheckpointResult.Protected },
   onCancel: () -> Unit = {},
   restoreInput: () -> Unit = {},
   delayedFeedbackMillis: Long = 350,
-  localDurabilityWatchdogMillis: Long = 3_000,
+  checkpointWatchdogMillis: Long = 3_000,
   showDelayedFeedback: () -> Unit = {},
   hideDelayedFeedback: () -> Unit = {},
 ): EditorRouteLeaveInterceptor =
@@ -232,9 +207,7 @@ private fun interceptor(
     restoreInput = restoreInput,
     beginClose = {
       object : DocumentEditingClose {
-        override suspend fun awaitLocalDurability(): LocalDurabilityResult = awaitResult()
-
-        override suspend fun retryLocalDurability(): LocalDurabilityResult = retryResult()
+        override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitResult()
 
         override fun cancel() {
           onCancel()
@@ -243,7 +216,7 @@ private fun interceptor(
     },
     resolveDecision = { RouteRemovalDecision.CancelRemoval },
     delayedFeedbackMillis = delayedFeedbackMillis,
-    localDurabilityWatchdogMillis = localDurabilityWatchdogMillis,
+    checkpointWatchdogMillis = checkpointWatchdogMillis,
     showDelayedFeedback = showDelayedFeedback,
     hideDelayedFeedback = hideDelayedFeedback,
   )

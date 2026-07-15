@@ -2,8 +2,11 @@ package co.typie.editor.sync
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -14,7 +17,7 @@ class SyncEngineTest {
   private var clock = 0L
 
   private fun TestScope.engine(
-    editor: FakeSyncEditor,
+    editor: SyncEditor,
     store: FakeDeltaStore,
     initialServerHeads: ByteArray = enc(),
     initialDurableHeads: ByteArray = enc(),
@@ -34,6 +37,248 @@ class SyncEngineTest {
       onEvent = onEvent,
       now = { clock++ },
     )
+
+  @Test
+  fun checkpointReturnsFailureWhenFrontierInspectionFails() = runTest {
+    val failure = IllegalStateException("editor unavailable")
+    val baseEditor = FakeSyncEditor()
+    var failInspection = false
+    val editor =
+      object : SyncEditor by baseEditor {
+        override suspend fun missingChangesetsFor(confirmedHeads: ByteArray): MissingBytes {
+          if (failInspection) throw failure
+          return baseEditor.missingChangesetsFor(confirmedHeads)
+        }
+      }
+    val engine =
+      engine(editor, FakeDeltaStore()) { PushResult(heads = enc(1), durableHeads = enc()) }
+    runCurrent()
+    baseEditor.known.add(1)
+    failInspection = true
+
+    val checkpoint = engine.checkpointCurrentFrontier()
+
+    assertEquals(failure, checkpoint.exceptionOrNull())
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointReturnsAfterLocalCaptureWhileLivePushIsPending() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    val pushStarted = CompletableDeferred<Unit>()
+    val releasePush = CompletableDeferred<Unit>()
+    val engine =
+      engine(editor, store) {
+        pushStarted.complete(Unit)
+        releasePush.await()
+        PushResult(heads = enc(1), durableHeads = enc())
+      }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = async { engine.checkpointCurrentFrontier() }
+    runCurrent()
+
+    assertTrue(pushStarted.isCompleted)
+    assertTrue(checkpoint.await().isSuccess)
+    assertEquals(listOf("1"), store.load("doc1").map { it.id })
+
+    releasePush.complete(Unit)
+    advanceUntilIdle()
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointReturnsAfterLiveAckWhileLocalCaptureIsPending() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    val captureStarted = CompletableDeferred<Unit>()
+    val releaseCapture = CompletableDeferred<Unit>()
+    store.onPut = { record ->
+      captureStarted.complete(Unit)
+      releaseCapture.await()
+      store.defaultPut(record)
+    }
+    val engine = engine(editor, store) { PushResult(heads = enc(1), durableHeads = enc()) }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = async { engine.checkpointCurrentFrontier() }
+    runCurrent()
+
+    assertTrue(captureStarted.isCompleted)
+    assertTrue(checkpoint.await().isSuccess)
+    assertFalse(releaseCapture.isCompleted)
+
+    releaseCapture.complete(Unit)
+    advanceUntilIdle()
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointAcceptsExistingExactConfirmedFrontierWithoutStartingWork() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    var puts = 0
+    var pushes = 0
+    store.onPut = { puts++ }
+    val engine =
+      engine(editor, store) {
+        pushes++
+        PushResult(heads = enc(), durableHeads = enc())
+      }
+    runCurrent()
+    editor.known.add(1)
+    engine.setConfirmedHeads(enc(1))
+
+    val startedAt = testScheduler.currentTime
+    assertTrue(engine.checkpointCurrentFrontier().isSuccess)
+    assertEquals(startedAt, testScheduler.currentTime)
+    assertEquals(0, puts)
+    assertEquals(0, pushes)
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointAcceptsNewLiveAckWhenCaptureFailsAndDurableHeadsLag() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    var puts = 0
+    store.onPut = {
+      puts++
+      throw IllegalStateException("disk unavailable")
+    }
+    val engine = engine(editor, store) { PushResult(heads = enc(1), durableHeads = enc()) }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = engine.checkpointCurrentFrontier()
+
+    assertTrue(checkpoint.isSuccess)
+    assertTrue(puts >= 1)
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointRejectsStaleLiveAckAndRetriesCaptureOnce() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    var puts = 0
+    store.onPut = {
+      puts++
+      throw IllegalStateException("disk unavailable")
+    }
+    val engine = engine(editor, store) { PushResult(heads = enc(), durableHeads = enc()) }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = engine.checkpointCurrentFrontier()
+
+    assertTrue(checkpoint.isFailure)
+    assertEquals(2, puts)
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointRetriesOnlyExplicitCaptureFailure() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    var loads = 0
+    store.onLoad = {
+      loads++
+      emptyList()
+    }
+    val engine = engine(editor, store) { PushResult(heads = enc(), durableHeads = enc()) }
+    runCurrent()
+    loads = 0
+    editor.known.add(1)
+    editor.withheld = 1
+
+    val checkpoint = engine.checkpointCurrentFrontier()
+
+    assertTrue(checkpoint.isFailure)
+    assertEquals(1, loads)
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointWaitsForPendingLiveAckAfterBothCaptureAttemptsFail() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    val pushStarted = CompletableDeferred<Unit>()
+    val releasePush = CompletableDeferred<Unit>()
+    var puts = 0
+    store.onPut = {
+      puts++
+      throw IllegalStateException("disk unavailable")
+    }
+    val engine =
+      engine(editor, store) {
+        pushStarted.complete(Unit)
+        releasePush.await()
+        PushResult(heads = enc(1), durableHeads = enc())
+      }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = async { engine.checkpointCurrentFrontier() }
+    runCurrent()
+
+    assertTrue(pushStarted.isCompleted)
+    assertEquals(2, puts)
+    assertFalse(checkpoint.isCompleted)
+
+    releasePush.complete(Unit)
+    assertTrue(checkpoint.await().isSuccess)
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointWaitsForPendingCaptureAfterLivePushFails() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    val captureStarted = CompletableDeferred<Unit>()
+    val releaseCapture = CompletableDeferred<Unit>()
+    store.onPut = { record ->
+      captureStarted.complete(Unit)
+      releaseCapture.await()
+      store.defaultPut(record)
+    }
+    val engine = engine(editor, store) { throw IllegalStateException("network unavailable") }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = async { engine.checkpointCurrentFrontier() }
+    runCurrent()
+
+    assertTrue(captureStarted.isCompleted)
+    assertFalse(checkpoint.isCompleted)
+
+    releaseCapture.complete(Unit)
+    assertTrue(checkpoint.await().isSuccess)
+    engine.stop()
+  }
+
+  @Test
+  fun checkpointFailsAfterBothDurabilityPathsTerminate() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    var puts = 0
+    store.onPut = {
+      puts++
+      throw IllegalStateException("disk unavailable")
+    }
+    val engine = engine(editor, store) { throw IllegalStateException("network unavailable") }
+    runCurrent()
+    editor.known.add(1)
+
+    val checkpoint = engine.checkpointCurrentFrontier()
+
+    assertTrue(checkpoint.isFailure)
+    assertEquals(2, puts)
+    engine.stop()
+  }
 
   @Test
   fun staleStoreDeltaIsAdoptedAndPushed() = runTest {

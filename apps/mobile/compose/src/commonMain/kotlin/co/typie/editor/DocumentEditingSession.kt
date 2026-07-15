@@ -17,20 +17,18 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-internal sealed interface LocalDurabilityResult {
-  data object Captured : LocalDurabilityResult
+internal sealed interface EditingCheckpointResult {
+  data object Protected : EditingCheckpointResult
 
-  data class EditFailed(val cause: Throwable) : LocalDurabilityResult
+  data class EditFailed(val cause: Throwable) : EditingCheckpointResult
 
-  data class CaptureFailed(val cause: Throwable) : LocalDurabilityResult
+  data class ProtectionFailed(val cause: Throwable) : EditingCheckpointResult
 
-  data object SessionStopped : LocalDurabilityResult
+  data object SessionStopped : EditingCheckpointResult
 }
 
 internal interface DocumentEditingClose {
-  suspend fun awaitLocalDurability(): LocalDurabilityResult
-
-  suspend fun retryLocalDurability(): LocalDurabilityResult
+  suspend fun awaitCheckpoint(): EditingCheckpointResult
 
   fun cancel()
 }
@@ -54,72 +52,34 @@ internal class DocumentEditingSession(
   }
 
   private inner class Close(private val quiescence: LocalEditQuiescence) : DocumentEditingClose {
-    private inner class Attempt {
-      private val result = CompletableDeferred<LocalDurabilityResult>()
-      private val work =
-        scope.launch(start = CoroutineStart.LAZY) {
-          if (state.load() === State.Closed) {
-            result.complete(LocalDurabilityResult.SessionStopped)
-            return@launch
-          }
-          val settledEdits =
-            try {
-              editResult.await()
-            } catch (e: CancellationException) {
-              if (state.load() === State.Closed) {
-                result.complete(LocalDurabilityResult.SessionStopped)
-                return@launch
-              }
-              throw e
-            }
-          val captureResult =
-            try {
-              engine.captureNow()
-              Result.success(Unit)
-            } catch (e: CancellationException) {
-              throw e
-            } catch (e: Throwable) {
-              Result.failure(e)
-            }
-
-          result.complete(resolveResult(settledEdits, captureResult))
-        }
-
-      fun start() {
-        work.start()
-      }
-
-      suspend fun await(): LocalDurabilityResult = result.await()
-
-      fun stop() {
-        if (result.complete(LocalDurabilityResult.SessionStopped)) {
-          work.cancel()
-        }
-      }
-    }
-
     private val editResult: Deferred<Result<Unit>> =
       scope.async(start = CoroutineStart.UNDISPATCHED) { quiescence.await() }
-    private val attempts = AtomicReference(Attempt().also(Attempt::start))
-
-    override suspend fun awaitLocalDurability(): LocalDurabilityResult = attempts.load().await()
-
-    override suspend fun retryLocalDurability(): LocalDurabilityResult {
-      while (true) {
-        val current = attempts.load()
-        val currentResult = current.await()
-        if (currentResult !is LocalDurabilityResult.CaptureFailed) return currentResult
-        val currentState = state.load()
-        if (currentState === State.Closed) return LocalDurabilityResult.SessionStopped
-        if (currentState !is State.Closing || currentState.close !== this) return currentResult
-
-        val next = Attempt()
-        if (attempts.compareAndSet(current, next)) {
-          next.start()
-          return next.await()
+    private val result = CompletableDeferred<EditingCheckpointResult>()
+    private val work =
+      scope.launch(start = CoroutineStart.LAZY) {
+        if (state.load() === State.Closed) {
+          result.complete(EditingCheckpointResult.SessionStopped)
+          return@launch
         }
+        val settledEdits =
+          try {
+            editResult.await()
+          } catch (e: CancellationException) {
+            if (state.load() === State.Closed) {
+              result.complete(EditingCheckpointResult.SessionStopped)
+              return@launch
+            }
+            throw e
+          }
+        val checkpoint = engine.checkpointCurrentFrontier()
+        result.complete(resolveResult(settledEdits, checkpoint))
       }
+
+    init {
+      work.start()
     }
+
+    override suspend fun awaitCheckpoint(): EditingCheckpointResult = result.await()
 
     override fun cancel() {
       val current = state.load()
@@ -130,21 +90,21 @@ internal class DocumentEditingSession(
 
     fun stop() {
       editResult.cancel()
-      attempts.load().stop()
+      if (result.complete(EditingCheckpointResult.SessionStopped)) work.cancel()
     }
 
     private fun resolveResult(
       editResult: Result<Unit>,
-      captureResult: Result<Unit>,
-    ): LocalDurabilityResult {
-      if (state.load() === State.Closed) return LocalDurabilityResult.SessionStopped
-      captureResult.exceptionOrNull()?.let {
-        return LocalDurabilityResult.CaptureFailed(it)
-      }
+      checkpointResult: Result<Unit>,
+    ): EditingCheckpointResult {
+      if (state.load() === State.Closed) return EditingCheckpointResult.SessionStopped
       editResult.exceptionOrNull()?.let {
-        return LocalDurabilityResult.EditFailed(it)
+        return EditingCheckpointResult.EditFailed(it)
       }
-      return LocalDurabilityResult.Captured
+      checkpointResult.exceptionOrNull()?.let {
+        return EditingCheckpointResult.ProtectionFailed(it)
+      }
+      return EditingCheckpointResult.Protected
     }
   }
 
