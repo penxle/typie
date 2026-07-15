@@ -17,8 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
@@ -41,7 +39,8 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.EditorViewportState
-import co.typie.navigation.LocalNavigationPopNestedScrollConnection
+import co.typie.navigation.LocalNavigationPopNestedScroll
+import co.typie.navigation.NavigationPopNestedScroll
 import co.typie.screen.editor.editor.state.EditorScreenState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,7 +95,7 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
-  fun disabledViewportInputDoesNotPanFromTouchOrWheel() = runComposeUiTest {
+  fun disabledEditorInteractionDoesNotPanFromTouchOrWheel() = runComposeUiTest {
     var consumed = Offset.Zero
 
     setContent {
@@ -129,7 +128,7 @@ class EditorScreenLayoutDesktopTest {
               it
             },
           viewportContentWidth = 320f,
-          viewportInputEnabled = false,
+          editorInteractionEnabled = false,
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
           header = {},
@@ -152,13 +151,16 @@ class EditorScreenLayoutDesktopTest {
 
   @Test
   fun subPaneNestedScrollDoesNotEnterNavigationPopConnection() = runComposeUiTest {
-    var navigationPreScrollCount = 0
-    val navigationConnection =
-      object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-          navigationPreScrollCount += 1
-          return Offset.Zero
-        }
+    var navigationDragCount = 0
+    val navigationPopNestedScroll =
+      NavigationPopNestedScroll().apply {
+        update(
+          canStart = { true },
+          onStart = {},
+          onDrag = { navigationDragCount += 1 },
+          onRelease = {},
+          onCancel = {},
+        )
       }
 
     setContent {
@@ -182,7 +184,7 @@ class EditorScreenLayoutDesktopTest {
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides remember { EditorUiState() },
-        LocalNavigationPopNestedScrollConnection provides navigationConnection,
+        LocalNavigationPopNestedScroll provides navigationPopNestedScroll,
       ) {
         EditorScreenLayout(
           state = remember { EditorScreenState(EditorViewportState()) },
@@ -209,11 +211,11 @@ class EditorScreenLayoutDesktopTest {
     waitForIdle()
 
     onNodeWithTag(SubPaneTag).performTouchInput {
-      swipe(start = center, end = Offset(x = center.x, y = center.y - 120f))
+      swipe(start = center, end = Offset(x = center.x + 120f, y = center.y))
     }
     waitForIdle()
 
-    assertEquals(0, navigationPreScrollCount)
+    assertEquals(0, navigationDragCount)
   }
 
   @Test
@@ -227,7 +229,7 @@ class EditorScreenLayoutDesktopTest {
       val visibleArea = EditorVisibleArea(viewport = Size(width = 320f, height = 640f))
       val uiState = remember {
         EditorUiState().apply {
-          updateExtensionAreaBounds(
+          updateInteractionSurfaceBounds(
             boundsInRoot = Rect(left = 0f, top = 0f, right = 320f, bottom = 640f),
             density = 1f,
           )
@@ -305,13 +307,16 @@ class EditorScreenLayoutDesktopTest {
 
   @Test
   fun viewportPanStillEntersNavigationPopConnection() = runComposeUiTest {
-    var navigationPreScrollCount = 0
-    val navigationConnection =
-      object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-          navigationPreScrollCount += 1
-          return Offset.Zero
-        }
+    var navigationDragCount = 0
+    val navigationPopNestedScroll =
+      NavigationPopNestedScroll().apply {
+        update(
+          canStart = { true },
+          onStart = {},
+          onDrag = { navigationDragCount += 1 },
+          onRelease = {},
+          onCancel = {},
+        )
       }
 
     setContent {
@@ -320,7 +325,7 @@ class EditorScreenLayoutDesktopTest {
       val visibleArea = EditorVisibleArea(viewport = Size(width = 320f, height = 640f))
       val uiState = remember {
         EditorUiState().apply {
-          updateExtensionAreaBounds(
+          updateInteractionSurfaceBounds(
             boundsInRoot = Rect(left = 0f, top = 0f, right = 320f, bottom = 640f),
             density = 1f,
           )
@@ -342,13 +347,13 @@ class EditorScreenLayoutDesktopTest {
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides uiState,
-        LocalNavigationPopNestedScrollConnection provides navigationConnection,
+        LocalNavigationPopNestedScroll provides navigationPopNestedScroll,
       ) {
         EditorScreenLayout(
           state = remember { EditorScreenState(EditorViewportState()) },
           scrollFrame = scrollFrame,
           visibleArea = visibleArea,
-          viewportScrollableState = rememberScrollable2DState { delta -> delta },
+          viewportScrollableState = rememberScrollable2DState { Offset.Zero },
           viewportContentWidth = 320f,
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
@@ -362,11 +367,11 @@ class EditorScreenLayoutDesktopTest {
     waitForIdle()
 
     onNodeWithTag(LayoutTag).performTouchInput {
-      swipe(start = center, end = Offset(x = center.x, y = center.y - 120f))
+      swipe(start = center, end = Offset(x = center.x + 120f, y = center.y))
     }
     waitForIdle()
 
-    assertTrue(navigationPreScrollCount > 0)
+    assertTrue(navigationDragCount > 0)
   }
 
   private companion object {

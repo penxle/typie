@@ -26,17 +26,17 @@ import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
 
 internal class EditorInteractionGestures(
   contextProvider: () -> EditorGestureContext,
-  val tap: EditorTapGesture = EditorTapGesture(tapSlopPx = 0f),
-  val doubleTapDrag: EditorDoubleTapDragSession = EditorDoubleTapDragSession(),
-  val longPress: EditorLongPressGesture = EditorLongPressGesture(),
-  val pan: EditorPanGesture = EditorPanGesture(),
-  val pinch: EditorPinchGesture = EditorPinchGesture(),
-  val tableColumnResize: EditorTableColumnResizeGesture = EditorTableColumnResizeGesture(),
-  val selectionHandle: EditorSelectionHandleGesture =
+  private val tap: EditorTapGesture = EditorTapGesture(tapSlopPx = 0f),
+  private val doubleTapDrag: EditorDoubleTapDragSession = EditorDoubleTapDragSession(),
+  private val longPress: EditorLongPressGesture = EditorLongPressGesture(),
+  private val pan: EditorPanGesture = EditorPanGesture(),
+  private val pinch: EditorPinchGesture = EditorPinchGesture(),
+  private val tableColumnResize: EditorTableColumnResizeGesture = EditorTableColumnResizeGesture(),
+  private val selectionHandle: EditorSelectionHandleGesture =
     EditorSelectionHandleGesture(contextProvider = contextProvider),
-  val dnd: EditorDndGesture = EditorDndGesture(),
+  private val dnd: EditorDndGesture = EditorDndGesture(),
 ) {
-  val tableHandle: EditorTableHandleGesture =
+  private val tableHandle: EditorTableHandleGesture =
     EditorTableHandleGesture(
       contextProvider = contextProvider,
       onHandoffToSelectionHandle = ::handoffTableDragToSelectionHandle,
@@ -54,13 +54,12 @@ internal class EditorInteractionGestures(
 
   fun handlePointerDown(
     pointerId: Long,
-    position: Offset,
+    positionInEditor: Offset?,
+    positionInRoot: Offset,
     nowMillis: Long,
     tapEnabled: Boolean,
     inputModifiers: InputModifiers,
-    panPosition: Offset = position,
-    panDriver: EditorPanGestureDriver? = null,
-    hasEditorPosition: Boolean = true,
+    touchPanDriver: EditorPanGestureDriver? = null,
     context: EditorGestureContext,
   ): Boolean {
     if (tap.hasActivePointer) {
@@ -75,27 +74,34 @@ internal class EditorInteractionGestures(
     }
 
     if (
-      panDriver != null &&
+      touchPanDriver != null &&
         pan.prepareScrollCatch(
           pointerId = pointerId,
-          position = panPosition,
+          position = positionInRoot,
           nowMillis = nowMillis,
-          driver = panDriver,
+          driver = touchPanDriver,
         )
     ) {
       return true
     }
 
-    val columnResizePlacement =
-      if (hasEditorPosition) {
-        tableColumnResize.hitTest(position = position, context = context)
-      } else {
-        null
+    if (positionInEditor == null) {
+      if (touchPanDriver != null) {
+        pan.prepareFresh(
+          pointerId = pointerId,
+          position = positionInRoot,
+          nowMillis = nowMillis,
+          driver = touchPanDriver,
+        )
       }
-    val tableHandleHit =
-      hasEditorPosition && columnResizePlacement == null && tableHandle.hitTest(position)
+      return false
+    }
+    val position = positionInEditor
+
+    val columnResizePlacement = tableColumnResize.hitTest(position = position, context = context)
+    val tableHandleHit = columnResizePlacement == null && tableHandle.hitTest(position)
     val selectionHandleType =
-      if (hasEditorPosition && columnResizePlacement == null && !tableHandleHit) {
+      if (columnResizePlacement == null && !tableHandleHit) {
         selectionHandle.hitTest(position)
       } else {
         null
@@ -140,13 +146,13 @@ internal class EditorInteractionGestures(
       columnResizePlacement == null &&
         !tableHandleHit &&
         selectionHandleType == null &&
-        panDriver != null
+        touchPanDriver != null
     ) {
       pan.prepareFresh(
         pointerId = pointerId,
-        position = panPosition,
+        position = positionInRoot,
         nowMillis = nowMillis,
-        driver = panDriver,
+        driver = touchPanDriver,
       )
     }
     if (
@@ -168,13 +174,30 @@ internal class EditorInteractionGestures(
 
   fun handlePointerMove(
     pointerId: Long,
-    position: Offset,
-    panPosition: Offset = position,
+    positionInEditor: Offset?,
+    positionInRoot: Offset,
     nowMillis: Long,
     pressed: Boolean = true,
     consumed: Boolean = false,
     context: EditorGestureContext,
   ): Boolean {
+    if (positionInEditor == null) {
+      val panConsumed =
+        pan.update(
+          pointerId = pointerId,
+          position = positionInRoot,
+          nowMillis = nowMillis,
+          pressed = pressed,
+          consumed = consumed,
+          context = context,
+        )
+      if (panConsumed) {
+        cancelTapAndLongPress(context = context)
+      }
+      return panConsumed
+    }
+    val position = positionInEditor
+
     if (longPress.isActivePointer(pointerId)) {
       return longPress.update(position = position, context = context)
     }
@@ -232,7 +255,7 @@ internal class EditorInteractionGestures(
     val panConsumed =
       pan.update(
         pointerId = pointerId,
-        position = panPosition,
+        position = positionInRoot,
         nowMillis = nowMillis,
         pressed = pressed,
         consumed = consumed,
@@ -247,11 +270,28 @@ internal class EditorInteractionGestures(
 
   fun handlePointerUp(
     pointerId: Long,
-    position: Offset,
-    panPosition: Offset = position,
+    positionInEditor: Offset?,
+    positionInRoot: Offset,
     nowMillis: Long,
     context: EditorGestureContext,
   ): Boolean {
+    if (positionInEditor == null) {
+      val panConsumed =
+        pan.update(
+          pointerId = pointerId,
+          position = positionInRoot,
+          nowMillis = nowMillis,
+          pressed = false,
+          consumed = false,
+          context = context,
+        )
+      if (panConsumed || tap.hasActivePointer) {
+        cancelTapAndLongPress(context = context)
+      }
+      return panConsumed
+    }
+    val position = positionInEditor
+
     if (longPress.isActivePointer(pointerId)) {
       context.effects.cancelLongPressDispatch()
       tap.onPointerUp(
@@ -299,7 +339,7 @@ internal class EditorInteractionGestures(
     if (
       pan.update(
         pointerId = pointerId,
-        position = panPosition,
+        position = positionInRoot,
         nowMillis = nowMillis,
         pressed = false,
         consumed = false,

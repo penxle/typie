@@ -29,14 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.ViewModelStoreOwner
@@ -138,7 +135,7 @@ fun NavigationStack(
   val progress = remember { Animatable(0f) }
 
   var lastDragAmount by remember { mutableStateOf(0f) }
-  val nestedPopGestureSession = remember { NavigationPopGestureSession() }
+  val popNestedScroll = remember { NavigationPopNestedScroll() }
 
   fun clearRemovedRoutes(removedRoutes: List<Route>) {
     removedRoutes.forEach { removedRoute ->
@@ -312,7 +309,6 @@ fun NavigationStack(
   }
 
   fun finishPopDrag() {
-    nestedPopGestureSession.reset()
     val velocity = lastDragAmount * 1000f / 16f
     scope.launch {
       if (progress.value > 0.5f || velocity > 1000f) {
@@ -343,73 +339,7 @@ fun NavigationStack(
     }
   }
 
-  val popNestedScrollConnection =
-    remember(navigator.canPop, animState, containerWidth) {
-      object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-          if (source != NestedScrollSource.UserInput || !nestedPopGestureSession.isClaimed) {
-            return Offset.Zero
-          }
-
-          updatePopDrag(available.x)
-          return available
-        }
-
-        override fun onPostScroll(
-          consumed: Offset,
-          available: Offset,
-          source: NestedScrollSource,
-        ): Offset {
-          if (
-            source != NestedScrollSource.UserInput ||
-              nestedPopGestureSession.isClaimed ||
-              !navigator.canPop ||
-              navigator.isTransitioning ||
-              containerWidth <= 0f ||
-              (animState != AnimState.Idle && animState != AnimState.Dragging)
-          ) {
-            return Offset.Zero
-          }
-          if (
-            !nestedPopGestureSession.tryClaim(
-              initialDrag = consumed + available,
-              childConsumed = consumed != Offset.Zero,
-            )
-          ) {
-            return Offset.Zero
-          }
-
-          startPopDrag()
-          updatePopDrag(available.x)
-          return available
-        }
-
-        override suspend fun onPreFling(available: Velocity): Velocity {
-          val claimed = nestedPopGestureSession.isClaimed
-          nestedPopGestureSession.reset()
-          if (!claimed) {
-            return Velocity.Zero
-          }
-
-          finishPopDrag()
-          return available
-        }
-
-        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-          val claimed = nestedPopGestureSession.isClaimed
-          nestedPopGestureSession.reset()
-          if (!claimed) {
-            return Velocity.Zero
-          }
-
-          finishPopDrag()
-          return available
-        }
-      }
-    }
-
   fun cancelPopDrag() {
-    nestedPopGestureSession.reset()
     if (animState != AnimState.Dragging) return
     scope.launch {
       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
@@ -418,11 +348,18 @@ fun NavigationStack(
     }
   }
 
-  fun cancelNestedPopDrag() {
-    if (nestedPopGestureSession.isClaimed) {
-      cancelPopDrag()
-    }
-  }
+  popNestedScroll.update(
+    canStart = {
+      navigator.canPop &&
+        !navigator.isTransitioning &&
+        containerWidth > 0f &&
+        (animState == AnimState.Idle || animState == AnimState.Dragging)
+    },
+    onStart = ::startPopDrag,
+    onDrag = ::updatePopDrag,
+    onRelease = ::finishPopDrag,
+    onCancel = ::cancelPopDrag,
+  )
 
   // pop 요청은 이 collector가 애니메이션과 stack 변경을 함께 처리한다.
   LaunchedEffect(Unit) {
@@ -526,8 +463,7 @@ fun NavigationStack(
   val animationProviders =
     buildList<ProvidedValue<*>> {
       add(Nav provides navigator)
-      add(LocalNavigationPopNestedScrollCancel provides ::cancelNestedPopDrag)
-      add(LocalNavigationPopNestedScrollConnection provides popNestedScrollConnection)
+      add(LocalNavigationPopNestedScroll provides popNestedScroll)
       add(LocalTopBarAnimationSource provides topBarState)
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
     }
@@ -540,17 +476,13 @@ fun NavigationStack(
           containerWidth = it.width.toFloat()
           containerHeight = it.height.toFloat()
         }
-        .pointerInput(nestedPopGestureSession) {
+        .pointerInput(popNestedScroll) {
           awaitPointerEventScope {
             while (true) {
               val event = awaitPointerEvent(PointerEventPass.Initial)
-              val beganMultiTouch =
-                nestedPopGestureSession.updatePressedPointerCount(
-                  event.changes.count { change -> change.pressed }
-                )
-              if (beganMultiTouch && animState == AnimState.Dragging) {
-                cancelPopDrag()
-              }
+              popNestedScroll.updatePressedPointerCount(
+                event.changes.count { change -> change.pressed }
+              )
             }
           }
         }
@@ -743,7 +675,7 @@ fun NavigationStack(
                   val dy = change.position.y - down.position.y
                   if (abs(dx) > slop || abs(dy) > slop) {
                     if (
-                      nestedPopGestureSession.isMultiTouchRejected ||
+                      popNestedScroll.isMultiTouchRejected ||
                         !popGestureSession.tryClaim(
                           initialDrag = Offset(dx, dy),
                           childConsumed = change.isConsumed,
@@ -757,7 +689,7 @@ fun NavigationStack(
                         ?: return@awaitEachGesture
                     if (!confirmChange.pressed) return@awaitEachGesture
                     if (confirmChange.isConsumed) return@awaitEachGesture
-                    if (nestedPopGestureSession.isMultiTouchRejected) return@awaitEachGesture
+                    if (popNestedScroll.isMultiTouchRejected) return@awaitEachGesture
                     if (confirmEvent.changes.count { it.pressed } != 1) return@awaitEachGesture
                     confirmChange.consume()
                     overSlopX = confirmChange.position.x - down.position.x
@@ -770,14 +702,14 @@ fun NavigationStack(
                 // 자식 scrollable이 이 포인터를 take over하지 못하도록 우리가 계속 consume.
                 var dragging = true
                 while (dragging) {
-                  if (nestedPopGestureSession.isMultiTouchRejected) {
+                  if (popNestedScroll.isMultiTouchRejected) {
                     // Close after progress updates that may have been queued before root rejection.
-                    cancelPopDrag()
+                    popNestedScroll.cancelDirectGesture()
                     return@awaitEachGesture
                   }
                   val event = awaitPointerEvent(PointerEventPass.Main)
                   if (event.changes.count { it.pressed } > 1) {
-                    cancelPopDrag()
+                    popNestedScroll.cancelDirectGesture()
                     return@awaitEachGesture
                   }
                   val change = event.changes.fastFirstOrNull { it.id == down.id }
@@ -788,7 +720,7 @@ fun NavigationStack(
                   updatePopDrag(change.positionChangeIgnoreConsumed().x)
                   if (!change.pressed) dragging = false else change.consume()
                 }
-                finishPopDrag()
+                popNestedScroll.finishDirectGesture()
               }
             }
           }
@@ -875,7 +807,7 @@ fun NavigationStack(
                 val dy = change.position.y - down.position.y
                 if (abs(dx) > slop || abs(dy) > slop) {
                   if (
-                    nestedPopGestureSession.isMultiTouchRejected ||
+                    popNestedScroll.isMultiTouchRejected ||
                       !popGestureSession.tryClaim(
                         initialDrag = Offset(dx, dy),
                         childConsumed = change.isConsumed,
@@ -892,14 +824,14 @@ fun NavigationStack(
               updatePopDrag(overSlopX)
               var dragging = true
               while (dragging) {
-                if (nestedPopGestureSession.isMultiTouchRejected) {
+                if (popNestedScroll.isMultiTouchRejected) {
                   // Close after progress updates that may have been queued before root rejection.
-                  cancelPopDrag()
+                  popNestedScroll.cancelDirectGesture()
                   return@awaitEachGesture
                 }
                 val event = awaitPointerEvent(PointerEventPass.Main)
                 if (event.changes.count { it.pressed } > 1) {
-                  cancelPopDrag()
+                  popNestedScroll.cancelDirectGesture()
                   return@awaitEachGesture
                 }
                 val change = event.changes.fastFirstOrNull { it.id == down.id }
@@ -910,7 +842,7 @@ fun NavigationStack(
                 updatePopDrag(change.positionChangeIgnoreConsumed().x)
                 if (!change.pressed) dragging = false else change.consume()
               }
-              finishPopDrag()
+              popNestedScroll.finishDirectGesture()
             }
           }
         )

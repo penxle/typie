@@ -36,7 +36,7 @@ import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
-import co.typie.navigation.LocalNavigationPopNestedScrollCancel
+import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.navigation.navigationPopNestedScroll
@@ -227,11 +227,11 @@ class EditorInteractionsDesktopTest {
   fun `cancelling main editor viewport pan rolls back active back swipe`() = runComposeUiTest {
     val fixture = Fixture(scrollConsumer = { Offset.Zero })
     val navigator = Navigator(Route.Home)
-    val viewportEnabled = mutableStateOf(true)
+    val interactionEnabled = mutableStateOf(true)
     setNavigationEditorContent(
       fixture = fixture,
       navigator = navigator,
-      viewportEnabled = { viewportEnabled.value },
+      interactionEnabled = { interactionEnabled.value },
     )
 
     onNodeWithTag(NavigationEditorTag).performTouchInput {
@@ -239,7 +239,7 @@ class EditorInteractionsDesktopTest {
       moveBy(Offset(x = 100f, y = 0f))
       moveBy(Offset(x = 1f, y = 0f))
     }
-    runOnIdle { viewportEnabled.value = false }
+    runOnIdle { interactionEnabled.value = false }
     waitForIdle()
 
     onNodeWithTag(NavigationEditorTag).performTouchInput { up() }
@@ -442,8 +442,11 @@ class EditorInteractionsDesktopTest {
   @Test
   fun `detaching the interaction boundary cancels active pinch`() = runComposeUiTest {
     val fixture = Fixture()
-    val includeLeafInteractions = mutableStateOf(true)
-    setEditorContent(fixture = fixture, includeLeafInteractions = { includeLeafInteractions.value })
+    val includeInteractionBoundary = mutableStateOf(true)
+    setEditorContent(
+      fixture = fixture,
+      includeInteractionBoundary = { includeInteractionBoundary.value },
+    )
 
     onNodeWithTag(EditorTag).performTouchInput {
       down(pointerId = 0, position = Offset(100f, 100f))
@@ -451,7 +454,7 @@ class EditorInteractionsDesktopTest {
     }
     assertEquals(EditorInteractionMode.ViewportZooming, fixture.controller.interactionMode)
 
-    runOnIdle { includeLeafInteractions.value = false }
+    runOnIdle { includeInteractionBoundary.value = false }
     waitForIdle()
 
     assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
@@ -466,8 +469,11 @@ class EditorInteractionsDesktopTest {
   @Test
   fun `detaching the interaction boundary cancels active pan`() = runComposeUiTest {
     val fixture = Fixture()
-    val includeLeafInteractions = mutableStateOf(true)
-    setEditorContent(fixture = fixture, includeLeafInteractions = { includeLeafInteractions.value })
+    val includeInteractionBoundary = mutableStateOf(true)
+    setEditorContent(
+      fixture = fixture,
+      includeInteractionBoundary = { includeInteractionBoundary.value },
+    )
 
     onNodeWithTag(EditorTag).performTouchInput {
       down(pointerId = 0, position = Offset(100f, 100f))
@@ -476,7 +482,7 @@ class EditorInteractionsDesktopTest {
     waitForIdle()
     assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
 
-    runOnIdle { includeLeafInteractions.value = false }
+    runOnIdle { includeInteractionBoundary.value = false }
     waitForIdle()
 
     assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
@@ -770,6 +776,29 @@ class EditorInteractionsDesktopTest {
     }
 
   @Test
+  fun `foreign pointer already down prevents editor pointer stream from starting`() =
+    runComposeUiTest {
+      val fixture = Fixture()
+      setEditorContent(fixture = fixture, editorWidth = 300.dp)
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(pointerId = 0, position = Offset(350f, 100f))
+      }
+      onNodeWithTag(RootTag).performTouchInput {
+        down(pointerId = 1, position = Offset(100f, 100f))
+      }
+
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertEquals(0, fixture.host.pointerStreamCancelCount)
+      assertTrue(fixture.touchPanDeltas.isEmpty())
+
+      onNodeWithTag(RootTag).performTouchInput {
+        up(pointerId = 1)
+        up(pointerId = 0)
+      }
+    }
+
+  @Test
   fun `fully foreign multi-touch stays outside editor gesture ownership`() = runComposeUiTest {
     val fixture = Fixture()
     setEditorContent(fixture = fixture, editorWidth = 300.dp)
@@ -818,7 +847,7 @@ class EditorInteractionsDesktopTest {
 
   private fun androidx.compose.ui.test.ComposeUiTest.setEditorContent(
     fixture: Fixture,
-    includeLeafInteractions: () -> Boolean = { true },
+    includeInteractionBoundary: () -> Boolean = { true },
     editorWidth: androidx.compose.ui.unit.Dp = 400.dp,
     onCoroutineScope: (CoroutineScope) -> Unit = {},
   ) {
@@ -837,9 +866,10 @@ class EditorInteractionsDesktopTest {
             .nestedScroll(fixture.nestedScrollConnection)
             .nestedScroll(NoOpNestedScrollConnection, nestedScrollDispatcher)
             .then(
-              if (includeLeafInteractions()) {
+              if (includeInteractionBoundary()) {
                 Modifier.editorInteractions(
                   interactionController = fixture.controller,
+                  geometry = fixture.host,
                   screenPointerSequence = screenPointerSequence,
                   scrollableState = fixture.scrollableState,
                   nestedScrollDispatcher = nestedScrollDispatcher,
@@ -865,7 +895,7 @@ class EditorInteractionsDesktopTest {
   private fun androidx.compose.ui.test.ComposeUiTest.setNavigationEditorContent(
     fixture: Fixture,
     navigator: Navigator,
-    viewportEnabled: () -> Boolean = { true },
+    interactionEnabled: () -> Boolean = { true },
   ) {
     setContent {
       NavigationStack(
@@ -875,7 +905,7 @@ class EditorInteractionsDesktopTest {
       ) { route ->
         if (route == NavigationEditorRoute) {
           val nestedScrollDispatcher = remember { NestedScrollDispatcher() }
-          val cancelNavigationPopNestedScroll = LocalNavigationPopNestedScrollCancel.current
+          val navigationPopNestedScroll = LocalNavigationPopNestedScroll.current
           val screenPointerSequence = remember { EditorScreenPointerSequence() }
           Box(Modifier.fillMaxSize().observeEditorScreenPointerSequence(screenPointerSequence)) {
             Box(
@@ -885,14 +915,15 @@ class EditorInteractionsDesktopTest {
                 .nestedScroll(NoOpNestedScrollConnection, nestedScrollDispatcher)
                 .editorInteractions(
                   interactionController = fixture.controller,
+                  geometry = fixture.host,
                   screenPointerSequence = screenPointerSequence,
                   scrollableState = fixture.scrollableState,
                   nestedScrollDispatcher = nestedScrollDispatcher,
                   flingBehavior = fixture.flingBehavior,
                   touchSlop = 8f,
                   density = 1f,
-                  enabled = viewportEnabled(),
-                  onPanCancel = { cancelNavigationPopNestedScroll?.invoke() },
+                  enabled = interactionEnabled(),
+                  onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
                 )
             )
           }

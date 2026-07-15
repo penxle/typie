@@ -1518,8 +1518,8 @@ class EditorInteractionControllerTest {
           pointerId = 1L,
           position = down,
           nowMillis = 0L,
-          panPosition = down,
-          panDriver = driver,
+          positionInRoot = down,
+          touchPanDriver = driver,
         )
       )
 
@@ -1532,7 +1532,7 @@ class EditorInteractionControllerTest {
         controller.onPointerMove(
           pointerId = 1L,
           position = Offset(43f, 30f),
-          panPosition = Offset(43f, 30f),
+          positionInRoot = Offset(43f, 30f),
           nowMillis = 20L,
         )
       )

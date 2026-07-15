@@ -1141,6 +1141,7 @@ fun EditorScreen(entityId: String) {
           Offset(x = editorRect.left + position.x, y = editorRect.top + position.y)
         }
       }
+    val editorInteractionEnabled = editorReady && !popoverOverlayState.isOutsideDismissGestureActive
     SideEffect {
       val viewportZoomConfig =
         (layoutSpec as? EditorDocumentLayoutSpec.Paginated)?.let { paginatedLayoutSpec ->
@@ -1165,7 +1166,7 @@ fun EditorScreen(entityId: String) {
         scrollGestureLockState = scrollGestureLockState,
         viewportZoomConfig = viewportZoomConfig,
         layoutSpec = layoutSpec,
-        pointerInputEnabled = { editorReady && !popoverOverlayState.isOutsideDismissGestureActive },
+        pointerInputEnabled = { editorInteractionEnabled },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
         onRequestSoftwareKeyboard = {
           if (editorReady && editorInputEnabledByToolbar && !editorSuppressesSoftwareKeyboard) {
@@ -1211,7 +1212,7 @@ fun EditorScreen(entityId: String) {
         visibleArea = visibleArea,
         magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
         viewportScrollableState = viewportScrollableState,
-        viewportInputEnabled = editorReady,
+        editorInteractionEnabled = editorInteractionEnabled,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
         onViewportWheelScroll = { uiState.contextMenu.hide() },

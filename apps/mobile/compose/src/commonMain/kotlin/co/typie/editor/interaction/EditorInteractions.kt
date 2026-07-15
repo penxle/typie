@@ -39,6 +39,7 @@ private const val WheelModeSwitchMinDeltaPx = 1.5f
 
 internal fun Modifier.editorInteractions(
   interactionController: EditorInteractionController,
+  geometry: EditorInteractionGeometry,
   screenPointerSequence: EditorScreenPointerSequence,
   scrollableState: Scrollable2DState? = null,
   nestedScrollDispatcher: NestedScrollDispatcher? = null,
@@ -48,11 +49,12 @@ internal fun Modifier.editorInteractions(
   density: Float,
   enabled: Boolean = true,
   onViewportWheelScroll: () -> Unit = {},
-  onPanCancel: () -> Unit = {},
+  onNestedScrollCancel: () -> Unit = {},
 ): Modifier =
   this then
     EditorInteractionsElement(
       interactionController = interactionController,
+      geometry = geometry,
       screenPointerSequence = screenPointerSequence,
       scrollableState = scrollableState,
       nestedScrollDispatcher = nestedScrollDispatcher,
@@ -62,11 +64,12 @@ internal fun Modifier.editorInteractions(
       density = density,
       enabled = enabled,
       onViewportWheelScroll = onViewportWheelScroll,
-      onPanCancel = onPanCancel,
+      onNestedScrollCancel = onNestedScrollCancel,
     )
 
 private data class EditorInteractionsElement(
   private val interactionController: EditorInteractionController,
+  private val geometry: EditorInteractionGeometry,
   private val screenPointerSequence: EditorScreenPointerSequence,
   private val scrollableState: Scrollable2DState?,
   private val nestedScrollDispatcher: NestedScrollDispatcher?,
@@ -76,11 +79,12 @@ private data class EditorInteractionsElement(
   private val density: Float,
   private val enabled: Boolean,
   private val onViewportWheelScroll: () -> Unit,
-  private val onPanCancel: () -> Unit,
+  private val onNestedScrollCancel: () -> Unit,
 ) : ModifierNodeElement<EditorInteractionsNode>() {
   override fun create(): EditorInteractionsNode =
     EditorInteractionsNode(
       interactionController = interactionController,
+      geometry = geometry,
       screenPointerSequence = screenPointerSequence,
       scrollableState = scrollableState,
       nestedScrollDispatcher = nestedScrollDispatcher,
@@ -90,12 +94,13 @@ private data class EditorInteractionsElement(
       density = density,
       enabled = enabled,
       onViewportWheelScroll = onViewportWheelScroll,
-      onPanCancel = onPanCancel,
+      onNestedScrollCancel = onNestedScrollCancel,
     )
 
   override fun update(node: EditorInteractionsNode) {
     node.update(
       interactionController = interactionController,
+      geometry = geometry,
       screenPointerSequence = screenPointerSequence,
       scrollableState = scrollableState,
       nestedScrollDispatcher = nestedScrollDispatcher,
@@ -105,13 +110,14 @@ private data class EditorInteractionsElement(
       density = density,
       enabled = enabled,
       onViewportWheelScroll = onViewportWheelScroll,
-      onPanCancel = onPanCancel,
+      onNestedScrollCancel = onNestedScrollCancel,
     )
   }
 }
 
 private class EditorInteractionsNode(
   var interactionController: EditorInteractionController,
+  var geometry: EditorInteractionGeometry,
   var screenPointerSequence: EditorScreenPointerSequence,
   var scrollableState: Scrollable2DState?,
   var nestedScrollDispatcher: NestedScrollDispatcher?,
@@ -121,7 +127,7 @@ private class EditorInteractionsNode(
   var density: Float,
   var enabled: Boolean,
   var onViewportWheelScroll: () -> Unit,
-  var onPanCancel: () -> Unit,
+  var onNestedScrollCancel: () -> Unit,
 ) : Modifier.Node(), PointerInputModifierNode, SemanticsModifierNode, EditorScreenPointerListener {
   private val pointers = mutableMapOf<Long, PointerType>()
   private val singlePointerStreams = mutableSetOf<Long>()
@@ -138,7 +144,7 @@ private class EditorInteractionsNode(
       touchSlopProvider = { touchSlop },
       maximumFlingVelocityProvider = { maximumFlingVelocity },
       launch = { block -> coroutineScope.launch { block() } },
-      onCancel = { onPanCancel() },
+      onCancel = { onNestedScrollCancel() },
     )
 
   override fun onAttach() {
@@ -147,6 +153,7 @@ private class EditorInteractionsNode(
 
   fun update(
     interactionController: EditorInteractionController,
+    geometry: EditorInteractionGeometry,
     screenPointerSequence: EditorScreenPointerSequence,
     scrollableState: Scrollable2DState?,
     nestedScrollDispatcher: NestedScrollDispatcher?,
@@ -156,10 +163,11 @@ private class EditorInteractionsNode(
     density: Float,
     enabled: Boolean,
     onViewportWheelScroll: () -> Unit,
-    onPanCancel: () -> Unit,
+    onNestedScrollCancel: () -> Unit,
   ) {
     val inputOwnerChanged =
       this.interactionController !== interactionController ||
+        this.geometry !== geometry ||
         this.screenPointerSequence !== screenPointerSequence ||
         this.scrollableState !== scrollableState ||
         this.nestedScrollDispatcher !== nestedScrollDispatcher ||
@@ -172,6 +180,7 @@ private class EditorInteractionsNode(
       screenPointerSequence.attach(this)
     }
     this.interactionController = interactionController
+    this.geometry = geometry
     this.screenPointerSequence = screenPointerSequence
     this.scrollableState = scrollableState
     this.nestedScrollDispatcher = nestedScrollDispatcher
@@ -181,7 +190,7 @@ private class EditorInteractionsNode(
     this.density = density
     this.enabled = enabled
     this.onViewportWheelScroll = onViewportWheelScroll
-    this.onPanCancel = onPanCancel
+    this.onNestedScrollCancel = onNestedScrollCancel
   }
 
   override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
@@ -205,7 +214,10 @@ private class EditorInteractionsNode(
     registerPointerDowns(pointerEvent)
     val pressedTouchChanges = pressedTouchChanges(pointerEvent)
 
-    if (suppressUntilAllUp || screenPointerSequence.isMixedSequence) {
+    if (screenPointerSequence.hasForeignTouchPointer(::isEditorTouchPointer)) {
+      suppressMixedSequence()
+    }
+    if (suppressUntilAllUp) {
       consumeEditorChanges(pointerEvent)
       finishReleasedPointers(pointerEvent)
       return
@@ -254,14 +266,14 @@ private class EditorInteractionsNode(
     cancelInteraction(clearSuppression = true)
   }
 
-  override fun onMixedSequence() {
-    if (pointers.isEmpty()) {
+  override fun onScreenPointerMembershipChanged() {
+    if (
+      pointers.values.none { pointerType -> pointerType == PointerType.Touch } ||
+        !screenPointerSequence.hasForeignTouchPointer(::isEditorTouchPointer)
+    ) {
       return
     }
-    suppressUntilAllUp = true
-    interactionController.cancel()
-    scrollDriver.cancel()
-    finishWheelZoom()
+    suppressMixedSequence()
   }
 
   override fun onGlobalAllUp() {
@@ -284,13 +296,11 @@ private class EditorInteractionsNode(
   private fun registerPointerDowns(pointerEvent: PointerEvent) {
     pointerEvent.changes
       .filter { change -> change.pressed && !change.previousPressed }
-      .forEach { change ->
-        pointers[change.id.value] = change.type
-        if (change.type == PointerType.Touch) {
-          screenPointerSequence.onEditorPointerDown(change.id.value)
-        }
-      }
+      .forEach { change -> pointers[change.id.value] = change.type }
   }
+
+  private fun isEditorTouchPointer(pointerId: Long): Boolean =
+    pointers[pointerId] == PointerType.Touch
 
   private fun pressedTouchChanges(pointerEvent: PointerEvent): List<PointerInputChange> =
     pointerEvent.changes.filter { change ->
@@ -302,11 +312,8 @@ private class EditorInteractionsNode(
       .filter { change -> change.pressed && !change.previousPressed }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
-        val tapEnabled = interactionController.isTapEligible(change.position)
-        val resolvedEditorPosition =
-          interactionController.resolveInteractionPosition(change.position)
-        val editorPosition =
-          resolvedEditorPosition ?: if (tapEnabled) return@forEach else rootPosition
+        val tapEnabled = geometry.isTapEligible(change.position)
+        val editorPosition = geometry.resolveInteractionPosition(change.position)
         singlePointerStreams += change.id.value
         if (
           interactionController.onPointerDown(
@@ -315,9 +322,8 @@ private class EditorInteractionsNode(
             nowMillis = change.uptimeMillis,
             tapEnabled = tapEnabled,
             inputModifiers = pointerEvent.inputModifiers(),
-            panPosition = rootPosition,
-            panDriver = if (change.type == PointerType.Touch) scrollDriver else null,
-            hasEditorPosition = resolvedEditorPosition != null,
+            positionInRoot = rootPosition,
+            touchPanDriver = if (change.type == PointerType.Touch) scrollDriver else null,
           )
         ) {
           change.consume()
@@ -330,13 +336,12 @@ private class EditorInteractionsNode(
       }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
-        val editorPosition =
-          interactionController.resolveInteractionPosition(change.position) ?: rootPosition
+        val editorPosition = geometry.resolveInteractionPosition(change.position)
         if (
           interactionController.onPointerMove(
             pointerId = change.id.value,
             position = editorPosition,
-            panPosition = rootPosition,
+            positionInRoot = rootPosition,
             nowMillis = change.uptimeMillis,
             consumed = change.isConsumed,
           )
@@ -351,13 +356,12 @@ private class EditorInteractionsNode(
       }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
-        val editorPosition =
-          interactionController.resolveInteractionPosition(change.position) ?: rootPosition
+        val editorPosition = geometry.resolveInteractionPosition(change.position)
         if (
           interactionController.onPointerUp(
             pointerId = change.id.value,
             position = editorPosition,
-            panPosition = rootPosition,
+            positionInRoot = rootPosition,
             nowMillis = change.uptimeMillis,
           )
         ) {
@@ -379,9 +383,7 @@ private class EditorInteractionsNode(
     pointerEvent.changes
       .filter { change -> !change.pressed }
       .forEach { change ->
-        if (pointers.remove(change.id.value) == PointerType.Touch) {
-          screenPointerSequence.onEditorPointerUp(change.id.value)
-        }
+        pointers.remove(change.id.value)
         singlePointerStreams -= change.id.value
       }
     if (pointers.isEmpty() && !screenPointerSequence.hasScreenPointers) {
@@ -395,6 +397,18 @@ private class EditorInteractionsNode(
     suppressUntilAllUp = pointerEvent.changes.any { change -> change.pressed }
     consumeEditorChanges(pointerEvent)
     finishReleasedPointers(pointerEvent)
+  }
+
+  private fun suppressMixedSequence() {
+    val hadEditorInteraction =
+      singlePointerStreams.isNotEmpty() ||
+        interactionController.interactionMode != EditorInteractionMode.Idle
+    suppressUntilAllUp = true
+    if (hadEditorInteraction) {
+      interactionController.cancel()
+    }
+    scrollDriver.cancel()
+    finishWheelZoom()
   }
 
   private fun consumeEditorChanges(pointerEvent: PointerEvent) {
@@ -457,7 +471,7 @@ private class EditorInteractionsNode(
       }
       wheelZoomActive = true
     }
-    val focalInEditor = interactionController.resolveInteractionPosition(change.position)
+    val focalInEditor = geometry.resolveInteractionPosition(change.position)
     if (
       focalInEditor == null ||
         !interactionController.updatePointerSignalZoom(
@@ -493,7 +507,6 @@ private class EditorInteractionsNode(
 
   private fun cancelInteraction(clearSuppression: Boolean) {
     val hadPointers = pointers.isNotEmpty() || suppressUntilAllUp
-    pointers.keys.forEach(screenPointerSequence::onEditorPointerUp)
     pointers.clear()
     singlePointerStreams.clear()
     if (hadPointers) {
@@ -515,21 +528,14 @@ private class EditorInteractionsNode(
 
 internal class EditorScreenPointerSequence {
   private val screenPointers = mutableSetOf<Long>()
-  private val editorPointers = mutableSetOf<Long>()
   private var listener: EditorScreenPointerListener? = null
-  private var mixedSequence = false
-
-  val isMixedSequence: Boolean
-    get() = mixedSequence
+  private var pressedMembershipChanged = false
 
   val hasScreenPointers: Boolean
     get() = screenPointers.isNotEmpty()
 
   fun attach(listener: EditorScreenPointerListener) {
     this.listener = listener
-    if (mixedSequence) {
-      listener.onMixedSequence()
-    }
   }
 
   fun detach(listener: EditorScreenPointerListener) {
@@ -538,37 +544,29 @@ internal class EditorScreenPointerSequence {
     }
   }
 
-  fun onEditorPointerDown(pointerId: Long) {
-    editorPointers += pointerId
+  fun hasForeignTouchPointer(isEditorTouchPointer: (Long) -> Boolean): Boolean =
+    screenPointers.any { pointerId ->
+      !isEditorTouchPointer(pointerId)
+    }
+
+  fun observePressedPointers(pointerEvent: PointerEvent) {
+    pointerEvent.changes
+      .filter { change -> change.type == PointerType.Touch && change.pressed }
+      .forEach { change ->
+        pressedMembershipChanged = screenPointers.add(change.id.value) || pressedMembershipChanged
+      }
   }
 
-  fun onEditorPointerUp(pointerId: Long) {
-    editorPointers -= pointerId
-  }
-
-  fun observe(pointerEvent: PointerEvent) {
+  fun observeReleasedPointers(pointerEvent: PointerEvent) {
+    if (pressedMembershipChanged) {
+      pressedMembershipChanged = false
+      listener?.onScreenPointerMembershipChanged()
+    }
     val hadScreenPointers = screenPointers.isNotEmpty()
-    pointerEvent.changes.forEach { change ->
-      if (change.type != PointerType.Touch) {
-        return@forEach
-      }
-      if (change.pressed) {
-        screenPointers += change.id.value
-      } else {
-        screenPointers -= change.id.value
-      }
-    }
-    if (
-      !mixedSequence &&
-        editorPointers.isNotEmpty() &&
-        screenPointers.any { pointerId -> pointerId !in editorPointers }
-    ) {
-      mixedSequence = true
-      listener?.onMixedSequence()
-    }
+    pointerEvent.changes
+      .filter { change -> change.type == PointerType.Touch && !change.pressed }
+      .forEach { change -> screenPointers -= change.id.value }
     if (screenPointers.isEmpty()) {
-      editorPointers.clear()
-      mixedSequence = false
       if (hadScreenPointers) {
         listener?.onGlobalAllUp()
       }
@@ -576,10 +574,9 @@ internal class EditorScreenPointerSequence {
   }
 
   fun reset() {
-    val shouldNotify = mixedSequence || screenPointers.isNotEmpty() || editorPointers.isNotEmpty()
+    val shouldNotify = screenPointers.isNotEmpty()
     screenPointers.clear()
-    editorPointers.clear()
-    mixedSequence = false
+    pressedMembershipChanged = false
     if (shouldNotify) {
       listener?.onGlobalAllUp()
     }
@@ -587,7 +584,7 @@ internal class EditorScreenPointerSequence {
 }
 
 internal interface EditorScreenPointerListener {
-  fun onMixedSequence()
+  fun onScreenPointerMembershipChanged()
 
   fun onGlobalAllUp()
 }
@@ -612,8 +609,10 @@ private data class EditorScreenPointerObserverElement(
 private class EditorScreenPointerObserverNode(var sequence: EditorScreenPointerSequence) :
   Modifier.Node(), PointerInputModifierNode {
   override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
-    if (pass == PointerEventPass.Final) {
-      sequence.observe(pointerEvent)
+    when (pass) {
+      PointerEventPass.Initial -> sequence.observePressedPointers(pointerEvent)
+      PointerEventPass.Final -> sequence.observeReleasedPointers(pointerEvent)
+      PointerEventPass.Main -> Unit
     }
   }
 

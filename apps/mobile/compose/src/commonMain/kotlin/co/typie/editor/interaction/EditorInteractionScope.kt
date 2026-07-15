@@ -32,7 +32,7 @@ internal class EditorInteractionScope(
   private var uiState: EditorUiState? = null
   private var visibleArea: EditorVisibleArea? = null
   private var viewportState: EditorViewportState? = null
-  private var extensionAreaTapEnabled = true
+  private var outsidePageTapEnabled = true
   override var density: Float = 0f
     private set
 
@@ -80,8 +80,7 @@ internal class EditorInteractionScope(
     this.onSelectionHaptic = onSelectionHaptic
     this.onRequestSoftwareKeyboard = onRequestSoftwareKeyboard
     this.pointerInputEnabled = pointerInputEnabled
-    extensionAreaTapEnabled =
-      layoutSpec == null || layoutSpec is EditorDocumentLayoutSpec.Continuous
+    outsidePageTapEnabled = layoutSpec == null || layoutSpec is EditorDocumentLayoutSpec.Continuous
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
 
@@ -106,7 +105,7 @@ internal class EditorInteractionScope(
     onSelectionHaptic = null
     onRequestSoftwareKeyboard = null
     pointerInputEnabled = { true }
-    extensionAreaTapEnabled = true
+    outsidePageTapEnabled = true
     scrollGestureLockState = null
   }
 
@@ -133,7 +132,7 @@ internal class EditorInteractionScope(
     if (!bounds.isValid) {
       return false
     }
-    if (extensionAreaTapEnabled) {
+    if (outsidePageTapEnabled) {
       return true
     }
     val x = positionInSurface.x / density

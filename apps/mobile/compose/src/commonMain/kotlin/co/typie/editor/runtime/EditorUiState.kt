@@ -28,7 +28,7 @@ class EditorUiState {
   private val pageOffsets = mutableStateMapOf<Int, Offset>()
   // Root-space page positions are for IME geometry; pageOffsets remain editor-local.
   private val pagePositionsInRoot = mutableStateMapOf<Int, PagePositionInRoot>()
-  private var extensionAreaBoundsInRoot: Rect = Rect.Zero
+  private var interactionSurfaceBoundsInRoot: Rect = Rect.Zero
   private var editorBoundsInRoot: Rect = Rect.Zero
   private var editorClippedBoundsInRoot: Rect = Rect.Zero
 
@@ -42,7 +42,7 @@ class EditorUiState {
     displayZoom = 1f
     pageOffsets.clear()
     pagePositionsInRoot.clear()
-    extensionAreaBoundsInRoot = Rect.Zero
+    interactionSurfaceBoundsInRoot = Rect.Zero
     editorBoundsInRoot = Rect.Zero
     editorClippedBoundsInRoot = Rect.Zero
     editorBoundsInContainer = EditorBoundsInContainer()
@@ -79,8 +79,6 @@ class EditorUiState {
     )
 
   fun editorRectInRoot(): Rect? = editorBoundsInRoot.takeIf { it.isUsable }
-
-  internal fun extensionAreaRectInRoot(): Rect? = extensionAreaBoundsInRoot.takeIf { it.isUsable }
 
   fun textClippingRectInRoot(): Rect? = editorClippedBoundsInRoot.takeIf { it.isUsable }
 
@@ -135,8 +133,8 @@ class EditorUiState {
     pagePositionsInRoot.remove(page)
   }
 
-  fun updateExtensionAreaBounds(boundsInRoot: Rect, density: Float) {
-    extensionAreaBoundsInRoot = boundsInRoot
+  fun updateInteractionSurfaceBounds(boundsInRoot: Rect, density: Float) {
+    interactionSurfaceBoundsInRoot = boundsInRoot
     syncEditorBoundsInContainer(density)
   }
 
@@ -153,8 +151,8 @@ class EditorUiState {
   private fun syncEditorBoundsInContainer(density: Float) {
     if (
       density <= 0f ||
-        extensionAreaBoundsInRoot.width <= 0f ||
-        extensionAreaBoundsInRoot.height <= 0f ||
+        interactionSurfaceBoundsInRoot.width <= 0f ||
+        interactionSurfaceBoundsInRoot.height <= 0f ||
         editorBoundsInRoot.width <= 0f ||
         editorBoundsInRoot.height <= 0f
     ) {
@@ -164,8 +162,8 @@ class EditorUiState {
 
     editorBoundsInContainer =
       EditorBoundsInContainer(
-        x = (editorBoundsInRoot.left - extensionAreaBoundsInRoot.left) / density,
-        y = (editorBoundsInRoot.top - extensionAreaBoundsInRoot.top) / density,
+        x = (editorBoundsInRoot.left - interactionSurfaceBoundsInRoot.left) / density,
+        y = (editorBoundsInRoot.top - interactionSurfaceBoundsInRoot.top) / density,
         width = editorBoundsInRoot.width / density,
         height = editorBoundsInRoot.height / density,
       )

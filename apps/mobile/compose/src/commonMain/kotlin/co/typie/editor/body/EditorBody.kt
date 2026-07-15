@@ -66,16 +66,16 @@ internal fun EditorBody(
         bodyContentHeight = bodyContentHeight,
       )
     }
-  val containerModifier =
+  val interactionSurfaceModifier =
     Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
-      uiState.updateExtensionAreaBounds(
+      uiState.updateInteractionSurfaceBounds(
         boundsInRoot = coordinates.unclippedBoundsInRoot(),
         density = density.density,
       )
     }
 
   Box(modifier = modifier.fillMaxWidth()) {
-    EditorExtensionArea(modifier = containerModifier.then(interactionModifier)) {
+    Box(modifier = interactionSurfaceModifier.then(interactionModifier)) {
       if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
         EditorExtensionAreaLineHighlightOverlay(
           cursor = editor?.cursor,

@@ -74,31 +74,24 @@ internal class EditorInteractionController(
 
   fun canApplyModeEvent(event: EditorInteractionEvent): Boolean = mode.canApply(event)
 
-  fun resolveInteractionPosition(positionInSurface: Offset): Offset? =
-    geometry.resolveInteractionPosition(positionInSurface)
-
-  fun isTapEligible(positionInSurface: Offset): Boolean = geometry.isTapEligible(positionInSurface)
-
   fun onPointerDown(
     pointerId: Long,
-    position: Offset,
+    position: Offset?,
     nowMillis: Long,
     tapEnabled: Boolean = true,
     inputModifiers: InputModifiers = InputModifiers(),
-    panPosition: Offset = position,
-    panDriver: EditorPanGestureDriver? = null,
-    hasEditorPosition: Boolean = true,
+    positionInRoot: Offset = requireNotNull(position),
+    touchPanDriver: EditorPanGestureDriver? = null,
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerDown(
         pointerId = pointerId,
-        position = position,
+        positionInEditor = position,
+        positionInRoot = positionInRoot,
         nowMillis = nowMillis,
-        tapEnabled = tapEnabled,
+        tapEnabled = tapEnabled && position != null,
         inputModifiers = inputModifiers,
-        panPosition = panPosition,
-        panDriver = panDriver,
-        hasEditorPosition = hasEditorPosition,
+        touchPanDriver = touchPanDriver,
         context = gestureContext,
       )
     } else {
@@ -107,17 +100,17 @@ internal class EditorInteractionController(
 
   fun onPointerMove(
     pointerId: Long,
-    position: Offset,
+    position: Offset?,
     nowMillis: Long,
-    panPosition: Offset = position,
+    positionInRoot: Offset = requireNotNull(position),
     pressed: Boolean = true,
     consumed: Boolean = false,
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerMove(
         pointerId = pointerId,
-        position = position,
-        panPosition = panPosition,
+        positionInEditor = position,
+        positionInRoot = positionInRoot,
         nowMillis = nowMillis,
         pressed = pressed,
         consumed = consumed,
@@ -129,15 +122,15 @@ internal class EditorInteractionController(
 
   fun onPointerUp(
     pointerId: Long,
-    position: Offset,
+    position: Offset?,
     nowMillis: Long,
-    panPosition: Offset = position,
+    positionInRoot: Offset = requireNotNull(position),
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerUp(
         pointerId = pointerId,
-        position = position,
-        panPosition = panPosition,
+        positionInEditor = position,
+        positionInRoot = positionInRoot,
         nowMillis = nowMillis,
         context = gestureContext,
       )

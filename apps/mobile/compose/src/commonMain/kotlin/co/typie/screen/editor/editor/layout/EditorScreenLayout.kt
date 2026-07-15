@@ -46,7 +46,7 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
-import co.typie.navigation.LocalNavigationPopNestedScrollCancel
+import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.navigationPopNestedScroll
 import co.typie.screen.editor.editor.overlay.editorMagnifier
 import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
@@ -86,7 +86,7 @@ internal fun EditorScreenLayout(
   magnifierFocalPositionInRoot: Offset? = null,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
-  viewportInputEnabled: Boolean = true,
+  editorInteractionEnabled: Boolean = true,
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
   onViewportWheelScroll: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
@@ -104,7 +104,7 @@ internal fun EditorScreenLayout(
   val interactionScope = LocalEditorInteractionScope.current
   val uiState = LocalEditorUiState.current
   val toolbarBackdropHazeState = LocalHazeState.current
-  val cancelNavigationPopNestedScroll = LocalNavigationPopNestedScrollCancel.current
+  val navigationPopNestedScroll = LocalNavigationPopNestedScroll.current
   val viewportNestedScrollDispatcher = remember { NestedScrollDispatcher() }
   val screenPointerSequence = remember { EditorScreenPointerSequence() }
   val viewportFlingBehavior = ScrollableDefaults.flingBehavior()
@@ -149,6 +149,7 @@ internal fun EditorScreenLayout(
     val editorInteractionModifier =
       Modifier.editorInteractions(
         interactionController = interactionScope.controller,
+        geometry = interactionScope,
         screenPointerSequence = screenPointerSequence,
         scrollableState = viewportScrollableState,
         nestedScrollDispatcher = viewportNestedScrollDispatcher,
@@ -156,9 +157,9 @@ internal fun EditorScreenLayout(
         touchSlop = viewConfiguration.touchSlop,
         maximumFlingVelocity = viewConfiguration.maximumFlingVelocity,
         density = density.density,
-        enabled = viewportInputEnabled,
+        enabled = editorInteractionEnabled,
         onViewportWheelScroll = onViewportWheelScroll,
-        onPanCancel = { cancelNavigationPopNestedScroll?.invoke() },
+        onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
       )
     val viewportWidth = constraints.maxWidth / density.density
     val resolvedContentWidth =

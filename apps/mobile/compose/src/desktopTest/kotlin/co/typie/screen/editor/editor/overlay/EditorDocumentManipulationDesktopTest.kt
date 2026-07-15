@@ -128,7 +128,7 @@ class EditorDocumentManipulationDesktopTest {
         updateFocus(true)
         updateDisplayZoom(1f)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -345,7 +345,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -400,7 +400,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(
           ComposeRect(
             offset = Offset(x = 40f, y = 0f),
@@ -482,7 +482,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(
           ComposeRect(Offset.Zero, ComposeSize(width = 120f, height = 400f)),
           density = 1f,
@@ -552,7 +552,7 @@ class EditorDocumentManipulationDesktopTest {
         updateFocus(true)
         updateDisplayZoom(1f)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(
           ComposeRect(Offset.Zero, ComposeSize(width = 120f, height = 120f)),
           density = 1f,
@@ -633,7 +633,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -688,7 +688,7 @@ class EditorDocumentManipulationDesktopTest {
         EditorUiState().apply {
           updateFocus(true)
           updatePageOffset(page = 0, offset = Offset.Zero)
-          updateExtensionAreaBounds(TestRootRect, density = 1f)
+          updateInteractionSurfaceBounds(TestRootRect, density = 1f)
           updateEditorBounds(TestRootRect, density = 1f)
         }
       val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -754,7 +754,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -801,7 +801,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -852,7 +852,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -910,7 +910,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(
           ComposeRect(
             offset = Offset(x = 20f, y = 20f),
@@ -967,7 +967,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -1018,7 +1018,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -1070,7 +1070,7 @@ class EditorDocumentManipulationDesktopTest {
       EditorUiState().apply {
         updateFocus(true)
         updatePageOffset(page = 0, offset = Offset.Zero)
-        updateExtensionAreaBounds(TestRootRect, density = 1f)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -1177,6 +1177,7 @@ class EditorDocumentManipulationDesktopTest {
               .nestedScroll(object : NestedScrollConnection {}, nestedScrollDispatcher)
               .editorInteractions(
                 interactionController = interactionScope.controller,
+                geometry = interactionScope,
                 screenPointerSequence = screenPointerSequence,
                 scrollableState = scrollableState,
                 nestedScrollDispatcher = nestedScrollDispatcher,
@@ -1216,7 +1217,7 @@ class EditorDocumentManipulationDesktopTest {
       updateFocus(true)
       updateDisplayZoom(1f)
       updatePageOffset(page = 0, offset = Offset.Zero)
-      updateExtensionAreaBounds(TestRootRect, density = 1f)
+      updateInteractionSurfaceBounds(TestRootRect, density = 1f)
       updateEditorBounds(TestRootRect, density = 1f)
     }
 

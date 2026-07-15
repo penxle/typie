@@ -281,7 +281,7 @@ class EditorScrollResolverTest {
   fun `distance to pages bottom excludes bottom occlusion so typewriter padding can add it`() {
     val uiState =
       EditorUiState().apply {
-        updateExtensionAreaBounds(
+        updateInteractionSurfaceBounds(
           boundsInRoot = Rect(left = 0f, top = 0f, right = 300f, bottom = 1000f),
           density = 1f,
         )

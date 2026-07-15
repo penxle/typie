@@ -62,7 +62,7 @@ class EditorUiStateTest {
     val state = EditorUiState()
     state.updateFocus(true)
     state.updatePageOffset(page = 0, offset = Offset(0f, 0f))
-    state.updateExtensionAreaBounds(boundsInRoot = Rect(0f, 100f, 300f, 800f), density = 2f)
+    state.updateInteractionSurfaceBounds(boundsInRoot = Rect(0f, 100f, 300f, 800f), density = 2f)
     state.updateEditorBounds(boundsInRoot = Rect(20f, 180f, 280f, 580f), density = 2f)
 
     state.clear()
@@ -73,10 +73,10 @@ class EditorUiStateTest {
   }
 
   @Test
-  fun `ui state resolves editor bounds relative to extension area container`() {
+  fun `ui state resolves editor bounds relative to interaction surface`() {
     val state = EditorUiState()
 
-    state.updateExtensionAreaBounds(boundsInRoot = Rect(0f, 120f, 400f, 920f), density = 2f)
+    state.updateInteractionSurfaceBounds(boundsInRoot = Rect(0f, 120f, 400f, 920f), density = 2f)
     state.updateEditorBounds(
       boundsInRoot = Rect(40f, 200f, 360f, 680f),
       clippedBoundsInRoot = Rect(40f, 240f, 360f, 640f),
@@ -95,7 +95,7 @@ class EditorUiStateTest {
   fun `ui state converts container coordinates into editor local coordinates`() {
     val state = EditorUiState()
 
-    state.updateExtensionAreaBounds(boundsInRoot = Rect(0f, 120f, 400f, 920f), density = 2f)
+    state.updateInteractionSurfaceBounds(boundsInRoot = Rect(0f, 120f, 400f, 920f), density = 2f)
     state.updateEditorBounds(boundsInRoot = Rect(40f, 200f, 360f, 680f), density = 2f)
 
     val point = state.containerToEditorLocal(x = 80f, y = 100f)
