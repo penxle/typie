@@ -1543,6 +1543,98 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `pan release preserves velocity from recent movement`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val driver = TestPanGestureDriver(shouldCatchTouch = false)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 0L,
+        touchPanDriver = driver,
+      )
+      controller.onPointerMove(
+        pointerId = 1L,
+        position = start + Offset(20f, 0f),
+        positionInRoot = start + Offset(20f, 0f),
+        nowMillis = 10L,
+      )
+      controller.onPointerMove(
+        pointerId = 1L,
+        position = start + Offset(40f, 0f),
+        positionInRoot = start + Offset(40f, 0f),
+        nowMillis = 20L,
+      )
+      controller.onPointerUp(
+        pointerId = 1L,
+        position = start + Offset(40f, 0f),
+        positionInRoot = start + Offset(40f, 0f),
+        nowMillis = 55L,
+      )
+
+      val velocity = driver.endVelocities.single()
+      assertTrue(velocity.x > 1_500f, "Expected recent pan velocity, got $velocity")
+      assertTrue(velocity.y in -0.01f..0.01f, "Expected horizontal pan velocity, got $velocity")
+    }
+
+  @Test
+  fun `pan release after pointer stops has no velocity`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val driver = TestPanGestureDriver(shouldCatchTouch = false)
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 0L,
+        touchPanDriver = driver,
+      )
+      controller.onPointerMove(
+        pointerId = 1L,
+        position = start + Offset(20f, 0f),
+        positionInRoot = start + Offset(20f, 0f),
+        nowMillis = 10L,
+      )
+      controller.onPointerMove(
+        pointerId = 1L,
+        position = start + Offset(40f, 0f),
+        positionInRoot = start + Offset(40f, 0f),
+        nowMillis = 20L,
+      )
+      controller.onPointerUp(
+        pointerId = 1L,
+        position = start + Offset(40f, 0f),
+        positionInRoot = start + Offset(40f, 0f),
+        nowMillis = 61L,
+      )
+
+      assertEquals(Velocity.Zero, driver.endVelocities.single())
+    }
+
+  @Test
   fun `editor pointer stream does not start long press from selection handle hit target`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2966,6 +3058,7 @@ class EditorInteractionControllerTest {
     override val touchSlop: Float = 8f
     override val maximumFlingVelocity: Float = 10_000f
     var startCount = 0
+    val endVelocities = mutableListOf<Velocity>()
     val updates = mutableListOf<Offset>()
 
     override fun start(): Boolean {
@@ -2979,7 +3072,9 @@ class EditorInteractionControllerTest {
       updates += delta
     }
 
-    override fun end(velocity: Velocity) = Unit
+    override fun end(velocity: Velocity) {
+      endVelocities += velocity
+    }
 
     override fun cancel() = Unit
   }

@@ -7,6 +7,8 @@ import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.canApply
 
+private const val PointerMoveStoppedTimeoutMillis = 40L
+
 internal interface EditorPanGestureDriver {
   val shouldCatchTouch: Boolean
   val touchSlop: Float
@@ -97,10 +99,13 @@ internal class EditorPanGesture {
       if (delta != Offset.Zero) {
         current.driver.update(delta)
       }
-      velocityTracker.addPosition(nowMillis, position)
+      if (pressed) {
+        velocityTracker.addPosition(nowMillis, position)
+        current.lastVelocitySampleAtMillis = nowMillis
+      }
       current.lastPosition = position
       if (!pressed) {
-        finish(context = context)
+        finish(nowMillis = nowMillis, context = context)
       }
       return true
     }
@@ -126,12 +131,14 @@ internal class EditorPanGesture {
         return false
       }
       velocityTracker.addPosition(nowMillis, position)
+      current.lastVelocitySampleAtMillis = nowMillis
       current.driver.update(delta)
       current.lastPosition = position
       return true
     }
 
     velocityTracker.addPosition(nowMillis, position)
+    current.lastVelocitySampleAtMillis = nowMillis
     val fromStart = position - current.startPosition
     val distance = fromStart.getDistance()
     val touchSlop = current.driver.touchSlop.coerceAtLeast(0f)
@@ -184,6 +191,7 @@ internal class EditorPanGesture {
         pointerId = pointerId,
         startPosition = position,
         lastPosition = position,
+        lastVelocitySampleAtMillis = nowMillis,
         startKind = startKind,
         driver = driver,
       )
@@ -208,11 +216,16 @@ internal class EditorPanGesture {
     return true
   }
 
-  private fun finish(context: EditorGestureContext) {
+  private fun finish(nowMillis: Long, context: EditorGestureContext) {
     val current = session ?: return
     val maximum =
       current.driver.maximumFlingVelocity.takeIf { it.isFinite() && it > 0f } ?: Float.MAX_VALUE
-    val velocity = velocityTracker.calculateVelocity(Velocity(maximum, maximum))
+    val velocity =
+      if (nowMillis - current.lastVelocitySampleAtMillis > PointerMoveStoppedTimeoutMillis) {
+        Velocity.Zero
+      } else {
+        velocityTracker.calculateVelocity(Velocity(maximum, maximum))
+      }
     current.driver.end(velocity)
     context.applyModeEvent(EditorInteractionEvent.PanEnd)
     clear()
@@ -228,6 +241,7 @@ internal class EditorPanGesture {
     val pointerId: Long,
     val startPosition: Offset,
     var lastPosition: Offset,
+    var lastVelocitySampleAtMillis: Long,
     val startKind: StartKind,
     val driver: EditorPanGestureDriver,
     var driverStarted: Boolean = false,

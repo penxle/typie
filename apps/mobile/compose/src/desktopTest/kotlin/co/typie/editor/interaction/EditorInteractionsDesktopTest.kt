@@ -425,11 +425,12 @@ class EditorInteractionsDesktopTest {
 
     onNodeWithTag(EditorTag).performTouchInput {
       moveTo(pointerId = 0, position = Offset(50f, 101f))
+      moveTo(pointerId = 0, position = Offset(50f, 102f))
     }
     waitForIdle()
 
     assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
-    assertEquals(Offset(x = 0f, y = 1f), fixture.touchPanDeltas.single())
+    assertEquals(listOf(Offset(x = 0f, y = 1f), Offset(x = 0f, y = 1f)), fixture.touchPanDeltas)
     assertTrue(fixture.nestedScrollAvailable.isNotEmpty())
 
     onNodeWithTag(EditorTag).performTouchInput { up(pointerId = 0) }
@@ -551,6 +552,7 @@ class EditorInteractionsDesktopTest {
 
       onNodeWithTag(EditorTag).performTouchInput {
         down(pointerId = 0, position = Offset(100f, 100f))
+        moveTo(pointerId = 0, position = Offset(120f, 100f))
         moveTo(pointerId = 0, position = Offset(140f, 100f))
         up(pointerId = 0)
       }
@@ -657,6 +659,7 @@ class EditorInteractionsDesktopTest {
 
       onNodeWithTag(EditorTag).performTouchInput {
         down(pointerId = 0, position = Offset(100f, 100f))
+        moveTo(pointerId = 0, position = Offset(120f, 100f))
         moveTo(pointerId = 0, position = Offset(140f, 100f))
         up(pointerId = 0)
       }
@@ -714,6 +717,7 @@ class EditorInteractionsDesktopTest {
 
     onNodeWithTag(EditorTag).performTouchInput {
       down(pointerId = 0, position = Offset(100f, 100f))
+      moveTo(pointerId = 0, position = Offset(120f, 100f))
       moveTo(pointerId = 0, position = Offset(140f, 100f))
       up(pointerId = 0)
     }
