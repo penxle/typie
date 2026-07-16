@@ -113,10 +113,8 @@ fn expand_line(
     let new_ascent = line.ascent.max(expansion.ascent);
     let new_descent = line.descent.max(expansion.descent);
     let content_height = new_ascent + new_descent;
-    let new_height = old_height
-        .max(expansion.min_line_height)
-        .max(content_height);
-    let leading = (new_height - content_height).max(0.0);
+    let new_height = old_height.max(expansion.min_line_height);
+    let leading = new_height - content_height;
     let new_baseline = leading / 2.0 + new_ascent;
     let delta = new_baseline - line.baseline;
 
@@ -250,7 +248,7 @@ mod tests {
         let expansion = LineStrutExpansion {
             ascent: 12.0,
             descent: 3.0,
-            min_line_height: 0.0,
+            min_line_height: 15.0,
         };
         let result = expand_first_line(&node, &expansion).unwrap();
 
@@ -307,7 +305,7 @@ mod tests {
         let expansion = LineStrutExpansion {
             ascent: 12.0,
             descent: 3.0,
-            min_line_height: 0.0,
+            min_line_height: 15.0,
         };
         let result = expand_first_line(&outer, &expansion).unwrap();
 
@@ -325,6 +323,74 @@ mod tests {
             ob.children[0].height,
             20.0 + first_line_delta,
             "inner box must keep the second line's height"
+        );
+    }
+
+    fn shrunken_line(height: f32, ascent: f32, descent: f32) -> MeasuredLine {
+        let content = ascent + descent;
+        MeasuredLine {
+            node: Dot::new(1, 7),
+            height,
+            baseline: (height - content) / 2.0 + ascent,
+            ascent,
+            descent,
+            cursor_ascent: ascent,
+            cursor_descent: descent,
+            glyph_runs: vec![],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            offset_range: None,
+            tab_gaps: vec![],
+            is_phantom: false,
+            content_edge_x: None,
+        }
+    }
+
+    #[test]
+    fn expand_does_not_reinflate_shrunken_line() {
+        // line-height 80%: box(12.8) < content(16). A same-strut marker expansion
+        // must be a no-op, not re-clamp the line back to its content height.
+        let line = shrunken_line(12.8, 8.0, 8.0);
+        let node = box_with_line(line, 0.0, 100.0);
+        let expansion = LineStrutExpansion {
+            ascent: 8.0,
+            descent: 8.0,
+            min_line_height: 12.8,
+        };
+        let result = expand_first_line(&node, &expansion).unwrap();
+        assert!(
+            (result.height - 12.8).abs() < 1e-3,
+            "same-strut expansion must keep the shrunken box (got {})",
+            result.height
+        );
+        assert!(
+            (result.baseline - 6.4).abs() < 1e-3,
+            "baseline must stay centered (got {})",
+            result.baseline
+        );
+    }
+
+    #[test]
+    fn expand_grows_to_marker_line_box_not_content() {
+        // Bigger marker (content 24, line-height 80% → box 19.2) on a small text
+        // line: the line grows to the marker's line box, not its content height.
+        let line = shrunken_line(12.8, 8.0, 8.0);
+        let node = box_with_line(line, 0.0, 100.0);
+        let expansion = LineStrutExpansion {
+            ascent: 12.0,
+            descent: 12.0,
+            min_line_height: 19.2,
+        };
+        let result = expand_first_line(&node, &expansion).unwrap();
+        assert!(
+            (result.height - 19.2).abs() < 1e-3,
+            "expansion must grow to min_line_height, not content height (got {})",
+            result.height
+        );
+        assert!(
+            (result.baseline - ((19.2 - 24.0) / 2.0 + 12.0)).abs() < 1e-3,
+            "baseline must center the marker content in the line box (got {})",
+            result.baseline
         );
     }
 

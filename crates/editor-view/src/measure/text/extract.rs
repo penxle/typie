@@ -163,9 +163,10 @@ pub(crate) fn extract_lines(
         let ascent = typography.ascent;
         let descent = typography.descent;
         let content_height = (ascent + descent).max(0.0);
-        let line_box_height =
-            (typography.max_run_font_size * line_height_ratio).max(content_height);
-        let leading = (line_box_height - content_height).max(0.0);
+        // The line box follows the ratio even below the font's natural height
+        // (ascent+descent); negative half-leading keeps the overlap symmetric.
+        let line_box_height = typography.max_run_font_size * line_height_ratio;
+        let leading = line_box_height - content_height;
         let baseline = leading / 2.0 + ascent;
 
         let mut glyph_runs = Vec::new();

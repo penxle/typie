@@ -1087,6 +1087,7 @@ dependencies = [
  "icu_segmenter",
  "log",
  "parley",
+ "proptest",
  "rstar",
  "serde",
  "smallvec",

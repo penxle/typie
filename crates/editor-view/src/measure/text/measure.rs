@@ -74,8 +74,8 @@ pub(crate) fn build_strut_only_line(
     let ascent = strut.ascent;
     let descent = strut.descent;
     let content_height = ascent + descent;
-    let line_box_height = (base_style.font_size * base_style.line_height).max(content_height);
-    let leading = (line_box_height - content_height).max(0.0);
+    let line_box_height = base_style.font_size * base_style.line_height;
+    let leading = line_box_height - content_height;
     let baseline = leading / 2.0 + ascent;
     MeasuredLine {
         node,
@@ -793,6 +793,69 @@ mod tests {
                 },
             )
             .unwrap()
+    }
+
+    fn with_line_height(mut l: DocLogs, value: u32) -> DocLogs {
+        l.block_modifiers = ModifierAttrLog::new()
+            .apply(
+                Dot::new(60, 1),
+                ModifierAttrOp::SetModifier {
+                    target: Dot::ROOT,
+                    modifier: Modifier::LineHeight { value },
+                },
+            )
+            .unwrap();
+        l
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn line_height_ratio_scales_line_box_exactly(value in 50u32..=300) {
+            let expected = 16.0 * value as f32 / 100.0;
+
+            let (lines, h) = measure(&with_line_height(build_logs(vec![ch('a')]), value), 1.0e6);
+            proptest::prop_assert!(
+                (h - expected).abs() < 0.01,
+                "text line box must be font_size × ratio with no floor (value={value}, h={h}, expected={expected})"
+            );
+
+            let ascent = lines[0].ascent;
+            let descent = lines[0].descent;
+            let baseline = lines[0].baseline;
+            let top_overflow = ascent - baseline;
+            let bottom_overflow = (baseline + descent) - lines[0].height;
+            proptest::prop_assert!(
+                (top_overflow - bottom_overflow).abs() < 0.01,
+                "shrink/growth must distribute evenly around the content (top={top_overflow}, bottom={bottom_overflow})"
+            );
+
+            let (lines_ref, _) = measure(&with_line_height(build_logs(vec![ch('a')]), 160), 1.0e6);
+            let caret = lines[0].cursor_ascent + lines[0].cursor_descent;
+            let caret_ref = lines_ref[0].cursor_ascent + lines_ref[0].cursor_descent;
+            proptest::prop_assert!(
+                (caret - caret_ref).abs() < 0.01,
+                "caret height must stay at the font's natural height regardless of line-height (caret={caret}, ref={caret_ref})"
+            );
+
+            let (_, h2) = measure(
+                &with_line_height(build_logs(vec![ch('a'), hb(), ch('b')]), value),
+                1.0e6,
+            );
+            proptest::prop_assert!(
+                (h2 - expected * 2.0).abs() < 0.01,
+                "two lines must stack at exactly 2 × line box (value={value}, h2={h2})"
+            );
+        }
+    }
+
+    #[test]
+    fn strut_only_line_honors_small_line_height() {
+        let (lines, h) = measure(&with_line_height(build_logs(vec![]), 80), 1.0e6);
+        assert_eq!(lines.len(), 1);
+        assert!(
+            (h - 12.8).abs() < 0.01,
+            "empty-paragraph strut line must be font_size × 0.8 (h={h})"
+        );
     }
 
     #[test]

@@ -57,3 +57,4 @@ editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 fontique.workspace = true
 icu_segmenter = { workspace = true, features = ["compiled_data", "auto"] }
+proptest.workspace = true

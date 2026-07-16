@@ -206,11 +206,9 @@ pub(crate) fn measure_list_item(
         match expand_first_line(&measured, &expansion) {
             Some(e) => (e.tree, e.top, e.height, e.baseline),
             None => {
-                let fallback_height = (marker_font_size * marker_style.line_height)
-                    .max(marker_ascent + marker_descent);
+                let fallback_height = marker_font_size * marker_style.line_height;
                 let fallback_baseline =
-                    (fallback_height - (marker_ascent + marker_descent)).max(0.0) / 2.0
-                        + marker_ascent;
+                    (fallback_height - (marker_ascent + marker_descent)) / 2.0 + marker_ascent;
                 let top = first_line_info(&measured).map(|i| i.top).unwrap_or(0.0);
                 (measured, top, fallback_height, fallback_baseline)
             }
