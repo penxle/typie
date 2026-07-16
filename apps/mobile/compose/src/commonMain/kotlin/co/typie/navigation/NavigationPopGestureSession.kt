@@ -7,7 +7,7 @@ internal class NavigationPopGestureSession {
   private var state = State.Possible
   private var multiTouchRejected = false
   private var systemBackZoneRejected = false
-  private var pressedPointerCount = 0
+  private var pressedDragPointerCount = 0
 
   val isClaimed: Boolean
     get() = state == State.Claimed
@@ -17,6 +17,9 @@ internal class NavigationPopGestureSession {
 
   val isSystemBackZoneRejected: Boolean
     get() = systemBackZoneRejected
+
+  val hasPressedDragPointer: Boolean
+    get() = pressedDragPointerCount > 0
 
   fun tryClaim(initialDrag: Offset, childConsumed: Boolean): Boolean {
     if (multiTouchRejected || systemBackZoneRejected || state != State.Possible) {
@@ -34,10 +37,10 @@ internal class NavigationPopGestureSession {
     return isClaimed
   }
 
-  fun updatePressedPointerCount(count: Int, downInSystemBackZone: Boolean = false): Boolean {
+  fun updatePressedDragPointerCount(count: Int, downInSystemBackZone: Boolean = false): Boolean {
     val wasMultiTouchRejected = multiTouchRejected
-    val previousCount = pressedPointerCount
-    pressedPointerCount = count
+    val previousCount = pressedDragPointerCount
+    pressedDragPointerCount = count
     when {
       count > 1 -> {
         multiTouchRejected = true

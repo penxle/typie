@@ -12,8 +12,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.TouchInjectionScope
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performTrackpadInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import co.typie.route.Route
@@ -24,6 +27,11 @@ import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class)
 class NavigationStackDesktopTest {
+  @Test
+  fun mainAreaTrackpadClickDragPopsOnDesktop() = assertTrackpadClickDragPops(startAtEdge = false)
+
+  @Test fun edgeTrackpadClickDragPopsOnDesktop() = assertTrackpadClickDragPops(startAtEdge = true)
+
   @Test
   fun verticalScrollSessionDoesNotBecomeBackSwipeAfterTurningRight() =
     assertGestureDoesNotPop(
@@ -126,6 +134,38 @@ class NavigationStackDesktopTest {
     scrollConsumer: (Offset) -> Offset,
     gesture: TouchInjectionScope.() -> Unit,
   ) = assertGestureResult(scrollConsumer, shouldPop = false, gesture)
+
+  private fun assertTrackpadClickDragPops(startAtEdge: Boolean) = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+
+    setContent {
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(
+          Modifier.fillMaxSize().testTag(if (route == editorRoute) EditorRouteTag else HomeRouteTag)
+        )
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+
+    onNodeWithTag(EditorRouteTag).performTrackpadInput {
+      moveTo(if (startAtEdge) Offset(x = 10f, y = center.y) else center)
+      press()
+      moveBy(Offset(x = 220f, y = 0f))
+      moveBy(Offset(x = 1f, y = 0f))
+    }
+    waitUntil { onNodeWithTag(EditorRouteTag).fetchSemanticsNode().boundsInRoot.left > 100f }
+    onNodeWithTag(EditorRouteTag).performTrackpadInput { release() }
+    waitForIdle()
+
+    assertEquals(Route.Home, navigator.current)
+    onAllNodes(hasTestTag(EditorRouteTag)).assertCountEquals(0)
+  }
 
   private fun assertGesturePops(
     scrollConsumer: (Offset) -> Offset,

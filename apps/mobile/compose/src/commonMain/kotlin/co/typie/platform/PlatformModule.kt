@@ -1,5 +1,6 @@
 package co.typie.platform
 
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.ffi.EditorHost
 import co.typie.migration.LegacyMigrationPlatformSource
 import co.typie.storage.DiskCache
@@ -25,3 +26,5 @@ expect object PlatformModule {
   val editorHost: EditorHost
   val diskCache: DiskCache
 }
+
+internal expect fun PointerType.isTouchDragPointer(): Boolean

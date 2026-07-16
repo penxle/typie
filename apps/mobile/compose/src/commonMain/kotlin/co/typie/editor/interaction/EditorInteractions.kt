@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.scrollByOffset
 import androidx.compose.ui.unit.IntSize
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.viewport.normalizeEditorViewportWheelZoomDelta
+import co.typie.platform.isTouchDragPointer
 import kotlin.math.abs
 import kotlin.math.min
 import kotlinx.coroutines.Job
@@ -323,7 +324,7 @@ private class EditorInteractionsNode(
             tapEnabled = tapEnabled,
             inputModifiers = pointerEvent.inputModifiers(),
             positionInRoot = rootPosition,
-            touchPanDriver = if (change.type == PointerType.Touch) scrollDriver else null,
+            touchPanDriver = if (change.type.isTouchDragPointer()) scrollDriver else null,
           )
         ) {
           change.consume()
@@ -420,6 +421,11 @@ private class EditorInteractionsNode(
   private fun handlePointerSignal(pointerEvent: PointerEvent) {
     if (!enabled || density <= 0f) {
       finishWheelZoom()
+      return
+    }
+    if (pointers.isNotEmpty()) {
+      finishWheelZoom()
+      pointerEvent.changes.forEach(PointerInputChange::consume)
       return
     }
     val scrollDelta =

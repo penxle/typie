@@ -2,6 +2,7 @@ package co.typie.platform
 
 import android.annotation.SuppressLint
 import android.content.Context
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.JnaEditorHost
 import co.typie.migration.AndroidLegacyMigrationPlatformSource
@@ -37,3 +38,5 @@ actual object PlatformModule {
   }
   actual val diskCache: DiskCache by lazy { diskCache() }
 }
+
+internal actual fun PointerType.isTouchDragPointer(): Boolean = this == PointerType.Touch

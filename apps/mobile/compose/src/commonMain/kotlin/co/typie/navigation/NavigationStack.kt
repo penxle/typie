@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.touchlab.kermit.Logger
 import co.typie.ext.pointerIgnore
 import co.typie.ext.thenIf
+import co.typie.platform.isTouchDragPointer
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
 import co.typie.route.keepAlive
@@ -523,12 +524,18 @@ fun NavigationStack(
           awaitPointerEventScope {
             while (true) {
               val event = awaitPointerEvent(PointerEventPass.Initial)
-              val pressedCount = event.changes.count { change -> change.pressed }
+              val pressedDragPointerCount =
+                event.changes.count { change -> change.type.isTouchDragPointer() && change.pressed }
               val down =
-                if (pressedCount == 1) event.changes.fastFirstOrNull { change -> change.pressed }
-                else null
-              popNestedScroll.updatePressedPointerCount(
-                count = pressedCount,
+                if (pressedDragPointerCount == 1) {
+                  event.changes.fastFirstOrNull { change ->
+                    change.type.isTouchDragPointer() && change.pressed
+                  }
+                } else {
+                  null
+                }
+              popNestedScroll.updatePressedDragPointerCount(
+                count = pressedDragPointerCount,
                 downInSystemBackZone = down != null && down.position.x < backGestureZoneWidth,
               )
             }
@@ -707,6 +714,9 @@ fun NavigationStack(
               val slop = viewConfiguration.touchSlop
               awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                if (!down.type.isTouchDragPointer()) {
+                  return@awaitEachGesture
+                }
                 if (navigator.isTransitioning) return@awaitEachGesture
                 val popGestureSession = NavigationPopGestureSession()
                 if (animState != AnimState.Idle && animState != AnimState.Dragging)
@@ -843,6 +853,9 @@ fun NavigationStack(
             val slop = viewConfiguration.touchSlop
             awaitEachGesture {
               val down = awaitFirstDown(requireUnconsumed = false)
+              if (!down.type.isTouchDragPointer()) {
+                return@awaitEachGesture
+              }
               if (navigator.isTransitioning) return@awaitEachGesture
               val popGestureSession = NavigationPopGestureSession()
               var overSlopX = 0f

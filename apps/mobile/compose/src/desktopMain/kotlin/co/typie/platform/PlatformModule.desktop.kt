@@ -1,5 +1,6 @@
 package co.typie.platform
 
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.JnaEditorHost
 import co.typie.migration.DesktopLegacyMigrationPlatformSource
@@ -29,3 +30,6 @@ actual object PlatformModule {
   }
   actual val diskCache: DiskCache = diskCache()
 }
+
+internal actual fun PointerType.isTouchDragPointer(): Boolean =
+  this == PointerType.Touch || this == PointerType.Mouse

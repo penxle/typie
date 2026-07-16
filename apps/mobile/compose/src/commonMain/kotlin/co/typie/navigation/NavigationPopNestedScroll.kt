@@ -33,8 +33,8 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
     this.onCancel = onCancel
   }
 
-  fun updatePressedPointerCount(count: Int, downInSystemBackZone: Boolean = false) {
-    if (gestureSession.updatePressedPointerCount(count, downInSystemBackZone)) {
+  fun updatePressedDragPointerCount(count: Int, downInSystemBackZone: Boolean = false) {
+    if (gestureSession.updatePressedDragPointerCount(count, downInSystemBackZone)) {
       onCancel()
     }
   }
@@ -71,7 +71,12 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
     available: Offset,
     source: NestedScrollSource,
   ): Offset {
-    if (source != NestedScrollSource.UserInput || gestureSession.isClaimed || !canStart()) {
+    if (
+      source != NestedScrollSource.UserInput ||
+        !gestureSession.hasPressedDragPointer ||
+        gestureSession.isClaimed ||
+        !canStart()
+    ) {
       return Offset.Zero
     }
     if (

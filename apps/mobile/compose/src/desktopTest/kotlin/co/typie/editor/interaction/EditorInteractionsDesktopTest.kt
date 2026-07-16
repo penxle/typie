@@ -22,9 +22,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performTrackpadInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -57,6 +61,222 @@ import kotlinx.coroutines.yield
 
 @OptIn(ExperimentalTestApi::class)
 class EditorInteractionsDesktopTest {
+  @Test
+  fun `desktop trackpad click drag scrolls the viewport like touch`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture)
+
+    onNodeWithTag(EditorTag).performTrackpadInput {
+      moveTo(Offset(x = 100f, y = 100f))
+      press()
+      moveBy(Offset(x = 4f, y = 0f))
+      moveBy(Offset(x = 8f, y = 0f))
+      release()
+    }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+  }
+
+  @Test
+  fun `desktop trackpad click drag commits main editor back swipe`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performTrackpadInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+      repeat(18) { moveBy(Offset(x = 10f, y = 0f), delayMillis = 1L) }
+    }
+    waitUntil { onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left > 100f }
+    onNodeWithTag(NavigationEditorTag).performTrackpadInput { release() }
+
+    waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
+    onAllNodes(hasTestTag(NavigationEditorTag)).assertCountEquals(0)
+  }
+
+  @Test
+  fun `desktop trackpad click drag ignores overlapping scroll signals`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performMouseInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+    }
+    waitForIdle()
+    repeat(18) {
+      onNodeWithTag(NavigationEditorTag).performMouseInput {
+        moveBy(Offset(x = 10f, y = 0f), delayMillis = 1L)
+      }
+      waitForIdle()
+      onNodeWithTag(NavigationEditorTag).performMouseInput { scroll(Offset(x = -1f, y = 0f)) }
+      waitForIdle()
+    }
+    onNodeWithTag(NavigationEditorTag).performMouseInput { release() }
+    waitForIdle()
+
+    assertEquals(Route.Home, navigator.current)
+    onAllNodes(hasTestTag(NavigationEditorTag)).assertCountEquals(0)
+  }
+
+  @Test
+  fun `desktop trackpad click drag cancelled back swipe returns editor to origin`() =
+    runComposeUiTest {
+      val fixture = Fixture(scrollConsumer = { Offset.Zero })
+      val navigator = Navigator(Route.Home)
+      setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+      onNodeWithTag(NavigationEditorTag).performTrackpadInput {
+        moveTo(Offset(x = 80f, y = center.y))
+        press()
+        repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
+      }
+      waitUntil { onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left > 0.5f }
+      onNodeWithTag(NavigationEditorTag).performTrackpadInput { release() }
+      waitForIdle()
+
+      assertEquals(NavigationEditorRoute, navigator.current)
+      assertEquals(
+        expected = 0f,
+        actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+        absoluteTolerance = 0.5f,
+      )
+    }
+
+  @Test
+  fun `rapid desktop trackpad release completes committed back swipe`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performTrackpadInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+      repeat(18) { moveBy(Offset(x = 10f, y = 0f), delayMillis = 1L) }
+      release()
+    }
+
+    waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
+    onAllNodes(hasTestTag(NavigationEditorTag)).assertCountEquals(0)
+  }
+
+  @Test
+  fun `rapid desktop trackpad release rolls cancelled back swipe to origin`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performTrackpadInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+      repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
+      release()
+    }
+
+    waitUntil { onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left <= 0.5f }
+    assertEquals(NavigationEditorRoute, navigator.current)
+  }
+
+  @Test
+  fun `pointer signal scroll does not move navigation route`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performMouseInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      listOf(-18f, -9f, -4f, -2f, -1f).forEach { deltaX -> scroll(Offset(x = deltaX, y = 0f)) }
+    }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.any { delta -> delta.x > 0f })
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertEquals(
+      expected = 0f,
+      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+  }
+
+  @Test
+  fun `pointer signal scroll does not interrupt a pressed pointer sequence`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performMouseInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+    }
+    waitForIdle()
+    listOf(-120f, -80f, -40f, -20f).forEach { deltaX ->
+      onNodeWithTag(NavigationEditorTag).performMouseInput { scroll(Offset(x = deltaX, y = 0f)) }
+      waitForIdle()
+    }
+    onNodeWithTag(NavigationEditorTag).performMouseInput { release() }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertEquals(
+      expected = 0f,
+      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+  }
+
+  @Test
+  fun `accessibility scroll does not move navigation route`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performSemanticsAction(SemanticsActions.ScrollBy) { action ->
+      assertTrue(action(12f, 0f))
+    }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.any { delta -> delta.x > 0f })
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertEquals(
+      expected = 0f,
+      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+  }
+
+  @Test
+  fun `accessibility scroll remains navigation inert while a pointer is pressed`() =
+    runComposeUiTest {
+      val fixture = Fixture(scrollConsumer = { Offset.Zero })
+      val navigator = Navigator(Route.Home)
+      setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+      onNodeWithTag(NavigationEditorTag).performMouseInput {
+        moveTo(Offset(x = 80f, y = center.y))
+        press()
+      }
+      waitForIdle()
+      onNodeWithTag(NavigationEditorTag).performSemanticsAction(SemanticsActions.ScrollBy) { action
+        ->
+        assertTrue(action(120f, 0f))
+      }
+      waitForIdle()
+      onNodeWithTag(NavigationEditorTag).performMouseInput { release() }
+      waitForIdle()
+
+      assertTrue(fixture.touchPanDeltas.any { delta -> delta.x > 0f })
+      assertEquals(NavigationEditorRoute, navigator.current)
+      assertEquals(
+        expected = 0f,
+        actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+        absoluteTolerance = 0.5f,
+      )
+    }
+
   @Test
   fun `interaction boundary preserves accessibility scroll by action`() = runComposeUiTest {
     val fixture = Fixture()

@@ -65,7 +65,11 @@ internal class EditorViewportScrollDriver(
         state.scroll(MutatePriority.UserInput) {
           pan.precedingSelfFling?.job?.join()
           for (delta in pan.deltas) {
-            dispatchScroll(delta = delta, dispatcher = dispatcher)
+            dispatchScroll(
+              delta = delta,
+              dispatcher = dispatcher,
+              source = NestedScrollSource.UserInput,
+            )
           }
         }
       } finally {
@@ -136,7 +140,13 @@ internal class EditorViewportScrollDriver(
     }
     launch {
       state.scroll(MutatePriority.UserInput) {
-        dispatchScroll(delta = delta, dispatcher = dispatcher)
+        // Pointer signals are independent deltas without a drag/fling terminal. Do not let a
+        // nested parent claim them as a user drag that can never be released.
+        dispatchScroll(
+          delta = delta,
+          dispatcher = dispatcher,
+          source = NestedScrollSource.SideEffect,
+        )
       }
     }
     return true
@@ -149,7 +159,12 @@ internal class EditorViewportScrollDriver(
     state.scroll(MutatePriority.Default) {
       animate(Offset.VectorConverter, Offset.Zero, offset) { currentValue, _ ->
         val delta = currentValue - previousValue
-        val consumed = dispatchScroll(delta = delta, dispatcher = dispatcher)
+        val consumed =
+          dispatchScroll(
+            delta = delta,
+            dispatcher = dispatcher,
+            source = NestedScrollSource.SideEffect,
+          )
         previousValue += consumed
       }
     }
@@ -194,7 +209,7 @@ private class ActiveSelfFling {
 private fun Scroll2DScope.dispatchScroll(
   delta: Offset,
   dispatcher: NestedScrollDispatcher,
-  source: NestedScrollSource = NestedScrollSource.UserInput,
+  source: NestedScrollSource,
 ): Offset {
   val preConsumed = dispatcher.dispatchPreScroll(delta, source)
   val available = delta - preConsumed
