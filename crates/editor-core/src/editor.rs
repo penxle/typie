@@ -4773,14 +4773,89 @@ mod tests {
     #[test]
     fn fold_unit_selection_starts_internal_dnd() {
         let (mut editor, _, _) = fold_editor_with_unit_selection();
+        let expected = editor.state().selection.expect("fold unit selection");
+
+        let actual = start_internal_dnd_source(&mut editor);
+
+        assert_eq!(actual, expected);
+    }
+
+    fn start_internal_dnd_source(editor: &mut Editor) -> Selection {
         editor.apply(Message::Dnd {
             op: DndOp::StartInternalSelection,
         });
-        assert!(
-            matches!(editor.dnd, DndState::InternalDnd { .. }),
-            "fold unit selection must produce InternalDnd state, got {:?}",
-            editor.dnd
-        );
+        let DndState::InternalDnd { source, .. } = &editor.dnd else {
+            panic!("expected InternalDnd, got {:?}", editor.dnd);
+        };
+        let view = editor.state().view();
+        let ctx = StableResolveCtx::from_live(&view, editor.state().projected.seq_checkout());
+        source.resolve(&ctx).expect("source restores")
+    }
+
+    #[test]
+    fn internal_dnd_preserves_full_document_source_beginning_with_fold() {
+        let (initial, _root, _trailing) = state! {
+            doc { _root: root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                _trailing: paragraph { text("after") }
+            } }
+            selection: (_root, 0, >) -> (_trailing, 5, <)
+        };
+        let expected = initial.selection.expect("full-document selection");
+        let mut editor = Editor::new_test(initial);
+
+        let actual = start_internal_dnd_source(&mut editor);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn internal_dnd_preserves_full_document_source_beginning_with_table() {
+        let (initial, _root, _trailing) = state! {
+            doc { _root: root {
+                table { table_row { table_cell { paragraph { text("cell") } } } }
+                _trailing: paragraph { text("after") }
+            } }
+            selection: (_root, 0, >) -> (_trailing, 5, <)
+        };
+        let expected = initial.selection.expect("full-document selection");
+        let mut editor = Editor::new_test(initial);
+
+        let actual = start_internal_dnd_source(&mut editor);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn internal_dnd_preserves_cross_isolating_normalized_source() {
+        let (mut initial, _title, _outside) = state! {
+            doc { root {
+                fold {
+                    _title: fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                _outside: paragraph { text("outside") }
+                paragraph { text("trailing") }
+            } }
+            selection: (_title, 2) -> (_outside, 3)
+        };
+        let normalized = {
+            let view = initial.view();
+            initial
+                .selection
+                .expect("selection")
+                .normalize(&view)
+                .expect("selection normalizes")
+        };
+        initial.selection = Some(normalized);
+        let mut editor = Editor::new_test(initial);
+
+        let actual = start_internal_dnd_source(&mut editor);
+
+        assert_eq!(actual, normalized);
     }
 
     // drop_internal_selection 단계별 디버그: 어느 단계에서 실패하는지 확인

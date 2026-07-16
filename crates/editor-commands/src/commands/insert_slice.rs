@@ -206,6 +206,7 @@ mod tests {
                 source: paragraph [alignment(Alignment::Right)] carry([italic]) {
                     text("XY") [bold]
                 }
+                paragraph { text("after") }
             } }
             selection: (source, 0) -> (source, 2)
         };

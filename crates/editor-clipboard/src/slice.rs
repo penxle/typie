@@ -7,7 +7,7 @@ use editor_model::{
 };
 use editor_resource::Resource;
 use editor_state::State;
-use editor_state::{CellRect, ResolvedSelection};
+use editor_state::{CellRect, ResolvedSelection, document_content_selection};
 use serde::{Deserialize, Serialize};
 
 use crate::html::parse as html_parse;
@@ -34,8 +34,12 @@ impl Slice {
         if let Some(rect) = rs.as_cell_rect() {
             return Some(extract_cell_rect(state, &view, &rect));
         }
-        let common_id = common_ancestor(&view, &rs)?;
-        let common_nv = view.node(common_id)?;
+        let full_document = covers_document_content(&view, &rs);
+        let common_nv = if full_document {
+            view.root()?
+        } else {
+            view.node(common_ancestor(&view, &rs)?)?
+        };
         let common_depth = block_path_of(&common_nv).len();
 
         let from = rs.from();
@@ -49,19 +53,20 @@ impl Slice {
 
         let fragment = build_fragment(state, &common_nv, &rs);
 
-        if can_use_as_slice_roots(&fragment.children) {
-            Some(Slice::new(
+        let mut slice = if can_use_as_slice_roots(&fragment.children) {
+            Slice::new(
                 fragment.children,
                 open_start.saturating_sub(1),
                 open_end.saturating_sub(1),
-            ))
+            )
         } else {
-            Some(Slice::new(
-                vec![fragment],
-                open_start.max(1),
-                open_end.max(1),
-            ))
+            Slice::new(vec![fragment], open_start.max(1), open_end.max(1))
+        };
+        if full_document {
+            clear_open_edge_carry(&mut slice.content, slice.open_start, true);
+            clear_open_edge_carry(&mut slice.content, slice.open_end, false);
         }
+        Some(slice)
     }
 
     pub fn to_text(&self) -> String {
@@ -113,6 +118,32 @@ impl Slice {
             text: self.to_text(),
         }
     }
+}
+
+fn covers_document_content(view: &DocView, selection: &ResolvedSelection) -> bool {
+    let Some(document) =
+        document_content_selection(view).and_then(|selection| selection.resolve(view))
+    else {
+        return false;
+    };
+    selection.from().path() == document.from().path()
+        && selection.to().path() == document.to().path()
+}
+
+fn clear_open_edge_carry(content: &mut [Fragment], depth: u32, start: bool) {
+    if depth == 0 {
+        return;
+    }
+    let fragment = if start {
+        content.first_mut()
+    } else {
+        content.last_mut()
+    };
+    let Some(fragment) = fragment else {
+        return;
+    };
+    fragment.carry.clear();
+    clear_open_edge_carry(&mut fragment.children, depth - 1, start);
 }
 
 fn can_use_as_slice_roots(fragments: &[Fragment]) -> bool {
@@ -333,7 +364,7 @@ mod tests {
     use editor_macros::state;
     use editor_model::{AtomLeaf, CalloutVariant, Modifier, NodeType};
     use editor_resource::Resource;
-    use editor_state::{Position, Selection};
+    use editor_state::{Affinity, Position, Selection};
 
     fn cell_rect_sel(state: &State, anchor_cell: Dot, head_cell: Dot) -> editor_state::Selection {
         use editor_state::{Position, Selection};
@@ -415,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_all_inline_content_drops_source_block_context() {
+    fn extract_full_document_paragraph_preserves_block_context() {
         let (state, ..) = state! {
             doc { root {
                 p1: paragraph [alignment(editor_model::Alignment::Center)] carry([bold]) {
@@ -427,8 +458,37 @@ mod tests {
 
         let slice = Slice::extract(&state).expect("non-collapsed");
 
-        assert_eq!(slice.open_start, 0);
-        assert_eq!(slice.open_end, 0);
+        assert_eq!(slice.open_start, 1);
+        assert_eq!(slice.open_end, 1);
+        assert_eq!(slice.content.len(), 1);
+        let paragraph = &slice.content[0];
+        assert!(matches!(paragraph.node, PlainNode::Paragraph(_)));
+        assert_eq!(paragraph.children.len(), 1);
+        assert!(matches!(paragraph.children[0].node, PlainNode::Text(_)));
+        assert!(paragraph.carry.is_empty());
+        assert!(
+            paragraph
+                .modifiers
+                .iter()
+                .any(|modifier| matches!(modifier, Modifier::Alignment { .. }))
+        );
+    }
+
+    #[test]
+    fn extract_complete_paragraph_in_larger_document_remains_bare_inline() {
+        let (state, ..) = state! {
+            doc { root {
+                p1: paragraph [alignment(editor_model::Alignment::Center)] carry([bold]) {
+                    text("Hello")
+                }
+                paragraph { text("after") }
+            } }
+            selection: (p1, 0) -> (p1, 5)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!((slice.open_start, slice.open_end), (0, 0));
         assert_eq!(slice.content.len(), 1);
         assert!(matches!(slice.content[0].node, PlainNode::Text(_)));
         assert!(slice.content[0].carry.is_empty());
@@ -438,6 +498,53 @@ mod tests {
                 .iter()
                 .all(|modifier| !matches!(modifier, Modifier::Alignment { .. }))
         );
+    }
+
+    #[test]
+    fn extract_full_document_is_direction_and_affinity_independent() {
+        let (state, first, last) = state! {
+            doc { root {
+                first: paragraph { text("first") }
+                last: paragraph { text("last") }
+            } }
+            selection: (first, 0, >) -> (last, 4, <)
+        };
+        let forward = Slice::extract(&state).expect("forward selection");
+        let backward_state = State {
+            selection: Some(Selection::new(
+                Position {
+                    node: last,
+                    offset: 4,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: first,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            )),
+            ..state
+        };
+
+        let backward = Slice::extract(&backward_state).expect("backward selection");
+
+        assert_eq!(backward, forward);
+        assert_eq!((forward.open_start, forward.open_end), (1, 1));
+    }
+
+    #[test]
+    fn extract_full_document_with_leading_unit_keeps_open_trailing_paragraph() {
+        let (state, _root, _trailing) = state! {
+            doc { _root: root { image _trailing: paragraph { text("after") } } }
+            selection: (_root, 0, >) -> (_trailing, 5, <)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+
+        assert_eq!((slice.open_start, slice.open_end), (0, 1));
+        assert_eq!(slice.content.len(), 2);
+        assert!(matches!(slice.content[0].node, PlainNode::Image(_)));
+        assert!(matches!(slice.content[1].node, PlainNode::Paragraph(_)));
     }
 
     #[test]
@@ -869,8 +976,11 @@ mod tests {
             Position::new(para, 3),
         )));
         let slice = Slice::extract(&s).expect("non-collapsed");
-        let tab_frag = slice
-            .content
+        assert_eq!((slice.open_start, slice.open_end), (1, 1));
+        let paragraph = slice.content.first().expect("paragraph wrapper");
+        assert!(matches!(paragraph.node, PlainNode::Paragraph(_)));
+        let tab_frag = paragraph
+            .children
             .iter()
             .find(|c| matches!(c.node, PlainNode::Tab(_)))
             .expect("Tab must appear in extracted slice");

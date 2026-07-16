@@ -1605,7 +1605,7 @@ mod tests {
 
     #[test]
     fn expand_all_selects_document_range() {
-        let (state, ..) = state! {
+        let (state, p1, p2) = state! {
             doc { root { p1: paragraph { text("hello") } p2: paragraph { text("world") } } }
             selection: (p1, 1) -> (p1, 3)
         };
@@ -1619,8 +1619,17 @@ mod tests {
         });
 
         let sel = editor.state().selection.expect("selection exists in test");
-        assert_eq!(sel.anchor.offset, 0);
-        assert_eq!(sel.head.offset, 2);
+        assert_eq!(
+            sel,
+            Selection::new(
+                Position::new(p1, 0),
+                Position {
+                    node: p2,
+                    offset: 5,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
         assert!(!editor.undo_history.can_undo());
     }
 

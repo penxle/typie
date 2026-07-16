@@ -1,39 +1,30 @@
-use editor_state::{Affinity, Position, Selection};
+use editor_state::document_content_selection;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
 
 pub fn select_all(tr: &mut Transaction) -> CommandResult {
-    let (root_id, children_count) = {
+    let selection = {
         let view = tr.view();
-        let root = view.root().expect("root must exist");
-        (root.id(), root.children().count())
+        document_content_selection(&view)
+            .and_then(|selection| selection.normalize(&view))
+            .expect("root must have a canonical document selection")
     };
 
-    if children_count == 0 {
-        tr.set_selection(Some(Selection::collapsed(Position::new(root_id, 0))))?;
-    } else {
-        tr.set_selection(Some(Selection::new(
-            Position {
-                node: root_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node: root_id,
-                offset: children_count,
-                affinity: Affinity::Upstream,
-            },
-        )))?;
+    if tr.selection() == Some(selection) {
+        return Ok(false);
     }
 
+    tr.set_selection(Some(selection))?;
     Ok(true)
 }
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::Dot;
     use editor_macros::state;
-    use editor_state::{Affinity, Position};
+    use editor_model::ChildView;
+    use editor_state::{Affinity, Position, Selection, State};
 
     use super::*;
     use crate::test_utils::*;
@@ -52,9 +43,9 @@ mod tests {
 
     #[test]
     fn select_all_single_paragraph() {
-        let (state, r) = state! {
-            doc { r: root { paragraph { text("hello") } } }
-            selection: (r, 0)
+        let (state, paragraph) = state! {
+            doc { root { paragraph: paragraph { text("hello") } } }
+            selection: (paragraph, 2)
         };
 
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
@@ -62,10 +53,10 @@ mod tests {
         assert_eq!(
             actual.selection,
             Some(Selection::new(
-                Position::new(r, 0),
+                Position::new(paragraph, 0),
                 Position {
-                    node: r,
-                    offset: 1,
+                    node: paragraph,
+                    offset: 5,
                     affinity: Affinity::Upstream,
                 },
             ))
@@ -74,59 +65,39 @@ mod tests {
 
     #[test]
     fn select_all_multiple_paragraphs() {
-        let (state, r) = state! {
+        let (state, first, last) = state! {
             doc {
-                r: root {
-                    paragraph { text("hello") }
+                root {
+                    first: paragraph { text("hello") }
                     paragraph { text("world") }
-                    paragraph { text("!") }
+                    last: paragraph { text("!") }
                 }
             }
-            selection: (r, 0)
+            selection: (first, 0)
         };
 
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
         let sel = actual.selection.unwrap();
-        assert_eq!(sel.anchor, Position::new(r, 0));
+        assert_eq!(sel.anchor, Position::new(first, 0));
         assert_eq!(
             sel.head,
             Position {
-                node: r,
-                offset: 3,
+                node: last,
+                offset: 1,
                 affinity: Affinity::Upstream,
             },
         );
     }
 
     #[test]
-    fn select_all_images_only() {
-        // Root content requires a trailing Paragraph, so projection appends a
-        // derived paragraph after the three images → 4 children total.
-        let (state, r) = state! {
-            doc { r: root { image image image } }
-            selection: (r, 0)
-        };
-
-        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
-
-        let sel = actual.selection.unwrap();
-        assert_eq!(sel.anchor, Position::new(r, 0));
-        assert_eq!(
-            sel.head,
-            Position {
-                node: r,
-                offset: 4,
-                affinity: Affinity::Upstream,
-            },
-        );
-    }
-
-    #[test]
-    fn select_all_empty_paragraph() {
-        let (state, r) = state! {
-            doc { r: root { paragraph {} } }
-            selection: (r, 0)
+    fn select_all_descends_through_list_edges() {
+        let (state, first, trailing) = state! {
+            doc { root {
+                bullet_list { list_item { first: paragraph { text("first") } } }
+                trailing: paragraph {}
+            } }
+            selection: (trailing, 0)
         };
 
         let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
@@ -134,13 +105,150 @@ mod tests {
         assert_eq!(
             actual.selection,
             Some(Selection::new(
-                Position::new(r, 0),
+                Position::new(first, 0),
                 Position {
-                    node: r,
-                    offset: 1,
+                    node: trailing,
+                    offset: 0,
                     affinity: Affinity::Upstream,
                 },
             ))
         );
+    }
+
+    #[test]
+    fn select_all_uses_derived_trailing_paragraph_cursor() {
+        let (state, root) = state! {
+            doc { root: root { image image image } }
+            selection: (root, 0)
+        };
+
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
+        let trailing = {
+            let view = actual.view();
+            let root = view.node(root).expect("root");
+            assert_eq!(root.children().count(), 4);
+            let Some(ChildView::Block(trailing)) = root.last_child() else {
+                panic!("projection must append a trailing paragraph");
+            };
+            trailing.id()
+        };
+
+        assert_eq!(
+            actual.selection,
+            Some(Selection::new(
+                Position::new(root, 0),
+                Position {
+                    node: trailing,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    fn assert_leading_unit_selection(state: State, root: Dot, trailing: Dot) {
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
+        assert_eq!(
+            actual.selection,
+            Some(Selection::new(
+                Position::new(root, 0),
+                Position {
+                    node: trailing,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn select_all_uses_parent_boundary_for_leading_units() {
+        let (image_state, image_root, image_trailing) = state! {
+            doc { image_root: root { image image_trailing: paragraph {} } }
+            selection: (image_trailing, 0)
+        };
+        assert_leading_unit_selection(image_state, image_root, image_trailing);
+
+        let (blockquote_state, blockquote_root, blockquote_trailing) = state! {
+            doc { blockquote_root: root {
+                blockquote { paragraph { text("quote") } }
+                blockquote_trailing: paragraph {}
+            } }
+            selection: (blockquote_trailing, 0)
+        };
+        assert_leading_unit_selection(blockquote_state, blockquote_root, blockquote_trailing);
+
+        let (callout_state, callout_root, callout_trailing) = state! {
+            doc { callout_root: root {
+                callout { paragraph { text("callout") } }
+                callout_trailing: paragraph {}
+            } }
+            selection: (callout_trailing, 0)
+        };
+        assert_leading_unit_selection(callout_state, callout_root, callout_trailing);
+
+        let (fold_state, fold_root, fold_trailing) = state! {
+            doc { fold_root: root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                fold_trailing: paragraph {}
+            } }
+            selection: (fold_trailing, 0)
+        };
+        assert_leading_unit_selection(fold_state, fold_root, fold_trailing);
+
+        let (table_state, table_root, table_trailing) = state! {
+            doc { table_root: root {
+                table { table_row { table_cell { paragraph { text("cell") } } } }
+                table_trailing: paragraph {}
+            } }
+            selection: (table_trailing, 0)
+        };
+        assert_leading_unit_selection(table_state, table_root, table_trailing);
+    }
+
+    #[test]
+    fn select_all_empty_paragraph() {
+        let (state, paragraph) = state! {
+            doc { root { paragraph: paragraph {} } }
+            selection: (paragraph, 0)
+        };
+
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
+
+        assert_eq!(
+            actual.selection,
+            Some(Selection::collapsed(Position {
+                node: paragraph,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            }))
+        );
+    }
+
+    #[test]
+    fn select_all_is_idempotent_for_canonical_selection() {
+        let (state, paragraph) = state! {
+            doc { root { paragraph: paragraph { text("hello") } } }
+            selection: (paragraph, 0)
+        };
+        let state = State {
+            selection: Some(Selection::new(
+                Position::new(paragraph, 0),
+                Position {
+                    node: paragraph,
+                    offset: 5,
+                    affinity: Affinity::Upstream,
+                },
+            )),
+            ..state
+        };
+        let mut tr = Transaction::new(&state);
+
+        assert!(!select_all(&mut tr).expect("select all succeeds"));
+        assert!(!tr.selection_changed());
+        assert_eq!(tr.selection(), state.selection);
     }
 }

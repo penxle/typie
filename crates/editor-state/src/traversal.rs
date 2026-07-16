@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType, NodeType, NodeView, OwnModifier};
 
-use crate::{Position, selection::ResolvedSelection};
+use crate::{Affinity, Position, classify, selection::ResolvedSelection, selection::Selection};
 
 pub struct TextRun {
     pub host: Dot,
@@ -528,16 +528,54 @@ pub fn last_cursor_position(node: &NodeView) -> Option<Position> {
     }
 }
 
+pub fn document_content_selection(view: &DocView) -> Option<Selection> {
+    let root = view.root()?;
+    let Some(first) = root.first_child() else {
+        return Some(Selection::collapsed(Position::new(root.id(), 0)));
+    };
+    let last = root.last_child()?;
+    let child_count = root.child_count();
+
+    let start = if classify::child_is_unit(&first) {
+        Position::new(root.id(), 0)
+    } else {
+        match first {
+            ChildView::Block(block) => first_cursor_position(&block)?,
+            ChildView::Leaf(_) => Position::new(root.id(), 0),
+        }
+    };
+    let end = if classify::child_is_unit(&last) {
+        Position::new(root.id(), child_count)
+    } else {
+        match last {
+            ChildView::Block(block) => last_cursor_position(&block)?,
+            ChildView::Leaf(_) => Position::new(root.id(), child_count),
+        }
+    };
+
+    Some(Selection::new(
+        Position {
+            affinity: Affinity::Downstream,
+            ..start
+        },
+        Position {
+            affinity: Affinity::Upstream,
+            ..end
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_macros::state;
     use editor_model::{
         AliasLog, AtomLeaf, DocLogs, DocView, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc,
         SeqItem, SpanLog, project_document,
     };
 
-    use crate::{Position, selection::Selection};
+    use crate::{Affinity, Position, selection::Selection};
 
     fn leaves_in_range<'a>(rs: &ResolvedSelection<'a>) -> Vec<editor_model::LeafView<'a>> {
         let mut out = Vec::new();
@@ -1040,6 +1078,84 @@ mod tests {
 
         let last = last_cursor_position(&para_nv).unwrap();
         assert_eq!(last.offset, 0);
+    }
+
+    #[test]
+    fn document_content_selection_uses_inline_edges_for_paragraph() {
+        let (state, paragraph) = state! {
+            doc { root { paragraph: paragraph { text("hello") } } }
+            selection: none
+        };
+        let view = state.view();
+
+        assert_eq!(
+            document_content_selection(&view),
+            Some(Selection::new(
+                Position {
+                    node: paragraph,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: paragraph,
+                    offset: 5,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn document_content_selection_descends_through_list_edges() {
+        let (state, first, trailing) = state! {
+            doc { root {
+                bullet_list { list_item { first: paragraph { text("first") } } }
+                trailing: paragraph {}
+            } }
+            selection: none
+        };
+        let view = state.view();
+
+        assert_eq!(
+            document_content_selection(&view),
+            Some(Selection::new(
+                Position {
+                    node: first,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: trailing,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn document_content_selection_uses_parent_boundary_for_leading_unit() {
+        let (state, root, trailing) = state! {
+            doc { root: root { image trailing: paragraph {} } }
+            selection: none
+        };
+        let view = state.view();
+
+        assert_eq!(
+            document_content_selection(&view),
+            Some(Selection::new(
+                Position {
+                    node: root,
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: trailing,
+                    offset: 0,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
     }
 
     // §4.9: proptest — invariants

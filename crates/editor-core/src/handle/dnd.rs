@@ -4,7 +4,7 @@ use crate::error::EditorError;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
 use editor_clipboard::Slice;
 use editor_commands::{self as commands};
-use editor_model::{ChildView, DocView, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode};
+use editor_model::{DocView, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode};
 use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
 use editor_view::DropTarget;
 
@@ -24,10 +24,8 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                 .selection
                 .as_ref()
                 .filter(|selection| !selection.is_collapsed())
-                .map(|selection| snap_to_block_unit(&view, selection))
-                .filter(|selection| !selection.is_collapsed())
                 .map_or(DndState::Idle, |source| DndState::InternalDnd {
-                    source: StableSelection::capture(&source, &view),
+                    source: StableSelection::capture(source, &view),
                     drop_target: None,
                 });
             Ok(())
@@ -205,27 +203,6 @@ fn position_inside_selection(view: &DocView, position: Position, selection: &Sel
         return false;
     };
     *resolved_selection.from() < resolved_position && resolved_position < *resolved_selection.to()
-}
-
-/// anchor가 isolating+monolithic 블록(fold/table)의 parent 경계에 있으면
-/// 해당 블록의 단위 선택으로 스냅한다. promote_cross_isolating이 만드는
-/// (parent, fold_idx)→(external_pos) 선택을 DnD 소스로 정제하기 위해 사용.
-fn snap_to_block_unit(view: &DocView, selection: &Selection) -> Selection {
-    let anchor = selection.anchor;
-    if let Some(node) = view.node(anchor.node) {
-        let spec = node.spec();
-        if !spec.is_textblock()
-            && !spec.inline
-            && let Some(ChildView::Block(child)) = node.children().nth(anchor.offset)
-        {
-            let child_spec = child.spec();
-            if child_spec.isolating && child_spec.monolithic {
-                let unit_end = Position::new(anchor.node, anchor.offset + 1);
-                return Selection::new(anchor, unit_end);
-            }
-        }
-    }
-    *selection
 }
 
 fn can_apply_drop(
