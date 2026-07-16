@@ -3,14 +3,14 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
-use editor_common::StrExt;
+use editor_common::{HistoryTag, StrExt};
 use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{
     Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, Position, ProjectedState, ResolvedPosition,
     ResolvedPositionFlatExt, Selection, apply_pending, as_gap_cursor, continuation_at, flat_chars,
     flat_segments_in_range, flat_size, is_unit_node_selection, replacement_paint,
 };
-use editor_transaction::Transaction;
+use editor_transaction::{HistoryMeta, Transaction};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -773,6 +773,52 @@ fn analyze_delta(
     }
 }
 
+// A soft-keyboard backspace reaches this path as an IME batch (iOS:
+// select-last-grapheme + empty commit, Android: deleteSurrounding(1, 0))
+// instead of a Backspace key event, so the auto-replacement restore in
+// handle_key_event never sees it. A batch counts as a plain backspace when it
+// reduces to deleting exactly the grapheme before the collapsed caret with no
+// composition in play.
+fn flat_ime_ops_form_plain_backspace(editor: &Editor, ops: &[FlatImeOp]) -> bool {
+    if editor.state().composition.is_some() {
+        return false;
+    }
+    let Some(initial) = FlatImeState::from_editor(editor, ops) else {
+        return false;
+    };
+    if initial.comp.is_some() || initial.sel_start != initial.sel_end {
+        return false;
+    }
+    let reduced = initial.clone().reduce_flat_ime_ops(ops);
+    if reduced.state.comp.is_some() {
+        return false;
+    }
+    let Some(change) = reduced.text_change else {
+        return false;
+    };
+    if !change.insert.is_empty()
+        || change.replace_end != initial.sel_end
+        || change.replace_start >= change.replace_end
+    {
+        return false;
+    }
+    if change
+        .deleted_from(&initial.text)
+        .iter()
+        .any(|c| is_token(*c))
+    {
+        return false;
+    }
+    let doc = editor.state().view();
+    let Some(caret) = ResolvedPosition::from_flat(&doc, initial.sel_end) else {
+        return false;
+    };
+    let resource = editor.resource.lock().unwrap();
+    caret
+        .prev_grapheme(&resource)
+        .is_some_and(|prev| prev.to_flat() == change.replace_start)
+}
+
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
     let mut delete_paint = if editor.is_probing() {
         editor.ime_delete_paint.clone()
@@ -780,6 +826,20 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         editor.ime_delete_paint.take()
     };
     let commit_as_is = ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs));
+
+    if matches!(editor.last_history_tag(), Some(HistoryTag::AutoReplacement))
+        && flat_ime_ops_form_plain_backspace(editor, &ops)
+        && editor.try_undo_auto_replacement()
+    {
+        if !editor.state().pending_modifiers.is_empty() {
+            editor.transact(|tr| {
+                tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                tr.clear_pending_format()?;
+                Ok(())
+            })?;
+        }
+        return Ok(());
+    }
 
     let committed_insert = (|| -> Result<bool, EditorError> {
         let initial = match FlatImeState::from_editor(editor, &ops) {

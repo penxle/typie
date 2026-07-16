@@ -47,6 +47,18 @@ fn flat_text(editor: &Editor) -> String {
     editor_state::flat_text(&view, 0..editor_state::flat_size(&view))
 }
 
+fn caret_flat(editor: &Editor) -> usize {
+    let view = editor.state().view();
+    editor
+        .state()
+        .selection
+        .expect("selection must exist")
+        .head
+        .resolve(&view)
+        .map(|rp| rp.to_flat())
+        .expect("cursor must resolve")
+}
+
 const PLAIN_PATTERN: &str = "abc";
 const PLAIN_SUBSTITUTE: &str = "X";
 const REGEX_PATTERN: &str = r"\d+#";
@@ -291,6 +303,91 @@ fn second_backspace_after_restore_is_normal_delete() {
         selection: (p1, 2)
     };
     assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn ime_backspace_batch_immediately_after_replacement_restores_original() {
+    // iOS soft-keyboard backspace arrives through the flat IME path as a
+    // select-last-grapheme + empty-commit batch, not as a Backspace key event.
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+
+    type_text(&mut editor, PLAIN_PATTERN);
+    let caret = caret_flat(&editor);
+    editor.apply(Message::TextInput {
+        ops: vec![
+            FlatImeOp::SetSelection {
+                start: caret - 1,
+                end: caret,
+            },
+            FlatImeOp::Compose { text: "".into() },
+            FlatImeOp::CommitAsIs,
+        ],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn ime_delete_surrounding_immediately_after_replacement_restores_original() {
+    // Android soft-keyboard backspace arrives as deleteSurroundingText(1, 0).
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+
+    type_text(&mut editor, PLAIN_PATTERN);
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::DeleteSurrounding {
+            before: 1,
+            after: 0,
+        }],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn ime_multi_grapheme_backward_delete_after_replacement_is_normal_delete() {
+    // Only a single-grapheme backward delete is a backspace; a wider batch
+    // delete (e.g. word delete) must not trigger the restore.
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule("ab", "XY", false)]);
+
+    for ch in "ab".chars() {
+        type_text(&mut editor, &ch.to_string());
+    }
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::DeleteSurrounding {
+            before: 2,
+            after: 0,
+        }],
+    });
+
+    let flat = flat_text(&editor);
+    assert!(!flat.contains("ab"), "restore must not fire: {flat:?}");
+    assert!(
+        !flat.contains("XY"),
+        "substitute must be deleted normally: {flat:?}"
+    );
 }
 
 #[test]

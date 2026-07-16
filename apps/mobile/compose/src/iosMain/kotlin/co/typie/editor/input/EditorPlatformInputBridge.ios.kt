@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import swiftPMImport.co.typie.compose.EditorFloatingCursorBridge
+import swiftPMImport.co.typie.compose.EditorTextInputTraitsBridge
 
 internal actual class EditorPlatformInputBridge actual constructor() {
   private val physicalKeyGate = EditorPhysicalKeyFrameGate()
@@ -121,6 +122,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     viewportTransform: () -> EditorViewportTransform,
     dispatch: (List<Message>) -> Unit,
   ): () -> Unit {
+    val traitsGeneration = EditorTextInputTraitsBridge.install()
     val uninstall =
       installFloatingCursorBridge(
         onBegin = { floatingCursorSession.begin(cursor()) },
@@ -135,6 +137,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     return {
       uninstall()
       floatingCursorSession.end()
+      EditorTextInputTraitsBridge.uninstallWithGeneration(traitsGeneration)
     }
   }
 }
