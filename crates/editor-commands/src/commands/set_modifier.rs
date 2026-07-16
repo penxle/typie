@@ -509,6 +509,36 @@ mod tests {
     }
 
     #[test]
+    fn range_set_alignment_ending_at_empty_paragraph_start_applies_to_both_paragraphs() {
+        use editor_model::Alignment;
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("hello") }
+                    p2: paragraph {}
+                }
+            }
+            selection: (p1, 0, >) -> (p2, 0, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::Alignment {
+                value: Alignment::Center
+            }
+        ));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph [alignment(Alignment::Center)] { text("hello") }
+                    p2: paragraph [alignment(Alignment::Center)] {}
+                }
+            }
+            selection: (p1, 0, >) -> (p2, 0, <)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn range_set_font_size_across_two_paragraphs_at_block_level() {
         let (initial, ..) = state! {
             doc { r: root {

@@ -119,7 +119,10 @@ pub(crate) fn collect_applicable_targets_in_range(
         ) else {
             continue;
         };
-        if !(start <= hi_r && lo_r <= end) {
+        // Coverage is positional: a normalized forward selection carries an
+        // Upstream head, so comparing ResolvedPositions would drop a block
+        // whose extent starts exactly at the selection end on affinity alone.
+        if !(start.path() <= hi_r.path() && lo_r.path() <= end.path()) {
             continue;
         }
         if targets.contains(&node.node_type()) {
