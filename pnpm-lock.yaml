@@ -463,6 +463,9 @@ importers:
       '@types/node':
         specifier: ^26.1.0
         version: 26.1.0
+      '@types/textarea-caret':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@typie/adapter-node':
         specifier: workspace:*
         version: link:../../packages/adapter-node
@@ -553,6 +556,9 @@ importers:
       svelte-sonner:
         specifier: ^1.1.1
         version: 1.1.1(svelte@5.56.4(@typescript-eslint/types@8.63.0))
+      textarea-caret:
+        specifier: ^3.1.0
+        version: 3.1.0
       ts-pattern:
         specifier: ^5.9.0
         version: 5.9.0

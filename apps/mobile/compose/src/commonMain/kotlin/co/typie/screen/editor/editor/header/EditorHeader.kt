@@ -13,7 +13,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -133,7 +136,6 @@ internal fun EditorHeader(
         imeAction = ImeAction.Next,
         onFocusNext = { subtitleInputState.requestFocus() },
         onEnterDocument = { subtitleInputState.requestFocus() },
-        onFocusPrevious = {},
         onBackspaceAtStart = {},
         onFocused = onTitleFocused,
         modifier = Modifier.fillMaxWidth(),
@@ -197,12 +199,23 @@ private fun EditorHeaderField(
   imeAction: ImeAction,
   onFocusNext: () -> Unit,
   onEnterDocument: () -> Unit,
-  onFocusPrevious: () -> Unit,
+  onFocusPrevious: (() -> Unit)? = null,
   onBackspaceAtStart: () -> Unit,
   onFocused: () -> Unit,
   modifier: Modifier = Modifier,
   textInputState: TextInputState,
 ) {
+  val verticalExitScope = rememberCoroutineScope()
+  val currentEnabled by rememberUpdatedState(enabled)
+  val verticalNavigation =
+    remember(verticalExitScope, textInputState) {
+      HeaderVerticalNavigationState(
+        scope = verticalExitScope,
+        currentValue = { textInputState.value },
+        currentEnabled = { currentEnabled },
+      )
+    }
+
   BasicTextField(
     value = text,
     onValueChange = onValueChange,
@@ -210,23 +223,28 @@ private fun EditorHeaderField(
     modifier =
       modifier
         .textInputFocusable(textInputState, enabled = enabled) {
+          verticalNavigation.onFocusChanged(it.isFocused)
           if (it.isFocused) {
             onFocused()
           }
         }
+        .invalidateHeaderVerticalNavigationOnPointerDown(verticalNavigation)
         .onPreviewKeyEvent {
           if (it.type != KeyEventType.KeyDown) {
             return@onPreviewKeyEvent false
           }
 
+          verticalNavigation.invalidate()
+
           when (it.key) {
-            Key.DirectionDown -> {
-              onFocusNext()
-              true
-            }
+            Key.DirectionDown,
             Key.DirectionUp -> {
-              onFocusPrevious()
-              true
+              verticalNavigation.handleVerticalKeyDown(
+                event = it,
+                onExitUp = onFocusPrevious,
+                onExitDown = onFocusNext,
+              )
+              false
             }
             Key.Enter -> {
               if (it.isShiftPressed) {
@@ -238,7 +256,7 @@ private fun EditorHeaderField(
             }
             Key.Tab -> {
               if (it.isShiftPressed) {
-                onFocusPrevious()
+                onFocusPrevious?.invoke()
               } else {
                 onFocusNext()
               }
@@ -255,6 +273,7 @@ private fun EditorHeaderField(
     cursorBrush = SolidColor(AppTheme.colors.textDefault),
     keyboardOptions = KeyboardOptions(imeAction = imeAction),
     keyboardActions = KeyboardActions(onNext = { onFocusNext() }, onDone = { onEnterDocument() }),
+    onTextLayout = verticalNavigation::onTextLayout,
     minLines = 1,
     maxLines = Int.MAX_VALUE,
     decorationBox = { innerTextField ->

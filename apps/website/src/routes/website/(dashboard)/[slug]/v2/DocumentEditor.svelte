@@ -40,6 +40,7 @@
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
+  import { headerVerticalNavigation } from './header-vertical-navigation';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import { GapBuffer } from './sync/gap-buffer';
   import { PeerChannel } from './sync/peer-channel';
@@ -664,6 +665,14 @@
     subtitleUpdateTimeout = setTimeout(flushSubtitleUpdate, 300);
   }
 
+  function enterDocumentFromHeader() {
+    ctx.editor?.focus();
+    ctx.editor?.enqueue({
+      type: 'navigation',
+      op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
+    });
+  }
+
   const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
 
   $effect(() => {
@@ -1175,7 +1184,7 @@
                                 return;
                               }
 
-                              if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown')) {
+                              if (e.key === 'Enter') {
                                 e.preventDefault();
                                 subtitleEl?.focus();
                               }
@@ -1184,7 +1193,8 @@
                             rows={1}
                             spellcheck="false"
                             bind:value={localTitle}
-                            use:autosize></textarea>
+                            use:autosize
+                            use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
 
                           <textarea
                             bind:this={subtitleEl}
@@ -1218,25 +1228,22 @@
                                 return;
                               }
 
-                              if ((!e.altKey && e.key === 'ArrowUp') || (e.key === 'Backspace' && !localSubtitle)) {
+                              if (e.key === 'Backspace' && !localSubtitle) {
                                 e.preventDefault();
                                 titleEl?.focus();
                               }
 
-                              if (e.key === 'Enter' || (!e.altKey && e.key === 'ArrowDown') || (e.key === 'Tab' && !e.shiftKey)) {
+                              if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
                                 e.preventDefault();
-                                ctx.editor?.focus();
-                                ctx.editor?.enqueue({
-                                  type: 'navigation',
-                                  op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false },
-                                });
+                                enterDocumentFromHeader();
                               }
                             }}
                             placeholder="부제목을 입력하세요"
                             rows={1}
                             spellcheck="false"
                             bind:value={localSubtitle}
-                            use:autosize></textarea>
+                            use:autosize
+                            use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
 
                           {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
                             <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
