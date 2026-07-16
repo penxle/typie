@@ -14,16 +14,18 @@ internal fun createTestDocumentEditingSession(
   editor: Editor,
   scope: CoroutineScope,
   documentId: String = "doc",
+  syncEditor: FakeSyncEditor = FakeSyncEditor(),
+  store: DeltaStore = FakeDeltaStore(),
+  pushFn: suspend (ByteArray) -> PushResult = TestSyncTransport::push,
 ): DocumentEditingSession {
-  val syncEditor = FakeSyncEditor()
   val engine =
     SyncEngine(
       editor = syncEditor,
       documentId = documentId,
       initialServerHeads = enc(),
       initialDurableHeads = enc(),
-      store = FakeDeltaStore(),
-      pushFn = TestSyncTransport::push,
+      store = store,
+      pushFn = pushFn,
       scope = scope,
       now = { 0L },
     )

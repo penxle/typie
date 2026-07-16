@@ -332,11 +332,12 @@ fun DocumentScreen(entityId: String) {
         if (confirmation is DialogResult.Resolved) {
           val documentRoute = Route.Document(entityId)
           val editorRoute = Route.Editor(entityId)
-          val matchingEditorPresent = nav.current == documentRoute && nav.previous == editorRoute
+          val deletionRoute = nav.current.takeIf { it == documentRoute }
+          val matchingEditorPresent = deletionRoute != null && nav.previous == editorRoute
           if (!matchingEditorPresent) {
             val deleteResult = model.deleteDocument(document.id).withDefaultExceptionHandler(toast)
-            if (deleteResult.isOk) {
-              withContext(NonCancellable) { nav.pop() }
+            if (deleteResult.isOk && deletionRoute != null) {
+              withContext(NonCancellable) { if (nav.current === deletionRoute) nav.pop() }
             }
           } else {
             val preparation =
