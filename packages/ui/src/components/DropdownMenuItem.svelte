@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { Icon } from '@typie/ui/components';
+  import { getContext } from 'svelte';
   import CheckIcon from '~icons/lucide/check';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -13,6 +14,9 @@
   };
 
   let { style, active = false, children, onclick }: Props = $props();
+
+  // In focus-managed menus hover moves focus, so hover itself must not paint a second highlight.
+  const focusManaged = getContext<boolean>('dropdownMenuFocusManaged') ?? false;
 </script>
 
 <button
@@ -29,7 +33,7 @@
         textAlign: 'left',
         fontSize: '13px',
         color: active ? 'text.brand' : 'text.default',
-        _hover: { color: 'text.brand', backgroundColor: 'surface.subtle' },
+        _hover: focusManaged ? undefined : { color: 'text.brand', backgroundColor: 'surface.subtle' },
         _focus: { color: 'text.brand', backgroundColor: 'surface.subtle' },
       },
       style,

@@ -8,6 +8,10 @@ export const deactivateFocusTrap = (element: HTMLElement, options?: { returnFocu
   focusTrapMap.get(element)?.deactivate(options);
 };
 
+export const updateFocusTrapContainers = (element: HTMLElement, containers: HTMLElement[]) => {
+  focusTrapMap.get(element)?.updateContainerElements(containers);
+};
+
 export const focusTrap: Action<HTMLElement, Options | undefined> = (element, options) => {
   $effect(() => {
     const trap = createFocusTrap(element, options);

@@ -4,9 +4,9 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
-  import { createFloatingActions, deactivateFocusTrap, focusTrap, portal } from '../actions';
+  import { createFloatingActions, deactivateFocusTrap, focusTrap, portal, updateFocusTrapContainers } from '../actions';
   import { getAppContext } from '../context';
-  import { pushEscapeHandler } from '../utils';
+  import { createHoverFocusHandler, pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -76,6 +76,28 @@
   };
 
   setContext('close', close);
+  setContext('menuFocusManaged', true);
+
+  // Portaled submenus live outside menuEl, so they must join the focus trap as extra containers for their items to hold focus.
+  const trapExtraContainers = new SvelteSet<HTMLElement>();
+  setContext('registerMenuTrapContainer', (el: HTMLElement) => {
+    // Called from effects; untrack so mutating and spreading the reactive set does not subscribe the caller.
+    untrack(() => {
+      trapExtraContainers.add(el);
+      if (menuEl) {
+        updateFocusTrapContainers(menuEl, [menuEl, ...trapExtraContainers]);
+      }
+    });
+
+    return () => {
+      untrack(() => {
+        trapExtraContainers.delete(el);
+        if (menuEl) {
+          updateFocusTrapContainers(menuEl, [menuEl, ...trapExtraContainers]);
+        }
+      });
+    };
+  });
 
   $effect(() => {
     if (open && app) {
@@ -110,9 +132,13 @@
     }
   });
 
+  const MENU_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)';
+
   const getMenuItems = () => {
-    return menuEl?.querySelectorAll('[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)');
+    return menuEl?.querySelectorAll(MENU_ITEM_SELECTOR);
   };
+
+  const hoverFocus = createHoverFocusHandler(MENU_ITEM_SELECTOR);
 
   const onKeydown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -247,6 +273,7 @@
       listStyle,
     )}
     onoutroend={ontransitionend}
+    onpointermove={hoverFocus}
     role="menu"
     use:floating
     use:focusTrap={{

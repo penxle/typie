@@ -18,7 +18,7 @@ export const globalCss = defineGlobalStyles({
   '*, *::before, *::after': {
     boxSizing: 'border-box',
     border: '0 solid {colors.border.default}',
-    outline: '0 solid {colors.border.default}',
+    outline: '0 solid transparent',
   },
 
   html: {

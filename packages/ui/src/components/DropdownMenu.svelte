@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { pushEscapeHandler } from '@typie/ui/utils';
-  import { tick } from 'svelte';
+  import { createHoverFocusHandler, pushEscapeHandler } from '@typie/ui/utils';
+  import { setContext, tick } from 'svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
 
@@ -15,6 +15,8 @@
 
   let { style, opened = true, autoFocus = true, onclose, children }: Props = $props();
   let containerElement: HTMLDivElement | undefined = $state();
+
+  setContext('dropdownMenuFocusManaged', autoFocus);
 
   const close = () => {
     onclose?.();
@@ -78,6 +80,14 @@
       (target as HTMLButtonElement).click();
     }
   };
+
+  const hoverFocus = createHoverFocusHandler('button[type="button"]');
+
+  const onPointermove = (e: PointerEvent) => {
+    if (autoFocus) {
+      hoverFocus(e);
+    }
+  };
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -94,6 +104,8 @@
     },
     style,
   )}
+  onpointermove={onPointermove}
+  role="none"
 >
   {@render children()}
 </div>

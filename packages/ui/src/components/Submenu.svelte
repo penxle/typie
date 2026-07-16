@@ -3,6 +3,7 @@
   import { getContext, setContext, tick } from 'svelte';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import { portal } from '../actions';
+  import { createHoverFocusHandler } from '../utils';
   import Icon from './Icon.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component, Snippet } from 'svelte';
@@ -24,6 +25,12 @@
     parentClose?.();
   });
 
+  const focusManaged = getContext<boolean>('menuFocusManaged') ?? false;
+
+  const registerTrapContainer = getContext<((el: HTMLElement) => () => void) | undefined>('registerMenuTrapContainer');
+
+  const MENU_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)';
+
   let submenuOpen = $state(false);
   let flipped = false;
   let triggerEl = $state<HTMLDivElement>();
@@ -39,6 +46,12 @@
       return onMenuClose(() => {
         el.style.visibility = 'hidden';
       });
+    }
+  });
+
+  $effect(() => {
+    if (submenuOpen && submenuEl && registerTrapContainer) {
+      return registerTrapContainer(submenuEl);
     }
   });
 
@@ -96,8 +109,14 @@
             const ratio = Math.max(0, Math.min(1, distance / Math.max(1, maxDistance)));
             const timeout = 150 + ratio * 250;
 
+            const parkedTarget = e.target as HTMLElement;
             safeZoneTimeout = setTimeout(() => {
               submenuOpen = false;
+              // No pointermove follows a stationary close, so hand focus to the item parked under the pointer.
+              const item = parkedTarget.closest(MENU_ITEM_SELECTOR);
+              if (item instanceof HTMLElement && item.matches(':hover')) {
+                item.focus({ preventScroll: true });
+              }
             }, timeout);
           }
           return;
@@ -108,6 +127,10 @@
       const directChild = findDirectChild(e.target as HTMLElement);
       if (directChild && directChild !== triggerEl) {
         submenuOpen = false;
+        const item = (e.target as HTMLElement).closest(MENU_ITEM_SELECTOR);
+        if (item instanceof HTMLElement) {
+          item.focus({ preventScroll: true });
+        }
       }
     };
 
@@ -142,6 +165,10 @@
       e.stopPropagation();
       e.preventDefault();
       submenuOpen = false;
+      const item = (e.target as HTMLElement).closest(MENU_ITEM_SELECTOR);
+      if (item instanceof HTMLElement) {
+        item.focus({ preventScroll: true });
+      }
     };
 
     menuContainer.dataset.submenuSafezone = '';
@@ -160,8 +187,10 @@
   });
 
   const getSubmenuItems = () => {
-    return submenuEl?.querySelectorAll('[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)');
+    return submenuEl?.querySelectorAll(MENU_ITEM_SELECTOR);
   };
+
+  const hoverFocus = createHoverFocusHandler(MENU_ITEM_SELECTOR);
 </script>
 
 <!-- 트리거 -->
@@ -185,35 +214,47 @@
         transition: 'common',
         cursor: 'pointer',
         _focus: { backgroundColor: 'surface.muted' },
-        _hover: { backgroundColor: 'surface.muted' },
       },
+      !focusManaged && { _hover: { backgroundColor: 'surface.muted' } },
       submenuOpen && { backgroundColor: 'surface.muted' },
       style,
     ),
   )}
   aria-expanded={submenuOpen}
   aria-haspopup="menu"
-  onblur={() => (focused = false)}
+  onblur={(e) => {
+    focused = false;
+    // Keyboard nav in the parent menu moves focus off the trigger; close the submenu unless focus went into it.
+    if (submenuOpen && !(e.relatedTarget instanceof Node && submenuEl?.contains(e.relatedTarget))) {
+      submenuOpen = false;
+    }
+  }}
   onfocus={() => (focused = true)}
   onkeydown={(e) => {
-    if (e.key !== 'ArrowRight') {
-      return;
+    if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      submenuOpen = true;
+      tick().then(() => {
+        const items = getSubmenuItems();
+        if (items && items.length > 0) {
+          (items[0] as HTMLElement).focus();
+        }
+      });
+    } else if (e.key === 'ArrowLeft' && submenuOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      submenuOpen = false;
     }
-
-    e.preventDefault();
-    e.stopPropagation();
-    submenuOpen = true;
-    tick().then(() => {
-      const items = getSubmenuItems();
-      if (items && items.length > 0) {
-        (items[0] as HTMLElement).focus();
-      }
-    });
   }}
   onpointerenter={() => {
     submenuOpen = true;
   }}
   onpointermove={(e) => {
+    // pointerenter alone cannot reopen after a keyboard close while the pointer never left the trigger.
+    if (e.clientX !== lastPointerPos.x || e.clientY !== lastPointerPos.y) {
+      submenuOpen = true;
+    }
     lastPointerPos = { x: e.clientX, y: e.clientY };
   }}
   role="menuitem"
@@ -222,7 +263,15 @@
   {#if prefix}
     {@render prefix()}
   {:else if icon}
-    <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} {icon} size={14} />
+    <Icon
+      style={css.raw({
+        color: 'text.faint',
+        _groupFocus: { color: 'text.subtle' },
+        _groupHover: focusManaged ? undefined : { color: 'text.subtle' },
+      })}
+      {icon}
+      size={14}
+    />
   {/if}
   <span>{label}</span>
   <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={12} />
@@ -285,6 +334,7 @@
         prev?.focus();
       }
     }}
+    onpointermove={hoverFocus}
     role="menu"
     use:portal
   >

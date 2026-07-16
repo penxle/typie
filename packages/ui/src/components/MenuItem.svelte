@@ -57,6 +57,9 @@
 
   let close = getContext<undefined | (() => void)>('close');
 
+  // In focus-managed menus hover moves focus, so hover itself must not paint a second highlight.
+  const focusManaged = getContext<boolean>('menuFocusManaged') ?? false;
+
   let focused = $state(false);
 
   const recipe = sva({
@@ -76,14 +79,12 @@
         textAlign: 'left',
         transition: 'common',
         _focus: { backgroundColor: 'surface.muted' },
-        _hover: { backgroundColor: 'surface.muted' },
         _disabled: {
           color: 'text.disabled!',
           backgroundColor: 'transparent!',
         },
         '[data-submenu-safezone] &': {
           cursor: 'default',
-          _hover: { backgroundColor: 'transparent' },
         },
       },
       icon: {
@@ -100,27 +101,59 @@
           },
           icon: {
             color: 'text.faint',
-            _groupHover: { color: 'text.subtle' },
-            '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
+            _groupFocus: { color: 'text.subtle' },
           },
         },
         danger: {
           root: {
             color: 'text.subtle',
+            _focus: { color: 'text.danger' },
+          },
+          icon: {
+            color: 'text.faint',
+            _groupFocus: { color: 'text.danger' },
+          },
+        },
+      },
+      focusManaged: {
+        true: {},
+        false: {
+          root: {
+            _hover: { backgroundColor: 'surface.muted' },
+            '[data-submenu-safezone] &': { _hover: { backgroundColor: 'transparent' } },
+          },
+        },
+      },
+    },
+    compoundVariants: [
+      {
+        variant: 'default',
+        focusManaged: false,
+        css: {
+          icon: {
+            _groupHover: { color: 'text.subtle' },
+            '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
+          },
+        },
+      },
+      {
+        variant: 'danger',
+        focusManaged: false,
+        css: {
+          root: {
             _hover: { color: 'text.danger' },
             '[data-submenu-safezone] &': { _hover: { color: 'text.subtle' } },
           },
           icon: {
-            color: 'text.faint',
             _groupHover: { color: 'text.danger' },
             '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
           },
         },
       },
-    },
+    ],
   });
 
-  const styles = $derived(recipe.raw({ variant }));
+  const styles = $derived(recipe.raw({ variant, focusManaged }));
 </script>
 
 <svelte:element

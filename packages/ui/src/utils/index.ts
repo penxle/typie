@@ -5,6 +5,7 @@ export * from './download';
 export * from './drag-scroll';
 export * from './escape-stack';
 export * from './flip-animation';
+export * from './hover-focus';
 export * from './json';
 export * from './number';
 export * from './ref';
