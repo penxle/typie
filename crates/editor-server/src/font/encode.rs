@@ -11,6 +11,7 @@ use skrifa::raw::{FontRef, TableProvider};
 use skrifa::{GlyphId, MetadataProvider, Tag};
 use write_fonts::FontBuilder;
 
+use super::convert::convert_to_glyf;
 use crate::ServerError;
 
 #[ffi]
@@ -53,10 +54,25 @@ pub fn build_font(
     let has_cbdt = font.table_data(Tag::new(b"CBDT")).is_some()
         && font.table_data(Tag::new(b"CBLC")).is_some();
 
-    if !has_glyf && !has_cbdt {
+    if font.table_data(Tag::new(b"CFF2")).is_some() {
         return Err(ServerError::InvalidFont(
-            "unsplittable font: no glyf/CBDT table (CFF/CFF2 unsupported)".into(),
+            "unsplittable font: CFF2 unsupported".into(),
         ));
+    }
+    if font.table_data(Tag::new(b"VARC")).is_some() {
+        return Err(ServerError::InvalidFont(
+            "unsplittable font: VARC unsupported".into(),
+        ));
+    }
+
+    if !has_glyf && !has_cbdt {
+        if font.table_data(Tag::new(b"CFF ")).is_none() {
+            return Err(ServerError::InvalidFont(
+                "unsplittable font: no glyf/CBDT/CFF table".into(),
+            ));
+        }
+        let converted = convert_to_glyf(&font)?;
+        return build_font(&converted, chunk_codepoints);
     }
 
     let charmap = font.charmap();
@@ -637,7 +653,7 @@ mod tests {
     }
 
     #[test]
-    fn build_font_rejects_cff_font_without_glyf_or_cbdt() {
+    fn build_font_rejects_corrupt_cff() {
         let Some(data) = load_test_font() else {
             return;
         };
@@ -650,6 +666,171 @@ mod tests {
             }
         }
         let result = build_font(&font, &[vec![0x41]]);
-        assert!(result.is_err());
+        assert!(matches!(result, Err(ServerError::InvalidFont(_))));
+    }
+
+    #[test]
+    fn build_font_rejects_font_without_any_outline_table() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let mut font = data.clone();
+        let num_tables = u16::from_be_bytes([font[4], font[5]]);
+        for i in 0..num_tables {
+            let off = 12 + (i as usize) * 16;
+            if &font[off..off + 4] == b"glyf" {
+                font[off..off + 4].copy_from_slice(b"XXXX");
+            }
+        }
+        let result = build_font(&font, &[vec![0x41]]);
+        assert!(
+            matches!(&result, Err(ServerError::InvalidFont(msg)) if msg.contains("unsplittable"))
+        );
+    }
+
+    const CFF_FIXTURE: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/SourceSans3-Regular.otf"
+    ));
+
+    #[derive(Default)]
+    struct RecordingPen(Vec<(u8, f32, f32)>);
+
+    impl skrifa::outline::OutlinePen for RecordingPen {
+        fn move_to(&mut self, x: f32, y: f32) {
+            self.0.push((0, x, y));
+        }
+        fn line_to(&mut self, x: f32, y: f32) {
+            self.0.push((1, x, y));
+        }
+        fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+            self.0.push((2, cx0, cy0));
+            self.0.push((2, x, y));
+        }
+        fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+            self.0.push((3, cx0, cy0));
+            self.0.push((3, cx1, cy1));
+            self.0.push((3, x, y));
+        }
+        fn close(&mut self) {
+            self.0.push((4, 0.0, 0.0));
+        }
+    }
+
+    fn draw_points(data: &[u8], ch: char) -> Vec<(u8, f32, f32)> {
+        use skrifa::instance::{LocationRef, Size};
+        use skrifa::outline::DrawSettings;
+        let font = FontRef::new(data).unwrap();
+        let gid = font.charmap().map(ch).unwrap();
+        let glyph = font.outline_glyphs().get(gid).unwrap();
+        let mut pen = RecordingPen::default();
+        glyph
+            .draw(
+                DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
+                &mut pen,
+            )
+            .unwrap();
+        pen.0
+    }
+
+    #[test]
+    fn build_font_converts_cff_and_splits() {
+        let cps = get_font_codepoints(CFF_FIXTURE).unwrap();
+        let chunk_cps: Vec<Vec<u32>> = cps.chunks(200).map(|c| c.to_vec()).collect();
+
+        let built = build_font(CFF_FIXTURE, &chunk_cps).unwrap();
+        assert_eq!(built.chunks.len(), chunk_cps.len());
+
+        let base_raw = decompress_zstd(&built.base).unwrap();
+        let base_font = FontRef::new(&base_raw).unwrap();
+        assert!(base_font.glyf().is_ok());
+        assert!(base_font.table_data(Tag::new(b"CFF ")).is_none());
+    }
+
+    #[test]
+    fn build_font_cff_chunks_patch_back_into_base() {
+        let cps = get_font_codepoints(CFF_FIXTURE).unwrap();
+        let chunk_cps: Vec<Vec<u32>> = cps.chunks(200).map(|c| c.to_vec()).collect();
+        let built = build_font(CFF_FIXTURE, &chunk_cps).unwrap();
+
+        let mut base_raw = decompress_zstd(&built.base).unwrap();
+        assert!(
+            draw_points(&base_raw, 'A').is_empty(),
+            "0으로 채워진 glyf의 글리프는 패치 전에 빈 아웃라인이어야 한다"
+        );
+        let glyf_offset = {
+            let font = FontRef::new(&base_raw).unwrap();
+            font.table_directory()
+                .table_records()
+                .iter()
+                .find(|r| r.tag() == Tag::new(b"glyf"))
+                .unwrap()
+                .offset() as usize
+        };
+
+        for chunk in &built.chunks {
+            let raw = decompress_zstd(chunk).unwrap();
+            let count = u32::from_be_bytes(raw[0..4].try_into().unwrap()) as usize;
+            let mut pos = 4;
+            for _ in 0..count {
+                let offset = u32::from_be_bytes(raw[pos..pos + 4].try_into().unwrap()) as usize;
+                let len = u32::from_be_bytes(raw[pos + 4..pos + 8].try_into().unwrap()) as usize;
+                let dst = glyf_offset + offset;
+                base_raw[dst..dst + len].copy_from_slice(&raw[pos + 8..pos + 8 + len]);
+                pos += 8 + len;
+            }
+        }
+
+        let converted = convert_to_glyf(&FontRef::new(CFF_FIXTURE).unwrap()).unwrap();
+        let patched_points = draw_points(&base_raw, 'A');
+        assert!(
+            !patched_points.is_empty(),
+            "패치 후에는 실제 아웃라인이 그려져야 한다"
+        );
+        assert_eq!(
+            patched_points,
+            draw_points(&converted, 'A'),
+            "패치 복원된 글리프는 변환본과 동일하게 그려져야 한다"
+        );
+    }
+
+    #[test]
+    fn build_font_hash_stable_for_cff_input() {
+        let cp_groups = vec![vec![0x41u32]];
+        let a = build_font(CFF_FIXTURE, &cp_groups).unwrap();
+        let b = build_font(CFF_FIXTURE, &cp_groups).unwrap();
+        assert_eq!(a.hash, b.hash);
+    }
+
+    const CFF2_FIXTURE: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/SourceSans3VF-Upright.otf"
+    ));
+
+    #[test]
+    fn build_font_rejects_cff2() {
+        let result = build_font(CFF2_FIXTURE, &[vec![0x41]]);
+        assert!(
+            matches!(&result, Err(ServerError::InvalidFont(msg)) if msg.contains("unsplittable font")),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn build_font_rejects_cff2_even_with_glyf() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let font = FontRef::new(&data).unwrap();
+        let mut builder = FontBuilder::new();
+        builder.add_raw(Tag::new(b"CFF2"), vec![0u8; 4]);
+        builder.copy_missing_tables(font);
+        let hybrid = builder.build();
+
+        let result = build_font(&hybrid, &[vec![0x41]]);
+        assert!(
+            matches!(&result, Err(ServerError::InvalidFont(msg)) if msg.contains("unsplittable font")),
+            "{result:?}"
+        );
     }
 }

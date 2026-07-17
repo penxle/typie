@@ -103,6 +103,9 @@ if (verify) {
     const hashBase = `fonts/${row.path}/${row.hash}`;
     const manifestOk = await objectExistsNonEmpty(`${hashBase}/manifest.v1`);
     if (manifestOk) {
+      if (!(await objectExistsNonEmpty(`${hashBase}/base`))) {
+        incomplete.push({ id: row.id, path: row.path, reason: 'base missing or empty' });
+      }
       const expectedChunks = (row.chunks as number[][]).length;
       const chunkChecks = await mapWithConcurrency(
         Array.from({ length: expectedChunks }, (_, i) => i),
@@ -128,7 +131,7 @@ if (verify) {
 
   process.stdout.write('\n');
   console.log(
-    `검증 완료: 마이그레이션됨 ${rows.length - notMigrated.length}개 중 불충족 ${incomplete.length}개, cff-suspect ${cffSuspect.length}개(게이트 제외), 미마이그레이션 ${notMigrated.length}개(게이트 제외)`,
+    `검증 완료: 마이그레이션됨 ${rows.length - notMigrated.length}개 중 불충족 ${incomplete.length}개, cff-suspect ${cffSuspect.length}개, 미마이그레이션 ${notMigrated.length}개(게이트 제외)`,
   );
 
   if (notMigrated.length > 0) {
@@ -139,7 +142,7 @@ if (verify) {
   }
 
   if (cffSuspect.length > 0) {
-    console.log('cff-suspect 목록(게이트 제외):');
+    console.log('cff-suspect 목록:');
     for (const r of cffSuspect) {
       console.log(`- ${r.id} ${r.path}`);
     }
@@ -152,7 +155,7 @@ if (verify) {
     }
   }
 
-  process.exit(incomplete.length > 0 ? 1 : 0);
+  process.exit(incomplete.length > 0 || cffSuspect.length > 0 ? 1 : 0);
 }
 
 console.log(`전체 폰트 ${rows.length}개 스캔 시작`);
@@ -161,9 +164,13 @@ const scanStart = Date.now();
 let scanned = 0;
 
 const scanTargets = await mapWithConcurrency(rows, SCAN_CONCURRENCY, async (row): Promise<BackfillTarget | null> => {
-  const needsV2 = row.hash === '';
+  const manifestV1Ok = row.hash !== '' && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/manifest.v1`));
+  const baseOk = row.hash !== '' && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/base`));
+  const chunkProbeNeeded = row.hash !== '' && !manifestV1Ok;
+  const hasChunk0 = chunkProbeNeeded && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/chunks/0`));
+  const needsV2 = row.hash === '' || !baseOk || (!manifestV1Ok && !hasChunk0);
   const needsLegacy = !(await objectExists(`fonts/${row.path}/manifest.json`));
-  const needsManifest = row.hash !== '' && !(await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/manifest.v1`));
+  const needsManifest = baseOk && !manifestV1Ok && hasChunk0;
   scanned++;
   logProgress('스캔', scanned, rows.length, scanStart);
   return needsV2 || needsLegacy || needsManifest

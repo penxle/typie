@@ -161,7 +161,7 @@ fun FontSettingsScreen() {
       if (model.userFontFamilies.isEmpty()) {
         CardSurface(modifier = Modifier.fillMaxWidth()) {
           Text(
-            "아직 직접 업로드한 폰트가 없어요.\n우측 상단의 추가 버튼으로 TTF 폰트를 한 번에 여러 개 업로드할 수 있어요.",
+            "아직 직접 업로드한 폰트가 없어요.\n우측 상단의 추가 버튼으로 TTF·OTF 폰트를 한 번에 여러 개 업로드할 수 있어요.",
             style = AppTheme.typography.caption,
             color = AppTheme.colors.textMuted,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 40.dp),
@@ -247,8 +247,8 @@ private fun FontUploadSheet(isUploading: Boolean, onUpload: suspend () -> Unit) 
       ) {
         Text("이용 안내", style = AppTheme.typography.label)
 
-        BulletItem("TTF 확장자를 가진 폰트 파일만 업로드할 수 있어요.")
-        BulletItem("여러 개의 TTF 폰트 파일을 한 번에 선택할 수 있어요.")
+        BulletItem("TTF 또는 OTF 확장자를 가진 폰트 파일만 업로드할 수 있어요.")
+        BulletItem("여러 개의 폰트 파일을 한 번에 선택할 수 있어요.")
         BulletItem("기울어진 폰트는 업로드할 수 없어요.")
         BulletItem("업로드한 폰트는 내 글이라면 어디서나 사용할 수 있어요.")
         BulletItem("무료 폰트이거나 웹 사용 라이선스가 있는 폰트만 이용해 주세요.")
@@ -382,8 +382,7 @@ private fun fontUploadSummaryDisplay(summary: FontUploadResult): Pair<String, St
           val errorMessage =
             when (failure.error) {
               FontUploadError.InvalidFontStyle -> "기울어진 폰트는 업로드할 수 없어요."
-              FontUploadError.UnsupportedFontFormat ->
-                "지원하지 않는 폰트 형식이에요. TrueType(glyf) 폰트만 업로드할 수 있어요."
+              FontUploadError.UnsupportedFontFormat -> "지원하지 않는 폰트 형식이에요. 일부 특수 형식의 폰트는 업로드할 수 없어요."
               FontUploadError.Generic -> "폰트 업로드에 실패했어요."
             }
           if (failure.name.isNotEmpty()) "\u2022 ${failure.name}: $errorMessage"

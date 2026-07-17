@@ -24,6 +24,7 @@ rapidhash.workspace = true
 hashbrown.workspace = true
 hex.workspace = true
 icu_segmenter = { workspace = true, features = ["serde"] }
+kurbo.workspace = true
 ruzstd.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true

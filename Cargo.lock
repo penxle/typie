@@ -1011,6 +1011,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "hex",
  "icu_segmenter",
+ "kurbo",
  "proptest",
  "rapidhash",
  "ruzstd",

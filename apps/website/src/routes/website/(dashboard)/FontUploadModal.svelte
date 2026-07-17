@@ -46,7 +46,7 @@
 
   const errorMap = {
     invalid_font_style: '폰트가 기울어져 있어요.',
-    unsupported_font_format: '지원하지 않는 폰트 형식이에요. TrueType(glyf) 폰트만 업로드할 수 있어요.',
+    unsupported_font_format: '지원하지 않는 폰트 형식이에요. 일부 특수 형식의 폰트는 업로드할 수 없어요.',
   };
 
   const processFiles = async (files: FileList | null) => {
@@ -149,7 +149,7 @@
   const handleUpload = async () => {
     const picker = document.createElement('input');
     picker.type = 'file';
-    picker.accept = '.ttf';
+    picker.accept = '.ttf,.otf';
     picker.multiple = true;
 
     picker.addEventListener('change', async () => {
@@ -176,12 +176,12 @@
     const files = e.dataTransfer?.files;
     if (!files) return;
 
-    const fontFiles = [...files].filter((file) => /\.ttf$/i.test(file.name));
+    const fontFiles = [...files].filter((file) => /\.(ttf|otf)$/i.test(file.name));
 
     if (fontFiles.length === 0) {
       Dialog.alert({
         title: '올바른 폰트 파일이 아니에요',
-        message: 'TTF 파일만 업로드할 수 있어요.',
+        message: 'TTF 또는 OTF 파일만 업로드할 수 있어요.',
       });
       return;
     }
@@ -234,7 +234,7 @@
       </div>
 
       <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'text.faint' })}>
-        <li>TTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
+        <li>TTF 또는 OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
         <li>기울어진 폰트는 업로드할 수 없어요.</li>
         <li>업로드된 폰트는 내 글이라면 어디서나 이용할 수 있어요.</li>
         <li>기존에 업로드한 폰트 목록은 설정 &gt; 폰트 탭에서 관리할 수 있어요.</li>
@@ -287,7 +287,7 @@
             <div class={css({ fontSize: '14px', fontWeight: 'medium', color: isDragging ? 'text.brand' : 'text.subtle' })}>
               클릭하거나 파일을 드래그해서 업로드
             </div>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>TTF 파일 (여러 개 가능)</div>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>TTF 또는 OTF 파일 (여러 개 가능)</div>
           </div>
         {/if}
       </div>

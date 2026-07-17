@@ -86,6 +86,7 @@ export const backfillFont = async ({ row, needsV2, needsLegacy, needsManifest }:
       } catch (err) {
         if (isUnsupportedFontFormat(err)) {
           skippedReason = 'unsupported_font_format';
+          await db.update(Fonts).set({ hash: '', chunks: [] }).where(eq(Fonts.id, row.id));
         } else {
           throw err;
         }
