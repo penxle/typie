@@ -8,7 +8,8 @@ import { asc, eq } from 'drizzle-orm';
 import { db, FontFamilies, Fonts } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
 import { FONTS_BUCKET, objectExistsNonEmpty } from '#/utils/backfill-fonts.ts';
-import { sfntDirectoryLength, sfntHasTable } from '#/utils/sfnt.ts';
+import { decompressZstd } from '#/utils/compression.ts';
+import { sfntHasTable } from '#/utils/sfnt.ts';
 import type { BackfillResult, BackfillTarget } from '#/utils/backfill-fonts.ts';
 
 process.env.SCRIPT = '1';
@@ -71,8 +72,8 @@ const objectExists = async (key: string): Promise<boolean> => {
   }
 };
 
-const getObjectRange = async (key: string, length: number): Promise<Uint8Array> => {
-  const object = await aws.s3.send(new GetObjectCommand({ Bucket: FONTS_BUCKET, Key: key, Range: `bytes=0-${length - 1}` }));
+const getObject = async (key: string): Promise<Uint8Array> => {
+  const object = await aws.s3.send(new GetObjectCommand({ Bucket: FONTS_BUCKET, Key: key }));
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return await object.Body!.transformToByteArray();
 };
@@ -98,12 +99,9 @@ if (values['find-colr']) {
   await mapWithConcurrency(targets, 8, async (row) => {
     const key = `fonts/${row.path}/${row.hash}/base`;
     try {
-      let head = await getObjectRange(key, 1024);
-      const directoryLength = sfntDirectoryLength(head);
-      if (directoryLength !== null && head.length < directoryLength) {
-        head = await getObjectRange(key, directoryLength);
-      }
-      const hasColr = sfntHasTable(head, 'COLR');
+      // base 객체는 zstd 압축본 — 해제 후에만 sfnt 디렉토리 파싱이 유효하다.
+      const base = await decompressZstd(await getObject(key));
+      const hasColr = sfntHasTable(base, 'COLR');
       if (hasColr === null) {
         process.stdout.write(`\n판정 불가: ${row.id} (${row.path})\n`);
       } else if (hasColr) {
