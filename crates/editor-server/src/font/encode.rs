@@ -89,6 +89,7 @@ pub fn build_font(
 
     let mut per_glyph: HashMap<u16, (usize, Vec<u8>)> = HashMap::new();
     let mut composite_deps: HashMap<u16, HashSet<u16>> = HashMap::new();
+    let mut colr_layers: HashMap<u16, Vec<u16>> = HashMap::new();
     let mut table_overrides: Vec<(Tag, Vec<u8>)> = Vec::new();
     let mut split_tag: Option<Tag> = None;
 
@@ -147,6 +148,27 @@ pub fn build_font(
             }
         }
 
+        if let Ok(colr) = font.colr()
+            && let (Some(Ok(bases)), Some(Ok(layers))) =
+                (colr.base_glyph_records(), colr.layer_records())
+        {
+            for base in bases {
+                let start = usize::from(base.first_layer_index());
+                let end = start + usize::from(base.num_layers());
+                if end > layers.len() {
+                    continue;
+                }
+                let gids: Vec<u16> = layers[start..end]
+                    .iter()
+                    .map(|l| l.glyph_id().to_u16())
+                    .filter(|&g| g < num_glyphs)
+                    .collect();
+                if !gids.is_empty() {
+                    colr_layers.insert(base.glyph_id().to_u16(), gids);
+                }
+            }
+        }
+
         table_overrides.push((Tag::new(b"glyf"), vec![0u8; glyf_raw.len()]));
         table_overrides.push((Tag::new(b"loca"), loca_raw.as_ref().to_vec()));
         split_tag = Some(Tag::new(b"glyf"));
@@ -165,6 +187,14 @@ pub fn build_font(
                     }
                 }
             }
+
+            let mut colr_expanded: HashSet<u16> = HashSet::new();
+            for &gid in &gids_needed {
+                if let Some(layers) = colr_layers.get(&gid) {
+                    colr_expanded.extend(layers);
+                }
+            }
+            gids_needed.extend(colr_expanded);
 
             let mut expanded: HashSet<u16> = HashSet::new();
             for &gid in &gids_needed {
@@ -832,5 +862,199 @@ mod tests {
             matches!(&result, Err(ServerError::InvalidFont(msg)) if msg.contains("unsplittable font")),
             "{result:?}"
         );
+    }
+
+    fn build_colr_test_font() -> Vec<u8> {
+        use kurbo::Shape;
+        use write_fonts::tables::cmap::Cmap;
+        use write_fonts::tables::colr::{BaseGlyph as ColrBaseGlyph, Colr, Layer as ColrLayer};
+        use write_fonts::tables::glyf::{
+            Anchor, Bbox, Component, ComponentFlags, CompositeGlyph, GlyfLocaBuilder, Glyph,
+            SimpleGlyph, Transform,
+        };
+        use write_fonts::tables::head::Head;
+        use write_fonts::tables::loca::LocaFormat;
+        use write_fonts::tables::maxp::Maxp;
+        use write_fonts::types::{GlyphId, GlyphId16};
+
+        let square = |o: f64| {
+            let path = kurbo::Rect::new(o, 0.0, o + 100.0, 100.0).to_path(0.1);
+            SimpleGlyph::from_bezpath(&path).unwrap()
+        };
+
+        let mut builder = GlyfLocaBuilder::new();
+        builder.add_glyph(&square(0.0)).unwrap();
+        builder.add_glyph(&Glyph::Empty).unwrap();
+        builder.add_glyph(&square(100.0)).unwrap();
+        let composite = CompositeGlyph::new(
+            Component::new(
+                GlyphId16::new(4),
+                Anchor::Offset { x: 0, y: 0 },
+                Transform::default(),
+                ComponentFlags::default(),
+            ),
+            Bbox {
+                x_min: 0,
+                y_min: 0,
+                x_max: 100,
+                y_max: 100,
+            },
+        );
+        builder.add_glyph(&composite).unwrap();
+        builder.add_glyph(&square(200.0)).unwrap();
+        builder.add_glyph(&square(300.0)).unwrap();
+        let (glyf, loca, loca_format) = builder.build();
+
+        let cmap = Cmap::from_mappings([('A', GlyphId::new(1)), ('B', GlyphId::new(5))]).unwrap();
+        let colr = Colr::new(
+            1,
+            Some(vec![ColrBaseGlyph::new(GlyphId16::new(1), 0, 2)]),
+            Some(vec![
+                ColrLayer::new(GlyphId16::new(2), 0),
+                ColrLayer::new(GlyphId16::new(3), 1),
+            ]),
+            2,
+        );
+        let mut head = Head::default();
+        head.index_to_loc_format = match loca_format {
+            LocaFormat::Short => 0,
+            LocaFormat::Long => 1,
+        };
+
+        let mut fb = write_fonts::FontBuilder::new();
+        fb.add_table(&glyf).unwrap();
+        fb.add_table(&loca).unwrap();
+        fb.add_table(&head).unwrap();
+        fb.add_table(&Maxp::new(6)).unwrap();
+        fb.add_table(&cmap).unwrap();
+        fb.add_table(&colr).unwrap();
+        fb.build()
+    }
+
+    fn chunk_gids(chunk: &[u8], font_data: &[u8]) -> HashSet<u16> {
+        let font = FontRef::new(font_data).unwrap();
+        let loca = font.loca(None).unwrap();
+        let num_glyphs = font.maxp().unwrap().num_glyphs();
+        let mut offset_to_gid: HashMap<usize, u16> = HashMap::new();
+        for gid in 0..num_glyphs {
+            let start = loca.get_raw(gid as usize).unwrap_or(0) as usize;
+            let end = loca.get_raw(gid as usize + 1).unwrap_or(0) as usize;
+            if start < end {
+                offset_to_gid.insert(start, gid);
+            }
+        }
+        let chunk = decompress_zstd(chunk).unwrap();
+        let count = u32::from_be_bytes(chunk[0..4].try_into().unwrap()) as usize;
+        let mut gids = HashSet::new();
+        let mut pos = 4;
+        for _ in 0..count {
+            let offset = u32::from_be_bytes(chunk[pos..pos + 4].try_into().unwrap()) as usize;
+            let len = u32::from_be_bytes(chunk[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            gids.insert(offset_to_gid[&offset]);
+            pos += 8 + len;
+        }
+        gids
+    }
+
+    #[test]
+    fn colr_layers_included_in_chunk() {
+        let data = build_colr_test_font();
+        let built = build_font(&data, &[vec![u32::from('A')]]).unwrap();
+        let gids = chunk_gids(&built.chunks[0], &data);
+        assert_eq!(gids, HashSet::from([2, 3, 4]), "레이어·composite 성분 포함");
+    }
+
+    #[test]
+    fn colr_layers_not_pulled_for_unrelated_codepoint() {
+        let data = build_colr_test_font();
+        let built = build_font(&data, &[vec![u32::from('B')]]).unwrap();
+        let gids = chunk_gids(&built.chunks[0], &data);
+        assert_eq!(gids, HashSet::from([5]));
+    }
+
+    const MONA_COLR_FIXTURE: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/Mona12ColorEmoji.ttf"
+    ));
+
+    fn patch_chunk_into_base(base: &[u8], chunk: &[u8]) -> Vec<u8> {
+        let mut out = base.to_vec();
+        let font = FontRef::new(base).unwrap();
+        let glyf_start = font
+            .table_directory()
+            .table_records()
+            .iter()
+            .find(|r| r.tag() == Tag::new(b"glyf"))
+            .unwrap()
+            .offset() as usize;
+        let chunk = decompress_zstd(chunk).unwrap();
+        let count = u32::from_be_bytes(chunk[0..4].try_into().unwrap()) as usize;
+        let mut pos = 4;
+        for _ in 0..count {
+            let offset = u32::from_be_bytes(chunk[pos..pos + 4].try_into().unwrap()) as usize;
+            let len = u32::from_be_bytes(chunk[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            out[glyf_start + offset..glyf_start + offset + len]
+                .copy_from_slice(&chunk[pos + 8..pos + 8 + len]);
+            pos += 8 + len;
+        }
+        out
+    }
+
+    #[test]
+    fn mona_colr_layers_survive_split_and_patch() {
+        let cp = 0x1F600u32;
+        let built = build_font(MONA_COLR_FIXTURE, &[vec![cp]]).unwrap();
+
+        let font = FontRef::new(MONA_COLR_FIXTURE).unwrap();
+        let base_gid = font.charmap().map(cp).unwrap().to_u32() as u16;
+        let colr = font.colr().unwrap();
+        let bases = colr.base_glyph_records().unwrap().unwrap();
+        let record = bases
+            .iter()
+            .find(|b| b.glyph_id().to_u16() == base_gid)
+            .unwrap();
+        let layers = colr.layer_records().unwrap().unwrap();
+        let start = usize::from(record.first_layer_index());
+        let expected: HashSet<u16> = layers[start..start + usize::from(record.num_layers())]
+            .iter()
+            .map(|l| l.glyph_id().to_u16())
+            .collect();
+        assert!(!expected.is_empty());
+
+        let gids = chunk_gids(&built.chunks[0], MONA_COLR_FIXTURE);
+        assert!(
+            expected.is_subset(&gids),
+            "누락 레이어: {:?}",
+            expected.difference(&gids).collect::<Vec<_>>()
+        );
+
+        let base_raw = decompress_zstd(&built.base).unwrap();
+        let patched = patch_chunk_into_base(&base_raw, &built.chunks[0]);
+        let orig_glyf_start = font
+            .table_directory()
+            .table_records()
+            .iter()
+            .find(|r| r.tag() == Tag::new(b"glyf"))
+            .unwrap()
+            .offset() as usize;
+        let patched_font = FontRef::new(&patched).unwrap();
+        let patched_glyf_start = patched_font
+            .table_directory()
+            .table_records()
+            .iter()
+            .find(|r| r.tag() == Tag::new(b"glyf"))
+            .unwrap()
+            .offset() as usize;
+        let loca = font.loca(None).unwrap();
+        for &gid in &expected {
+            let s = loca.get_raw(gid as usize).unwrap() as usize;
+            let e = loca.get_raw(gid as usize + 1).unwrap() as usize;
+            assert!(s < e, "레이어 {gid}가 빈 글리프");
+            assert_eq!(
+                &patched[patched_glyf_start + s..patched_glyf_start + e],
+                &MONA_COLR_FIXTURE[orig_glyf_start + s..orig_glyf_start + e],
+                "레이어 {gid} glyf가 패치 후 원본과 불일치"
+            );
+        }
     }
 }

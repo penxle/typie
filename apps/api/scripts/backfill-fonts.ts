@@ -3,11 +3,12 @@
 import os from 'node:os';
 import { parseArgs } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import { HeadObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { asc, eq } from 'drizzle-orm';
 import { db, FontFamilies, Fonts } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
 import { FONTS_BUCKET, objectExistsNonEmpty } from '#/utils/backfill-fonts.ts';
+import { sfntDirectoryLength, sfntHasTable } from '#/utils/sfnt.ts';
 import type { BackfillResult, BackfillTarget } from '#/utils/backfill-fonts.ts';
 
 process.env.SCRIPT = '1';
@@ -18,6 +19,7 @@ const { values } = parseArgs({
   options: {
     'dry-run': { type: 'boolean', default: false },
     verify: { type: 'boolean', default: false },
+    'find-colr': { type: 'boolean', default: false },
     concurrency: { type: 'string' },
   },
 });
@@ -69,6 +71,12 @@ const objectExists = async (key: string): Promise<boolean> => {
   }
 };
 
+const getObjectRange = async (key: string, length: number): Promise<Uint8Array> => {
+  const object = await aws.s3.send(new GetObjectCommand({ Bucket: FONTS_BUCKET, Key: key, Range: `bytes=0-${length - 1}` }));
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  return await object.Body!.transformToByteArray();
+};
+
 const rows = await db
   .select({
     id: Fonts.id,
@@ -81,6 +89,38 @@ const rows = await db
   .from(Fonts)
   .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
   .orderBy(asc(Fonts.id));
+
+if (values['find-colr']) {
+  const targets = rows.filter((row) => row.hash !== '');
+  const findStart = Date.now();
+  let checked = 0;
+  const matches: { id: string; postScriptName: string; path: string; hash: string }[] = [];
+  await mapWithConcurrency(targets, 8, async (row) => {
+    const key = `fonts/${row.path}/${row.hash}/base`;
+    try {
+      let head = await getObjectRange(key, 1024);
+      const directoryLength = sfntDirectoryLength(head);
+      if (directoryLength !== null && head.length < directoryLength) {
+        head = await getObjectRange(key, directoryLength);
+      }
+      const hasColr = sfntHasTable(head, 'COLR');
+      if (hasColr === null) {
+        process.stdout.write(`\n판정 불가: ${row.id} (${row.path})\n`);
+      } else if (hasColr) {
+        matches.push(row);
+      }
+    } catch (err) {
+      process.stdout.write(`\nbase 조회 실패: ${row.id} (${row.path}) — ${err instanceof Error ? err.message : String(err)}\n`);
+    }
+    checked += 1;
+    logProgress('COLR 스캔', checked, targets.length, findStart);
+  });
+  console.log(`\n\nCOLR 폰트 ${matches.length}개:`);
+  for (const row of matches.toSorted((a, b) => a.id.localeCompare(b.id))) {
+    console.log(`${row.id}\t${row.postScriptName}\t${row.path}\t${row.hash}`);
+  }
+  process.exit(0);
+}
 
 if (verify) {
   console.log(`검증 시작: 전체 ${rows.length}개 행`);

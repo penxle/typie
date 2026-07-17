@@ -8,6 +8,7 @@
 *outro+
 *start
 aapt
+ABXY
 acked
 affordances
 agentic
@@ -38,6 +39,7 @@ cnpg
 coalescer
 coalescible
 coilresvg
+colr
 crds
 crdt
 creds

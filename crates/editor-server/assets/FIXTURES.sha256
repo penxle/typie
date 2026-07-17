@@ -2,3 +2,7 @@
 08df266400933d3178d081a45f94a08814c3e55b4b7dd2e0ff69cb1329f13ab6  crates/editor-server/assets/SourceSans3-Regular.otf
 3d0dfd6a3a644ab3d462a737923ffac41fb0ae007ce9ba83c24e6bfa76aa56c7  crates/editor-server/assets/SourceSans3VF-Upright.otf
 56af9b9c6715597e458284a474dc118a50a4150e9d547c70f7b4a33c3e6a9328  crates/editor-server/assets/OFL-SourceSans.txt
+# source: MonadABXY/mona-font@2026.05.25
+7085399a265040fd85306b98e17f361d66eecb3b07e88a1d9eb242e41bb0f3d5  crates/editor-server/assets/Mona12ColorEmoji.ttf
+edc25f105101679128588ab4cde86871d21c882e0abef2a0d3f0143cf496e171  crates/editor-server/assets/OFL-Mona.txt
+500bb1ccf43df7bbb522112f9133a52b16e1c35e809632f5d8609b179152de5b  crates/editor-server/assets/OFL-NotoEmoji.txt
