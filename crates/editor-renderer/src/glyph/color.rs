@@ -44,6 +44,13 @@ pub fn rasterize_color_outline(
         )
         .ok()?;
         if ctx.outline.is_empty() {
+            // 분할 로딩에서 미도착 레이어는 loca 길이 > 0 이지만 0으로 채워져 빈
+            // 윤곽으로 파싱된다. 부분 합성을 캐시에 남기는 대신 None 으로 물러나
+            // 청크 도착 후 font_version 재시도에 맡긴다. loca 길이 0 은 원래 빈
+            // 레이어이므로 기존대로 건너뛴다.
+            if glyf_len(&font, u32::from(*layer_gid)) > 0 {
+                return None;
+            }
             continue;
         }
 
@@ -156,6 +163,15 @@ fn compute_union_bounds(
     Some((base_x, base_y, width, height))
 }
 
+fn glyf_len(font: &FontRef<'_>, gid: u32) -> usize {
+    let Ok(loca) = font.loca(None) else {
+        return 0;
+    };
+    let start = loca.get_raw(gid as usize).unwrap_or(0) as usize;
+    let end = loca.get_raw(gid as usize + 1).unwrap_or(0) as usize;
+    end.saturating_sub(start)
+}
+
 fn outline_point_bounds(points: &[Point]) -> Option<(Point, Point)> {
     if points.is_empty() {
         return None;
@@ -242,5 +258,165 @@ fn blit_mask_onto_canvas(
             }
             dx += 4;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Content, ScaleContext, rasterize_color_outline};
+
+    fn push_u16(v: &mut Vec<u8>, x: u16) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+
+    fn push_u32(v: &mut Vec<u8>, x: u32) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+
+    fn push_i16(v: &mut Vec<u8>, x: i16) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+
+    fn square_glyph() -> Vec<u8> {
+        let mut g = Vec::new();
+        push_i16(&mut g, 1);
+        for v in [0i16, 0, 100, 100] {
+            push_i16(&mut g, v);
+        }
+        push_u16(&mut g, 3);
+        push_u16(&mut g, 0);
+        g.extend_from_slice(&[0x01, 0x01, 0x01, 0x01]);
+        for dx in [0i16, 100, 0, -100] {
+            push_i16(&mut g, dx);
+        }
+        for dy in [0i16, 0, 100, 0] {
+            push_i16(&mut g, dy);
+        }
+        while g.len() % 4 != 0 {
+            g.push(0);
+        }
+        g
+    }
+
+    /// gid0/1: 빈 글리프, gid2/3: 사각형 레이어, gid4: loca 길이 0 인 원래 빈 레이어.
+    /// COLR v0: base gid1 → layers [gid2, gid3, gid4].
+    fn synthetic_colr_font() -> (Vec<u8>, std::ops::Range<usize>) {
+        let sq = square_glyph();
+        let sq_len = sq.len() as u32;
+
+        let mut glyf = Vec::new();
+        glyf.extend_from_slice(&sq);
+        glyf.extend_from_slice(&sq);
+
+        let mut loca = Vec::new();
+        for off in [0, 0, 0, sq_len, sq_len * 2, sq_len * 2] {
+            push_u32(&mut loca, off);
+        }
+
+        let mut head = Vec::new();
+        push_u32(&mut head, 0x0001_0000);
+        push_u32(&mut head, 0);
+        push_u32(&mut head, 0);
+        push_u32(&mut head, 0x5F0F_3CF5);
+        push_u16(&mut head, 0);
+        push_u16(&mut head, 1000);
+        head.extend_from_slice(&[0; 16]);
+        for v in [0i16, 0, 100, 100] {
+            push_i16(&mut head, v);
+        }
+        push_u16(&mut head, 0);
+        push_u16(&mut head, 8);
+        push_i16(&mut head, 2);
+        push_i16(&mut head, 1);
+        push_i16(&mut head, 0);
+
+        let mut maxp = Vec::new();
+        push_u32(&mut maxp, 0x0000_5000);
+        push_u16(&mut maxp, 5);
+
+        let mut hhea = Vec::new();
+        push_u32(&mut hhea, 0x0001_0000);
+        for v in [800i16, -200, 0] {
+            push_i16(&mut hhea, v);
+        }
+        push_u16(&mut hhea, 100);
+        for v in [0i16, 0, 100, 1, 0, 0, 0, 0, 0, 0, 0] {
+            push_i16(&mut hhea, v);
+        }
+        push_u16(&mut hhea, 1);
+
+        let mut hmtx = Vec::new();
+        push_u16(&mut hmtx, 100);
+        push_i16(&mut hmtx, 0);
+        for _ in 0..4 {
+            push_i16(&mut hmtx, 0);
+        }
+
+        let mut colr = Vec::new();
+        push_u16(&mut colr, 0);
+        push_u16(&mut colr, 1);
+        push_u32(&mut colr, 14);
+        push_u32(&mut colr, 20);
+        push_u16(&mut colr, 3);
+        push_u16(&mut colr, 1);
+        push_u16(&mut colr, 0);
+        push_u16(&mut colr, 3);
+        for (g, p) in [(2u16, 0u16), (3, 1), (4, 2)] {
+            push_u16(&mut colr, g);
+            push_u16(&mut colr, p);
+        }
+
+        let tables: [(&[u8; 4], &[u8]); 7] = [
+            (b"COLR", &colr),
+            (b"glyf", &glyf),
+            (b"head", &head),
+            (b"hhea", &hhea),
+            (b"hmtx", &hmtx),
+            (b"loca", &loca),
+            (b"maxp", &maxp),
+        ];
+
+        let mut font = Vec::new();
+        push_u32(&mut font, 0x0001_0000);
+        push_u16(&mut font, tables.len() as u16);
+        push_u16(&mut font, 0);
+        push_u16(&mut font, 0);
+        push_u16(&mut font, 0);
+        let mut off = 12 + 16 * tables.len() as u32;
+        let mut offsets = Vec::new();
+        for (tag, data) in &tables {
+            font.extend_from_slice(*tag);
+            push_u32(&mut font, 0);
+            push_u32(&mut font, off);
+            push_u32(&mut font, data.len() as u32);
+            offsets.push(off as usize);
+            off += data.len().next_multiple_of(4) as u32;
+        }
+        let glyf_start = offsets[1];
+        for (_, data) in &tables {
+            font.extend_from_slice(data);
+            while font.len() % 4 != 0 {
+                font.push(0);
+            }
+        }
+        let gid3_range = glyf_start + sq.len()..glyf_start + sq.len() * 2;
+        (font, gid3_range)
+    }
+
+    #[test]
+    fn colr_full_layers_rasterize() {
+        let (font, _) = synthetic_colr_font();
+        let mut ctx = ScaleContext::new();
+        let raster = rasterize_color_outline(&mut ctx, &font, 1, 16.0, 0.0).expect("full layers");
+        assert_eq!(raster.content, Content::Color);
+        assert!(raster.width > 0 && raster.height > 0);
+    }
+
+    #[test]
+    fn colr_unloaded_layer_returns_none() {
+        let (mut font, gid3_range) = synthetic_colr_font();
+        font[gid3_range].fill(0);
+        let mut ctx = ScaleContext::new();
+        assert!(rasterize_color_outline(&mut ctx, &font, 1, 16.0, 0.0).is_none());
     }
 }
