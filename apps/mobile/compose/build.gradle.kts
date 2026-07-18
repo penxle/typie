@@ -104,6 +104,8 @@ kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
 
     androidResources { enable = true }
+
+    withHostTest {}
   }
 
   jvm("desktop")
@@ -249,6 +251,29 @@ buildkonfig {
 aboutLibraries { export { outputFile = aboutLibrariesComposeResourceFile.asFile } }
 
 tasks.named("copyNonXmlValueResourcesForCommonMain") { dependsOn("exportLibraryDefinitions") }
+
+tasks
+  .withType<Test>()
+  .matching { it.name == "testAndroidHostTest" }
+  .configureEach {
+    val androidHostTestRoot = layout.projectDirectory.dir("src/androidHostTest/kotlin").asFile
+    val androidHostTestClasses =
+      fileTree(androidHostTestRoot)
+        .matching { include("**/*Test.kt") }
+        .files
+        .map {
+          it
+            .relativeTo(androidHostTestRoot)
+            .invariantSeparatorsPath
+            .removeSuffix(".kt")
+            .replace('/', '.')
+        }
+        .ifEmpty { listOf("co.typie.__no_android_host_tests__") }
+    filter {
+      isFailOnNoMatchingTests = false
+      androidHostTestClasses.forEach { includeTestsMatching(it) }
+    }
+  }
 
 val versionProps = Properties().apply { load(rootProject.file("version.properties").reader()) }
 

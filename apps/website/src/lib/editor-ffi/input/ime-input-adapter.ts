@@ -138,6 +138,7 @@ export class ImeInputAdapter {
   #pendingCompositionTarget: ImeRange | null = null;
   #compositionActive = false;
   #commitPendingText: string | null = null;
+  #resyncInProgress = false;
 
   constructor(deps: ImeInputAdapterDeps) {
     this.#deps = deps;
@@ -282,6 +283,33 @@ export class ImeInputAdapter {
     return { target, text: pending };
   }
 
+  resetForResync(input: ImeTextInput | null): void {
+    const wasComposing = this.#compositionActive;
+
+    this.#resyncInProgress = true;
+    try {
+      this.#context = null;
+      this.#pendingEditIntent = null;
+      this.#pendingCompositionText = null;
+      this.#pendingCompositionTarget = null;
+      this.#compositionActive = false;
+      this.#commitPendingText = null;
+
+      if (!input) {
+        return;
+      }
+
+      this.syncFromEditor(input);
+
+      if (wasComposing && document.activeElement === input) {
+        input.blur();
+        input.focus({ preventScroll: true });
+      }
+    } finally {
+      this.#resyncInProgress = false;
+    }
+  }
+
   syncFromEditor(input: ImeTextInput): void {
     const context = this.#deps.readContext();
     if (!context) {
@@ -314,6 +342,10 @@ export class ImeInputAdapter {
   }
 
   handleBeforeInput(e: InputEvent & { currentTarget: ImeTextInput }): void {
+    if (this.#resyncInProgress) {
+      return;
+    }
+
     if (
       this.#commitPendingText != null &&
       (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') &&
@@ -370,6 +402,10 @@ export class ImeInputAdapter {
   }
 
   handleInput(e: Event & { currentTarget: ImeTextInput }): void {
+    if (this.#resyncInProgress) {
+      return;
+    }
+
     const context = this.#currentContext(e.currentTarget, false);
     if (!context) {
       return;
@@ -389,6 +425,10 @@ export class ImeInputAdapter {
   }
 
   handleCompositionStart(e: CompositionEvent & { currentTarget: ImeTextInput }): void {
+    if (this.#resyncInProgress) {
+      return;
+    }
+
     this.#clearCommitPending();
     const wasCompositionActive = this.#compositionActive;
     const pendingTarget = this.#pendingCompositionTarget;
@@ -400,10 +440,18 @@ export class ImeInputAdapter {
   }
 
   handleCompositionUpdate(e: CompositionEvent): void {
+    if (this.#resyncInProgress) {
+      return;
+    }
+
     this.#pendingCompositionText = e.data;
   }
 
   handleCompositionEnd(): void {
+    if (this.#resyncInProgress) {
+      return;
+    }
+
     this.#compositionActive = false;
     this.#pendingCompositionText = null;
     this.#pendingCompositionTarget = null;

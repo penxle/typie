@@ -82,6 +82,30 @@ fn is_illegal_slot(e: &EditorError) -> bool {
         )
 }
 
+fn is_flat_offset_insertable(doc: &editor_model::DocView, offset: usize) -> bool {
+    ResolvedPosition::from_flat(doc, offset)
+        .and_then(|rp| doc.node(rp.node()))
+        .is_some_and(|n| n.spec().is_textblock())
+}
+
+fn nearest_insertable_flat(doc: &editor_model::DocView, total: usize, offset: usize) -> usize {
+    if is_flat_offset_insertable(doc, offset) {
+        return offset;
+    }
+    for radius in 1..=total {
+        if let Some(before) = offset.checked_sub(radius)
+            && is_flat_offset_insertable(doc, before)
+        {
+            return before;
+        }
+        let after = offset + radius;
+        if after <= total && is_flat_offset_insertable(doc, after) {
+            return after;
+        }
+    }
+    offset
+}
+
 /// Snapshot of the transient (non-document) editor state recorded with each undo
 /// entry so undo/redo restore the caret.
 ///
@@ -569,6 +593,16 @@ impl Editor {
             })?
             .to_flat();
         let (sel_start, sel_end) = (anchor_flat.min(head_flat), anchor_flat.max(head_flat));
+        // ime() runs on every cursor move; the collapsed caret is the dominant
+        // case, so avoid walking the same offset twice.
+        let (sel_start, sel_end) = if sel_start == sel_end {
+            let s = nearest_insertable_flat(&doc, doc_size, sel_start);
+            (s, s)
+        } else {
+            let s = nearest_insertable_flat(&doc, doc_size, sel_start);
+            let e = nearest_insertable_flat(&doc, doc_size, sel_end);
+            (s.min(e), s.max(e))
+        };
 
         // Keep the window start anchored across keyboard edits: IMEs predict the
         // window's next content by applying their own edits to it (iOS resets
@@ -638,6 +672,8 @@ impl Editor {
         let old_composition_paint = self.composition_paint.clone();
         let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
+        let mut ime_failed = false;
+
         let messages = std::mem::take(&mut self.message_queue);
         // Coalesce a consecutive run of remote changesets into one batched receive:
         // a sync burst enqueues many `Message::Remote` back-to-back, and applying
@@ -671,7 +707,23 @@ impl Editor {
                             batch.extend(ops);
                         }
                     }
-                    self.process_message(Message::TextInput { ops: batch })
+                    if ime_failed {
+                        log::warn!(
+                            "dropping text input batch queued after an absorbed ime failure"
+                        );
+                        continue;
+                    }
+                    if let Err(e) = self.process_message(Message::TextInput { ops: batch }) {
+                        if is_illegal_slot(&e) {
+                            log::warn!(
+                                "text input rejected by insert-slot guard; requesting ime resync: {e}"
+                            );
+                        } else {
+                            log::error!("text input failed; requesting ime resync: {e}");
+                        }
+                        ime_failed = true;
+                    }
+                    Ok(())
                 }
                 other => {
                     self.ime_delete_paint = None;
@@ -693,6 +745,21 @@ impl Editor {
         if !self.state.projected.graph().pending().is_empty() {
             log::warn!("tick sealed leftover unsealed ops; an edit path failed to commit");
             self.state.projected_mut().commit();
+        }
+
+        if ime_failed {
+            if self.state.composition.is_some()
+                && let Err(e) = self.transact(|tr| {
+                    tr.update_meta(|m| m.history = HistoryMeta::Skip);
+                    tr.keep_pending_modifiers();
+                    tr.set_composition(None)?;
+                    Ok(())
+                })
+            {
+                log::error!("composition cleanup after absorbed ime failure failed: {e}");
+            }
+            self.ime_delete_paint = None;
+            self.push_event(EditorEvent::ImeResyncRequired);
         }
 
         let layout_dirty = self.view.take_layout_dirty(&mut self.state);
@@ -1952,8 +2019,8 @@ mod tests {
         PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
     };
     use editor_state::{
-        Affinity, PendingModifier, PendingModifiers, Position, Selection, StablePosition,
-        StableResolveCtx, State,
+        Affinity, Composition, PendingModifier, PendingModifiers, Position, ResolvedPosition,
+        ResolvedPositionFlatExt, Selection, StablePosition, StableResolveCtx, State,
     };
     use hashbrown::HashSet;
     use std::collections::BTreeMap;
@@ -2153,6 +2220,157 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.tick().unwrap();
         assert_eq!(editor.state.projected_mut().take_drop_stats(), 0);
+    }
+
+    // The zombie fixture projects to "\u{2028}a\u{2029}"; flat offsets 0 and 3
+    // resolve to the ROOT node, whose sequence rejects a char insert with
+    // `IllegalInsertSlot`. Parking the caret at offset 0 arms a text input to
+    // fail through the insert-slot guard.
+    fn zombie_fixture_editor() -> Editor {
+        let mut editor = Editor::new_test(State::from_changesets(zombie_css(), None).unwrap());
+        editor.tick().unwrap();
+        let view = editor.state().view();
+        let caret = ResolvedPosition::from_flat(&view, 0)
+            .expect("document-start position resolves")
+            .position();
+        drop(view);
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(caret),
+            },
+        });
+        editor
+    }
+
+    fn seed_active_composition(editor: &mut Editor) {
+        editor
+            .transact(|tr| {
+                tr.set_composition(Some(Composition { start: 1, end: 2 }))?;
+                Ok(())
+            })
+            .unwrap();
+        editor.composition_paint = Some(vec![Modifier::Bold]);
+        editor.ime_delete_paint = Some((0, vec![Modifier::Bold]));
+        assert!(editor.state().composition.is_some());
+    }
+
+    fn enqueue_illegal_text_input(editor: &mut Editor) {
+        editor.enqueue(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
+        });
+    }
+
+    fn legal_selection_message(editor: &Editor) -> Message {
+        let view = editor.state().view();
+        let caret = ResolvedPosition::from_flat(&view, 1)
+            .expect("in-paragraph position resolves")
+            .position();
+        drop(view);
+        Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(caret),
+            },
+        }
+    }
+
+    fn legal_insert_ops(text: &str) -> Vec<FlatImeOp> {
+        vec![FlatImeOp::ReplaceSelection { text: text.into() }]
+    }
+
+    fn resize_message() -> Message {
+        Message::System {
+            event: SystemEvent::Resize {
+                width: 1024.0,
+                height: 768.0,
+                scale_factor: 2.0,
+            },
+        }
+    }
+
+    fn enqueue_failing_non_text_input_message(editor: &mut Editor) {
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+    }
+
+    #[test]
+    fn tick_absorbs_text_input_failure_into_resync_event_and_clears_composition() {
+        let mut editor = zombie_fixture_editor();
+        seed_active_composition(&mut editor);
+        enqueue_illegal_text_input(&mut editor);
+
+        let events = editor.tick().unwrap();
+
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, EditorEvent::ImeResyncRequired))
+                .count(),
+            1
+        );
+        assert!(editor.state().composition.is_none());
+        assert!(editor.composition_paint.is_none());
+        assert!(editor.ime_delete_paint.is_none());
+    }
+
+    #[test]
+    fn tick_drops_text_input_batches_after_failure_but_processes_other_messages() {
+        let mut editor = zombie_fixture_editor();
+        let doc_before = editor.state().projected.projected().clone();
+        enqueue_illegal_text_input(&mut editor);
+        editor.enqueue(legal_selection_message(&editor));
+        editor.enqueue(Message::TextInput {
+            ops: legal_insert_ops("a"),
+        });
+
+        let events = editor.tick().unwrap();
+
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, EditorEvent::ImeResyncRequired))
+                .count(),
+            1
+        );
+        assert_eq!(editor.state().projected.projected(), &doc_before);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::Selection)
+        )));
+    }
+
+    #[test]
+    fn tick_drops_commit_as_is_batch_after_failure() {
+        let mut editor = zombie_fixture_editor();
+        seed_active_composition(&mut editor);
+        enqueue_illegal_text_input(&mut editor);
+        editor.enqueue(resize_message());
+        editor.enqueue(Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose { text: "가".into() },
+                FlatImeOp::CommitAsIs,
+            ],
+        });
+
+        let events = editor.tick().unwrap();
+
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, EditorEvent::ImeResyncRequired))
+                .count(),
+            1
+        );
+        assert!(editor.state().composition.is_none());
+    }
+
+    #[test]
+    fn tick_still_propagates_non_text_input_errors_even_after_absorbed_failure() {
+        let mut editor = zombie_fixture_editor();
+        enqueue_illegal_text_input(&mut editor);
+        enqueue_failing_non_text_input_message(&mut editor);
+
+        assert!(editor.tick().is_err());
     }
 
     fn test_editor() -> (Editor, editor_crdt::Dot) {
@@ -5868,5 +6086,200 @@ mod tests {
             lower_damaged,
             "top insert must propagate damage to a lower page (reflow), not just page 0"
         );
+    }
+
+    fn build_fixture_editor(pick: usize) -> Editor {
+        let state = match pick {
+            0 => {
+                let (state, ..) = state! {
+                    doc {
+                        root {
+                            a: paragraph { text("ab") }
+                            b: paragraph { text("cd") }
+                        }
+                    }
+                    selection: (a, 0)
+                };
+                state
+            }
+            1 => {
+                let (state, ..) = state! {
+                    doc {
+                        root {
+                            list: bullet_list {
+                                list_item { p: paragraph { text("ab") } }
+                            }
+                            tail: paragraph { text("z") }
+                        }
+                    }
+                    selection: (p, 0)
+                };
+                state
+            }
+            2 => {
+                let (state, ..) = state! {
+                    doc {
+                        root {
+                            f: fold {
+                                fold_title { text("t") }
+                                fold_content {
+                                    paragraph { text("a") }
+                                    bullet_list { list_item { paragraph { text("b") } } }
+                                }
+                            }
+                            tail: paragraph { text("z") }
+                        }
+                    }
+                    selection: (f, 0)
+                };
+                state
+            }
+            _ => State::from_changesets(zombie_css(), None).unwrap(),
+        };
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+        editor
+    }
+
+    fn fixture_flat_len(pick: usize) -> usize {
+        let editor = build_fixture_editor(pick);
+        let view = editor.state().view();
+        editor_state::flat_size(&view)
+    }
+
+    fn set_selection_flat(editor: &mut Editor, offset: usize) -> bool {
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFlat {
+                start: offset,
+                end: offset,
+            },
+        });
+        let view = editor.state().view();
+        let Some(sel) = editor.state().selection else {
+            return false;
+        };
+        let Some(head) = sel.head.resolve(&view) else {
+            return false;
+        };
+        head.to_flat() == offset
+    }
+
+    fn enqueue_text_input_at(editor: &mut Editor, ime: &Ime, ch: char) {
+        editor.enqueue(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection {
+                    start: ime.selection.start,
+                    end: ime.selection.end,
+                },
+                FlatImeOp::ReplaceSelection {
+                    text: ch.to_string(),
+                },
+            ],
+        });
+    }
+
+    fn set_selection_flat_range(editor: &mut Editor, start: usize, end: usize) -> bool {
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFlat { start, end },
+        });
+        let view = editor.state().view();
+        let Some(sel) = editor.state().selection else {
+            return false;
+        };
+        let Some(anchor) = sel.anchor.resolve(&view) else {
+            return false;
+        };
+        let Some(head) = sel.head.resolve(&view) else {
+            return false;
+        };
+        let got = (
+            anchor.to_flat().min(head.to_flat()),
+            anchor.to_flat().max(head.to_flat()),
+        );
+        got == (start.min(end), start.max(end))
+    }
+
+    #[test]
+    fn ime_reported_selection_accepts_text_insertion_at_every_flat_offset() {
+        for fixture_pick in 0..4 {
+            let mut executed = 0usize;
+            let flat_len = fixture_flat_len(fixture_pick);
+            for offset in 0..=flat_len {
+                let mut editor = build_fixture_editor(fixture_pick);
+                if !set_selection_flat(&mut editor, offset) {
+                    continue;
+                }
+                let Some(ime) = editor.ime(64, 64).unwrap() else {
+                    panic!(
+                        "fixture {fixture_pick} offset {offset}: selection set but ime window absent"
+                    );
+                };
+                let doc_before = editor.state().projected.projected().clone();
+                enqueue_text_input_at(&mut editor, &ime, 'x');
+                let events = editor.tick().unwrap();
+                assert!(
+                    !events
+                        .iter()
+                        .any(|e| matches!(e, EditorEvent::ImeResyncRequired)),
+                    "fixture {fixture_pick} offset {offset}: guard rejected ime-reported selection"
+                );
+                assert_ne!(
+                    editor.state().projected.projected(),
+                    &doc_before,
+                    "fixture {fixture_pick} offset {offset}: insertion was a silent no-op"
+                );
+                executed += 1;
+            }
+            assert!(
+                executed > 0,
+                "fixture {fixture_pick}: sweep executed no cases"
+            );
+        }
+    }
+
+    fn representative_uncollapsed_ranges(fixture_pick: usize) -> Vec<(usize, usize)> {
+        match fixture_pick {
+            0 => vec![(2, 6), (0, 8)],
+            1 => vec![(2, 7), (3, 5)],
+            2 => vec![(0, 4), (6, 7)],
+            _ => vec![(0, 3), (1, 2)],
+        }
+    }
+
+    #[test]
+    fn ime_reported_selection_accepts_text_insertion_for_representative_uncollapsed_ranges() {
+        for fixture_pick in 0..4 {
+            let mut executed = 0usize;
+            for (start, end) in representative_uncollapsed_ranges(fixture_pick) {
+                let mut editor = build_fixture_editor(fixture_pick);
+                if !set_selection_flat_range(&mut editor, start, end) {
+                    continue;
+                }
+                let Some(ime) = editor.ime(64, 64).unwrap() else {
+                    panic!(
+                        "fixture {fixture_pick} range ({start},{end}): selection set but ime window absent"
+                    );
+                };
+                let doc_before = editor.state().projected.projected().clone();
+                enqueue_text_input_at(&mut editor, &ime, 'x');
+                let events = editor.tick().unwrap();
+                assert!(
+                    !events
+                        .iter()
+                        .any(|e| matches!(e, EditorEvent::ImeResyncRequired)),
+                    "fixture {fixture_pick} range ({start},{end}): guard rejected ime-reported selection"
+                );
+                assert_ne!(
+                    editor.state().projected.projected(),
+                    &doc_before,
+                    "fixture {fixture_pick} range ({start},{end}): insertion was a silent no-op"
+                );
+                executed += 1;
+            }
+            assert!(
+                executed > 0,
+                "fixture {fixture_pick}: representative range sweep executed no cases"
+            );
+        }
     }
 }

@@ -33,6 +33,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
+  isSessionCurrent: () -> Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {

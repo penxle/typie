@@ -29,6 +29,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
+  isSessionCurrent: () -> Boolean,
 ): PlatformTextInputMethodRequest {
   val androidView = view
   val extractMonitor = ImeExtractMonitor()
@@ -48,6 +49,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         view = androidView,
         bringIntoViewRequests = bringIntoViewRequests,
         extractMonitor = extractMonitor,
+        isSessionCurrent = isSessionCurrent,
       )
     if (suppressSoftwareKeyboard) {
       androidView.post { hideEditorSoftwareKeyboard(androidView) }

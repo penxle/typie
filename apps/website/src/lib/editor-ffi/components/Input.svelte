@@ -7,6 +7,7 @@
   import { handleKeyDown } from '../handlers/keyboard';
   import { IME_CONTEXT_AFTER_LIMIT, IME_CONTEXT_BEFORE_LIMIT, normalizeImeContext } from '../input/ime-context';
   import { ImeInputAdapter } from '../input/ime-input-adapter';
+  import { wireImeResyncListener } from '../input/ime-resync';
   import { getViewportOverlayContext } from './ViewportOverlay.svelte';
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ImeContext, ImeTextInput } from '../input/ime-context';
@@ -72,6 +73,12 @@
     void editor.cursor;
     void editor.selection;
     syncInput();
+  });
+
+  $effect(() => {
+    if (!editor) return;
+
+    return wireImeResyncListener(editor, inputAdapter, () => editor.inputEl ?? null);
   });
 </script>
 

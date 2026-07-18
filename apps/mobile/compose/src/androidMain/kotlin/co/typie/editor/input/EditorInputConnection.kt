@@ -45,27 +45,29 @@ internal class EditorInputConnection(
   private val view: View,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val extractMonitor: ImeExtractMonitor,
+  isSessionCurrent: () -> Boolean,
 ) : InputConnection {
-  private val batch = ImeEditBatch { messages ->
-    val recorder = editor.inputRecorder
-    val imeBefore = if (recorder == null) null else editor.ime
-    val state =
-      editor.syncWithBringIntoView(bringIntoViewRequests) {
-        for (message in messages) {
-          enqueue(message)
+  private val batch =
+    ImeEditBatch(isSessionCurrent) { messages ->
+      val recorder = editor.inputRecorder
+      val imeBefore = if (recorder == null) null else editor.ime
+      val state =
+        editor.syncWithBringIntoView(bringIntoViewRequests) {
+          for (message in messages) {
+            enqueue(message)
+          }
+          beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
         }
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+      recorder?.record { seq, t ->
+        RecordedInputEntry.Dispatch(
+          seq = seq,
+          t = t,
+          messages = messages,
+          imeBefore = imeBefore,
+          imeAfter = state?.ime,
+        )
       }
-    recorder?.record { seq, t ->
-      RecordedInputEntry.Dispatch(
-        seq = seq,
-        t = t,
-        messages = messages,
-        imeBefore = imeBefore,
-        imeAfter = state?.ime,
-      )
     }
-  }
 
   private fun recordCall(method: String, args: String) {
     editor.inputRecorder?.record { seq, t ->
@@ -320,7 +322,10 @@ internal fun ImeExtract.toExtractedText(): ExtractedText =
     it.flags = if (selectionStart != selectionEnd) ExtractedText.FLAG_SELECTING else 0
   }
 
-private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
+internal class ImeEditBatch(
+  private val isSessionCurrent: () -> Boolean,
+  private val dispatch: (List<Message>) -> Unit,
+) {
   private var batchLevel = 0
   private val pendingOps = mutableListOf<FlatImeOp>()
   private val pendingMessages = mutableListOf<Message>()
@@ -392,6 +397,11 @@ private class ImeEditBatch(private val dispatch: (List<Message>) -> Unit) {
   private fun flush() {
     flushOpsToPendingMessages()
     if (pendingMessages.isEmpty()) return
+
+    if (!isSessionCurrent()) {
+      pendingMessages.clear()
+      return
+    }
 
     val messages = pendingMessages.toList()
     pendingMessages.clear()

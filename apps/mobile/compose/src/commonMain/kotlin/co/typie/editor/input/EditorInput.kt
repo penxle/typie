@@ -21,9 +21,11 @@ import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
+import co.typie.editor.EditorEventListener
 import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
 import co.typie.editor.createBindings
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
@@ -76,9 +78,19 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
+  isSessionCurrent: () -> Boolean,
 ): PlatformTextInputMethodRequest
 
 internal expect fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean
+
+internal fun rebindImeResync(
+  previous: (() -> Unit)?,
+  target: Editor,
+  listener: EditorEventListener<EditorEvent.ImeResyncRequired>,
+): () -> Unit {
+  previous?.invoke()
+  return target.on<EditorEvent.ImeResyncRequired>(listener)
+}
 
 internal fun shouldRestartEditorInputSession(
   previousEnabled: Boolean,
@@ -150,12 +162,16 @@ private data class EditorInputElement(
     )
 
   override fun update(node: EditorInputNode) {
+    val previousEditor = node.session.editor
     node.session = session
     node.uiState = uiState
     node.updatePlatform(platform)
     node.bringIntoViewRequests = bringIntoViewRequests
     node.clipboard = clipboard
     node.updateInputPolicy(enabled = enabled, suppressSoftwareKeyboard = suppressSoftwareKeyboard)
+    if (node.session.editor !== previousEditor) {
+      node.bindImeResync()
+    }
   }
 }
 
@@ -179,6 +195,19 @@ internal class EditorInputNode(
   private val platformInputBridge = EditorPlatformInputBridge()
   private val editor: Editor
     get() = session.editor
+
+  private var unsubscribeImeResync: (() -> Unit)? = null
+  private var imeSessionGeneration = 0
+
+  fun bindImeResync() {
+    unsubscribeImeResync =
+      rebindImeResync(unsubscribeImeResync, editor) { _, _ ->
+        if (focused) {
+          imeSessionGeneration += 1
+          syncTextInputSession()
+        }
+      }
+  }
 
   private fun <T : Job> submit(start: (Editor, CoroutineContext) -> T): T? = session.submit(start)
 
@@ -239,6 +268,7 @@ internal class EditorInputNode(
           dispatchBindingMessages(messages = messages, bringIntoViewTarget = bringIntoViewTarget)
         },
       )
+    bindImeResync()
   }
 
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
@@ -479,6 +509,7 @@ internal class EditorInputNode(
 
   private fun syncTextInputSession() {
     val sessionEnabled = focused && enabled
+    val generationAtStart = imeSessionGeneration
     editor.inputRecorder?.record { seq, t ->
       RecordedInputEntry.Session(seq = seq, t = t, event = if (sessionEnabled) "start" else "stop")
     }
@@ -545,6 +576,7 @@ internal class EditorInputNode(
                   textFieldRectInRoot = uiState::editorRectInRoot,
                   textClippingRectInRoot = uiState::textClippingRectInRoot,
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+                  isSessionCurrent = { imeSessionGeneration == generationAtStart },
                 )
               launch {
                 notifyImeStateChanged(editor)
@@ -569,6 +601,8 @@ internal class EditorInputNode(
   }
 
   override fun onDetach() {
+    unsubscribeImeResync?.invoke()
+    unsubscribeImeResync = null
     bindingCoalescer = null
     focused = false
     platformInputBridge.reset()

@@ -1,6 +1,6 @@
 // cspell:ignore aeeeeeb aeeeeeeb xeeeeeb eeeeeeb xeeeeeeb
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ImeInputAdapter } from './ime-input-adapter';
 import { beforeInputEvent, compositionEvent, context, inputEvent } from './ime-test-fixtures';
 import type { Message } from '@typie/editor-ffi/browser';
@@ -1192,5 +1192,105 @@ describe('ImeInputAdapter', () => {
       },
       { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
     ]);
+  });
+
+  it('resetForResync rewrites the input from editor state before cycling focus', () => {
+    const harness = createImeHarness(context(''));
+    const { adapter, input } = harness;
+    document.body.append(input);
+
+    adapter.handleCompositionStart(compositionEvent(input));
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅎ'));
+    input.value = 'ㅎ';
+    input.setSelectionRange(1, 1);
+    adapter.handleInput(inputEvent(input));
+
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    harness.setContext({
+      text: '\u{2028}done\u{2029}',
+      windowStart: 0,
+      selection: { start: 5, end: 5 },
+      composing: null,
+    });
+
+    const order: string[] = [];
+    let valueWhenBlurred: string | null = null;
+    vi.spyOn(input, 'blur').mockImplementation(() => {
+      valueWhenBlurred = input.value;
+      order.push('blur');
+    });
+    vi.spyOn(input, 'focus').mockImplementation(() => {
+      order.push('focus');
+    });
+
+    adapter.resetForResync(input);
+
+    expect(input.value).toBe('\u{2028}done\u{2029}');
+    expect(input.selectionStart).toBe(5);
+    expect(valueWhenBlurred).toBe('\u{2028}done\u{2029}');
+    expect(order).toEqual(['blur', 'focus']);
+  });
+
+  it('resetForResync outside composition rewrites without focus cycling', () => {
+    const harness = createImeHarness(context(''));
+    const { adapter, input } = harness;
+    document.body.append(input);
+
+    adapter.syncFromEditor(input);
+
+    harness.setContext({
+      text: '\u{2028}reset\u{2029}',
+      windowStart: 0,
+      selection: { start: 6, end: 6 },
+      composing: null,
+    });
+
+    const blur = vi.spyOn(input, 'blur');
+    const focus = vi.spyOn(input, 'focus');
+
+    adapter.resetForResync(input);
+
+    expect(input.value).toBe('\u{2028}reset\u{2029}');
+    expect(input.selectionStart).toBe(6);
+    expect(input.selectionEnd).toBe(6);
+    expect(blur).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it('input and composition events during resync are dropped', () => {
+    const harness = createImeHarness(context(''));
+    const { adapter, input, messages } = harness;
+    document.body.append(input);
+
+    adapter.handleCompositionStart(compositionEvent(input));
+    adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', 'ㅎ'));
+    input.value = 'ㅎ';
+    input.setSelectionRange(1, 1);
+    adapter.handleInput(inputEvent(input));
+
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    harness.setContext({
+      text: '\u{2028}sync\u{2029}',
+      windowStart: 0,
+      selection: { start: 5, end: 5 },
+      composing: null,
+    });
+
+    vi.spyOn(input, 'blur').mockImplementation(() => {
+      input.value = 'garbage';
+      input.setSelectionRange(7, 7);
+      adapter.handleInput(inputEvent(input));
+      adapter.handleCompositionEnd();
+    });
+
+    messages.length = 0;
+
+    adapter.resetForResync(input);
+
+    expect(messages).toEqual([]);
   });
 });
