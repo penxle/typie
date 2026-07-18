@@ -10,6 +10,7 @@ import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
 import { register, snapshot, unregister } from './registry';
+import { probeEvent, probeRendered } from './surface-probe';
 import { zoomDiffers } from './zoom';
 import type {
   BlockState,
@@ -141,20 +142,22 @@ let recoveryRegistered = false;
 function registerSurfaceRecovery() {
   if (recoveryRegistered) return;
   recoveryRegistered = true;
-  const recoverAll = () => {
+  const recoverAll = (source: string) => {
+    probeEvent(`recover-all scheduled source=${source}`);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        probeEvent(`recover-all applied source=${source} editors=${snapshot().length}`);
         for (const editor of snapshot()) {
           editor.recoverSurfaces();
         }
       });
     });
   };
-  wasm.set_gl_canary(recoverAll);
+  wasm.set_gl_canary(() => recoverAll('gl-canary'));
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') recoverAll();
+    if (document.visibilityState === 'visible') recoverAll('visibilitychange');
   });
-  window.addEventListener('pageshow', recoverAll);
+  window.addEventListener('pageshow', () => recoverAll('pageshow'));
 }
 
 export class Editor {
@@ -594,7 +597,8 @@ export class Editor {
 
   #renderSurface(page: number): void {
     if (this.#destroyed) return;
-    this.#wasm.render_surface(page);
+    const committed = this.#wasm.render_surface(page);
+    if (committed) probeRendered(this, page);
   }
 
   #resizeSurface(page: number, width: number, height: number): void {

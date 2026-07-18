@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import { CROP_MARKER_SIZE, PAGE_RENDER_OVERSCAN_MARGIN } from '../constants';
   import { getEditorContext } from '../editor.svelte';
+  import { probeAttach, probeDetach, probeEvent } from '../surface-probe';
   import { shouldKeepEmbedsWhileHidden, visibleExternalElements } from './external-element-visibility';
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
@@ -99,6 +100,7 @@
           untrack(() => {
             editor.attachSurface(page, canvas, width, backingHeight);
           });
+          probeAttach(editor, page, canvas);
 
           const paint = () => {
             if (isVisible) {
@@ -112,10 +114,16 @@
           const off = editor.on('render_invalidated', paint);
 
           const onContextRestored = () => {
+            probeEvent(`contextrestored page=${page}`);
             editor.invalidateSurface(page);
             paint();
           };
           canvas.addEventListener('contextrestored', onContextRestored);
+
+          const onContextLost = () => {
+            probeEvent(`contextlost page=${page}`);
+          };
+          canvas.addEventListener('contextlost', onContextLost);
 
           $effect.pre(() => {
             void editor.surfaceScaleFactor;
@@ -162,6 +170,8 @@
 
           return () => {
             canvas.removeEventListener('contextrestored', onContextRestored);
+            canvas.removeEventListener('contextlost', onContextLost);
+            probeDetach(editor, page);
             off();
             untrack(() => editor.detachSurface(page));
           };
