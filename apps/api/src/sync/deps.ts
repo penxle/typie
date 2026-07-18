@@ -1,3 +1,4 @@
+import { EntityAvailability } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
@@ -34,17 +35,19 @@ export const createProductionDeps = (): SyncDeps => ({
 
   checkDocumentAccess: async (userId, documentId) => {
     const doc = await db
-      .select({ siteId: Entities.siteId })
+      .select({ siteId: Entities.siteId, availability: Entities.availability })
       .from(Documents)
       .innerJoin(Entities, eq(Documents.entityId, Entities.id))
       .where(eq(Documents.id, documentId))
       .then(first);
     if (!doc) return 'forbidden';
-    try {
-      await assertSitePermission({ userId, siteId: doc.siteId });
-    } catch (err) {
-      if (err instanceof TypieError) return 'forbidden';
-      throw err;
+    if (doc.availability === EntityAvailability.PRIVATE) {
+      try {
+        await assertSitePermission({ userId, siteId: doc.siteId });
+      } catch (err) {
+        if (err instanceof TypieError) return 'forbidden';
+        throw err;
+      }
     }
     const state = await db
       .select({ documentId: DocumentStates.documentId })
