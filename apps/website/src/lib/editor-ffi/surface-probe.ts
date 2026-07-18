@@ -1,7 +1,13 @@
-// 탭 복귀 후 페이지 캔버스 렌더링 깨짐 진단용 계측. localStorage에 'typie:surface-probe'를 '1'로
-// 설정하고 새로고침하면 활성화되며, 렌더 없이 캔버스 픽셀이 변하면(=브라우저가 백킹을 파기/오염) 콘솔에 보고한다.
+// 탭 복귀 후 페이지 캔버스 렌더링 깨짐 진단용 계측. localStorage 'typie:surface-probe' 값으로 모드를
+// 고르고 새로고침한다. '1' = 픽셀 스냅샷 검증(getImageData가 캔버스를 CPU 래스터로 전환시키는 부작용 있음 —
+// 버그를 가리는 것이 실측으로 확인됨). 'no-gl' = OffscreenCanvas의 webgl 컨텍스트를 차단해 GL present 경로만
+// 제거(readback 없음). 'cpu' = 페이지 캔버스를 willReadFrequently로 선점해 처음부터 CPU 백킹(readback 없음).
 
-const enabled = typeof localStorage !== 'undefined' && localStorage.getItem('typie:surface-probe') === '1';
+const mode = typeof localStorage === 'undefined' ? null : localStorage.getItem('typie:surface-probe');
+const enabled = mode === '1';
+const blockGl = mode === 'no-gl';
+const forceCpu = mode === 'cpu';
+const active = enabled || blockGl || forceCpu;
 
 type Entry = {
   canvas: HTMLCanvasElement;
@@ -88,6 +94,11 @@ function ensureInterval() {
 }
 
 export function probeAttach(editor: object, page: number, canvas: HTMLCanvasElement): void {
+  if (forceCpu) {
+    canvas.getContext('2d', { willReadFrequently: true });
+    trace(`forced willReadFrequently page=${page}`);
+    return;
+  }
   if (!enabled) return;
   let pages = editors.get(editor);
   if (!pages) {
@@ -117,18 +128,32 @@ export function probeRendered(editor: object, page: number): void {
 }
 
 export function probeEvent(message: string): void {
-  if (!enabled) return;
+  if (!active) return;
   trace(message);
 }
 
-if (enabled && typeof document !== 'undefined') {
+if (blockGl && typeof OffscreenCanvas !== 'undefined') {
+  const original = OffscreenCanvas.prototype.getContext;
+  (OffscreenCanvas.prototype as { getContext: (...args: unknown[]) => unknown }).getContext = function (
+    this: OffscreenCanvas,
+    ...args: unknown[]
+  ) {
+    if (typeof args[0] === 'string' && args[0].startsWith('webgl')) {
+      trace(`blocked OffscreenCanvas.getContext('${args[0]}')`);
+      return null;
+    }
+    return (original as (...args: unknown[]) => unknown).call(this, ...args);
+  };
+}
+
+if (active && typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     trace(`visibilitychange state=${document.visibilityState}`);
-    if (document.visibilityState === 'visible') {
+    if (enabled && document.visibilityState === 'visible') {
       for (const delay of [100, 500, 1500, 3000, 6000]) {
         setTimeout(verifyAll, delay);
       }
     }
   });
-  trace('enabled');
+  trace(`enabled mode=${mode}`);
 }
