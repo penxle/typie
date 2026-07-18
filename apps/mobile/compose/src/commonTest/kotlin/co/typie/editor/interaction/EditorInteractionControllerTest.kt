@@ -880,6 +880,75 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `consecutive tap distance scales with density`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      host.density = 2f
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(16f)
+      val firstTap = Offset(10f, 20f)
+      val secondTap = Offset(40f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = firstTap, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = firstTap, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(controller.onPointerDown(pointerId = 2L, position = secondTap, nowMillis = 120L))
+      assertTrue(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `double tap drag threshold scales with density`() =
+    runTest(StandardTestDispatcher()) {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      host.density = 2f
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(16f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L))
+      advanceUntilIdle()
+
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 2L,
+          position = start + Offset(5f, 0f),
+          nowMillis = 140L,
+        )
+      )
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 2L,
+          position = start + Offset(9f, 0f),
+          nowMillis = 160L,
+        )
+      )
+      assertEquals(EditorInteractionMode.DoubleTapSelecting, controller.interactionMode)
+    }
+
+  @Test
   fun `double tap drag extends selection directly from controller workflow`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2259,18 +2328,14 @@ class EditorInteractionControllerTest {
     onPointerUp(pointerId = SelectionHandleTestPointerId, position = Offset.Zero, nowMillis = 32L)
 
   @Test
-  fun `pending double tap drag locks scroll gesture until pointer up`() =
+  fun `pending double tap drag owns pointer sequence over pan until pointer up`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { selection },
-          selectionEndpointsProvider = { selectionEndpoints() },
-        )
+      val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -2282,22 +2347,53 @@ class EditorInteractionControllerTest {
           uiStateProvider = { host.uiState },
         )
       controller.updateTapSlop(8f)
+      val driver = TestPanGestureDriver(shouldCatchTouch = false)
       val start = Offset(10f, 20f)
 
-      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
-      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 0L,
+        touchPanDriver = driver,
+      )
+      controller.onPointerUp(
+        pointerId = 1L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 40L,
+      )
       advanceUntilIdle()
 
-      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      controller.onPointerDown(
+        pointerId = 2L,
+        position = start,
+        positionInRoot = start,
+        nowMillis = 120L,
+        touchPanDriver = driver,
+      )
       advanceUntilIdle()
 
       assertTrue(host.scrollGestureLockActive)
 
-      controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
+      val moved = start + Offset(20f, 0f)
+      controller.onPointerMove(
+        pointerId = 2L,
+        position = moved,
+        positionInRoot = moved,
+        nowMillis = 140L,
+      )
 
+      assertEquals(0, driver.startCount)
+      assertEquals(EditorInteractionMode.DoubleTapSelecting, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
 
-      controller.onPointerUp(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 160L)
+      controller.onPointerUp(
+        pointerId = 2L,
+        position = moved,
+        positionInRoot = moved,
+        nowMillis = 160L,
+      )
       advanceUntilIdle()
 
       assertFalse(host.scrollGestureLockActive)

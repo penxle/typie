@@ -26,7 +26,8 @@ import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
 
 internal class EditorInteractionGestures(
   contextProvider: () -> EditorGestureContext,
-  private val tap: EditorTapGesture = EditorTapGesture(tapSlopPx = 0f),
+  private val tap: EditorTapGesture =
+    EditorTapGesture(tapSlopPx = 0f, densityProvider = { contextProvider().geometry.density }),
   private val doubleTapDrag: EditorDoubleTapDragSession = EditorDoubleTapDragSession(),
   private val longPress: EditorLongPressGesture = EditorLongPressGesture(),
   private val pan: EditorPanGesture = EditorPanGesture(),
@@ -142,18 +143,18 @@ internal class EditorInteractionGestures(
           placement = columnResizePlacement,
           context = context,
         )
-    if (
+    when {
+      doubleTapDrag.active -> pan.cancel(context = context)
       columnResizePlacement == null &&
         !tableHandleHit &&
         selectionHandleType == null &&
-        touchPanDriver != null
-    ) {
-      pan.prepareFresh(
-        pointerId = pointerId,
-        position = positionInRoot,
-        nowMillis = nowMillis,
-        driver = touchPanDriver,
-      )
+        touchPanDriver != null ->
+        pan.prepareFresh(
+          pointerId = pointerId,
+          position = positionInRoot,
+          nowMillis = nowMillis,
+          driver = touchPanDriver,
+        )
     }
     if (
       tapEnabled &&
@@ -181,6 +182,11 @@ internal class EditorInteractionGestures(
     consumed: Boolean = false,
     context: EditorGestureContext,
   ): Boolean {
+    if (doubleTapDrag.active) {
+      val position = positionInEditor ?: return true
+      trackTapPointerMove(pointerId = pointerId, position = position, context = context)
+      return doubleTapDrag.handlePointerMove(position = position, tap = tap, context = context)
+    }
     if (positionInEditor == null) {
       val panConsumed =
         pan.update(
@@ -202,12 +208,7 @@ internal class EditorInteractionGestures(
       return longPress.update(position = position, context = context)
     }
 
-    val movedPastTapSlop =
-      tap.trackPointerMove(pointerId = pointerId, position = position, context = context)
-    if (movedPastTapSlop) {
-      longPress.cancelPending(pointerId = pointerId)
-      context.effects.cancelLongPressDispatch()
-    }
+    trackTapPointerMove(pointerId = pointerId, position = position, context = context)
     if (tableColumnResize.pending || tableColumnResize.active) {
       val wasActive = tableColumnResize.active
       val handled =
@@ -265,7 +266,7 @@ internal class EditorInteractionGestures(
       cancelTapAndLongPress(context = context)
       return true
     }
-    return doubleTapDrag.handlePointerMove(position = position, tap = tap, context = context)
+    return false
   }
 
   fun handlePointerUp(
@@ -544,6 +545,17 @@ internal class EditorInteractionGestures(
     doubleTapDrag.resetPointerOwnedState(context = context)
     if (tap.cancelActivePointerStream()) {
       context.effects.enqueuePointerCancel()
+    }
+  }
+
+  private fun trackTapPointerMove(
+    pointerId: Long,
+    position: Offset,
+    context: EditorGestureContext,
+  ) {
+    if (tap.trackPointerMove(pointerId = pointerId, position = position, context = context)) {
+      longPress.cancelPending(pointerId = pointerId)
+      context.effects.cancelLongPressDispatch()
     }
   }
 

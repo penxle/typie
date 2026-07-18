@@ -10,12 +10,13 @@ import co.typie.editor.interaction.gestures.EditorTapGesture
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.dispatchSelectionExtension
 
-private const val EditorDoubleTapDragStartThresholdPx = 4f
+private const val EditorDoubleTapDragStartThresholdDp = 4f
 
 internal class EditorDoubleTapDragSession {
   private var phase = EditorDoubleTapDragPhase.Idle
   private var pendingSelectionExtensionPosition: Offset? = null
   private var startPosition: Offset? = null
+  private var startThresholdPx = 0f
 
   val active: Boolean
     get() = phase != EditorDoubleTapDragPhase.Idle
@@ -41,6 +42,7 @@ internal class EditorDoubleTapDragSession {
     context.uiState.contextMenu.hide()
     context.effects.setScrollGestureLocked(true)
     startPosition = position
+    startThresholdPx = EditorDoubleTapDragStartThresholdDp * context.geometry.density
     phase = EditorDoubleTapDragPhase.Pending
     return true
   }
@@ -121,8 +123,7 @@ internal class EditorDoubleTapDragSession {
 
   private fun canStart(position: Offset): Boolean {
     val startPosition = startPosition ?: return false
-    return pending &&
-      (position - startPosition).getDistance() >= EditorDoubleTapDragStartThresholdPx
+    return pending && (position - startPosition).getDistance() >= startThresholdPx
   }
 
   private fun start(tap: EditorTapGesture, context: EditorGestureContext): Boolean {
@@ -154,6 +155,7 @@ internal class EditorDoubleTapDragSession {
   private fun stop(): Boolean {
     val wasActive = active
     startPosition = null
+    startThresholdPx = 0f
     phase = EditorDoubleTapDragPhase.Idle
     return wasActive
   }
@@ -162,8 +164,7 @@ internal class EditorDoubleTapDragSession {
     if (
       context.mode.isViewportZooming ||
         !dragging ||
-        (startPosition != null &&
-          (position - startPosition!!).getDistance() < EditorDoubleTapDragStartThresholdPx)
+        (startPosition != null && (position - startPosition!!).getDistance() < startThresholdPx)
     ) {
       return false
     }

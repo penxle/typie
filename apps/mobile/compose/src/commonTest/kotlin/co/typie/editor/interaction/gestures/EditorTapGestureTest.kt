@@ -15,7 +15,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `tap timer can dispatch a primary click once`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset(10f, 20f))
 
@@ -27,7 +27,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `tap timer selection hit consumes pending tap without advancing click count`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
     gesture.markTapDispatched()
@@ -41,7 +41,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `tap timer range selection keeps tap available for pointer up dispatch`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
 
@@ -51,7 +51,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `consecutive tap inside configured window dispatches count two`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset(10f, 20f))
     val firstClick =
@@ -64,7 +64,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `double tap clears tap history so third tap dispatches count one`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = 1)
     gesture.recordTap(nowMillis = 240L, position = Offset(18f, 26f), clickCount = 2)
@@ -79,7 +79,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `consecutive taps after double tap can form a new double tap`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = 1)
     gesture.recordTap(nowMillis = 240L, position = Offset(18f, 26f), clickCount = 2)
@@ -90,7 +90,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `tap outside configured window resets click count`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = 1)
 
@@ -104,7 +104,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `moving inside tap slop keeps pending tap dispatch`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
 
@@ -117,7 +117,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `moving beyond tap slop cancels pending tap without starting selection drag`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
 
@@ -128,7 +128,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `plain drag does not advance consecutive tap count`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 100L, position = Offset.Zero, clickCount = 1)
     gesture.startPendingTap(pointerId = 2L, position = Offset.Zero)
@@ -143,7 +143,7 @@ class EditorTapGestureTest {
 
   @Test
   fun `cancelling active stream clears only the active tap candidate`() {
-    val gesture = EditorTapGesture(tapSlopPx = 8f)
+    val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
     assertTrue(gesture.cancelActivePointerStream())
@@ -156,4 +156,7 @@ class EditorTapGestureTest {
     startActivePointer(pointerId = pointerId, position = position)
     markTapPending()
   }
+
+  private fun createTapGesture(): EditorTapGesture =
+    EditorTapGesture(tapSlopPx = 8f, densityProvider = { 1f })
 }

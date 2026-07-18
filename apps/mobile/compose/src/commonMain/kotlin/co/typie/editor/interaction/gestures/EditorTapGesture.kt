@@ -22,12 +22,12 @@ internal const val EditorTapDispatchDelayMillis =
   EditorTapDownDelayMillis + EditorTapTimerDelayMillis
 
 private const val ConsecutiveTapMaxIntervalMillis = 300L
-private const val ConsecutiveTapMaxDistancePx = 20f
+private const val ConsecutiveTapMaxDistanceDp = 20f
 
 internal class EditorTapGesture(
   private var tapSlopPx: Float,
+  private val densityProvider: () -> Float,
   private val consecutiveTapMaxIntervalMillis: Long = ConsecutiveTapMaxIntervalMillis,
-  private val consecutiveTapMaxDistancePx: Float = ConsecutiveTapMaxDistancePx,
 ) {
   private var activePointerId: Long? = null
   private var downPosition = Offset.Zero
@@ -165,7 +165,7 @@ internal class EditorTapGesture(
     val previousTime = lastTapTimeMillis ?: return false
     val previousPosition = lastTapPosition ?: return false
     return nowMillis - previousTime < consecutiveTapMaxIntervalMillis &&
-      (position - previousPosition).getDistance() < consecutiveTapMaxDistancePx
+      (position - previousPosition).getDistance() < ConsecutiveTapMaxDistanceDp * densityProvider()
   }
 }
 
