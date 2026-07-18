@@ -55,6 +55,7 @@ import co.typie.editor.ffi.TableOverlayColumn
 import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.EditorInteractionScope
+import co.typie.editor.interaction.EditorPlatformIndirectScaleBridge
 import co.typie.editor.interaction.EditorScreenPointerSequence
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.editorInteractions
@@ -595,7 +596,7 @@ class EditorDocumentManipulationDesktopTest {
           eventType = PointerEventType.Scroll,
           position = Offset(x = 42f, y = 30f),
           scrollDelta = Offset(x = 0f, y = -12f),
-          keyboardModifiers = PointerKeyboardModifiers(isCtrlPressed = true),
+          keyboardModifiers = PointerKeyboardModifiers(isMetaPressed = true),
         )
       }
       waitForIdle()
@@ -1179,6 +1180,8 @@ class EditorDocumentManipulationDesktopTest {
                 interactionController = interactionScope.controller,
                 geometry = interactionScope,
                 screenPointerSequence = screenPointerSequence,
+                platformIndirectScaleBridge = remember { EditorPlatformIndirectScaleBridge() },
+                scrollGestureLockState = scrollGestureLockState,
                 scrollableState = scrollableState,
                 nestedScrollDispatcher = nestedScrollDispatcher,
                 touchSlop = 8f,

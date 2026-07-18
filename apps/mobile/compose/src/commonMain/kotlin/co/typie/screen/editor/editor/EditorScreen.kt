@@ -1142,6 +1142,13 @@ fun EditorScreen(entityId: String) {
         }
       }
     val editorInteractionEnabled = editorReady && !popoverOverlayState.isOutsideDismissGestureActive
+    val platformIndirectScaleEnabled =
+      editorInteractionEnabled &&
+        screenState.sceneInForeground &&
+        !nav.isTransitioning &&
+        !subPaneBlocksEditorInput &&
+        !screenShortcutModeActive &&
+        popoverOverlayState.entry == null
     SideEffect {
       val viewportZoomConfig =
         (layoutSpec as? EditorDocumentLayoutSpec.Paginated)?.let { paginatedLayoutSpec ->
@@ -1213,9 +1220,10 @@ fun EditorScreen(entityId: String) {
         magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
         viewportScrollableState = viewportScrollableState,
         editorInteractionEnabled = editorInteractionEnabled,
+        platformIndirectScaleEnabled = platformIndirectScaleEnabled,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
-        onViewportWheelScroll = { uiState.contextMenu.hide() },
+        onViewportIndirectInput = { uiState.contextMenu.hide() },
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {

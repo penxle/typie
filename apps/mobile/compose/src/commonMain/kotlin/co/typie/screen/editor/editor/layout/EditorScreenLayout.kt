@@ -32,9 +32,11 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.interaction.EditorPlatformIndirectScaleBridge
 import co.typie.editor.interaction.EditorScreenPointerSequence
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.editorInteractions
+import co.typie.editor.interaction.editorPlatformIndirectScale
 import co.typie.editor.interaction.observeEditorScreenPointerSequence
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
@@ -46,6 +48,7 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.ext.LocalScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.navigationPopNestedScroll
 import co.typie.screen.editor.editor.overlay.editorMagnifier
@@ -87,8 +90,9 @@ internal fun EditorScreenLayout(
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
   editorInteractionEnabled: Boolean = true,
+  platformIndirectScaleEnabled: Boolean = editorInteractionEnabled,
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
-  onViewportWheelScroll: () -> Unit = {},
+  onViewportIndirectInput: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable (Modifier) -> Unit,
@@ -99,6 +103,8 @@ internal fun EditorScreenLayout(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
+  val scrollGestureLockState = LocalScrollGestureLockState.current
+  val platformIndirectScaleBridge = remember { EditorPlatformIndirectScaleBridge() }
   val viewConfiguration = LocalViewConfiguration.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val interactionScope = LocalEditorInteractionScope.current
@@ -148,19 +154,26 @@ internal fun EditorScreenLayout(
   ) { constraints ->
     val editorInteractionModifier =
       Modifier.editorInteractions(
-        interactionController = interactionScope.controller,
-        geometry = interactionScope,
-        screenPointerSequence = screenPointerSequence,
-        scrollableState = viewportScrollableState,
-        nestedScrollDispatcher = viewportNestedScrollDispatcher,
-        flingBehavior = viewportFlingBehavior,
-        touchSlop = viewConfiguration.touchSlop,
-        maximumFlingVelocity = viewConfiguration.maximumFlingVelocity,
-        density = density.density,
-        enabled = editorInteractionEnabled,
-        onViewportWheelScroll = onViewportWheelScroll,
-        onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
-      )
+          interactionController = interactionScope.controller,
+          geometry = interactionScope,
+          screenPointerSequence = screenPointerSequence,
+          platformIndirectScaleBridge = platformIndirectScaleBridge,
+          scrollGestureLockState = scrollGestureLockState,
+          scrollableState = viewportScrollableState,
+          nestedScrollDispatcher = viewportNestedScrollDispatcher,
+          flingBehavior = viewportFlingBehavior,
+          touchSlop = viewConfiguration.touchSlop,
+          maximumFlingVelocity = viewConfiguration.maximumFlingVelocity,
+          density = density.density,
+          enabled = editorInteractionEnabled,
+          onViewportIndirectInput = onViewportIndirectInput,
+          onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
+        )
+        .editorPlatformIndirectScale(
+          bridge = platformIndirectScaleBridge,
+          enabled = platformIndirectScaleEnabled,
+          density = density.density,
+        )
     val viewportWidth = constraints.maxWidth / density.density
     val resolvedContentWidth =
       resolveEditorViewportContentWidth(

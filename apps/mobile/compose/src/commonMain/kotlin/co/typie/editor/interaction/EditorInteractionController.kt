@@ -165,17 +165,20 @@ internal class EditorInteractionController(
     )
   }
 
-  fun beginPointerSignalZoom(): Boolean =
+  fun beginIndirectZoom(): Boolean =
     if (ensurePointerInputEnabled()) {
-      gestures.beginPointerSignalZoom(context = gestureContext)
+      gestures.beginIndirectZoom(context = gestureContext)
     } else {
       false
     }
 
-  fun updatePointerSignalZoom(focalInEditorPx: Offset, normalizedDelta: Float): Boolean =
+  fun cancelPendingPointerForIndirectInput(): Boolean =
+    gestures.cancelPendingPointerForIndirectInput(context = gestureContext)
+
+  fun updateIndirectScrollZoom(focalInRootPx: Offset, normalizedDelta: Float): Boolean =
     if (ensurePointerInputEnabled()) {
-      gestures.updatePointerSignalZoom(
-        focalInEditorPx = focalInEditorPx,
+      gestures.updateIndirectScrollZoom(
+        focalInRootPx = focalInRootPx,
         normalizedDelta = normalizedDelta,
         context = gestureContext,
       )
@@ -183,8 +186,19 @@ internal class EditorInteractionController(
       false
     }
 
-  fun endPointerSignalZoom() {
-    gestures.endPointerSignalZoom(context = gestureContext)
+  fun updateIndirectScaleZoom(focalInRootPx: Offset, scaleFactor: Float): Boolean =
+    if (ensurePointerInputEnabled()) {
+      gestures.updateIndirectScaleZoom(
+        focalInRootPx = focalInRootPx,
+        scaleFactor = scaleFactor,
+        context = gestureContext,
+      )
+    } else {
+      false
+    }
+
+  fun endIndirectZoom() {
+    gestures.endIndirectZoom(context = gestureContext)
   }
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =

@@ -132,25 +132,11 @@ internal class EditorViewportScrollDriver(
   }
 
   fun launchPointerSignalScroll(scrollDelta: Offset, density: Float): Boolean {
-    val state = scrollableState() ?: return false
-    val dispatcher = nestedScrollDispatcher() ?: return false
     val delta = editorViewportWheelScrollDeltaPx(scrollDelta = scrollDelta, density = density)
-    if (delta == Offset.Zero) {
-      return false
-    }
-    launch {
-      state.scroll(MutatePriority.UserInput) {
-        // Pointer signals are independent deltas without a drag/fling terminal. Do not let a
-        // nested parent claim them as a user drag that can never be released.
-        dispatchScroll(
-          delta = delta,
-          dispatcher = dispatcher,
-          source = NestedScrollSource.SideEffect,
-        )
-      }
-    }
-    return true
+    return launchIndirectScroll(delta)
   }
+
+  fun launchTrackpadPan(panOffset: Offset): Boolean = launchIndirectScroll(panOffset)
 
   suspend fun performSemanticsScroll(offset: Offset): Offset {
     val state = scrollableState() ?: return Offset.Zero
@@ -169,6 +155,26 @@ internal class EditorViewportScrollDriver(
       }
     }
     return previousValue
+  }
+
+  private fun launchIndirectScroll(delta: Offset): Boolean {
+    val state = scrollableState() ?: return false
+    val dispatcher = nestedScrollDispatcher() ?: return false
+    if (delta == Offset.Zero || !delta.x.isFinite() || !delta.y.isFinite()) {
+      return false
+    }
+    launch {
+      state.scroll(MutatePriority.UserInput) {
+        // Indirect input has deltas but no editor-owned drag/fling terminal. Do not let a nested
+        // parent claim it as a user drag that can never be released.
+        dispatchScroll(
+          delta = delta,
+          dispatcher = dispatcher,
+          source = NestedScrollSource.SideEffect,
+        )
+      }
+    }
+    return true
   }
 
   private suspend fun performFling(

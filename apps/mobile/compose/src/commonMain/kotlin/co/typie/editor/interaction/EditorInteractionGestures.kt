@@ -416,28 +416,49 @@ internal class EditorInteractionGestures(
     return true
   }
 
-  fun beginPointerSignalZoom(context: EditorGestureContext): Boolean {
+  fun beginIndirectZoom(context: EditorGestureContext): Boolean {
     if (!context.mode.canApply(EditorInteractionEvent.ViewportZoomStart)) {
       return false
     }
-    if (!context.semantics.viewportZoom.beginPointerSignal()) {
+    if (!context.semantics.viewportZoom.beginIndirect()) {
       return false
     }
     context.applyModeEvent(EditorInteractionEvent.ViewportZoomStart)
     return true
   }
 
-  fun updatePointerSignalZoom(
-    focalInEditorPx: Offset,
+  fun cancelPendingPointerForIndirectInput(context: EditorGestureContext): Boolean {
+    if (
+      context.mode != EditorInteractionMode.Idle ||
+        (!tap.hasActivePointer && !pan.hasPendingPointer)
+    ) {
+      return false
+    }
+    cancel(context = context)
+    return true
+  }
+
+  fun updateIndirectScrollZoom(
+    focalInRootPx: Offset,
     normalizedDelta: Float,
     context: EditorGestureContext,
   ): Boolean =
-    context.semantics.viewportZoom.updatePointerSignal(
-      focalInEditorPx = focalInEditorPx,
+    context.semantics.viewportZoom.updateIndirectScroll(
+      focalInRootPx = focalInRootPx,
       normalizedDelta = normalizedDelta,
     )
 
-  fun endPointerSignalZoom(context: EditorGestureContext) {
+  fun updateIndirectScaleZoom(
+    focalInRootPx: Offset,
+    scaleFactor: Float,
+    context: EditorGestureContext,
+  ): Boolean =
+    context.semantics.viewportZoom.updateIndirectScale(
+      focalInRootPx = focalInRootPx,
+      scaleFactor = scaleFactor,
+    )
+
+  fun endIndirectZoom(context: EditorGestureContext) {
     context.semantics.viewportZoom.end()
     context.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
   }

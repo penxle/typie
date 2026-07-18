@@ -111,15 +111,15 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
-  fun `pointer signal zoom shares the viewport zoom semantic`() {
+  fun `indirect scroll zoom shares the viewport zoom semantic`() {
     val fixture = Fixture()
     val normalizedDeltaForOneAndHalfZoom = -240f * ln(1.5f)
 
-    assertTrue(fixture.semantic.beginPointerSignal())
+    assertTrue(fixture.semantic.beginIndirect())
     assertTrue(fixture.viewportState.isTransforming)
     assertTrue(
-      fixture.semantic.updatePointerSignal(
-        focalInEditorPx = Offset(80f, 150f),
+      fixture.semantic.updateIndirectScroll(
+        focalInRootPx = Offset(80f, 150f),
         normalizedDelta = normalizedDeltaForOneAndHalfZoom,
       )
     )
@@ -133,7 +133,7 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
-  fun `pointer signal anchor follows the actual page width inside the layout track`() {
+  fun `indirect scroll anchor follows the actual page width inside the layout track`() {
     val fixture =
       Fixture(
         pageSizes = listOf(PageSize(width = 700f, height = 960f)),
@@ -144,16 +144,16 @@ class EditorViewportZoomSemanticTest {
       )
     val normalizedDeltaForOneAndHalfZoom = -240f * ln(1.5f)
 
-    assertTrue(fixture.semantic.beginPointerSignal())
+    assertTrue(fixture.semantic.beginIndirect())
     assertTrue(
-      fixture.semantic.updatePointerSignal(Offset(310f, 0f), normalizedDeltaForOneAndHalfZoom)
+      fixture.semantic.updateIndirectScroll(Offset(310f, 0f), normalizedDeltaForOneAndHalfZoom)
     )
 
     assertEquals(Offset(35f, 0f), fixture.viewportState.scrollOffset)
   }
 
   @Test
-  fun `pointer signal target is restored after zoom bounds are measured`() {
+  fun `indirect scroll target is restored after zoom bounds are measured`() {
     val fixture =
       Fixture(
         measuredViewportSize = Size(width = 720f, height = 900f),
@@ -161,9 +161,9 @@ class EditorViewportZoomSemanticTest {
       )
     val normalizedDeltaForOneAndHalfZoom = -240f * ln(1.5f)
 
-    assertTrue(fixture.semantic.beginPointerSignal())
+    assertTrue(fixture.semantic.beginIndirect())
     assertTrue(
-      fixture.semantic.updatePointerSignal(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
+      fixture.semantic.updateIndirectScroll(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
     )
     assertEquals(Offset.Zero, fixture.viewportState.scrollOffset)
 
@@ -176,7 +176,7 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
-  fun `pointer signal updates remain cumulative before zoom bounds are measured`() {
+  fun `indirect scroll updates remain cumulative before zoom bounds are measured`() {
     val fixture =
       Fixture(
         measuredViewportSize = Size(width = 720f, height = 900f),
@@ -184,12 +184,12 @@ class EditorViewportZoomSemanticTest {
       )
     val normalizedDeltaForOneAndHalfZoom = -240f * ln(1.5f)
 
-    assertTrue(fixture.semantic.beginPointerSignal())
+    assertTrue(fixture.semantic.beginIndirect())
     assertTrue(
-      fixture.semantic.updatePointerSignal(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
+      fixture.semantic.updateIndirectScroll(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
     )
     assertTrue(
-      fixture.semantic.updatePointerSignal(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
+      fixture.semantic.updateIndirectScroll(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
     )
     assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
     assertEquals(Offset.Zero, fixture.viewportState.scrollOffset)
@@ -200,6 +200,23 @@ class EditorViewportZoomSemanticTest {
     )
 
     assertEquals(Offset(300f, 0f), fixture.viewportState.scrollOffset)
+  }
+
+  @Test
+  fun `native scale uses the same root physical focal anchor`() {
+    val fixture =
+      Fixture(editorBoundsInRoot = Rect(left = 100f, top = 200f, right = 820f, bottom = 2200f))
+
+    assertTrue(fixture.semantic.beginIndirect())
+    assertTrue(
+      fixture.semantic.updateIndirectScale(focalInRootPx = Offset(180f, 350f), scaleFactor = 1.5f)
+    )
+
+    assertEquals(1.5f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(Offset(40f, 75f), fixture.viewportState.scrollOffset)
+
+    fixture.semantic.end()
+    assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
   }
 
   private class Fixture(

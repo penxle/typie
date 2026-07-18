@@ -25,6 +25,8 @@ import androidx.compose.ui.semantics.scrollByOffset
 import androidx.compose.ui.unit.IntSize
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.viewport.normalizeEditorViewportWheelZoomDelta
+import co.typie.ext.ScrollGestureLockHandle
+import co.typie.ext.ScrollGestureLockState
 import co.typie.platform.isTouchDragPointer
 import kotlin.math.abs
 import kotlin.math.min
@@ -34,14 +36,13 @@ import kotlinx.coroutines.launch
 
 private const val EditorTapSlopDp = 8f
 private const val WheelBurstGapMs = 56L
-private const val WheelTailDeltaPx = 0.8f
-private const val WheelTailStreakToReset = 3
-private const val WheelModeSwitchMinDeltaPx = 1.5f
 
 internal fun Modifier.editorInteractions(
   interactionController: EditorInteractionController,
   geometry: EditorInteractionGeometry,
   screenPointerSequence: EditorScreenPointerSequence,
+  platformIndirectScaleBridge: EditorPlatformIndirectScaleBridge,
+  scrollGestureLockState: ScrollGestureLockState,
   scrollableState: Scrollable2DState? = null,
   nestedScrollDispatcher: NestedScrollDispatcher? = null,
   flingBehavior: FlingBehavior? = null,
@@ -49,7 +50,7 @@ internal fun Modifier.editorInteractions(
   maximumFlingVelocity: Float = Float.MAX_VALUE,
   density: Float,
   enabled: Boolean = true,
-  onViewportWheelScroll: () -> Unit = {},
+  onViewportIndirectInput: () -> Unit = {},
   onNestedScrollCancel: () -> Unit = {},
 ): Modifier =
   this then
@@ -57,6 +58,8 @@ internal fun Modifier.editorInteractions(
       interactionController = interactionController,
       geometry = geometry,
       screenPointerSequence = screenPointerSequence,
+      platformIndirectScaleBridge = platformIndirectScaleBridge,
+      scrollGestureLockState = scrollGestureLockState,
       scrollableState = scrollableState,
       nestedScrollDispatcher = nestedScrollDispatcher,
       flingBehavior = flingBehavior,
@@ -64,7 +67,7 @@ internal fun Modifier.editorInteractions(
       maximumFlingVelocity = maximumFlingVelocity,
       density = density,
       enabled = enabled,
-      onViewportWheelScroll = onViewportWheelScroll,
+      onViewportIndirectInput = onViewportIndirectInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
 
@@ -72,6 +75,8 @@ private data class EditorInteractionsElement(
   private val interactionController: EditorInteractionController,
   private val geometry: EditorInteractionGeometry,
   private val screenPointerSequence: EditorScreenPointerSequence,
+  private val platformIndirectScaleBridge: EditorPlatformIndirectScaleBridge,
+  private val scrollGestureLockState: ScrollGestureLockState,
   private val scrollableState: Scrollable2DState?,
   private val nestedScrollDispatcher: NestedScrollDispatcher?,
   private val flingBehavior: FlingBehavior?,
@@ -79,7 +84,7 @@ private data class EditorInteractionsElement(
   private val maximumFlingVelocity: Float,
   private val density: Float,
   private val enabled: Boolean,
-  private val onViewportWheelScroll: () -> Unit,
+  private val onViewportIndirectInput: () -> Unit,
   private val onNestedScrollCancel: () -> Unit,
 ) : ModifierNodeElement<EditorInteractionsNode>() {
   override fun create(): EditorInteractionsNode =
@@ -87,6 +92,8 @@ private data class EditorInteractionsElement(
       interactionController = interactionController,
       geometry = geometry,
       screenPointerSequence = screenPointerSequence,
+      platformIndirectScaleBridge = platformIndirectScaleBridge,
+      scrollGestureLockState = scrollGestureLockState,
       scrollableState = scrollableState,
       nestedScrollDispatcher = nestedScrollDispatcher,
       flingBehavior = flingBehavior,
@@ -94,7 +101,7 @@ private data class EditorInteractionsElement(
       maximumFlingVelocity = maximumFlingVelocity,
       density = density,
       enabled = enabled,
-      onViewportWheelScroll = onViewportWheelScroll,
+      onViewportIndirectInput = onViewportIndirectInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
 
@@ -103,6 +110,8 @@ private data class EditorInteractionsElement(
       interactionController = interactionController,
       geometry = geometry,
       screenPointerSequence = screenPointerSequence,
+      platformIndirectScaleBridge = platformIndirectScaleBridge,
+      scrollGestureLockState = scrollGestureLockState,
       scrollableState = scrollableState,
       nestedScrollDispatcher = nestedScrollDispatcher,
       flingBehavior = flingBehavior,
@@ -110,7 +119,7 @@ private data class EditorInteractionsElement(
       maximumFlingVelocity = maximumFlingVelocity,
       density = density,
       enabled = enabled,
-      onViewportWheelScroll = onViewportWheelScroll,
+      onViewportIndirectInput = onViewportIndirectInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
   }
@@ -120,6 +129,8 @@ private class EditorInteractionsNode(
   var interactionController: EditorInteractionController,
   var geometry: EditorInteractionGeometry,
   var screenPointerSequence: EditorScreenPointerSequence,
+  var platformIndirectScaleBridge: EditorPlatformIndirectScaleBridge,
+  var scrollGestureLockState: ScrollGestureLockState,
   var scrollableState: Scrollable2DState?,
   var nestedScrollDispatcher: NestedScrollDispatcher?,
   var flingBehavior: FlingBehavior?,
@@ -127,16 +138,23 @@ private class EditorInteractionsNode(
   var maximumFlingVelocity: Float,
   var density: Float,
   var enabled: Boolean,
-  var onViewportWheelScroll: () -> Unit,
+  var onViewportIndirectInput: () -> Unit,
   var onNestedScrollCancel: () -> Unit,
-) : Modifier.Node(), PointerInputModifierNode, SemanticsModifierNode, EditorScreenPointerListener {
+) :
+  Modifier.Node(),
+  PointerInputModifierNode,
+  SemanticsModifierNode,
+  EditorScreenPointerListener,
+  EditorPlatformIndirectScaleOwner {
   private val pointers = mutableMapOf<Long, PointerType>()
   private val singlePointerStreams = mutableSetOf<Long>()
   private var suppressUntilAllUp = false
   private var wheelLastEventMillis: Long? = null
-  private var wheelLowDeltaStreak = 0
   private var wheelZoomActive = false
   private var wheelZoomTimeoutJob: Job? = null
+  private var scaleZoomActive = false
+  private var physicalSequenceYieldedToIndirectInput = false
+  private var physicalDragLockHandle: ScrollGestureLockHandle? = null
   private val scrollDriver =
     EditorViewportScrollDriver(
       scrollableState = { scrollableState },
@@ -150,12 +168,15 @@ private class EditorInteractionsNode(
 
   override fun onAttach() {
     screenPointerSequence.attach(this)
+    platformIndirectScaleBridge.attach(this)
   }
 
   fun update(
     interactionController: EditorInteractionController,
     geometry: EditorInteractionGeometry,
     screenPointerSequence: EditorScreenPointerSequence,
+    platformIndirectScaleBridge: EditorPlatformIndirectScaleBridge,
+    scrollGestureLockState: ScrollGestureLockState,
     scrollableState: Scrollable2DState?,
     nestedScrollDispatcher: NestedScrollDispatcher?,
     flingBehavior: FlingBehavior?,
@@ -163,13 +184,15 @@ private class EditorInteractionsNode(
     maximumFlingVelocity: Float,
     density: Float,
     enabled: Boolean,
-    onViewportWheelScroll: () -> Unit,
+    onViewportIndirectInput: () -> Unit,
     onNestedScrollCancel: () -> Unit,
   ) {
     val inputOwnerChanged =
       this.interactionController !== interactionController ||
         this.geometry !== geometry ||
         this.screenPointerSequence !== screenPointerSequence ||
+        this.platformIndirectScaleBridge !== platformIndirectScaleBridge ||
+        this.scrollGestureLockState !== scrollGestureLockState ||
         this.scrollableState !== scrollableState ||
         this.nestedScrollDispatcher !== nestedScrollDispatcher ||
         this.flingBehavior !== flingBehavior
@@ -180,9 +203,15 @@ private class EditorInteractionsNode(
       this.screenPointerSequence.detach(this)
       screenPointerSequence.attach(this)
     }
+    if (this.platformIndirectScaleBridge !== platformIndirectScaleBridge) {
+      this.platformIndirectScaleBridge.detach(this)
+      platformIndirectScaleBridge.attach(this)
+    }
     this.interactionController = interactionController
     this.geometry = geometry
     this.screenPointerSequence = screenPointerSequence
+    this.platformIndirectScaleBridge = platformIndirectScaleBridge
+    this.scrollGestureLockState = scrollGestureLockState
     this.scrollableState = scrollableState
     this.nestedScrollDispatcher = nestedScrollDispatcher
     this.flingBehavior = flingBehavior
@@ -190,19 +219,14 @@ private class EditorInteractionsNode(
     this.maximumFlingVelocity = maximumFlingVelocity
     this.density = density
     this.enabled = enabled
-    this.onViewportWheelScroll = onViewportWheelScroll
+    this.onViewportIndirectInput = onViewportIndirectInput
     this.onNestedScrollCancel = onNestedScrollCancel
   }
 
   override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
-    if (pass != PointerEventPass.Main) {
+    if (routeIndirectPointerPass(pointerEvent = pointerEvent, pass = pass)) {
       return
     }
-    if (pointerEvent.type == PointerEventType.Scroll) {
-      handlePointerSignal(pointerEvent)
-      return
-    }
-    finishWheelZoom()
     if (!enabled || density <= 0f) {
       cancelInteraction(clearSuppression = true)
       return
@@ -213,6 +237,24 @@ private class EditorInteractionsNode(
       dragSlopPx = min(touchSlop, EditorTapSlopDp * density)
     )
     registerPointerDowns(pointerEvent)
+    if (
+      scaleZoomActive &&
+        pointers.isNotEmpty() &&
+        pointers.values.all { pointerType -> pointerType == PointerType.Mouse }
+    ) {
+      suppressUntilAllUp = true
+      physicalSequenceYieldedToIndirectInput = true
+    }
+    if (physicalSequenceYieldedToIndirectInput) {
+      consumeEditorChanges(pointerEvent)
+      finishReleasedPointers(pointerEvent)
+      return
+    }
+    if (pointers.isEmpty()) {
+      return
+    }
+    finishWheelZoom()
+    finishScaleZoom()
     val pressedTouchChanges = pressedTouchChanges(pointerEvent)
 
     if (screenPointerSequence.hasForeignTouchPointer(::isEditorTouchPointer)) {
@@ -263,13 +305,24 @@ private class EditorInteractionsNode(
     finishReleasedPointers(pointerEvent)
   }
 
+  private fun routeIndirectPointerPass(
+    pointerEvent: PointerEvent,
+    pass: PointerEventPass,
+  ): Boolean {
+    if (pass == PointerEventPass.Initial) {
+      handleIndirectPointerEvent(pointerEvent)
+      return true
+    }
+    return pass != PointerEventPass.Main || pointerEvent.type.isIndirectPointerEvent()
+  }
+
   override fun onCancelPointerInput() {
     cancelInteraction(clearSuppression = true)
   }
 
   override fun onScreenPointerMembershipChanged() {
     if (
-      pointers.values.none { pointerType -> pointerType == PointerType.Touch } ||
+      (pointers.isEmpty() && interactionController.interactionMode == EditorInteractionMode.Idle) ||
         !screenPointerSequence.hasForeignTouchPointer(::isEditorTouchPointer)
     ) {
       return
@@ -281,6 +334,8 @@ private class EditorInteractionsNode(
     pointers.clear()
     singlePointerStreams.clear()
     suppressUntilAllUp = false
+    physicalSequenceYieldedToIndirectInput = false
+    releasePhysicalDragLock()
   }
 
   override fun SemanticsPropertyReceiver.applySemantics() {
@@ -297,7 +352,16 @@ private class EditorInteractionsNode(
   private fun registerPointerDowns(pointerEvent: PointerEvent) {
     pointerEvent.changes
       .filter { change -> change.pressed && !change.previousPressed }
-      .forEach { change -> pointers[change.id.value] = change.type }
+      .forEach { change ->
+        pointers[change.id.value] = change.type
+        if (
+          physicalDragLockHandle == null &&
+            change.type == PointerType.Mouse &&
+            change.type.isTouchDragPointer()
+        ) {
+          physicalDragLockHandle = scrollGestureLockState.acquire()
+        }
+      }
   }
 
   private fun isEditorTouchPointer(pointerId: Long): Boolean =
@@ -389,10 +453,19 @@ private class EditorInteractionsNode(
       }
     if (pointers.isEmpty() && !screenPointerSequence.hasScreenPointers) {
       suppressUntilAllUp = false
+      physicalSequenceYieldedToIndirectInput = false
+    }
+    if (
+      pointers.values.none { pointerType ->
+        pointerType == PointerType.Mouse && pointerType.isTouchDragPointer()
+      }
+    ) {
+      releasePhysicalDragLock()
     }
   }
 
   private fun cancelAndSuppress(pointerEvent: PointerEvent) {
+    physicalSequenceYieldedToIndirectInput = false
     interactionController.cancel()
     scrollDriver.cancel()
     suppressUntilAllUp = pointerEvent.changes.any { change -> change.pressed }
@@ -405,11 +478,13 @@ private class EditorInteractionsNode(
       singlePointerStreams.isNotEmpty() ||
         interactionController.interactionMode != EditorInteractionMode.Idle
     suppressUntilAllUp = true
+    physicalSequenceYieldedToIndirectInput = false
+    finishWheelZoom()
+    finishScaleZoom()
     if (hadEditorInteraction) {
       interactionController.cancel()
     }
     scrollDriver.cancel()
-    finishWheelZoom()
   }
 
   private fun consumeEditorChanges(pointerEvent: PointerEvent) {
@@ -418,12 +493,45 @@ private class EditorInteractionsNode(
       .forEach(PointerInputChange::consume)
   }
 
+  private fun handleIndirectPointerEvent(pointerEvent: PointerEvent): Boolean {
+    when (pointerEvent.type) {
+      PointerEventType.Scroll -> {
+        finishScaleZoom()
+        handlePointerSignal(pointerEvent)
+      }
+      PointerEventType.PanStart,
+      PointerEventType.PanMove,
+      PointerEventType.PanEnd -> {
+        finishWheelZoom()
+        finishScaleZoom()
+        handleTrackpadPan(pointerEvent)
+      }
+      PointerEventType.ScaleStart,
+      PointerEventType.ScaleChange,
+      PointerEventType.ScaleEnd -> {
+        finishWheelZoom()
+        handleScale(pointerEvent)
+      }
+      else -> return false
+    }
+    return true
+  }
+
   private fun handlePointerSignal(pointerEvent: PointerEvent) {
     if (!enabled || density <= 0f) {
       finishWheelZoom()
       return
     }
-    if (pointers.isNotEmpty()) {
+    if (screenPointerSequence.hasScreenPointers) {
+      finishWheelZoom()
+      pointerEvent.changes.forEach(PointerInputChange::consume)
+      return
+    }
+    if (
+      pointers.isNotEmpty() &&
+        !physicalSequenceYieldedToIndirectInput &&
+        !yieldPendingPhysicalPointerToIndirectInput()
+    ) {
       finishWheelZoom()
       pointerEvent.changes.forEach(PointerInputChange::consume)
       return
@@ -435,60 +543,50 @@ private class EditorInteractionsNode(
     if (scrollDelta == Offset.Zero) {
       return
     }
-    val zoomModified =
-      pointerEvent.keyboardModifiers.isCtrlPressed || pointerEvent.keyboardModifiers.isMetaPressed
+    val zoomModified = pointerEvent.keyboardModifiers.isEditorIndirectZoomModifierPressed()
     if (!zoomModified) {
       finishWheelZoom()
       if (scrollDriver.launchPointerSignalScroll(scrollDelta = scrollDelta, density = density)) {
-        onViewportWheelScroll()
+        onViewportIndirectInput()
         pointerEvent.changes.forEach(PointerInputChange::consume)
       }
       return
     }
 
-    val change = pointerEvent.changes.firstOrNull() ?: return
+    handleModifiedPointerScroll(pointerEvent = pointerEvent, scrollDelta = scrollDelta)
+  }
+
+  private fun handleModifiedPointerScroll(pointerEvent: PointerEvent, scrollDelta: Offset) {
+    val change = pointerEvent.changes.firstOrNull { candidate -> !candidate.isConsumed } ?: return
     val dominantDelta =
       if (abs(scrollDelta.y) >= abs(scrollDelta.x)) scrollDelta.y else scrollDelta.x
     if (!dominantDelta.isFinite() || dominantDelta == 0f) {
       return
     }
     val normalizedDelta = normalizeEditorViewportWheelZoomDelta(dominantDelta)
-    val deltaMagnitude = abs(normalizedDelta)
     val elapsed = wheelLastEventMillis?.let { change.uptimeMillis - it } ?: Long.MAX_VALUE
     if (elapsed > WheelBurstGapMs) {
       finishWheelZoom()
     }
     wheelLastEventMillis = change.uptimeMillis
-    if (deltaMagnitude <= WheelTailDeltaPx) {
-      wheelLowDeltaStreak += 1
-      if (wheelLowDeltaStreak >= WheelTailStreakToReset) {
-        finishWheelZoom()
-        return
-      }
-    } else {
-      wheelLowDeltaStreak = 0
-    }
     if (!wheelZoomActive) {
-      if (
-        deltaMagnitude < WheelModeSwitchMinDeltaPx ||
-          !interactionController.beginPointerSignalZoom()
-      ) {
+      if (!interactionController.beginIndirectZoom()) {
         return
       }
       wheelZoomActive = true
     }
-    val focalInEditor = geometry.resolveInteractionPosition(change.position)
+    val focalInRoot = positionInRoot(change.position)
     if (
-      focalInEditor == null ||
-        !interactionController.updatePointerSignalZoom(
-          focalInEditorPx = focalInEditor,
-          normalizedDelta = normalizedDelta,
-        )
+      !interactionController.updateIndirectScrollZoom(
+        focalInRootPx = focalInRoot,
+        normalizedDelta = normalizedDelta,
+      )
     ) {
       finishWheelZoom()
       return
     }
     keepWheelZoomAlive()
+    onViewportIndirectInput()
     pointerEvent.changes.forEach(PointerInputChange::consume)
   }
 
@@ -503,12 +601,134 @@ private class EditorInteractionsNode(
   private fun finishWheelZoom() {
     wheelZoomTimeoutJob?.cancel()
     wheelZoomTimeoutJob = null
-    wheelLowDeltaStreak = 0
     wheelLastEventMillis = null
     if (wheelZoomActive) {
       wheelZoomActive = false
-      interactionController.endPointerSignalZoom()
+      interactionController.endIndirectZoom()
     }
+  }
+
+  private fun handleTrackpadPan(pointerEvent: PointerEvent) {
+    if (!enabled || density <= 0f) {
+      return
+    }
+    if (!canAcceptIndirectInput() && !yieldPendingPhysicalPointerToIndirectInput()) {
+      pointerEvent.changes.forEach(PointerInputChange::consume)
+      return
+    }
+    if (pointerEvent.type == PointerEventType.PanMove) {
+      val panOffset =
+        pointerEvent.changes.firstNotNullOfOrNull { change ->
+          change.panOffset.takeIf { offset -> !change.isConsumed && offset.isUsablePanOffset() }
+        }
+      if (panOffset != null && scrollDriver.launchTrackpadPan(panOffset)) {
+        onViewportIndirectInput()
+      }
+    }
+    pointerEvent.changes.forEach(PointerInputChange::consume)
+  }
+
+  private fun handleScale(pointerEvent: PointerEvent) {
+    if (!enabled || density <= 0f) {
+      finishScaleZoom()
+      return
+    }
+    when (pointerEvent.type) {
+      PointerEventType.ScaleStart -> {
+        beginIndirectScale()
+      }
+      PointerEventType.ScaleChange -> {
+        if (!canAcceptIndirectInput()) {
+          finishScaleZoom()
+          pointerEvent.changes.forEach(PointerInputChange::consume)
+          return
+        }
+        val change =
+          if (scaleZoomActive) {
+            pointerEvent.changes.firstOrNull { candidate ->
+              !candidate.isConsumed && candidate.scaleFactor.isUsableScaleChange()
+            }
+          } else {
+            null
+          }
+        if (change != null) {
+          updateIndirectScale(
+            focalInRootPx = positionInRoot(change.position),
+            scaleFactor = change.scaleFactor,
+          )
+        }
+      }
+      PointerEventType.ScaleEnd -> endIndirectScale()
+    }
+    pointerEvent.changes.forEach(PointerInputChange::consume)
+  }
+
+  private fun canAcceptIndirectInput(): Boolean =
+    enabled &&
+      density > 0f &&
+      (pointers.isEmpty() || physicalSequenceYieldedToIndirectInput) &&
+      !screenPointerSequence.hasScreenPointers
+
+  override fun beginIndirectScale(): Boolean {
+    finishWheelZoom()
+    if (scaleZoomActive) {
+      return false
+    }
+    if (!canAcceptIndirectInput() && !yieldPendingPhysicalPointerToIndirectInput()) {
+      return false
+    }
+    scaleZoomActive = interactionController.beginIndirectZoom()
+    return scaleZoomActive
+  }
+
+  override fun updateIndirectScale(focalInRootPx: Offset, scaleFactor: Float): Boolean {
+    if (!scaleZoomActive || !canAcceptIndirectInput()) {
+      finishScaleZoom()
+      return false
+    }
+    if (
+      !interactionController.updateIndirectScaleZoom(
+        focalInRootPx = focalInRootPx,
+        scaleFactor = scaleFactor,
+      )
+    ) {
+      finishScaleZoom()
+      return false
+    }
+    onViewportIndirectInput()
+    return true
+  }
+
+  override fun endIndirectScale() {
+    finishScaleZoom()
+  }
+
+  private fun finishScaleZoom() {
+    if (scaleZoomActive) {
+      scaleZoomActive = false
+      interactionController.endIndirectZoom()
+    }
+  }
+
+  private fun yieldPendingPhysicalPointerToIndirectInput(): Boolean {
+    if (
+      screenPointerSequence.hasScreenPointers ||
+        pointers.isEmpty() ||
+        pointers.values.any { pointerType -> pointerType != PointerType.Mouse } ||
+        !interactionController.cancelPendingPointerForIndirectInput()
+    ) {
+      return false
+    }
+    singlePointerStreams.clear()
+    scrollDriver.cancel()
+    suppressUntilAllUp = true
+    physicalSequenceYieldedToIndirectInput = true
+    return true
+  }
+
+  private fun releasePhysicalDragLock() {
+    physicalDragLockHandle?.release()
+    physicalDragLockHandle = null
   }
 
   private fun cancelInteraction(clearSuppression: Boolean) {
@@ -520,6 +740,9 @@ private class EditorInteractionsNode(
     }
     scrollDriver.cancel()
     finishWheelZoom()
+    finishScaleZoom()
+    releasePhysicalDragLock()
+    physicalSequenceYieldedToIndirectInput = false
     if (clearSuppression) {
       suppressUntilAllUp = false
     }
@@ -528,9 +751,28 @@ private class EditorInteractionsNode(
   override fun onDetach() {
     cancelInteraction(clearSuppression = true)
     screenPointerSequence.detach(this)
+    platformIndirectScaleBridge.detach(this)
     super.onDetach()
   }
 }
+
+private fun Offset.isUsablePanOffset(): Boolean {
+  if (this == Offset.Zero) {
+    return false
+  }
+  return x.isFinite() && y.isFinite()
+}
+
+private fun Float.isUsableScaleChange(): Boolean = isFinite() && this > 0f && this != 1f
+
+private fun PointerEventType.isIndirectPointerEvent(): Boolean =
+  this == PointerEventType.Scroll ||
+    this == PointerEventType.PanStart ||
+    this == PointerEventType.PanMove ||
+    this == PointerEventType.PanEnd ||
+    this == PointerEventType.ScaleStart ||
+    this == PointerEventType.ScaleChange ||
+    this == PointerEventType.ScaleEnd
 
 internal class EditorScreenPointerSequence {
   private val screenPointers = mutableSetOf<Long>()

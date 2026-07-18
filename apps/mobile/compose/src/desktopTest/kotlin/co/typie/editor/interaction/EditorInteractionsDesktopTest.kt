@@ -15,31 +15,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.pan
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTrackpadInput
+import androidx.compose.ui.test.scale
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorZoomController
+import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.ext.ScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
@@ -49,11 +58,13 @@ import co.typie.ui.component.topbar.TopBarState
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -76,6 +87,457 @@ class EditorInteractionsDesktopTest {
     waitForIdle()
 
     assertTrue(fixture.touchPanDeltas.isNotEmpty())
+  }
+
+  @Test
+  fun `editor physical click drag owns desktop scroll translation until release`() =
+    runComposeUiTest {
+      val fixture = Fixture()
+      setEditorContent(fixture)
+
+      onNodeWithTag(EditorTag).performTrackpadInput {
+        moveTo(Offset(x = 100f, y = 100f))
+        press()
+      }
+      waitForIdle()
+      assertTrue(fixture.scrollGestureLockState.isLocked)
+
+      onNodeWithTag(EditorTag).performTrackpadInput {
+        moveBy(Offset(x = 20f, y = 0f))
+        release()
+      }
+      waitForIdle()
+
+      assertFalse(fixture.scrollGestureLockState.isLocked)
+      assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    }
+
+  @Test
+  fun `desktop command pointer scroll zooms without moving navigation`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+    val editor = onNodeWithTag(NavigationEditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performMouseInput { moveTo(center) }
+    editor.performKeyInput { keyDown(Key.MetaLeft) }
+    editor.performMouseInput { repeat(24) { scroll(Offset(x = 0f, y = -0.1f)) } }
+    editor.performKeyInput { keyUp(Key.MetaLeft) }
+    mainClock.advanceTimeBy(100)
+    waitForIdle()
+
+    assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertEquals(
+      expected = 0f,
+      actual = editor.fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+  }
+
+  @Test
+  fun `desktop ctrl pointer scroll remains viewport scroll`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performMouseInput { moveTo(center) }
+    editor.performKeyInput { keyDown(Key.CtrlLeft) }
+    editor.performMouseInput { scroll(Offset(x = 0f, y = -96f)) }
+    editor.performKeyInput { keyUp(Key.CtrlLeft) }
+    waitForIdle()
+
+    assertEquals(initialZoom, fixture.zoomController.displayZoom, 0.0001f)
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+  }
+
+  @Test
+  fun `modified pointer scroll reaches editor before a child consumes it`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture, consumeIndirectInputAtChild = true)
+    val editor = onNodeWithTag(EditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performMouseInput { moveTo(center) }
+    editor.performKeyInput { keyDown(Key.MetaLeft) }
+    editor.performMouseInput { scroll(Offset(x = 0f, y = -96f)) }
+    editor.performKeyInput { keyUp(Key.MetaLeft) }
+    waitForIdle()
+
+    assertTrue(fixture.zoomController.displayZoom > initialZoom)
+  }
+
+  @Test
+  fun `command scroll takes over a pressed tap and allows following scale`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performMouseInput {
+      moveTo(center)
+      press()
+    }
+    waitForIdle()
+    assertEquals(1, fixture.host.longPressDispatchScheduleCount)
+
+    editor.performKeyInput { keyDown(Key.MetaLeft) }
+    editor.performMouseInput { scroll(Offset(x = 0f, y = -24f)) }
+    editor.performKeyInput { keyUp(Key.MetaLeft) }
+    waitForIdle()
+
+    assertTrue(fixture.host.longPressDispatchCancelCount > 0)
+    assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    val zoomAfterScroll = fixture.zoomController.displayZoom
+    runOnIdle {
+      assertTrue(fixture.platformIndirectScaleBridge.begin())
+      assertTrue(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.1f,
+        )
+      )
+      fixture.platformIndirectScaleBridge.end()
+    }
+    assertTrue(fixture.zoomController.displayZoom > zoomAfterScroll)
+    editor.performMouseInput { release() }
+    waitForIdle()
+
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertFalse(fixture.scrollGestureLockState.isLocked)
+  }
+
+  @Test
+  fun `common trackpad scale event does not start physical gestures`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    onNodeWithTag(EditorTag).performTrackpadInput {
+      updatePointerTo(Offset(x = 180f, y = 160f))
+      scale(1.25f)
+    }
+    waitForIdle()
+
+    assertEquals(initialZoom * 1.25f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertEquals(0, fixture.host.tapDispatchScheduleCount)
+    assertEquals(0, fixture.host.longPressDispatchScheduleCount)
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+  }
+
+  @Test
+  fun `common trackpad scale event precedes child consumption`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture, consumeIndirectInputAtChild = true)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    onNodeWithTag(EditorTag).performTrackpadInput {
+      updatePointerTo(Offset(x = 180f, y = 160f))
+      scale(1.25f)
+    }
+    waitForIdle()
+
+    assertEquals(initialZoom * 1.25f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `common trackpad scale event does not move navigation route`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    onNodeWithTag(NavigationEditorTag).performTrackpadInput {
+      updatePointerTo(Offset(x = 180f, y = 160f))
+      scale(1.2f)
+    }
+    waitForIdle()
+
+    assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertEquals(
+      expected = 0f,
+      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+  }
+
+  @Test
+  fun `platform indirect scale bridge uses the editor interaction owner`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    runOnIdle {
+      assertTrue(fixture.platformIndirectScaleBridge.begin())
+      assertTrue(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.25f,
+        )
+      )
+      fixture.platformIndirectScaleBridge.end()
+    }
+
+    assertEquals(initialZoom * 1.25f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+  }
+
+  @Test
+  fun `platform indirect scale reports accepted editor input`() = runComposeUiTest {
+    val fixture = Fixture()
+    var acceptedInputCount = 0
+    setEditorContent(fixture = fixture, onViewportIndirectInput = { acceptedInputCount += 1 })
+
+    runOnIdle {
+      assertTrue(fixture.platformIndirectScaleBridge.begin())
+      assertTrue(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.1f,
+        )
+      )
+      fixture.platformIndirectScaleBridge.end()
+    }
+
+    assertEquals(1, acceptedInputCount)
+  }
+
+  @Test
+  fun `platform indirect scale takes over a pending physical pan candidate`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    onNodeWithTag(EditorTag).performTrackpadInput {
+      moveTo(Offset(x = 100f, y = 100f))
+      press()
+    }
+    waitForIdle()
+
+    runOnIdle {
+      assertTrue(fixture.platformIndirectScaleBridge.begin())
+      assertTrue(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.1f,
+        )
+      )
+      fixture.platformIndirectScaleBridge.end()
+    }
+
+    onNodeWithTag(EditorTag).performTrackpadInput { release() }
+    waitForIdle()
+    assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertFalse(fixture.scrollGestureLockState.isLocked)
+  }
+
+  @Test
+  fun `platform indirect scale takes over a pressed tap`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performMouseInput {
+      moveTo(center)
+      press()
+    }
+    waitForIdle()
+
+    runOnIdle {
+      assertTrue(fixture.platformIndirectScaleBridge.begin())
+      assertTrue(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.1f,
+        )
+      )
+      fixture.platformIndirectScaleBridge.end()
+    }
+
+    assertTrue(fixture.host.longPressDispatchCancelCount > 0)
+    assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    editor.performMouseInput { release() }
+    waitForIdle()
+
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertFalse(fixture.scrollGestureLockState.isLocked)
+  }
+
+  @Test
+  fun `late mouse press joins an active platform indirect scale without starting long press`() =
+    runComposeUiTest {
+      val fixture = Fixture(tapEligible = true)
+      setEditorContent(fixture)
+      val editor = onNodeWithTag(EditorTag)
+      val initialZoom = fixture.zoomController.displayZoom
+
+      runOnIdle { assertTrue(fixture.platformIndirectScaleBridge.begin()) }
+      editor.performMouseInput {
+        moveTo(center)
+        press()
+      }
+      waitForIdle()
+
+      assertEquals(EditorInteractionMode.ViewportZooming, fixture.controller.interactionMode)
+      assertEquals(0, fixture.host.longPressDispatchScheduleCount)
+      runOnIdle {
+        assertTrue(
+          fixture.platformIndirectScaleBridge.update(
+            focalInRootPx = Offset(x = 180f, y = 160f),
+            scaleFactor = 1.1f,
+          )
+        )
+        fixture.platformIndirectScaleBridge.end()
+      }
+
+      assertTrue(fixture.zoomController.displayZoom > initialZoom)
+      editor.performMouseInput { release() }
+      waitForIdle()
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertFalse(fixture.scrollGestureLockState.isLocked)
+    }
+
+  @Test
+  fun `platform indirect scale cannot take over an active physical pan`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performMouseInput {
+      moveTo(Offset(x = 100f, y = 100f))
+      press()
+      moveTo(Offset(x = 120f, y = 100f))
+    }
+    waitForIdle()
+    assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
+    val panDeltaCountBeforeIndirectInput = fixture.touchPanDeltas.size
+
+    editor.performKeyInput { keyDown(Key.MetaLeft) }
+    editor.performMouseInput { scroll(Offset(x = 0f, y = -24f)) }
+    editor.performKeyInput { keyUp(Key.MetaLeft) }
+    editor.performTrackpadInput {
+      updatePointerTo(Offset(x = 120f, y = 100f))
+      pan(Offset(x = -40f, y = 60f))
+    }
+    assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
+    assertEquals(panDeltaCountBeforeIndirectInput, fixture.touchPanDeltas.size)
+    runOnIdle { assertFalse(fixture.platformIndirectScaleBridge.begin()) }
+
+    editor.performMouseInput { release() }
+    waitForIdle()
+    assertEquals(initialZoom, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertFalse(fixture.scrollGestureLockState.isLocked)
+  }
+
+  @Test
+  fun `foreign physical sequence cancels active platform indirect scale`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture = fixture, editorWidth = 300.dp)
+
+    runOnIdle {
+      assertTrue(fixture.platformIndirectScaleBridge.begin())
+      assertTrue(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.1f,
+        )
+      )
+    }
+
+    onNodeWithTag(RootTag).performTouchInput {
+      down(pointerId = 0, position = Offset(x = 350f, y = 100f))
+    }
+
+    runOnIdle {
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertFalse(
+        fixture.platformIndirectScaleBridge.update(
+          focalInRootPx = Offset(x = 180f, y = 160f),
+          scaleFactor = 1.1f,
+        )
+      )
+    }
+
+    onNodeWithTag(RootTag).performTouchInput { up(pointerId = 0) }
+  }
+
+  @Test
+  fun `common trackpad pan event scrolls without moving navigation`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+
+    onNodeWithTag(NavigationEditorTag).performTrackpadInput {
+      updatePointerTo(Offset(x = 180f, y = 160f))
+      pan(Offset(x = -40f, y = 60f))
+    }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertEquals(
+      expected = 0f,
+      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+  }
+
+  @Test
+  fun `common trackpad pan event takes over a pending physical candidate`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+
+    editor.performMouseInput {
+      moveTo(center)
+      press()
+    }
+    waitForIdle()
+    editor.performTrackpadInput {
+      updatePointerTo(center)
+      pan(Offset(x = -40f, y = 60f))
+    }
+    editor.performMouseInput { release() }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertFalse(fixture.scrollGestureLockState.isLocked)
+  }
+
+  @Test
+  fun `modified physical click drag remains pan and never zooms`() = runComposeUiTest {
+    val fixture = Fixture()
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+    val initialZoom = fixture.zoomController.displayZoom
+
+    editor.performKeyInput { keyDown(Key.MetaLeft) }
+    editor.performTrackpadInput {
+      moveTo(Offset(x = 100f, y = 100f))
+      press()
+      moveBy(Offset(x = 20f, y = 0f))
+      release()
+    }
+    editor.performKeyInput { keyUp(Key.MetaLeft) }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(initialZoom, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(initialZoom, fixture.zoomController.renderZoom, 0.0001f)
+    assertFalse(fixture.scrollGestureLockState.isLocked)
   }
 
   @Test
@@ -202,31 +664,33 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `pointer signal scroll does not interrupt a pressed pointer sequence`() = runComposeUiTest {
-    val fixture = Fixture(scrollConsumer = { Offset.Zero })
-    val navigator = Navigator(Route.Home)
-    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+  fun `pointer signal scroll takes over a pending pointer without moving navigation`() =
+    runComposeUiTest {
+      val fixture = Fixture(scrollConsumer = { Offset.Zero })
+      val navigator = Navigator(Route.Home)
+      setNavigationEditorContent(fixture = fixture, navigator = navigator)
 
-    onNodeWithTag(NavigationEditorTag).performMouseInput {
-      moveTo(Offset(x = 80f, y = center.y))
-      press()
-    }
-    waitForIdle()
-    listOf(-120f, -80f, -40f, -20f).forEach { deltaX ->
-      onNodeWithTag(NavigationEditorTag).performMouseInput { scroll(Offset(x = deltaX, y = 0f)) }
+      onNodeWithTag(NavigationEditorTag).performMouseInput {
+        moveTo(Offset(x = 80f, y = center.y))
+        press()
+      }
       waitForIdle()
-    }
-    onNodeWithTag(NavigationEditorTag).performMouseInput { release() }
-    waitForIdle()
+      listOf(-120f, -80f, -40f, -20f).forEach { deltaX ->
+        onNodeWithTag(NavigationEditorTag).performMouseInput { scroll(Offset(x = deltaX, y = 0f)) }
+        waitForIdle()
+      }
+      onNodeWithTag(NavigationEditorTag).performMouseInput { release() }
+      waitForIdle()
 
-    assertTrue(fixture.touchPanDeltas.isEmpty())
-    assertEquals(NavigationEditorRoute, navigator.current)
-    assertEquals(
-      expected = 0f,
-      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
-      absoluteTolerance = 0.5f,
-    )
-  }
+      assertTrue(fixture.touchPanDeltas.any { delta -> delta.x > 0f })
+      assertEquals(NavigationEditorRoute, navigator.current)
+      assertEquals(
+        expected = 0f,
+        actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
+        absoluteTolerance = 0.5f,
+      )
+      assertFalse(fixture.scrollGestureLockState.isLocked)
+    }
 
   @Test
   fun `accessibility scroll does not move navigation route`() = runComposeUiTest {
@@ -1073,6 +1537,8 @@ class EditorInteractionsDesktopTest {
     fixture: Fixture,
     includeInteractionBoundary: () -> Boolean = { true },
     editorWidth: androidx.compose.ui.unit.Dp = 400.dp,
+    consumeIndirectInputAtChild: Boolean = false,
+    onViewportIndirectInput: () -> Unit = {},
     onCoroutineScope: (CoroutineScope) -> Unit = {},
   ) {
     setContent {
@@ -1095,17 +1561,40 @@ class EditorInteractionsDesktopTest {
                   interactionController = fixture.controller,
                   geometry = fixture.host,
                   screenPointerSequence = screenPointerSequence,
+                  platformIndirectScaleBridge = fixture.platformIndirectScaleBridge,
+                  scrollGestureLockState = fixture.scrollGestureLockState,
                   scrollableState = fixture.scrollableState,
                   nestedScrollDispatcher = nestedScrollDispatcher,
                   flingBehavior = fixture.flingBehavior,
                   touchSlop = 8f,
                   density = 1f,
+                  onViewportIndirectInput = onViewportIndirectInput,
                 )
               } else {
                 Modifier
               }
             )
-        )
+        ) {
+          if (consumeIndirectInputAtChild) {
+            Box(
+              Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitPointerEventScope {
+                  while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Main)
+                    if (
+                      event.type == PointerEventType.Scroll ||
+                        event.type == PointerEventType.ScaleStart ||
+                        event.type == PointerEventType.ScaleChange ||
+                        event.type == PointerEventType.ScaleEnd
+                    ) {
+                      event.changes.forEach { change -> change.consume() }
+                    }
+                  }
+                }
+              }
+            )
+          }
+        }
         if (editorWidth < 400.dp) {
           Box(
             Modifier.align(androidx.compose.ui.Alignment.TopEnd).size(400.dp - editorWidth, 400.dp)
@@ -1141,6 +1630,8 @@ class EditorInteractionsDesktopTest {
                   interactionController = fixture.controller,
                   geometry = fixture.host,
                   screenPointerSequence = screenPointerSequence,
+                  platformIndirectScaleBridge = fixture.platformIndirectScaleBridge,
+                  scrollGestureLockState = fixture.scrollGestureLockState,
                   scrollableState = fixture.scrollableState,
                   nestedScrollDispatcher = nestedScrollDispatcher,
                   flingBehavior = fixture.flingBehavior,
@@ -1165,6 +1656,7 @@ class EditorInteractionsDesktopTest {
     editorBoundsInRoot: Rect = Rect(left = 0f, top = 0f, right = 400f, bottom = 400f),
     pageSize: PageSize = PageSize(width = 720f, height = 960f),
     flingBehaviorOverride: FlingBehavior? = null,
+    tapEligible: Boolean = false,
   ) {
     val touchPanDeltas = mutableListOf<Offset>()
     val flingPanDeltas = mutableListOf<Offset>()
@@ -1233,14 +1725,17 @@ class EditorInteractionsDesktopTest {
         pageMarginRight = 0f,
       )
     private val pageSizes = listOf(pageSize)
-    private val zoomController = EditorZoomController()
+    val zoomController = EditorZoomController()
+    val platformIndirectScaleBridge = EditorPlatformIndirectScaleBridge()
+    val scrollGestureLockState = ScrollGestureLockState()
     private val uiState =
       EditorUiState().apply {
         updateDisplayZoom(1f)
         updatePageOffset(page = 0, offset = Offset.Zero)
         updateEditorBounds(boundsInRoot = editorBoundsInRoot, density = 1f)
       }
-    val host = TestHost()
+    val host = TestHost(tapEligible = tapEligible)
+    private val editor = Editor(FakeFfiEditor(), CoroutineScope(Job()), Dispatchers.Unconfined)
     private val semantics =
       EditorInteractionSemantics(effects = host).apply {
         zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = 400f)
@@ -1259,7 +1754,7 @@ class EditorInteractionsDesktopTest {
       }
     val controller =
       EditorInteractionController(
-        editorProvider = { error("Pinch routing must not access the editor") },
+        editorProvider = { editor },
         effects = host,
         geometry = host,
         semantics = semantics,
@@ -1267,14 +1762,21 @@ class EditorInteractionsDesktopTest {
       )
   }
 
-  private class TestHost : EditorInteractionEffects, EditorInteractionGeometry {
+  private class TestHost(private val tapEligible: Boolean) :
+    EditorInteractionEffects, EditorInteractionGeometry {
     var pointerStreamCancelCount = 0
+    var tapDispatchScheduleCount = 0
+    var longPressDispatchScheduleCount = 0
+    var longPressDispatchCancelCount = 0
 
     override val density: Float = 1f
 
-    override fun resolveInteractionPosition(positionInSurface: Offset): Offset? = null
+    override fun resolveInteractionPosition(positionInSurface: Offset): Offset? =
+      positionInSurface.takeIf {
+        tapEligible
+      }
 
-    override fun isTapEligible(positionInSurface: Offset): Boolean = false
+    override fun isTapEligible(positionInSurface: Offset): Boolean = tapEligible
 
     override fun resolvePoint(positionInNode: Offset): PagePoint? = null
 
@@ -1284,7 +1786,9 @@ class EditorInteractionsDesktopTest {
 
     override fun dispatchEdgeAutoScroll(delta: Offset): Offset = Offset.Zero
 
-    override fun scheduleTapDispatch(dispatchAtMillis: Long) = Unit
+    override fun scheduleTapDispatch(dispatchAtMillis: Long) {
+      tapDispatchScheduleCount += 1
+    }
 
     override fun cancelTapDispatch() {
       pointerStreamCancelCount += 1
@@ -1294,9 +1798,13 @@ class EditorInteractionsDesktopTest {
       pointerId: Long,
       position: Offset,
       dispatchAtMillis: Long,
-    ) = Unit
+    ) {
+      longPressDispatchScheduleCount += 1
+    }
 
-    override fun cancelLongPressDispatch() = Unit
+    override fun cancelLongPressDispatch() {
+      longPressDispatchCancelCount += 1
+    }
 
     override fun launchInteraction(block: suspend () -> Unit) = Unit
 

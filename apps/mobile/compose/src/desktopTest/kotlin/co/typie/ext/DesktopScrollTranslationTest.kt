@@ -97,6 +97,55 @@ class DesktopScrollTranslationTest {
       SwingUtilities.invokeAndWait { window.dispose() }
     }
   }
+
+  @Test
+  fun editorOwnedMouseDragDoesNotDispatchSyntheticScrollOrFling() {
+    val target = WheelEventRecorder()
+    lateinit var window: ComposeWindow
+    lateinit var handler: Any
+    var locked = false
+
+    SwingUtilities.invokeAndWait {
+      window = ComposeWindow()
+      handler = createDragToScrollHandler(window) { locked }
+      val mouseListener = handler.field<MouseListener>("mouseListener")
+
+      val modifiedButtonMask = InputEvent.BUTTON1_DOWN_MASK or InputEvent.CTRL_DOWN_MASK
+      mouseListener.mousePressed(
+        mouseEvent(target, MouseEvent.MOUSE_PRESSED, x = 0, y = 100, modifiers = modifiedButtonMask)
+      )
+      locked = true
+      handler
+        .field<MouseMotionListener>("motionListener")
+        .mouseDragged(
+          mouseEvent(
+            target,
+            MouseEvent.MOUSE_DRAGGED,
+            x = 40,
+            y = 130,
+            modifiers = modifiedButtonMask,
+          )
+        )
+      mouseListener.mouseReleased(
+        mouseEvent(
+          target,
+          MouseEvent.MOUSE_RELEASED,
+          x = 40,
+          y = 130,
+          modifiers = modifiedButtonMask,
+        )
+      )
+      locked = false
+    }
+    SwingUtilities.invokeAndWait {}
+
+    try {
+      assertEquals(0, target.wheelEvents.size)
+      assertEquals(null, handler.field<Timer?>("flingTimer"))
+    } finally {
+      SwingUtilities.invokeAndWait { window.dispose() }
+    }
+  }
 }
 
 private fun assertDiagonalWheelEvents(target: WheelEventRecorder) {
@@ -111,11 +160,14 @@ private fun assertDiagonalWheelEvents(target: WheelEventRecorder) {
   assertEquals(-7.5, vertical.preciseWheelRotation)
 }
 
-private fun createDragToScrollHandler(window: ComposeWindow): Any {
+private fun createDragToScrollHandler(
+  window: ComposeWindow,
+  isScrollGestureLocked: () -> Boolean = { false },
+): Any {
   val handlerClass = Class.forName("co.typie.ext.DragToScrollHandler")
   return handlerClass.declaredConstructors.single().run {
     isAccessible = true
-    newInstance(window, 1.0, { false })
+    newInstance(window, 1.0, isScrollGestureLocked)
   }
 }
 
@@ -137,15 +189,11 @@ private class WheelEventRecorder : Component() {
   }
 }
 
-private fun mouseEvent(target: Component, id: Int, x: Int, y: Int): MouseEvent =
-  MouseEvent(
-    target,
-    id,
-    System.currentTimeMillis(),
-    InputEvent.BUTTON1_DOWN_MASK,
-    x,
-    y,
-    1,
-    false,
-    MouseEvent.BUTTON1,
-  )
+private fun mouseEvent(
+  target: Component,
+  id: Int,
+  x: Int,
+  y: Int,
+  modifiers: Int = InputEvent.BUTTON1_DOWN_MASK,
+): MouseEvent =
+  MouseEvent(target, id, System.currentTimeMillis(), modifiers, x, y, 1, false, MouseEvent.BUTTON1)

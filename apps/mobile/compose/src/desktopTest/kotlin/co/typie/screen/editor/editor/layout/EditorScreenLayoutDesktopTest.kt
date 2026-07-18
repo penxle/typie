@@ -366,9 +366,13 @@ class EditorScreenLayoutDesktopTest {
     }
     waitForIdle()
 
+    // NavigationStack supplies this root pointer membership in production. This isolated layout
+    // test provides the same admission state before exercising the nested-scroll connection.
+    navigationPopNestedScroll.updatePressedDragPointerCount(count = 1, downInSystemBackZone = false)
     onNodeWithTag(LayoutTag).performTouchInput {
       swipe(start = center, end = Offset(x = center.x + 120f, y = center.y))
     }
+    navigationPopNestedScroll.updatePressedDragPointerCount(count = 0, downInSystemBackZone = false)
     waitForIdle()
 
     assertTrue(navigationDragCount > 0)

@@ -31,6 +31,9 @@ internal class EditorPanGesture {
 
   private var active = false
 
+  val hasPendingPointer: Boolean
+    get() = session != null && !active
+
   fun prepareFresh(
     pointerId: Long,
     position: Offset,

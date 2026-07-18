@@ -31,8 +31,8 @@ internal class EditorViewportZoomSemantic {
   private var config: EditorViewportZoomSemanticConfig? = null
   private var transformActive = false
   private var pinchSession: PinchSession? = null
-  private var pointerSignalZoomActive = false
-  private var pointerSignalRawZoom: Float? = null
+  private var indirectZoomActive = false
+  private var indirectRawZoom: Float? = null
 
   fun configure(config: EditorViewportZoomSemanticConfig?) {
     if (config?.isUsable != true && (transformActive || hasActiveZoom)) {
@@ -91,24 +91,39 @@ internal class EditorViewportZoomSemantic {
     return true
   }
 
-  fun beginPointerSignal(): Boolean {
+  fun beginIndirect(): Boolean {
     val currentConfig = config?.takeIf { it.isUsable } ?: return false
     beginTransform(currentConfig)
-    pointerSignalZoomActive = true
-    pointerSignalRawZoom = null
+    indirectZoomActive = true
+    indirectRawZoom = null
     return true
   }
 
-  fun updatePointerSignal(focalInEditorPx: Offset, normalizedDelta: Float): Boolean {
-    val currentConfig = config?.takeIf { it.isUsable } ?: return false
-    if (!normalizedDelta.isFinite() || normalizedDelta == 0f || !pointerSignalZoomActive) {
+  fun updateIndirectScroll(focalInRootPx: Offset, normalizedDelta: Float): Boolean {
+    if (!normalizedDelta.isFinite() || normalizedDelta == 0f) {
       return false
+    }
+    return updateIndirectScale(
+      focalInRootPx = focalInRootPx,
+      scaleFactor = exp((-normalizedDelta / PointerSignalZoomDivisor).toDouble()).toFloat(),
+    )
+  }
+
+  fun updateIndirectScale(focalInRootPx: Offset, scaleFactor: Float): Boolean {
+    val currentConfig = config?.takeIf { it.isUsable } ?: return false
+    if (!indirectZoomActive || !isValidScaleUpdate(focalInRootPx, scaleFactor)) {
+      return false
+    }
+    if (scaleFactor == 1f) {
+      return true
     }
 
     val viewportState = currentConfig.viewportState
     val effectiveScrollTarget = viewportState.effectiveTransformScrollTarget
     val unappliedScrollDelta = effectiveScrollTarget - viewportState.scrollOffset
-    val focalInEditor = currentConfig.toEditorDp(focalInEditorPx) + unappliedScrollDelta
+    val editorRect = currentConfig.uiState.editorRectInRoot() ?: return false
+    val focalInEditor =
+      currentConfig.toEditorDp(focalInRootPx - editorRect.topLeft) + unappliedScrollDelta
     val previousZoom = currentConfig.zoomController.displayZoom
     val anchor =
       currentConfig
@@ -117,13 +132,13 @@ internal class EditorViewportZoomSemantic {
     val previousAnchorDisplayPosition =
       currentConfig.resolveAnchorDisplayPosition(anchor = anchor, displayZoom = previousZoom)
         ?: return false
-    val baseZoom = pointerSignalRawZoom ?: previousZoom
+    val baseZoom = indirectRawZoom ?: previousZoom
     val nextRawZoom =
       clampDocumentZoom(
-        zoom = baseZoom * exp((-normalizedDelta / PointerSignalZoomDivisor).toDouble()).toFloat(),
+        zoom = baseZoom * scaleFactor,
         bounds = computePaginatedZoomBounds(currentConfig.layoutSpec.pageWidth),
       )
-    pointerSignalRawZoom = nextRawZoom
+    indirectRawZoom = nextRawZoom
 
     val nextZoom = setZoom(config = currentConfig, zoom = nextRawZoom)
     val nextAnchorDisplayPosition =
@@ -141,8 +156,8 @@ internal class EditorViewportZoomSemantic {
       config?.zoomController?.commitRenderZoom()
     }
     pinchSession = null
-    pointerSignalZoomActive = false
-    pointerSignalRawZoom = null
+    indirectZoomActive = false
+    indirectRawZoom = null
     if (transformActive) {
       config?.viewportState?.endTransform()
       transformActive = false
@@ -155,7 +170,7 @@ internal class EditorViewportZoomSemantic {
   }
 
   private val hasActiveZoom: Boolean
-    get() = pinchSession != null || pointerSignalZoomActive
+    get() = pinchSession != null || indirectZoomActive
 
   private fun beginTransform(config: EditorViewportZoomSemanticConfig) {
     if (!transformActive) {
@@ -202,6 +217,13 @@ private val EditorPinchSample.isUsable: Boolean
       focalInRootPx.y.isFinite() &&
       distancePx.isFinite() &&
       distancePx > 0f
+
+private fun isValidScaleUpdate(focalInRootPx: Offset, scaleFactor: Float): Boolean {
+  if (!focalInRootPx.x.isFinite() || !focalInRootPx.y.isFinite()) {
+    return false
+  }
+  return scaleFactor.isFinite() && scaleFactor > 0f
+}
 
 private fun EditorViewportZoomSemanticConfig.resolveAnchor(
   focalInRootPx: Offset
