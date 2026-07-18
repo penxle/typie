@@ -8,10 +8,13 @@ import { pubsub } from '#/pubsub.ts';
 import {
   advanceLiveHeads,
   appendBundle,
+  clearPresence,
   getCollectedSeq,
   getDurableHeads,
   getLiveHeads,
+  hasActivePresence,
   hasStreamBeenTrimmed,
+  markPresence,
   readMergedGraph,
   readStreamBatch,
   seqCompare,
@@ -22,6 +25,7 @@ import {
 import { assertSitePermission } from '#/utils/permission.ts';
 import { hasActiveSubscription } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
+import { scheduleSweepDue } from '#/utils/zombie-sweep.ts';
 import type { SyncDeps } from './types.ts';
 
 export const createProductionDeps = (): SyncDeps => ({
@@ -61,6 +65,17 @@ export const createProductionDeps = (): SyncDeps => ({
 
   markWriterActive: async (userId) => {
     await redis.zadd('writers:active', Date.now(), userId);
+  },
+
+  markPresence,
+
+  // On the last lease release the document becomes sweep-eligible once quiescence
+  // elapses; register it so the due-cron can pick it up without a further edit.
+  clearPresence: async (documentId, connectionId) => {
+    await clearPresence(documentId, connectionId);
+    if (!(await hasActivePresence(documentId))) {
+      await scheduleSweepDue(documentId);
+    }
   },
 
   getCollectedSeq,

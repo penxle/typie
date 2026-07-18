@@ -254,5 +254,9 @@ xxlarge
 zadd
 zcard
 zeed
+zrangebyscore
+zrem
 zremrangebyscore
+zscore
+zset
 zstd

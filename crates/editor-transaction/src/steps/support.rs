@@ -288,7 +288,7 @@ pub(crate) fn char_leaf_dots_for_text(
     Ok(dots)
 }
 
-pub(crate) fn delete_dots_ops(ps: &ProjectedState, dots: &[Dot]) -> Vec<EditOp> {
+pub fn delete_dots_ops(ps: &ProjectedState, dots: &[Dot]) -> Vec<EditOp> {
     let mut positions: Vec<usize> = dots.iter().filter_map(|&d| ps.seq_flat_pos(d)).collect();
     // Descending, so deleting a run never shifts the positions of runs still to come.
     positions.sort_unstable_by(|a, b| b.cmp(a));

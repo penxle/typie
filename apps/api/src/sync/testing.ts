@@ -51,6 +51,8 @@ export class FakeSyncDeps implements SyncDeps {
   writable = true;
   checkWritableCalls = 0;
   writerActivity: string[] = [];
+  presenceMarks: { documentId: string; connectionId: string }[] = [];
+  presenceClears: { documentId: string; connectionId: string }[] = [];
 
   consumeTicket = async (ticket: string): Promise<SyncSession | null> => {
     const session = this.tickets.get(ticket) ?? null;
@@ -59,6 +61,14 @@ export class FakeSyncDeps implements SyncDeps {
   };
 
   checkDocumentAccess = async (_userId: string, documentId: string): Promise<DocumentAccess> => this.access.get(documentId) ?? 'ok';
+
+  markPresence = async (documentId: string, connectionId: string): Promise<void> => {
+    this.presenceMarks.push({ documentId, connectionId });
+  };
+
+  clearPresence = async (documentId: string, connectionId: string): Promise<void> => {
+    this.presenceClears.push({ documentId, connectionId });
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- required by SyncDeps.checkWritable contract
   checkWritable = async (_userId: string): Promise<boolean> => {

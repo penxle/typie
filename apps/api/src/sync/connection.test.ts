@@ -285,6 +285,84 @@ test('pull: 무구독이어도 허용', async () => {
   assert.notEqual(d.socket.sent.at(-1)?.t, 'error');
 });
 
+test('attach: presence lease를 연결 nonce로 mark (attach-ack 전 await)', async () => {
+  const d = setup();
+  await hello(d);
+  let ackSeenAtMark: boolean | null = null;
+  const original = d.deps.markPresence;
+  d.deps.markPresence = async (documentId, connectionId) => {
+    ackSeenAtMark = d.socket.sent.some((m) => m.t === 'attach-ack');
+    return original(documentId, connectionId);
+  };
+  await d.dispatch({ t: 'attach', documentId: 'D1' });
+  assert.equal(d.deps.presenceMarks.length, 1);
+  assert.equal(d.deps.presenceMarks[0].documentId, 'D1');
+  assert.ok(d.deps.presenceMarks[0].connectionId.length > 0);
+  assert.equal(ackSeenAtMark, false);
+});
+
+test('detach: 같은 연결 nonce로 presence clear', async () => {
+  const d = setup();
+  await hello(d);
+  await d.dispatch({ t: 'attach', documentId: 'D1' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await d.dispatch({ t: 'detach', documentId: 'D1' });
+  assert.equal(d.deps.presenceClears.length, 1);
+  assert.equal(d.deps.presenceClears[0].documentId, 'D1');
+  assert.equal(d.deps.presenceClears[0].connectionId, d.deps.presenceMarks[0].connectionId);
+});
+
+test('destroy: 첨부된 모든 문서 presence를 연결 nonce로 clear', async () => {
+  const d = setup();
+  await hello(d);
+  await d.dispatch({ t: 'attach', documentId: 'D1' });
+  await d.dispatch({ t: 'attach', documentId: 'D2' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const nonce = d.deps.presenceMarks[0].connectionId;
+  d.connection.destroy();
+  const cleared = d.deps.presenceClears.filter((c) => c.connectionId === nonce).map((c) => c.documentId);
+  assert.deepEqual(new Set(cleared), new Set(['D1', 'D2']));
+});
+
+test('refreshPresence: 첨부 문서 lease를 같은 nonce로 갱신', async () => {
+  const d = setup();
+  await hello(d);
+  await d.dispatch({ t: 'attach', documentId: 'D1' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const nonce = d.deps.presenceMarks[0].connectionId;
+  d.connection.refreshPresence();
+  const refreshed = d.deps.presenceMarks.filter((m) => m.documentId === 'D1' && m.connectionId === nonce);
+  assert.ok(refreshed.length >= 2);
+});
+
+test('reconnect 경합: 구 연결 정리가 신 연결 lease를 지우지 않는다', async () => {
+  const deps = new FakeSyncDeps();
+  deps.tickets.set('TK1', { sessionId: 'S1', userId: 'U1', deviceId: 'DEV1' });
+  deps.tickets.set('TK2', { sessionId: 'S1', userId: 'U1', deviceId: 'DEV1' });
+
+  const socketA = new FakeSocket();
+  const a = new SyncConnection({ deps, socket: socketA });
+  await a.handleMessage(encodeMessage({ t: 'hello', ticket: 'TK1', clientId: 'me', capabilities: [] }));
+  await a.handleMessage(encodeMessage({ t: 'attach', documentId: 'D1' }));
+
+  const socketB = new FakeSocket();
+  const b = new SyncConnection({ deps, socket: socketB });
+  await b.handleMessage(encodeMessage({ t: 'hello', ticket: 'TK2', clientId: 'me', capabilities: [] }));
+  await b.handleMessage(encodeMessage({ t: 'attach', documentId: 'D1' }));
+
+  const nonceA = deps.presenceMarks[0].connectionId;
+  const nonceB = deps.presenceMarks[1].connectionId;
+  assert.notEqual(nonceA, nonceB);
+
+  a.destroy();
+
+  assert.ok(deps.presenceClears.some((c) => c.documentId === 'D1' && c.connectionId === nonceA));
+  assert.equal(
+    deps.presenceClears.some((c) => c.connectionId === nonceB),
+    false,
+  );
+});
+
 test('push rate limit: 용량 소진 시 rate_limited, 시간 경과로 refill', async () => {
   let clock = 0;
   const d = setup({ now: () => clock });

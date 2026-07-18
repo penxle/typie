@@ -822,6 +822,24 @@ export const DocumentChangesetsDeadLetter = pgTable('document_changesets_dead_le
     .default(sql`now()`),
 });
 
+export const DocumentSweeps = pgTable(
+  'document_sweeps',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_SWEEPS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    streamSeq: text('stream_seq').notNull(),
+    zombieDots: jsonb('zombie_dots').$type<string[]>().notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.documentId, t.streamSeq)],
+);
+
 export const PreorderPayments = pgTable('preorder_payments', {
   id: text('id')
     .primaryKey()

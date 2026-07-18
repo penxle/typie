@@ -60,6 +60,7 @@ export const createSyncServer = (options: { deps: SyncDeps; checkMaintenance: Ch
       }
       missedPongs += 1;
       ws.ping();
+      connection.refreshPresence();
     }, HEARTBEAT_INTERVAL_MS);
 
     const ip = getClientAddressFromIncoming(request);

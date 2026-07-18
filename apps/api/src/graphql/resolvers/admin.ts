@@ -2,7 +2,7 @@ import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, Subscri
 import { TypieError } from '@typie/lib/errors';
 import { bootstrapSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
-import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, getTableColumns, ilike, ne, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '#/bootstrap.ts';
 import { redis } from '#/cache.ts';
 import {
@@ -23,6 +23,7 @@ import {
 } from '#/db/index.ts';
 import * as portone from '#/external/portone.ts';
 import { assertAdminPermission } from '#/utils/permission.ts';
+import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
 import { Document, User } from '../objects.ts';
 
@@ -61,10 +62,8 @@ builder.queryFields((t) => ({
         conditions.push(or(ilike(Users.name, `%${args.search}%`), ilike(Users.email, `%${args.search}%`), eq(Users.id, args.search)));
       }
 
-      if (conditions.length > 0) {
-        list$ = list$.where(and(...conditions));
-        count$ = count$.where(and(...conditions));
-      }
+      list$ = list$.where(and(ne(Users.id, SYSTEM_USER_ID), ...conditions));
+      count$ = count$.where(and(ne(Users.id, SYSTEM_USER_ID), ...conditions));
 
       list$ = list$.orderBy(desc(Users.createdAt)).limit(args.limit).offset(args.offset);
 

@@ -1,4 +1,10 @@
-import { DocumentChangesetsCollectJob, DocumentChangesetsConsolidateJob, DocumentChangesetsScanCron } from './changeset.ts';
+import {
+  DocumentChangesetsCollectJob,
+  DocumentChangesetsConsolidateJob,
+  DocumentChangesetsScanCron,
+  DocumentZombieSweepDueCron,
+  DocumentZombieSweepJob,
+} from './changeset.ts';
 import {
   DocumentGCJob,
   DocumentGCScanCron,
@@ -24,6 +30,7 @@ import {
 export const jobs = [
   DocumentChangesetsCollectJob,
   DocumentChangesetsConsolidateJob,
+  DocumentZombieSweepJob,
   DocumentSyncCollectJob,
   DocumentPreviewInvalidateJob,
   DocumentIndexJob,
@@ -39,7 +46,13 @@ export const jobs = [
   SendSubscriptionWaivedEmailJob,
 ];
 
-export const crons = [DocumentChangesetsScanCron, DocumentSyncScanCron, DocumentGCScanCron, SubscriptionRenewalCron];
+export const crons = [
+  DocumentChangesetsScanCron,
+  DocumentZombieSweepDueCron,
+  DocumentSyncScanCron,
+  DocumentGCScanCron,
+  SubscriptionRenewalCron,
+];
 
 export type Jobs = typeof jobs;
 export type JobName = Jobs[number]['name'];

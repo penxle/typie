@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { logger } from '@typie/lib';
 import { DocumentChannel } from './channel.ts';
 import { CLOSE_AUTH_FAILED, CLOSE_BACKPRESSURE, CLOSE_PROTOCOL_ERROR, decodeClientMessage, encodeMessage } from './protocol.ts';
@@ -13,6 +14,9 @@ export const HELLO_TIMEOUT_MS = 15_000;
 
 const log = logger.getChild('sync');
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function -- fire-and-forget rejection sink
+const swallow = (): void => {};
+
 export type SyncSocket = {
   send: (data: Uint8Array) => Promise<void>;
   close: (code: number, reason?: string) => void;
@@ -25,6 +29,9 @@ export class SyncConnection {
   #now: () => number;
   #session: SyncSession | null = null;
   #clientId = '';
+  // Server-issued presence lease member — unique per (instance, connection), so a
+  // dead connection's teardown can never zrem a live reconnect's lease.
+  #connectionId = randomUUID();
   #channels = new Map<string, DocumentChannel>();
   #access = new Map<string, DocumentAccess>();
   #pushTokens = PUSH_BUCKET_CAPACITY;
@@ -155,6 +162,7 @@ export class SyncConnection {
       onOverload: () => this.#close(CLOSE_BACKPRESSURE, 'live buffer overflow'),
     });
     this.#channels.set(message.documentId, channel);
+    await this.#deps.markPresence(message.documentId, this.#connectionId);
     void channel.start({ sinceSeq: message.sinceSeq, snapshotCursor: message.snapshotCursor }).catch(async () => {
       channel.stop();
       if (this.#channels.get(message.documentId) !== channel) return;
@@ -169,6 +177,7 @@ export class SyncConnection {
   #handleDetach(message: { documentId: string }): void {
     this.#channels.get(message.documentId)?.stop();
     this.#channels.delete(message.documentId);
+    void this.#deps.clearPresence(message.documentId, this.#connectionId).catch(swallow);
   }
 
   #takePushToken(): boolean {
@@ -248,6 +257,14 @@ export class SyncConnection {
     return this.#session?.bootstrapBypassKeyHash;
   }
 
+  // Called from the WS heartbeat: refresh the lease score for every attached
+  // document so an idle-but-connected session keeps deferring sweeps.
+  refreshPresence(): void {
+    for (const [documentId, channel] of this.#channels) {
+      if (!channel.stopped) void this.#deps.markPresence(documentId, this.#connectionId).catch(swallow);
+    }
+  }
+
   handleMessage(data: Uint8Array): Promise<void> {
     const run = this.#queue.then(() => this.#process(data));
     // eslint-disable-next-line @typescript-eslint/no-empty-function -- swallow rejection; caller awaits run
@@ -261,7 +278,10 @@ export class SyncConnection {
       clearTimeout(this.#helloTimer);
       this.#helloTimer = null;
     }
-    for (const channel of this.#channels.values()) channel.stop();
+    for (const [documentId, channel] of this.#channels) {
+      channel.stop();
+      void this.#deps.clearPresence(documentId, this.#connectionId).catch(swallow);
+    }
     this.#channels.clear();
   }
 }

@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/node';
+import { logger } from '@typie/lib';
 import { DocumentBundleKind } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { and, asc, count, eq, lte, max, sql } from 'drizzle-orm';
@@ -12,6 +13,7 @@ import {
   DocumentHeads,
   Documents,
   DocumentStates,
+  DocumentSweeps,
   Entities,
   firstOrThrow,
 } from '#/db/index.ts';
@@ -19,10 +21,14 @@ import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
 import { collectedKey, getMaxBundleSeq, loadBundleStream, packLengthPrefixed, readStreamBatch, trimStream } from '#/utils/changeset.ts';
 import { calculateBlobSizeFromAssetIds, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
+import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
+import { clearSweepDue, scheduleSweepDue, sweepDocument, sweepDueKey } from '#/utils/zombie-sweep.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
 import type { Dayjs } from 'dayjs';
+
+const log = logger.getChild('mq');
 
 const HEAD_BUCKET_SECONDS = 10 * 60;
 const CONSOLIDATE_THRESHOLD = 64;
@@ -52,9 +58,11 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
   }
 
   let updated = false;
+  let userVisibleChanged = false;
   let persistedHeads: Uint8Array | null = null;
   let stale = false;
   let shouldConsolidate = false;
+  let totalityViolations = 0;
 
   try {
     const collected = await redis.get(collectedKey(documentId));
@@ -75,6 +83,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     // `O(tail × build)`.
     const packed = packLengthPrefixed(entries.map((e) => e.changeset));
     const fold = await wasm.use((host) => host.collect_fold(existing, packed));
+    totalityViolations = fold.totality_violations;
 
     let mergedChanged = false;
     let prevCharacterCount = fold.base_char_count;
@@ -84,7 +93,10 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       if (status === 'applied') {
         perUserDelta.set(entry.userId, (perUserDelta.get(entry.userId) ?? 0) + (charCount - prevCharacterCount));
         prevCharacterCount = charCount;
-        contributorIds.add(entry.userId);
+        if (entry.userId !== SYSTEM_USER_ID) {
+          contributorIds.add(entry.userId);
+          userVisibleChanged = true;
+        }
         mergedChanged = true;
       } else if (status === 'failed') {
         failed.push({ userId: entry.userId, deviceId: entry.deviceId, payload: entry.changeset, error: 'changeset apply failed' });
@@ -140,13 +152,22 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
               seq,
               payload: entry.changeset,
             });
+
+            if (entry.zombieDots && entry.zombieDots.length > 0) {
+              await tx
+                .insert(DocumentSweeps)
+                .values({ documentId, streamSeq: entry.seq, zombieDots: entry.zombieDots })
+                .onConflictDoNothing({ target: [DocumentSweeps.documentId, DocumentSweeps.streamSeq] });
+            }
           }
 
           await tx
             .update(DocumentStates)
             .set({ json: result.plain, text: result.text, characterCount, blobSize, heads: result.heads, lastBundleSeq: seq, updatedAt })
             .where(eq(DocumentStates.documentId, documentId));
-          await tx.update(Documents).set({ updatedAt }).where(eq(Documents.id, documentId));
+          if (userVisibleChanged) {
+            await tx.update(Documents).set({ updatedAt }).where(eq(Documents.id, documentId));
+          }
           updated = true;
           persistedHeads = result.heads;
 
@@ -249,6 +270,14 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     return;
   }
 
+  if (totalityViolations > 0) {
+    Sentry.captureMessage('totality violation detected', {
+      level: 'warning',
+      extra: { documentId, totalityViolations },
+    });
+    await scheduleSweepDue(documentId);
+  }
+
   const collectedNow = await redis.get(collectedKey(documentId));
   const remaining = await readStreamBatch(documentId, collectedNow, 1);
   if (remaining.length > 0) {
@@ -256,13 +285,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
   }
 
   if (updated) {
-    const { siteId, entityId, userId } = await db
-      .select({ siteId: Entities.siteId, entityId: Entities.id, userId: Entities.userId })
-      .from(Documents)
-      .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-      .where(eq(Documents.id, documentId))
-      .then(firstOrThrow);
-
+    // Snapshot-accuracy propagation (heads) fires on any applied batch, including
+    // a system-only sweep — attached clients must observe the swept frontier.
     pubsub.publish('document:changesets', documentId, {
       target: '*',
       seq: '',
@@ -272,16 +296,31 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       durableHeads: persistedHeads!.toBase64(),
     });
-    pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
-    pubsub.publish('user:usage:update', userId, null);
 
-    await enqueueJob('search:index:document', documentId, {
-      deduplication: { id: documentId, ttl: 60 * 1000 },
-    });
+    // User-facing side effects skip system-only sweeps: zombies are invisible, so
+    // re-index / preview / recency / usage notifications would be no-ops that a
+    // large backfill turns into a job storm.
+    if (userVisibleChanged) {
+      const { siteId, entityId, userId } = await db
+        .select({ siteId: Entities.siteId, entityId: Entities.id, userId: Entities.userId })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, documentId))
+        .then(firstOrThrow);
 
-    await enqueueJob('document:preview:invalidate', documentId, {
-      deduplication: { id: documentId, ttl: 60 * 60 * 1000 },
-    });
+      pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
+      pubsub.publish('user:usage:update', userId, null);
+
+      await enqueueJob('search:index:document', documentId, {
+        deduplication: { id: documentId, ttl: 60 * 1000 },
+      });
+
+      await enqueueJob('document:preview:invalidate', documentId, {
+        deduplication: { id: documentId, ttl: 60 * 60 * 1000 },
+      });
+
+      await scheduleSweepDue(documentId);
+    }
   }
 });
 
@@ -344,6 +383,8 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
         payload: consolidatedPayload,
       });
     });
+
+    await scheduleSweepDue(documentId);
   } catch (err) {
     if (err instanceof StaleConsolidationError) return;
     Sentry.captureException(err);
@@ -352,6 +393,27 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
     await lock.release();
   }
 });
+
+export const DocumentZombieSweepJob = defineJob(
+  'document:zombies:sweep',
+  async ({ documentId, dueScore }: { documentId: string; dueScore: number }) => {
+    const result = await sweepDocument(documentId);
+    if (result.deferred) {
+      await scheduleSweepDue(documentId, { retry: true });
+      return;
+    }
+
+    await clearSweepDue(documentId, dueScore);
+
+    if (result.applied) {
+      log.info('zombie sweep applied to {documentId}: runs={deleteRunCount} zombies={zombieCount}', {
+        documentId,
+        deleteRunCount: result.deleteRunCount,
+        zombieCount: result.zombieDots.length,
+      });
+    }
+  },
+);
 
 export const DocumentChangesetsScanCron = defineCron('document:changesets:scan', '* * * * *', async () => {
   const keys = await redis.keys('document:changesets:stream:*');
@@ -362,4 +424,17 @@ export const DocumentChangesetsScanCron = defineCron('document:changesets:scan',
       enqueueJob('document:changesets:collect', key.split(':').at(-1)!),
     ),
   );
+});
+
+export const DocumentZombieSweepDueCron = defineCron('document:zombies:sweep-due', '* * * * *', async () => {
+  const rows = await redis.zrangebyscore(sweepDueKey, '-inf', Date.now(), 'WITHSCORES');
+
+  const enqueues: Promise<void>[] = [];
+  for (let i = 0; i < rows.length; i += 2) {
+    const documentId = rows[i];
+    const dueScore = Number(rows[i + 1]);
+    enqueues.push(enqueueJob('document:zombies:sweep', { documentId, dueScore }, { deduplication: { id: documentId, ttl: 60 * 1000 } }));
+  }
+
+  await Promise.all(enqueues);
 });

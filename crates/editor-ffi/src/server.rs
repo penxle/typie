@@ -54,6 +54,7 @@ pub struct CollectResult {
     pub base_char_count: u32,
     pub plain: editor_model::PlainDoc,
     pub text: String,
+    pub totality_violations: u32,
 }
 
 #[ffi]
@@ -288,6 +289,7 @@ impl EditorServer {
         };
         let plain = state.to_plain();
         let text = extract_text_from_view(&state.view());
+        let totality_violations = collect_zombie_dots(&state).len() as u32;
 
         Ok(CollectResult {
             heads,
@@ -296,6 +298,7 @@ impl EditorServer {
             base_char_count,
             plain,
             text,
+            totality_violations,
         }
         .into_ffi()?)
     }
@@ -496,6 +499,33 @@ impl EditorServer {
         Ok(bytes)
     }
 
+    pub fn zombie_dots(&self, graph: Vec<u8>) -> EditorResult<Vec<String>> {
+        let css = editor_codec::decode_changeset_stream(&graph[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            .into_graph_input();
+        let state = crate::graph::build_state_tolerant(css)
+            .map_err(|e| FfiError::SweepFailed(e.to_string()))?;
+        Ok(collect_zombie_dots(&state)
+            .into_iter()
+            .map(|d| d.to_string())
+            .collect())
+    }
+
+    pub fn sweep(&self, graph: Vec<u8>) -> EditorResult<Vec<u8>> {
+        let css = editor_codec::decode_changeset_stream(&graph[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            .into_graph_input();
+        let sweep_css = sweep_impl(css)?;
+        if sweep_css.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(sweep_css),
+        )
+        .map_err(|e| FfiError::Serialization(e.to_string()))?;
+        Ok(bytes)
+    }
+
     /// Returns the total ops count in a Changesets bundle. Used by push light validation.
     pub fn peek_changeset_ops_count(&self, bundle: Vec<u8>) -> EditorResult<u32> {
         let cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
@@ -559,6 +589,54 @@ fn state_at_heads(
         .collect();
     editor_state::State::from_changesets(css, None)
         .map_err(|e| FfiError::RevertFailed(e.to_string()))
+}
+
+fn collect_zombie_dots(state: &editor_state::State) -> Vec<editor_crdt::Dot> {
+    let ps = &state.projected;
+    let reachable: hashbrown::HashSet<editor_crdt::Dot> = ps
+        .subtree_real_dots(editor_crdt::Dot::ROOT)
+        .into_iter()
+        .collect();
+    let mut zombies = Vec::new();
+    for op in state.graph().iter_all() {
+        if !matches!(
+            op.payload,
+            editor_model::EditOp::Seq(editor_crdt::ListOp::Ins { .. })
+        ) {
+            continue;
+        }
+        if reachable.contains(&op.id) {
+            continue;
+        }
+        if ps.seq_visible_pos(op.id).is_some() {
+            zombies.push(op.id);
+        }
+    }
+    zombies
+}
+
+fn sweep_impl(
+    css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
+) -> Result<Vec<editor_crdt::Changeset<editor_model::EditOp>>, FfiError> {
+    let state = crate::graph::build_state_tolerant(css)
+        .map_err(|e| FfiError::SweepFailed(e.to_string()))?;
+    let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
+        state.graph().current_heads().copied().collect();
+    let zombies = collect_zombie_dots(&state);
+    if zombies.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ops = editor_transaction::delete_dots_ops(&state.projected, &zombies);
+    let mut graph = state.graph().clone();
+    for op in ops {
+        graph
+            .add_mut(op)
+            .map_err(|e| FfiError::SweepFailed(e.to_string()))?;
+    }
+    graph.commit_mut();
+    graph
+        .local_changesets_since(&current_heads)
+        .map_err(|e| FfiError::SweepFailed(e.to_string()))
 }
 
 fn extract_text_from_view(view: &editor_model::DocView<'_>) -> String {
@@ -1026,6 +1104,49 @@ mod tests {
     }
 
     #[test]
+    fn collect_fold_counts_totality_violations_for_zombie_document() {
+        let server = EditorServer;
+        let existing = enc_css(&zombie_css());
+        let result = server.collect_fold(existing, pack(&[])).unwrap();
+        assert!(
+            result.totality_violations > 0,
+            "a projection-hidden-but-live insertion must be counted as a violation"
+        );
+    }
+
+    #[test]
+    fn collect_fold_reports_zero_totality_violations_for_clean_document() {
+        let cs = Changeset::<EditOp> {
+            ops: vec![
+                Op {
+                    id: Dot::new(4, 0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: editor_model::NodeType::Paragraph,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: Dot::new(4, 1),
+                    parents: vec![Dot::new(4, 0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+            ],
+        };
+        let server = EditorServer;
+        let existing = enc_css(std::slice::from_ref(&cs));
+        let result = server.collect_fold(existing, pack(&[])).unwrap();
+        assert_eq!(result.totality_violations, 0);
+    }
+
+    #[test]
     fn consolidate_merges_stream_preserving_changesets_and_heads() {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
@@ -1459,5 +1580,155 @@ mod tests {
         assert_eq!(paras.len(), 2, "both paragraphs should be restored");
         assert_eq!(paras[0].inline_text(), "a");
         assert_eq!(paras[1].inline_text(), "b");
+    }
+
+    fn zombie_css() -> Vec<editor_crdt::Changeset<editor_model::EditOp>> {
+        use editor_crdt::{Changeset, Dot, ListOp, Op};
+        use editor_model::{EditOp, NodeType, SeqItem};
+        let d = |c| Dot::new(1, c);
+        let ops = vec![
+            Op {
+                id: d(0),
+                parents: vec![],
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: 0,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT],
+                        attrs: vec![],
+                    },
+                }),
+            },
+            Op {
+                id: d(1),
+                parents: vec![d(0)],
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Char('a'),
+                }),
+            },
+            Op {
+                id: d(2),
+                parents: vec![d(1)],
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: 2,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT, Dot::new(9, 999)],
+                        attrs: vec![],
+                    },
+                }),
+            },
+            Op {
+                id: d(3),
+                parents: vec![d(2)],
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: 3,
+                    item: SeqItem::Char('z'),
+                }),
+            },
+        ];
+        vec![Changeset { ops }]
+    }
+
+    #[test]
+    fn sweep_tombstones_unprojected_visible_ops() {
+        let css = zombie_css();
+        let before = crate::graph::build_state_tolerant(css.clone()).unwrap();
+        let before_tree = before.projected.projected().clone();
+        assert!(
+            before
+                .projected
+                .seq_visible_pos(editor_crdt::Dot::new(1, 2))
+                .is_some()
+        );
+        assert!(before.view().node(editor_crdt::Dot::new(1, 2)).is_none());
+
+        let sweep_css = sweep_impl(css.clone()).unwrap();
+        assert!(!sweep_css.is_empty());
+
+        let mut merged = css;
+        merged.extend(sweep_css);
+        let after = crate::graph::build_state_tolerant(merged).unwrap();
+        assert!(
+            after
+                .projected
+                .seq_visible_pos(editor_crdt::Dot::new(1, 2))
+                .is_none()
+        );
+        assert!(
+            after
+                .projected
+                .seq_visible_pos(editor_crdt::Dot::new(1, 3))
+                .is_none()
+        );
+        assert!(
+            after.projected.projected() == &before_tree,
+            "투영 결과는 불변이어야 한다"
+        );
+    }
+
+    #[test]
+    fn sweep_preserves_modifiers_when_span_anchors_on_zombie() {
+        use editor_model::{Anchor, Modifier, SpanOp};
+        let mut css = zombie_css();
+        let span_op = editor_crdt::Op {
+            id: editor_crdt::Dot::new(1, 10),
+            parents: vec![editor_crdt::Dot::new(1, 3)],
+            payload: editor_model::EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: editor_crdt::Dot::new(1, 1),
+                    bias: editor_model::Bias::Before,
+                },
+                end: Anchor {
+                    id: editor_crdt::Dot::new(1, 3),
+                    bias: editor_model::Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }),
+        };
+        css.push(editor_crdt::Changeset { ops: vec![span_op] });
+
+        let before = crate::graph::build_state_tolerant(css.clone()).unwrap();
+        let before_doc = before.projected.projected().clone();
+        let sweep_css = sweep_impl(css.clone()).unwrap();
+        let mut merged = css;
+        merged.extend(sweep_css);
+        let after = crate::graph::build_state_tolerant(merged).unwrap();
+        assert!(
+            after.projected.projected() == &before_doc,
+            "모디파이어 상태 포함 동등"
+        );
+    }
+
+    #[test]
+    fn sweep_of_clean_document_is_empty() {
+        use editor_crdt::{Changeset, Dot, ListOp, Op};
+        use editor_model::{EditOp, NodeType, SeqItem};
+        let d = |c| Dot::new(2, c);
+        let ops = vec![
+            Op {
+                id: d(0),
+                parents: vec![],
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: 0,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT],
+                        attrs: vec![],
+                    },
+                }),
+            },
+            Op {
+                id: d(1),
+                parents: vec![d(0)],
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: 1,
+                    item: SeqItem::Char('a'),
+                }),
+            },
+        ];
+        let sweep_css = sweep_impl(vec![Changeset { ops }]).unwrap();
+        assert!(sweep_css.is_empty());
     }
 }

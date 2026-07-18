@@ -146,6 +146,7 @@ export interface CollectResult {
     base_char_count: number;
     plain: PlainDoc;
     text: string;
+    totality_violations: number;
 }
 
 export interface ConsolidateResult {
@@ -831,6 +832,7 @@ declare class EditorServer {
      */
     peek_changeset_ops_count(bundle: Uint8Array): number;
     revert(graph: Uint8Array, target_heads: Uint8Array): Uint8Array;
+    sweep(graph: Uint8Array): Uint8Array;
     to_graph(plain: PlainDoc): Uint8Array;
     to_graph_with_anchors(plain: PlainDoc, anchor_paths: AnchorPaths): GraphWithAnchors;
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
@@ -850,6 +852,7 @@ declare class EditorServer {
      * Verifies a PlainDoc's structural invariants by attempting to load it.
      */
     verify_plain(plain: PlainDoc): void;
+    zombie_dots(graph: Uint8Array): string[];
 }
 
 export type { Editor, EditorHost, EditorServer };

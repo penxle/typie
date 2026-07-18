@@ -22,5 +22,5 @@ pub use meta::*;
 pub use prune::prune;
 pub use revert::*;
 pub use step::*;
-pub use steps::support::capture_subtree;
+pub use steps::support::{capture_subtree, delete_dots_ops};
 pub use transaction::*;

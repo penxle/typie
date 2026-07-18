@@ -1,10 +1,10 @@
-use editor_crdt::Dot;
+use editor_crdt::{Dot, ListOp};
 use editor_macros::state;
 use editor_model::{
-    CalloutVariant, ChildView, Modifier, ModifierType, Node, PlainCalloutNode, PlainNode,
+    CalloutVariant, ChildView, EditOp, Modifier, ModifierType, Node, PlainCalloutNode, PlainNode,
 };
 use editor_state::{Position, Selection};
-use editor_transaction::Step;
+use editor_transaction::{Step, delete_dots_ops};
 
 fn block_text(state: &editor_state::State, elem: &Dot) -> String {
     state.view().node(*elem).unwrap().inline_text()
@@ -262,5 +262,48 @@ fn inline_span_modifier_bolds_range_and_inverts() {
             .get(&ModifierType::Bold),
         None,
         "inverse of AddSpanModifier removes the span"
+    );
+}
+
+#[test]
+fn delete_dots_ops_coalesces_contiguous_run_and_keeps_gap_separate() {
+    let (state, p1) = state! {
+        doc {
+            root {
+                p1: paragraph {
+                    text("Hello World")
+                }
+            }
+        }
+        selection: (p1, 0)
+    };
+
+    // "ello " (offsets 1..=5, contiguous) plus "r" (offset 8, separate) should
+    // coalesce into exactly two `Del` ops.
+    let mut dots: Vec<Dot> = (1..=5).map(|off| char_dot(&state, &p1, off)).collect();
+    dots.push(char_dot(&state, &p1, 8));
+
+    let ops = delete_dots_ops(&state.projected, &dots);
+
+    assert_eq!(ops.len(), 2, "one op for the run, one for the lone char");
+    let hello_pos = state
+        .projected
+        .seq_flat_pos(char_dot(&state, &p1, 1))
+        .unwrap();
+    let r_pos = state
+        .projected
+        .seq_flat_pos(char_dot(&state, &p1, 8))
+        .unwrap();
+    assert_eq!(
+        ops[0],
+        EditOp::Seq(ListOp::Del { pos: r_pos, len: 1 }),
+        "descending order: the later run comes first"
+    );
+    assert_eq!(
+        ops[1],
+        EditOp::Seq(ListOp::Del {
+            pos: hello_pos,
+            len: 5
+        })
     );
 }

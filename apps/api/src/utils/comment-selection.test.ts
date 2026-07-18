@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeStablePosition, normalizeStableSelection } from './comment-selection.ts';
+import { extractSelectionDots, normalizeStablePosition, normalizeStableSelection } from './comment-selection.ts';
 
 test('normalizeStablePosition converts legacy adjacent binding to child', () => {
   const position = {
@@ -91,4 +91,87 @@ test('normalizeStableSelection passes through unrecognized selections untouched'
 
   assert.equal(normalizeStableSelection(selection), selection);
   assert.equal(normalizeStableSelection('garbage'), 'garbage');
+});
+
+test('extractSelectionDots reads current-format chain[]/child.dot positions', () => {
+  const selection = {
+    anchor: { chain: ['0_0', '3x_1A'], child: { dot: '3x_1B', bind: 'left' }, affinity: 'downstream' },
+    head: { chain: ['0_0', '4y_2C'], child: null, affinity: 'upstream' },
+  };
+
+  assert.deepEqual(extractSelectionDots(selection), {
+    kind: 'ok',
+    dots: ['0_0', '3x_1A', '3x_1B', '4y_2C'],
+  });
+});
+
+test('extractSelectionDots reads current-format positions with an implicit null child (no child key)', () => {
+  const selection = {
+    anchor: { chain: ['0_AzL8n0Y58m8', '1_1jh'], affinity: 'upstream' },
+    head: { chain: ['0_AzL8n0Y58m8', '1_1Tw'], affinity: 'downstream' },
+  };
+
+  assert.deepEqual(extractSelectionDots(selection), {
+    kind: 'ok',
+    dots: ['0_AzL8n0Y58m8', '1_1jh', '1_1Tw'],
+  });
+});
+
+test('extractSelectionDots reads legacy binding.anchor positions', () => {
+  const selection = {
+    anchor: { chain: ['0_0', '3x_1A'], binding: { type: 'adjacent', anchor: '3x_1B', bind: 'left' }, affinity: 'downstream' },
+    head: { chain: ['0_0', '4y_2C'], binding: { type: 'container_start' }, affinity: 'downstream' },
+  };
+
+  assert.deepEqual(extractSelectionDots(selection), {
+    kind: 'ok',
+    dots: ['0_0', '3x_1A', '3x_1B', '4y_2C'],
+  });
+});
+
+test('extractSelectionDots reads the pre-rewrite kind-tagged chain[].child_dot + char_dot positions', () => {
+  const selection = {
+    anchor: {
+      kind: 'char',
+      chain: [{ node_id: '0', child_dot: '0_0' }],
+      offset: 23,
+      bind: 'right',
+      affinity: 'downstream',
+      char_dot: 'L03pmlNIfyG_Eh',
+    },
+    head: { kind: 'container_start', chain: [{ node_id: '0', child_dot: '0_0' }], affinity: 'downstream' },
+  };
+
+  assert.deepEqual(extractSelectionDots(selection), {
+    kind: 'ok',
+    dots: ['0', '0_0', 'L03pmlNIfyG_Eh'],
+  });
+});
+
+test('extractSelectionDots reads the untagged binding.Adjacent.anchor positions', () => {
+  const selection = {
+    anchor: { chain: ['0_0'], binding: { Adjacent: { anchor: '1_1', bind: 'Left' } }, affinity: 'downstream' },
+    head: { chain: ['0_0'], binding: { Adjacent: { anchor: '2_2', bind: 'Right' } }, affinity: 'downstream' },
+  };
+
+  assert.deepEqual(extractSelectionDots(selection), {
+    kind: 'ok',
+    dots: ['0_0', '1_1', '2_2'],
+  });
+});
+
+test('extractSelectionDots reports unrecognized when either side has an unrecognized shape', () => {
+  const unrecognizedAnchor = {
+    anchor: { chain: [{ node_id: '0' }], affinity: 'downstream' },
+    head: { chain: ['0_0'], child: null, affinity: 'upstream' },
+  };
+  const unrecognizedHead = {
+    anchor: { chain: ['0_0'], child: null, affinity: 'upstream' },
+    head: 'garbage',
+  };
+
+  assert.deepEqual(extractSelectionDots(unrecognizedAnchor), { kind: 'unrecognized' });
+  assert.deepEqual(extractSelectionDots(unrecognizedHead), { kind: 'unrecognized' });
+  assert.deepEqual(extractSelectionDots('garbage'), { kind: 'unrecognized' });
+  assert.deepEqual(extractSelectionDots(null), { kind: 'unrecognized' });
 });

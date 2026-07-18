@@ -33,7 +33,7 @@ export const trimmedKey = (documentId: string) => `document:changesets:trimmed:$
 // un-collected backlog (e.g. worker outage) is never trimmed away — no data loss.
 const RETAIN_WINDOW_MS = 30 * 60 * 1000;
 
-export type StreamEntry = { seq: string; changeset: Uint8Array; userId: string; deviceId: string };
+export type StreamEntry = { seq: string; changeset: Uint8Array; userId: string; deviceId: string; zombieDots?: string[] };
 
 // Redis Stream ids are `<ms>-<seq>`; compare numerically part-by-part.
 export const seqCompare = (a: string, b: string): number => {
@@ -52,11 +52,13 @@ const parseEntries = (rows: XRangeRow[]): StreamEntry[] =>
     for (let i = 0; i < fields.length; i += 2) {
       map.set(fields[i], fields[i + 1]);
     }
+    const z = map.get('z');
     return {
       seq,
       changeset: Uint8Array.fromBase64(map.get('c') ?? ''),
       userId: map.get('u') ?? '',
       deviceId: map.get('d') ?? '',
+      zombieDots: z ? (JSON.parse(z) as string[]) : undefined,
     };
   });
 
@@ -64,10 +66,22 @@ const parseEntries = (rows: XRangeRow[]): StreamEntry[] =>
 // broadcast to peers and returned to the pusher). An accurate confirmed-heads
 // contract keeps a pusher from re-sending already-known changesets, so the
 // stream stays duplicate-free without an explicit dedup index.
-export const appendBundle = async (documentId: string, bundle: Uint8Array, userId: string, deviceId: string): Promise<string> => {
+export const appendBundle = async (
+  documentId: string,
+  bundle: Uint8Array,
+  userId: string,
+  deviceId: string,
+  opts?: { zombieDots?: string[] },
+): Promise<string> => {
   // No MAXLEN: trimming is the collect job's responsibility (keyed to the
   // collected cursor) so un-collected entries are never dropped.
-  const seq = await redis.xadd(streamKey(documentId), '*', 'c', bundle.toBase64(), 'u', userId, 'd', deviceId);
+  const b64 = bundle.toBase64();
+  // The sweep sidecar (`z`) rides the same XADD as the bundle — one command, so
+  // the zombie-dot set is stored atomically with the changeset it deletes.
+  const seq =
+    opts?.zombieDots && opts.zombieDots.length > 0
+      ? await redis.xadd(streamKey(documentId), '*', 'c', b64, 'u', userId, 'd', deviceId, 'z', JSON.stringify(opts.zombieDots))
+      : await redis.xadd(streamKey(documentId), '*', 'c', b64, 'u', userId, 'd', deviceId);
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- xadd on a stream always returns an id
   return seq!;
 };
@@ -139,6 +153,30 @@ export const readStreamSince = async (
 export const streamTip = async (documentId: string): Promise<string | null> => {
   const rows = (await redis.xrevrange(streamKey(documentId), '+', '-', 'COUNT', 1)) as XRangeRow[];
   return rows.length > 0 ? rows[0][0] : null;
+};
+
+// Per-document connection presence — a TTL-scored zset keyed on the server-issued
+// connection nonce (not clientId: a nonce is unique per (instance, connection), so
+// a dead connection's `clearPresence` can never remove a live reconnect's lease).
+// The sweep quiescence fence reads it to defer while a session (whose undo stack a
+// sweep could partially resurrect) is attached; the score floor lets a crashed
+// instance's lease self-heal without explicit cleanup.
+const presenceKey = (documentId: string) => `document:presence:${documentId}`;
+
+const PRESENCE_TTL_MS = 5 * 60 * 1000;
+
+export const markPresence = async (documentId: string, connectionId: string): Promise<void> => {
+  await redis.zadd(presenceKey(documentId), Date.now(), connectionId);
+};
+
+export const clearPresence = async (documentId: string, connectionId: string): Promise<void> => {
+  await redis.zrem(presenceKey(documentId), connectionId);
+};
+
+export const hasActivePresence = async (documentId: string): Promise<boolean> => {
+  const floor = Date.now() - PRESENCE_TTL_MS;
+  await redis.zremrangebyscore(presenceKey(documentId), '-inf', floor);
+  return (await redis.zcard(presenceKey(documentId))) > 0;
 };
 
 // The durable frontier of the persisted (collected) history — `null` only for
