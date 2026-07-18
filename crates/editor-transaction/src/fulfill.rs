@@ -162,6 +162,7 @@ mod tests {
             node_attrs: editor_model::imbl::HashMap::new(),
             node_carries: editor_model::imbl::HashMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
+            drops: 0,
         };
         let view = DocView::new(&doc);
         let node = view.node(fold_id).unwrap();
@@ -232,6 +233,7 @@ mod tests {
             node_attrs: editor_model::imbl::HashMap::new(),
             node_carries: editor_model::imbl::HashMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
+            drops: 0,
         };
         let view = DocView::new(&doc);
         let node = view.node(fold_id).unwrap();
@@ -304,6 +306,7 @@ mod tests {
             node_attrs: editor_model::imbl::HashMap::new(),
             node_carries: editor_model::imbl::HashMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
+            drops: 0,
         };
         let view = DocView::new(&doc);
         let node = view.node(fold_id).unwrap();

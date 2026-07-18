@@ -23,6 +23,16 @@ pub(crate) fn apply_to(
         offset,
         len,
     })?;
+    // The split's new marker lands as `block`'s next sibling: its tree parents are
+    // `block`'s own chain (self-excluded), which is exactly the parent's inclusive
+    // ancestry, so `parents` doubles as the live parents-chain check input here.
+    let parent = ps.parent_of(block).ok_or(StepError::NodeNotFound(block))?;
+    let sibling_index = support::child_elem_ids(ps, parent)
+        .iter()
+        .position(|&d| d == block)
+        .ok_or(StepError::NodeNotFound(block))?
+        + 1;
+    support::validate_ins_slot(ps, parent, pos, sibling_index, node_type, Some(&parents))?;
     let new_dot = batched
         .apply(EditOp::Seq(ListOp::Ins {
             pos,

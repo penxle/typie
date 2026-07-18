@@ -249,6 +249,23 @@ impl RawChild {
     }
 }
 
+/// Count the real (authored, non-synthetic) op dots in `node`'s subtree — the
+/// measure of content lost when a whole subtree is dropped from the tree.
+pub(crate) fn count_rawnode_real_dots(node: &RawNode) -> u64 {
+    let mut n = (!node.id.is_synthetic()) as u64;
+    for c in &node.children {
+        n += count_rawchild_real_dots(c);
+    }
+    n
+}
+
+pub(crate) fn count_rawchild_real_dots(c: &RawChild) -> u64 {
+    match c {
+        RawChild::Leaf { id, .. } => (!id.is_synthetic()) as u64,
+        RawChild::Block(b) => count_rawnode_real_dots(b),
+    }
+}
+
 /// A block's ordered children, backed by a persistent order-statistics tree
 /// (`SumTree`) summed by direct-leaf count. This makes positional edits
 /// (`insert`/`remove` at a slot, and `leaf_slot` mapping a leaf offset to a child
@@ -461,6 +478,17 @@ fn descend_stack(stack: &mut Vec<(Dot, usize)>, parents: &[Dot]) -> bool {
 }
 
 pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError> {
+    let mut drops = 0;
+    project_blocks_with_stats(items, &mut drops)
+}
+
+/// As [`project_blocks`], additionally counting each real op dot dropped for
+/// failing to attach: a block/block-atom whose parent chain no longer resolves,
+/// and an inline leaf stranded at the root.
+pub fn project_blocks_with_stats(
+    items: &[(Dot, SeqItem)],
+    drops: &mut u64,
+) -> Result<RawTree, ProjectError> {
     let mut nodes: Vec<BuildNode> = vec![BuildNode {
         id: Dot::ROOT,
         node_type: NodeType::Root,
@@ -477,6 +505,7 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError>
                 attrs,
             } => {
                 if !descend_stack(&mut stack, parents) {
+                    *drops += (!id.is_synthetic()) as u64;
                     continue;
                 }
                 let idx = nodes.len();
@@ -497,7 +526,7 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError>
                         item: item.clone(),
                     });
                 }
-                _ => {}
+                _ => *drops += (!id.is_synthetic()) as u64,
             },
             SeqItem::Atom(leaf) => {
                 if leaf.is_block_level() {
@@ -513,7 +542,7 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError>
                             item: item.clone(),
                         });
                     }
-                    _ => {}
+                    _ => *drops += (!id.is_synthetic()) as u64,
                 }
             }
             SeqItem::BlockAtom { leaf, parents } => {
@@ -527,6 +556,7 @@ pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError>
                     return Err(ProjectError::OrphanLeaf { id: *id });
                 }
                 if !descend_stack(&mut stack, parents) {
+                    *drops += (!id.is_synthetic()) as u64;
                     continue;
                 }
                 let parent_idx = stack.last().expect("root is always present").1;
@@ -708,6 +738,36 @@ mod tests {
             .map(|slot| children.leaf_ordinal_at(slot))
             .collect();
         assert_eq!(got, vec![0, 1, 1, 2, 3]);
+    }
+
+    #[test]
+    fn project_blocks_with_stats_counts_dropped_marker_and_inline() {
+        let para = Dot::new(1, 0);
+        let ghost = Dot::new(9, 9);
+        let dropped_block = Dot::new(1, 1);
+        let dropped_char = Dot::new(1, 2);
+        let seq = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (
+                dropped_block,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, ghost],
+                    attrs: vec![],
+                },
+            ),
+            (dropped_char, SeqItem::Char('z')),
+        ];
+        let mut drops = 0u64;
+        let _ = project_blocks_with_stats(&seq, &mut drops).unwrap();
+        assert_eq!(drops, 2, "dropped block marker + its stranded inline char");
     }
 
     #[test]

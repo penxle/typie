@@ -589,7 +589,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "ime_resync_required" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 

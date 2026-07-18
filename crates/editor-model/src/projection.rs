@@ -9,8 +9,8 @@ use crate::{
     ModifierType, NodeType, OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
 use crate::{
-    Node, NodeAttrLog, SeqItem, SpanLog, normalize, project_blocks, seed_block_init,
-    validate_block_tree,
+    Node, NodeAttrLog, SeqItem, SpanLog, normalize_with_stats, project_blocks_with_stats,
+    seed_block_init, validate_block_tree,
 };
 
 #[derive(Debug)]
@@ -49,6 +49,11 @@ pub struct ProjectedDoc {
     pub node_attrs: imbl::HashMap<Dot, Node>,
     pub node_carries: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub alias_classes: AliasClasses,
+    /// Real op dots dropped from the tree while producing THIS projection pass (a
+    /// projection-hidden zombie count). Per-pass, not deduplicated: a zombie that
+    /// persists in the sequence is re-counted every time the tree is re-derived.
+    /// Not part of document identity — excluded from `PartialEq`.
+    pub drops: u64,
 }
 
 impl ProjectedDoc {
@@ -723,11 +728,17 @@ pub fn project_core<R: SeqResolve>(
         }
     }
 
-    let raw_tree = normalize(project_blocks(elements).map_err(ProjectionError::Project)?);
+    let mut drops: u64 = 0;
+    let raw_tree = normalize_with_stats(
+        project_blocks_with_stats(elements, &mut drops).map_err(ProjectionError::Project)?,
+        &mut drops,
+    );
     let tree = BlockTree::from_raw(&raw_tree);
     validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
 
-    Ok(project_from_tree(elements, tree, resolver, logs))
+    let mut pd = project_from_tree(elements, tree, resolver, logs);
+    pd.drops = drops;
+    Ok(pd)
 }
 
 pub fn project_from_tree<R: SeqResolve>(
@@ -758,6 +769,7 @@ pub fn project_from_tree<R: SeqResolve>(
         node_attrs,
         node_carries,
         alias_classes,
+        drops: 0,
     };
 
     let paths = BlockPaths::from_tree(&pd.tree);
@@ -797,7 +809,7 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
-    use crate::{AliasOp, AliasRun, AtomLeaf, SeqItem, project_blocks};
+    use crate::{AliasOp, AliasRun, AtomLeaf, SeqItem, normalize, project_blocks};
 
     fn elems_nested() -> Vec<(Dot, SeqItem)> {
         let bq = Dot::new(1, 5);
@@ -892,6 +904,7 @@ mod tests {
             node_attrs: imbl::HashMap::new(),
             node_carries: imbl::HashMap::new(),
             alias_classes: AliasClasses::default(),
+            drops: 0,
         };
         let idx = ProjectionIndexes::rebuild_from(&projected, &SpanLog::new());
         assert_eq!(idx.paths, BlockPaths::from_tree(&tree));

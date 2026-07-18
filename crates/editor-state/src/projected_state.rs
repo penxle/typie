@@ -5,8 +5,8 @@ use editor_model::{
     Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeType, ProjectedDoc,
     ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
     SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of, normalize_content_shallow,
-    normalize_subtree, project_blocks, project_from, project_from_tree, seq_parents,
-    split_block_insert, split_logs,
+    normalize_subtree_with_stats, project_blocks_with_stats, project_from, project_from_tree,
+    seq_parents, split_block_insert, split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -169,6 +169,11 @@ pub struct ProjectedState {
     indexes: ProjectionIndexes,
     leaf_cursor: Option<LeafCursor>,
     layout_dirty: crate::LayoutDirty,
+    /// Running total of per-pass drop EVENTS across every projection (full and
+    /// incremental) since the last [`take_drop_stats`](Self::take_drop_stats) — not a
+    /// distinct-zombie count. A zombie that survives is re-counted on each full
+    /// reprojection, so the tripwire keeps firing until a later sweep removes it.
+    drop_stats: u64,
 }
 
 impl ProjectedState {
@@ -185,6 +190,7 @@ impl ProjectedState {
 
     fn rebuild_from_graph(&mut self) -> Result<(), SpineError> {
         let (logs, seq, projected, indexes) = Self::build_warm(&self.graph)?;
+        self.drop_stats += projected.drops;
         self.logs = logs;
         self.seq = seq;
         self.projected = projected;
@@ -261,6 +267,7 @@ impl ProjectedState {
 
     pub fn from_graph(graph: OpGraph<EditOp>) -> Result<Self, SpineError> {
         let (logs, seq, projected, indexes) = Self::build_warm(&graph)?;
+        let drop_stats = projected.drops;
         Ok(Self {
             graph,
             logs,
@@ -269,6 +276,7 @@ impl ProjectedState {
             indexes,
             leaf_cursor: None,
             layout_dirty: crate::LayoutDirty::Full,
+            drop_stats,
         })
     }
 
@@ -307,6 +315,7 @@ impl ProjectedState {
         let projected = project_from(&self.logs, &self.seq)?;
         let paths = BlockPaths::from_tree(&projected.tree);
         let spans = SpanAnchorIndex::build(&self.logs.spans);
+        self.drop_stats += projected.drops;
         self.projected = projected;
         self.indexes = ProjectionIndexes { paths, spans };
         self.leaf_cursor = None;
@@ -328,6 +337,7 @@ impl ProjectedState {
         let projected = project_from(&self.logs, &self.seq)?;
         let paths = BlockPaths::from_tree(&projected.tree);
         let spans = self.indexes.spans.clone();
+        self.drop_stats += projected.drops;
         self.projected = projected;
         self.indexes = ProjectionIndexes { paths, spans };
         self.leaf_cursor = None;
@@ -647,7 +657,9 @@ impl ProjectedState {
                 .into());
             }
         }
-        let raw = project_blocks(&elements).map_err(ProjectionError::Project)?;
+        let mut window_drops: u64 = 0;
+        let raw = project_blocks_with_stats(&elements, &mut window_drops)
+            .map_err(ProjectionError::Project)?;
         // Normalize each top-level block's subtree independently (NOT under a fresh
         // Root): the Root content model is a whole-document rule and must not be
         // re-applied to a window, or it scaffolds spurious mid-document content.
@@ -671,7 +683,7 @@ impl ProjectedState {
         for c in raw_children {
             match c {
                 RawChild::Block(mut b) => {
-                    normalize_subtree(&mut b, &[NodeType::Root]);
+                    normalize_subtree_with_stats(&mut b, &[NodeType::Root], &mut window_drops);
                     plan_subtree(
                         &b,
                         Dot::ROOT,
@@ -785,6 +797,7 @@ impl ProjectedState {
             self.mark_dirty_block(*block);
         }
         self.mark_dirty_structural(Dot::ROOT);
+        self.drop_stats += window_drops;
         Ok(())
     }
 
@@ -887,9 +900,12 @@ impl ProjectedState {
                 }
             }
         }
-        // Forget any direct block the rule dropped (and its whole subtree).
+        // Forget any direct block the rule dropped (and its whole subtree). The
+        // shallow proxy carries no descendants, so the normalize sink can't see this
+        // loss; count the dropped subtree's real dots directly from the live tree.
         let dropped: Vec<Dot> = before.difference(&after).copied().collect();
         for d in dropped {
+            self.drop_stats += self.subtree_real_dots(d).len() as u64;
             let mut sub = Vec::new();
             if let Some(b) = self.projected.tree.get(d) {
                 collect_subtree_nodes(&self.projected.tree, b, &mut sub);
@@ -1959,6 +1975,20 @@ impl ProjectedState {
 
     pub fn projected(&self) -> &ProjectedDoc {
         &self.projected
+    }
+
+    /// Real op dots dropped from the tree (projection-hidden zombies) since the last
+    /// call, resetting the running total to zero.
+    pub fn take_drop_stats(&mut self) -> u64 {
+        std::mem::take(&mut self.drop_stats)
+    }
+
+    /// Peeks the running drop-stats total without draining it. `take_drop_stats`
+    /// requires `&mut self`, which forces an `Arc` copy-on-write clone whenever the
+    /// projected state is shared (e.g. `View`'s layout-cache snapshot); callers on a
+    /// hot, usually-empty path should check this first and skip the mutable call.
+    pub fn drop_stats(&self) -> u64 {
+        self.drop_stats
     }
 
     pub fn graph(&self) -> &OpGraph<EditOp> {

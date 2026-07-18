@@ -94,4 +94,95 @@ mod tests {
         let c = s.clone();
         assert!(!state_observably_changed(&s, &c));
     }
+
+    fn zombie_css() -> Vec<Changeset<EditOp>> {
+        use editor_crdt::{Dot, ListOp, Op};
+        use editor_model::{NodeType, SeqItem};
+        let d = |c| Dot::new(1, c);
+        vec![Changeset {
+            ops: vec![
+                Op {
+                    id: d(0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(1),
+                    parents: vec![d(0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+                Op {
+                    id: d(2),
+                    parents: vec![d(1)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 2,
+                        item: SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![Dot::ROOT, Dot::new(9, 999)],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(3),
+                    parents: vec![d(2)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 3,
+                        item: SeqItem::Char('z'),
+                    }),
+                },
+            ],
+        }]
+    }
+
+    fn clean_css() -> Vec<Changeset<EditOp>> {
+        let mut css = zombie_css();
+        css[0].ops.truncate(2);
+        css
+    }
+
+    #[test]
+    fn projection_counts_dropped_subtree_real_dots() {
+        use editor_crdt::Dot;
+        let state = State::from_changesets(zombie_css(), None).unwrap();
+        assert!(
+            state.view().node(Dot::new(1, 2)).is_none(),
+            "전제: 현행 워크는 이 마커를 드롭"
+        );
+        assert_eq!(state.projected.projected().drops, 2, "마커+char");
+    }
+
+    #[test]
+    fn projection_of_clean_document_counts_no_drops() {
+        let state = State::from_changesets(clean_css(), None).unwrap();
+        assert_eq!(state.projected.projected().drops, 0);
+    }
+
+    #[test]
+    fn persistent_zombie_recounts_on_each_full_reprojection() {
+        let mut state = State::from_changesets(zombie_css(), None).unwrap();
+        assert_eq!(
+            state.projected_mut().take_drop_stats(),
+            2,
+            "initial projection counts the zombie marker + char, then drains to 0"
+        );
+        // The zombie still lives in the sequence, so a fresh whole-document
+        // reprojection drops it again — the tripwire is per-pass, not deduplicated.
+        state.projected_mut().reproject_all().unwrap();
+        assert_eq!(
+            state.projected_mut().take_drop_stats(),
+            2,
+            "a persistent zombie re-counts on every full reprojection"
+        );
+    }
 }

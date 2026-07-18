@@ -48,6 +48,7 @@ pub enum EditorEvent {
         prefetch: Vec<FontData>,
     },
     CursorExitedDocumentStart,
+    ImeResyncRequired,
     TrackedRangeReplaceResult {
         id: String,
         outcome: TrackedRangeReplaceOutcome,

@@ -1250,7 +1250,8 @@ mod tests {
             } }
             selection: (p1, 0)
         };
-        let pos = support::child_seq_insert_pos(&state.projected, bq, 1).unwrap();
+        let pos =
+            support::child_seq_insert_pos(&state.projected, bq, 1, NodeType::Paragraph).unwrap();
         state
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
@@ -1291,7 +1292,8 @@ mod tests {
             } }
             selection: (p1, 0)
         };
-        let pos = support::child_seq_insert_pos(&state.projected, p1, 2).unwrap();
+        let pos =
+            support::child_seq_insert_pos(&state.projected, p1, 2, NodeType::HardBreak).unwrap();
         state
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {

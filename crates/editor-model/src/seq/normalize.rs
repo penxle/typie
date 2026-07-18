@@ -2,7 +2,9 @@ use std::collections::{HashMap, VecDeque};
 
 use editor_crdt::Dot;
 
-use super::project::{RawChild, RawNode, RawTree, synthetic_id};
+use super::project::{
+    RawChild, RawNode, RawTree, count_rawchild_real_dots, count_rawnode_real_dots, synthetic_id,
+};
 use crate::nodes::NodeType;
 use crate::schema::{ContentExpr, ContextExpr};
 
@@ -20,20 +22,42 @@ fn fixed_slot_roles(content: &ContentExpr) -> Option<Vec<NodeType>> {
     }
 }
 
+/// Whether `t`'s children occupy fixed, role-keyed slots (e.g. `Fold`'s
+/// `FoldTitle`/`FoldContent`) — a schema `Seq` of `Single`s that projection
+/// reorders by role. For such nodes tree order diverges from sequence order, so
+/// sequence-position math must not assume the tree-last child holds the max.
+pub fn is_fixed_slot(t: NodeType) -> bool {
+    fixed_slot_roles(&t.spec().content).is_some()
+}
+
 pub fn reshape_fixed_slots(node: &mut RawNode) {
+    let mut drops = 0;
+    reshape_fixed_slots_with_stats(node, &mut drops);
+}
+
+/// As [`reshape_fixed_slots`], counting the real dots dropped: any non-block
+/// child, plus every surplus block left over after each role slot is filled —
+/// each such block is discarded whole, so its whole subtree is counted.
+pub fn reshape_fixed_slots_with_stats(node: &mut RawNode, drops: &mut u64) {
     let roles = fixed_slot_roles(&node.node_type.spec().content).expect("fixed-slot only");
     let mut by_role: HashMap<NodeType, VecDeque<RawNode>> = HashMap::new();
     for c in std::mem::take(&mut node.children) {
-        if let RawChild::Block(b) = c {
-            by_role.entry(b.node_type).or_default().push_back(b);
+        match c {
+            RawChild::Block(b) => by_role.entry(b.node_type).or_default().push_back(b),
+            leaf => *drops += count_rawchild_real_dots(&leaf),
         }
     }
-    for role in roles {
+    for role in &roles {
         let slot = by_role
-            .get_mut(&role)
+            .get_mut(role)
             .and_then(|q| q.pop_front())
-            .unwrap_or_else(|| scaffold_block(role, 0, node.id));
+            .unwrap_or_else(|| scaffold_block(*role, 0, node.id));
         node.children.push(RawChild::Block(slot));
+    }
+    for (_role, surplus) in by_role {
+        for b in surplus {
+            *drops += count_rawnode_real_dots(&b);
+        }
     }
 }
 
@@ -96,19 +120,29 @@ fn match_content(
 }
 
 pub fn repair_general(node: &mut RawNode) {
+    let mut drops = 0;
+    repair_general_with_stats(node, &mut drops);
+}
+
+/// As [`repair_general`], counting real dots dropped. An unmatched block is
+/// dissolved — its children are promoted (and survive), so only the wrapper's
+/// own real dot is counted; an unmatched leaf is discarded whole.
+pub fn repair_general_with_stats(node: &mut RawNode, drops: &mut u64) {
     let content = node.node_type.spec().content.clone();
     loop {
         let mut kids: VecDeque<RawChild> = std::mem::take(&mut node.children).into_iter().collect();
         let mut out = Vec::new();
         match_content(&content, &mut kids, node.id, &mut out);
-        let promoted: Vec<RawChild> = Vec::from(kids)
-            .into_iter()
-            .filter_map(|c| match c {
-                RawChild::Block(b) => Some(b.children),
-                _ => None,
-            })
-            .flatten()
-            .collect();
+        let mut promoted: Vec<RawChild> = Vec::new();
+        for c in Vec::from(kids) {
+            match c {
+                RawChild::Block(b) => {
+                    *drops += (!b.id.is_synthetic()) as u64;
+                    promoted.extend(b.children);
+                }
+                RawChild::Leaf { id, .. } => *drops += (!id.is_synthetic()) as u64,
+            }
+        }
         node.children = out;
         if promoted.is_empty() {
             return;
@@ -117,7 +151,11 @@ pub fn repair_general(node: &mut RawNode) {
     }
 }
 
-fn repair_preserving_unknown(node: &mut RawNode, repair: impl FnOnce(&mut RawNode)) {
+fn repair_preserving_unknown(
+    node: &mut RawNode,
+    drops: &mut u64,
+    repair: impl FnOnce(&mut RawNode, &mut u64),
+) {
     let taken = std::mem::take(&mut node.children);
     let mut known = Vec::with_capacity(taken.len());
     let mut unknowns: Vec<(usize, RawChild)> = Vec::new();
@@ -128,7 +166,7 @@ fn repair_preserving_unknown(node: &mut RawNode, repair: impl FnOnce(&mut RawNod
         }
     }
     node.children = known;
-    repair(node);
+    repair(node, drops);
     if !unknowns.is_empty() {
         let mut out = std::mem::take(&mut node.children);
         for (i, (idx, c)) in unknowns.into_iter().enumerate() {
@@ -230,14 +268,18 @@ fn complete_root_trailing_editable_paragraph(node: &mut RawNode) {
     )));
 }
 
-fn drop_context_invalid_here(node: &mut RawNode, path: &[NodeType]) {
+fn drop_context_invalid_here(node: &mut RawNode, path: &[NodeType], drops: &mut u64) {
     node.children.retain(|c| {
         let Some(t) = c.as_child_type() else {
             return true;
         };
         let full: Vec<NodeType> = path.iter().copied().chain(std::iter::once(t)).collect();
         let ctx = &t.spec().context;
-        *ctx == ContextExpr::Any || ctx.matches(&full)
+        let keep = *ctx == ContextExpr::Any || ctx.matches(&full);
+        if !keep {
+            *drops += count_rawchild_real_dots(c);
+        }
+        keep
     });
 }
 
@@ -260,10 +302,17 @@ fn fix_roots(tree: &mut RawTree) {
     }
 }
 
-pub fn normalize(mut tree: RawTree) -> RawTree {
+pub fn normalize(tree: RawTree) -> RawTree {
+    let mut drops = 0;
+    normalize_with_stats(tree, &mut drops)
+}
+
+/// As [`normalize`], counting the real op dots dropped from the tree during
+/// normalization (context-invalid subtrees, dissolved wrappers, surplus slots).
+pub fn normalize_with_stats(mut tree: RawTree, drops: &mut u64) -> RawTree {
     fix_roots(&mut tree);
     for r in &mut tree.roots {
-        normalize_node(r, &mut Vec::new());
+        normalize_node(r, &mut Vec::new(), drops);
     }
     tree
 }
@@ -272,8 +321,15 @@ pub fn normalize(mut tree: RawTree) -> RawTree {
 /// applying only that block's (and descendants') content rules — NOT the
 /// document Root rules. For localized re-projection of one top-level block.
 pub fn normalize_subtree(node: &mut RawNode, ancestors: &[NodeType]) {
+    let mut drops = 0;
+    normalize_subtree_with_stats(node, ancestors, &mut drops);
+}
+
+/// As [`normalize_subtree`], counting the real op dots dropped from `node`'s
+/// subtree during normalization.
+pub fn normalize_subtree_with_stats(node: &mut RawNode, ancestors: &[NodeType], drops: &mut u64) {
     let mut path = ancestors.to_vec();
-    normalize_node(node, &mut path);
+    normalize_node(node, &mut path, drops);
 }
 
 /// Apply only `node`'s own schema content rule (repairing its direct children),
@@ -285,12 +341,16 @@ pub fn normalize_subtree(node: &mut RawNode, ancestors: &[NodeType]) {
 pub fn normalize_content_shallow(node: &mut RawNode, ancestors: &[NodeType]) {
     let mut path = ancestors.to_vec();
     path.push(node.node_type);
+    // The shallow proxy carries no descendants, so its drop counts describe only
+    // the proxy — not the real subtrees. The caller counts real dropped dots from
+    // the live tree at the `forget_node` site instead; discard the proxy count.
+    let mut _drops = 0u64;
     let mut passes = 0;
     loop {
         passes += 1;
         debug_assert!(passes <= 100, "normalize_content_shallow did not converge");
         if node.node_type != NodeType::Unknown {
-            drop_context_invalid_here(node, &path);
+            drop_context_invalid_here(node, &path, &mut _drops);
         }
         let types: Vec<NodeType> = node
             .children
@@ -301,9 +361,9 @@ pub fn normalize_content_shallow(node: &mut RawNode, ancestors: &[NodeType]) {
         if node.node_type.spec().content.matches_sequence(&types) {
             break;
         } else if fixed_slot_roles(&node.node_type.spec().content).is_some() {
-            repair_preserving_unknown(node, reshape_fixed_slots);
+            repair_preserving_unknown(node, &mut _drops, reshape_fixed_slots_with_stats);
         } else {
-            repair_preserving_unknown(node, repair_general);
+            repair_preserving_unknown(node, &mut _drops, repair_general_with_stats);
         }
     }
     complete_root_trailing_editable_paragraph(node);
@@ -312,23 +372,23 @@ pub fn normalize_content_shallow(node: &mut RawNode, ancestors: &[NodeType]) {
 
 /// Recurse `normalize_node` into each direct block child, writing the normalized
 /// child back.
-fn recurse_block_children(children: &mut [RawChild], path: &mut Vec<NodeType>) {
+fn recurse_block_children(children: &mut [RawChild], path: &mut Vec<NodeType>, drops: &mut u64) {
     for c in children.iter_mut() {
         if let RawChild::Block(b) = c {
-            normalize_node(b, path);
+            normalize_node(b, path, drops);
         }
     }
 }
 
-fn normalize_node(node: &mut RawNode, path: &mut Vec<NodeType>) {
+fn normalize_node(node: &mut RawNode, path: &mut Vec<NodeType>, drops: &mut u64) {
     path.push(node.node_type);
-    recurse_block_children(&mut node.children, path);
+    recurse_block_children(&mut node.children, path, drops);
     let mut passes = 0;
     loop {
         passes += 1;
         debug_assert!(passes <= 100, "normalize_node did not converge");
         if node.node_type != NodeType::Unknown {
-            drop_context_invalid_here(node, path);
+            drop_context_invalid_here(node, path, drops);
         }
         let types: Vec<NodeType> = node
             .children
@@ -339,11 +399,11 @@ fn normalize_node(node: &mut RawNode, path: &mut Vec<NodeType>) {
         if node.node_type.spec().content.matches_sequence(&types) {
             break;
         } else if fixed_slot_roles(&node.node_type.spec().content).is_some() {
-            repair_preserving_unknown(node, reshape_fixed_slots);
+            repair_preserving_unknown(node, drops, reshape_fixed_slots_with_stats);
         } else {
-            repair_preserving_unknown(node, repair_general);
+            repair_preserving_unknown(node, drops, repair_general_with_stats);
         }
-        recurse_block_children(&mut node.children, path);
+        recurse_block_children(&mut node.children, path, drops);
     }
     if node.node_type == NodeType::Table {
         normalize_grid(node);
@@ -428,6 +488,80 @@ mod tests {
             &node.children[1],
             RawChild::Block(b) if b.node_type == NodeType::FoldContent
         ));
+    }
+
+    #[test]
+    fn normalize_with_stats_counts_dissolved_wrapper_only() {
+        // Root rejects a ListItem: repair_general promotes its Paragraph child (which
+        // survives) and dissolves only the ListItem wrapper — one real dot, not the subtree.
+        let list_item = Dot::new(1, 1);
+        let promoted_para = Dot::new(1, 2);
+        let node = RawNode {
+            attrs: vec![],
+            id: Dot::ROOT,
+            node_type: NodeType::Root,
+            children: vec![RawChild::Block(RawNode {
+                attrs: vec![],
+                id: list_item,
+                node_type: NodeType::ListItem,
+                children: vec![RawChild::Block(RawNode {
+                    attrs: vec![],
+                    id: promoted_para,
+                    node_type: NodeType::Paragraph,
+                    children: vec![],
+                })],
+            })],
+        };
+        let mut drops = 0u64;
+        let out = normalize_with_stats(RawTree { roots: vec![node] }, &mut drops);
+        assert_eq!(
+            drops, 1,
+            "dissolved ListItem wrapper is one real dot; its promoted Paragraph survives"
+        );
+        assert!(
+            out.roots[0]
+                .children
+                .iter()
+                .any(|c| matches!(c, RawChild::Block(b) if b.id == promoted_para)),
+            "promoted Paragraph survives at root level"
+        );
+        assert!(valid(&out).is_ok());
+    }
+
+    #[test]
+    fn reshape_fixed_slots_with_stats_counts_surplus_subtree_whole() {
+        // A surplus second FoldTitle is discarded whole — its marker AND its char count.
+        let ft1 = Dot::new(1, 1);
+        let ft2 = Dot::new(1, 2);
+        let ft2_char = Dot::new(1, 3);
+        let mut node = RawNode {
+            attrs: vec![],
+            id: Dot::new(1, 0),
+            node_type: NodeType::Fold,
+            children: vec![
+                RawChild::Block(RawNode {
+                    attrs: vec![],
+                    id: ft1,
+                    node_type: NodeType::FoldTitle,
+                    children: vec![],
+                }),
+                RawChild::Block(RawNode {
+                    attrs: vec![],
+                    id: ft2,
+                    node_type: NodeType::FoldTitle,
+                    children: vec![RawChild::Leaf {
+                        id: ft2_char,
+                        item: super::super::SeqItem::Char('z'),
+                    }],
+                }),
+            ],
+        };
+        let mut drops = 0u64;
+        reshape_fixed_slots_with_stats(&mut node, &mut drops);
+        assert_eq!(
+            drops, 2,
+            "surplus FoldTitle discarded whole: marker + its char"
+        );
     }
 
     #[test]

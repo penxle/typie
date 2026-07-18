@@ -4,7 +4,8 @@ use editor_crdt::sequence::Bias as SeqBias;
 use editor_crdt::{Dot, ListOp};
 use editor_model::{
     AliasRun, Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierAttrOp, ModifierType,
-    NodeType, PlainNode, PlainTextNode, SeqClass, SeqItem, SpanOp, Subtree, classify,
+    NodeType, PlainNode, PlainTextNode, Schema, SeqClass, SeqItem, SpanOp, Subtree, anchor_dot,
+    classify, is_fixed_slot,
 };
 use editor_state::{BatchedState, ProjectedState};
 
@@ -28,10 +29,12 @@ pub(crate) fn child_elem_ids(ps: &ProjectedState, block: Dot) -> Vec<Dot> {
 /// Seq position to insert at a full child-slot index of `block` (blocks + atom
 /// leaves + chars). Inserts AFTER the full extent of the preceding child: after
 /// a preceding block's whole subtree, or after a preceding leaf's single dot.
+/// `t` is the type of the node about to be inserted, validated against `parent`.
 pub(crate) fn child_seq_insert_pos(
     ps: &ProjectedState,
     parent: Dot,
     index: usize,
+    t: NodeType,
 ) -> Result<usize, StepError> {
     let children = child_elem_ids(ps, parent);
     if index > children.len() {
@@ -41,25 +44,145 @@ pub(crate) fn child_seq_insert_pos(
             len: children.len(),
         });
     }
-    if index == 0 {
-        return seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent));
-    }
-    let prev = children[index - 1];
-    // Insert right after the previous sibling's last sequence element. For a block
-    // sibling that's its subtree's max position — found in `O(depth)`, not by
-    // resolving every dot in the subtree (the per-block-insert cost of a paste).
-    let max = if ps.is_block(prev) {
-        ps.subtree_max_seq_pos(prev)
-            .ok_or(StepError::NodeNotFound(prev))?
+    let pos = if index == 0 {
+        seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent))?
     } else {
-        match prev.as_op_dot() {
-            Some(d) => ps
-                .seq_flat_pos(d.dot())
-                .ok_or(StepError::NodeNotFound(prev))?,
-            None => return Err(StepError::NodeNotFound(prev)),
-        }
+        let prev = children[index - 1];
+        // Insert right after the previous sibling's last sequence element. For a
+        // block sibling that's its subtree's exact max position — a rightmost-path
+        // walk under-reports it across a reversed fixed-slot (Fold), landing the
+        // insert inside the container.
+        let max = if ps.is_block(prev) {
+            subtree_seq_max_exact(ps, prev).ok_or(StepError::NodeNotFound(prev))?
+        } else {
+            match prev.as_op_dot() {
+                Some(d) => ps
+                    .seq_flat_pos(d.dot())
+                    .ok_or(StepError::NodeNotFound(prev))?,
+                None => return Err(StepError::NodeNotFound(prev)),
+            }
+        };
+        max + 1
     };
-    Ok(max + 1)
+    validate_ins_slot(ps, parent, pos, index, t, None)?;
+    Ok(pos)
+}
+
+/// The maximum sequence position spanned by `block`'s subtree. Mirrors
+/// `ProjectedState::subtree_max_seq_pos`'s rightmost-path walk, but the instant
+/// the walk meets a fixed-slot node (`Fold`) it switches to an exhaustive scan of
+/// that node's subtree. A fixed-slot container reorders its children by role, so
+/// its tree-last child is not its sequence-max — a reversed `Fold`
+/// (`FoldContent` before `FoldTitle` in the sequence) hides its real max in the
+/// tree-first slot, which the rightmost walk would miss. Every non-fixed parent
+/// keeps its children in sequence order, so the max stays in the tree-last child
+/// until such a container is reached — including one nested inside the rightmost
+/// path of non-fixed ancestors.
+pub(crate) fn subtree_seq_max_exact(ps: &ProjectedState, block: Dot) -> Option<usize> {
+    let exhaustive = |b: Dot| {
+        ps.subtree_real_dots(b)
+            .iter()
+            .filter_map(|&d| ps.seq_flat_pos(d))
+            .max()
+    };
+    let mut node = block;
+    loop {
+        let t = ps.block_node_type(node)?;
+        if is_fixed_slot(t) {
+            return exhaustive(node);
+        }
+        let count = match ps.child_count(node) {
+            Some(c) => c,
+            None => break,
+        };
+        if count == 0 {
+            return match anchor_dot(node).and_then(|d| ps.seq_flat_pos(d)) {
+                Some(pos) => Some(pos),
+                None => exhaustive(block),
+            };
+        }
+        let last = ps.child_dot_at(node, count - 1)?;
+        if ps.is_block(last) {
+            node = last;
+        } else {
+            return match ps.seq_flat_pos(last) {
+                Some(pos) => Some(pos),
+                None => exhaustive(block),
+            };
+        }
+    }
+    exhaustive(block)
+}
+
+/// The single validation gate for a locally generated `Seq(Ins)` into `block` at
+/// sequence position `pos`. Rejects with `IllegalInsertSlot` when the position
+/// falls outside `block`'s own span, when `t` is not schema-legal content for
+/// `block`, or — when `parents` is `Some` (a block-marker insert) — when the
+/// supplied tree-parent chain is stale relative to `block`'s live ancestry.
+/// `offset` is the child-slot offset the caller derived `pos` from; a run of
+/// chars only needs its first slot checked, so it is carried for the contract
+/// but not re-derived here (positional repair is a later concern).
+pub(crate) fn validate_ins_slot(
+    ps: &ProjectedState,
+    block: Dot,
+    pos: usize,
+    offset: usize,
+    t: NodeType,
+    parents: Option<&[Dot]>,
+) -> Result<(), StepError> {
+    let _ = offset;
+    let err = || StepError::IllegalInsertSlot { block, pos };
+
+    let start = match block.as_op_dot() {
+        Some(d) => ps
+            .seq_boundary_pos(d.dot(), SeqBias::After)
+            .ok_or_else(err)?,
+        None if block == Dot::ROOT => 0,
+        // synthetic block: fail-closed if its real anchor doesn't resolve. A legal
+        // insert targets a real block, materialized out of any scaffold first.
+        None => ps
+            .child_dot_at(block, 0)
+            .and_then(|c| c.as_op_dot().map(|d| d.dot()))
+            .and_then(|c| ps.seq_boundary_pos(c, SeqBias::Before))
+            .ok_or_else(err)?,
+    };
+    let end = subtree_seq_max_exact(ps, block).map_or(start, |m| m + 1);
+    if !(start..=end).contains(&pos) {
+        return Err(err());
+    }
+
+    let bt = ps.block_node_type(block).ok_or_else(err)?;
+    if !Schema::node_spec(bt).content.matches(t) {
+        return Err(err());
+    }
+
+    if let Some(parents) = parents {
+        let chain: Vec<Dot> = ps.ancestor_real_dots(block, true);
+        if parents != chain.as_slice() {
+            return Err(err());
+        }
+    }
+    Ok(())
+}
+
+/// Preorder type-check of an arbitrary `Subtree` about to be emitted beneath a
+/// `host`-typed parent. Each node's type must be legal content for its parent
+/// (the subtree root against `host`, every child against its own parent node).
+/// A `Subtree` can be built freely, so `emit_subtree` runs this before mutating
+/// any state — a rejection aborts before the first op, leaving the state
+/// untouched.
+fn validate_subtree_shape(sub: &Subtree, host: NodeType) -> Result<(), StepError> {
+    let t = sub.node.as_type();
+    if !Schema::node_spec(host).content.matches(t) {
+        return Err(StepError::IllegalInsertSlot {
+            block: Dot::ROOT,
+            pos: 0,
+        });
+    }
+    for child in &sub.children {
+        validate_subtree_shape(child, t)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn parents_chain(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> {
@@ -115,6 +238,7 @@ pub(crate) fn insert_text_ops(
         offset,
         len,
     })?;
+    validate_ins_slot(ps, block, p, offset, NodeType::Text, None)?;
     let mut ops = Vec::with_capacity(text.chars().count());
     for (i, ch) in text.chars().enumerate() {
         ops.push(EditOp::Seq(ListOp::Ins {
@@ -611,6 +735,16 @@ pub(crate) fn emit_subtree(
     if subtree.node == PlainNode::Unknown {
         return Err(StepError::UnknownSubtree);
     }
+    // The caller validated the entry slot; the shape below it is arbitrary, so
+    // reject an illegal nesting before emitting anything. Each marker's tree
+    // parents are woven from the tree structure here, so the parents-chain
+    // criterion holds by construction and needs no per-marker chain check.
+    if let Some(host) = parents
+        .last()
+        .and_then(|&p| batched.projected.block_node_type(p))
+    {
+        validate_subtree_shape(subtree, host)?;
+    }
     let node_type = subtree.node.as_type();
     match classify(node_type) {
         SeqClass::Block => {
@@ -717,12 +851,219 @@ pub(crate) fn emit_subtree(
 
 #[cfg(test)]
 mod tests {
+    use editor_crdt::{Changeset, Op, OpGraph};
     use editor_macros::state;
+    use editor_model::ChildView;
+    use editor_state::State;
+    use proptest::prelude::*;
 
     use super::*;
+    use crate::Transaction;
 
     fn p(actor: u64, clock: u64) -> Dot {
         Dot::new(actor, clock)
+    }
+
+    #[test]
+    fn insert_text_into_non_inline_block_rejects() {
+        let (state, list, ..) = state! {
+            doc {
+                root {
+                    list: bullet_list {
+                        list_item { p: paragraph { text("ab") } }
+                    }
+                }
+            }
+            selection: (p, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        let err = tr.insert_text(list, 0, "x").unwrap_err();
+        assert!(matches!(err, StepError::IllegalInsertSlot { .. }));
+    }
+
+    #[test]
+    fn insert_text_into_paragraph_accepts_all_offsets() {
+        let (state, p) = state! {
+            doc {
+                root {
+                    p: paragraph { text("ab") page_break }
+                }
+            }
+            selection: (p, 0)
+        };
+        for offset in 0..=3 {
+            let mut tr = Transaction::new(&state);
+            assert!(tr.insert_text(p, offset, "x").is_ok(), "offset {offset}");
+        }
+    }
+
+    #[test]
+    fn insert_pos_outside_block_span_is_illegal() {
+        let (state, a) = state! {
+            doc {
+                root {
+                    a: paragraph { text("ab") }
+                    paragraph { text("cd") }
+                }
+            }
+            selection: (a, 0)
+        };
+        let ps = &state.projected;
+        let a_marker = ps.seq_flat_pos(a).unwrap();
+        assert!(
+            validate_ins_slot(ps, a, a_marker, 0, NodeType::Text, None).is_err(),
+            "마커 슬롯"
+        );
+        assert!(validate_ins_slot(ps, a, a_marker + 1, 0, NodeType::Text, None).is_ok());
+        assert!(
+            validate_ins_slot(ps, a, a_marker + 3, 2, NodeType::Text, None).is_ok(),
+            "말미"
+        );
+        assert!(
+            validate_ins_slot(ps, a, a_marker + 4, 2, NodeType::Text, None).is_err(),
+            "스팬 밖"
+        );
+    }
+
+    #[test]
+    fn marker_ins_with_stale_parents_chain_rejects() {
+        let (state, _list, li, ..) = state! {
+            doc {
+                root {
+                    list: bullet_list { li: list_item { p: paragraph { text("a") } } }
+                }
+            }
+            selection: (p, 0)
+        };
+        let ps = &state.projected;
+        let pos = child_seq_insert_pos(ps, li, 1, NodeType::Paragraph).unwrap();
+        let good: Vec<Dot> = ps.ancestor_real_dots(li, true);
+        assert!(validate_ins_slot(ps, li, pos, 1, NodeType::Paragraph, Some(&good)).is_ok());
+        let stale = vec![Dot::ROOT, Dot::new(9, 9)];
+        assert!(validate_ins_slot(ps, li, pos, 1, NodeType::Paragraph, Some(&stale)).is_err());
+    }
+
+    fn seq_block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
+        SeqItem::Block {
+            node_type,
+            parents,
+            attrs: vec![],
+        }
+    }
+
+    /// Weave raw changesets whose sequence order is exactly `items` (each appended
+    /// in turn), on a deterministic actor so block markers can reference each
+    /// other's dots by `(1, index)`. DAG parents are the linear chain `add_mut`
+    /// derives from the running heads.
+    fn weave_css(items: Vec<SeqItem>) -> Vec<Changeset<EditOp>> {
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        for (pos, item) in items.into_iter().enumerate() {
+            g.add_mut(EditOp::Seq(ListOp::Ins { pos, item })).unwrap();
+        }
+        g.commit_mut();
+        g.changesets_as_vec()
+    }
+
+    /// A `Fold` whose sequence order is reversed relative to schema order:
+    /// `[Fold, FoldContent(+Paragraph), FoldTitle(+char)]`. Projection reorders
+    /// the children to `[FoldTitle, FoldContent]`, so the sequence-max hides in
+    /// the tree-first slot.
+    fn reversed_fold_css() -> Vec<Changeset<EditOp>> {
+        let fold = Dot::new(1, 0);
+        let content = Dot::new(1, 1);
+        weave_css(vec![
+            seq_block(NodeType::Fold, vec![Dot::ROOT]),
+            seq_block(NodeType::FoldContent, vec![Dot::ROOT, fold]),
+            seq_block(NodeType::Paragraph, vec![Dot::ROOT, fold, content]),
+            seq_block(NodeType::FoldTitle, vec![Dot::ROOT, fold]),
+            SeqItem::Char('t'),
+        ])
+    }
+
+    /// The same reversed `Fold`, buried on the rightmost path of non-fixed
+    /// ancestors (`Table > TableRow > TableCell > Fold`). A top-block-only
+    /// fixed-slot check would miss it — the exhaustive switch must fire the moment
+    /// the rightmost walk reaches the nested `Fold`.
+    fn nested_reversed_fold_css() -> Vec<Changeset<EditOp>> {
+        let table = Dot::new(1, 0);
+        let row = Dot::new(1, 1);
+        let cell = Dot::new(1, 2);
+        let fold = Dot::new(1, 3);
+        let content = Dot::new(1, 4);
+        weave_css(vec![
+            seq_block(NodeType::Table, vec![Dot::ROOT]),
+            seq_block(NodeType::TableRow, vec![Dot::ROOT, table]),
+            seq_block(NodeType::TableCell, vec![Dot::ROOT, table, row]),
+            seq_block(NodeType::Fold, vec![Dot::ROOT, table, row, cell]),
+            seq_block(
+                NodeType::FoldContent,
+                vec![Dot::ROOT, table, row, cell, fold],
+            ),
+            seq_block(
+                NodeType::Paragraph,
+                vec![Dot::ROOT, table, row, cell, fold, content],
+            ),
+            seq_block(NodeType::FoldTitle, vec![Dot::ROOT, table, row, cell, fold]),
+            SeqItem::Char('t'),
+        ])
+    }
+
+    #[test]
+    fn insert_after_reversed_fold_preserves_all_dots() {
+        let css = reversed_fold_css();
+        let state = State::from_changesets(css, None).unwrap();
+        let root_children = state.projected.child_elem_dots(Dot::ROOT);
+        let fold = root_children[0];
+        let before: Vec<Dot> = state.projected.subtree_real_dots(fold);
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_subtree(
+            Dot::ROOT,
+            1,
+            Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+        )
+        .unwrap();
+
+        let after_fold: Vec<Dot> = tr.state().projected.subtree_real_dots(fold);
+        assert_eq!(
+            before.len(),
+            after_fold.len(),
+            "Fold 서브트리가 침범당하지 않는다"
+        );
+        for d in &before {
+            assert!(
+                tr.state().view().node(*d).is_some() || tr.state().view().leaf(*d).is_some(),
+                "{d:?} 보존"
+            );
+        }
+    }
+
+    #[test]
+    fn insert_after_nested_reversed_fold_preserves_all_dots() {
+        let state = State::from_changesets(nested_reversed_fold_css(), None).unwrap();
+        let table = state.projected.child_elem_dots(Dot::ROOT)[0];
+        let before: Vec<Dot> = state.projected.subtree_real_dots(table);
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_subtree(
+            Dot::ROOT,
+            1,
+            Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+        )
+        .unwrap();
+
+        let after: Vec<Dot> = tr.state().projected.subtree_real_dots(table);
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "중첩 역순 Fold를 감싼 서브트리가 침범당하지 않는다"
+        );
+        for d in &before {
+            assert!(
+                tr.state().view().node(*d).is_some() || tr.state().view().leaf(*d).is_some(),
+                "{d:?} 보존"
+            );
+        }
     }
 
     #[test]
@@ -776,7 +1117,7 @@ mod tests {
         assert_eq!(subtree.source_dots, vec![image_dot]);
 
         let parents = self_inclusive_parents(ps, root).unwrap();
-        let mut seq_pos = child_seq_insert_pos(ps, root, 2).unwrap();
+        let mut seq_pos = child_seq_insert_pos(ps, root, 2, NodeType::Image).unwrap();
         let mut pairs: Vec<(Dot, Dot)> = Vec::new();
         let mut new_dot = None;
         state
@@ -787,5 +1128,188 @@ mod tests {
             .unwrap();
 
         assert_eq!(pairs, vec![(image_dot, new_dot.unwrap())]);
+    }
+
+    fn zombie_css() -> Vec<Changeset<EditOp>> {
+        let d = |c| Dot::new(1, c);
+        vec![Changeset {
+            ops: vec![
+                Op {
+                    id: d(0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(1),
+                    parents: vec![d(0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+                Op {
+                    id: d(2),
+                    parents: vec![d(1)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 2,
+                        item: SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![Dot::ROOT, Dot::new(9, 999)],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(3),
+                    parents: vec![d(2)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 3,
+                        item: SeqItem::Char('z'),
+                    }),
+                },
+            ],
+        }]
+    }
+
+    fn all_block_dots(state: &State) -> Vec<Dot> {
+        let view = state.view();
+        let mut out = vec![Dot::ROOT];
+        if let Some(root) = view.root() {
+            for d in root.descendants() {
+                if let ChildView::Block(b) = d {
+                    out.push(b.id());
+                }
+            }
+        }
+        out
+    }
+
+    fn build_fixture(pick: usize) -> State {
+        match pick {
+            0 => {
+                let (state, ..) = state! {
+                    doc {
+                        root {
+                            a: paragraph { text("ab") }
+                            b: paragraph { text("cd") }
+                        }
+                    }
+                    selection: (a, 0)
+                };
+                state
+            }
+            1 => {
+                let (state, ..) = state! {
+                    doc {
+                        root {
+                            list: bullet_list {
+                                list_item { p: paragraph { text("ab") } }
+                            }
+                            tail: paragraph { text("z") }
+                        }
+                    }
+                    selection: (p, 0)
+                };
+                state
+            }
+            2 => {
+                let (state, ..) = state! {
+                    doc {
+                        root {
+                            f: fold {
+                                fold_title { text("t") }
+                                fold_content {
+                                    paragraph { text("a") }
+                                    bullet_list { list_item { paragraph { text("b") } } }
+                                }
+                            }
+                            tail: paragraph { text("z") }
+                        }
+                    }
+                    selection: (f, 0)
+                };
+                state
+            }
+            _ => State::from_changesets(zombie_css(), None).unwrap(),
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn local_ins_realizes_requested_slot_or_rejects_atomically(
+            fixture_pick in 0usize..4,
+            block_pick in 0usize..64,
+            offset_pick in 0usize..64,
+            op_pick in 0usize..2,
+            ch in proptest::char::range('a', 'z'),
+        ) {
+            let state = build_fixture(fixture_pick);
+            let blocks = all_block_dots(&state);
+            let block = blocks[block_pick % blocks.len()];
+            let ins_type = if op_pick == 0 { NodeType::Text } else { NodeType::Paragraph };
+            let content = &Schema::node_spec(state.projected.block_node_type(block).unwrap()).content;
+            prop_assume!(!content.matches(ins_type) || content.is_repeatable(ins_type));
+
+            let len = state.projected.child_count(block).unwrap_or(0);
+            let offset = offset_pick % (len + 1);
+            let before_doc = state.projected.projected().clone();
+            let before_ops = state.graph().len();
+            let before_drops = state.projected.projected().drops;
+            let before_children: Vec<Dot> = state.projected.child_elem_dots(block);
+
+            let mut tr = Transaction::new(&state);
+            let result = if op_pick == 0 {
+                tr.insert_text(block, offset, &ch.to_string())
+            } else {
+                tr.insert_subtree(
+                    block,
+                    offset,
+                    Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+                )
+            };
+            match result {
+                Ok(()) => {
+                    let ps = &tr.state().projected;
+                    let children = ps.block_children(block).unwrap();
+                    let after_children: Vec<Dot> = ps.child_elem_dots(block);
+                    prop_assert_eq!(after_children.len(), before_children.len() + 1);
+                    prop_assert_eq!(&after_children[..offset], &before_children[..offset]);
+                    prop_assert_eq!(&after_children[offset + 1..], &before_children[offset..]);
+                    prop_assert!(
+                        !before_children.contains(&after_children[offset]),
+                        "신규 dot"
+                    );
+                    match children.get(offset) {
+                        Some(Child::Leaf { item: SeqItem::Char(c), .. }) if op_pick == 0 => {
+                            prop_assert_eq!(*c, ch);
+                        }
+                        Some(Child::Block(b)) if op_pick == 1 => {
+                            prop_assert_eq!(ps.block_node_type(*b), Some(NodeType::Paragraph));
+                        }
+                        other => prop_assert!(false, "슬롯 {offset} 내용 불일치: {other:?}"),
+                    }
+                    prop_assert_eq!(
+                        ps.projected().drops,
+                        before_drops,
+                        "성공 삽입이 드롭을 만들지 않는다"
+                    );
+                }
+                Err(_) => {
+                    prop_assert!(tr.state().projected.projected() == &before_doc);
+                    prop_assert_eq!(
+                        tr.state().graph().len(),
+                        before_ops,
+                        "거부는 op을 남기지 않는다"
+                    );
+                }
+            }
+        }
     }
 }

@@ -69,7 +69,7 @@ pub(crate) fn apply_to(
         batched.apply(op)?;
     }
 
-    let pos = support::child_seq_insert_pos(&batched.projected, parent, index)?;
+    let pos = support::child_seq_insert_pos(&batched.projected, parent, index, new_type)?;
     let parents = support::self_inclusive_parents(&batched.projected, parent)
         .ok_or(StepError::NodeNotFound(parent))?;
     let mut seq_pos = pos;

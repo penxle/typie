@@ -64,6 +64,9 @@ pub enum StepError {
     #[error("replace target {block:?} carries unknown content and cannot replace type losslessly")]
     UnknownBearingReplace { block: Dot },
 
+    #[error("illegal insert slot {pos} for block {block:?}")]
+    IllegalInsertSlot { block: Dot, pos: usize },
+
     #[error(
         "cannot replace {block:?} block type from {old_type:?} to {new_type:?} without changing its children"
     )]

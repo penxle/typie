@@ -1,4 +1,5 @@
 use editor_clipboard::Slice;
+use editor_commands::CommandError;
 use editor_common::{HistoryTag, Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
 use editor_model::{EditOp, ModifierState, ModifierType};
@@ -71,6 +72,14 @@ fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
             index,
         }),
     }
+}
+
+fn is_illegal_slot(e: &EditorError) -> bool {
+    matches!(e, EditorError::Step(StepError::IllegalInsertSlot { .. }))
+        || matches!(
+            e,
+            EditorError::Command(CommandError::Step(StepError::IllegalInsertSlot { .. }))
+        )
 }
 
 /// Snapshot of the transient (non-document) editor state recorded with each undo
@@ -635,7 +644,7 @@ impl Editor {
         // each separately re-clones the whole projected state (O(N)) per changeset.
         let mut iter = messages.into_iter().peekable();
         while let Some(msg) = iter.next() {
-            match msg {
+            let result: Result<(), EditorError> = match msg {
                 Message::Remote { changeset } => {
                     self.ime_delete_paint = None;
                     let mut batch = vec![changeset];
@@ -644,7 +653,7 @@ impl Editor {
                             batch.push(changeset);
                         }
                     }
-                    self.apply_remote_changesets(batch)?;
+                    self.apply_remote_changesets(batch)
                 }
                 // Coalesce a consecutive run of text-input batches into one reduce +
                 // transact: an IME composition update enqueues several `TextInput`
@@ -662,13 +671,19 @@ impl Editor {
                             batch.extend(ops);
                         }
                     }
-                    self.process_message(Message::TextInput { ops: batch })?;
+                    self.process_message(Message::TextInput { ops: batch })
                 }
                 other => {
                     self.ime_delete_paint = None;
-                    self.process_message(other)?;
+                    self.process_message(other)
                 }
+            };
+            if let Err(e) = &result
+                && is_illegal_slot(e)
+            {
+                log::error!("tick rejected message: {e}");
             }
+            result?;
         }
         // Defense-in-depth: every op-applying path seals its own changeset
         // (`Transaction::commit`, `apply_undo_result`). If a future path leaks
@@ -770,6 +785,15 @@ impl Editor {
             self.push_event(EditorEvent::StateChanged {
                 fields: fields.into_iter().collect(),
             });
+        }
+
+        if self.state.projected.drop_stats() > 0 {
+            let drops = self.state.projected_mut().take_drop_stats();
+            if drops > 0 {
+                log::error!(
+                    "projection dropped {drops} live sequence element(s); zombie content present"
+                );
+            }
         }
 
         Ok(std::mem::take(&mut self.pending_events))
@@ -1921,7 +1945,7 @@ impl Editor {
 mod tests {
     use crate::dnd::DndState;
     use crate::editor::Editor;
-    use editor_crdt::{Changeset, Dot, ListOp};
+    use editor_crdt::{Changeset, Dot, ListOp, Op};
     use editor_macros::state;
     use editor_model::{
         ChildView, EditOp, LayoutMode, Modifier, ModifierType, Node, NodeType, PlainDoc, PlainNode,
@@ -2073,6 +2097,62 @@ mod tests {
         }];
         let s = with_pending(state, pending);
         assert!(normalize_pending_overlay(&s).is_none());
+    }
+
+    fn zombie_css() -> Vec<Changeset<EditOp>> {
+        let d = |c| Dot::new(1, c);
+        vec![Changeset {
+            ops: vec![
+                Op {
+                    id: d(0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(1),
+                    parents: vec![d(0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+                Op {
+                    id: d(2),
+                    parents: vec![d(1)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 2,
+                        item: SeqItem::Block {
+                            node_type: NodeType::Paragraph,
+                            parents: vec![Dot::ROOT, Dot::new(9, 999)],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(3),
+                    parents: vec![d(2)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 3,
+                        item: SeqItem::Char('z'),
+                    }),
+                },
+            ],
+        }]
+    }
+
+    #[test]
+    fn tick_drains_projection_drop_stats() {
+        let state = State::from_changesets(zombie_css(), None).unwrap();
+        let mut editor = Editor::new_test(state);
+        editor.tick().unwrap();
+        assert_eq!(editor.state.projected_mut().take_drop_stats(), 0);
     }
 
     fn test_editor() -> (Editor, editor_crdt::Dot) {
