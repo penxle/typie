@@ -19,6 +19,22 @@ const RETRY_DELAY_MS = 5 * 60 * 1000;
 
 export const sweepDueKey = 'document:sweep:due';
 
+// field=documentId, value=<streamTip when confirmed zombie-free>. Kept out of
+// sweepDocument so the sync-path semantics stay unchanged; written by the scripts.
+export const sweepVerifiedKey = 'document:sweep:verified';
+
+const SWEEP_VERIFIED_NO_TIP = 'none';
+
+export const recordSweepVerified = async (documentId: string, tip: string | null): Promise<void> => {
+  await redis.hset(sweepVerifiedKey, documentId, tip ?? SWEEP_VERIFIED_NO_TIP);
+};
+
+export const getSweepVerifiedMany = async (documentIds: string[]): Promise<(string | null)[]> =>
+  documentIds.length === 0 ? [] : await redis.hmget(sweepVerifiedKey, ...documentIds);
+
+export const sweepVerifiedMatchesTip = (marker: string | null, tip: string | null): boolean =>
+  marker !== null && marker === (tip ?? SWEEP_VERIFIED_NO_TIP);
+
 // host.sweep / host.zombie_dots come from the wasm-server bundle (Task 6); the
 // intersection keeps this call site typed whether or not the regenerated .d.ts
 // already declares them, and matches their signatures exactly when it does.

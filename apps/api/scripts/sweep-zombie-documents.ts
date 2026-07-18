@@ -1,39 +1,47 @@
 #!/usr/bin/env node
 
-// sweepDocument (#/utils/zombie-sweep.ts)는 #/mq/index.ts를 정적 import하고, 그 import가
-// mq/bullmq.ts 평가 시점에 worker.run()을 실행한다(SCRIPT 환경변수가 없으면). ESM은 import를
-// 스크립트 본문보다 먼저 평가하므로 여기서 process.env.SCRIPT를 설정해도 이미 늦다 — 프로세스
-// 시작 전에 주입해야 한다:
+// Each worker owns the shard `shardOf(documentId) % workers == workerIndex` and runs its
+// own scan + wasm; this process only merges and persists their reports. dry-run is the
+// default (nothing written to the document store without --yes):
 //
-//   SCRIPT=1 doppler run --config prod_local -- node --experimental-strip-types scripts/sweep-zombie-documents.ts [--yes] [--checkpoint <path>] [--batch <n>]
-//
-// dry-run이 기본값이며 --yes 없이는 DB에 아무 것도 쓰지 않는다.
+//   SCRIPT=1 doppler run --config prod_local -- node --experimental-strip-types \
+//     scripts/sweep-zombie-documents.ts [--yes] [--workers <n>] [--batch <n>] [--enqueue-rate <n/s>] [--checkpoint <path>]
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { asc, eq, gt } from 'drizzle-orm';
-import { db, DocumentCommentThreads, DocumentStates } from '#/db/index.ts';
-import { extractSelectionDots } from '#/utils/comment-selection.ts';
-import { sweepDocument } from '#/utils/zombie-sweep.ts';
+import { Worker } from 'node:worker_threads';
+import { mergeCommentHits, mergeReportEntries } from '#/utils/sweep-sharding.ts';
+import type { SweepCommentHit, SweepReportEntry } from '#/utils/sweep-sharding.ts';
+
+process.env.SCRIPT = '1';
 
 const { values } = parseArgs({
   options: {
     yes: { type: 'boolean', default: false },
     checkpoint: { type: 'string', default: '.sweep-checkpoint' },
-    batch: { type: 'string', default: '100' },
+    batch: { type: 'string', default: '500' },
+    workers: { type: 'string' },
+    'enqueue-rate': { type: 'string', default: '50' },
   },
 });
 
 const dryRun = !values.yes;
-const checkpointPath = `${values.checkpoint}.${dryRun ? 'dry' : 'apply'}`;
-const reportPath = `sweep-report.${dryRun ? 'dry' : 'apply'}.json`;
-const commentHitsPath = `sweep-comment-hits.${dryRun ? 'dry' : 'apply'}.json`;
+const mode = dryRun ? 'dry' : 'apply';
+const checkpointBase = values.checkpoint;
+const reportPath = `sweep-report.${mode}.json`;
+const commentHitsPath = `sweep-comment-hits.${mode}.json`;
 const batchSize = Number(values.batch);
+const workerCount = Math.max(1, values.workers ? Number(values.workers) : os.availableParallelism() - 1);
+const enqueueRate = Number(values['enqueue-rate']);
 
-let cursor = existsSync(checkpointPath) ? readFileSync(checkpointPath, 'utf8').trim() : '';
+const FLUSH_EVERY = 2000;
 
-type ReportEntry = { documentId: string; reason: 'failed' | 'deferred'; message?: string };
-type CommentHit = { documentId: string; threadId: string; hitDots: string[] | null };
+const shardCheckpointPath = (shard: number): string => `${checkpointBase}.${mode}.shard-${shard}-of-${workerCount}`;
+const legacyCheckpointPath = `${checkpointBase}.${mode}`;
+
+const escapeRegExp = (value: string): string => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
 const readJsonArray = <T>(path: string): T[] => {
   if (!existsSync(path)) {
@@ -48,85 +56,160 @@ const readJsonArray = <T>(path: string): T[] => {
   }
 };
 
-const report: ReportEntry[] = readJsonArray<ReportEntry>(reportPath);
-const commentHits: CommentHit[] = readJsonArray<CommentHit>(commentHitsPath);
+// A different N remaps every document, so a shard layout only resumes under its own N:
+// resume same-N, hard-stop on a different N, warn+restart for the serial-era single file.
+const resolveShardCursors = (): string[] => {
+  const dir = path.dirname(shardCheckpointPath(0)) || '.';
+  const shardRe = new RegExp(String.raw`^${escapeRegExp(path.basename(checkpointBase))}\.${mode}\.shard-(\d+)-of-(\d+)$`);
+  const existing = existsSync(dir) ? readdirSync(dir).filter((name) => shardRe.test(name)) : [];
 
-console.log(dryRun ? 'DRY RUN (실제 적용은 --yes)' : 'APPLY MODE');
-
-const findZombieAnchoredComments = async (documentId: string, zombieDots: string[]): Promise<CommentHit[]> => {
-  if (zombieDots.length === 0) {
-    return [];
-  }
-  const zombieSet = new Set(zombieDots);
-
-  const threads = await db
-    .select({ id: DocumentCommentThreads.id, selection: DocumentCommentThreads.selection })
-    .from(DocumentCommentThreads)
-    .where(eq(DocumentCommentThreads.documentId, documentId));
-
-  const hits: CommentHit[] = [];
-  for (const thread of threads) {
-    const extraction = extractSelectionDots(thread.selection);
-    if (extraction.kind === 'unrecognized') {
-      console.warn(`${documentId}: comment ${thread.id} selection 형식 미상 — 좀비 교차 검사 불가`);
-      hits.push({ documentId, threadId: thread.id, hitDots: null });
-      continue;
+  if (existing.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const foundCounts = new Set(existing.map((name) => Number(shardRe.exec(name)![2])));
+    if (foundCounts.size > 1 || !foundCounts.has(workerCount)) {
+      console.error(
+        `기존 샤드 체크포인트의 워커 수(${[...foundCounts].join(', ')})가 현재 --workers ${workerCount}와 다릅니다.\n` +
+          `같은 --workers 값으로 재실행하거나 기존 shard 파일을 다른 곳으로 옮긴 뒤 다시 시작하세요 (파일을 삭제하지 마세요).`,
+      );
+      process.exit(1);
     }
-
-    const hitDots = extraction.dots.filter((dot) => zombieSet.has(dot));
-    if (hitDots.length > 0) {
-      console.log(`${documentId}: comment ${thread.id} anchors on zombie dots [${hitDots.join(', ')}]`);
-      hits.push({ documentId, threadId: thread.id, hitDots });
+    const cursors = Array.from({ length: workerCount }, () => '');
+    for (let shard = 0; shard < workerCount; shard++) {
+      const path = shardCheckpointPath(shard);
+      if (existsSync(path)) {
+        const parsed = JSON.parse(readFileSync(path, 'utf8')) as { workers: number; cursor: string };
+        cursors[shard] = parsed.cursor ?? '';
+      }
     }
+    console.log(`샤드 체크포인트 ${existing.length}개에서 이어갑니다 (workers=${workerCount}).`);
+    return cursors;
   }
-  return hits;
+
+  if (existsSync(legacyCheckpointPath)) {
+    console.warn(
+      `기존 단일 체크포인트(${legacyCheckpointPath})는 샤드 방식으로 이어갈 수 없습니다 — 무시하고 처음부터 시작합니다. ` +
+        `${dryRun ? '(dry-run이라 안전합니다.)' : '(apply는 재실행이 필요합니다.)'} 기존 파일은 보존합니다.`,
+    );
+  }
+  return Array.from({ length: workerCount }, () => '');
 };
 
-let scanned = 0;
-let dirty = 0;
-let totalZombies = 0;
+const shardCursors = resolveShardCursors();
+let report = readJsonArray<SweepReportEntry>(reportPath);
+let commentHits = readJsonArray<SweepCommentHit>(commentHitsPath);
 
-for (;;) {
-  const rows = await db
-    .select({ documentId: DocumentStates.documentId })
-    .from(DocumentStates)
-    .where(cursor ? gt(DocumentStates.documentId, cursor) : undefined)
-    .orderBy(asc(DocumentStates.documentId))
-    .limit(batchSize);
-  if (rows.length === 0) {
-    break;
-  }
+// Snapshot of documents that carry a stale failed/deferred entry from a prior run; workers
+// report which of them re-scan clean so their entries are dropped instead of lingering.
+const staleIds = report.map((entry) => entry.documentId);
 
-  for (const { documentId } of rows) {
-    scanned += 1;
-    try {
-      const result = await sweepDocument(documentId, { dryRun });
-      if (result.deferred) {
-        report.push({ documentId, reason: 'deferred' });
-      } else if (result.deleteRunCount > 0) {
-        dirty += 1;
-        totalZombies += result.zombieDots.length;
-        console.log(`${documentId}: zombies=${result.zombieDots.length} runs=${result.deleteRunCount} applied=${result.applied}`);
-        if (dryRun) {
-          commentHits.push(...(await findZombieAnchoredComments(documentId, result.zombieDots)));
-        }
-      }
-    } catch (err) {
-      console.error(`${documentId}: FAILED`, err);
-      report.push({ documentId, reason: 'failed', message: err instanceof Error ? err.message : String(err) });
-    }
-    cursor = documentId;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-
-  // report/commentHits must land before the checkpoint — a crash between the two
-  // must re-scan the batch rather than silently drop its failed/deferred entries.
+// Report/comment-hits before the checkpoints: a crash between the two must re-scan
+// (checkpoint still behind) rather than lose a failed/deferred entry.
+const flush = (): void => {
   writeFileSync(reportPath, JSON.stringify(report, null, 2));
   if (dryRun) {
     writeFileSync(commentHitsPath, JSON.stringify(commentHits, null, 2));
   }
-  writeFileSync(checkpointPath, cursor);
-}
+  for (let shard = 0; shard < workerCount; shard++) {
+    writeFileSync(shardCheckpointPath(shard), JSON.stringify({ workers: workerCount, cursor: shardCursors[shard] }));
+  }
+};
 
-console.log(`scanned=${scanned} dirty=${dirty} totalZombies=${totalZombies} unresolved=${report.length}`);
-process.exit(report.length > 0 ? 1 : 0);
+type WorkerMessage =
+  | {
+      type: 'result';
+      cursor: string;
+      entries: SweepReportEntry[];
+      hits: SweepCommentHit[];
+      resolved: string[];
+      stats: { scanned: number; dirty: number; zombies: number; applied: number };
+    }
+  | { type: 'exhausted' }
+  | { type: 'fatal'; message: string };
+
+console.log(dryRun ? 'DRY RUN (실제 적용은 --yes)' : 'APPLY MODE');
+console.log(`워커 ${workerCount}개, batch ${batchSize}${dryRun ? '' : `, enqueue-rate ${enqueueRate}/s`}`);
+
+let scanned = 0;
+let dirty = 0;
+let totalZombies = 0;
+let applied = 0;
+let sinceFlush = 0;
+let aborted = false;
+
+await new Promise<void>((resolve, reject) => {
+  let active = 0;
+
+  const spawn = (shard: number): void => {
+    const worker = new Worker(new URL('sweep-zombie-documents-worker.ts', import.meta.url), {
+      workerData: {
+        workerIndex: shard,
+        workers: workerCount,
+        dryRun,
+        batch: batchSize,
+        startCursor: shardCursors[shard],
+        enqueueRate,
+        staleIds,
+      },
+      execArgv: process.execArgv,
+      env: { ...process.env, WASM_POOL_SIZE: '1', DB_POOL_MAX: '2' },
+    });
+    active += 1;
+
+    worker.on('message', (message: WorkerMessage) => {
+      if (message.type === 'fatal') {
+        reject(new Error(`worker ${shard}: ${message.message}`));
+        return;
+      }
+      if (message.type === 'exhausted') {
+        worker.postMessage({ done: true });
+        return;
+      }
+
+      report = mergeReportEntries(report, message.entries);
+      if (message.resolved.length > 0) {
+        const cleared = new Set(message.resolved);
+        report = report.filter((entry) => !cleared.has(entry.documentId));
+      }
+      if (dryRun && message.hits.length > 0) {
+        commentHits = mergeCommentHits(commentHits, message.hits);
+      }
+      shardCursors[shard] = message.cursor;
+      scanned += message.stats.scanned;
+      dirty += message.stats.dirty;
+      totalZombies += message.stats.zombies;
+      applied += message.stats.applied;
+
+      sinceFlush += message.stats.scanned;
+      if (sinceFlush >= FLUSH_EVERY) {
+        flush();
+        sinceFlush = 0;
+      }
+
+      process.stdout.write(
+        `\r스캔 ${scanned} dirty ${dirty} zombies ${totalZombies}${dryRun ? '' : ` applied ${applied}`} 미해결 ${report.length}   `,
+      );
+    });
+
+    worker.on('error', reject);
+    worker.on('exit', () => {
+      active -= 1;
+      if (active === 0) {
+        resolve();
+      }
+    });
+  };
+
+  for (let shard = 0; shard < workerCount; shard++) {
+    spawn(shard);
+  }
+}).catch((err) => {
+  aborted = true;
+  console.error('\n워커 비정상 종료 — 부분 상태를 기록합니다:', err);
+});
+
+flush();
+process.stdout.write('\n');
+console.log(
+  `scanned=${scanned} dirty=${dirty} totalZombies=${totalZombies}${dryRun ? '' : ` applied=${applied}`} unresolved=${report.length}${aborted ? ' ABORTED' : ''}`,
+);
+process.exit(aborted || report.length > 0 ? 1 : 0);

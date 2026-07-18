@@ -19,6 +19,13 @@
 //   SCRIPT=1 doppler run --config prod_local -- node --experimental-strip-types \
 //     scripts/verify-sweep-readiness.ts --keepalive-canary --ws-canary <url>
 //
+// Because the whole window is blocked, a document's stream tip cannot move, so the backfill's
+// verified marker (recorded at `streamTip`-when-checked) still describes the current graph: any
+// document whose marker equals its current tip is skipped from the final sweep and re-verification
+// (carried-over verification, not an omission), and only unmarked/moved documents are re-checked.
+// The heavy per-document work (final sweep, re-verification) runs across `--sweep-concurrency`
+// worker threads, each with its own wasm instance.
+//
 // Exit 0: readiness confirmed — proceed with comment-anchor migration, then L3 deploy.
 // Exit 1: block unconfirmed, or violating documents remain (see --violations output) — release
 // the window without migrating or deploying L3 (no-op rollback).
@@ -26,11 +33,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
+import { Worker } from 'node:worker_threads';
 import { asc, gt } from 'drizzle-orm';
 import { WebSocket } from 'ws';
 import { db, DocumentStates } from '#/db/index.ts';
-import { getCollectedSeq, hasActivePresence, readStreamBatch, streamTip } from '#/utils/changeset.ts';
-import { sweepDocument } from '#/utils/zombie-sweep.ts';
+import { getCollectedSeq, hasActivePresence, streamTip } from '#/utils/changeset.ts';
+import { getSweepVerifiedMany, sweepVerifiedMatchesTip } from '#/utils/zombie-sweep.ts';
 import type { SweepResult } from '#/utils/zombie-sweep.ts';
 
 // Mirrors zombie-sweep.ts's own QUIESCENCE_MS (not exported) — the final sweep pass below is a
@@ -65,6 +73,7 @@ const violationsPath = values.violations as string;
 const reportPath = values.report as string;
 const batchSize = Number(values.batch);
 const pollMs = Number(values['poll-ms']);
+// Redefined: the number of worker threads that share the residual final-sweep / re-verification.
 const sweepConcurrency = Number(values['sweep-concurrency']);
 const checkConcurrency = Number(values['check-concurrency']);
 const maxSweepAttempts = Number(values['max-sweep-attempts']);
@@ -222,6 +231,29 @@ async function loadDocumentIds(): Promise<string[]> {
   return ids;
 }
 
+type VerifiedPartition = { skipped: string[]; residual: string[] };
+
+// Skip a document whose verified marker still equals its current (block-frozen) tip: an
+// unmoved tip is an unchanged graph, so the backfill's zombie-free judgement carries over
+// and only unmarked/moved documents need the wasm-heavy re-check.
+async function partitionByVerified(documentIds: string[]): Promise<VerifiedPartition> {
+  const skipped: string[] = [];
+  const residual: string[] = [];
+  const WINDOW = 1000;
+  for (let start = 0; start < documentIds.length; start += WINDOW) {
+    const slice = documentIds.slice(start, start + WINDOW);
+    const [markers, tips] = await Promise.all([
+      getSweepVerifiedMany(slice),
+      mapWithConcurrency(slice, checkConcurrency, (id) => streamTip(id)),
+    ]);
+    for (const [i, element] of slice.entries()) {
+      if (sweepVerifiedMatchesTip(markers[i], tips[i])) skipped.push(element);
+      else residual.push(element);
+    }
+  }
+  return { skipped, residual };
+}
+
 async function waitForPresenceDecay(documentIds: string[]): Promise<void> {
   const start = Date.now();
   for (;;) {
@@ -279,23 +311,78 @@ async function waitForQuiescence(documentIds: string[]): Promise<void> {
   }
 }
 
+type FinalSweepResult = { documentId: string; result: SweepResult | null };
+type ReverifyRow = { documentId: string; drained: boolean; zombieCount: number; unconfirmedSidecar: number };
+
+async function runWorkerPass<R>(documentIds: string[], phase: 'final-sweep' | 'reverify'): Promise<R[]> {
+  if (documentIds.length === 0) return [];
+
+  const results: R[] = Array.from({ length: documentIds.length });
+  let cursor = 0;
+  let processed = 0;
+
+  await new Promise<void>((resolve, reject) => {
+    let active = 0;
+
+    const spawn = (): void => {
+      const worker = new Worker(new URL('verify-sweep-readiness-worker.ts', import.meta.url), {
+        workerData: { phase, maxSweepAttempts, sweepRetryMs, sidecarCheckLimit: SIDECAR_CHECK_LIMIT },
+        execArgv: process.execArgv,
+        env: { ...process.env, WASM_POOL_SIZE: '1', DB_POOL_MAX: '2' },
+      });
+      active += 1;
+
+      worker.on('message', (message: null | { index: number; result: R } | { fatal: string }) => {
+        if (message && 'fatal' in message) {
+          reject(new Error(`readiness worker (${phase}): ${message.fatal}`));
+          return;
+        }
+        if (message) {
+          results[message.index] = message.result;
+          processed += 1;
+          if (processed % 100 === 0 || processed === documentIds.length) {
+            console.log(`  [${phase}] ${processed}/${documentIds.length} processed`);
+          }
+        }
+        if (cursor < documentIds.length) {
+          const index = cursor;
+          cursor += 1;
+          worker.postMessage({ index, documentId: documentIds[index] });
+        } else {
+          worker.postMessage({ done: true });
+        }
+      });
+
+      worker.on('error', reject);
+      worker.on('exit', () => {
+        active -= 1;
+        if (active === 0) resolve();
+      });
+    };
+
+    for (let i = 0; i < Math.min(sweepConcurrency, documentIds.length); i++) spawn();
+  }).catch((err: unknown) => {
+    // Fail closed: a worker crash mid-pass cannot become a PASS, so record the abort and stop
+    // before any migration/L3 deploy (mirrors the aborted-flag + partial-report exit convention).
+    const summary = {
+      finishedAt: new Date().toISOString(),
+      phase,
+      aborted: true,
+      pass: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+    writeFileSync(reportPath, JSON.stringify(summary, null, 2));
+    console.error(`\n[${phase}] 워커 비정상 종료 — fail-closed (migration/L3 중단):`, err);
+    process.exit(1);
+  });
+
+  return results;
+}
+
 type FinalSweepOutcome = { unresolved: string[]; applied: number; zombiesSwept: number };
 
 async function finalSweepPass(documentIds: string[]): Promise<FinalSweepOutcome> {
-  let processed = 0;
-  const rows = await mapWithConcurrency(documentIds, sweepConcurrency, async (documentId) => {
-    let last: SweepResult | null = null;
-    for (let attempt = 1; attempt <= maxSweepAttempts; attempt++) {
-      last = await sweepDocument(documentId, { dryRun: false });
-      if (!last.deferred) break;
-      if (attempt < maxSweepAttempts) await sleep(sweepRetryMs);
-    }
-    processed += 1;
-    if (processed % 100 === 0 || processed === documentIds.length) {
-      console.log(`  [final-sweep] ${processed}/${documentIds.length} processed`);
-    }
-    return { documentId, result: last };
-  });
+  const rows = await runWorkerPass<FinalSweepResult>(documentIds, 'final-sweep');
 
   const unresolved = rows.filter((r) => r.result === null || r.result.deferred).map((r) => r.documentId);
   const applied = rows.filter((r) => r.result?.applied).length;
@@ -305,24 +392,19 @@ async function finalSweepPass(documentIds: string[]): Promise<FinalSweepOutcome>
   return { unresolved, applied, zombiesSwept };
 }
 
-type ReverifyRow = { documentId: string; drained: boolean; zombieCount: number; unconfirmedSidecar: number };
-
 async function reverify(documentIds: string[]): Promise<ReverifyRow[]> {
-  return mapWithConcurrency(documentIds, checkConcurrency, async (documentId): Promise<ReverifyRow> => {
-    const [collected, tip, dry] = await Promise.all([
-      getCollectedSeq(documentId),
-      streamTip(documentId),
-      sweepDocument(documentId, { dryRun: true }),
-    ]);
-    const pending = await readStreamBatch(documentId, collected, SIDECAR_CHECK_LIMIT);
-    const unconfirmedSidecar = pending.filter((entry) => entry.zombieDots && entry.zombieDots.length > 0).length;
-    return { documentId, drained: seqEqual(collected, tip), zombieCount: dry.zombieDots.length, unconfirmedSidecar };
-  });
+  return runWorkerPass<ReverifyRow>(documentIds, 'reverify');
 }
 
 type Violation = { documentId: string; reasons: string[] };
 
-function writeReport(documentIds: string[], finalSweep: FinalSweepOutcome, reverifyRows: ReverifyRow[]): void {
+function writeReport(
+  documentIds: string[],
+  skipped: string[],
+  residual: string[],
+  finalSweep: FinalSweepOutcome,
+  reverifyRows: ReverifyRow[],
+): void {
   const violationsByDoc = new Map<string, string[]>();
   const addViolation = (documentId: string, reason: string): void => {
     const reasons = violationsByDoc.get(documentId) ?? [];
@@ -348,6 +430,8 @@ function writeReport(documentIds: string[], finalSweep: FinalSweepOutcome, rever
   const summary = {
     finishedAt: new Date().toISOString(),
     documentCount: documentIds.length,
+    skippedCount: skipped.length,
+    residualCount: residual.length,
     finalSweep: { applied: finalSweep.applied, zombiesSwept: finalSweep.zombiesSwept, unresolvedCount: finalSweep.unresolved.length },
     violationCount: violations.length,
     pass: violations.length === 0,
@@ -362,7 +446,9 @@ function writeReport(documentIds: string[], finalSweep: FinalSweepOutcome, rever
     process.exit(1);
   }
 
-  console.log(`PASS — ${documentIds.length} documents clean. Proceed with comment-anchor migration, then L3 deploy.`);
+  console.log(
+    `PASS — ${documentIds.length} documents clean (${skipped.length} 이월 검증 / ${residual.length} 실검사). Proceed with comment-anchor migration, then L3 deploy.`,
+  );
   process.exit(0);
 }
 
@@ -374,6 +460,10 @@ async function main(): Promise<void> {
   const documentIds = await loadDocumentIds();
   console.log(`  documents: ${documentIds.length}`);
 
+  console.log('=== Verified-marker skip filter ===');
+  const { skipped, residual } = await partitionByVerified(documentIds);
+  console.log(`  skip (이월된 검증) ${skipped.length} / 실검사 ${residual.length}`);
+
   console.log('=== Step 2: presence lease decay ===');
   await waitForPresenceDecay(documentIds);
 
@@ -382,14 +472,14 @@ async function main(): Promise<void> {
 
   console.log('=== Step 4: tip quiescence wait + final sweep ===');
   await waitForQuiescence(documentIds);
-  const finalSweep = await finalSweepPass(documentIds);
+  const finalSweep = await finalSweepPass(residual);
 
   console.log('=== Step 5: collect drain (2nd) ===');
   await drainCollect(documentIds, 'drain-2');
 
   console.log('=== Step 6: full re-verification ===');
-  const reverifyRows = await reverify(documentIds);
+  const reverifyRows = await reverify(residual);
 
   console.log('=== Step 7: report ===');
-  writeReport(documentIds, finalSweep, reverifyRows);
+  writeReport(documentIds, skipped, residual, finalSweep, reverifyRows);
 }
