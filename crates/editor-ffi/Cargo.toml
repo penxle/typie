@@ -92,6 +92,7 @@ web-sys = { workspace = true, optional = true, features = [
   "WebGlFramebuffer",
   "EventTarget",
   "Event",
+  "console",
 ] }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 

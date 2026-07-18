@@ -10,7 +10,9 @@ use web_sys::{
     WebGlTexture,
 };
 
-use crate::present::{Backoff, split_strips};
+use editor_renderer::backend::cpu::unpremultiply;
+
+use crate::present::{Backoff, sentinel_color, sentinel_sink_offset, split_strips};
 
 struct Presenter {
     canvas: OffscreenCanvas,
@@ -26,13 +28,17 @@ struct Presenter {
 struct GlState {
     presenter: Option<Presenter>,
     backoff: Backoff,
+    nonce: u32,
 }
 
 thread_local! {
-    static STATE: RefCell<GlState> = RefCell::new(GlState {
-        presenter: None,
-        backoff: Backoff::new(),
-    });
+    static STATE: RefCell<GlState> = const {
+        RefCell::new(GlState {
+            presenter: None,
+            backoff: Backoff::new(),
+            nonce: 0,
+        })
+    };
     static CANARY: RefCell<Option<Function>> = const { RefCell::new(None) };
 }
 
@@ -126,6 +132,7 @@ impl Presenter {
         sink_width: i32,
         r: IRect,
         ctx: &CanvasRenderingContext2d,
+        nonce: u32,
     ) -> bool {
         let (w, h) = (r.width(), r.height());
         if w <= 0 || h <= 0 {
@@ -180,6 +187,17 @@ impl Presenter {
             Gl::COLOR_BUFFER_BIT,
             Gl::NEAREST,
         );
+        let sentinel = sentinel_color(nonce);
+        gl.enable(Gl::SCISSOR_TEST);
+        gl.scissor(w - 1, ch - h, 1, 1);
+        gl.clear_color(
+            f32::from(sentinel[0]) / 255.0,
+            f32::from(sentinel[1]) / 255.0,
+            f32::from(sentinel[2]) / 255.0,
+            1.0,
+        );
+        gl.clear(Gl::COLOR_BUFFER_BIT);
+        gl.disable(Gl::SCISSOR_TEST);
         gl.flush();
         if gl.is_context_lost() {
             return false;
@@ -203,8 +221,48 @@ impl Presenter {
             )
             .is_ok();
         ctx.restore();
-        ok
+        if !ok {
+            return false;
+        }
+        verify_and_restore_sentinel(pixels, sink_width, r, ctx, sentinel)
     }
+}
+
+fn verify_and_restore_sentinel(
+    pixels: &[u8],
+    sink_width: i32,
+    r: IRect,
+    ctx: &CanvasRenderingContext2d,
+    sentinel: [u8; 4],
+) -> bool {
+    let sx = (r.x1 - 1) as f64;
+    let sy = (r.y1 - 1) as f64;
+    let Ok(read) = ctx.get_image_data(sx, sy, 1.0, 1.0) else {
+        return false;
+    };
+    let data = read.data();
+    if data.0.get(0..4) != Some(&sentinel[..]) {
+        web_sys::console::warn_1(
+            &format!(
+                "[gl-present] sentinel mismatch at ({sx},{sy}): expected {sentinel:?}, got {:?}",
+                data.0.get(0..4)
+            )
+            .into(),
+        );
+        return false;
+    }
+    let offset = sentinel_sink_offset(sink_width, r);
+    let Some(src) = pixels.get(offset..offset + 4) else {
+        return false;
+    };
+    let mut px = [src[0], src[1], src[2], src[3]];
+    unpremultiply(&mut px);
+    let Ok(image_data) =
+        web_sys::ImageData::new_with_u8_clamped_array_and_sh(wasm_bindgen::Clamped(&px[..]), 1, 1)
+    else {
+        return false;
+    };
+    ctx.put_image_data(&image_data, sx, sy).is_ok()
 }
 
 impl Drop for Presenter {
@@ -240,12 +298,14 @@ pub fn begin() -> bool {
 pub fn present(pixels: &[u8], sink_width: i32, r: IRect, ctx: &CanvasRenderingContext2d) -> bool {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
+        let st = &mut *st;
         let Some(p) = st.presenter.as_mut() else {
             return false;
         };
         let max_tex = p.max_tex;
         for strip in split_strips(r, max_tex) {
-            if !p.blit(pixels, sink_width, strip, ctx) {
+            st.nonce = st.nonce.wrapping_add(1);
+            if !p.blit(pixels, sink_width, strip, ctx, st.nonce) {
                 st.presenter = None;
                 st.backoff.fail();
                 return false;

@@ -7,6 +7,22 @@ pub fn use_gl(r: IRect) -> bool {
     (r.width().max(0) as u64) * (r.height().max(0) as u64) >= GL_THRESHOLD_PX
 }
 
+// The GL→2D drawImage composite can silently paint stale or cleared pixels after the
+// browser restores GPU resources (tab switch), so every blit stamps a per-present nonce
+// pixel and reads it back from the target; a mismatch falls the rect back to putImageData.
+pub fn sentinel_color(nonce: u32) -> [u8; 4] {
+    [
+        (nonce & 0xff) as u8,
+        ((nonce >> 8) & 0xff) as u8,
+        ((nonce >> 16) & 0xff) as u8,
+        255,
+    ]
+}
+
+pub fn sentinel_sink_offset(sink_width: i32, r: IRect) -> usize {
+    ((r.y1 - 1) as usize) * (sink_width as usize) * 4 + ((r.x1 - 1) as usize) * 4
+}
+
 pub fn split_strips(r: IRect, max_size: i32) -> Vec<IRect> {
     if max_size <= 0 {
         return Vec::new();
@@ -73,6 +89,23 @@ mod tests {
         assert!(use_gl(rect(0, 0, 512, 512)));
         assert!(!use_gl(rect(0, 0, 512, 511)));
         assert!(!use_gl(rect(0, 0, 0, 0)));
+    }
+
+    #[test]
+    fn sentinel_color_packs_nonce_bytes_with_opaque_alpha() {
+        assert_eq!(sentinel_color(0), [0, 0, 0, 255]);
+        assert_eq!(sentinel_color(0x00_01_02_03), [0x03, 0x02, 0x01, 255]);
+        assert_eq!(sentinel_color(0xff_ff_ff_ff), [0xff, 0xff, 0xff, 255]);
+        assert_ne!(sentinel_color(1), sentinel_color(2));
+    }
+
+    #[test]
+    fn sentinel_sink_offset_points_at_bottom_right_pixel() {
+        assert_eq!(
+            sentinel_sink_offset(100, rect(2, 3, 10, 20)),
+            (19 * 100 + 9) * 4
+        );
+        assert_eq!(sentinel_sink_offset(1, rect(0, 0, 1, 1)), 0);
     }
 
     #[test]
