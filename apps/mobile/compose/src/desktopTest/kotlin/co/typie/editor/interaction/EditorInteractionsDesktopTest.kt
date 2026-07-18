@@ -599,7 +599,7 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `desktop trackpad click drag cancelled back swipe returns editor to origin`() =
+  fun `slow desktop trackpad click drag returns editor to origin before halfway`() =
     runComposeUiTest {
       val fixture = Fixture(scrollConsumer = { Offset.Zero })
       val navigator = Navigator(Route.Home)
@@ -608,7 +608,7 @@ class EditorInteractionsDesktopTest {
       onNodeWithTag(NavigationEditorTag).performTrackpadInput {
         moveTo(Offset(x = 80f, y = center.y))
         press()
-        repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
+        repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 100L) }
       }
       waitUntil { onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left > 0.5f }
       onNodeWithTag(NavigationEditorTag).performTrackpadInput { release() }
@@ -637,23 +637,6 @@ class EditorInteractionsDesktopTest {
 
     waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
     onAllNodes(hasTestTag(NavigationEditorTag)).assertCountEquals(0)
-  }
-
-  @Test
-  fun `rapid desktop trackpad release rolls cancelled back swipe to origin`() = runComposeUiTest {
-    val fixture = Fixture(scrollConsumer = { Offset.Zero })
-    val navigator = Navigator(Route.Home)
-    setNavigationEditorContent(fixture = fixture, navigator = navigator)
-
-    onNodeWithTag(NavigationEditorTag).performTrackpadInput {
-      moveTo(Offset(x = 80f, y = center.y))
-      press()
-      repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
-      release()
-    }
-
-    waitUntil { onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left <= 0.5f }
-    assertEquals(NavigationEditorRoute, navigator.current)
   }
 
   @Test
@@ -805,27 +788,19 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `rapid main editor viewport release rolls cancelled back swipe to origin`() =
-    runComposeUiTest {
-      val fixture = Fixture(scrollConsumer = { Offset.Zero })
-      val navigator = Navigator(Route.Home)
-      setNavigationEditorContent(fixture = fixture, navigator = navigator)
+  fun `rapid main editor viewport release commits before halfway`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    setNavigationEditorContent(fixture = fixture, navigator = navigator)
 
-      onNodeWithTag(NavigationEditorTag).performTouchInput {
-        down(Offset(x = 80f, y = center.y))
-        repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
-        moveBy(Offset(x = 1f, y = 0f), delayMillis = 1L)
-        up()
-      }
-      waitForIdle()
-
-      assertEquals(NavigationEditorRoute, navigator.current)
-      assertEquals(
-        expected = 0f,
-        actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
-        absoluteTolerance = 0.5f,
-      )
+    onNodeWithTag(NavigationEditorTag).performTouchInput {
+      down(Offset(x = 80f, y = center.y))
+      repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
+      moveBy(Offset(x = 1f, y = 0f), delayMillis = 1L)
+      up()
     }
+    waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
+  }
 
   @Test
   fun `rapid edge release completes committed back swipe`() = runComposeUiTest {
@@ -841,28 +816,6 @@ class EditorInteractionsDesktopTest {
     }
 
     waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
-  }
-
-  @Test
-  fun `rapid edge release rolls cancelled back swipe to origin`() = runComposeUiTest {
-    val fixture = Fixture(scrollConsumer = { Offset.Zero })
-    val navigator = Navigator(Route.Home)
-    setNavigationEditorContent(fixture = fixture, navigator = navigator)
-
-    onNodeWithTag(NavigationEditorTag).performTouchInput {
-      down(Offset(x = 10f, y = center.y))
-      repeat(12) { moveBy(Offset(x = 5f, y = 0f), delayMillis = 1L) }
-      moveBy(Offset(x = 1f, y = 0f), delayMillis = 1L)
-      up()
-    }
-    waitForIdle()
-
-    assertEquals(NavigationEditorRoute, navigator.current)
-    assertEquals(
-      expected = 0f,
-      actual = onNodeWithTag(NavigationEditorTag).fetchSemanticsNode().boundsInRoot.left,
-      absoluteTolerance = 0.5f,
-    )
   }
 
   @Test

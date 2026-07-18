@@ -7,25 +7,29 @@ import androidx.compose.ui.unit.Velocity
 
 internal class NavigationPopNestedScroll : NestedScrollConnection {
   private val gestureSession = NavigationPopGestureSession()
+  private var activationDistance = 0f
   private var canStart: () -> Boolean = { false }
   private var onStart: () -> Unit = {}
   private var onDrag: (Float) -> Unit = {}
-  private var onRelease: () -> Unit = {}
+  private var onRelease: (Float) -> Unit = {}
   private var onCancel: () -> Unit = {}
+  private var scrollInterruption: ScrollInterruption? = null
+  private var pressedPointerId: Long? = null
+  private var pointerDownPosition: Offset? = null
+  private var pointerPosition: Offset? = null
 
-  val isMultiTouchRejected: Boolean
-    get() = gestureSession.isMultiTouchRejected
-
-  val isSystemBackZoneRejected: Boolean
-    get() = gestureSession.isSystemBackZoneRejected
+  val isCurrentSequenceRejected: Boolean
+    get() = gestureSession.isCurrentSequenceRejected
 
   fun update(
+    activationDistance: Float,
     canStart: () -> Boolean,
     onStart: () -> Unit,
     onDrag: (Float) -> Unit,
-    onRelease: () -> Unit,
+    onRelease: (Float) -> Unit,
     onCancel: () -> Unit,
   ) {
+    this.activationDistance = activationDistance
     this.canStart = canStart
     this.onStart = onStart
     this.onDrag = onDrag
@@ -33,15 +37,57 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
     this.onCancel = onCancel
   }
 
-  fun updatePressedDragPointerCount(count: Int, downInSystemBackZone: Boolean = false) {
-    if (gestureSession.updatePressedDragPointerCount(count, downInSystemBackZone)) {
+  fun registerScrollInterruption(
+    owner: Any,
+    isScrollInProgress: () -> Boolean,
+    interrupt: () -> Unit,
+  ) {
+    scrollInterruption = ScrollInterruption(owner, isScrollInProgress, interrupt)
+  }
+
+  fun unregisterScrollInterruption(owner: Any) {
+    if (scrollInterruption?.owner === owner) {
+      scrollInterruption = null
+    }
+  }
+
+  fun updatePressedDragPointerCount(
+    count: Int,
+    downInSystemBackZone: Boolean = false,
+    pointerId: Long? = null,
+    position: Offset? = null,
+  ) {
+    val isFirstDown = count == 1 && !gestureSession.hasPressedDragPointer
+    when {
+      isFirstDown -> {
+        pressedPointerId = pointerId
+        pointerDownPosition = position
+        pointerPosition = position
+      }
+      count == 1 && pointerId == pressedPointerId -> pointerPosition = position
+      count == 0 -> {
+        pressedPointerId = null
+        pointerDownPosition = null
+        pointerPosition = null
+      }
+    }
+    val currentScrollInterruption = scrollInterruption
+    val interruptsScrolling =
+      isFirstDown && currentScrollInterruption?.isScrollInProgress?.invoke() == true
+    val wasClaimed = gestureSession.isClaimed
+    gestureSession.updatePressedDragPointerCount(count, downInSystemBackZone)
+    if (interruptsScrolling) {
+      gestureSession.rejectCurrentSequence()
+      currentScrollInterruption.interrupt()
+    }
+    if (wasClaimed && !gestureSession.isClaimed) {
       onCancel()
     }
   }
 
-  fun finishDirectGesture() {
+  fun finishDirectGesture(velocityX: Float) {
     gestureSession.reset()
-    onRelease()
+    onRelease(velocityX)
   }
 
   fun cancelDirectGesture() {
@@ -75,36 +121,56 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
       source != NestedScrollSource.UserInput ||
         !gestureSession.hasPressedDragPointer ||
         gestureSession.isClaimed ||
+        gestureSession.isCurrentSequenceRejected ||
         !canStart()
     ) {
       return Offset.Zero
     }
-    if (
-      !gestureSession.tryClaim(
-        initialDrag = consumed + available,
-        childConsumed = consumed != Offset.Zero,
-      )
-    ) {
+    if (consumed != Offset.Zero) {
+      gestureSession.rejectCurrentSequence()
       return Offset.Zero
     }
 
-    onStart()
-    onDrag(available.x)
+    val dragFromStart =
+      pointerPosition?.let { current -> pointerDownPosition?.let { down -> current - down } }
+        ?: return Offset.Zero
+    val activation = resolveNavigationPopActivation(dragFromStart, activationDistance)
+    when (activation) {
+      NavigationPopActivation.Pending -> return Offset.Zero
+      NavigationPopActivation.Rejected -> {
+        gestureSession.rejectCurrentSequence()
+        return Offset.Zero
+      }
+      is NavigationPopActivation.Ready -> {
+        if (!gestureSession.tryClaim(initialDrag = dragFromStart, childConsumed = false)) {
+          return Offset.Zero
+        }
+
+        onStart()
+        onDrag(activation.overshootX)
+      }
+    }
     return available
   }
 
   override suspend fun onPreFling(available: Velocity): Velocity =
-    if (releaseClaimedGesture()) available else Velocity.Zero
+    if (releaseClaimedGesture(available.x)) available else Velocity.Zero
 
   override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
-    if (releaseClaimedGesture()) available else Velocity.Zero
+    if (releaseClaimedGesture(consumed.x + available.x)) available else Velocity.Zero
 
-  private fun releaseClaimedGesture(): Boolean {
+  private fun releaseClaimedGesture(velocityX: Float): Boolean {
     if (!gestureSession.isClaimed) {
       return false
     }
     gestureSession.reset()
-    onRelease()
+    onRelease(velocityX)
     return true
   }
+
+  private class ScrollInterruption(
+    val owner: Any,
+    val isScrollInProgress: () -> Boolean,
+    val interrupt: () -> Unit,
+  )
 }

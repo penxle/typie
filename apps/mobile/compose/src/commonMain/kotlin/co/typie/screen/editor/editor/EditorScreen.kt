@@ -1219,6 +1219,7 @@ fun EditorScreen(entityId: String) {
         visibleArea = visibleArea,
         magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
         viewportScrollableState = viewportScrollableState,
+        isCurrentNavigationRoute = nav.current == Route.Editor(entityId),
         editorInteractionEnabled = editorInteractionEnabled,
         platformIndirectScaleEnabled = platformIndirectScaleEnabled,
         viewportContentWidth = bodyTrackWidth,

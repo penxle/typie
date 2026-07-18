@@ -27,13 +27,18 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.ViewModelStoreOwner
@@ -72,6 +77,112 @@ private enum class AnimState {
   Pop,
   Dragging,
   PopGestureCommitted,
+}
+
+private val NavigationPopActivationDistance = 15.dp
+
+internal fun shouldCommitNavigationPop(
+  progress: Float,
+  velocityX: Float,
+  containerWidth: Float,
+): Boolean {
+  val logicalVelocity = velocityX / containerWidth
+  return if (abs(logicalVelocity) >= 1f) logicalVelocity > 0f else progress > 0.5f
+}
+
+private class NavigationPopPointerVelocity {
+  private val tracker = VelocityTracker()
+
+  fun update(pressedPointerCount: Int, change: PointerInputChange?) {
+    if (pressedPointerCount > 1) {
+      reset()
+      return
+    }
+    change?.let { tracker.addPointerInputChange(it) }
+  }
+
+  fun release(maximumVelocity: Float): Float {
+    val velocityX = tracker.calculateVelocity(Velocity(maximumVelocity, maximumVelocity)).x
+    reset()
+    return velocityX
+  }
+
+  fun reset() {
+    tracker.resetTracking()
+  }
+}
+
+private suspend fun PointerInputScope.detectNavigationPopDrag(
+  activationDistance: Float,
+  pointerVelocity: NavigationPopPointerVelocity,
+  canStart: () -> Boolean,
+  isSequenceRejected: () -> Boolean,
+  onStart: () -> Unit,
+  onDrag: (Float) -> Unit,
+  onRelease: (Float) -> Unit,
+  onCancel: () -> Unit,
+) {
+  awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    if (!down.type.isTouchDragPointer() || !canStart()) return@awaitEachGesture
+
+    var activationOvershootX = 0f
+    while (true) {
+      val event = awaitPointerEvent(PointerEventPass.Main)
+      if (event.changes.count { it.pressed } != 1) return@awaitEachGesture
+      val change = event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
+      if (!change.pressed) return@awaitEachGesture
+
+      when (
+        val activation =
+          resolveNavigationPopActivation(
+            dragFromStart = change.position - down.position,
+            activationDistance = activationDistance,
+          )
+      ) {
+        NavigationPopActivation.Pending -> continue
+        NavigationPopActivation.Rejected -> return@awaitEachGesture
+        is NavigationPopActivation.Ready -> {
+          if (isSequenceRejected() || !canStart() || change.isConsumed) {
+            return@awaitEachGesture
+          }
+          change.consume()
+          activationOvershootX = activation.overshootX
+          break
+        }
+      }
+    }
+
+    onStart()
+    onDrag(activationOvershootX)
+    while (true) {
+      if (isSequenceRejected()) {
+        pointerVelocity.reset()
+        onCancel()
+        return@awaitEachGesture
+      }
+
+      val event = awaitPointerEvent(PointerEventPass.Main)
+      if (event.changes.count { it.pressed } > 1) {
+        pointerVelocity.reset()
+        onCancel()
+        return@awaitEachGesture
+      }
+      val change = event.changes.fastFirstOrNull { it.id == down.id }
+      if (change == null) {
+        pointerVelocity.reset()
+        onRelease(0f)
+        return@awaitEachGesture
+      }
+
+      onDrag(change.positionChangeIgnoreConsumed().x)
+      if (!change.pressed) {
+        onRelease(pointerVelocity.release(viewConfiguration.maximumFlingVelocity))
+        return@awaitEachGesture
+      }
+      change.consume()
+    }
+  }
 }
 
 @Composable
@@ -135,10 +246,19 @@ fun NavigationStack(
 
   val progress = remember { Animatable(0f) }
 
-  var lastDragAmount by remember { mutableStateOf(0f) }
   val popNestedScroll = remember { NavigationPopNestedScroll() }
+  val navigationPopActivationDistance =
+    with(LocalDensity.current) { NavigationPopActivationDistance.toPx() }
   val backGestureZoneWidth by rememberUpdatedState(systemBackGestureZoneWidth())
+  val popPointerVelocity = remember { NavigationPopPointerVelocity() }
   var predictiveBackActive by remember { mutableStateOf(false) }
+
+  fun canStartPopGesture(): Boolean =
+    navigator.canPop &&
+      !navigator.isTransitioning &&
+      !predictiveBackActive &&
+      containerWidth > 0f &&
+      (animState == AnimState.Idle || animState == AnimState.Dragging)
 
   fun clearRemovedRoutes(removedRoutes: List<Route>) {
     removedRoutes.forEach { removedRoute ->
@@ -315,7 +435,6 @@ fun NavigationStack(
   }
 
   fun updatePopDrag(dragAmount: Float) {
-    lastDragAmount = dragAmount
     scope.launch {
       val newValue = (progress.value + dragAmount / containerWidth).coerceIn(0f, 1f)
       progress.snapTo(newValue)
@@ -344,10 +463,15 @@ fun NavigationStack(
     }
   }
 
-  fun finishPopDrag() {
-    val velocity = lastDragAmount * 1000f / 16f
+  fun finishPopDrag(velocityX: Float) {
     scope.launch {
-      if (progress.value > 0.5f || velocity > 1000f) {
+      if (
+        shouldCommitNavigationPop(
+          progress = progress.value,
+          velocityX = velocityX,
+          containerWidth = containerWidth,
+        )
+      ) {
         commitPopDrag()
       } else {
         progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
@@ -367,13 +491,8 @@ fun NavigationStack(
   }
 
   popNestedScroll.update(
-    canStart = {
-      navigator.canPop &&
-        !navigator.isTransitioning &&
-        !predictiveBackActive &&
-        containerWidth > 0f &&
-        (animState == AnimState.Idle || animState == AnimState.Dragging)
-    },
+    activationDistance = navigationPopActivationDistance,
+    canStart = ::canStartPopGesture,
     onStart = ::startPopDrag,
     onDrag = ::updatePopDrag,
     onRelease = ::finishPopDrag,
@@ -526,7 +645,7 @@ fun NavigationStack(
               val event = awaitPointerEvent(PointerEventPass.Initial)
               val pressedDragPointerCount =
                 event.changes.count { change -> change.type.isTouchDragPointer() && change.pressed }
-              val down =
+              val activePointer =
                 if (pressedDragPointerCount == 1) {
                   event.changes.fastFirstOrNull { change ->
                     change.type.isTouchDragPointer() && change.pressed
@@ -534,9 +653,22 @@ fun NavigationStack(
                 } else {
                   null
                 }
+              val releasedPointer =
+                if (pressedDragPointerCount == 0) {
+                  event.changes.fastFirstOrNull { change ->
+                    change.type.isTouchDragPointer() && change.previousPressed && !change.pressed
+                  }
+                } else {
+                  null
+                }
+              val pointerSample = activePointer ?: releasedPointer
+              popPointerVelocity.update(pressedDragPointerCount, pointerSample)
               popNestedScroll.updatePressedDragPointerCount(
                 count = pressedDragPointerCount,
-                downInSystemBackZone = down != null && down.position.x < backGestureZoneWidth,
+                downInSystemBackZone =
+                  activePointer != null && activePointer.position.x < backGestureZoneWidth,
+                pointerId = pointerSample?.id?.value,
+                position = pointerSample?.position,
               )
             }
           }
@@ -710,78 +842,17 @@ fun NavigationStack(
       Box(
         Modifier.fillMaxSize()
           .thenIf(navigator.canPop) {
-            pointerInput(Unit) {
-              val slop = viewConfiguration.touchSlop
-              awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                if (!down.type.isTouchDragPointer()) {
-                  return@awaitEachGesture
-                }
-                if (navigator.isTransitioning) return@awaitEachGesture
-                val popGestureSession = NavigationPopGestureSession()
-                if (animState != AnimState.Idle && animState != AnimState.Dragging)
-                  return@awaitEachGesture
-                var overSlopX = 0f
-                var claimed = false
-                while (!claimed) {
-                  val event = awaitPointerEvent(PointerEventPass.Main)
-                  if (event.changes.count { it.pressed } != 1) return@awaitEachGesture
-                  val change =
-                    event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
-                  if (!change.pressed) return@awaitEachGesture
-                  val dx = change.position.x - down.position.x
-                  val dy = change.position.y - down.position.y
-                  if (abs(dx) > slop || abs(dy) > slop) {
-                    if (
-                      popNestedScroll.isMultiTouchRejected ||
-                        popNestedScroll.isSystemBackZoneRejected ||
-                        predictiveBackActive ||
-                        !popGestureSession.tryClaim(
-                          initialDrag = Offset(dx, dy),
-                          childConsumed = change.isConsumed,
-                        )
-                    ) {
-                      return@awaitEachGesture
-                    }
-                    val confirmEvent = awaitPointerEvent(PointerEventPass.Main)
-                    val confirmChange =
-                      confirmEvent.changes.fastFirstOrNull { it.id == down.id }
-                        ?: return@awaitEachGesture
-                    if (!confirmChange.pressed) return@awaitEachGesture
-                    if (confirmChange.isConsumed) return@awaitEachGesture
-                    if (popNestedScroll.isMultiTouchRejected) return@awaitEachGesture
-                    if (confirmEvent.changes.count { it.pressed } != 1) return@awaitEachGesture
-                    confirmChange.consume()
-                    overSlopX = confirmChange.position.x - down.position.x
-                    claimed = true
-                  }
-                }
-                startPopDrag()
-                updatePopDrag(overSlopX)
-                // blocker가 Main pass 전에 consume하므로 isConsumed를 무시하고 loop.
-                // 자식 scrollable이 이 포인터를 take over하지 못하도록 우리가 계속 consume.
-                var dragging = true
-                while (dragging) {
-                  if (popNestedScroll.isMultiTouchRejected) {
-                    // Close after progress updates that may have been queued before root rejection.
-                    popNestedScroll.cancelDirectGesture()
-                    return@awaitEachGesture
-                  }
-                  val event = awaitPointerEvent(PointerEventPass.Main)
-                  if (event.changes.count { it.pressed } > 1) {
-                    popNestedScroll.cancelDirectGesture()
-                    return@awaitEachGesture
-                  }
-                  val change = event.changes.fastFirstOrNull { it.id == down.id }
-                  if (change == null) {
-                    dragging = false
-                    continue
-                  }
-                  updatePopDrag(change.positionChangeIgnoreConsumed().x)
-                  if (!change.pressed) dragging = false else change.consume()
-                }
-                popNestedScroll.finishDirectGesture()
-              }
+            pointerInput(navigationPopActivationDistance) {
+              detectNavigationPopDrag(
+                activationDistance = navigationPopActivationDistance,
+                pointerVelocity = popPointerVelocity,
+                canStart = ::canStartPopGesture,
+                isSequenceRejected = { popNestedScroll.isCurrentSequenceRejected },
+                onStart = ::startPopDrag,
+                onDrag = ::updatePopDrag,
+                onRelease = popNestedScroll::finishDirectGesture,
+                onCancel = popNestedScroll::cancelDirectGesture,
+              )
             }
           }
           .graphicsLayer {
@@ -846,69 +917,22 @@ fun NavigationStack(
         }
       }
 
-      // 엣지 제스처 감지 영역 (첫 touch slop 이동이 소비되지 않은 오른쪽 드래그일 때만 claim)
+      // 엣지 제스처 감지 영역 (15dp를 넘긴 dominant-right drag만 claim)
       if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
         Box(
-          Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(Unit) {
-            val slop = viewConfiguration.touchSlop
-            awaitEachGesture {
-              val down = awaitFirstDown(requireUnconsumed = false)
-              if (!down.type.isTouchDragPointer()) {
-                return@awaitEachGesture
-              }
-              if (navigator.isTransitioning) return@awaitEachGesture
-              val popGestureSession = NavigationPopGestureSession()
-              var overSlopX = 0f
-              var claimed = false
-              while (!claimed) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                if (event.changes.count { it.pressed } != 1) return@awaitEachGesture
-                val change =
-                  event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
-                if (!change.pressed) return@awaitEachGesture
-                val dx = change.position.x - down.position.x
-                val dy = change.position.y - down.position.y
-                if (abs(dx) > slop || abs(dy) > slop) {
-                  if (
-                    popNestedScroll.isMultiTouchRejected ||
-                      popNestedScroll.isSystemBackZoneRejected ||
-                      predictiveBackActive ||
-                      !popGestureSession.tryClaim(
-                        initialDrag = Offset(dx, dy),
-                        childConsumed = change.isConsumed,
-                      )
-                  ) {
-                    return@awaitEachGesture
-                  }
-                  change.consume()
-                  overSlopX = dx
-                  claimed = true
-                }
-              }
-              startPopDrag()
-              updatePopDrag(overSlopX)
-              var dragging = true
-              while (dragging) {
-                if (popNestedScroll.isMultiTouchRejected) {
-                  // Close after progress updates that may have been queued before root rejection.
-                  popNestedScroll.cancelDirectGesture()
-                  return@awaitEachGesture
-                }
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                if (event.changes.count { it.pressed } > 1) {
-                  popNestedScroll.cancelDirectGesture()
-                  return@awaitEachGesture
-                }
-                val change = event.changes.fastFirstOrNull { it.id == down.id }
-                if (change == null) {
-                  dragging = false
-                  continue
-                }
-                updatePopDrag(change.positionChangeIgnoreConsumed().x)
-                if (!change.pressed) dragging = false else change.consume()
-              }
-              popNestedScroll.finishDirectGesture()
-            }
+          Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(
+            navigationPopActivationDistance
+          ) {
+            detectNavigationPopDrag(
+              activationDistance = navigationPopActivationDistance,
+              pointerVelocity = popPointerVelocity,
+              canStart = ::canStartPopGesture,
+              isSequenceRejected = { popNestedScroll.isCurrentSequenceRejected },
+              onStart = ::startPopDrag,
+              onDrag = ::updatePopDrag,
+              onRelease = popNestedScroll::finishDirectGesture,
+              onCancel = popNestedScroll::cancelDirectGesture,
+            )
           }
         )
       }

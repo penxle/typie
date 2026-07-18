@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor.layout
 
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.Scrollable2DState
 import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +62,7 @@ import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -89,6 +92,7 @@ internal fun EditorScreenLayout(
   magnifierFocalPositionInRoot: Offset? = null,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
+  isCurrentNavigationRoute: Boolean = true,
   editorInteractionEnabled: Boolean = true,
   platformIndirectScaleEnabled: Boolean = editorInteractionEnabled,
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
@@ -118,6 +122,20 @@ internal fun EditorScreenLayout(
   val coroutineScope = rememberCoroutineScope()
   var smoothScrollJob by remember { mutableStateOf<Job?>(null) }
   var layoutBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+  if (isCurrentNavigationRoute) {
+    DisposableEffect(navigationPopNestedScroll, viewportScrollableState) {
+      navigationPopNestedScroll?.registerScrollInterruption(
+        owner = viewportScrollableState,
+        isScrollInProgress = { viewportScrollableState.isScrollInProgress },
+        interrupt = {
+          coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            viewportScrollableState.scroll(MutatePriority.UserInput) {}
+          }
+        },
+      )
+      onDispose { navigationPopNestedScroll?.unregisterScrollInterruption(viewportScrollableState) }
+    }
+  }
   LaunchedEffect(
     state.viewportState.isTransforming,
     state.viewportState.isDirectManipulationInProgress,

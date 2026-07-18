@@ -155,6 +155,7 @@ class EditorScreenLayoutDesktopTest {
     val navigationPopNestedScroll =
       NavigationPopNestedScroll().apply {
         update(
+          activationDistance = 15f,
           canStart = { true },
           onStart = {},
           onDrag = { navigationDragCount += 1 },
@@ -311,6 +312,7 @@ class EditorScreenLayoutDesktopTest {
     val navigationPopNestedScroll =
       NavigationPopNestedScroll().apply {
         update(
+          activationDistance = 15f,
           canStart = { true },
           onStart = {},
           onDrag = { navigationDragCount += 1 },
@@ -368,7 +370,18 @@ class EditorScreenLayoutDesktopTest {
 
     // NavigationStack supplies this root pointer membership in production. This isolated layout
     // test provides the same admission state before exercising the nested-scroll connection.
-    navigationPopNestedScroll.updatePressedDragPointerCount(count = 1, downInSystemBackZone = false)
+    navigationPopNestedScroll.updatePressedDragPointerCount(
+      count = 1,
+      downInSystemBackZone = false,
+      pointerId = 1L,
+      position = Offset.Zero,
+    )
+    navigationPopNestedScroll.updatePressedDragPointerCount(
+      count = 1,
+      downInSystemBackZone = false,
+      pointerId = 1L,
+      position = Offset(x = 120f, y = 0f),
+    )
     onNodeWithTag(LayoutTag).performTouchInput {
       swipe(start = center, end = Offset(x = center.x + 120f, y = center.y))
     }
