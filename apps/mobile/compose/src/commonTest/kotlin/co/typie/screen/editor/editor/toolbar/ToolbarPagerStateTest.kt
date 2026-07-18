@@ -33,17 +33,42 @@ class ToolbarPagerStateTest {
   }
 
   @Test
-  fun metrics_snap_to_next_page_when_velocity_crosses_threshold() {
+  fun metrics_snap_using_resolved_velocity_threshold() {
     val metrics = ToolbarPagerMetrics(pageDistance = 300f, scrollRanges = listOf(120, 0, 0))
 
-    assertEquals(420f, metrics.snapPosition(position = 150f, velocity = -800f, hardStop = null))
+    assertEquals(
+      120f,
+      metrics.snapPosition(
+        position = 150f,
+        velocity = -1000f,
+        hardStop = null,
+        swipeVelocityThreshold = 1200f,
+      ),
+    )
+    assertEquals(
+      420f,
+      metrics.snapPosition(
+        position = 150f,
+        velocity = -1400f,
+        hardStop = null,
+        swipeVelocityThreshold = 1200f,
+      ),
+    )
   }
 
   @Test
   fun metrics_keep_position_inside_internal_scroll_range() {
     val metrics = ToolbarPagerMetrics(pageDistance = 300f, scrollRanges = listOf(120, 0))
 
-    assertEquals(60f, metrics.snapPosition(position = 60f, velocity = 0f, hardStop = null))
+    assertEquals(
+      60f,
+      metrics.snapPosition(
+        position = 60f,
+        velocity = 0f,
+        hardStop = null,
+        swipeVelocityThreshold = 1200f,
+      ),
+    )
     assertEquals(true, metrics.decaysFlingWithinInternalScroll(position = 60f, velocity = 100f))
   }
 }

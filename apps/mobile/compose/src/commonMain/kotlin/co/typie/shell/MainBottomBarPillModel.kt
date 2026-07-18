@@ -16,7 +16,7 @@ fun stableIndicatorDirection(
   }
 }
 
-fun bottomBarStretchIntensityForDelta(delta: Float, fullStretchDelta: Float = 18f): Float {
+fun bottomBarStretchIntensityForDelta(delta: Float, fullStretchDelta: Float): Float {
   require(fullStretchDelta > 0f) { "fullStretchDelta must be greater than 0" }
   return (abs(delta) / fullStretchDelta).coerceIn(0f, 1f)
 }

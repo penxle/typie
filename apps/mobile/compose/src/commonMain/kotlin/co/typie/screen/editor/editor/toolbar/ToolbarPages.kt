@@ -162,6 +162,7 @@ internal fun EditorToolbarPages(
     val pageDistance = with(density) { maxWidth.roundToPx().coerceAtLeast(0) }.toFloat()
     val hardStopOverscrollLimitPx = with(density) { ToolbarHardStopOverscrollLimit.toPx() }
     val hardStopActivationEpsilonPx = with(density) { ToolbarHardStopActivationEpsilon.toPx() }
+    val swipeVelocityThresholdPx = with(density) { ToolbarSwipeVelocityThreshold.toPx() }
     val pageScrollRanges = pages.map { it.scrollState?.maxValue ?: 0 }
     val pageMetrics =
       remember(pageDistance, pageScrollRanges) {
@@ -440,7 +441,12 @@ internal fun EditorToolbarPages(
 
     suspend fun settlePages(velocity: Float = 0f) {
       val snapPosition =
-        pageMetrics.snapPosition(pagerState.scrollPosition, velocity, pagerState.activeHardStop)
+        pageMetrics.snapPosition(
+          position = pagerState.scrollPosition,
+          velocity = velocity,
+          hardStop = pagerState.activeHardStop,
+          swipeVelocityThreshold = swipeVelocityThresholdPx,
+        )
       val snapPage = pageMetrics.pageIndexForPosition(snapPosition)
       val snapPageKey = pages.getOrNull(snapPage)?.key ?: EditorToolbarPageKey.Main
       pagerState.recordManualPageKey(snapPageKey)
@@ -499,6 +505,7 @@ internal fun EditorToolbarPages(
         validAutoTargetKey,
         onEditorInputRequest,
         defaultFlingBehavior,
+        swipeVelocityThresholdPx,
       ) {
         object : FlingBehavior {
           override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {

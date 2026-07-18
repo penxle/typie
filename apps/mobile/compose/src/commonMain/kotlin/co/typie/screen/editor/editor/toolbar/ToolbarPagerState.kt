@@ -255,7 +255,12 @@ internal data class ToolbarPagerMetrics(
     return ToolbarScrollResult(position = boundedProposed, hardStop = nextHardStop)
   }
 
-  fun snapPosition(position: Float, velocity: Float, hardStop: ToolbarHardStop?): Float {
+  fun snapPosition(
+    position: Float,
+    velocity: Float,
+    hardStop: ToolbarHardStop?,
+    swipeVelocityThreshold: Float,
+  ): Float {
     if (snapPositions.isEmpty()) {
       return 0f
     }
@@ -267,10 +272,10 @@ internal data class ToolbarPagerMetrics(
 
     return when {
       isInsideInternalScrollRange(boundedPosition) -> boundedPosition
-      velocity <= -ToolbarSwipeVelocityThreshold ->
+      velocity <= -swipeVelocityThreshold ->
         snapPositions.firstOrNull { it > boundedPosition + ToolbarSnapPositionEpsilon }
           ?: maxPosition
-      velocity >= ToolbarSwipeVelocityThreshold ->
+      velocity >= swipeVelocityThreshold ->
         snapPositions.lastOrNull { it < boundedPosition - ToolbarSnapPositionEpsilon } ?: 0f
       else -> snapPositions.minByOrNull { abs(it - boundedPosition) } ?: 0f
     }

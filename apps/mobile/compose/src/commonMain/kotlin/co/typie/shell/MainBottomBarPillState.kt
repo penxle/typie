@@ -56,6 +56,7 @@ internal fun Modifier.mainBottomBarPillGestures(
     tabState.onSelectTab,
   ) {
     if (totalWidth <= 0f) return@pointerInput
+    val fullStretchDeltaPx = MainBottomBarPillFullStretchDelta.toPx()
 
     awaitEachGesture {
       val down = awaitFirstDown(requireUnconsumed = false)
@@ -111,7 +112,7 @@ internal fun Modifier.mainBottomBarPillGestures(
           // the smooth tap catch-up. 1px is small enough that any real finger movement
           // (typically several px/frame) reliably triggers follow.
           if (delta.getDistance() > MainBottomBarPillFollowMovementThresholdPx) {
-            trackedX = state.followDrag(trackedX, pointerX, totalWidth)
+            trackedX = state.followDrag(trackedX, pointerX, totalWidth, fullStretchDeltaPx)
           }
 
           if (!dragging) {
@@ -246,7 +247,12 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
     }
   }
 
-  fun followDrag(previousX: Float, targetX: Float, totalWidth: Float): Float {
+  fun followDrag(
+    previousX: Float,
+    targetX: Float,
+    totalWidth: Float,
+    fullStretchDelta: Float,
+  ): Float {
     val clampedX = targetX.coerceIn(0f, totalWidth)
     val delta = clampedX - previousX
     motionDirection =
@@ -257,10 +263,7 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
         minDelta = MainBottomBarPillDirectionMinDeltaPx,
       )
     deformationTarget =
-      bottomBarStretchIntensityForDelta(
-        delta = delta,
-        fullStretchDelta = MainBottomBarPillFullStretchDeltaPx,
-      )
+      bottomBarStretchIntensityForDelta(delta = delta, fullStretchDelta = fullStretchDelta)
     downFollowEnabled = false
     dragPointerJob?.cancel()
     dragPointerX = clampedX
@@ -414,7 +417,7 @@ private const val MainBottomBarPillProgressDurationMillis = 180
 private const val MainBottomBarPillDownFollowDurationMillis = 240
 private const val MainBottomBarPillFollowMovementThresholdPx = 1f
 private const val MainBottomBarPillDirectionMinDeltaPx = 1.5f
-private const val MainBottomBarPillFullStretchDeltaPx = 18f
+private val MainBottomBarPillFullStretchDelta = 18.dp
 
 private val MainBottomBarPillProgressSpec =
   tween<Float>(MainBottomBarPillProgressDurationMillis, easing = EaseOutCubic)

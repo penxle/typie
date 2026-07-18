@@ -2,6 +2,7 @@ package co.typie.shell
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.runTest
 
 class MainBottomBarPillModelTest {
 
@@ -48,5 +49,14 @@ class MainBottomBarPillModelTest {
 
     assertEquals(Tab.Home, nearestTab(centers, totalWidth = 248f, pointerX = -50f))
     assertEquals(Tab.Notes, nearestTab(centers, totalWidth = 248f, pointerX = 500f))
+  }
+
+  @Test
+  fun followDrag_usesResolvedFullStretchDistance() = runTest {
+    val state = MainBottomBarPillState(scope = this, initialActiveTab = Tab.Home)
+
+    state.followDrag(previousX = 0f, targetX = 18f, totalWidth = 100f, fullStretchDelta = 36f)
+
+    assertEquals(0.5f, state.deformationTarget)
   }
 }
