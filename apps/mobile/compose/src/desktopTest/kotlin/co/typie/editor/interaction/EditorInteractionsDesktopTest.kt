@@ -291,10 +291,10 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `platform indirect scale reports accepted editor input`() = runComposeUiTest {
+  fun `platform indirect scale reports editor pointer input`() = runComposeUiTest {
     val fixture = Fixture()
-    var acceptedInputCount = 0
-    setEditorContent(fixture = fixture, onViewportIndirectInput = { acceptedInputCount += 1 })
+    var pointerInputCount = 0
+    setEditorContent(fixture = fixture, onEditorPointerInput = { pointerInputCount += 1 })
 
     runOnIdle {
       assertTrue(fixture.platformIndirectScaleBridge.begin())
@@ -307,7 +307,21 @@ class EditorInteractionsDesktopTest {
       fixture.platformIndirectScaleBridge.end()
     }
 
-    assertEquals(1, acceptedInputCount)
+    assertEquals(1, pointerInputCount)
+  }
+
+  @Test
+  fun `direct pointer down reports editor input once`() = runComposeUiTest {
+    val fixture = Fixture()
+    var pointerInputCount = 0
+    setEditorContent(fixture = fixture, onEditorPointerInput = { pointerInputCount += 1 })
+
+    onNodeWithTag(EditorTag).performTouchInput { down(center) }
+    waitForIdle()
+
+    assertEquals(1, pointerInputCount)
+
+    onNodeWithTag(EditorTag).performTouchInput { up() }
   }
 
   @Test
@@ -1538,7 +1552,7 @@ class EditorInteractionsDesktopTest {
     includeInteractionBoundary: () -> Boolean = { true },
     editorWidth: androidx.compose.ui.unit.Dp = 400.dp,
     consumeIndirectInputAtChild: Boolean = false,
-    onViewportIndirectInput: () -> Unit = {},
+    onEditorPointerInput: () -> Unit = {},
     onCoroutineScope: (CoroutineScope) -> Unit = {},
   ) {
     setContent {
@@ -1568,7 +1582,7 @@ class EditorInteractionsDesktopTest {
                   flingBehavior = fixture.flingBehavior,
                   touchSlop = 8f,
                   density = 1f,
-                  onViewportIndirectInput = onViewportIndirectInput,
+                  onEditorPointerInput = onEditorPointerInput,
                 )
               } else {
                 Modifier

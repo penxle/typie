@@ -293,12 +293,13 @@ internal fun EditorToolbarPages(
 
     LaunchedEffect(pages, pageMetrics) {
       snapshotFlow {
-        pages.mapIndexedNotNull { index, page ->
-          val scrollState = page.scrollState ?: return@mapIndexedNotNull null
-          val target = pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
-          scrollState to target.coerceIn(0, scrollState.maxValue)
+          pages.mapIndexedNotNull { index, page ->
+            val scrollState = page.scrollState ?: return@mapIndexedNotNull null
+            val target =
+              pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
+            scrollState to target.coerceIn(0, scrollState.maxValue)
+          }
         }
-      }
         .collect { scrollTargets ->
           scrollTargets.forEach { (scrollState, target) ->
             if (scrollState.value != target) {
@@ -336,9 +337,12 @@ internal fun EditorToolbarPages(
     }
 
     val indicatorHeldVisible =
-      pagerState.indicatorInteracting || pagerState.indicatorPageTransitioning
-    LaunchedEffect(pagerState.indicatorPulse, indicatorHeldVisible) {
-      if (pagerState.indicatorPulse == 0 && !indicatorHeldVisible) {
+      !pagerState.indicatorDismissed &&
+        (pagerState.indicatorInteracting || pagerState.indicatorPageTransitioning)
+    LaunchedEffect(pagerState.indicatorPulse, pagerState.indicatorDismissed, indicatorHeldVisible) {
+      if (
+        pagerState.indicatorDismissed || (pagerState.indicatorPulse == 0 && !indicatorHeldVisible)
+      ) {
         pagerState.indicatorVisible = false
         return@LaunchedEffect
       }
@@ -464,10 +468,10 @@ internal fun EditorToolbarPages(
         validAutoTargetKey != null && pagerState.lastAppliedAutoTargetKey != validAutoTargetKey
       }
       snapshotFlow {
-        scrollableState.isScrollInProgress ||
-          pagerState.pointerScrollGestureActive ||
-          pagerState.decayFlingInProgress
-      }
+          scrollableState.isScrollInProgress ||
+            pagerState.pointerScrollGestureActive ||
+            pagerState.decayFlingInProgress
+        }
         .first { inProgress -> !inProgress }
       val targetPageKey =
         pendingAutoTargetPageKey
@@ -523,7 +527,14 @@ internal fun EditorToolbarPages(
 
     val indicatorAlpha by
       animateFloatAsState(
-        targetValue = if (pagerState.indicatorVisible || indicatorHeldVisible) 1f else 0f,
+        targetValue =
+          if (
+            !pagerState.indicatorDismissed && (pagerState.indicatorVisible || indicatorHeldVisible)
+          ) {
+            1f
+          } else {
+            0f
+          },
         animationSpec = tween(ToolbarIndicatorFadeMillis),
         label = "editor-toolbar-indicator-alpha",
       )

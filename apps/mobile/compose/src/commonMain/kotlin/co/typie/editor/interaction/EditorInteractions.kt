@@ -50,7 +50,7 @@ internal fun Modifier.editorInteractions(
   maximumFlingVelocity: Float = Float.MAX_VALUE,
   density: Float,
   enabled: Boolean = true,
-  onViewportIndirectInput: () -> Unit = {},
+  onEditorPointerInput: () -> Unit = {},
   onNestedScrollCancel: () -> Unit = {},
 ): Modifier =
   this then
@@ -67,7 +67,7 @@ internal fun Modifier.editorInteractions(
       maximumFlingVelocity = maximumFlingVelocity,
       density = density,
       enabled = enabled,
-      onViewportIndirectInput = onViewportIndirectInput,
+      onEditorPointerInput = onEditorPointerInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
 
@@ -84,7 +84,7 @@ private data class EditorInteractionsElement(
   private val maximumFlingVelocity: Float,
   private val density: Float,
   private val enabled: Boolean,
-  private val onViewportIndirectInput: () -> Unit,
+  private val onEditorPointerInput: () -> Unit,
   private val onNestedScrollCancel: () -> Unit,
 ) : ModifierNodeElement<EditorInteractionsNode>() {
   override fun create(): EditorInteractionsNode =
@@ -101,7 +101,7 @@ private data class EditorInteractionsElement(
       maximumFlingVelocity = maximumFlingVelocity,
       density = density,
       enabled = enabled,
-      onViewportIndirectInput = onViewportIndirectInput,
+      onEditorPointerInput = onEditorPointerInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
 
@@ -119,7 +119,7 @@ private data class EditorInteractionsElement(
       maximumFlingVelocity = maximumFlingVelocity,
       density = density,
       enabled = enabled,
-      onViewportIndirectInput = onViewportIndirectInput,
+      onEditorPointerInput = onEditorPointerInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
   }
@@ -138,7 +138,7 @@ private class EditorInteractionsNode(
   var maximumFlingVelocity: Float,
   var density: Float,
   var enabled: Boolean,
-  var onViewportIndirectInput: () -> Unit,
+  var onEditorPointerInput: () -> Unit,
   var onNestedScrollCancel: () -> Unit,
 ) :
   Modifier.Node(),
@@ -184,7 +184,7 @@ private class EditorInteractionsNode(
     maximumFlingVelocity: Float,
     density: Float,
     enabled: Boolean,
-    onViewportIndirectInput: () -> Unit,
+    onEditorPointerInput: () -> Unit,
     onNestedScrollCancel: () -> Unit,
   ) {
     val inputOwnerChanged =
@@ -219,7 +219,7 @@ private class EditorInteractionsNode(
     this.maximumFlingVelocity = maximumFlingVelocity
     this.density = density
     this.enabled = enabled
-    this.onViewportIndirectInput = onViewportIndirectInput
+    this.onEditorPointerInput = onEditorPointerInput
     this.onNestedScrollCancel = onNestedScrollCancel
   }
 
@@ -230,6 +230,9 @@ private class EditorInteractionsNode(
     if (!enabled || density <= 0f) {
       cancelInteraction(clearSuppression = true)
       return
+    }
+    if (pointerEvent.changes.any { change -> change.pressed && !change.previousPressed }) {
+      onEditorPointerInput()
     }
 
     interactionController.updateTapSlop(tapSlopPx = EditorTapSlopDp * density)
@@ -547,7 +550,7 @@ private class EditorInteractionsNode(
     if (!zoomModified) {
       finishWheelZoom()
       if (scrollDriver.launchPointerSignalScroll(scrollDelta = scrollDelta, density = density)) {
-        onViewportIndirectInput()
+        onEditorPointerInput()
         pointerEvent.changes.forEach(PointerInputChange::consume)
       }
       return
@@ -586,7 +589,7 @@ private class EditorInteractionsNode(
       return
     }
     keepWheelZoomAlive()
-    onViewportIndirectInput()
+    onEditorPointerInput()
     pointerEvent.changes.forEach(PointerInputChange::consume)
   }
 
@@ -622,7 +625,7 @@ private class EditorInteractionsNode(
           change.panOffset.takeIf { offset -> !change.isConsumed && offset.isUsablePanOffset() }
         }
       if (panOffset != null && scrollDriver.launchTrackpadPan(panOffset)) {
-        onViewportIndirectInput()
+        onEditorPointerInput()
       }
     }
     pointerEvent.changes.forEach(PointerInputChange::consume)
@@ -695,7 +698,7 @@ private class EditorInteractionsNode(
       finishScaleZoom()
       return false
     }
-    onViewportIndirectInput()
+    onEditorPointerInput()
     return true
   }
 

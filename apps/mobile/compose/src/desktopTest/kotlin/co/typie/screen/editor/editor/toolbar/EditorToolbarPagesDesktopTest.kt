@@ -44,6 +44,7 @@ import dev.chrisbanes.haze.blur.LocalHazeBlurStyle
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -1191,6 +1192,63 @@ class EditorToolbarPagesDesktopTest {
       pagerState.indicatorPulse > firstPulse,
       "indicator should pulse when the toolbar appears again",
     )
+  }
+
+  @Test
+  fun dismissIndicatorHidesCurrentPulseUntilNextPulse() = runComposeUiTest {
+    lateinit var pagerState: ToolbarPagerState
+    setContent {
+      pagerState = rememberToolbarPagerState()
+      val textScrollState = rememberScrollState()
+      ToolbarTestContent(textScrollState = textScrollState, pagerState = pagerState)
+    }
+    waitForIdle()
+    mainClock.autoAdvance = false
+    runOnIdle {
+      pagerState.indicatorPageTransitioning = true
+      pagerState.indicatorPulse++
+    }
+    mainClock.advanceTimeByFrame()
+    runOnIdle { assertTrue(pagerState.indicatorVisible) }
+
+    runOnIdle { pagerState.dismissIndicator() }
+    mainClock.advanceTimeByFrame()
+
+    runOnIdle {
+      assertFalse(pagerState.indicatorVisible)
+      pagerState.indicatorPageTransitioning = false
+      pagerState.indicatorPulse++
+    }
+    mainClock.advanceTimeByFrame()
+    runOnIdle { assertTrue(pagerState.indicatorVisible) }
+  }
+
+  @Test
+  fun dismissedIndicatorInteractionDuringFadeStartsNewPulse() = runComposeUiTest {
+    lateinit var pagerState: ToolbarPagerState
+    setContent {
+      pagerState = rememberToolbarPagerState()
+      val textScrollState = rememberScrollState()
+      ToolbarTestContent(textScrollState = textScrollState, pagerState = pagerState)
+    }
+    waitForIdle()
+    mainClock.autoAdvance = false
+    runOnIdle { pagerState.indicatorPulse++ }
+    mainClock.advanceTimeByFrame()
+    val dismissedPulse = runOnIdle {
+      pagerState.dismissIndicator()
+      pagerState.indicatorPulse
+    }
+    mainClock.advanceTimeByFrame()
+
+    tapToolbarIndicatorPage(pageIndex = 1, pageCount = DefaultPageKeys.size)
+    mainClock.advanceTimeByFrame()
+
+    runOnIdle {
+      assertTrue(pagerState.indicatorPulse > dismissedPulse)
+      assertFalse(pagerState.indicatorDismissed)
+      assertTrue(pagerState.indicatorVisible)
+    }
   }
 
   @Test

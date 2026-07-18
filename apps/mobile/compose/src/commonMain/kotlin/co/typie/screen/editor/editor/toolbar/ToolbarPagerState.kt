@@ -28,6 +28,7 @@ internal class ToolbarPagerState {
   var indicatorInteracting by mutableStateOf(false)
   var indicatorDragging by mutableStateOf(false)
   var indicatorPulse by mutableIntStateOf(0)
+  private var indicatorDismissedAtPulse by mutableStateOf<Int?>(null)
   var indicatorDragProgress by mutableStateOf<Float?>(null)
   var indicatorPageTransitioning by mutableStateOf(false)
   var activeHardStop by mutableStateOf<ToolbarHardStop?>(null)
@@ -40,6 +41,14 @@ internal class ToolbarPagerState {
   var previousPageKeys by mutableStateOf<List<EditorToolbarPageKey>?>(null)
   var previousPageScrollRanges by mutableStateOf<List<Int>?>(null)
   var lastAppliedAutoTargetKey by mutableStateOf<Any?>(null)
+
+  val indicatorDismissed: Boolean
+    get() = indicatorDismissedAtPulse == indicatorPulse
+
+  fun dismissIndicator() {
+    indicatorDismissedAtPulse = indicatorPulse
+    indicatorVisible = false
+  }
 
   fun recordManualPageKey(pageKey: EditorToolbarPageKey) {
     recentManualPageKeys = listOf(pageKey) + recentManualPageKeys.filterNot { it == pageKey }
