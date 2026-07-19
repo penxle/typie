@@ -36,7 +36,6 @@
   import StatsModal from './@stats/StatsModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
-  import MaintenanceBanner from './MaintenanceBanner.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import PlanUpgradeModal from './PlanUpgradeModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -353,7 +352,6 @@
   <div class={flex({ flexDirection: 'column', height: '[100dvh]' })}>
     <EnvironmentBanner />
     <AdminImpersonateBanner query$key={query.data} />
-    <MaintenanceBanner />
 
     {#if !query.data.me.subscription}
       <div
