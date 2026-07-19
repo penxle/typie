@@ -25,6 +25,8 @@ export type ManagerEffects<C> = {
   attach: (canvas: C, backend: SurfaceBackend) => AttachOutcome | 'cpu-oversized';
   detach: () => void;
   requestRender: () => void;
+  // 숨김 탭(rAF 정지)에서는 present가 커밋될 수 없다 — 클록 게이트가 이를 조회한다.
+  isSuspended: () => boolean;
   onPresented: (listener: () => void) => () => void;
   addContextListeners: (canvas: C, isCurrent: () => boolean) => () => void;
   disposeGlContext: (canvas: C) => void;
@@ -55,6 +57,9 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
   let live: Slot<C> | undefined;
   let pending: Slot<C> | undefined;
   let pendingCleanup: (() => void) | undefined;
+  // pending의 현재 swap 타임아웃 canceller. 숨김 중 재예약이 이 참조를 교체하므로 factory
+  // 스코프에 둔다 — pendingCleanup은 늘 최신 타이머를 취소한다.
+  let cancelSwapTimeout: (() => void) | undefined;
   let attached = false;
   let epoch = 0;
   let timedOutOnce = false;
@@ -136,6 +141,13 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
 
   const onSwapTimeout = (myEpoch: number) => {
     if (myEpoch !== epoch || !pending) return;
+    // 숨김 중엔 present가 커밋될 수 없다 — 실패로 계상하지 말고(강등·강제 폴백 없이) 같은
+    // 에포크로 재예약만 한다. pendingCleanup은 factory 스코프의 cancelSwapTimeout을 읽으므로
+    // 이 새 타이머를 취소한다.
+    if (effects.isSuspended()) {
+      cancelSwapTimeout = effects.schedule(() => onSwapTimeout(myEpoch), SWAP_TIMEOUT_MS);
+      return;
+    }
     const failedToken = pending.token;
     cancelWatchdog?.();
     cancelWatchdog = undefined;
@@ -238,10 +250,11 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
       });
     }
     const offPresented = effects.onPresented(() => finishSwap(myEpoch));
-    const cancelTimeout = effects.schedule(() => onSwapTimeout(myEpoch), SWAP_TIMEOUT_MS);
+    cancelSwapTimeout = effects.schedule(() => onSwapTimeout(myEpoch), SWAP_TIMEOUT_MS);
     pendingCleanup = () => {
       offPresented();
-      cancelTimeout();
+      cancelSwapTimeout?.();
+      cancelSwapTimeout = undefined;
     };
     effects.requestRender();
   };
@@ -273,10 +286,17 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
       const incident = pending?.token ?? live?.token;
       if (incident !== undefined) effects.defer(() => effects.pool.noteGlFailure(incident));
       cancelWatchdog?.();
-      cancelWatchdog = effects.schedule(() => {
+      // 숨김 중엔 재마운트해도 present가 커밋될 수 없어 컨텍스트 churn만 유발한다 — 발화 시점에
+      // 여전히 숨김이면 재마운트 대신 재예약하고, 복귀 후 발화 때 비로소 재마운트한다.
+      const onWatchdog = () => {
+        if (effects.isSuspended()) {
+          cancelWatchdog = effects.schedule(onWatchdog, RESTORE_WATCHDOG_MS);
+          return;
+        }
         cancelWatchdog = undefined;
         if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu');
-      }, RESTORE_WATCHDOG_MS);
+      };
+      cancelWatchdog = effects.schedule(onWatchdog, RESTORE_WATCHDOG_MS);
     },
     onContextRestored(): void {
       cancelWatchdog?.();
@@ -285,6 +305,16 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
     },
     remountFromLoss(): void {
       if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu');
+    },
+    // 가시성 복귀 시 손: failedParked(live/pending 없음)를 치유하고, 숨김 중 정체된 pending은
+    // 렌더를 한 번 재촉해 커밋을 유도한다. 원치 않는(park된) 페이지는 건드리지 않는다.
+    resume(): void {
+      if (!wantsLive) return;
+      if (pending) {
+        effects.requestRender();
+        return;
+      }
+      if (!live) mount(effects.pool.backendOf() ?? 'cpu');
     },
     restyle(): void {
       if (live) effects.styleCanvas(live.canvas);

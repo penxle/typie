@@ -38,6 +38,11 @@ type Entry = {
 };
 
 const editors = new Map<ProbeEditor, Map<number, Entry>>();
+// gl-loss 주입은 (editor,page) 수명당 1회만 — remount마다 재주입되면 무한 로스 storm이 된다.
+const lossInjected = new WeakMap<ProbeEditor, Set<number>>();
+// 복구 후 캡처는 다음 커밋된 render(probeRendered) 틱에서 실행되도록 대기시킨다 — remount 직후
+// repaint와의 경합으로 인한 거짓 MISMATCH를 피한다.
+const lossWaiters = new WeakMap<ProbeEditor, Map<number, () => void>>();
 let intervalId: ReturnType<typeof setInterval> | undefined;
 
 const timestamp = () => new Date().toISOString().slice(11, 23);
@@ -173,18 +178,45 @@ function ensureInterval() {
 // (remount)를 기다린 뒤, 소스별로 복구 전/후 스냅샷 일치를 assert한다. remount는 캔버스를 교체하므로
 // 매 단계 (editor,page) 키로 현재 entry를 다시 조회한다.
 function scheduleLossInjection(editor: ProbeEditor, page: number): void {
+  let injectedPages = lossInjected.get(editor);
+  if (!injectedPages) {
+    injectedPages = new Set();
+    lossInjected.set(editor, injectedPages);
+  }
+  if (injectedPages.has(page)) return; // 수명당 1회만 주입
+  injectedPages.add(page);
+
   let attempts = 0;
   const tryStart = () => {
     if (attempts++ > 40) return;
     const entry = editors.get(editor)?.get(page);
     if (!entry) return; // detached
-    if (entry.canvas.width < 32 || entry.canvas.getContext('2d')) {
+    // 숨김 중에는 시작하지 않는다 — present가 커밋되지 못해 복구 판정 자체가 불가능하다.
+    if (document.visibilityState !== 'visible' || entry.canvas.width < 32 || entry.canvas.getContext('2d')) {
       setTimeout(tryStart, 100);
       return;
     }
     runLossInjection(editor, page);
   };
   setTimeout(tryStart, 200);
+}
+
+function registerLossWaiter(editor: ProbeEditor, page: number, waiter: () => void): void {
+  let pages = lossWaiters.get(editor);
+  if (!pages) {
+    pages = new Map();
+    lossWaiters.set(editor, pages);
+  }
+  pages.set(page, waiter);
+}
+
+function serviceLossWaiter(editor: ProbeEditor, page: number): void {
+  const pages = lossWaiters.get(editor);
+  if (!pages) return;
+  const waiter = pages.get(page);
+  if (!waiter) return;
+  pages.delete(page);
+  waiter();
 }
 
 function runLossInjection(editor: ProbeEditor, page: number): void {
@@ -211,14 +243,20 @@ function runLossInjection(editor: ProbeEditor, page: number): void {
     const backend = editor.surfaceBackend(page);
     const ready = cur && cur.canvas.width === w && cur.canvas.height === h && !cur.canvas.getContext('2d');
     if (backend === 'gl' && ready) {
-      const postTexture = captureGl(editor, page, 'texture', points);
-      const postPresent = captureGl(editor, page, 'present', points);
-      const textureMatch = postTexture !== null && diffPoints(preTexture, postTexture).length === 0;
-      const presentMatch = postPresent !== null && diffPoints(prePresent, postPresent).length === 0;
-      report(
-        `gl-loss recovered page=${page} attempts=${attempts}`,
-        `texture=${textureMatch ? 'match' : 'MISMATCH'} present=${presentMatch ? 'match' : 'MISMATCH'}`,
-      );
+      // shape+backend는 준비됐지만 즉시 캡처하면 remount 직후 repaint와 경합해 거짓 MISMATCH가
+      // 난다 — 다음 커밋된 render(probeRendered) 틱 + settle 후에 캡처한다.
+      registerLossWaiter(editor, page, () => {
+        setTimeout(() => {
+          const postTexture = captureGl(editor, page, 'texture', points);
+          const postPresent = captureGl(editor, page, 'present', points);
+          const textureMatch = postTexture !== null && diffPoints(preTexture, postTexture).length === 0;
+          const presentMatch = postPresent !== null && diffPoints(prePresent, postPresent).length === 0;
+          report(
+            `gl-loss recovered page=${page} attempts=${attempts}`,
+            `texture=${textureMatch ? 'match' : 'MISMATCH'} present=${presentMatch ? 'match' : 'MISMATCH'}`,
+          );
+        }, 50);
+      });
       return;
     }
     if (attempts > 60) {
@@ -266,6 +304,8 @@ export function probeDetach(editor: ProbeEditor, page: number): void {
 }
 
 export function probeRendered(editor: ProbeEditor, page: number): void {
+  // gl-loss 복구 대기자는 enabled와 무관하게(gl-loss 모드에서도) 커밋된 render 틱마다 서비스한다.
+  serviceLossWaiter(editor, page);
   if (!enabled) return;
   const entry = editors.get(editor)?.get(page);
   if (!entry) return;

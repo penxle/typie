@@ -38,6 +38,7 @@ type PageHandle = {
     attachedCount: number;
     pendingToken: LeaseToken | undefined;
     deferSync: boolean;
+    suspended: boolean;
     lastZone: PageZone | undefined;
     lastVisibility: VisibilityState | undefined;
   };
@@ -142,6 +143,7 @@ function createHarness(budget: number, opts?: { deferSync?: boolean }) {
       attachedCount: 0,
       pendingToken: undefined as LeaseToken | undefined,
       deferSync: deferSyncOverride ?? opts?.deferSync ?? false,
+      suspended: false,
       lastZone: undefined as PageZone | undefined,
       lastVisibility: undefined as VisibilityState | undefined,
     };
@@ -185,6 +187,7 @@ function createHarness(budget: number, opts?: { deferSync?: boolean }) {
       },
       // eslint-disable-next-line @typescript-eslint/no-empty-function -- render scheduling isn't under test here
       requestRender: () => {},
+      isSuspended: () => state.suspended,
       onPresented: (listener) => {
         presented.push(listener);
         return () => {
@@ -446,6 +449,15 @@ function createHarness(budget: number, opts?: { deferSync?: boolean }) {
     onContextRestored(page: PageHandle): void {
       log(`onContextRestored(${keyFor(page.editorKey, page.page)})`);
       page.manager.onContextRestored();
+      assertInvariants();
+    },
+    setSuspended(page: PageHandle, value: boolean): void {
+      log(`setSuspended(${keyFor(page.editorKey, page.page)}, ${value})`);
+      page.state.suspended = value;
+    },
+    resume(page: PageHandle): void {
+      log(`resume(${keyFor(page.editorKey, page.page)})`);
+      page.manager.resume();
       assertInvariants();
     },
     setFocus(editorKey: object): void {
@@ -1063,6 +1075,49 @@ describe('page-surface-integration', () => {
       expect(pageC.manager.debug().pending).toBeUndefined(); // gl 재마운트(승격 콜백) 없음
       expect(pageC.manager.debug().live?.outcome).toBe('cpu');
       expect(h.pool.debugHoldCount()).toBe(0);
+    });
+
+    // 프로덕션 크리티컬: 숨김 탭에서 컨텍스트 로스 시 rAF가 얼어 present가 절대 커밋되지 못하는데,
+    // setTimeout 워치독은 계속 돌아 mount→swap timeout→강등의 storm으로 영구 blank(failedParked)에
+    // 빠졌다. 시계 게이트(F1a)로 숨김 중엔 워치독이 재마운트하지 않고 재예약만 하며(실패 미계상),
+    // 복귀 시 워치독 발화로 재마운트해 realized-gl로 수렴한다.
+    it('R-N: 숨김 중 로스는 워치독을 재예약만 시키고(실패 미계상·강등 없음), 복귀 후 realized-gl로 수렴한다', () => {
+      const h = createHarness(2);
+      const ed = {};
+      const page = h.addPage(ed, 0);
+      const token = mountLiveGl(h, page); // live gl(원장 gl, lease 1)
+      expect(h.pool.backendOf(ed, 0)).toBe('gl');
+
+      h.setSuspended(page, true);
+      h.onContextLost(page); // 워치독 무장 + 지연된 noteGlFailure(token) 1건(실제 로스)
+
+      // 숨김 중 워치독을 반복 발화해도 재마운트/새 pending 없이 재예약만 — 구 live·홀드 그대로.
+      page.attachRequests.length = 0;
+      for (let i = 0; i < 3; i++) h.fireTimerLabel(page, 'restore-watchdog');
+      expect(page.manager.debug().pending).toBeUndefined();
+      expect(page.manager.debug().live?.token).toBe(token);
+      expect(h.pool.debugHoldCount()).toBe(1); // 홀드 churn 없음(재획득/취소 없음)
+      expect(page.attachRequests).toEqual([]); // 숨김 중 어떤 attach도 시도되지 않음
+
+      h.flushDefer(page); // 실제 로스 1건만 계상 — 임계값(3) 미만이라 강등 없음
+      expect(h.pool.backendOf(ed, 0)).toBe('gl');
+
+      // 복귀: resume은 live가 살아있어 안전한 no-op이고, 재예약된 워치독이 이제 재마운트한다.
+      h.setSuspended(page, false);
+      h.setAttachScript(page, ['gl']);
+      h.resume(page);
+      h.fireTimerLabel(page, 'restore-watchdog');
+      expect(page.manager.debug().pending).toBeDefined();
+
+      h.quiesce();
+      h.firePresent(page); // 재마운트 gl commit
+      h.quiesce();
+
+      // realized-gl 수렴: 원장·realized 모두 gl로 합치, 홀드 1.
+      expect(page.manager.debug().live?.isGl).toBe(true);
+      assertRealizedMatchesLedger(h);
+      expect(h.pool.backendOf(ed, 0)).toBe('gl');
+      expect(h.pool.debugHoldCount()).toBe(1);
     });
   });
 

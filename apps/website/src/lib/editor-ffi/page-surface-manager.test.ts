@@ -80,6 +80,7 @@ const harness = (overrides?: {
   attach?: (canvas: FakeCanvas, backend: SurfaceBackend) => AttachOutcome | 'cpu-oversized';
   pool?: ReturnType<typeof createFakePool>;
   deferSync?: boolean;
+  suspended?: boolean;
 }) => {
   let nextId = 0;
   const canvases: FakeCanvas[] = [];
@@ -87,6 +88,8 @@ const harness = (overrides?: {
   const timers: { fn: () => void; ms: number; cancelled: boolean }[] = [];
   const deferred: (() => void)[] = [];
   let attachedCount = 0;
+  let suspended = overrides?.suspended ?? false;
+  let requestRenderCount = 0;
   const pool = overrides?.pool ?? createFakePool();
 
   const effects: ManagerEffects<FakeCanvas> = {
@@ -104,8 +107,10 @@ const harness = (overrides?: {
     detach: () => {
       attachedCount -= 1;
     },
-    // eslint-disable-next-line @typescript-eslint/no-empty-function -- render scheduling isn't under test here
-    requestRender: () => {},
+    requestRender: () => {
+      requestRenderCount += 1;
+    },
+    isSuspended: () => suspended,
     onPresented: (listener) => {
       presented.push(listener);
       return () => {
@@ -166,8 +171,23 @@ const harness = (overrides?: {
     for (const fn of due) fn();
   };
   const activeTimers = () => timers.filter((entry) => !entry.cancelled).length;
+  const setSuspended = (value: boolean) => {
+    suspended = value;
+  };
 
-  return { manager, canvases, timers, pool, firePresent, fireTimer, flushDeferred, activeTimers, attachedCount: () => attachedCount };
+  return {
+    manager,
+    canvases,
+    timers,
+    pool,
+    firePresent,
+    fireTimer,
+    flushDeferred,
+    activeTimers,
+    setSuspended,
+    requestRenderCount: () => requestRenderCount,
+    attachedCount: () => attachedCount,
+  };
 };
 
 const inView = { inAcquire: true, inRelease: true, isVisible: true };
@@ -405,6 +425,101 @@ describe('page-surface-manager', () => {
     expect(h.attachedCount()).toBe(1);
     const alive = h.canvases.filter((canvas) => !canvas.removed);
     expect(alive).toEqual([debug.live]);
+  });
+
+  it('R-N1: a suspended swap timeout reschedules without disposing the pending or counting a gl failure', () => {
+    const h = harness({ suspended: true });
+    h.manager.reconcile(inView);
+    h.flushDeferred();
+    const pendingCanvas = h.manager.debug().pending;
+    expect(pendingCanvas).toBe(h.canvases[0]);
+    expect(h.activeTimers()).toBe(1);
+
+    const timer = h.fireTimer(SWAP_TIMEOUT_MS);
+    expect(timer).toBeDefined();
+    h.flushDeferred();
+
+    // suspended: pending survives intact, no forced cpu fallback, no failure counted, no escalation
+    expect(h.manager.debug().pending).toBe(pendingCanvas);
+    expect(h.manager.debug().live).toBeUndefined();
+    expect(h.manager.debug().timedOutOnce).toBe(false);
+    expect(h.pool.calls.noteGlFailure).toEqual([]);
+    expect(h.canvases.length).toBe(1); // no cpu fallback canvas was created
+    expect(h.canvases[0].removed).toBe(false);
+    expect(h.attachedCount()).toBe(1);
+    expect(h.activeTimers()).toBe(1); // a fresh swap timer was rescheduled
+
+    // becoming visible then presenting commits the untouched gl pending
+    h.setSuspended(false);
+    h.firePresent();
+    expect(h.manager.debug().live).toBe(pendingCanvas);
+    expect(h.manager.debug().pending).toBeUndefined();
+    expect(h.pool.calls.notePresent).toEqual([1]); // gl lease token committed
+  });
+
+  it('R-N2: a suspended restore watchdog reschedules instead of remounting until visible', () => {
+    const h = harness({ deferSync: true, suspended: true });
+    h.manager.reconcile(inView);
+    h.firePresent();
+    const firstLive = h.manager.debug().live;
+    expect(firstLive).toBeDefined();
+
+    h.manager.onContextLost();
+    expect(h.activeTimers()).toBe(1); // watchdog armed
+
+    const fired = h.fireTimer(RESTORE_WATCHDOG_MS);
+    expect(fired).toBeDefined();
+    // suspended: no remount, old live kept, watchdog rescheduled
+    expect(h.manager.debug().pending).toBeUndefined();
+    expect(h.manager.debug().live).toBe(firstLive);
+    expect(h.activeTimers()).toBe(1);
+
+    // once visible the rescheduled watchdog fire remounts
+    h.setSuspended(false);
+    const refired = h.fireTimer(RESTORE_WATCHDOG_MS);
+    expect(refired).toBeDefined();
+    expect(h.manager.debug().pending).toBeDefined();
+    expect(h.manager.debug().live).toBe(firstLive); // old live kept until the remount commits
+  });
+
+  it('R-N3: resume() remounts a failedParked page', () => {
+    const h = harness({ deferSync: true });
+    h.manager.reconcile(inView); // gl pending, never presented
+    h.fireTimer(SWAP_TIMEOUT_MS); // 1st timeout — forced cpu fallback
+    h.fireTimer(SWAP_TIMEOUT_MS); // 2nd timeout — failedParked
+
+    expect(h.manager.debug().live).toBeUndefined();
+    expect(h.manager.debug().pending).toBeUndefined();
+    expect(h.manager.debug().wantsLive).toBe(true);
+
+    const canvasesBefore = h.canvases.length;
+    h.manager.resume();
+    expect(h.canvases.length).toBeGreaterThan(canvasesBefore);
+    expect(h.manager.debug().pending).toBeDefined();
+  });
+
+  it('R-N4: resume() no-ops without demand, nudges a render for a live pending, and no-ops when settled', () => {
+    const h = harness({ deferSync: true });
+
+    // wantsLive=false (no reconcile yet) — full no-op
+    h.manager.resume();
+    expect(h.canvases.length).toBe(0);
+    expect(h.requestRenderCount()).toBe(0);
+
+    // pending in flight — nudge a render, do not mount another canvas
+    h.manager.reconcile(inView);
+    const rendersAfterMount = h.requestRenderCount();
+    const canvasesAfterMount = h.canvases.length;
+    h.manager.resume();
+    expect(h.requestRenderCount()).toBe(rendersAfterMount + 1);
+    expect(h.canvases.length).toBe(canvasesAfterMount);
+
+    // settled live, no pending — no-op
+    h.firePresent();
+    const rendersAfterPresent = h.requestRenderCount();
+    h.manager.resume();
+    expect(h.requestRenderCount()).toBe(rendersAfterPresent);
+    expect(h.manager.debug().pending).toBeUndefined();
   });
 
   it('destroy fully disposes local resources and forgets the pool entry', () => {

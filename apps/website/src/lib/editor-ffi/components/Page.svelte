@@ -196,6 +196,7 @@
             editor.detachSurface(page);
           },
           requestRender: () => editor.requestSurfaceRender(page),
+          isSuspended: () => document.visibilityState !== 'visible',
           onPresented: (listener) => editor.onSurfacePresented(page, listener),
           addContextListeners: (canvas, isCurrent) => {
             const onWebglContextLost = (event: Event) => {
@@ -252,6 +253,16 @@
           flushIfAttached();
         };
         poolRoutes.add(route);
+
+        // 가시성 복귀 시 resume: 숨김 중 로스로 detach된 표면(failedParked)을 치유하고, 정체된
+        // pending은 렌더를 재촉한다. 에디터 레벨 recoverSurfaces는 attached 표면만 갱신하므로
+        // detached 표면 복구는 이 손이 담당한다(둘은 독립적).
+        const onVisible = () => {
+          if (document.visibilityState === 'visible') manager.resume();
+        };
+        const onPageShow = () => manager.resume();
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('pageshow', onPageShow);
 
         const offRender = editor.on('render_invalidated', paint);
 
@@ -348,6 +359,8 @@
 
         return () => {
           poolRoutes.delete(route);
+          document.removeEventListener('visibilitychange', onVisible);
+          window.removeEventListener('pageshow', onPageShow);
           offRender();
           manager.destroy();
         };
