@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,11 +26,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
+import co.typie.ext.thenIf
 import co.typie.generated.resources.Res
 import co.typie.navigation.Nav
 import co.typie.storage.Preference
@@ -46,40 +53,58 @@ import io.github.alexzhirkevich.compottie.Compottie
 import io.github.alexzhirkevich.compottie.LottieCompositionSpec
 import io.github.alexzhirkevich.compottie.rememberLottieComposition
 import io.github.alexzhirkevich.compottie.rememberLottiePainter
+import kotlin.math.min
 import kotlinx.coroutines.launch
 
 private data class OnboardingPage(
   val asset: String,
   val loop: Boolean,
   val heroFraction: Float,
+  val edgeFade: Boolean,
   val title: String,
   val subtitle: String,
 )
 
 private val pages =
   listOf(
-    OnboardingPage(
-      asset = "logo",
-      loop = false,
-      heroFraction = 0.55f,
-      title = "타이피에 오신 걸 환영해요",
-      subtitle = "떠오른 순간을 놓치지 않도록,\n언제 어디서나 편안하게 글을 이어 써보세요.",
-    ),
-    OnboardingPage(
-      asset = "writing",
-      loop = true,
-      heroFraction = 1f,
-      title = "글을 쓰는 모든 순간을 한곳에서",
-      subtitle = "작품과 설정을 스페이스로 정리하고,\n나에게 맞는 환경에서 쓰고 공유해 보세요.",
-    ),
-    OnboardingPage(
-      asset = "features",
-      loop = true,
-      heroFraction = 1f,
-      title = "14일 무료 체험이 시작됐어요",
-      subtitle = "타이피의 모든 기능을 이용할 수 있어요.\n지금 바로 첫 글을 시작해보세요.",
-    ),
-  )
+      OnboardingPage(
+        asset = "logo",
+        loop = false,
+        heroFraction = 0.55f,
+        edgeFade = false,
+        title = "타이피에 오신 걸 환영해요",
+        subtitle = "떠오른 순간을 놓치지 않도록,\n언제 어디서나 편안하게 글을 이어 써보세요.",
+      ),
+      OnboardingPage(
+        asset = "writing",
+        loop = true,
+        heroFraction = 1f,
+        edgeFade = false,
+        title = "글을 쓰는 모든 순간을 한곳에서",
+        subtitle = "작품과 설정을 스페이스로 정리하고,\n나에게 맞는 환경에서 쓰고 공유해 보세요.",
+      ),
+      OnboardingPage(
+        asset = "features",
+        loop = true,
+        heroFraction = 1f,
+        edgeFade = true,
+        title = "14일 무료 체험이 시작됐어요",
+        subtitle = "타이피의 모든 기능을 이용할 수 있어요.\n지금 바로 첫 글을 시작해보세요.",
+      ),
+    )
+    .map { page ->
+      page.copy(title = page.title.keepAllWords(), subtitle = page.subtitle.keepAllWords())
+    }
+
+// skiko(데스크톱·iOS)는 LineBreak.WordBreak.Phrase를 지원하지 않아, 어절 내부를 WORD JOINER로
+// 결합해 공백에서만 줄바꿈되도록 강제한다.
+private fun String.keepAllWords(): String = buildString {
+  for ((index, c) in this@keepAllWords.withIndex()) {
+    append(c)
+    val next = this@keepAllWords.getOrNull(index + 1) ?: continue
+    if (!c.isWhitespace() && !next.isWhitespace()) append('\u2060')
+  }
+}
 
 @Composable
 fun OnboardingPreviewScreen() {
@@ -132,9 +157,28 @@ fun OnboardingScreen(onComplete: () -> Unit) {
               contentScale = ContentScale.Fit,
               modifier =
                 Modifier.align(Alignment.Center)
-                  .fillMaxWidth(page.heroFraction)
+                  .fillMaxSize(page.heroFraction)
                   .padding(horizontal = 32.dp)
-                  .aspectRatio(1f),
+                  .thenIf(page.edgeFade) {
+                    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                      .drawWithContent {
+                        drawContent()
+                        val side = min(size.width, size.height)
+                        val left = (size.width - side) / 2f
+                        drawRect(
+                          brush =
+                            Brush.horizontalGradient(
+                              0f to Color.Transparent,
+                              0.12f to Color.Black,
+                              0.88f to Color.Black,
+                              1f to Color.Transparent,
+                              startX = left,
+                              endX = left + side,
+                            ),
+                          blendMode = BlendMode.DstIn,
+                        )
+                      }
+                  },
             )
           }
 
@@ -144,7 +188,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
           ) {
             Text(
               text = page.title,
-              style = AppTheme.typography.heading,
+              style = AppTheme.typography.heading.copy(lineBreak = LineBreak.Heading),
               color = AppTheme.colors.textDefault,
               textAlign = TextAlign.Center,
               modifier = Modifier.fillMaxWidth(),
@@ -152,7 +196,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Text(
               text = page.subtitle,
-              style = AppTheme.typography.body,
+              style = AppTheme.typography.body.copy(lineBreak = LineBreak.Heading),
               color = AppTheme.colors.textMuted,
               textAlign = TextAlign.Center,
               modifier = Modifier.fillMaxWidth(),
