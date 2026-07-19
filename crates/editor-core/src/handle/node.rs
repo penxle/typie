@@ -7,10 +7,20 @@ use crate::message::*;
 pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError> {
     editor.transact(|tr| match op {
         NodeOp::SetAttr { id, attr } => {
+            let id = if id.is_synthetic() {
+                editor_transaction::materialize_repair_target(tr, id)?
+            } else {
+                id
+            };
             tr.set_node_attr(id, attr)?;
             Ok(())
         }
         NodeOp::SetAttrs { id, attrs } => {
+            let id = if id.is_synthetic() {
+                editor_transaction::materialize_repair_target(tr, id)?
+            } else {
+                id
+            };
             tr.set_node(id, attrs)?;
             Ok(())
         }

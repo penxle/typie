@@ -703,6 +703,7 @@ export const DocumentStates = pgTable('document_states', {
   text: text('text').notNull(),
   characterCount: integer('character_count').notNull().default(0),
   blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
+  projectionDegraded: boolean('projection_degraded').notNull().default(false),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

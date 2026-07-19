@@ -1261,7 +1261,7 @@ mod tests {
             let offset = offset_pick % (len + 1);
             let before_doc = state.projected.projected().clone();
             let before_ops = state.graph().len();
-            let before_drops = state.projected.projected().drops;
+            let before_drops = state.projected.projected().repair_stats.drops;
             let before_children: Vec<Dot> = state.projected.child_elem_dots(block);
 
             let mut tr = Transaction::new(&state);
@@ -1296,7 +1296,7 @@ mod tests {
                         other => prop_assert!(false, "슬롯 {offset} 내용 불일치: {other:?}"),
                     }
                     prop_assert_eq!(
-                        ps.projected().drops,
+                        ps.projected().repair_stats.drops,
                         before_drops,
                         "성공 삽입이 드롭을 만들지 않는다"
                     );

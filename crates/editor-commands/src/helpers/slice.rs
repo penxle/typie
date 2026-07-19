@@ -1,7 +1,8 @@
 use editor_clipboard::Slice;
 use editor_crdt::Dot;
 use editor_model::{
-    ChildView, DocView, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, Schema,
+    ChildView, ContentExpr, DocView, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode,
+    Schema, context_allows, wrap_chain,
 };
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
@@ -109,10 +110,11 @@ pub(crate) fn insert_slice_at_position(
     if slice.is_empty() {
         return Ok(None);
     }
-    let slice = prepare_page_breaks_for_position(tr, &position, slice);
+    let mut slice = prepare_page_breaks_for_position(tr, &position, slice);
     if slice.is_empty() {
         return Ok(None);
     }
+    repair_slice_fragments(&mut slice.content);
 
     let in_textblock = position_in_textblock(tr, &position);
     if in_textblock {
@@ -809,6 +811,189 @@ fn block_parent_and_index(view: &DocView, id: Dot) -> Option<(Dot, usize)> {
     None
 }
 
+/// Recursion-depth ceiling and WRAP/SPLIT operation budget for one repair
+/// invocation. Clipboard HTML is external input, so — like the projection repair's
+/// `RepairCtx` — the pass is bounded: past either limit it stops restructuring and
+/// leaves the (partially repaired) fragments for the projection layer to absorb.
+/// Both are far above any real paste; they exist only to cap pathological input.
+const REPAIR_DEPTH_LIMIT: usize = 128;
+const REPAIR_OP_BUDGET: usize = 4096;
+
+/// Restructure each top-level slice fragment's subtree so every node satisfies its
+/// schema content model before the insert-shape decision, applying the same
+/// WRAP / SPLIT-HOIST algebra the projection repair uses — on the dot-less
+/// `Fragment` tree. A misfit child is either wrapped in the minimal scaffold chain
+/// (`wrap_chain`) that makes it legal in place, or split out: the container keeps
+/// the fitting prefix and the residue is promoted to the container's parent level
+/// (a trailing scaffold of the container's own type carries any following
+/// children) to be re-examined and re-placed. Ancestors above the top-level
+/// fragments are unknown at this point; `Root` is assumed so that Root-anchored
+/// contexts (e.g. `PageBreak`) stay legal. One pass, proportional to slice size;
+/// nothing is dropped.
+pub(crate) fn repair_slice_fragments(fragments: &mut [Fragment]) {
+    let mut budget = REPAIR_OP_BUDGET;
+    for fragment in fragments.iter_mut() {
+        repair_fragment_subtree(fragment, &[NodeType::Root], &mut budget);
+    }
+}
+
+fn repair_fragment_subtree(fragment: &mut Fragment, ancestors: &[NodeType], budget: &mut usize) {
+    let container = fragment.node.as_type();
+    let mut path: Vec<NodeType> = ancestors.to_vec();
+    path.push(container);
+    let hoist = repair_fragment_children(container, &mut fragment.children, &mut path, budget);
+    fragment.children.extend(hoist);
+}
+
+/// Repair `children` against `container`'s content model (`path` ends with
+/// `container`), recursing into each fitting child. Returns the forest to hoist to
+/// `container`'s parent level (empty when self-contained). Stops early once the
+/// depth ceiling or op budget is reached.
+fn repair_fragment_children(
+    container: NodeType,
+    children: &mut Vec<Fragment>,
+    path: &mut Vec<NodeType>,
+    budget: &mut usize,
+) -> Vec<Fragment> {
+    if path.len() > REPAIR_DEPTH_LIMIT {
+        return Vec::new();
+    }
+    let mut i = 0;
+    while i < children.len() {
+        if *budget == 0 {
+            break;
+        }
+        if fragment_is_misfit(container, children, i, path) {
+            match scaffold_chain_for(path, children[i].node.as_type()) {
+                Some(chain) => {
+                    *budget -= 1;
+                    wrap_fragment(children, i, &chain);
+                    continue;
+                }
+                None => {
+                    *budget -= 1;
+                    return split_hoist_fragment(container, children, i);
+                }
+            }
+        }
+        let child = children[i].node.as_type();
+        path.push(child);
+        let hoist = repair_fragment_children(child, &mut children[i].children, path, budget);
+        path.pop();
+        if !hoist.is_empty() {
+            children.splice(i + 1..i + 1, hoist);
+        }
+        i += 1;
+    }
+    Vec::new()
+}
+
+fn fragment_is_misfit(
+    container: NodeType,
+    children: &[Fragment],
+    i: usize,
+    path: &[NodeType],
+) -> bool {
+    if container == NodeType::Unknown {
+        return false;
+    }
+    let child = children[i].node.as_type();
+    if child != NodeType::Unknown && !context_allows(path, child) {
+        return true;
+    }
+    fragment_content_residue(container, children) == Some(i)
+}
+
+/// Index of the first child `container`'s content model cannot admit in sequence
+/// order (the first child past the greedily consumable prefix). `Unknown` children
+/// are transparent. `None` when the children form a completable prefix — missing
+/// required trailing slots are a completion concern, not a residue.
+fn fragment_content_residue(container: NodeType, children: &[Fragment]) -> Option<usize> {
+    if container == NodeType::Unknown {
+        return None;
+    }
+    let reals: Vec<(usize, NodeType)> = children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| {
+            let t = c.node.as_type();
+            (t != NodeType::Unknown).then_some((i, t))
+        })
+        .collect();
+    let types: Vec<NodeType> = reals.iter().map(|(_, t)| *t).collect();
+    let consumed = greedy_consume(&Schema::node_spec(container).content, &types);
+    (consumed < reals.len()).then(|| reals[consumed].0)
+}
+
+/// How many of `types` the content expr consumes from the front, greedily — the
+/// dot-less mirror of the projection repair's consume walk.
+fn greedy_consume(expr: &ContentExpr, types: &[NodeType]) -> usize {
+    fn matches_at(e: &ContentExpr, types: &[NodeType], idx: usize) -> bool {
+        types.get(idx).is_some_and(|t| e.matches(*t))
+    }
+    fn walk(expr: &ContentExpr, types: &[NodeType], idx: &mut usize) {
+        match expr {
+            ContentExpr::Empty => {}
+            ContentExpr::Any => *idx = types.len(),
+            ContentExpr::Single(t) => {
+                if types.get(*idx) == Some(t) {
+                    *idx += 1;
+                }
+            }
+            ContentExpr::Optional(inner) => {
+                if matches_at(inner, types, *idx) {
+                    walk(inner, types, idx);
+                }
+            }
+            ContentExpr::ZeroOrMore(inner) | ContentExpr::OneOrMore(inner) => {
+                while matches_at(inner, types, *idx) {
+                    walk(inner, types, idx);
+                }
+            }
+            ContentExpr::Choice(cs) => {
+                if let Some(c) = cs.iter().find(|c| matches_at(c, types, *idx)) {
+                    walk(c, types, idx);
+                }
+            }
+            ContentExpr::Seq(es) => {
+                for e in es {
+                    walk(e, types, idx);
+                }
+            }
+        }
+    }
+    let mut idx = 0;
+    walk(expr, types, &mut idx);
+    idx
+}
+
+fn scaffold_chain_for(path: &[NodeType], child: NodeType) -> Option<Vec<NodeType>> {
+    let chain = wrap_chain(path, child)?;
+    (!chain.is_empty()).then_some(chain)
+}
+
+fn wrap_fragment(children: &mut Vec<Fragment>, i: usize, chain: &[NodeType]) {
+    let mut current = children.remove(i);
+    for &role in chain.iter().rev() {
+        current = Fragment::leaf(role.into_node().to_plain()).with_children(vec![current]);
+    }
+    children.insert(i, current);
+}
+
+fn split_hoist_fragment(
+    container: NodeType,
+    children: &mut Vec<Fragment>,
+    k: usize,
+) -> Vec<Fragment> {
+    let tail = children.split_off(k + 1);
+    let promoted = children.pop().expect("k is a valid child index");
+    let mut out = vec![promoted];
+    if !tail.is_empty() {
+        out.push(Fragment::leaf(container.into_node().to_plain()).with_children(tail));
+    }
+    out
+}
+
 fn same_textblock_type(slice_node: &PlainNode, doc_node_id: Dot, tr: &Transaction) -> bool {
     let view = tr.state().view();
     let Some(doc_node) = view.node(doc_node_id) else {
@@ -818,4 +1003,137 @@ fn same_textblock_type(slice_node: &PlainNode, doc_node_id: Dot, tr: &Transactio
     Schema::node_spec(slice_type).is_textblock()
         && doc_node.spec().is_textblock()
         && slice_type == doc_node.node_type()
+}
+
+#[cfg(test)]
+mod repair_tests {
+    use super::*;
+    use editor_model::{PlainBulletListNode, PlainListItemNode, PlainPageBreakNode, PlainTextNode};
+
+    fn text(t: &str) -> Fragment {
+        Fragment::leaf(PlainNode::Text(PlainTextNode { text: t.into() }))
+    }
+
+    fn page_break() -> Fragment {
+        Fragment::leaf(PlainNode::PageBreak(PlainPageBreakNode::default()))
+    }
+
+    fn para(children: Vec<Fragment>) -> Fragment {
+        Fragment::leaf(PlainNode::Paragraph(PlainParagraphNode::default())).with_children(children)
+    }
+
+    fn list_item(children: Vec<Fragment>) -> Fragment {
+        Fragment::leaf(PlainNode::ListItem(PlainListItemNode::default())).with_children(children)
+    }
+
+    fn bullet_list(children: Vec<Fragment>) -> Fragment {
+        Fragment::leaf(PlainNode::BulletList(PlainBulletListNode::default()))
+            .with_children(children)
+    }
+
+    fn types(fragments: &[Fragment]) -> Vec<NodeType> {
+        fragments.iter().map(|f| f.node.as_type()).collect()
+    }
+
+    #[test]
+    fn splits_list_item_with_two_paragraphs_into_sibling_items() {
+        let mut content = vec![bullet_list(vec![list_item(vec![
+            para(vec![text("a")]),
+            para(vec![text("b")]),
+        ])])];
+
+        repair_slice_fragments(&mut content);
+
+        assert_eq!(types(&content), vec![NodeType::BulletList]);
+        let items = &content[0].children;
+        assert_eq!(types(items), vec![NodeType::ListItem, NodeType::ListItem]);
+        assert_eq!(items[0].children, vec![para(vec![text("a")])]);
+        assert_eq!(items[1].children, vec![para(vec![text("b")])]);
+    }
+
+    #[test]
+    fn splits_list_item_with_three_paragraphs_into_three_items() {
+        let mut content = vec![bullet_list(vec![list_item(vec![
+            para(vec![text("a")]),
+            para(vec![text("b")]),
+            para(vec![text("c")]),
+        ])])];
+
+        repair_slice_fragments(&mut content);
+
+        let items = &content[0].children;
+        assert_eq!(
+            types(items),
+            vec![NodeType::ListItem, NodeType::ListItem, NodeType::ListItem]
+        );
+        assert_eq!(items[0].children, vec![para(vec![text("a")])]);
+        assert_eq!(items[1].children, vec![para(vec![text("b")])]);
+        assert_eq!(items[2].children, vec![para(vec![text("c")])]);
+    }
+
+    #[test]
+    fn keeps_trailing_paragraph_after_nested_list_in_a_sibling_item() {
+        let mut content = vec![bullet_list(vec![list_item(vec![
+            para(vec![text("a")]),
+            bullet_list(vec![list_item(vec![para(vec![text("x")])])]),
+            para(vec![text("b")]),
+        ])])];
+
+        repair_slice_fragments(&mut content);
+
+        let items = &content[0].children;
+        assert_eq!(types(items), vec![NodeType::ListItem, NodeType::ListItem]);
+        assert_eq!(
+            types(&items[0].children),
+            vec![NodeType::Paragraph, NodeType::BulletList]
+        );
+        assert_eq!(items[1].children, vec![para(vec![text("b")])]);
+    }
+
+    #[test]
+    fn leaves_valid_list_unchanged() {
+        let mut content = vec![bullet_list(vec![
+            list_item(vec![para(vec![text("a")])]),
+            list_item(vec![para(vec![text("b")])]),
+        ])];
+        let before = content.clone();
+
+        repair_slice_fragments(&mut content);
+
+        assert_eq!(content, before);
+    }
+
+    #[test]
+    fn leaves_bare_inline_fragments_unchanged() {
+        let mut content = vec![text("a"), text("b")];
+        let before = content.clone();
+
+        repair_slice_fragments(&mut content);
+
+        assert_eq!(content, before);
+    }
+
+    #[test]
+    fn keeps_page_break_in_top_level_paragraph() {
+        // PageBreak's context is `Root > Paragraph > &`; assuming `Root` above the
+        // top-level fragments keeps it legal so the repair does not hoist it out.
+        let mut content = vec![para(vec![text("a"), page_break()])];
+        let before = content.clone();
+
+        repair_slice_fragments(&mut content);
+
+        assert_eq!(content, before);
+    }
+
+    #[test]
+    fn deeply_nested_input_terminates() {
+        // Clipboard HTML is external; nesting far past the depth ceiling must return
+        // (the cap stops descent) rather than overflow the stack.
+        let mut inner = para(vec![text("x")]);
+        for _ in 0..(REPAIR_DEPTH_LIMIT * 4) {
+            inner = bullet_list(vec![list_item(vec![inner])]);
+        }
+        let mut content = vec![inner];
+        repair_slice_fragments(&mut content);
+    }
 }

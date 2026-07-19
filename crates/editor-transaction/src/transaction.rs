@@ -192,6 +192,19 @@ impl Transaction {
         })
     }
 
+    pub fn reissue_subtree(
+        &mut self,
+        parent: Dot,
+        index: usize,
+        subtree: Subtree,
+    ) -> Result<(), StepError> {
+        self.apply_step(Step::ReissueSubtree {
+            parent,
+            index,
+            subtree,
+        })
+    }
+
     pub fn remove_subtree(&mut self, block: Dot) -> Result<(), StepError> {
         let (parent, index, subtree) = {
             let ps = &self.state.projected;

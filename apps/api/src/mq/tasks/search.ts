@@ -18,6 +18,7 @@ export const DocumentIndexJob = defineJob('search:index:document', async (docume
       subtitle: Documents.subtitle,
       contentText: DocumentContents.text,
       stateText: DocumentStates.text,
+      stateProjectionDegraded: DocumentStates.projectionDegraded,
       updatedAt: Documents.updatedAt,
     })
     .from(Documents)
@@ -27,7 +28,7 @@ export const DocumentIndexJob = defineJob('search:index:document', async (docume
     .where(eq(Documents.id, documentId))
     .then(firstOrThrow);
 
-  if (document.state === EntityState.ACTIVE) {
+  if (document.state === EntityState.ACTIVE && !document.stateProjectionDegraded) {
     const ancestorIds = await getAncestorEntityIds(document.entityId);
 
     await elasticsearch.index({

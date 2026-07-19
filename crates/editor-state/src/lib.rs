@@ -76,7 +76,10 @@ pub use selection_expansion::{
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion,
 };
-pub use stable_position::{StablePosition, StablePositionChild, StableResolveCtx};
+pub use stable_position::{
+    ChainSegment, StablePosition, StablePositionChild, StablePositionV1, StableResolveCtx,
+    StableSelectionV1, resolve_v1_selection,
+};
 pub use stable_selection::{StableSelection, remap_selection};
 pub use state::*;
 pub use to_plain::to_plain;

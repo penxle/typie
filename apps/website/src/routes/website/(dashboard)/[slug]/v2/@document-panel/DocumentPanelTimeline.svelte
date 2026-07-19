@@ -51,6 +51,7 @@
       query Editor_DocumentPanelV2Timeline_Query($slug: String!) {
         document(slug: $slug) {
           id
+          sweepTombstones
 
           heads {
             id
@@ -167,7 +168,7 @@
 
     let plain;
     try {
-      plain = liveEditor.materializeAt(Uint8Array.fromBase64(head.heads));
+      plain = liveEditor.materializeAt(Uint8Array.fromBase64(head.heads), [...(query.data?.document.sweepTombstones ?? [])]);
     } catch {
       if (selectedHeadId === headId && shownHeadId !== null) selectedHeadId = shownHeadId;
       return;

@@ -46,17 +46,8 @@ fn remap_selection_out_of_fold_content(
     if !matches!(fold.node(), Node::Fold(_)) {
         return None;
     }
-    let mut fold_title_id = None;
-    let mut fold_content_id = None;
-    for child in fold.child_blocks() {
-        match child.node() {
-            Node::FoldTitle(_) => fold_title_id = Some(child.id()),
-            Node::FoldContent(_) => fold_content_id = Some(child.id()),
-            _ => {}
-        }
-    }
-    let fold_title_id = fold_title_id?;
-    let fold_content_id = fold_content_id?;
+    let fold_title_id = fold.fold_title()?.id();
+    let fold_content_id = fold.fold_content()?.id();
 
     let in_content = |nid: Dot| {
         nid == fold_content_id

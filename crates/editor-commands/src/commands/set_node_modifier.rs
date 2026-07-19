@@ -4,6 +4,7 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     apply_modifier_to_node, is_table_justify, is_unit_variant, matches_modifier_context,
+    materialize_target,
 };
 use crate::{CommandError, CommandResult};
 
@@ -27,6 +28,15 @@ pub fn set_node_modifier(tr: &mut Transaction, id: Dot, modifier: Modifier) -> C
         return Ok(false);
     }
 
+    // A synthetic repair scaffold has no persistent op target, so a modifier
+    // aimed at it would apply to a dot no real block owns and be silently lost.
+    // Materialize it into real nodes first (restoring the selection across the
+    // re-issue) and retarget the op at the result.
+    let id = if id.is_synthetic() {
+        materialize_target(tr, id)?
+    } else {
+        id
+    };
     apply_modifier_to_node(tr, id, &modifier)?;
     Ok(true)
 }
@@ -37,6 +47,107 @@ mod tests {
 
     use super::*;
     use crate::test_utils::*;
+
+    #[test]
+    fn materializes_a_synthetic_target_before_recording_the_modifier() {
+        use editor_model::{Alignment, ModifierType, NodeType};
+
+        // Root holding only an image derives a synthetic trailing Paragraph — a
+        // block with no op dot, so a modifier aimed at it would be silently lost.
+        let (initial, ..) = state! {
+            doc { r: root { image } }
+            selection: (r, 0, <)
+        };
+        let synthetic = {
+            let view = initial.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .expect("synthetic trailing paragraph")
+                .id()
+        };
+        assert!(
+            synthetic.is_synthetic(),
+            "the trailing paragraph is synthetic"
+        );
+
+        let mut tr = Transaction::new(&initial);
+        let applied = set_node_modifier(
+            &mut tr,
+            synthetic,
+            Modifier::Alignment {
+                value: Alignment::Center,
+            },
+        )
+        .unwrap();
+        assert!(applied, "the gated command applies to a synthetic target");
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let paragraph = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Paragraph)
+            .expect("a real paragraph replaced the synthetic one");
+        assert!(
+            !paragraph.id().is_synthetic(),
+            "the target was materialized"
+        );
+        assert_eq!(
+            paragraph.block_modifier(ModifierType::Alignment),
+            Some(&Modifier::Alignment {
+                value: Alignment::Center
+            }),
+            "the modifier records on the materialized real paragraph, not a lost synthetic dot"
+        );
+    }
+
+    #[test]
+    fn materializes_and_restores_a_caret_inside_the_synthetic_target() {
+        use editor_model::{Alignment, ModifierType, NodeType};
+        use editor_state::{Position, Selection};
+
+        let (mut initial, ..) = state! {
+            doc { r: root { image } }
+            selection: (r, 0, <)
+        };
+        let synthetic = {
+            let view = initial.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .expect("synthetic trailing paragraph")
+                .id()
+        };
+        // Caret sits *inside* the synthetic scaffold, not at a root gap.
+        initial.selection = Some(Selection::collapsed(Position::new(synthetic, 0)));
+
+        let (actual, ..) = transact!(initial, |tr| set_node_modifier(
+            &mut tr,
+            synthetic,
+            Modifier::Alignment {
+                value: Alignment::Center
+            }
+        ));
+
+        let sel = actual.selection.expect("selection is preserved");
+        let view = actual.view();
+        assert!(
+            view.node(sel.head.node).is_some() && !sel.head.node.is_synthetic(),
+            "the caret is restored onto the live materialized node, not the dead synthetic filler"
+        );
+        assert_eq!(
+            view.node(sel.head.node)
+                .unwrap()
+                .block_modifier(ModifierType::Alignment),
+            Some(&Modifier::Alignment {
+                value: Alignment::Center
+            }),
+        );
+    }
 
     #[test]
     fn sets_font_size_on_root_as_document_default() {

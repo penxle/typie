@@ -812,8 +812,8 @@ export class Editor {
     this.#requestWasmTick();
   }
 
-  materializeAt(heads: Uint8Array): PlainDoc {
-    return this.#wasm.materialize_at(heads);
+  materializeAt(heads: Uint8Array, sweepTombstones: string[]): PlainDoc {
+    return this.#wasm.materialize_at(heads, sweepTombstones);
   }
 
   get cursor() {

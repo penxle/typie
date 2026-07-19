@@ -163,7 +163,16 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 
           await tx
             .update(DocumentStates)
-            .set({ json: result.plain, text: result.text, characterCount, blobSize, heads: result.heads, lastBundleSeq: seq, updatedAt })
+            .set({
+              json: result.plain,
+              text: result.text,
+              characterCount,
+              blobSize,
+              heads: result.heads,
+              lastBundleSeq: seq,
+              projectionDegraded: fold.projection_degraded,
+              updatedAt,
+            })
             .where(eq(DocumentStates.documentId, documentId));
           if (userVisibleChanged) {
             await tx.update(Documents).set({ updatedAt }).where(eq(Documents.id, documentId));

@@ -1,22 +1,23 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use editor_crdt::Dot;
 use editor_crdt::OpLog;
-use editor_crdt::sequence::{SeqCheckout, SeqResolve, checkout_with_resolver};
+use editor_crdt::sequence::{Bias, Boundary, SeqCheckout, SeqResolve, checkout_with_resolver};
 
 use crate::{
     AliasClasses, AliasLog, BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog,
     ModifierType, NodeType, OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
 use crate::{
-    Node, NodeAttrLog, SeqItem, SpanLog, normalize_with_stats, project_blocks_with_stats,
-    seed_block_init, validate_block_tree,
+    Node, NodeAttrLog, RepairStats, SeqItem, SpanLog, normalize_with_stats,
+    project_blocks_with_stats, seed_block_init, validate_block_tree,
 };
 
 #[derive(Debug)]
 pub enum ProjectionError {
     Project(ProjectError),
     LeafTypedBlock { dot: Dot, node_type: NodeType },
+    RootTypedBlock { dot: Dot },
     SchemaInvalid(SchemaError),
 }
 
@@ -49,11 +50,13 @@ pub struct ProjectedDoc {
     pub node_attrs: imbl::HashMap<Dot, Node>,
     pub node_carries: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub alias_classes: AliasClasses,
-    /// Real op dots dropped from the tree while producing THIS projection pass (a
-    /// projection-hidden zombie count). Per-pass, not deduplicated: a zombie that
-    /// persists in the sequence is re-counted every time the tree is re-derived.
+    /// Repairs applied while producing THIS projection pass (revival attachments,
+    /// WRAP / SPLIT-HOIST). Per-pass, not deduplicated: a persistent damaged state
+    /// re-counts every time the tree is re-derived. `drops`/`totality_violations`
+    /// record real content loss (both zero under the total-projection algebra);
+    /// `projection_degraded` marks a cap-hit whose schema validity is unverified.
     /// Not part of document identity — excluded from `PartialEq`.
-    pub drops: u64,
+    pub repair_stats: RepairStats,
 }
 
 impl ProjectedDoc {
@@ -712,33 +715,158 @@ pub fn project_from(logs: &DocLogs, seq: &SeqCheckout) -> Result<ProjectedDoc, P
     project_core(&elements, seq, logs)
 }
 
+pub struct OverlayResolve<R: SeqResolve> {
+    base: R,
+    before_ranks: Vec<usize>,
+    fold: HashMap<Dot, usize>,
+}
+
+impl<R: SeqResolve> OverlayResolve<R> {
+    pub fn new(base: R, overlay: &[Dot]) -> Self {
+        let mut before_ranks: Vec<usize> = overlay
+            .iter()
+            .filter_map(|&d| {
+                let b = base.resolve_boundary(d, Bias::Before)?;
+                b.visible.then_some(b.position)
+            })
+            .collect();
+        before_ranks.sort_unstable();
+
+        let fold: HashMap<Dot, usize> = overlay
+            .iter()
+            .filter_map(|&d| {
+                let b = base.resolve_boundary(d, Bias::Before)?;
+                if !b.visible {
+                    return None;
+                }
+                let preceding = before_ranks.partition_point(|&r| r < b.position);
+                Some((d, b.position - preceding))
+            })
+            .collect();
+
+        Self {
+            base,
+            before_ranks,
+            fold,
+        }
+    }
+}
+
+impl<R: SeqResolve> SeqResolve for OverlayResolve<R> {
+    fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        if let Some(&position) = self.fold.get(&id) {
+            return Some(Boundary {
+                position,
+                visible: false,
+            });
+        }
+        let b = self.base.resolve_boundary(id, bias)?;
+        let preceding = self.before_ranks.partition_point(|&r| r < b.position);
+        Some(Boundary {
+            position: b.position - preceding,
+            visible: b.visible,
+        })
+    }
+}
+
+pub fn project_with_overlay(
+    logs: &DocLogs,
+    seq: &SeqCheckout,
+    overlay: &[Dot],
+) -> Result<ProjectedDoc, ProjectionError> {
+    if overlay.is_empty() {
+        return project_from(logs, seq);
+    }
+    let hidden: HashSet<Dot> = overlay.iter().copied().collect();
+    let elements: Vec<(Dot, SeqItem)> = seq
+        .snapshot(&logs.seq)
+        .into_iter()
+        .filter(|(d, _)| !hidden.contains(d))
+        .collect();
+    let resolver = OverlayResolve::new(seq, overlay);
+    project_core(&elements, &resolver, logs)
+}
+
 pub fn project_core<R: SeqResolve>(
     elements: &[(Dot, SeqItem)],
     resolver: &R,
     logs: &DocLogs,
 ) -> Result<ProjectedDoc, ProjectionError> {
     for (d, item) in elements {
-        if let SeqItem::Block { node_type, .. } = item
-            && node_type.spec().is_leaf()
-        {
-            return Err(ProjectionError::LeafTypedBlock {
-                dot: *d,
-                node_type: *node_type,
-            });
+        if let SeqItem::Block { node_type, .. } = item {
+            if *node_type == NodeType::Root {
+                return Err(ProjectionError::RootTypedBlock { dot: *d });
+            }
+            if node_type.spec().is_leaf() {
+                return Err(ProjectionError::LeafTypedBlock {
+                    dot: *d,
+                    node_type: *node_type,
+                });
+            }
         }
     }
 
-    let mut drops: u64 = 0;
+    let mut stats = RepairStats::default();
     let raw_tree = normalize_with_stats(
-        project_blocks_with_stats(elements, &mut drops).map_err(ProjectionError::Project)?,
-        &mut drops,
+        project_blocks_with_stats(elements, &mut stats).map_err(ProjectionError::Project)?,
+        &mut stats,
     );
     let tree = BlockTree::from_raw(&raw_tree);
-    validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
+    // A degraded projection (repair-pass cap reached) preserves totality and order
+    // but not necessarily schema validity — surface it via telemetry rather than
+    // failing the load/collect.
+    if !stats.projection_degraded {
+        validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
+    }
 
     let mut pd = project_from_tree(elements, tree, resolver, logs);
-    pd.drops = drops;
+    pd.repair_stats = stats;
+    totality_check(elements, &pd.tree, &mut pd.repair_stats);
     Ok(pd)
+}
+
+/// Charge `stats.totality_violations` with the count of visible sequence elements
+/// (real authored dots) that are not reachable from Root in the projected tree —
+/// the `visible − reachable` set difference. Reachability is proven by a Root DFS,
+/// not a `nodes`-map walk (a node can linger in the map yet be unreachable from
+/// Root); a set difference, not a count comparison, because a deficit and a
+/// duplicate cancel under counting and `anchor_dot(Dot::ROOT)` lets the implicit
+/// Root inflate any tally. Shared by the full projection and the incremental window
+/// splice. Zero under the repair algebra (WRAP / SPLIT-HOIST move, never drop); any
+/// positive count is real content lost from the tree.
+pub fn totality_check(visible: &[(Dot, SeqItem)], tree: &BlockTree, stats: &mut RepairStats) {
+    let mut reachable: HashSet<Dot> = HashSet::new();
+    if let Some(root) = tree.root_node() {
+        let mut stack: Vec<&BlockNode> = vec![root];
+        while let Some(node) = stack.pop() {
+            for c in &node.children {
+                match c {
+                    Child::Leaf { id, .. } => {
+                        reachable.insert(*id);
+                    }
+                    Child::Block(id) => {
+                        if !id.is_synthetic() {
+                            reachable.insert(*id);
+                        }
+                        if let Some(b) = tree.get(*id) {
+                            stack.push(b);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let deficit = visible
+        .iter()
+        .filter(|(d, _)| !reachable.contains(d))
+        .count() as u64;
+    if deficit > 0 {
+        stats.totality_violations += deficit;
+        debug_assert!(
+            false,
+            "totality tripwire: {deficit} visible sequence element(s) unreachable from Root"
+        );
+    }
 }
 
 pub fn project_from_tree<R: SeqResolve>(
@@ -769,7 +897,7 @@ pub fn project_from_tree<R: SeqResolve>(
         node_attrs,
         node_carries,
         alias_classes,
-        drops: 0,
+        repair_stats: RepairStats::default(),
     };
 
     let paths = BlockPaths::from_tree(&pd.tree);
@@ -904,7 +1032,7 @@ mod tests {
             node_attrs: imbl::HashMap::new(),
             node_carries: imbl::HashMap::new(),
             alias_classes: AliasClasses::default(),
-            drops: 0,
+            repair_stats: RepairStats::default(),
         };
         let idx = ProjectionIndexes::rebuild_from(&projected, &SpanLog::new());
         assert_eq!(idx.paths, BlockPaths::from_tree(&tree));
@@ -1481,7 +1609,7 @@ mod tests {
     }
 
     #[test]
-    fn structural_malformation_drops_and_repairs() {
+    fn structural_malformation_revives_marker() {
         let elems = vec![(
             Dot::new(1, 1),
             SeqItem::Block {
@@ -1492,12 +1620,12 @@ mod tests {
         )];
         let pd = project_document(&logs_of(&elems)).unwrap();
         let nodes = collect_real_nodes(&pd.tree);
-        assert!(!nodes.contains_key(&Dot::new(1, 1)));
+        assert!(nodes.contains_key(&Dot::new(1, 1)));
         assert!(validate_block_tree(&pd.tree).is_ok());
     }
 
     #[test]
-    fn concurrent_container_delete_drops_subtree_no_crash() {
+    fn concurrent_container_delete_revives_orphaned_children() {
         let c = Dot::new(1, 0);
         let p1 = Dot::new(1, 1);
         let a = Dot::new(1, 2);
@@ -1567,8 +1695,8 @@ mod tests {
         let pd = project_document(&l).unwrap();
         let nodes = collect_real_nodes(&pd.tree);
         assert!(!nodes.contains_key(&c));
-        assert!(!nodes.contains_key(&p2));
-        assert!(!nodes.contains_key(&b));
+        assert!(nodes.contains_key(&p2));
+        assert!(nodes.contains_key(&b));
         assert!(validate_block_tree(&pd.tree).is_ok());
     }
 
@@ -1591,6 +1719,22 @@ mod tests {
                 "leaf-typed block {leaf_ty:?} must fail-loud"
             );
         }
+    }
+
+    #[test]
+    fn root_typed_block_errors() {
+        let elems = vec![(
+            Dot::new(1, 1),
+            SeqItem::Block {
+                node_type: NodeType::Root,
+                parents: vec![Dot::ROOT],
+                attrs: vec![],
+            },
+        )];
+        assert!(matches!(
+            project_document(&logs_of(&elems)),
+            Err(ProjectionError::RootTypedBlock { .. })
+        ));
     }
 
     #[test]
@@ -1645,9 +1789,11 @@ mod tests {
         l.seq = build_oplog(&ev);
         let pd = project_document(&l).unwrap();
         let nodes = collect_real_nodes(&pd.tree);
-        assert!(!nodes.contains_key(&Dot::new(2, 0)));
+        // The concurrently-inserted char, orphaned by the delete, is revived at Root
+        // and WRAPped into a Paragraph rather than dropped (total projection).
+        assert!(nodes.contains_key(&Dot::new(2, 0)));
         assert!(validate_block_tree(&pd.tree).is_ok());
-        assert_eq!(leaf_count(&pd), 0);
+        assert_eq!(leaf_count(&pd), 1);
     }
 
     #[test]
@@ -1737,7 +1883,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_fixed_slot_loser_overlay_no_leak() {
+    fn duplicate_fixed_slot_loser_survives_with_its_overlay() {
         let fold = Dot::new(1, 1);
         let title1 = Dot::new(1, 2);
         let loser = Dot::new(1, 3);
@@ -1787,7 +1933,10 @@ mod tests {
             )
             .unwrap();
         let pd = project_document(&l).unwrap();
-        assert!(!pd.node_carries.contains_key(&loser));
+        // The duplicate FoldTitle is no longer dropped — it is SPLIT-HOISTed into its
+        // own Fold and survives, so its carry is legitimately projected onto it.
+        assert!(pd.tree.get(loser).is_some());
+        assert!(pd.node_carries.contains_key(&loser));
     }
 
     #[test]
@@ -2021,6 +2170,239 @@ mod tests {
         assert!(
             !eff_of(&pd, img2).contains_key(&ModifierType::Alignment),
             "second image must NOT inherit the first's alignment"
+        );
+    }
+
+    #[test]
+    fn dead_parent_full_projection_reports_no_totality_violation() {
+        // A Paragraph whose declared parent (`ghost`) never existed is revived under
+        // Root by the repair algebra, so every visible sequence element stays reachable
+        // — the totality tripwire must read zero on this healed full projection.
+        let a = Dot::new(1, 1);
+        let ax = Dot::new(1, 2);
+        let b = Dot::new(1, 3);
+        let by = Dot::new(1, 4);
+        let ghost = Dot::new(9, 999);
+        let elems = vec![
+            (
+                a,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (ax, SeqItem::Char('x')),
+            (
+                b,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, ghost],
+                    attrs: vec![],
+                },
+            ),
+            (by, SeqItem::Char('y')),
+        ];
+        let pd = project_document(&logs_of(&elems)).unwrap();
+        assert!(
+            pd.tree.get(b).is_some(),
+            "the dead-parent paragraph is revived"
+        );
+        assert_eq!(
+            pd.repair_stats.totality_violations, 0,
+            "a healed projection loses nothing"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "totality tripwire: 1")]
+    fn totality_check_reports_visible_dot_absent_from_tree() {
+        // Test-only corruption: a visible sequence dot with no home in the tree. The
+        // predicate must charge exactly one violation for the unreachable element.
+        let a = Dot::new(1, 1);
+        let orphan = Dot::new(1, 2);
+        let raw = crate::RawTree {
+            roots: vec![crate::RawNode {
+                id: Dot::ROOT,
+                node_type: NodeType::Root,
+                attrs: vec![],
+                children: vec![crate::RawChild::Block(crate::RawNode {
+                    id: Dot::new(1, 0),
+                    node_type: NodeType::Paragraph,
+                    attrs: vec![],
+                    children: vec![crate::RawChild::Leaf {
+                        id: a,
+                        item: SeqItem::Char('a'),
+                    }],
+                })],
+            }],
+        };
+        let tree = BlockTree::from_raw(&raw);
+        let visible = vec![(a, SeqItem::Char('a')), (orphan, SeqItem::Char('b'))];
+        let mut stats = RepairStats::default();
+        totality_check(&visible, &tree, &mut stats);
+    }
+}
+
+#[cfg(test)]
+mod overlay_tests {
+    use std::collections::HashMap;
+
+    use editor_crdt::Dot;
+    use editor_crdt::sequence::{Bias, Boundary, SeqResolve};
+
+    use super::OverlayResolve;
+
+    struct StubResolve {
+        ranks: HashMap<Dot, (usize, bool)>,
+    }
+
+    impl StubResolve {
+        fn visible(ranks: &[(Dot, usize)]) -> Self {
+            Self {
+                ranks: ranks.iter().map(|&(d, r)| (d, (r, true))).collect(),
+            }
+        }
+    }
+
+    impl SeqResolve for StubResolve {
+        fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+            let &(rank, visible) = self.ranks.get(&id)?;
+            let position = match bias {
+                Bias::Before => rank,
+                Bias::After => rank + usize::from(visible),
+            };
+            Some(Boundary { position, visible })
+        }
+    }
+
+    fn d(clock: u64) -> Dot {
+        Dot::new(1, clock)
+    }
+
+    #[test]
+    fn normal_anchor_after_single_overlay_shifts_down_by_one() {
+        let (a, z, b, c) = (d(0), d(1), d(2), d(3));
+        let base = StubResolve::visible(&[(a, 0), (z, 1), (b, 2), (c, 3)]);
+        let overlay = OverlayResolve::new(&base, &[z]);
+
+        assert_eq!(
+            overlay.resolve_boundary(a, Bias::Before).unwrap().position,
+            0
+        );
+        assert_eq!(
+            overlay.resolve_boundary(a, Bias::After).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::Before).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::After).unwrap().position,
+            2
+        );
+        assert_eq!(
+            overlay.resolve_boundary(c, Bias::Before).unwrap().position,
+            2
+        );
+        assert_eq!(
+            overlay.resolve_boundary(c, Bias::After).unwrap().position,
+            3
+        );
+    }
+
+    #[test]
+    fn overlay_anchor_folds_both_biases_to_one_invisible_position() {
+        let (a, z, b) = (d(0), d(1), d(2));
+        let base = StubResolve::visible(&[(a, 0), (z, 1), (b, 2)]);
+        let overlay = OverlayResolve::new(&base, &[z]);
+
+        let before = overlay.resolve_boundary(z, Bias::Before).unwrap();
+        let after = overlay.resolve_boundary(z, Bias::After).unwrap();
+        assert_eq!(before.position, 1);
+        assert_eq!(after.position, 1);
+        assert!(!before.visible);
+        assert!(!after.visible);
+    }
+
+    #[test]
+    fn normal_anchor_between_two_overlays_rebases_over_preceding_only() {
+        let (a, z1, b, z2, c) = (d(0), d(1), d(2), d(3), d(4));
+        let base = StubResolve::visible(&[(a, 0), (z1, 1), (b, 2), (z2, 3), (c, 4)]);
+        let overlay = OverlayResolve::new(&base, &[z1, z2]);
+
+        assert_eq!(
+            overlay.resolve_boundary(a, Bias::Before).unwrap().position,
+            0
+        );
+        assert_eq!(
+            overlay.resolve_boundary(a, Bias::After).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::Before).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::After).unwrap().position,
+            2
+        );
+        assert_eq!(
+            overlay.resolve_boundary(c, Bias::Before).unwrap().position,
+            2
+        );
+        assert_eq!(
+            overlay.resolve_boundary(c, Bias::After).unwrap().position,
+            3
+        );
+    }
+
+    #[test]
+    fn adjacent_overlays_fold_to_same_gap() {
+        let (a, z1, z2, b) = (d(0), d(1), d(2), d(3));
+        let base = StubResolve::visible(&[(a, 0), (z1, 1), (z2, 2), (b, 3)]);
+        let overlay = OverlayResolve::new(&base, &[z1, z2]);
+
+        assert_eq!(
+            overlay.resolve_boundary(z1, Bias::Before).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(z1, Bias::After).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(z2, Bias::Before).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(z2, Bias::After).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::Before).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::After).unwrap().position,
+            2
+        );
+    }
+
+    #[test]
+    fn empty_overlay_passes_base_positions_through() {
+        let (a, b) = (d(0), d(1));
+        let base = StubResolve::visible(&[(a, 0), (b, 1)]);
+        let overlay = OverlayResolve::new(&base, &[]);
+
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::Before).unwrap().position,
+            1
+        );
+        assert_eq!(
+            overlay.resolve_boundary(b, Bias::After).unwrap().position,
+            2
         );
     }
 }

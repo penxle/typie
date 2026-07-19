@@ -3,10 +3,11 @@ use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, Op
 use editor_model::{
     Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp,
     Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeType, ProjectedDoc,
-    ProjectionError, ProjectionIndexes, RawChild, RawNode, SeqItem, SpanAnchorIndex, SpanLog,
-    SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of, normalize_content_shallow,
-    normalize_subtree_with_stats, project_blocks_with_stats, project_from, project_from_tree,
-    seq_parents, split_block_insert, split_logs,
+    ProjectionError, ProjectionIndexes, RawChild, RawNode, RepairStats, SeqItem, SpanAnchorIndex,
+    SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of,
+    normalize_content_shallow_with_stats, normalize_window_forest_with_stats, project_blocks,
+    project_from, project_from_tree, project_with_overlay, seq_parents, split_block_insert,
+    split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -90,6 +91,42 @@ fn collect_subtree_nodes(tree: &BlockTree, node: &BlockNode, out: &mut Vec<Dot>)
     }
 }
 
+/// Graft a Root-repair WRAP scaffold subtree into the tree, ID-aware: a node that
+/// already exists (a real block the scaffold reparented) keeps its live subtree —
+/// the scaffold references it by id rather than clobbering it with the empty
+/// shallow proxy (which would orphan the real block's real descendants). Preserved
+/// real ids are collected so the caller keeps them out of its drop set. Newly
+/// synthesized scaffold nodes are inserted whole.
+fn graft_shallow_scaffold(tree: &mut BlockTree, raw: &RawNode, reparented: &mut HashSet<Dot>) {
+    if tree.get(raw.id).is_some() {
+        reparented.insert(raw.id);
+        return;
+    }
+    let children: ChildList = raw
+        .children
+        .iter()
+        .map(|c| match c {
+            RawChild::Leaf { id, item } => Child::Leaf {
+                id: *id,
+                item: item.clone(),
+            },
+            RawChild::Block(b) => {
+                graft_shallow_scaffold(tree, b, reparented);
+                Child::Block(b.id)
+            }
+        })
+        .collect();
+    tree.nodes.insert(
+        raw.id,
+        BlockNode {
+            id: raw.id,
+            node_type: raw.node_type,
+            attrs: raw.attrs.clone(),
+            children,
+        },
+    );
+}
+
 fn last_known_child_for_shallow_root_repair(
     tree: &BlockTree,
     block: &BlockNode,
@@ -169,11 +206,12 @@ pub struct ProjectedState {
     indexes: ProjectionIndexes,
     leaf_cursor: Option<LeafCursor>,
     layout_dirty: crate::LayoutDirty,
-    /// Running total of per-pass drop EVENTS across every projection (full and
-    /// incremental) since the last [`take_drop_stats`](Self::take_drop_stats) — not a
-    /// distinct-zombie count. A zombie that survives is re-counted on each full
-    /// reprojection, so the tripwire keeps firing until a later sweep removes it.
-    drop_stats: u64,
+    /// Running total of per-pass repair stats across every projection (full and
+    /// incremental) since the last [`take_repair_stats`](Self::take_repair_stats).
+    /// Repairs (revival / WRAP / SPLIT-HOIST) re-count on each pass over a persistent
+    /// damaged state; `drops`/`totality_violations`/`projection_degraded` record
+    /// actual content loss or degradation.
+    repair_stats: RepairStats,
 }
 
 impl ProjectedState {
@@ -188,9 +226,21 @@ impl ProjectedState {
         Ok((logs, seq, projected, indexes))
     }
 
+    fn build_warm_with_overlay(
+        graph: &OpGraph<EditOp>,
+        overlay: &[Dot],
+    ) -> Result<(DocLogs, SeqCheckout, ProjectedDoc, ProjectionIndexes), SpineError> {
+        let logs = split_logs(graph)?;
+        let mut seq = SeqCheckout::new();
+        seq.apply_tail(&logs.seq);
+        let projected = project_with_overlay(&logs, &seq, overlay)?;
+        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans);
+        Ok((logs, seq, projected, indexes))
+    }
+
     fn rebuild_from_graph(&mut self) -> Result<(), SpineError> {
         let (logs, seq, projected, indexes) = Self::build_warm(&self.graph)?;
-        self.drop_stats += projected.drops;
+        self.repair_stats.accumulate(&projected.repair_stats);
         self.logs = logs;
         self.seq = seq;
         self.projected = projected;
@@ -266,8 +316,15 @@ impl ProjectedState {
     }
 
     pub fn from_graph(graph: OpGraph<EditOp>) -> Result<Self, SpineError> {
-        let (logs, seq, projected, indexes) = Self::build_warm(&graph)?;
-        let drop_stats = projected.drops;
+        Self::from_graph_with_overlay(graph, &[])
+    }
+
+    pub fn from_graph_with_overlay(
+        graph: OpGraph<EditOp>,
+        overlay: &[Dot],
+    ) -> Result<Self, SpineError> {
+        let (logs, seq, projected, indexes) = Self::build_warm_with_overlay(&graph, overlay)?;
+        let repair_stats = projected.repair_stats;
         Ok(Self {
             graph,
             logs,
@@ -276,7 +333,7 @@ impl ProjectedState {
             indexes,
             leaf_cursor: None,
             layout_dirty: crate::LayoutDirty::Full,
-            drop_stats,
+            repair_stats,
         })
     }
 
@@ -315,7 +372,7 @@ impl ProjectedState {
         let projected = project_from(&self.logs, &self.seq)?;
         let paths = BlockPaths::from_tree(&projected.tree);
         let spans = SpanAnchorIndex::build(&self.logs.spans);
-        self.drop_stats += projected.drops;
+        self.repair_stats.accumulate(&projected.repair_stats);
         self.projected = projected;
         self.indexes = ProjectionIndexes { paths, spans };
         self.leaf_cursor = None;
@@ -337,7 +394,7 @@ impl ProjectedState {
         let projected = project_from(&self.logs, &self.seq)?;
         let paths = BlockPaths::from_tree(&projected.tree);
         let spans = self.indexes.spans.clone();
-        self.drop_stats += projected.drops;
+        self.repair_stats.accumulate(&projected.repair_stats);
         self.projected = projected;
         self.indexes = ProjectionIndexes { paths, spans };
         self.leaf_cursor = None;
@@ -587,46 +644,99 @@ impl ProjectedState {
         if i > j || j >= root_children.len() {
             return self.reproject();
         }
-        let Some(first) = root_children.get(i).map(|child| match child {
+        let child_id = |c: &Child| match c {
             Child::Block(block) => *block,
             Child::Leaf { id, .. } => *id,
-        }) else {
-            return self.reproject();
         };
-        let Some(mut window_start) = self
-            .seq
-            .resolve_boundary(first, Bias::Before)
-            .map(|b| b.position)
-        else {
-            return self.reproject();
-        };
-        // The window ends where the first real child *after* `j` begins in the
-        // sequence. Children after `j` whose marker/id doesn't resolve are
-        // synthetic/scaffolded blocks (e.g. the normalizer's trailing paragraph
-        // required by the Root content rule); they own no real sequence elements. Such
-        // a scaffold must be subsumed into the window (`j` extended over it) so the
-        // splice removes it and normalization recreates the correct trailing shape —
-        // otherwise a superseded scaffold lingers as a duplicate empty block. If only
-        // scaffolds trail the window it runs to the sequence end, never a full reproject.
+        // Real dots the window's blocks own — the [i..=j] subtrees, grown as
+        // reparenting siblings are pulled in. A top-level sibling whose block-marker
+        // parents chain roots inside this set reparents INTO the window after this op
+        // (the order invariant makes it share the window's contiguous sequence range),
+        // so it must be reprojected together or a cold rebuild diverges.
+        let mut i = i;
         let mut j = j;
+        let mut window_owned: HashSet<Dot> = HashSet::new();
+        // Ancestors any window child's marker still nests under — drives left extension
+        // to a preceding sibling a window element reparents onto.
+        let mut referenced: HashSet<Dot> = HashSet::new();
+        for slot in i..=j {
+            if let Some(c) = root_children.get(slot) {
+                let id = child_id(c);
+                window_owned.extend(self.subtree_real_dots(id));
+                referenced.extend(self.marker_parents(id));
+            }
+        }
+        // Left extension runs BEFORE right extension so the right pass sees every block
+        // the window came to own. Pull in a preceding sibling when either:
+        //  (1) a window element still nests under it (its id is referenced by window
+        //      content) — its marker must open the window so `project_blocks` rebuilds
+        //      the nesting instead of reviving the content to Root; or
+        //  (2) the current head is a synthetic SPLIT/WRAP scaffold — it owns no
+        //      sequence marker, so its content sequence-belongs to an earlier real
+        //      block. The window must open at that real block's marker or a mid-run
+        //      snapshot regroups the split differently than a full reprojection. Walk
+        //      back through the contiguous scaffold run to its real origin.
+        // (A following sibling can never nest under a *right*-pulled block — ancestors
+        // precede descendants in the sequence — so left-then-right needs no re-pass.)
+        while i > 0 {
+            let head_synthetic = root_children
+                .get(i)
+                .map(&child_id)
+                .is_some_and(|d| d.is_synthetic());
+            let Some(prev) = root_children.get(i - 1).map(&child_id) else {
+                break;
+            };
+            if !head_synthetic && !referenced.contains(&prev) {
+                break;
+            }
+            window_owned.extend(self.subtree_real_dots(prev));
+            referenced.extend(self.marker_parents(prev));
+            i -= 1;
+        }
+        // Right extension: subsume trailing synthetic scaffolds (own real dots, no
+        // resolvable marker — e.g. a normalizer trailing paragraph) and following real
+        // siblings that reparent into the window (including onto a block the left pass
+        // just pulled in). Stop at the first genuine window-external child, whose marker
+        // begins the excluded tail (`window_end`); once a non-descendant closes the run
+        // the order invariant forbids any later sibling from reopening the window. If
+        // only scaffolds trail, the window runs to the sequence end — never a full
+        // reproject.
         let mut window_end = self.seq.visible_len();
         let mut k = j + 1;
         while let Some(c) = root_children.get(k) {
-            let id = match c {
-                Child::Block(b) => *b,
-                Child::Leaf { id, .. } => *id,
-            };
-            if let Some(p) = self
+            let id = child_id(c);
+            let parents = self.marker_parents(id);
+            let resolved = self
                 .seq
                 .resolve_boundary(id, Bias::Before)
-                .map(|b| b.position)
-            {
-                window_end = p;
-                break;
+                .map(|b| b.position);
+            match resolved {
+                Some(p) if !parents.iter().any(|d| window_owned.contains(d)) => {
+                    window_end = p;
+                    break;
+                }
+                _ => {
+                    window_owned.extend(self.subtree_real_dots(id));
+                    referenced.extend(parents);
+                    j = k;
+                    k += 1;
+                }
             }
-            j = k;
-            k += 1;
         }
+        let Some(first) = root_children.get(i).map(&child_id) else {
+            return self.reproject();
+        };
+        // Window start: the first child's own marker, or — for a synthetic scaffold at
+        // the head — the min position among the real dots it owns. Only a synthetic
+        // filler owning no real dots (nothing to localize) falls back to full reproject.
+        let Some(mut window_start) = self.seq_flat_pos(first).or_else(|| {
+            self.subtree_real_dots(first)
+                .iter()
+                .filter_map(|&d| self.seq_flat_pos(d))
+                .min()
+        }) else {
+            return self.reproject();
+        };
         if let Some(f) = floor {
             window_start = window_start.min(f);
         }
@@ -647,31 +757,37 @@ impl ProjectedState {
             .seq
             .snapshot_range(&self.logs.seq, window_start..window_end);
         for (d, item) in &elements {
-            if let SeqItem::Block { node_type, .. } = item
-                && node_type.spec().is_leaf()
-            {
-                return Err(ProjectionError::LeafTypedBlock {
-                    dot: *d,
-                    node_type: *node_type,
+            if let SeqItem::Block { node_type, .. } = item {
+                if *node_type == NodeType::Root {
+                    return Err(ProjectionError::RootTypedBlock { dot: *d }.into());
                 }
-                .into());
+                if node_type.spec().is_leaf() {
+                    return Err(ProjectionError::LeafTypedBlock {
+                        dot: *d,
+                        node_type: *node_type,
+                    }
+                    .into());
+                }
             }
         }
-        let mut window_drops: u64 = 0;
-        let raw = project_blocks_with_stats(&elements, &mut window_drops)
-            .map_err(ProjectionError::Project)?;
-        // Normalize each top-level block's subtree independently (NOT under a fresh
-        // Root): the Root content model is a whole-document rule and must not be
-        // re-applied to a window, or it scaffolds spurious mid-document content.
-        // The Root's own rule is re-established below via the schema, not hardcoded.
+        let mut window_stats = RepairStats::default();
+        let raw = project_blocks(&elements).map_err(ProjectionError::Project)?;
         let raw_children = raw
             .roots
             .into_iter()
             .next()
             .map(|r| r.children)
             .unwrap_or_default();
-        // Normalize each window block, plan its index entries, and graft its subtree
-        // into the live `nodes` map, building the flat child-reference list to splice.
+        // Normalize the whole window forest with the full-document Root algebra —
+        // WRAP a context-illegal top-level child (e.g. a bare `ListItem` whose
+        // `BulletList` marker was deleted) BEFORE recursing its content, so a surplus
+        // child SPLIT-HOISTs to the wrapping scaffold's level exactly as a cold rebuild
+        // groups it (per-block `normalize_subtree` under `[Root]` hoisted it one level
+        // too high, to Root). The Root *completion* rules stay document-global, applied
+        // by `repair_root_content_shallow` below — never re-run per window.
+        let forest = normalize_window_forest_with_stats(raw_children, &mut window_stats);
+        // Plan each block's index entries and graft its subtree into the live `nodes`
+        // map, building the flat child-reference list to splice.
         let mut plan_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
         let mut plan_block_leaves: BlockLeafPlan = Vec::new();
         let mut new_nodes: HashSet<Dot> = HashSet::new();
@@ -680,10 +796,9 @@ impl ProjectedState {
         // Root; they are leaves of Root, not of any window block, so they need their own
         // index/derivation maintenance (`plan_subtree` only covers block subtrees).
         let mut root_leaves: Vec<(Dot, Option<NodeType>)> = Vec::new();
-        for c in raw_children {
+        for c in forest {
             match c {
-                RawChild::Block(mut b) => {
-                    normalize_subtree_with_stats(&mut b, &[NodeType::Root], &mut window_drops);
+                RawChild::Block(b) => {
                     plan_subtree(
                         &b,
                         Dot::ROOT,
@@ -701,6 +816,10 @@ impl ProjectedState {
                 }
             }
         }
+
+        // Snapshot the window's re-projected children before the splice consumes them;
+        // the totality tripwire below walks them against the *post-repair* tree.
+        let window_children: Vec<Child> = new_children.clone();
 
         self.projected
             .tree
@@ -752,7 +871,7 @@ impl ProjectedState {
         // by hardcoding the rule here. Window blocks are already normalized, so
         // only the Root's direct content is repaired; returns any freshly scaffolded
         // blocks to index.
-        let scaffolded = self.repair_root_content_shallow();
+        let scaffolded = self.repair_root_content_shallow(&mut window_stats);
         let mut s_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
         let mut s_block_leaves: BlockLeafPlan = Vec::new();
         let mut s_nodes: HashSet<Dot> = HashSet::new();
@@ -778,6 +897,28 @@ impl ProjectedState {
                 self.indexes.paths.set_block_of_leaf(*leaf, *block);
             }
         }
+
+        // Window-local totality tripwire: run the same predicate the full path uses,
+        // but on a scratch Root over the window's re-projected children walked against
+        // the *post-splice, post-shallow-repair* tree — so the check covers the Root
+        // shallow reconcile (a rule-dropped window block leaves its id dangling and its
+        // elements unreachable) while the DFS stays O(window), not O(document).
+        {
+            let mut window_tree = self.projected.tree.clone();
+            let window_root = editor_model::synthetic_id(root_id, i, NodeType::Root);
+            window_tree.nodes.insert(
+                window_root,
+                BlockNode {
+                    id: window_root,
+                    node_type: NodeType::Root,
+                    attrs: Vec::new(),
+                    children: ChildList::from_iter(window_children),
+                },
+            );
+            window_tree.root = window_root;
+            editor_model::totality_check(&elements, &window_tree, &mut window_stats);
+        }
+
         // Rebuild segments for every block the window rewrote — the window
         // subtrees, any scaffolded blocks, and Root itself (its block-atom leaves were
         // re-indexed above). Each leaf's covering is resolved from the span log once here.
@@ -797,7 +938,7 @@ impl ProjectedState {
             self.mark_dirty_block(*block);
         }
         self.mark_dirty_structural(Dot::ROOT);
-        self.drop_stats += window_drops;
+        self.repair_stats.accumulate(&window_stats);
         Ok(())
     }
 
@@ -822,7 +963,7 @@ impl ProjectedState {
     /// forgotten. The last direct Paragraph carries its last schema-known child so
     /// Root-level completion can distinguish a terminal PageBreak from an editable
     /// trailing Paragraph without cloning the Paragraph's full content.
-    fn repair_root_content_shallow(&mut self) -> Vec<RawNode> {
+    fn repair_root_content_shallow(&mut self, stats: &mut RepairStats) -> Vec<RawNode> {
         let root_id = self.projected.tree.root;
         let Some(root) = self.projected.tree.get(root_id) else {
             return Vec::new();
@@ -880,11 +1021,19 @@ impl ProjectedState {
             })
             .collect();
 
-        normalize_content_shallow(&mut shallow, &[]);
+        // Share the SPLIT/WRAP algebra (and its `repairs` count) with the full path.
+        // Root accepts every block type so nothing hoists above it, but keep any
+        // escapee as a Root child rather than lose it — total, like `normalize_capped`.
+        let hoist = normalize_content_shallow_with_stats(&mut shallow, &[], stats);
+        shallow.children.extend(hoist);
 
         let mut new_children: Vec<Child> = Vec::new();
         let mut after: HashSet<Dot> = HashSet::new();
         let mut scaffolded: Vec<RawNode> = Vec::new();
+        // Real blocks that a WRAP scaffold reparented (its proxy is an empty
+        // placeholder): they moved, they were not dropped — preserved and kept out of
+        // the forget set below.
+        let mut reparented: HashSet<Dot> = HashSet::new();
         for c in shallow.children {
             match c {
                 RawChild::Leaf { id, item } => new_children.push(Child::Leaf { id, item }),
@@ -893,8 +1042,8 @@ impl ProjectedState {
                     if self.projected.tree.get(b.id).is_some() {
                         new_children.push(Child::Block(b.id));
                     } else {
-                        let id = self.projected.tree.insert_block_subtree(&b);
-                        new_children.push(Child::Block(id));
+                        graft_shallow_scaffold(&mut self.projected.tree, &b, &mut reparented);
+                        new_children.push(Child::Block(b.id));
                         scaffolded.push(b);
                     }
                 }
@@ -902,10 +1051,12 @@ impl ProjectedState {
         }
         // Forget any direct block the rule dropped (and its whole subtree). The
         // shallow proxy carries no descendants, so the normalize sink can't see this
-        // loss; count the dropped subtree's real dots directly from the live tree.
+        // loss; count the dropped subtree's real dots directly from the live tree. A
+        // block a scaffold reparented is preserved, not dropped.
+        after.extend(reparented.iter().copied());
         let dropped: Vec<Dot> = before.difference(&after).copied().collect();
         for d in dropped {
-            self.drop_stats += self.subtree_real_dots(d).len() as u64;
+            stats.drops += self.subtree_real_dots(d).len() as u64;
             let mut sub = Vec::new();
             if let Some(b) = self.projected.tree.get(d) {
                 collect_subtree_nodes(&self.projected.tree, b, &mut sub);
@@ -1351,12 +1502,13 @@ impl ProjectedState {
             })
         };
         if count >= 64 {
-            // Stream the visible sequence once, tracking block boundaries by their markers
-            // so a whole-doc span costs O(covered) cheap pushes + O(blocks) `block_of`
-            // lookups, not one imbl `block_of` per covered leaf. An inline leaf inherits the
-            // block opened by the last marker (resolved once per block from its first leaf);
-            // a block-level atom (a leaf of Root, arriving with no marker) resolves directly.
-            let mut cur: Option<usize> = None;
+            // Stream the visible sequence once, resolving each covered leaf to its block.
+            // Under total projection an inline run can be SPLIT across synthetic scaffold
+            // blocks (a mid-text PageBreak hoists its tail into new Paragraphs whose
+            // markers are not in the sequence), so a leaf cannot inherit the block of the
+            // last sequence marker — every covered leaf is attributed by its own
+            // `block_of`. The order invariant keeps each block's leaves contiguous, so
+            // `group_for` still yields one contiguous group per block.
             for (dot, item) in self
                 .seq
                 .iter_visible(&self.logs.seq)
@@ -1364,40 +1516,12 @@ impl ProjectedState {
                 .take(count)
             {
                 if matches!(item, SeqItem::Block { .. }) {
-                    cur = None;
                     continue;
                 }
-                let gi = if is_inline_leaf_item(item) {
-                    match cur {
-                        // Relies on: every visible inline leaf is indexed under the
-                        // block its run's first leaf resolved to — inline runs never
-                        // straddle a block boundary without a marker between them. It
-                        // further relies on the tail-drop invariant: visible-but-tree-
-                        // dropped ghosts (a mid-text PageBreak's truncated tail; orphan
-                        // leaves of a dropped block whose marker is invisible) only ever
-                        // occur as a marker run's TAIL, so they append AFTER a group's
-                        // real covered leaves — where `apply_range`'s clamping
-                        // (`find_by_offset → None`) and the singleton
-                        // `leaves[start_ord - lo]` indexing stay aligned. A future
-                        // normalization that dropped a MIDDLE leaf would break this
-                        // branch's ghost-adjacent attribution.
-                        Some(g) => g,
-                        None => {
-                            let Some(block) = self.indexes.paths.block_of(dot) else {
-                                continue;
-                            };
-                            let g = group_for(block, &mut groups);
-                            cur = Some(g);
-                            g
-                        }
-                    }
-                } else {
-                    cur = None;
-                    let Some(block) = self.indexes.paths.block_of(dot) else {
-                        continue;
-                    };
-                    group_for(block, &mut groups)
+                let Some(block) = self.indexes.paths.block_of(dot) else {
+                    continue;
                 };
+                let gi = group_for(block, &mut groups);
                 groups[gi].1.push(dot);
             }
         } else {
@@ -1500,6 +1624,13 @@ impl ProjectedState {
                 return false;
             }
         };
+        // A synthetic (hoist/scaffold-derived) block's sequence boundaries are set by
+        // normalization's SPLIT, not by a contiguous authored run, so extending it with
+        // an incremental splice can group content differently than a full reprojection
+        // would. Reproject the window instead so the grouping stays consistent.
+        if block.is_synthetic() {
+            return false;
+        }
         // Splice incrementally only when no normalization can be triggered: the new
         // leaf must be freely-repeatable content of its block, and (for a mid-block
         // insert) so must its left neighbor — otherwise the splice could place
@@ -1767,6 +1898,12 @@ impl ProjectedState {
             let Some(b) = self.indexes.paths.block_of(t) else {
                 return false;
             };
+            // A synthetic (hoist/scaffold-derived) block's boundaries come from
+            // normalization's SPLIT; removing a leaf from it can change how the
+            // surrounding run regroups. Reproject the window so it matches cold.
+            if b.is_synthetic() {
+                return false;
+            }
             if !self.is_inline_leaf(t) {
                 return false;
             }
@@ -1977,18 +2114,17 @@ impl ProjectedState {
         &self.projected
     }
 
-    /// Real op dots dropped from the tree (projection-hidden zombies) since the last
-    /// call, resetting the running total to zero.
-    pub fn take_drop_stats(&mut self) -> u64 {
-        std::mem::take(&mut self.drop_stats)
+    /// Repair stats accumulated since the last call, resetting the running total.
+    pub fn take_repair_stats(&mut self) -> RepairStats {
+        std::mem::take(&mut self.repair_stats)
     }
 
-    /// Peeks the running drop-stats total without draining it. `take_drop_stats`
+    /// Peeks the running repair stats without draining them. `take_repair_stats`
     /// requires `&mut self`, which forces an `Arc` copy-on-write clone whenever the
     /// projected state is shared (e.g. `View`'s layout-cache snapshot); callers on a
     /// hot, usually-empty path should check this first and skip the mutable call.
-    pub fn drop_stats(&self) -> u64 {
-        self.drop_stats
+    pub fn repair_stats(&self) -> RepairStats {
+        self.repair_stats
     }
 
     pub fn graph(&self) -> &OpGraph<EditOp> {
@@ -2125,6 +2261,23 @@ impl ProjectedState {
         self.seq
             .resolve_boundary(dot, Bias::Before)
             .map(|b| b.position)
+    }
+
+    /// The tree-parent chain a block/block-atom marker was authored under, read from
+    /// the sequence log (the authoritative projection source). Tombstone-safe — keyed
+    /// by dot, not visible position. Empty for a synthetic dot, a non-structural item,
+    /// or an unknown dot.
+    fn marker_parents(&self, dot: Dot) -> Vec<Dot> {
+        let Some(&lv) = self.logs.seq.lv_of.get(&dot) else {
+            return Vec::new();
+        };
+        match &self.logs.seq.entries[lv].op {
+            ListOp::Ins {
+                item: SeqItem::Block { parents, .. } | SeqItem::BlockAtom { parents, .. },
+                ..
+            } => parents.clone(),
+            _ => Vec::new(),
+        }
     }
 
     pub fn seq_boundary_pos(&self, dot: Dot, bias: Bias) -> Option<usize> {
@@ -2491,6 +2644,36 @@ mod tests {
         })
     }
 
+    /// Real (non-synthetic) dots reachable from Root by walking the projected tree's
+    /// child references — the structural truth a totality check enforces. A block whose
+    /// id is only referenced but whose node is absent (a dangling reference) is not
+    /// counted, so an orphaned leaf under it is likewise absent here.
+    fn reachable_real_dots(doc: &ProjectedDoc) -> HashSet<Dot> {
+        let mut out = HashSet::new();
+        let mut stack: Vec<Dot> = vec![doc.tree.root];
+        while let Some(id) = stack.pop() {
+            let Some(node) = doc.tree.get(id) else {
+                continue;
+            };
+            for c in node.children.iter() {
+                match c {
+                    Child::Leaf { id, .. } => {
+                        if !id.is_synthetic() {
+                            out.insert(*id);
+                        }
+                    }
+                    Child::Block(id) => {
+                        if !id.is_synthetic() {
+                            out.insert(*id);
+                        }
+                        stack.push(*id);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     #[test]
     fn char_insert_marks_owning_block_content() {
         let mut ps = ProjectedState::empty();
@@ -2679,6 +2862,69 @@ mod tests {
                 .eff
                 .get(&ModifierType::Bold),
             Some(&Modifier::Bold)
+        );
+    }
+
+    #[test]
+    fn from_graph_with_overlay_drops_dot_and_rebases_following_span_anchor() {
+        let mut ps = ProjectedState::empty();
+        let a = ps.apply(seq_char(1, 'a')).unwrap().id;
+        let b = ps.apply(seq_char(2, 'b')).unwrap().id;
+        let c = ps.apply(seq_char(3, 'c')).unwrap().id;
+        ps.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: a,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: c,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        ps.commit();
+        let graph = ps.graph().clone();
+
+        let full = ProjectedState::from_graph_with_overlay(graph.clone(), &[]).unwrap();
+        assert_eq!(
+            full.view()
+                .root()
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .inline_text(),
+            "abc"
+        );
+
+        let overlaid = ProjectedState::from_graph_with_overlay(graph, &[b]).unwrap();
+        let view = overlaid.view();
+        assert_eq!(
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap()
+                .inline_text(),
+            "ac",
+            "the overlay dot is removed from the tree"
+        );
+        assert_eq!(
+            view.leaf_state_by_dot_slow(a)
+                .unwrap()
+                .eff
+                .get(&ModifierType::Bold),
+            Some(&Modifier::Bold),
+            "the anchor before the overlay keeps its span"
+        );
+        assert_eq!(
+            view.leaf_state_by_dot_slow(c)
+                .unwrap()
+                .eff
+                .get(&ModifierType::Bold),
+            Some(&Modifier::Bold),
+            "the anchor after the overlay is re-based, not drifted off the covered char"
         );
     }
 
@@ -3121,6 +3367,74 @@ mod tests {
         }
     }
 
+    // Structural edits — paragraphs, blockquotes, blockquote-nested paragraphs, and
+    // range deletes — that force window reprojection, hoist-join, and boundary
+    // reparenting (a delete removing the top-level content between a blockquote and
+    // its orphaned nested paragraphs re-opens the blockquote, pulling them back in).
+    // The incrementally maintained projection must equal a cold rebuild over the same
+    // op history. `arb_seq_script` above only chars/deletes, so this whole class went
+    // unexercised until the reparent regression forced a hand-written script.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 192, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn warm_apply_nested_structural_matches_cold(
+            script in proptest::collection::vec(
+                (
+                    proptest::prelude::any::<u8>(),
+                    proptest::prelude::any::<u8>(),
+                    proptest::prelude::any::<u8>(),
+                ),
+                0..24,
+            ),
+        ) {
+            let root = Dot::ROOT;
+            let mut warm = ProjectedState::empty();
+            let mut count = 1usize;
+            let mut bqs: Vec<Dot> = Vec::new();
+            for (kind, a, b) in script {
+                let a = a as usize;
+                let b = b as usize;
+                match kind % 12 {
+                    0..=5 => {
+                        let pos = 1 + a % count;
+                        warm.apply(seq_char(pos, 'a')).unwrap();
+                        count += 1;
+                    }
+                    6..=7 => {
+                        let pos = a % (count + 1);
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![root])).unwrap();
+                        count += 1;
+                    }
+                    8 => {
+                        let pos = a % (count + 1);
+                        let d = warm
+                            .apply(seq_block(pos, NodeType::Blockquote, vec![root]))
+                            .unwrap()
+                            .id;
+                        bqs.push(d);
+                        count += 1;
+                    }
+                    9..=10 if !bqs.is_empty() => {
+                        let bq = bqs[a % bqs.len()];
+                        let pos = 1 + a % count;
+                        warm.apply(seq_block(pos, NodeType::Paragraph, vec![root, bq])).unwrap();
+                        count += 1;
+                    }
+                    _ if count > 1 => {
+                        let pos = 1 + a % (count - 1);
+                        let len = 1 + b % (count - pos);
+                        warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                        count -= len;
+                    }
+                    _ => {}
+                }
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+    }
+
     // Receiving a remote changeset projects each op incrementally (no whole-doc
     // reprojection per sync batch); the merged state must equal the cold rebuild.
     proptest::proptest! {
@@ -3358,11 +3672,11 @@ mod tests {
     // the first block and leaves the second block unspanned — caught here by both
     // the cold-equality check and `assert_seg_index_matches_logs`.
     #[test]
-    fn whole_range_span_over_ghost_region_and_second_block_matches_cold() {
+    fn whole_range_span_over_split_region_and_second_block_matches_cold() {
         use editor_model::AtomLeaf;
 
         let mut warm = ProjectedState::empty();
-        // Block 1 head that survives truncation: 4 chars at 1..=4.
+        // Block 1 head: 4 chars at 1..=4.
         let mut head: Vec<Dot> = Vec::new();
         for i in 0..4u8 {
             let d = warm
@@ -3371,20 +3685,19 @@ mod tests {
                 .id;
             head.push(d);
         }
-        // Block 1 trailing run that becomes ghosts once truncated: 8 chars at 5..=12.
+        // Block 1 trailing run: 8 chars at 5..=12.
         for i in 0..8u8 {
             warm.apply(seq_char(5 + i as usize, char::from(b'a' + i)))
                 .unwrap();
         }
-        // Truncate block 1 with a mid-text PageBreak right after the head — the 8
-        // trailing chars drop from the tree, surviving only as sequence ghosts.
+        // Split block 1 with a mid-text PageBreak right after the head — under total
+        // projection the 8 trailing chars are SPLIT-HOISTed into following Paragraphs
+        // (not dropped), so block 1 keeps only its 4-char head.
         warm.apply(EditOp::Seq(ListOp::Ins {
             pos: 5,
             item: SeqItem::Atom(AtomLeaf::PageBreak),
         }))
         .unwrap();
-        // Guard the geometry: block 1 keeps only its 4-char head (the PageBreak is
-        // an atom, not text), the 8 tail chars are ghosts still live in the sequence.
         let p1_text = warm
             .view()
             .root()
@@ -3395,10 +3708,10 @@ mod tests {
             .inline_text();
         assert_eq!(
             p1_text, "abcd",
-            "expected a ghost region: only the head in tree"
+            "block 1 keeps only its head before the split"
         );
 
-        // Second block appended AFTER the ghost tail, then filled so a whole-range
+        // Second block appended AFTER the split region, then filled so a whole-range
         // span covers >= 64 visible positions.
         let p2_pos = warm.seq.visible_len();
         warm.apply(seq_block(p2_pos, NodeType::Paragraph, vec![Dot::ROOT]))
@@ -3412,10 +3725,9 @@ mod tests {
                 .id;
             p2.push(d);
         }
-        assert_eq!(
-            warm.view().root().unwrap().child_blocks().count(),
-            2,
-            "expected two top-level blocks around the ghost region"
+        assert!(
+            warm.view().root().unwrap().child_blocks().count() >= 2,
+            "the split region and the second block are multiple top-level blocks"
         );
 
         let first = *head.first().unwrap();
@@ -3452,7 +3764,7 @@ mod tests {
         assert_eq!(
             warm.projected(),
             cold.projected(),
-            "diverged from cold rebuild over the ghost region"
+            "diverged from cold rebuild over the split region"
         );
         warm.assert_seg_index_matches_logs();
     }
@@ -4299,6 +4611,192 @@ mod tests {
     }
 
     #[test]
+    fn incremental_window_reprojection_reports_no_totality_violation() {
+        // Drive the incremental window-splice path (a nested block split, then a delete
+        // spanning it) and confirm the shared totality predicate — wired into that
+        // path, not just the full projection — charges nothing. The cold cross-check
+        // proves the window really rebuilt the whole document, so the zero is earned.
+        let mut state = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let bq = state
+            .apply(seq_block(1, NodeType::Blockquote, vec![root]))
+            .unwrap()
+            .id;
+        state
+            .apply(seq_block(2, NodeType::Paragraph, vec![root, bq]))
+            .unwrap();
+        for (i, ch) in ['a', 'b', 'c', 'd'].iter().enumerate() {
+            state.apply(seq_char(3 + i, *ch)).unwrap();
+        }
+        state
+            .apply(seq_block(5, NodeType::Paragraph, vec![root, bq]))
+            .unwrap();
+        state
+            .apply(EditOp::Seq(ListOp::Del { pos: 3, len: 3 }))
+            .unwrap();
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
+        assert_eq!(
+            state.take_repair_stats().totality_violations,
+            0,
+            "the incremental window path places every visible element"
+        );
+    }
+
+    // Regression: after a Blockquote gains nested `[root, blockquote]` paragraphs and a
+    // range delete removes the top-level paragraph separating them, the localized window
+    // must extend over the following nested paragraphs (they reparent back into the now
+    // re-opened Blockquote) so the incremental result matches a cold rebuild instead of
+    // stranding one at Root. The deterministic `(kind, a, b)` script drives the exact
+    // interleaving that first exposed the window-boundary shortfall.
+    #[test]
+    fn nested_blockquote_delete_reparents_paragraph_diverging_from_cold() {
+        let root = Dot::ROOT;
+        let mut warm = ProjectedState::empty();
+        let mut count = 1usize;
+        let mut bqs: Vec<Dot> = Vec::new();
+        let script: [(u8, usize, usize); 13] = [
+            (0, 0, 0),
+            (8, 17, 0),
+            (9, 2, 0),
+            (0, 0, 0),
+            (9, 148, 0),
+            (6, 146, 0),
+            (0, 42, 0),
+            (6, 104, 0),
+            (0, 140, 0),
+            (0, 0, 0),
+            (11, 135, 25),
+            (0, 0, 0),
+            (0, 107, 0),
+        ];
+        for (kind, a, b) in script {
+            match kind {
+                0..=5 => {
+                    let pos = 1 + a % count;
+                    warm.apply(seq_char(pos, 'a')).unwrap();
+                    count += 1;
+                }
+                6..=7 => {
+                    let pos = a % (count + 1);
+                    warm.apply(seq_block(pos, NodeType::Paragraph, vec![root]))
+                        .unwrap();
+                    count += 1;
+                }
+                8 => {
+                    let pos = a % (count + 1);
+                    let d = warm
+                        .apply(seq_block(pos, NodeType::Blockquote, vec![root]))
+                        .unwrap()
+                        .id;
+                    bqs.push(d);
+                    count += 1;
+                }
+                9..=10 if !bqs.is_empty() => {
+                    let bq = bqs[a % bqs.len()];
+                    let pos = 1 + a % count;
+                    warm.apply(seq_block(pos, NodeType::Paragraph, vec![root, bq]))
+                        .unwrap();
+                    count += 1;
+                }
+                _ if count > 1 => {
+                    let pos = 1 + a % (count - 1);
+                    let len = 1 + b % (count - pos);
+                    warm.apply(EditOp::Seq(ListOp::Del { pos, len })).unwrap();
+                    count -= len;
+                }
+                _ => {}
+            }
+        }
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(warm.projected(), cold.projected());
+    }
+
+    // Merge gate: a zombie-bearing history built purely cold, then a single
+    // incremental `apply` adjacent to the zombie. A mid-paragraph PageBreak
+    // SPLIT-HOISTs the trailing "bcde" run into synthetic scaffold paragraphs —
+    // visible in the sequence, restructured in the tree. Rebuilding the base with
+    // `from_graph` gives the incremental step no prior warm structure to lean on; the
+    // real apply path (graph + projection, not `apply_warm_only`) must then converge
+    // to a cold rebuild of the resulting graph rather than regrouping the split.
+    #[test]
+    fn incremental_apply_matches_cold_rebuild_with_zombie_history() {
+        use editor_model::AtomLeaf;
+        let mut authored = ProjectedState::empty();
+        for (i, ch) in ['a', 'b', 'c', 'd', 'e'].iter().enumerate() {
+            authored.apply(seq_char(1 + i, *ch)).unwrap();
+        }
+        authored
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::Atom(AtomLeaf::PageBreak),
+            }))
+            .unwrap();
+        let mut incremental = ProjectedState::from_graph(authored.graph().clone()).unwrap();
+        incremental.apply(seq_char(5, 'Z')).unwrap();
+        let full = ProjectedState::from_graph(incremental.graph().clone()).unwrap();
+        assert_eq!(incremental.projected(), full.projected());
+    }
+
+    // Regression (warm path): a reversed `Fold` — its `FoldContent` marker precedes
+    // its `FoldTitle` in the sequence — is built cold, then a single incremental
+    // `apply` inserts a Root-level Paragraph after it. That window reprojection
+    // SPLIT-HOISTs the container-internal `FoldTitle` (holding 't') to Root, where the
+    // Root content rule WRAPs it into a scaffold Fold. The shallow reconcile must
+    // reparent the *existing* real `FoldTitle` by id — not clobber it with the empty
+    // proxy nor forget it — or 't' is orphaned from the tree while a cold rebuild
+    // keeps it. Asserts the reparent path runs to convergence and loses no dot. This
+    // is the sole test that drives `graft_shallow_scaffold`'s reparent branch through
+    // the ProjectedState warm path (the editor-transaction reversed-Fold tests assert
+    // index-based preservation, which passes even when the block is tree-orphaned).
+    #[test]
+    fn incremental_insert_after_reversed_fold_preserves_hoisted_title_text() {
+        let root = Dot::ROOT;
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        let fold = g
+            .add_mut(seq_block(0, NodeType::Fold, vec![root]))
+            .unwrap()
+            .id;
+        let content = g
+            .add_mut(seq_block(1, NodeType::FoldContent, vec![root, fold]))
+            .unwrap()
+            .id;
+        g.add_mut(seq_block(2, NodeType::Paragraph, vec![root, fold, content]))
+            .unwrap();
+        let title = g
+            .add_mut(seq_block(3, NodeType::FoldTitle, vec![root, fold]))
+            .unwrap()
+            .id;
+        let t = g.add_mut(seq_char(4, 't')).unwrap().id;
+
+        let mut warm = ProjectedState::from_graph(g).unwrap();
+        // Cold base keeps the whole reversed Fold reachable — the 't' included.
+        assert!(
+            reachable_real_dots(warm.projected()).contains(&t),
+            "cold base keeps the reversed FoldTitle's text"
+        );
+
+        // One incremental Root-level insert after the Fold — drives the window
+        // reprojection whose hoist + shallow WRAP formerly orphaned 't'.
+        warm.apply(seq_block(5, NodeType::Paragraph, vec![root]))
+            .unwrap();
+
+        let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
+        assert_eq!(
+            warm.projected(),
+            cold.projected(),
+            "incremental reparent of the hoisted FoldTitle converges to a cold rebuild"
+        );
+        let warm_reach = reachable_real_dots(warm.projected());
+        for d in [fold, content, title, t] {
+            assert!(
+                warm_reach.contains(&d),
+                "{d:?} stays reachable in the warm tree (no orphan)"
+            );
+        }
+    }
+
+    #[test]
     fn accessor_smoke_block_modifier_span() {
         use editor_model::{Anchor, Bias, ModifierAttrOp, SpanOp};
 
@@ -4611,5 +5109,851 @@ mod tests {
             .unwrap();
         let cold = ProjectedState::from_graph(warm.graph().clone()).unwrap();
         assert_eq!(warm.projected(), cold.projected());
+    }
+
+    // ---- Property oracles: the design's invariants, machine-checked over an
+    // adversarial causal-script generator. Each op is a single-actor `add_mut`, so
+    // clocks stay dense and positions stay in range; the projection parents chain
+    // (not the CRDT causal parents) carries the injected damage.
+
+    type CausalStep = (u8, u8, u8, u8);
+
+    fn adversarial_block_type(y: usize) -> NodeType {
+        match y % 6 {
+            0 => NodeType::Paragraph,
+            1 => NodeType::FoldTitle,
+            2 => NodeType::ListItem,
+            3 => NodeType::TableCell,
+            4 => NodeType::FoldContent,
+            _ => NodeType::TableRow,
+        }
+    }
+
+    // Interpret `steps` into an `OpGraph`. `adversarial == false` seeds an immortal
+    // leading Paragraph and restricts moves to char/marker Ins (pos >= 1), Del
+    // (pos >= 1) and Undel, so nothing is ever orphaned at Root — a clean history
+    // that projects with zero repairs. `adversarial == true` injects dead-parent
+    // markers, marker-boundary chars, reversed/duplicate fixed slots, ListItem
+    // surplus, nested Table, PageBreak inside a Blockquote and classless Unknown.
+    fn build_causal_script(steps: &[CausalStep], adversarial: bool) -> OpGraph<EditOp> {
+        let root = Dot::ROOT;
+        let ghost = Dot::new(9, 999);
+        let alphabet = ['a', 'b', 'c', 'd'];
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        let mut count: usize = 0;
+        let mut blocks: Vec<Dot> = Vec::new();
+        let mut containers: Vec<Dot> = Vec::new();
+        let mut dels: Vec<(Dot, usize)> = Vec::new();
+
+        if !adversarial {
+            g.add_mut(seq_block(0, NodeType::Paragraph, vec![root]))
+                .unwrap();
+            count = 1;
+        }
+
+        // Clean-only: trailing run of freely-deletable chars (reset by any marker), so a
+        // delete never removes a block marker and orphans a container child.
+        let mut tail_chars: usize = 0;
+
+        for &(op, x, y, z) in steps {
+            let x = x as usize;
+            let y = y as usize;
+            let ch = alphabet[x % alphabet.len()];
+
+            if !adversarial {
+                match op % 6 {
+                    0 | 1 => {
+                        g.add_mut(seq_char(count, ch)).unwrap();
+                        count += 1;
+                        tail_chars += 1;
+                    }
+                    2 => {
+                        g.add_mut(seq_block(count, NodeType::Paragraph, vec![root]))
+                            .unwrap();
+                        count += 1;
+                        tail_chars = 0;
+                    }
+                    3 => {
+                        // Well-formed Fold: Title, Content[Paragraph] — schema order.
+                        let fold = g
+                            .add_mut(seq_block(count, NodeType::Fold, vec![root]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        g.add_mut(seq_block(count, NodeType::FoldTitle, vec![root, fold]))
+                            .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, ch)).unwrap();
+                        count += 1;
+                        let content = g
+                            .add_mut(seq_block(count, NodeType::FoldContent, vec![root, fold]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        g.add_mut(seq_block(
+                            count,
+                            NodeType::Paragraph,
+                            vec![root, fold, content],
+                        ))
+                        .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, ch)).unwrap();
+                        count += 1;
+                        tail_chars = 0;
+                    }
+                    4 => {
+                        // Well-formed BulletList/OrderedList: ListItem[Paragraph].
+                        let list_ty = if y & 1 == 0 {
+                            NodeType::BulletList
+                        } else {
+                            NodeType::OrderedList
+                        };
+                        let list = g.add_mut(seq_block(count, list_ty, vec![root])).unwrap().id;
+                        count += 1;
+                        let item = g
+                            .add_mut(seq_block(count, NodeType::ListItem, vec![root, list]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        g.add_mut(seq_block(
+                            count,
+                            NodeType::Paragraph,
+                            vec![root, list, item],
+                        ))
+                        .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, ch)).unwrap();
+                        count += 1;
+                        tail_chars = 0;
+                    }
+                    5 if z & 1 == 0 => {
+                        // Well-formed Table: Row[Cell[Paragraph]].
+                        let table = g
+                            .add_mut(seq_block(count, NodeType::Table, vec![root]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        let row = g
+                            .add_mut(seq_block(count, NodeType::TableRow, vec![root, table]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        let cell = g
+                            .add_mut(seq_block(
+                                count,
+                                NodeType::TableCell,
+                                vec![root, table, row],
+                            ))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        g.add_mut(seq_block(
+                            count,
+                            NodeType::Paragraph,
+                            vec![root, table, row, cell],
+                        ))
+                        .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, ch)).unwrap();
+                        count += 1;
+                        tail_chars = 0;
+                    }
+                    _ => {
+                        if tail_chars > 0 {
+                            let d = 1 + y % tail_chars;
+                            let pos = count - d;
+                            let del = g
+                                .add_mut(EditOp::Seq(ListOp::Del { pos, len: d }))
+                                .unwrap()
+                                .id;
+                            dels.push((del, d));
+                            count -= d;
+                            tail_chars -= d;
+                        } else if let Some((del, len)) = dels.pop() {
+                            g.add_mut(EditOp::Seq(ListOp::Undel { del })).unwrap();
+                            count += len;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            match op % 16 {
+                0..=2 => {
+                    let pos = x % (count + 1);
+                    g.add_mut(seq_char(pos, ch)).unwrap();
+                    count += 1;
+                }
+                3 => {
+                    let pos = x % (count + 1);
+                    let d = g
+                        .add_mut(seq_block(pos, NodeType::Paragraph, vec![root]))
+                        .unwrap()
+                        .id;
+                    blocks.push(d);
+                    count += 1;
+                }
+                4 => {
+                    let pos = x % (count + 1);
+                    let d = g
+                        .add_mut(seq_block(pos, NodeType::Blockquote, vec![root]))
+                        .unwrap()
+                        .id;
+                    blocks.push(d);
+                    containers.push(d);
+                    count += 1;
+                }
+                5 => {
+                    let parent = if !containers.is_empty() {
+                        containers[x % containers.len()]
+                    } else if !blocks.is_empty() {
+                        blocks[x % blocks.len()]
+                    } else {
+                        root
+                    };
+                    let chain = if parent == root {
+                        vec![root]
+                    } else {
+                        vec![root, parent]
+                    };
+                    let pos = x % (count + 1);
+                    let d = g
+                        .add_mut(seq_block(pos, NodeType::Paragraph, chain))
+                        .unwrap()
+                        .id;
+                    blocks.push(d);
+                    count += 1;
+                }
+                6 => {
+                    if count > 1 {
+                        let pos = 1 + x % (count - 1);
+                        let len = 1 + y % (count - pos);
+                        let d = g.add_mut(EditOp::Seq(ListOp::Del { pos, len })).unwrap().id;
+                        dels.push((d, len));
+                        count -= len;
+                    }
+                }
+                7 => {
+                    if let Some((d, len)) = dels.pop() {
+                        g.add_mut(EditOp::Seq(ListOp::Undel { del: d })).unwrap();
+                        count += len;
+                    }
+                }
+                8 => {
+                    let pos = x % (count + 1);
+                    let nt = adversarial_block_type(y);
+                    let d = g.add_mut(seq_block(pos, nt, vec![root, ghost])).unwrap().id;
+                    blocks.push(d);
+                    count += 1;
+                }
+                9 => {
+                    let pos = x % (count + 1);
+                    let d = g
+                        .add_mut(seq_block(pos, NodeType::Unknown, vec![root]))
+                        .unwrap()
+                        .id;
+                    blocks.push(d);
+                    count += 1;
+                }
+                10 => {
+                    let pos = x % (count + 1);
+                    let leaf = match y % 3 {
+                        0 => AtomLeaf::HardBreak,
+                        1 => AtomLeaf::Tab,
+                        _ => AtomLeaf::PageBreak,
+                    };
+                    g.add_mut(EditOp::Seq(ListOp::Ins {
+                        pos,
+                        item: SeqItem::Atom(leaf),
+                    }))
+                    .unwrap();
+                    count += 1;
+                }
+                11 => {
+                    let fold = g
+                        .add_mut(seq_block(count, NodeType::Fold, vec![root]))
+                        .unwrap()
+                        .id;
+                    count += 1;
+                    if y & 1 == 1 {
+                        let c = g
+                            .add_mut(seq_block(count, NodeType::FoldContent, vec![root, fold]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        g.add_mut(seq_block(count, NodeType::Paragraph, vec![root, fold, c]))
+                            .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, 'f')).unwrap();
+                        count += 1;
+                        g.add_mut(seq_block(count, NodeType::FoldTitle, vec![root, fold]))
+                            .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, 't')).unwrap();
+                        count += 1;
+                    } else {
+                        g.add_mut(seq_block(count, NodeType::FoldTitle, vec![root, fold]))
+                            .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, 't')).unwrap();
+                        count += 1;
+                        if z & 1 == 1 {
+                            g.add_mut(seq_block(count, NodeType::FoldTitle, vec![root, fold]))
+                                .unwrap();
+                            count += 1;
+                            g.add_mut(seq_char(count, 'u')).unwrap();
+                            count += 1;
+                        }
+                        let c = g
+                            .add_mut(seq_block(count, NodeType::FoldContent, vec![root, fold]))
+                            .unwrap()
+                            .id;
+                        count += 1;
+                        g.add_mut(seq_block(count, NodeType::Paragraph, vec![root, fold, c]))
+                            .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, 'f')).unwrap();
+                        count += 1;
+                    }
+                    blocks.push(fold);
+                }
+                12 => {
+                    let list_ty = if y & 1 == 0 {
+                        NodeType::BulletList
+                    } else {
+                        NodeType::OrderedList
+                    };
+                    let list = g.add_mut(seq_block(count, list_ty, vec![root])).unwrap().id;
+                    count += 1;
+                    let item = g
+                        .add_mut(seq_block(count, NodeType::ListItem, vec![root, list]))
+                        .unwrap()
+                        .id;
+                    count += 1;
+                    g.add_mut(seq_block(
+                        count,
+                        NodeType::Paragraph,
+                        vec![root, list, item],
+                    ))
+                    .unwrap();
+                    count += 1;
+                    g.add_mut(seq_char(count, 'l')).unwrap();
+                    count += 1;
+                    if z & 1 == 1 {
+                        g.add_mut(seq_block(
+                            count,
+                            NodeType::Paragraph,
+                            vec![root, list, item],
+                        ))
+                        .unwrap();
+                        count += 1;
+                        g.add_mut(seq_char(count, 'm')).unwrap();
+                        count += 1;
+                    }
+                    blocks.push(list);
+                }
+                13 => {
+                    let table = g
+                        .add_mut(seq_block(count, NodeType::Table, vec![root]))
+                        .unwrap()
+                        .id;
+                    count += 1;
+                    let row = g
+                        .add_mut(seq_block(count, NodeType::TableRow, vec![root, table]))
+                        .unwrap()
+                        .id;
+                    count += 1;
+                    let cell = g
+                        .add_mut(seq_block(
+                            count,
+                            NodeType::TableCell,
+                            vec![root, table, row],
+                        ))
+                        .unwrap()
+                        .id;
+                    count += 1;
+                    g.add_mut(seq_block(
+                        count,
+                        NodeType::Paragraph,
+                        vec![root, table, row, cell],
+                    ))
+                    .unwrap();
+                    count += 1;
+                    g.add_mut(seq_char(count, 'x')).unwrap();
+                    count += 1;
+                    if z & 1 == 1 {
+                        g.add_mut(seq_block(
+                            count,
+                            NodeType::Table,
+                            vec![root, table, row, cell],
+                        ))
+                        .unwrap();
+                        count += 1;
+                    }
+                    blocks.push(table);
+                }
+                14 => {
+                    let bq = g
+                        .add_mut(seq_block(count, NodeType::Blockquote, vec![root]))
+                        .unwrap()
+                        .id;
+                    count += 1;
+                    g.add_mut(seq_block(count, NodeType::Paragraph, vec![root, bq]))
+                        .unwrap();
+                    count += 1;
+                    g.add_mut(seq_char(count, 'q')).unwrap();
+                    count += 1;
+                    g.add_mut(EditOp::Seq(ListOp::Ins {
+                        pos: count,
+                        item: SeqItem::Atom(AtomLeaf::PageBreak),
+                    }))
+                    .unwrap();
+                    count += 1;
+                    blocks.push(bq);
+                    containers.push(bq);
+                }
+                _ => {
+                    let parent = if blocks.is_empty() {
+                        root
+                    } else {
+                        blocks[x % blocks.len()]
+                    };
+                    let chain = if parent == root {
+                        vec![root]
+                    } else {
+                        vec![root, parent]
+                    };
+                    let pos = x % (count + 1);
+                    let d = g
+                        .add_mut(seq_block(pos, adversarial_block_type(y), chain))
+                        .unwrap()
+                        .id;
+                    blocks.push(d);
+                    count += 1;
+                }
+            }
+        }
+        g
+    }
+
+    fn arb_adversarial_css() -> impl proptest::strategy::Strategy<Value = Vec<CausalStep>> {
+        use proptest::prelude::*;
+        proptest::collection::vec((any::<u8>(), any::<u8>(), any::<u8>(), any::<u8>()), 0..40)
+    }
+
+    fn arb_clean_css() -> impl proptest::strategy::Strategy<Value = Vec<CausalStep>> {
+        use proptest::prelude::*;
+        proptest::collection::vec((any::<u8>(), any::<u8>(), any::<u8>(), any::<u8>()), 0..40)
+    }
+
+    // A single trailing edit for the incremental warm≡cold oracle: `(is_delete, a, b)`
+    // — a range delete or a char insert, positioned modulo the base's visible length.
+    fn arb_tail() -> impl proptest::strategy::Strategy<Value = (bool, u8, u8)> {
+        use proptest::prelude::*;
+        (any::<bool>(), any::<u8>(), any::<u8>())
+    }
+
+    // Real (op) dots present in the current visible sequence — the "every visible
+    // element" a total projection must reach.
+    fn visible_real_dots(state: &ProjectedState) -> HashSet<Dot> {
+        state
+            .seq
+            .snapshot(&state.logs.seq)
+            .into_iter()
+            .map(|(d, _)| d)
+            .collect()
+    }
+
+    // Real dots in document order — a child-ordered preorder walk of the projected
+    // tree (synthetic scaffolds descended through, not emitted).
+    fn preorder_real_dots(doc: &ProjectedDoc) -> Vec<Dot> {
+        fn walk(tree: &BlockTree, id: Dot, out: &mut Vec<Dot>) {
+            let Some(node) = tree.get(id) else {
+                return;
+            };
+            for c in node.children.iter() {
+                match c {
+                    Child::Leaf { id, .. } => {
+                        if !id.is_synthetic() {
+                            out.push(*id);
+                        }
+                    }
+                    Child::Block(id) => {
+                        if !id.is_synthetic() {
+                            out.push(*id);
+                        }
+                        walk(tree, *id, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&doc.tree, doc.tree.root, &mut out);
+        out
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
+
+        // Totality: the projection reaches every visible sequence element — the set
+        // difference `visible − reachable` is empty, and the instance's own
+        // set-difference tally agrees.
+        #[test]
+        fn projection_reaches_every_visible_op(css in arb_adversarial_css()) {
+            let state = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("adversarial history projects");
+            let visible = visible_real_dots(&state);
+            let reachable = reachable_real_dots(state.projected());
+            let missing: Vec<Dot> = visible.difference(&reachable).copied().collect();
+            proptest::prop_assert!(missing.is_empty(), "unreachable visible dots: {missing:?}");
+            proptest::prop_assert_eq!(state.projected().repair_stats.totality_violations, 0);
+        }
+
+        // Exact-once: no real dot is reached more than once in a document-order walk —
+        // a scaffold graft must never duplicate a real subtree. Set-based totality
+        // above collapses a duplicate, so this multiset invariant is a separate gate.
+        #[test]
+        fn projection_reaches_each_visible_op_at_most_once(css in arb_adversarial_css()) {
+            let state = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("adversarial history projects");
+            let preorder = preorder_real_dots(state.projected());
+            let uniq: HashSet<Dot> = preorder.iter().copied().collect();
+            proptest::prop_assert_eq!(
+                preorder.len(),
+                uniq.len(),
+                "a real dot is reached more than once: {:?}",
+                preorder
+            );
+        }
+
+        // Schema validity: a non-degraded projection is a schema-valid nested tree.
+        #[test]
+        fn projection_result_is_schema_valid(css in arb_adversarial_css()) {
+            let state = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("adversarial history projects");
+            proptest::prop_assert!(!state.projected().repair_stats.projection_degraded);
+            proptest::prop_assert!(
+                editor_model::validate_block_tree(&state.projected().tree).is_ok()
+            );
+        }
+
+        // Determinism: two independent cold projections of the same history agree.
+        #[test]
+        fn projection_is_deterministic(css in arb_adversarial_css()) {
+            let a = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("projects");
+            let b = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("projects");
+            proptest::prop_assert_eq!(a.projected(), b.projected());
+        }
+
+        // Order invariant: repair moves content but never reorders it. A document-order
+        // (preorder) walk of the projected tree's real dots visits them in visible
+        // sequence order — the reversed-Fold case SPLIT-wraps (Content stays before
+        // Title), it does not physically reorder. Stated as a subsequence so a
+        // duplicated scaffold graft (caught by
+        // `cold_projection_reaches_each_visible_op_exactly_once`) cannot mask a genuine
+        // reorder: the sequence must embed in the preorder in order.
+        #[test]
+        fn projection_preserves_real_dot_order(css in arb_adversarial_css()) {
+            let state = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("projects");
+            let sequence: Vec<Dot> = state
+                .seq
+                .snapshot(&state.logs.seq)
+                .into_iter()
+                .map(|(d, _)| d)
+                .collect();
+            let preorder = preorder_real_dots(state.projected());
+            let mut it = preorder.iter();
+            for want in &sequence {
+                let found = it.by_ref().any(|d| d == want);
+                proptest::prop_assert!(
+                    found,
+                    "sequence dot {:?} not reached in document order; preorder={:?} sequence={:?}",
+                    want,
+                    preorder,
+                    sequence
+                );
+            }
+        }
+
+        // Idempotence: re-normalizing the repaired RawTree is a fixed point. Kept in
+        // RawTree form — a BlockTree→flatten round-trip debug-asserts on the synthetic
+        // scaffold that repair-triggering input produces.
+        #[test]
+        fn normalize_is_idempotent(css in arb_adversarial_css()) {
+            let state = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("projects");
+            let elements = state.seq.snapshot(&state.logs.seq);
+            let once = editor_model::normalize(project_blocks(&elements).expect("blocks"));
+            let twice = editor_model::normalize(once.clone());
+            proptest::prop_assert_eq!(once, twice);
+        }
+
+        // Incremental warm≡cold oracle (LIVE gate): apply one edit onto an arbitrary
+        // adversarial cold base through the real `apply` path; the incrementally
+        // maintained projection must equal a cold rebuild of the resulting graph. The
+        // two window-reproject defects this oracle once surfaced — list-container
+        // regrouping (`incremental_apply_over_list_container_diverges_from_cold`) and a
+        // container-base totality loss (`incremental_apply_over_container_base_drops_visible_op`)
+        // — are fixed and pinned as deterministic regressions below, so this now runs as
+        // a gate rather than an ignored reproduction. It generalizes Task 5's live
+        // warm≡cold suite past Paragraph/Blockquote to every container-internal type.
+        #[test]
+        fn incremental_apply_equals_cold(css in arb_adversarial_css(), tail in arb_tail()) {
+            let mut warm = ProjectedState::from_graph(build_causal_script(&css, true))
+                .expect("adversarial base projects");
+            let (is_del, a, b) = tail;
+            let vis = warm.seq.visible_len();
+            let op = if is_del && vis > 1 {
+                let pos = 1 + (a as usize) % (vis - 1);
+                let len = 1 + (b as usize) % (vis - pos);
+                EditOp::Seq(ListOp::Del { pos, len })
+            } else {
+                seq_char((a as usize) % (vis + 1), 'z')
+            };
+            // Some adversarial edits are rejected by the create-time guard; those never
+            // reach projection, so skip rather than assert on an un-applied op.
+            if warm.apply(op).is_err() {
+                return Ok(());
+            }
+            let cold = ProjectedState::from_graph(warm.graph().clone())
+                .expect("cold rebuild projects");
+            proptest::prop_assert_eq!(warm.projected(), cold.projected());
+        }
+
+        // Repairs fire only on damage: a clean history reports no repair, no drop, no
+        // totality deficit, no degradation — read off the instance's ProjectedDoc, not
+        // a global counter.
+        #[test]
+        fn repairs_never_fire_on_clean_history(css in arb_clean_css()) {
+            let state = ProjectedState::from_graph(build_causal_script(&css, false))
+                .expect("clean history projects");
+            let stats = state.projected().repair_stats;
+            proptest::prop_assert_eq!(stats.repairs, 0, "clean history: {:?}", stats);
+            proptest::prop_assert_eq!(stats.drops, 0);
+            proptest::prop_assert_eq!(stats.totality_violations, 0);
+            proptest::prop_assert!(!stats.projection_degraded);
+        }
+
+        // Degraded path: even with the repair budget lowered so the cap latches, the
+        // unconditional totality check runs and finds every visible element.
+        #[test]
+        fn low_repair_budget_never_violates_totality(css in arb_adversarial_css()) {
+            let g = build_causal_script(&css, true);
+            let _guard = editor_model::override_repair_budget(1);
+            let state = ProjectedState::from_graph(g).expect("projects even when degraded");
+            let visible = visible_real_dots(&state);
+            let reachable = reachable_real_dots(state.projected());
+            let missing: Vec<Dot> = visible.difference(&reachable).copied().collect();
+            proptest::prop_assert!(missing.is_empty(), "degraded lost visible dots: {missing:?}");
+            proptest::prop_assert_eq!(state.projected().repair_stats.totality_violations, 0);
+        }
+    }
+
+    // Instrumentation (anti-vacuity): the adversarial generator actually emits the
+    // container-internal types (FoldTitle / FoldContent / ListItem / TableRow /
+    // TableCell) plus the other injected shapes — sweep the move space and collect
+    // every block/atom type that reaches the visible sequence.
+    #[test]
+    fn adversarial_generator_covers_container_internal_types() {
+        let mut seen: HashSet<NodeType> = HashSet::new();
+        for op in 0u8..16 {
+            for y in 0u8..2 {
+                for z in 0u8..2 {
+                    let steps: Vec<CausalStep> =
+                        (0..4).map(|i| (op, (i * 7) as u8, y, z)).collect();
+                    let g = build_causal_script(&steps, true);
+                    let state = ProjectedState::from_graph(g).expect("projects");
+                    for (_, item) in state.seq.snapshot(&state.logs.seq) {
+                        if let Some(t) = item.as_child_type() {
+                            seen.insert(t);
+                        }
+                    }
+                }
+            }
+        }
+        for required in [
+            NodeType::Fold,
+            NodeType::FoldTitle,
+            NodeType::FoldContent,
+            NodeType::BulletList,
+            NodeType::OrderedList,
+            NodeType::ListItem,
+            NodeType::Table,
+            NodeType::TableRow,
+            NodeType::TableCell,
+            NodeType::Blockquote,
+            NodeType::Unknown,
+            NodeType::PageBreak,
+        ] {
+            assert!(
+                seen.contains(&required),
+                "generator never emitted {required:?}"
+            );
+        }
+    }
+
+    // Degraded path (deterministic): a fixture that needs several WRAP/SPLIT repairs,
+    // projected once at full budget to confirm it does, then again with the budget
+    // lowered to 1 so the cap latches. Degraded downgrades only schema validity — the
+    // totality check still runs unconditionally and charges nothing.
+    #[test]
+    fn degraded_cap_projection_still_reaches_every_visible_op() {
+        let steps: [CausalStep; 5] = [
+            (11, 1, 1, 1),
+            (12, 1, 1, 1),
+            (8, 0, 1, 0),
+            (8, 0, 2, 0),
+            (15, 0, 3, 0),
+        ];
+        let full = ProjectedState::from_graph(build_causal_script(&steps, true))
+            .expect("fixture projects");
+        assert!(
+            full.projected().repair_stats.repairs >= 2,
+            "fixture must need multiple repairs to exercise the cap: {:?}",
+            full.projected().repair_stats
+        );
+        assert!(!full.projected().repair_stats.projection_degraded);
+
+        let g = build_causal_script(&steps, true);
+        let state = {
+            let _guard = editor_model::override_repair_budget(1);
+            ProjectedState::from_graph(g).expect("projects even when degraded")
+        };
+        let stats = state.projected().repair_stats;
+        assert!(
+            stats.projection_degraded,
+            "budget 1 latches the cap: {stats:?}"
+        );
+        assert_eq!(
+            stats.totality_violations, 0,
+            "degraded loses nothing: {stats:?}"
+        );
+        let visible = visible_real_dots(&state);
+        let reachable = reachable_real_dots(state.projected());
+        let missing: Vec<Dot> = visible.difference(&reachable).copied().collect();
+        assert!(
+            missing.is_empty(),
+            "degraded orphaned visible dots: {missing:?}"
+        );
+    }
+
+    // Regression for an incremental-vs-cold divergence on LIST containers. A document
+    // holding a BulletList takes a range delete that removes the BulletList marker,
+    // leaving a bare ListItem (with a surplus paragraph) as a Root-misfit. A cold
+    // rebuild wraps the ListItem in a BulletList first, so the surplus SPLIT-HOISTs into
+    // a second ListItem inside that list; the incremental window path formerly
+    // normalized the bare ListItem's content under `[Root]` first — hoisting the surplus
+    // one level too high, to Root — then wrapped only the ListItem, stranding the surplus
+    // as a Root sibling (warm 1 ListItem, cold 2; repairs 8 vs 9). Fixed by normalizing
+    // the whole window forest with the full-document Root algebra (WRAP before recurse),
+    // minus the document-global Root completion. Reproduces identically whether the base
+    // is built cold (`from_graph`) or entirely incrementally, so it was a genuine
+    // window-reproject defect, not a base-construction artifact.
+    #[test]
+    fn incremental_apply_over_list_container_diverges_from_cold() {
+        let css: [CausalStep; 10] = [
+            (0, 0, 0, 0),
+            (0, 0, 0, 0),
+            (15, 0, 0, 0),
+            (15, 0, 0, 0),
+            (0, 0, 0, 0),
+            (0, 0, 0, 0),
+            (140, 0, 0, 30),
+            (142, 0, 0, 0),
+            (143, 0, 0, 0),
+            (122, 73, 0, 0),
+        ];
+        let tail = EditOp::Seq(ListOp::Del { pos: 3, len: 5 });
+        let g = build_causal_script(&css, true);
+
+        // Cold-built base, then one incremental delete.
+        let mut warm_fg = ProjectedState::from_graph(g.clone()).unwrap();
+        warm_fg.apply(tail.clone()).unwrap();
+
+        // Entirely-incremental: replay every base op through `apply`, then the same tail.
+        let mut ops: Vec<Op<EditOp>> = g.iter_all().cloned().collect();
+        ops.sort_by_key(|o| o.id.clock);
+        let mut warm_inc = ProjectedState::from_graph(OpGraph::<EditOp>::with_actor(1)).unwrap();
+        for o in &ops {
+            warm_inc.apply(o.payload.clone()).unwrap();
+        }
+        warm_inc.apply(tail).unwrap();
+
+        // Both incremental constructions agree — the divergence is not a from_graph artifact.
+        assert_eq!(
+            warm_fg.projected(),
+            warm_inc.projected(),
+            "cold-base and entirely-incremental warm states agree"
+        );
+
+        let cold = ProjectedState::from_graph(warm_fg.graph().clone()).unwrap();
+        assert_eq!(warm_fg.projected(), cold.projected());
+    }
+
+    // Regression for a TOTALITY LOSS on the incremental apply path. A container-heavy
+    // adversarial base (Fold + BulletList + nested/injected blocks) takes a single
+    // incremental char insert; two visible chars formerly became unreachable from Root in
+    // the warm tree while a cold rebuild kept them — the window reproject stranded ops a
+    // cold rebuild keeps. An independent whole-document `visible − reachable` catches any
+    // stranded op (the window totality tripwire also panics on it in a debug build).
+    #[test]
+    fn incremental_apply_over_container_base_drops_visible_op() {
+        let css: [CausalStep; 12] = [
+            (0, 0, 0, 0),
+            (11, 0, 104, 1),
+            (140, 0, 0, 50),
+            (0, 3, 0, 0),
+            (30, 0, 0, 0),
+            (0, 22, 0, 0),
+            (10, 103, 0, 0),
+            (218, 2, 8, 0),
+            (0, 0, 0, 0),
+            (0, 0, 0, 0),
+            (110, 0, 0, 0),
+            (0, 0, 0, 0),
+        ];
+        let mut warm = ProjectedState::from_graph(build_causal_script(&css, true)).unwrap();
+        warm.apply(seq_char(11, 'a')).unwrap();
+        let visible = visible_real_dots(&warm);
+        let reachable = reachable_real_dots(warm.projected());
+        let missing: Vec<Dot> = visible.difference(&reachable).copied().collect();
+        assert!(
+            missing.is_empty(),
+            "incremental apply stranded visible dots: {missing:?}"
+        );
+    }
+
+    // Regression for a COLD-projection content DUPLICATION. For some adversarial list
+    // histories the cold projection formerly listed the same synthetic scaffold block (a
+    // BulletList's ListItem) twice in its parent's children; that scaffold holds real
+    // chars, so a document-order (preorder) walk reached those real dots twice. Set-based
+    // totality (`visible ⊆ reachable`) misses it — a duplicate collapses in a set — as do
+    // schema validation and cold determinism (both cold rebuilds duplicate identically),
+    // so this multiset exact-once invariant is a separate gate. Fixed by keying WRAP and
+    // SPLIT-tail scaffolds distinctly (the `split_tail` kind bit) so the same real
+    // content reaching both no longer collides to one id and grafts twice.
+    #[test]
+    fn cold_projection_reaches_each_visible_op_exactly_once() {
+        let css: [CausalStep; 8] = [
+            (184, 181, 173, 175),
+            (52, 43, 19, 241),
+            (30, 183, 200, 65),
+            (162, 31, 53, 105),
+            (95, 166, 50, 154),
+            (249, 36, 117, 209),
+            (222, 121, 193, 161),
+            (17, 121, 226, 12),
+        ];
+        let state = ProjectedState::from_graph(build_causal_script(&css, true)).unwrap();
+        let preorder = preorder_real_dots(state.projected());
+        let uniq: HashSet<Dot> = preorder.iter().copied().collect();
+        assert_eq!(
+            preorder.len(),
+            uniq.len(),
+            "a real dot is reached more than once: {preorder:?}"
+        );
     }
 }

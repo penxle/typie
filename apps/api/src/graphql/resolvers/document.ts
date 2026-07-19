@@ -35,6 +35,7 @@ import {
   DocumentReactions,
   Documents,
   DocumentStates,
+  DocumentSweeps,
   DocumentVersionContributors,
   DocumentVersions,
   Embeds,
@@ -61,6 +62,7 @@ import { pubsub } from '#/pubsub.ts';
 import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
 import { compressZstd, decompressZstd } from '#/utils/compression.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
+import { isSnapshotUsable } from '#/utils/document-state.ts';
 import { isPrivateVisibilityOnlyInput } from '#/utils/documents-option-policy.ts';
 import {
   buildFreshV2Content,
@@ -249,7 +251,11 @@ IDocument.implement({
           nullable: true,
           load: async (ids: string[]) => {
             return await db
-              .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
+              .select({
+                documentId: DocumentStates.documentId,
+                text: DocumentStates.text,
+                projectionDegraded: DocumentStates.projectionDegraded,
+              })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
           },
@@ -259,7 +265,7 @@ IDocument.implement({
         const state = await stateLoader.load(self.id);
 
         let text: string;
-        if (state) {
+        if (isSnapshotUsable(state)) {
           text = state.text.replaceAll(/\s+/g, ' ').trim();
         } else {
           const loader = ctx.loader({
@@ -409,12 +415,12 @@ Document.implement({
       type: 'JSON',
       resolve: async (self) => {
         const state = await db
-          .select({ json: DocumentStates.json })
+          .select({ json: DocumentStates.json, projectionDegraded: DocumentStates.projectionDegraded })
           .from(DocumentStates)
           .where(eq(DocumentStates.documentId, self.id))
           .then(first);
 
-        if (state) {
+        if (isSnapshotUsable(state)) {
           return extractPlainDocLayoutMode(state.json as PlainDoc);
         }
 
@@ -536,6 +542,16 @@ Document.implement({
       type: [DocumentHead],
       resolve: async (self) =>
         db.select().from(DocumentHeads).where(eq(DocumentHeads.documentId, self.id)).orderBy(desc(DocumentHeads.updatedAt)),
+    }),
+
+    sweepTombstones: t.stringList({
+      resolve: async (self) => {
+        const rows = await db
+          .select({ zombieDots: DocumentSweeps.zombieDots })
+          .from(DocumentSweeps)
+          .where(eq(DocumentSweeps.documentId, self.id));
+        return [...new Set(rows.flatMap((row) => row.zombieDots))];
+      },
     }),
   }),
 });
@@ -669,7 +685,11 @@ DocumentView.implement({
           nullable: true,
           load: async (ids: string[]) => {
             return await db
-              .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
+              .select({
+                documentId: DocumentStates.documentId,
+                text: DocumentStates.text,
+                projectionDegraded: DocumentStates.projectionDegraded,
+              })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
           },
@@ -679,7 +699,7 @@ DocumentView.implement({
         const state = await stateLoader.load(self.id);
 
         let text: string;
-        if (state) {
+        if (isSnapshotUsable(state)) {
           text = state.text.replaceAll(/\s+/g, ' ').trim();
         } else {
           const loader = ctx.loader({
@@ -1677,8 +1697,14 @@ builder.mutationFields((t) => ({
 
       const graph = await readMergedGraph(input.documentId);
 
+      const sweepRows = await db
+        .select({ zombieDots: DocumentSweeps.zombieDots })
+        .from(DocumentSweeps)
+        .where(eq(DocumentSweeps.documentId, input.documentId));
+      const sweepTombstones = [...new Set(sweepRows.flatMap((row) => row.zombieDots))];
+
       const { revert, opsCount, currentHeads } = await wasmFfi.use((host) => {
-        const revert = host.revert(graph, head.heads);
+        const revert = host.revert(graph, head.heads, sweepTombstones);
         return { revert, opsCount: host.peek_changeset_ops_count(revert), currentHeads: host.heads(graph) };
       });
 

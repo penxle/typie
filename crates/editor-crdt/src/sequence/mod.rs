@@ -722,6 +722,12 @@ impl SeqResolve for SeqCheckout {
     }
 }
 
+impl<T: SeqResolve + ?Sized> SeqResolve for &T {
+    fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        (**self).resolve_boundary(id, bias)
+    }
+}
+
 pub fn checkout_with_resolver<P: Clone>(log: &OpLog<P>) -> (Vec<(Dot, P)>, BoundaryResolver) {
     let (elems, index) = checkout_with_index(log);
     (elems, BoundaryResolver { index })

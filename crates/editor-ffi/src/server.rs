@@ -26,6 +26,7 @@ pub struct AnchorPaths {
 pub struct Materialized {
     pub plain: editor_model::PlainDoc,
     pub text: String,
+    pub projection_degraded: bool,
 }
 
 #[ffi]
@@ -55,6 +56,7 @@ pub struct CollectResult {
     pub plain: editor_model::PlainDoc,
     pub text: String,
     pub totality_violations: u32,
+    pub projection_degraded: bool,
 }
 
 #[ffi]
@@ -67,6 +69,17 @@ pub struct ConsolidateResult {
     pub payload: Option<Vec<u8>>,
     pub consumed: u32,
     pub consumed_bytes: u32,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ResolvedV1Selection {
+    pub selection: editor_state::StableSelection,
+    // `true` when the v1 anchor collapsed to its offset-0 fallback rather than
+    // resolving exactly — the migration surfaces these for review.
+    pub degraded: bool,
 }
 
 #[ffi]
@@ -290,6 +303,7 @@ impl EditorServer {
         let plain = state.to_plain();
         let text = extract_text_from_view(&state.view());
         let totality_violations = collect_zombie_dots(&state).len() as u32;
+        let projection_degraded = state.projection_degraded();
 
         Ok(CollectResult {
             heads,
@@ -299,6 +313,7 @@ impl EditorServer {
             plain,
             text,
             totality_violations,
+            projection_degraded,
         }
         .into_ffi()?)
     }
@@ -463,7 +478,12 @@ impl EditorServer {
         Ok(bytes)
     }
 
-    pub fn revert(&self, graph: Vec<u8>, target_heads: Vec<u8>) -> EditorResult<Vec<u8>> {
+    pub fn revert(
+        &self,
+        graph: Vec<u8>,
+        target_heads: Vec<u8>,
+        sweep_tombstones: Vec<String>,
+    ) -> EditorResult<Vec<u8>> {
         // Input graph is used only to build state (`into_graph_input`); the only
         // thing ever reencoded is the revert transaction's own new local
         // changesets below (`from_local_ops`) — the input graph is never
@@ -475,13 +495,17 @@ impl EditorServer {
         let target_vec = editor_codec::decode_dots(&target_heads[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?;
         let target_set: hashbrown::HashSet<editor_crdt::Dot> = target_vec.into_iter().collect();
+        let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
 
         let state = crate::graph::build_state_tolerant(css)
             .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
         let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
             state.graph().current_heads().copied().collect();
 
-        let target_state = state_at_heads(state.graph(), &target_set)?;
+        let target_state = state_at_heads(state.graph(), &target_set, &overlay)?;
+        if target_state.projection_degraded() {
+            return Err(FfiError::RevertFailed("target projection is degraded".to_string()).into());
+        }
 
         let tr = editor_transaction::build_revert_transaction(&state, &target_state)
             .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
@@ -554,7 +578,13 @@ impl EditorServer {
         let state = crate::graph::build_state_tolerant(cs)?;
         let plain = state.to_plain();
         let text = extract_text_from_view(&state.view());
-        Ok(Materialized { plain, text }.into_ffi()?)
+        let projection_degraded = state.projection_degraded();
+        Ok(Materialized {
+            plain,
+            text,
+            projection_degraded,
+        }
+        .into_ffi()?)
     }
 
     pub fn validate_and_extract_text(&self, changeset_payloads: Vec<u8>) -> EditorResult<String> {
@@ -565,6 +595,31 @@ impl EditorServer {
         let state = crate::graph::build_state_tolerant(cs)?;
         Ok(extract_text_from_view(&state.view()))
     }
+
+    /// Migration entry point: resolve a normalized v1 comment anchor against the
+    /// document's current graph exactly as the shipping v1 reader would, then
+    /// re-capture it as a v2 `StableSelection`. `StablePosition::resolve` is
+    /// private, so the one-shot comment-anchor migration reaches it through here.
+    /// `degraded` is `true` when either endpoint fell back to the offset-0 collapse.
+    pub fn resolve_v1_selection(
+        &self,
+        graph: Vec<u8>,
+        normalized_v1_json: String,
+    ) -> EditorResult<Complex<ResolvedV1Selection>> {
+        let v1: editor_state::StableSelectionV1 = serde_json::from_str(&normalized_v1_json)
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?;
+        let css = editor_codec::decode_changeset_stream(&graph[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            .into_graph_input();
+        let state = crate::graph::build_state_tolerant(css)?;
+        let (selection, degraded) = editor_state::resolve_v1_selection(&state, &v1)
+            .map_err(|msg| EditorError::General { msg })?;
+        Ok(ResolvedV1Selection {
+            selection,
+            degraded,
+        }
+        .into_ffi()?)
+    }
 }
 
 /// Builds a `State` whose graph contains only the ops that are ancestors of
@@ -573,6 +628,7 @@ impl EditorServer {
 fn state_at_heads(
     graph: &editor_crdt::OpGraph<editor_model::EditOp>,
     heads: &hashbrown::HashSet<editor_crdt::Dot>,
+    overlay: &[editor_crdt::Dot],
 ) -> Result<editor_state::State, FfiError> {
     for h in heads {
         if !graph.contains(h) {
@@ -587,7 +643,7 @@ fn state_at_heads(
         .into_iter()
         .map(|op| editor_crdt::Changeset { ops: vec![op] })
         .collect();
-    editor_state::State::from_changesets(css, None)
+    editor_state::State::from_changesets_with_overlay(css, overlay, None)
         .map_err(|e| FfiError::RevertFailed(e.to_string()))
 }
 
@@ -1104,13 +1160,92 @@ mod tests {
     }
 
     #[test]
-    fn collect_fold_counts_totality_violations_for_zombie_document() {
+    fn collect_fold_counts_no_totality_violations_when_dead_parent_marker_is_revived() {
         let server = EditorServer;
         let existing = enc_css(&zombie_css());
         let result = server.collect_fold(existing, pack(&[])).unwrap();
+        assert_eq!(
+            result.totality_violations, 0,
+            "revival attaches the dead-parent marker under Root, so nothing is unreachable"
+        );
+    }
+
+    /// A single flat `TableCell` under Root must be wrapped back into
+    /// `Table > TableRow` to satisfy the schema — several deterministic repairs,
+    /// enough to latch the cap once the budget is lowered to 1.
+    fn degraded_prone_css() -> Vec<editor_crdt::Changeset<editor_model::EditOp>> {
+        let d = |c| Dot::new(1, c);
+        vec![Changeset {
+            ops: vec![
+                Op {
+                    id: d(0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: editor_model::NodeType::TableCell,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(1),
+                    parents: vec![d(0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+            ],
+        }]
+    }
+
+    #[test]
+    fn collect_fold_reports_projection_degraded_when_the_budget_caps() {
+        let server = EditorServer;
+        let existing = enc_css(&degraded_prone_css());
+
+        let clean = server.collect_fold(existing.clone(), pack(&[])).unwrap();
         assert!(
-            result.totality_violations > 0,
-            "a projection-hidden-but-live insertion must be counted as a violation"
+            !clean.projection_degraded,
+            "the fixture repairs cleanly at full budget"
+        );
+
+        let degraded = {
+            let _guard = editor_model::override_repair_budget(1);
+            server.collect_fold(existing, pack(&[])).unwrap()
+        };
+        assert!(
+            degraded.projection_degraded,
+            "budget 1 latches the cap, so collect records the snapshot as degraded"
+        );
+    }
+
+    #[test]
+    fn materialize_reports_projection_degraded_when_the_budget_caps() {
+        let server = EditorServer;
+        let graph = enc_css(&degraded_prone_css());
+        let materialized = {
+            let _guard = editor_model::override_repair_budget(1);
+            server.materialize(graph).unwrap()
+        };
+        assert!(materialized.projection_degraded);
+    }
+
+    #[test]
+    fn revert_refuses_a_degraded_target() {
+        let server = EditorServer;
+        let graph = enc_css(&degraded_prone_css());
+        let target = server.heads(graph.clone()).unwrap();
+
+        let result = {
+            let _guard = editor_model::override_repair_budget(1);
+            server.revert(graph, target, Vec::new())
+        };
+        assert!(
+            matches!(result, Err(EditorError::Ffi(FfiError::RevertFailed(_)))),
+            "revert must refuse a target whose projection is degraded"
         );
     }
 
@@ -1421,7 +1556,9 @@ mod tests {
         let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
         let server = EditorServer;
-        let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
+        let revert_bytes = server
+            .revert(graph_bytes.clone(), target_bytes, Vec::new())
+            .unwrap();
 
         let merged = server.apply(graph_bytes, revert_bytes).unwrap();
         let merged_css: Vec<Changeset<EditOp>> = editor_codec::decode_changeset_stream(&merged)
@@ -1453,7 +1590,7 @@ mod tests {
         let heads_bytes = EditorServer.heads(graph_bytes.clone()).unwrap();
 
         let server = EditorServer;
-        let revert_bytes = server.revert(graph_bytes, heads_bytes).unwrap();
+        let revert_bytes = server.revert(graph_bytes, heads_bytes, Vec::new()).unwrap();
         assert!(
             revert_bytes.is_empty(),
             "revert to current heads must be exactly 0 bytes, not a minimal empty envelope"
@@ -1567,7 +1704,9 @@ mod tests {
         let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
         let server = EditorServer;
-        let revert_bytes = server.revert(graph_bytes.clone(), target_bytes).unwrap();
+        let revert_bytes = server
+            .revert(graph_bytes.clone(), target_bytes, Vec::new())
+            .unwrap();
 
         let merged = server.apply(graph_bytes, revert_bytes).unwrap();
         let merged_css: Vec<Changeset<EditOp>> = editor_codec::decode_changeset_stream(&merged)
@@ -1580,6 +1719,62 @@ mod tests {
         assert_eq!(paras.len(), 2, "both paragraphs should be restored");
         assert_eq!(paras[0].inline_text(), "a");
         assert_eq!(paras[1].inline_text(), "b");
+    }
+
+    #[test]
+    fn revert_with_sweep_tombstone_neither_revives_swept_dot_nor_pulls_latest() {
+        use editor_state::{ProjectedState, State};
+
+        let mut ps = ProjectedState::empty();
+        ps.commit();
+
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 1,
+            item: SeqItem::Char('a'),
+        }))
+        .unwrap();
+        ps.commit();
+        let z = ps
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::Char('z'),
+            }))
+            .unwrap()
+            .id;
+        ps.commit();
+
+        let target_heads: Vec<Dot> = ps.graph().current_heads().copied().collect();
+
+        ps.apply(EditOp::Seq(ListOp::Ins {
+            pos: 3,
+            item: SeqItem::Char('b'),
+        }))
+        .unwrap();
+        ps.commit();
+
+        let graph_bytes = editor_codec::encode_changesets(
+            editor_codec::ReencodableChangesets::from_local_ops(ps.graph().changesets_as_vec()),
+        )
+        .unwrap();
+        let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
+
+        let server = EditorServer;
+        let revert_bytes = server
+            .revert(graph_bytes.clone(), target_bytes, vec![z.to_string()])
+            .unwrap();
+
+        let merged = server.apply(graph_bytes, revert_bytes).unwrap();
+        let merged_css: Vec<Changeset<EditOp>> = editor_codec::decode_changeset_stream(&merged)
+            .unwrap()
+            .into_graph_input();
+        let state = State::from_changesets(merged_css, None).unwrap();
+        let view = state.view();
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        assert_eq!(
+            para.inline_text(),
+            "a",
+            "past recovery must drop the swept dot (no revive) and the post-target edit (no latest)"
+        );
     }
 
     fn zombie_css() -> Vec<editor_crdt::Changeset<editor_model::EditOp>> {
@@ -1632,44 +1827,35 @@ mod tests {
     }
 
     #[test]
-    fn sweep_tombstones_unprojected_visible_ops() {
+    fn revived_dead_parent_content_is_not_swept() {
         let css = zombie_css();
-        let before = crate::graph::build_state_tolerant(css.clone()).unwrap();
-        let before_tree = before.projected.projected().clone();
-        assert!(
-            before
-                .projected
-                .seq_visible_pos(editor_crdt::Dot::new(1, 2))
-                .is_some()
-        );
-        assert!(before.view().node(editor_crdt::Dot::new(1, 2)).is_none());
+        let state = crate::graph::build_state_tolerant(css.clone()).unwrap();
 
-        let sweep_css = sweep_impl(css.clone()).unwrap();
-        assert!(!sweep_css.is_empty());
+        let view = state.view();
+        let marker = view.node(editor_crdt::Dot::new(1, 2));
+        assert!(
+            marker.is_some(),
+            "the dead-parent marker is revived under Root, not projection-hidden"
+        );
+        assert_eq!(
+            marker.unwrap().inline_text(),
+            "z",
+            "the revived marker carries its content, so it is live text"
+        );
+        assert!(
+            collect_zombie_dots(&state).is_empty(),
+            "revived content is not a zombie"
+        );
 
-        let mut merged = css;
-        merged.extend(sweep_css);
-        let after = crate::graph::build_state_tolerant(merged).unwrap();
+        let sweep_css = sweep_impl(css).unwrap();
         assert!(
-            after
-                .projected
-                .seq_visible_pos(editor_crdt::Dot::new(1, 2))
-                .is_none()
-        );
-        assert!(
-            after
-                .projected
-                .seq_visible_pos(editor_crdt::Dot::new(1, 3))
-                .is_none()
-        );
-        assert!(
-            after.projected.projected() == &before_tree,
-            "투영 결과는 불변이어야 한다"
+            sweep_css.is_empty(),
+            "sweep is a no-op once revival leaves nothing unreachable"
         );
     }
 
     #[test]
-    fn sweep_preserves_modifiers_when_span_anchors_on_zombie() {
+    fn sweep_preserves_modifiers_when_span_anchors_on_revived_content() {
         use editor_model::{Anchor, Modifier, SpanOp};
         let mut css = zombie_css();
         let span_op = editor_crdt::Op {
@@ -1730,5 +1916,77 @@ mod tests {
         ];
         let sweep_css = sweep_impl(vec![Changeset { ops }]).unwrap();
         assert!(sweep_css.is_empty());
+    }
+
+    fn paragraph_ab_graph() -> Vec<u8> {
+        let para = Dot::new(1, 0);
+        let a = Dot::new(1, 1);
+        let b = Dot::new(1, 2);
+        let cs = Changeset::<EditOp> {
+            ops: vec![
+                Op {
+                    id: para,
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: editor_model::NodeType::Paragraph,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: a,
+                    parents: vec![para],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+                Op {
+                    id: b,
+                    parents: vec![a],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 2,
+                        item: SeqItem::Char('b'),
+                    }),
+                },
+            ],
+        };
+        enc_css(std::slice::from_ref(&cs))
+    }
+
+    #[test]
+    fn resolve_v1_selection_reencodes_a_resolvable_anchor_as_v2() {
+        let server = EditorServer;
+        let a = Dot::new(1, 1);
+        let v1 = format!(
+            r#"{{"anchor":{{"chain":["{root}"],"child":{{"dot":"{a}","bind":"right"}},"affinity":"upstream"}},"head":{{"chain":["{root}"],"child":{{"dot":"{a}","bind":"right"}},"affinity":"upstream"}}}}"#,
+            root = Dot::ROOT,
+            a = a
+        );
+        let result = server
+            .resolve_v1_selection(paragraph_ab_graph(), v1)
+            .unwrap();
+        assert!(!result.degraded);
+        assert_eq!(result.selection.version, 2);
+        assert!(!result.selection.anchor.chain.is_empty());
+    }
+
+    #[test]
+    fn resolve_v1_selection_flags_an_unresolvable_anchor_as_degraded() {
+        let server = EditorServer;
+        // A child dot that appears nowhere in the sequence: the v1 reader collapses
+        // it to the offset-0 fallback, which the migration must flag as degraded.
+        let v1 = format!(
+            r#"{{"anchor":{{"chain":["{root}"],"child":{{"dot":"9_9","bind":"left"}},"affinity":"downstream"}},"head":{{"chain":["{root}"],"child":{{"dot":"9_9","bind":"left"}},"affinity":"downstream"}}}}"#,
+            root = Dot::ROOT
+        );
+        let result = server
+            .resolve_v1_selection(paragraph_ab_graph(), v1)
+            .unwrap();
+        assert!(result.degraded);
+        assert_eq!(result.selection.version, 2);
     }
 }

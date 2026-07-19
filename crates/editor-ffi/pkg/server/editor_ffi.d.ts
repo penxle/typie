@@ -1,6 +1,16 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * A step in a `StablePosition`'s ancestor chain. A real ancestor stores its
+ * authored dot. A projection-synthesized scaffold cannot: its id is a hash that
+ * folds in the content it wraps, so it is reissued the moment the document
+ * reprojects and a stored id would strand the anchor. A synthetic step instead
+ * stores what it can be rediscovered by — the first real dot it owns, its role,
+ * and its depth in the chain — so resolution re-anchors through the owner.
+ */
+export type ChainSegment = { type: "real"; dot: Dot } | { type: "synthetic"; owner: Dot; role: NodeType; depth: number };
+
+/**
  * An IME composition range, expressed in flat-offset coordinates.
  *
  * `start` and `end` are **flat offsets** — absolute positions over the
@@ -147,6 +157,7 @@ export interface CollectResult {
     plain: PlainDoc;
     text: string;
     totality_violations: number;
+    projection_degraded: boolean;
 }
 
 export interface ConsolidateResult {
@@ -273,6 +284,7 @@ export interface LinkValue {
 export interface Materialized {
     plain: PlainDoc;
     text: string;
+    projection_degraded: boolean;
 }
 
 export interface MissingChangesets {
@@ -432,6 +444,11 @@ export interface Rect {
     height: number;
 }
 
+export interface ResolvedV1Selection {
+    selection: StableSelection;
+    degraded: boolean;
+}
+
 export interface RubyValue {
     text: string;
 }
@@ -458,7 +475,7 @@ export interface Size {
 }
 
 export interface StablePosition {
-    chain: Dot[];
+    chain: ChainSegment[];
     child: StablePositionChild | undefined;
     affinity: Affinity;
 }
@@ -469,6 +486,7 @@ export interface StablePositionChild {
 }
 
 export interface StableSelection {
+    version: number;
     anchor: StablePosition;
     head: StablePosition;
 }
@@ -743,7 +761,7 @@ declare class Editor {
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
-    materialize_at(heads: Uint8Array): PlainDoc;
+    materialize_at(heads: Uint8Array, sweep_tombstones: string[]): PlainDoc;
     missing_changesets_tolerant(remote_heads_payload: Uint8Array): MissingChangesets;
     modifier_span_selection(pos: Position, modifier_type: ModifierType): Selection | undefined;
     modifier_state(): ModifierState | undefined;
@@ -831,7 +849,15 @@ declare class EditorServer {
      * Returns the total ops count in a Changesets bundle. Used by push light validation.
      */
     peek_changeset_ops_count(bundle: Uint8Array): number;
-    revert(graph: Uint8Array, target_heads: Uint8Array): Uint8Array;
+    /**
+     * Migration entry point: resolve a normalized v1 comment anchor against the
+     * document's current graph exactly as the shipping v1 reader would, then
+     * re-capture it as a v2 `StableSelection`. `StablePosition::resolve` is
+     * private, so the one-shot comment-anchor migration reaches it through here.
+     * `degraded` is `true` when either endpoint fell back to the offset-0 collapse.
+     */
+    resolve_v1_selection(graph: Uint8Array, normalized_v1_json: string): ResolvedV1Selection;
+    revert(graph: Uint8Array, target_heads: Uint8Array, sweep_tombstones: string[]): Uint8Array;
     sweep(graph: Uint8Array): Uint8Array;
     to_graph(plain: PlainDoc): Uint8Array;
     to_graph_with_anchors(plain: PlainDoc, anchor_paths: AnchorPaths): GraphWithAnchors;

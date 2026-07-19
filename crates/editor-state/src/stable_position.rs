@@ -3,12 +3,15 @@ use editor_crdt::sequence::{
 };
 use editor_crdt::{Dot, OpLog};
 use editor_macros::ffi;
-use editor_model::{ChildView, DocView, NodeView, SeqItem};
+use editor_model::{ChildView, DocView, NodeType, NodeView, SeqItem};
 use serde::{Deserialize, Serialize};
 
 use crate::Position;
 use crate::affinity::Affinity;
 use crate::bind::Bind;
+use crate::selection::Selection;
+use crate::stable_selection::StableSelection;
+use crate::state::State;
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -18,11 +21,31 @@ pub struct StablePositionChild {
     pub bind: Bind,
 }
 
+/// A step in a `StablePosition`'s ancestor chain. A real ancestor stores its
+/// authored dot. A projection-synthesized scaffold cannot: its id is a hash that
+/// folds in the content it wraps, so it is reissued the moment the document
+/// reprojects and a stored id would strand the anchor. A synthetic step instead
+/// stores what it can be rediscovered by — the first real dot it owns, its role,
+/// and its depth in the chain — so resolution re-anchors through the owner.
+#[ffi]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChainSegment {
+    Real {
+        dot: Dot,
+    },
+    Synthetic {
+        owner: Dot,
+        role: NodeType,
+        depth: u32,
+    },
+}
+
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct StablePosition {
-    pub chain: Vec<Dot>,
+    pub chain: Vec<ChainSegment>,
     pub child: Option<StablePositionChild>,
     pub affinity: Affinity,
 }
@@ -32,6 +55,33 @@ fn child_elem_id(child: &ChildView) -> Dot {
         ChildView::Leaf(l) => l.dot(),
         ChildView::Block(b) => b.id(),
     }
+}
+
+/// The chain step for `node` at `depth`. Root and authored ancestors keep their
+/// dot; a projection-synthesized scaffold records the real content it owns so a
+/// reprojected replica can rediscover it. Root is synthetic-bit-set but a stable
+/// canonical anchor, so it stays a `Real` step.
+fn chain_segment(node: &NodeView, depth: u32) -> ChainSegment {
+    let id = node.id();
+    if id == Dot::ROOT || !id.is_synthetic() {
+        ChainSegment::Real { dot: id }
+    } else {
+        ChainSegment::Synthetic {
+            owner: first_real_descendant(node).unwrap_or(id),
+            role: node.node_type(),
+            depth,
+        }
+    }
+}
+
+/// The first authored (non-synthetic) dot in `node`'s preorder subtree — the
+/// stable content a synthetic scaffold wraps, mirroring the scaffold's own
+/// `wrap_cause`. `None` for an empty filler scaffold that owns no real content.
+fn first_real_descendant(node: &NodeView) -> Option<Dot> {
+    node.descendants().find_map(|c| {
+        let dot = child_elem_id(&c);
+        (!dot.is_synthetic()).then_some(dot)
+    })
 }
 
 impl StablePosition {
@@ -82,8 +132,13 @@ impl StablePosition {
         let host = view
             .node(pos.node)
             .expect("StablePosition::capture: position node must be a live block");
-        let mut chain: Vec<Dot> = host.ancestors().map(|n| n.id()).collect();
-        chain.reverse();
+        let mut nodes: Vec<NodeView> = host.ancestors().collect();
+        nodes.reverse();
+        let chain: Vec<ChainSegment> = nodes
+            .iter()
+            .enumerate()
+            .map(|(depth, n)| chain_segment(n, depth as u32))
+            .collect();
         // O(log) child lookups instead of collecting every child of the host block —
         // this runs on the per-keystroke selection-capture path, so a linear scan makes
         // it `O(block)` inside a large paragraph.
@@ -235,6 +290,43 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
     offset
 }
 
+/// Resolves a chain step to a live node in the current projection. A real step
+/// resolves by its aliased dot. A synthetic step re-anchors: it walks up from the
+/// live node that now holds the owner's real content until it reaches an ancestor
+/// of the recorded role — the rediscovered scaffold — so a rehashed id never
+/// strands the anchor.
+fn resolve_segment<'a>(seg: &ChainSegment, ctx: &'a StableResolveCtx<'a>) -> Option<NodeView<'a>> {
+    match seg {
+        ChainSegment::Real { dot } => ctx.view.node(ctx.alias(*dot)),
+        ChainSegment::Synthetic { owner, role, .. } => {
+            let owner = ctx.alias(*owner);
+            let mut cur = if ctx.view.node(owner).is_some() {
+                Some(owner)
+            } else {
+                ctx.view.block_of(owner)
+            };
+            while let Some(id) = cur {
+                let node = ctx.view.node(id)?;
+                if node.node_type() == *role {
+                    return Some(node);
+                }
+                cur = ctx.view.parent_of(id);
+            }
+            None
+        }
+    }
+}
+
+/// The dot a chain step is positioned by when it sits just below a resolved host:
+/// a real step's own dot, or a synthetic step's owner (a real dot), so the offset
+/// is computed against live content instead of collapsing to 0 on a synthetic id.
+fn segment_target_dot(seg: &ChainSegment) -> Dot {
+    match seg {
+        ChainSegment::Real { dot } => *dot,
+        ChainSegment::Synthetic { owner, .. } => *owner,
+    }
+}
+
 impl StablePosition {
     pub fn resolve(&self, ctx: &StableResolveCtx) -> Option<Position> {
         if let Some(child) = &self.child
@@ -280,24 +372,23 @@ impl StablePosition {
         &self,
         ctx: &'a StableResolveCtx<'a>,
     ) -> Option<(NodeView<'a>, Option<Dot>)> {
-        if self.chain.is_empty() {
-            return None;
-        }
-        let mut k = 0usize;
-        let mut found = false;
-        for (i, id) in self.chain.iter().enumerate() {
-            if ctx.view.node(ctx.alias(*id)).is_some() {
-                k = i;
-                found = true;
-            } else {
-                break;
+        // The deepest chain step that still resolves to a live node — real steps
+        // by their (aliased) dot, synthetic steps by re-anchoring through the real
+        // content they own. Taking the deepest match (not the longest live prefix)
+        // recovers a reparented or rehashed-scaffold host even when an intermediate
+        // step died, replacing the old first-mismatch truncation and its offset-0
+        // collapse with an owner re-anchor.
+        let mut host: Option<(usize, NodeView<'a>)> = None;
+        for (i, seg) in self.chain.iter().enumerate() {
+            if let Some(n) = resolve_segment(seg, ctx) {
+                host = Some((i, n));
             }
         }
-        if !found {
-            return None;
-        }
-        let host = ctx.view.node(ctx.alias(self.chain[k])).unwrap();
-        let next_child = (k < self.chain.len() - 1).then(|| ctx.alias(self.chain[k + 1]));
+        let (k, host) = host?;
+        let next_child = self
+            .chain
+            .get(k + 1)
+            .map(|seg| ctx.alias(segment_target_dot(seg)));
         Some((host, next_child))
     }
 
@@ -331,6 +422,197 @@ impl StablePosition {
             affinity: self.affinity,
         }
     }
+}
+
+// ── Migration-only v1 anchor resolution ─────────────────────────────────────
+//
+// Production never reads v1: every client is force-updated and server-stored v1
+// is cleared by a one-shot migration. But that migration must resolve each stored
+// v1 anchor exactly as the shipping v1 reader would — including its offset-0
+// collapse — before re-capturing it as v2, so a degraded row lands where the old
+// client put it. This is a faithful copy of the v1 resolve, wired to report
+// whether it fell back to that collapse.
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct StablePositionV1 {
+    pub chain: Vec<Dot>,
+    pub child: Option<StablePositionChild>,
+    pub affinity: Affinity,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct StableSelectionV1 {
+    pub anchor: StablePositionV1,
+    pub head: StablePositionV1,
+}
+
+impl StablePositionV1 {
+    fn resolve(&self, ctx: &StableResolveCtx, degraded: &mut bool) -> Option<Position> {
+        if let Some(child) = &self.child
+            && is_inline_dot(child.dot, ctx)
+            && let Some(pos) = v1_child_parent_boundary(ctx, child.dot, child.bind, self.affinity)
+        {
+            return Some(pos);
+        }
+
+        let (host, next_child) = self.resolve_chain_host(ctx)?;
+        if next_child.is_none()
+            && let Some(child) = &self.child
+            && host.spec().is_textblock()
+            && let Some(pos) = v1_child_parent_boundary(ctx, child.dot, child.bind, self.affinity)
+        {
+            return Some(pos);
+        }
+        Some(self.resolve_in_host(ctx, host, next_child, degraded))
+    }
+
+    fn resolve_chain_host<'a>(
+        &self,
+        ctx: &'a StableResolveCtx<'a>,
+    ) -> Option<(NodeView<'a>, Option<Dot>)> {
+        if self.chain.is_empty() {
+            return None;
+        }
+        let mut k = 0usize;
+        let mut found = false;
+        for (i, id) in self.chain.iter().enumerate() {
+            if ctx.view.node(ctx.alias(*id)).is_some() {
+                k = i;
+                found = true;
+            } else {
+                break;
+            }
+        }
+        if !found {
+            return None;
+        }
+        let host = ctx.view.node(ctx.alias(self.chain[k])).unwrap();
+        let next_child = (k < self.chain.len() - 1).then(|| ctx.alias(self.chain[k + 1]));
+        Some((host, next_child))
+    }
+
+    fn resolve_in_host(
+        &self,
+        ctx: &StableResolveCtx,
+        host: NodeView<'_>,
+        next_child: Option<Dot>,
+        degraded: &mut bool,
+    ) -> Position {
+        let offset = if let Some(next_child) = next_child {
+            v1_offset_within(&host, next_child, ctx, degraded)
+        } else {
+            match &self.child {
+                None => 0,
+                Some(StablePositionChild { dot, bind }) => {
+                    let aliased = ctx.alias(*dot);
+                    match index_of(&host, aliased).or_else(|| {
+                        (!resolves_via_child_parent(&host, aliased, ctx))
+                            .then(|| direct_child_containing(&host, aliased, ctx))
+                            .flatten()
+                    }) {
+                        Some(j) => j + usize::from(*bind == Bind::Right),
+                        None => v1_offset_within(&host, aliased, ctx, degraded),
+                    }
+                }
+            }
+        };
+        Position {
+            node: host.id(),
+            offset,
+            affinity: self.affinity,
+        }
+    }
+}
+
+fn v1_child_parent_boundary(
+    ctx: &StableResolveCtx,
+    dot: Dot,
+    bind: Bind,
+    affinity: Affinity,
+) -> Option<Position> {
+    let dot = ctx.alias(dot);
+    let host_dot = if ctx.view.node(dot).is_some() {
+        ctx.view.parent_of(dot)
+    } else {
+        ctx.view.block_of(dot)
+    };
+    let host = ctx.view.node(host_dot?)?;
+    let offset = index_of(&host, dot)? + usize::from(bind == Bind::Right);
+    Some(Position {
+        node: host.id(),
+        offset,
+        affinity,
+    })
+}
+
+fn v1_offset_within(
+    c: &NodeView,
+    target: Dot,
+    ctx: &StableResolveCtx,
+    degraded: &mut bool,
+) -> usize {
+    let Some(op) = target.as_op_dot() else {
+        *degraded = true;
+        return 0;
+    };
+    let d = op.dot();
+    let Some(r) = ctx.resolver.position(d) else {
+        *degraded = true;
+        return 0;
+    };
+    let mut offset = 0usize;
+    let mut prev_real: Option<usize> = None;
+    for child in c.children() {
+        let key = match &child {
+            ChildView::Leaf(l) => {
+                let k = ctx.resolver.visible_position(l.dot());
+                if k.is_some() {
+                    prev_real = k;
+                }
+                k
+            }
+            ChildView::Block(b) => match b.dot() {
+                Some(d) => {
+                    let k = ctx.resolver.visible_position(d);
+                    if k.is_some() {
+                        prev_real = k;
+                    }
+                    k
+                }
+                None => prev_real,
+            },
+        };
+        if key.is_none_or(|k| k < r) {
+            offset += 1;
+        }
+    }
+    offset
+}
+
+/// Resolves a normalized v1 selection against the current projection exactly as
+/// the shipping v1 reader would, then re-captures it as a v2 [`StableSelection`].
+/// Returns the v2 selection and whether resolution degraded (fell back to the
+/// offset-0 collapse on either endpoint). `Err` means the anchor could not be
+/// located at all — the migration must surface, not silently drop, such a row.
+pub fn resolve_v1_selection(
+    state: &State,
+    v1: &StableSelectionV1,
+) -> Result<(StableSelection, bool), String> {
+    let view = state.view();
+    let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+    let mut degraded = false;
+    let anchor = v1
+        .anchor
+        .resolve(&ctx, &mut degraded)
+        .ok_or_else(|| "v1 anchor did not resolve against the graph".to_string())?;
+    let head = v1
+        .head
+        .resolve(&ctx, &mut degraded)
+        .ok_or_else(|| "v1 head did not resolve against the graph".to_string())?;
+    let v2 = StableSelection::capture(&Selection { anchor, head }, &view);
+    Ok((v2, degraded))
 }
 
 #[cfg(test)]
@@ -397,8 +679,11 @@ mod tests {
         let view = DocView::new(&pd);
         let sp = StablePosition::capture(&Position::new(para, 0), &view);
         assert!(sp.child.is_none());
-        assert_eq!(sp.chain.last(), Some(&para));
-        assert_eq!(sp.chain.first(), view.root().map(|r| r.id()).as_ref());
+        assert_eq!(sp.chain.last(), Some(&ChainSegment::Real { dot: para }));
+        assert_eq!(
+            sp.chain.first(),
+            Some(&ChainSegment::Real { dot: Dot::ROOT })
+        );
     }
 
     #[test]
@@ -469,7 +754,12 @@ mod tests {
     #[test]
     fn types_construct_and_compare() {
         let sp = StablePosition {
-            chain: vec![Dot::ROOT, Dot::new(1, 1)],
+            chain: vec![
+                ChainSegment::Real { dot: Dot::ROOT },
+                ChainSegment::Real {
+                    dot: Dot::new(1, 1),
+                },
+            ],
             child: Some(StablePositionChild {
                 dot: Dot::new(1, 2),
                 bind: Bind::Left,
@@ -479,7 +769,7 @@ mod tests {
         assert_eq!(sp.clone(), sp);
         assert!(sp.child.is_some());
         let cs = StablePosition {
-            chain: vec![Dot::ROOT],
+            chain: vec![ChainSegment::Real { dot: Dot::ROOT }],
             child: None,
             affinity: Affinity::Upstream,
         };
@@ -772,7 +1062,13 @@ mod tests {
             .expect("normalize synthesizes a derived trailing paragraph");
         let pos = Position::new(derived, 0);
         let sp = StablePosition::capture(&pos, &view);
-        assert_eq!(sp.chain.last(), Some(&derived));
+        assert!(matches!(
+            sp.chain.last(),
+            Some(ChainSegment::Synthetic {
+                role: NodeType::Paragraph,
+                ..
+            })
+        ));
         assert_eq!(sp.resolve(&ctx), Some(pos));
     }
 
@@ -805,7 +1101,7 @@ mod tests {
         let pre = project_document(&doclogs(&ins_only(&pre_items))).unwrap();
         let pre_view = DocView::new(&pre);
         let sp = StablePosition::capture(&Position::new(p1, 0), &pre_view);
-        assert_eq!(sp.chain.last(), Some(&p1));
+        assert_eq!(sp.chain.last(), Some(&ChainSegment::Real { dot: p1 }));
         let mut post_ev = ins_only(&pre_items);
         post_ev.push(InputEvent {
             id: Dot::new(1, 7),
@@ -832,7 +1128,12 @@ mod tests {
         ]));
         let ctx = StableResolveCtx::new(&view, &logs.seq);
         let sp = StablePosition {
-            chain: vec![view.root().unwrap().id(), para],
+            chain: vec![
+                ChainSegment::Real {
+                    dot: view.root().unwrap().id(),
+                },
+                ChainSegment::Real { dot: para },
+            ],
             child: Some(StablePositionChild {
                 dot: Dot::new(9, 9),
                 bind: Bind::Left,
@@ -916,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn normalization_dropped_anchor_resolves_in_range() {
+    fn normalization_hoisted_anchor_resolves_in_range() {
         use editor_model::AtomLeaf;
         let root = Dot::ROOT;
         let bq = Dot::new(1, 1);
@@ -931,10 +1232,20 @@ mod tests {
         let pd = project_document(&logs).unwrap();
         let view = DocView::new(&pd);
         let ctx = StableResolveCtx::new(&view, &logs.seq);
-        assert!(view.leaf(pb).is_none(), "PageBreak dropped from DocView");
-        let para_view = view.node(para).expect("paragraph survives normalize");
+        // Under total projection the context-invalid PageBreak (Blockquote>Paragraph) is
+        // SPLIT-HOISTed to a Root Paragraph and preserved — no longer dropped.
+        assert!(
+            view.leaf(pb).is_some(),
+            "the anchored PageBreak survives (hoisted, not dropped)"
+        );
         let sp = StablePosition {
-            chain: vec![view.root().unwrap().id(), bq, para],
+            chain: vec![
+                ChainSegment::Real {
+                    dot: view.root().unwrap().id(),
+                },
+                ChainSegment::Real { dot: bq },
+                ChainSegment::Real { dot: para },
+            ],
             child: Some(StablePositionChild {
                 dot: pb,
                 bind: Bind::Left,
@@ -942,9 +1253,10 @@ mod tests {
             affinity: Affinity::Downstream,
         };
         let r = sp.resolve(&ctx).unwrap();
-        assert_eq!(r.node, para);
-        assert!(r.offset <= para_view.children().count());
-        assert_eq!(r.offset, 0, "empty surviving paragraph -> offset 0");
+        // The anchor resolves to a live block with an in-range offset (its real,
+        // hoisted location rather than a dropped-anchor fallback).
+        let target = view.node(r.node).expect("resolves to a live block");
+        assert!(r.offset <= target.children().count(), "offset in range");
     }
 
     #[test]
@@ -1235,7 +1547,10 @@ mod tests {
         let pos = Position::new(empty_para, 0);
         let sp = StablePosition::capture(&pos, &pre_view);
         assert!(sp.child.is_none());
-        assert_eq!(sp.chain.last(), Some(&empty_para));
+        assert_eq!(
+            sp.chain.last(),
+            Some(&ChainSegment::Real { dot: empty_para })
+        );
 
         let mut ev = ins_only(&pre_items);
         ev.push(InputEvent {
@@ -1291,7 +1606,7 @@ mod tests {
         let ctx = StableResolveCtx::new(&view, &logs.seq);
         let root_id = view.root().unwrap().id();
         let sp = StablePosition {
-            chain: vec![root_id],
+            chain: vec![ChainSegment::Real { dot: root_id }],
             child: Some(StablePositionChild {
                 dot: root_id,
                 bind: Bind::Left,
@@ -1301,6 +1616,175 @@ mod tests {
         let r = sp.resolve(&ctx).unwrap();
         assert_eq!(r.node, root_id);
         assert_eq!(r.offset, 0);
+    }
+
+    fn bare_table_cell_state() -> (State, Dot, Dot) {
+        use editor_crdt::{Changeset, Op};
+        use editor_model::EditOp;
+        // A bare TableCell under Root is wrapped back into synthetic Table > TableRow
+        // scaffolds (and its inline content into a synthetic Paragraph) to satisfy the
+        // schema — a content-owning scaffold chain over a real cell and char.
+        let cell = Dot::new(1, 0);
+        let a = Dot::new(1, 1);
+        let css = vec![Changeset {
+            ops: vec![
+                Op {
+                    id: cell,
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: NodeType::TableCell,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: a,
+                    parents: vec![cell],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+            ],
+        }];
+        (State::from_changesets(css, None).unwrap(), cell, a)
+    }
+
+    #[test]
+    fn capture_stores_synthetic_scaffolds_by_the_real_content_they_own() {
+        let (state, _cell, a) = bare_table_cell_state();
+        let view = state.view();
+        let host = view.block_of(a).expect("'a' lives in a block");
+        let pos = Position::new(host, 0);
+        let sp = StablePosition::capture(&pos, &view);
+
+        // The synthetic Table / TableRow steps store a real owner dot, never their
+        // own reprojection-unstable hashed id.
+        let table = sp
+            .chain
+            .iter()
+            .find(|s| {
+                matches!(
+                    s,
+                    ChainSegment::Synthetic {
+                        role: NodeType::Table,
+                        ..
+                    }
+                )
+            })
+            .expect("chain crosses a synthetic Table scaffold");
+        assert!(matches!(
+            table,
+            ChainSegment::Synthetic { owner, .. } if !owner.is_synthetic()
+        ));
+        assert!(sp.chain.iter().any(|s| matches!(
+            s,
+            ChainSegment::Synthetic {
+                role: NodeType::TableRow,
+                owner,
+                ..
+            } if !owner.is_synthetic()
+        )));
+
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        assert_eq!(sp.resolve(&ctx), Some(pos));
+    }
+
+    #[test]
+    fn synthetic_segments_resolve_by_owner_ignoring_stored_depth() {
+        let (state, _cell, a) = bare_table_cell_state();
+        let view = state.view();
+        let host = view.block_of(a).expect("'a' lives in a block");
+        let sp = StablePosition::capture(&Position::new(host, 0), &view);
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        let resolved = sp.resolve(&ctx).expect("captured anchor resolves");
+
+        // Rewrite every synthetic step's depth to a bogus value: resolution
+        // re-anchors through the owner, so the recorded depth cannot move it.
+        let mut mangled = sp.clone();
+        for seg in &mut mangled.chain {
+            if let ChainSegment::Synthetic { depth, .. } = seg {
+                *depth = 9999;
+            }
+        }
+        assert_eq!(mangled.resolve(&ctx), Some(resolved));
+    }
+
+    #[test]
+    fn resolve_v1_selection_migrates_a_resolvable_anchor_without_degrading() {
+        let (state, _cell, a) = bare_table_cell_state();
+        let v1 = StableSelectionV1 {
+            anchor: StablePositionV1 {
+                chain: vec![Dot::ROOT],
+                child: Some(StablePositionChild {
+                    dot: a,
+                    bind: Bind::Right,
+                }),
+                affinity: Affinity::Upstream,
+            },
+            head: StablePositionV1 {
+                chain: vec![Dot::ROOT],
+                child: Some(StablePositionChild {
+                    dot: a,
+                    bind: Bind::Right,
+                }),
+                affinity: Affinity::Upstream,
+            },
+        };
+        let (v2, degraded) = resolve_v1_selection(&state, &v1).unwrap();
+        assert!(!degraded, "a resolvable v1 anchor must not degrade");
+        // The migrated v2 anchor re-encodes the synthetic Table scaffold by owner.
+        assert!(v2.anchor.chain.iter().any(|s| matches!(
+            s,
+            ChainSegment::Synthetic {
+                role: NodeType::Table,
+                ..
+            }
+        )));
+        let view = state.view();
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        assert!(v2.resolve(&ctx).expect("v2 resolves").is_collapsed());
+    }
+
+    #[test]
+    fn resolve_v1_selection_flags_degraded_and_matches_the_v1_offset_zero_fallback() {
+        let (state, _cell, _a) = bare_table_cell_state();
+        // An anchor whose child dot is nowhere in the sequence: the shipping v1
+        // reader collapses it to offset 0 at the host. Migration must reproduce
+        // that fallback and mark the row degraded.
+        let unknown = Dot::new(9, 9);
+        let v1 = StableSelectionV1 {
+            anchor: StablePositionV1 {
+                chain: vec![Dot::ROOT],
+                child: Some(StablePositionChild {
+                    dot: unknown,
+                    bind: Bind::Left,
+                }),
+                affinity: Affinity::Downstream,
+            },
+            head: StablePositionV1 {
+                chain: vec![Dot::ROOT],
+                child: Some(StablePositionChild {
+                    dot: unknown,
+                    bind: Bind::Left,
+                }),
+                affinity: Affinity::Downstream,
+            },
+        };
+        let (v2, degraded) = resolve_v1_selection(&state, &v1).unwrap();
+        assert!(
+            degraded,
+            "an unresolvable child collapses to the offset-0 fallback"
+        );
+
+        let view = state.view();
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        let sel = v2.resolve(&ctx).expect("degraded v2 still resolves");
+        assert_eq!(sel.anchor.node, Dot::ROOT);
+        assert_eq!(sel.anchor.offset, 0);
     }
 
     fn arb_para_chars() -> impl proptest::strategy::Strategy<Value = Vec<char>> {

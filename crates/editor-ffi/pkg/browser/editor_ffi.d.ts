@@ -1,6 +1,16 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * A step in a `StablePosition`'s ancestor chain. A real ancestor stores its
+ * authored dot. A projection-synthesized scaffold cannot: its id is a hash that
+ * folds in the content it wraps, so it is reissued the moment the document
+ * reprojects and a stored id would strand the anchor. A synthetic step instead
+ * stores what it can be rediscovered by — the first real dot it owns, its role,
+ * and its depth in the chain — so resolution re-anchors through the owner.
+ */
+export type ChainSegment = { type: "real"; dot: Dot } | { type: "synthetic"; owner: Dot; role: NodeType; depth: number };
+
+/**
  * An IME composition range, expressed in flat-offset coordinates.
  *
  * `start` and `end` are **flat offsets** — absolute positions over the
@@ -400,7 +410,7 @@ export interface Size {
 }
 
 export interface StablePosition {
-    chain: Dot[];
+    chain: ChainSegment[];
     child: StablePositionChild | undefined;
     affinity: Affinity;
 }
@@ -411,6 +421,7 @@ export interface StablePositionChild {
 }
 
 export interface StableSelection {
+    version: number;
     anchor: StablePosition;
     head: StablePosition;
 }
@@ -714,7 +725,7 @@ declare class Editor {
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
     local_changesets_since(remote_heads_payload: Uint8Array): Uint8Array;
-    materialize_at(heads: Uint8Array): PlainDoc;
+    materialize_at(heads: Uint8Array, sweep_tombstones: string[]): PlainDoc;
     missing_changesets_tolerant(remote_heads_payload: Uint8Array): MissingChangesets;
     modifier_span_selection(pos: Position, modifier_type: ModifierType): Selection | undefined;
     modifier_state(): ModifierState | undefined;

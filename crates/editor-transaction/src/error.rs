@@ -61,6 +61,11 @@ pub enum StepError {
     #[error("move target {block:?} carries unknown content and cannot move losslessly")]
     UnknownBearingMove { block: Dot },
 
+    #[error(
+        "repair scaffold {block:?} carries unknown content and cannot be materialized losslessly"
+    )]
+    UnknownBearingMaterialize { block: Dot },
+
     #[error("replace target {block:?} carries unknown content and cannot replace type losslessly")]
     UnknownBearingReplace { block: Dot },
 

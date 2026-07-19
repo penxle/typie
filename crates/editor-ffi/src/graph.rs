@@ -65,6 +65,13 @@ pub(crate) fn state_from_changesets_with_pending(
     Ok((state, stash))
 }
 
+pub(crate) fn parse_sweep_tombstones(tombstones: &[String]) -> Vec<editor_crdt::Dot> {
+    tombstones
+        .iter()
+        .filter_map(|s| s.parse::<editor_crdt::Dot>().ok())
+        .collect()
+}
+
 pub(crate) fn build_state_tolerant(
     css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
 ) -> EditorResult<editor_state::State> {

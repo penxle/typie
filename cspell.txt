@@ -214,6 +214,7 @@ udids
 uikit
 unapply
 unclipped
+unmigratable
 UNDISPATCHED
 uniffi
 unplugin

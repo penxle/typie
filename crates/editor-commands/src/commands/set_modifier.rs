@@ -5,7 +5,7 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     apply_modifier_to_node, collect_applicable_targets_in_range, is_table_justify, is_unit_variant,
-    resolve_applicable_target_collapsed, set_modifier_range_text,
+    materialize_target, resolve_applicable_target_collapsed, set_modifier_range_text,
 };
 use crate::{CommandError, CommandResult};
 
@@ -94,6 +94,13 @@ fn set_modifier_collapsed_block(tr: &mut Transaction, modifier: &Modifier) -> Co
     if skip {
         return Ok(false);
     }
+    // A synthetic target has no persistent op dot; materialize it and retarget
+    // the modifier at the remapped node.
+    let target = if target.is_synthetic() {
+        materialize_target(tr, target)?
+    } else {
+        target
+    };
     apply_modifier_to_node(tr, target, modifier)?;
     Ok(true)
 }
@@ -117,6 +124,33 @@ fn set_modifier_range_block(tr: &mut Transaction, modifier: &Modifier) -> Comman
         return Ok(false);
     }
 
+    // Materialize any synthetic targets first (each restores the selection across
+    // its re-issue), then re-derive the target set from the restored range so the
+    // modifier records on the live nodes rather than lost synthetic dots.
+    let needs_materialize = targets.iter().any(|&id| id.is_synthetic());
+    if !needs_materialize {
+        for target in targets {
+            apply_modifier_to_node(tr, target, modifier)?;
+        }
+        return Ok(true);
+    }
+
+    for target in targets {
+        materialize_target(tr, target)?;
+    }
+    let selection = tr.selection().ok_or(CommandError::Corrupted(
+        "selection lost during materialize".into(),
+    ))?;
+    let targets: Vec<Dot> = {
+        let view = tr.view();
+        let rs = selection
+            .resolve(&view)
+            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        collect_applicable_targets_in_range(&view, &rs, modifier_type)
+            .into_iter()
+            .filter(|&id| !is_table_justify(&view, id, modifier))
+            .collect()
+    };
     for target in targets {
         apply_modifier_to_node(tr, target, modifier)?;
     }
@@ -130,6 +164,86 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
     use editor_model::ModifierType;
+
+    #[test]
+    fn collapsed_block_materializes_synthetic_target_and_restores_caret() {
+        use editor_model::{Alignment, NodeType};
+        use editor_state::{Position, Selection};
+
+        let (mut initial, ..) = state! {
+            doc { r: root { image } }
+            selection: (r, 0, <)
+        };
+        let synthetic = {
+            let view = initial.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .expect("synthetic trailing paragraph")
+                .id()
+        };
+        initial.selection = Some(Selection::collapsed(Position::new(synthetic, 0)));
+
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::Alignment {
+                value: Alignment::Center
+            }
+        ));
+
+        let sel = actual.selection.expect("selection preserved");
+        let view = actual.view();
+        assert!(
+            view.node(sel.head.node).is_some() && !sel.head.node.is_synthetic(),
+            "the collapsed-block caret is restored onto the live materialized paragraph"
+        );
+        assert_eq!(
+            view.node(sel.head.node)
+                .unwrap()
+                .block_modifier(ModifierType::Alignment),
+            Some(&Modifier::Alignment {
+                value: Alignment::Center
+            }),
+            "the block modifier records on the materialized real target"
+        );
+    }
+
+    #[test]
+    fn range_block_materializes_synthetic_target_in_the_selection() {
+        use editor_model::{Alignment, NodeType};
+
+        // root = [image, <synthetic trailing paragraph>]; a block range spans both.
+        let (initial, ..) = state! {
+            doc { r: root { image } }
+            selection: (r, 0, >) -> (r, 2, <)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::Alignment {
+                value: Alignment::Center
+            }
+        ));
+
+        let view = actual.view();
+        let paragraph = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == NodeType::Paragraph)
+            .expect("a real paragraph replaced the synthetic one in the range");
+        assert!(
+            !paragraph.id().is_synthetic(),
+            "the synthetic range target was materialized"
+        );
+        assert_eq!(
+            paragraph.block_modifier(ModifierType::Alignment),
+            Some(&Modifier::Alignment {
+                value: Alignment::Center
+            }),
+            "the range modifier records on the materialized real target, not a lost synthetic dot"
+        );
+    }
 
     #[test]
     fn collapsed_set_font_size() {

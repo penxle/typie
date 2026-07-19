@@ -8,10 +8,18 @@ use crate::selection::Selection;
 use crate::stable_position::{StablePosition, StableResolveCtx};
 use crate::state::State;
 
+/// The persisted wire version of a `StableSelection`. Bumped when the anchor
+/// encoding changes; a stored envelope carries it so future revisions can tell
+/// formats apart. There is no legacy-read path — every consumer is force-updated
+/// and server-stored v1 is cleared by a one-shot migration — so the runtime only
+/// ever writes and reads the current version.
+pub const STABLE_SELECTION_WIRE_VERSION: u32 = 2;
+
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct StableSelection {
+    pub version: u32,
     pub anchor: StablePosition,
     pub head: StablePosition,
 }
@@ -25,19 +33,24 @@ impl StableSelection {
             Some(rs) if !rs.is_collapsed() => Some(rs.anchor() <= rs.head()),
             _ => None,
         };
-        match anchor_is_start {
-            Some(true) => StableSelection {
-                anchor: StablePosition::capture_range_start(&sel.anchor, view),
-                head: StablePosition::capture_range_end(&sel.head, view),
-            },
-            Some(false) => StableSelection {
-                anchor: StablePosition::capture_range_end(&sel.anchor, view),
-                head: StablePosition::capture_range_start(&sel.head, view),
-            },
-            None => StableSelection {
-                anchor: StablePosition::capture(&sel.anchor, view),
-                head: StablePosition::capture(&sel.head, view),
-            },
+        let (anchor, head) = match anchor_is_start {
+            Some(true) => (
+                StablePosition::capture_range_start(&sel.anchor, view),
+                StablePosition::capture_range_end(&sel.head, view),
+            ),
+            Some(false) => (
+                StablePosition::capture_range_end(&sel.anchor, view),
+                StablePosition::capture_range_start(&sel.head, view),
+            ),
+            None => (
+                StablePosition::capture(&sel.anchor, view),
+                StablePosition::capture(&sel.head, view),
+            ),
+        };
+        StableSelection {
+            version: STABLE_SELECTION_WIRE_VERSION,
+            anchor,
+            head,
         }
     }
 

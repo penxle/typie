@@ -20,6 +20,7 @@ import {
 } from '#/db/index.ts';
 import { generateDocument } from '#/export/index.ts';
 import { loadBundleStream } from '#/utils/changeset.ts';
+import { isSnapshotUsable } from '#/utils/document-state.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import type { ExportFontFamily, ExportFormat, PageLayout } from '#/export/index.ts';
@@ -111,10 +112,14 @@ builder.mutationFields((t) => ({
       }
 
       const state = await db
-        .select({ documentId: DocumentStates.documentId })
+        .select({ documentId: DocumentStates.documentId, projectionDegraded: DocumentStates.projectionDegraded })
         .from(DocumentStates)
         .where(eq(DocumentStates.documentId, document.id))
         .then(first);
+
+      if (state && !isSnapshotUsable(state)) {
+        throw new TypieError({ code: 'document_projection_degraded', message: '문서를 내보낼 수 없는 상태예요.', status: 409 });
+      }
 
       const title = document.title || '(제목 없음)';
       const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;

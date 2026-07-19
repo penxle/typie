@@ -200,6 +200,15 @@ impl<'a> NodeView<'a> {
     pub fn last_child(&self) -> Option<ChildView<'a>> {
         self.children().last()
     }
+    pub fn typed_child_block(&self, ty: NodeType) -> Option<NodeView<'a>> {
+        self.child_blocks().find(|b| b.node_type() == ty)
+    }
+    pub fn fold_title(&self) -> Option<NodeView<'a>> {
+        self.typed_child_block(NodeType::FoldTitle)
+    }
+    pub fn fold_content(&self) -> Option<NodeView<'a>> {
+        self.typed_child_block(NodeType::FoldContent)
+    }
     pub fn child_at(&self, index: usize) -> Option<ChildView<'a>> {
         // O(log K) via the `ChildList` order-statistics tree, not `O(index)` via
         // `children().nth`. On a large block (a paragraph with thousands of inline
@@ -661,6 +670,75 @@ mod tests {
             hr.as_atom(),
             Some(AtomLeaf::HorizontalRule { .. })
         ));
+    }
+
+    #[test]
+    fn fold_typed_accessors_locate_title_and_content_past_leading_unknown() {
+        let fold = Dot::new(1, 1);
+        let unknown = Dot::new(1, 2);
+        let title = Dot::new(1, 3);
+        let content = Dot::new(1, 4);
+        let content_para = Dot::new(1, 5);
+        let elems = vec![
+            (
+                fold,
+                SeqItem::Block {
+                    node_type: NodeType::Fold,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (
+                unknown,
+                SeqItem::Block {
+                    node_type: NodeType::Unknown,
+                    parents: vec![Dot::ROOT, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                title,
+                SeqItem::Block {
+                    node_type: NodeType::FoldTitle,
+                    parents: vec![Dot::ROOT, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                content,
+                SeqItem::Block {
+                    node_type: NodeType::FoldContent,
+                    parents: vec![Dot::ROOT, fold],
+                    attrs: vec![],
+                },
+            ),
+            (
+                content_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, fold, content],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let pd = project_document(&logs_of(&elems)).unwrap();
+        let view = DocView::new(&pd);
+        let fold_view = view.node(fold).unwrap();
+
+        assert!(
+            matches!(fold_view.first_child(), Some(ChildView::Block(b)) if b.node_type() == NodeType::Unknown),
+            "the preserved leading Unknown occupies the first slot, so positional access is wrong"
+        );
+        assert_eq!(
+            fold_view.fold_title().map(|t| t.id()),
+            Some(title),
+            "typed access finds FoldTitle by type, skipping the leading Unknown"
+        );
+        assert_eq!(
+            fold_view.fold_content().map(|c| c.id()),
+            Some(content),
+            "typed access finds FoldContent by type"
+        );
     }
 
     /// An unknown leaf's resolved `node_type()` must be the real `NodeType::Unknown`

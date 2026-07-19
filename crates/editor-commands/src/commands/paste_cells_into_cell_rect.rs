@@ -6,7 +6,7 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     find_first_text_position, insert_empty_table_column, insert_empty_table_row, nth_table_cell,
-    replace_cell_children, table_col_count, table_row_count,
+    repair_slice_fragments, replace_cell_children, table_col_count, table_row_count,
 };
 use crate::{CommandError, CommandResult};
 
@@ -14,7 +14,8 @@ use crate::{CommandError, CommandResult};
 /// cell-rect, or — for a collapsed caret inside a cell — that cell as a 1×1
 /// rect. Missing rows/columns are appended (never inserted in the middle) so
 /// cells outside the source rectangle keep their content and position.
-pub fn paste_cells_into_cell_rect(tr: &mut Transaction, slice: Slice) -> CommandResult {
+pub fn paste_cells_into_cell_rect(tr: &mut Transaction, mut slice: Slice) -> CommandResult {
+    repair_slice_fragments(&mut slice.content);
     let Some(source_rows) = extract_source_rows(&slice) else {
         return Ok(false);
     };

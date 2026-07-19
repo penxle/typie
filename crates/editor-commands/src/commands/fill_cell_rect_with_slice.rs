@@ -8,7 +8,8 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{
     cell_first_charlike_block, consume_pending_modifiers, find_first_text_position,
-    paint_block_uniformly, replace_cell_children, resolve_effective_modifiers,
+    paint_block_uniformly, repair_slice_fragments, replace_cell_children,
+    resolve_effective_modifiers,
 };
 use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
@@ -18,9 +19,10 @@ use crate::{CommandError, CommandResult};
 /// schema-valid; block slices are inserted verbatim.
 pub fn fill_cell_rect_with_slice(
     tr: &mut Transaction,
-    slice: Slice,
+    mut slice: Slice,
     provenance: SliceProvenance,
 ) -> CommandResult {
+    repair_slice_fragments(&mut slice.content);
     let blocks = slice_to_cell_blocks(&slice);
     if blocks.is_empty() {
         return Ok(false);

@@ -215,10 +215,12 @@ internal class FakeFfiEditor(
     insertedTemplateFragments += changesets.copyOf()
   }
 
-  override fun materializeAt(heads: ByteArray): PlainDoc = EmptyPlainDoc
+  override fun materializeAt(heads: ByteArray, sweepTombstones: List<String>): PlainDoc =
+    EmptyPlainDoc
 
   override fun freezeSelection(selection: Selection): StableSelection? =
-    StableSelection(anchor = EmptyStablePosition, head = EmptyStablePosition)
+    // 2 == editor-state STABLE_SELECTION_WIRE_VERSION (StableSelection wire v2).
+    StableSelection(version = 2, anchor = EmptyStablePosition, head = EmptyStablePosition)
 
   override fun findMatches(query: String, options: SearchOptions?): List<Selection> = emptyList()
 

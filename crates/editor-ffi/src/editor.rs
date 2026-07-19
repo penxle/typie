@@ -682,7 +682,11 @@ impl Editor {
         })
     }
 
-    pub fn materialize_at(&self, heads: Vec<u8>) -> EditorResult<Complex<editor_model::PlainDoc>> {
+    pub fn materialize_at(
+        &self,
+        heads: Vec<u8>,
+        sweep_tombstones: Vec<String>,
+    ) -> EditorResult<Complex<editor_model::PlainDoc>> {
         self.with_inner(|inner| {
             let heads_vec = editor_codec::decode_dots(&heads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?;
@@ -698,11 +702,18 @@ impl Editor {
             let ops = graph.topo_sort(&ancestry);
             let subgraph =
                 editor_crdt::OpGraph::from_changesets(vec![editor_crdt::Changeset { ops }])?;
-            let projected = editor_state::ProjectedState::from_graph(subgraph).map_err(|e| {
-                EditorError::General {
-                    msg: format!("materialize projection failed: {e:?}"),
-                }
+            let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
+            let projected = editor_state::ProjectedState::from_graph_with_overlay(
+                subgraph, &overlay,
+            )
+            .map_err(|e| EditorError::General {
+                msg: format!("materialize projection failed: {e:?}"),
             })?;
+            if projected.projected().repair_stats.projection_degraded {
+                return Err(EditorError::General {
+                    msg: "materialize projection is degraded".to_string(),
+                });
+            }
             Ok(editor_state::to_plain(projected.projected()).into_ffi()?)
         })
     }
@@ -1159,6 +1170,53 @@ mod tests {
             event: editor_core::SystemEvent::Initialize,
         });
         Editor::new(core, CarrierStash::default())
+    }
+
+    #[test]
+    fn materialize_at_refuses_a_degraded_projection() {
+        use editor_crdt::{Changeset, Dot, ListOp, Op};
+        use editor_model::{EditOp, NodeType, SeqItem};
+
+        // A flat `TableCell` under Root needs several schema repairs — enough to
+        // latch the cap once the budget is lowered to 1.
+        let css = vec![Changeset {
+            ops: vec![
+                Op {
+                    id: Dot::new(1, 0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: NodeType::TableCell,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: Dot::new(1, 1),
+                    parents: vec![Dot::new(1, 0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+            ],
+        }];
+
+        let state = editor_state::State::from_changesets(css, None).unwrap();
+        let heads: Vec<Dot> = state.graph().current_heads().copied().collect();
+        let heads_bytes = editor_codec::encode_dots(&heads).unwrap();
+        let editor = make_ffi_editor(state);
+
+        let result = {
+            let _guard = editor_model::override_repair_budget(1);
+            editor.materialize_at(heads_bytes, Vec::new())
+        };
+        assert!(
+            result.is_err(),
+            "materialize_at must surface a degraded projection as an error"
+        );
     }
 
     #[test]

@@ -7,6 +7,7 @@ pub(crate) mod insert_subtree;
 pub(crate) mod insert_text;
 pub(crate) mod merge_node;
 pub(crate) mod move_node;
+pub(crate) mod reissue_subtree;
 pub(crate) mod remove_modifier;
 pub(crate) mod remove_span_modifier;
 pub(crate) mod remove_subtree;

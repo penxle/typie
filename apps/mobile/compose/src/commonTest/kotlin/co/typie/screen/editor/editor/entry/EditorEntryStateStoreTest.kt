@@ -48,5 +48,6 @@ class EditorEntryStateStoreTest {
 
 private fun stableSelection(): StableSelection {
   val position = StablePosition(chain = emptyList(), child = null, affinity = Affinity.Downstream)
-  return StableSelection(anchor = position, head = position)
+  // 2 == editor-state STABLE_SELECTION_WIRE_VERSION (StableSelection wire v2).
+  return StableSelection(version = 2, anchor = position, head = position)
 }

@@ -226,6 +226,7 @@ type Document implements IDocument {
   snapshot: Binary!
   state: DocumentState
   subtitle: String
+  sweepTombstones: [String!]!
   thumbnail: Image
   title: String!
   type: DocumentType!

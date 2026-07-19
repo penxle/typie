@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use editor_crdt::{Changeset, OpGraph};
+use editor_crdt::{Changeset, Dot, OpGraph};
 use editor_model::{DocView, EditOp};
 
 use crate::Selection;
@@ -45,8 +45,16 @@ impl State {
         css: Vec<Changeset<EditOp>>,
         selection: Option<Selection>,
     ) -> Result<Self, StateError> {
+        Self::from_changesets_with_overlay(css, &[], selection)
+    }
+
+    pub fn from_changesets_with_overlay(
+        css: Vec<Changeset<EditOp>>,
+        overlay: &[Dot],
+        selection: Option<Selection>,
+    ) -> Result<Self, StateError> {
         let graph = OpGraph::from_changesets(css)?;
-        let projected = ProjectedState::from_graph(graph)?;
+        let projected = ProjectedState::from_graph_with_overlay(graph, overlay)?;
         Ok(Self::new(projected, selection))
     }
 
@@ -67,6 +75,10 @@ impl State {
 
     pub fn to_plain(&self) -> editor_model::PlainDoc {
         crate::to_plain::to_plain(self.projected.projected())
+    }
+
+    pub fn projection_degraded(&self) -> bool {
+        self.projected.projected().repair_stats.projection_degraded
     }
 }
 
@@ -152,37 +164,100 @@ mod tests {
     }
 
     #[test]
-    fn projection_counts_dropped_subtree_real_dots() {
+    fn projection_repairs_and_preserves_dead_parent_marker() {
         use editor_crdt::Dot;
         let state = State::from_changesets(zombie_css(), None).unwrap();
+        // The dead-parent marker is now revived (attached to Root), not dropped, so
+        // it is present in the tree — a repair, with no content loss.
         assert!(
-            state.view().node(Dot::new(1, 2)).is_none(),
-            "전제: 현행 워크는 이 마커를 드롭"
+            state.view().node(Dot::new(1, 2)).is_some(),
+            "the dead-parent Paragraph is revived under Root"
         );
-        assert_eq!(state.projected.projected().drops, 2, "마커+char");
+        let stats = state.projected.projected().repair_stats;
+        assert_eq!(stats.drops, 0, "nothing is dropped");
+        assert_eq!(stats.repairs, 1, "the revival attachment is one repair");
     }
 
     #[test]
-    fn projection_of_clean_document_counts_no_drops() {
+    fn projection_of_clean_document_counts_no_repairs() {
         let state = State::from_changesets(clean_css(), None).unwrap();
-        assert_eq!(state.projected.projected().drops, 0);
+        let stats = state.projected.projected().repair_stats;
+        assert_eq!(stats.repairs, 0);
+        assert_eq!(stats.drops, 0);
+    }
+
+    fn misplaced_table_cell_css() -> Vec<Changeset<EditOp>> {
+        use editor_crdt::{Dot, ListOp, Op};
+        use editor_model::{NodeType, SeqItem};
+        let d = |c| Dot::new(1, c);
+        vec![Changeset {
+            ops: vec![
+                Op {
+                    id: d(0),
+                    parents: vec![],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 0,
+                        item: SeqItem::Block {
+                            node_type: NodeType::TableCell,
+                            parents: vec![Dot::ROOT],
+                            attrs: vec![],
+                        },
+                    }),
+                },
+                Op {
+                    id: d(1),
+                    parents: vec![d(0)],
+                    payload: EditOp::Seq(ListOp::Ins {
+                        pos: 1,
+                        item: SeqItem::Char('a'),
+                    }),
+                },
+            ],
+        }]
     }
 
     #[test]
-    fn persistent_zombie_recounts_on_each_full_reprojection() {
+    fn projection_degraded_is_false_for_a_clean_document() {
+        let state = State::from_changesets(clean_css(), None).unwrap();
+        assert!(!state.projection_degraded());
+    }
+
+    #[test]
+    fn projection_degraded_reports_the_repair_budget_cap() {
+        // A TableCell placed directly under Root must be wrapped back into
+        // Table > TableRow to satisfy the schema — multiple repairs, all valid.
+        let full = State::from_changesets(misplaced_table_cell_css(), None).unwrap();
+        assert!(
+            full.projected.projected().repair_stats.repairs >= 2,
+            "fixture must need multiple repairs to exercise the cap: {:?}",
+            full.projected.projected().repair_stats
+        );
+        assert!(!full.projection_degraded());
+
+        // The same fixture with the budget lowered to 1 latches the cap, so the
+        // state-generation boundary reports the projection as degraded.
+        let degraded = {
+            let _guard = editor_model::override_repair_budget(1);
+            State::from_changesets(misplaced_table_cell_css(), None).unwrap()
+        };
+        assert!(degraded.projection_degraded());
+    }
+
+    #[test]
+    fn persistent_zombie_recounts_repairs_on_each_full_reprojection() {
         let mut state = State::from_changesets(zombie_css(), None).unwrap();
         assert_eq!(
-            state.projected_mut().take_drop_stats(),
-            2,
-            "initial projection counts the zombie marker + char, then drains to 0"
+            state.projected_mut().take_repair_stats().repairs,
+            1,
+            "initial projection counts the revival repair, then drains to 0"
         );
-        // The zombie still lives in the sequence, so a fresh whole-document
-        // reprojection drops it again — the tripwire is per-pass, not deduplicated.
+        // The dead-parent marker still lives in the sequence, so a fresh whole-document
+        // reprojection re-runs the revival — repairs are per-pass, not deduplicated.
         state.projected_mut().reproject_all().unwrap();
         assert_eq!(
-            state.projected_mut().take_drop_stats(),
-            2,
-            "a persistent zombie re-counts on every full reprojection"
+            state.projected_mut().take_repair_stats().repairs,
+            1,
+            "a persistent damaged state re-counts its repair on every full reprojection"
         );
     }
 }

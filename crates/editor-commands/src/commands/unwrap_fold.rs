@@ -27,18 +27,12 @@ pub fn unwrap_fold(tr: &mut Transaction, node_id: Dot) -> CommandResult {
             .index()
             .ok_or_else(|| CommandError::Corrupted("fold has no index".into()))?;
 
-        let title = match fold.first_child() {
-            Some(ChildView::Block(t)) => t,
-            _ => {
-                return Err(CommandError::Corrupted("fold missing FoldTitle".into()));
-            }
-        };
-        let content = match fold.last_child() {
-            Some(ChildView::Block(c)) => c,
-            _ => {
-                return Err(CommandError::Corrupted("fold missing FoldContent".into()));
-            }
-        };
+        let title = fold
+            .fold_title()
+            .ok_or_else(|| CommandError::Corrupted("fold missing FoldTitle".into()))?;
+        let content = fold
+            .fold_content()
+            .ok_or_else(|| CommandError::Corrupted("fold missing FoldContent".into()))?;
 
         let has_title_text = title.children().count() > 0;
         let title_text = title.inline_text();
@@ -437,10 +431,7 @@ mod tests {
         let img = {
             let view = base.view();
             let fold = view.node(f).unwrap();
-            let content = match fold.last_child() {
-                Some(ChildView::Block(c)) => c,
-                _ => panic!("fold missing content"),
-            };
+            let content = fold.fold_content().expect("fold missing content");
             match content.child_at(0) {
                 Some(ChildView::Leaf(l)) => l.dot(),
                 _ => panic!("expected image leaf in fold content"),

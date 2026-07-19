@@ -1952,4 +1952,129 @@ mod tests {
             "the plain cell-rect paste consumes the pending format once"
         );
     }
+
+    #[test]
+    fn paste_list_item_with_two_paragraphs_splits_into_sibling_items_without_zombies() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<li><p>a</p><p>b</p></li>".into()),
+                text: "a\nb".into(),
+            },
+        });
+
+        let view = editor.state().view();
+        let list = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.node_type() == editor_model::NodeType::BulletList)
+            .expect("pasted list survives as a bullet list");
+        let items: Vec<_> = list.child_blocks().collect();
+        assert_eq!(
+            items.len(),
+            2,
+            "list item with two paragraphs becomes two sibling list items"
+        );
+        assert!(
+            items
+                .iter()
+                .all(|it| it.node_type() == editor_model::NodeType::ListItem)
+        );
+        assert_eq!(items[0].child_blocks().count(), 1);
+        assert_eq!(items[1].child_blocks().count(), 1);
+        assert_eq!(items[0].child_blocks().next().unwrap().inline_text(), "a");
+        assert_eq!(items[1].child_blocks().next().unwrap().inline_text(), "b");
+
+        let ps = &editor.state().projected;
+        let visible: std::collections::HashSet<editor_crdt::Dot> = ps
+            .seq_checkout()
+            .snapshot(ps.seq())
+            .into_iter()
+            .map(|(dot, _)| dot)
+            .collect();
+        let reachable: std::collections::HashSet<editor_crdt::Dot> = ps
+            .subtree_real_dots(editor_crdt::Dot::ROOT)
+            .into_iter()
+            .collect();
+        let zombies: Vec<editor_crdt::Dot> = visible.difference(&reachable).copied().collect();
+        assert!(
+            zombies.is_empty(),
+            "no visible-but-unreachable ops after paste: {zombies:?}"
+        );
+
+        // Fail-first witness: the inserted sequence is already schema-valid, so a
+        // fresh cold reprojection has nothing to heal. If the fragment repair were
+        // not wired, the invalid `ListItem`-with-two-paragraphs would reach the
+        // sequence and the reprojection would repair it (repairs > 0).
+        let css = editor.state().graph().changesets_as_vec();
+        let cold = editor_state::State::from_changesets(css, None).expect("reprojects");
+        assert_eq!(
+            cold.projected.repair_stats().repairs,
+            0,
+            "paste inserted a schema-valid slice; no projection repair should be needed"
+        );
+    }
+
+    #[test]
+    fn paste_violating_list_into_cell_rect_is_repaired_before_insert() {
+        let (s, c00, c01, c10, c11) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("a") } }
+                    c01: table_cell { paragraph { text("b") } }
+                    table_cell { paragraph { text("x") } }
+                }
+                table_row {
+                    c10: table_cell { paragraph { text("c") } }
+                    c11: table_cell { paragraph { text("d") } }
+                    table_cell { paragraph { text("y") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let sel = {
+            let view = s.view();
+            editor_state::cell_rect_selection(c00, c11, &view).unwrap()
+        };
+        let s = editor_state::State {
+            selection: Some(sel),
+            ..s
+        };
+        let mut editor = Editor::new_test(s);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<li><p>a</p><p>b</p></li>".into()),
+                text: "a\nb".into(),
+            },
+        });
+
+        // Every filled cell holds a valid list: two sibling items, one paragraph each.
+        let view = editor.state().view();
+        for cid in [c00, c01, c10, c11] {
+            let cell = view.node(cid).expect("cell survives fill");
+            let list = cell
+                .child_blocks()
+                .find(|b| b.node_type() == editor_model::NodeType::BulletList)
+                .expect("cell holds the pasted bullet list");
+            let items: Vec<_> = list.child_blocks().collect();
+            assert_eq!(items.len(), 2, "filled cell splits into two sibling items");
+            assert_eq!(items[0].child_blocks().next().unwrap().inline_text(), "a");
+            assert_eq!(items[1].child_blocks().next().unwrap().inline_text(), "b");
+        }
+
+        // Coverage witness: the cell-rect path also repairs before insert, so the
+        // reprojected sequence needs no healing.
+        let css = editor.state().graph().changesets_as_vec();
+        let cold = editor_state::State::from_changesets(css, None).expect("reprojects");
+        assert_eq!(
+            cold.projected.repair_stats().repairs,
+            0,
+            "cell-rect fill inserted a schema-valid slice; no projection repair should be needed"
+        );
+    }
 }

@@ -22,6 +22,7 @@ import {
 } from '#/db/index.ts';
 import { readMergedGraph } from '#/utils/changeset.ts';
 import { compressZstd } from '#/utils/compression.ts';
+import { isSnapshotUsable } from '#/utils/document-state.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
@@ -486,12 +487,12 @@ export type FreshV2Content = {
 
 export const buildFreshV2Content = async (documentId: string): Promise<FreshV2Content | null> => {
   const sourceState = await db
-    .select({ documentId: DocumentStates.documentId })
+    .select({ documentId: DocumentStates.documentId, projectionDegraded: DocumentStates.projectionDegraded })
     .from(DocumentStates)
     .where(eq(DocumentStates.documentId, documentId))
     .then(first);
 
-  if (!sourceState) {
+  if (!isSnapshotUsable(sourceState)) {
     return null;
   }
 

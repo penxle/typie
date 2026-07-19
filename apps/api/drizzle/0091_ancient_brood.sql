@@ -1,0 +1,1 @@
+ALTER TABLE "document_states" ADD COLUMN "projection_degraded" boolean DEFAULT false NOT NULL;

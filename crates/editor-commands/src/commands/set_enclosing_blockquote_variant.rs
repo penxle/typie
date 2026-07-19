@@ -2,7 +2,9 @@ use editor_model::{BlockquoteVariant, Node, NodeType, PlainBlockquoteNode, Plain
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::{promote_list_run, resolve_selected_block_run_for_wrapper};
+use crate::helpers::{
+    materialize_target, promote_list_run, resolve_selected_block_run_for_wrapper,
+};
 
 pub fn set_enclosing_blockquote_variant(
     tr: &mut Transaction,
@@ -25,6 +27,13 @@ pub fn set_enclosing_blockquote_variant(
             return Ok(false);
         }
     }
+    // A synthetic enclosing blockquote scaffold has no op dot; materialize it
+    // (restoring the selection across the re-issue) before the SetNode op.
+    let wrapper_id = if wrapper_id.is_synthetic() {
+        materialize_target(tr, wrapper_id)?
+    } else {
+        wrapper_id
+    };
     tr.set_node(
         wrapper_id,
         PlainNode::Blockquote(PlainBlockquoteNode { variant }),

@@ -854,11 +854,19 @@ impl Editor {
             });
         }
 
-        if self.state.projected.drop_stats() > 0 {
-            let drops = self.state.projected_mut().take_drop_stats();
-            if drops > 0 {
+        if self.state.projected.repair_stats() != editor_model::RepairStats::default() {
+            let stats = self.state.projected_mut().take_repair_stats();
+            // Repairs are normal healing; only real content loss (drops /
+            // totality_violations) or a degraded (cap-hit) projection is a tripwire.
+            let lost = stats.drops + stats.totality_violations;
+            if lost > 0 {
                 log::error!(
-                    "projection dropped {drops} live sequence element(s); zombie content present"
+                    "projection failed to place {lost} live sequence element(s); content lost"
+                );
+            }
+            if stats.projection_degraded {
+                log::error!(
+                    "projection degraded (repair-pass cap reached); schema validity unverified"
                 );
             }
         }
@@ -1671,10 +1679,17 @@ impl Editor {
         let subtrees: Vec<editor_model::Subtree> = {
             let view = template_state.view();
             match view.root() {
+                // `children()`, not `child_blocks()`: Root permits block-level atoms
+                // (image/file/embed/archived/horizontal_rule) directly, and capturing
+                // only its block children would silently drop those atom siblings.
                 Some(root) => root
-                    .child_blocks()
-                    .filter_map(|b| {
-                        editor_transaction::capture_subtree(&template_state.projected, b.id())
+                    .children()
+                    .filter_map(|c| {
+                        let id = match c {
+                            editor_model::ChildView::Block(b) => b.id(),
+                            editor_model::ChildView::Leaf(l) => l.dot(),
+                        };
+                        editor_transaction::capture_subtree(&template_state.projected, id)
                     })
                     .collect(),
                 None => Vec::new(),
@@ -2215,11 +2230,14 @@ mod tests {
     }
 
     #[test]
-    fn tick_drains_projection_drop_stats() {
+    fn tick_drains_projection_repair_stats() {
         let state = State::from_changesets(zombie_css(), None).unwrap();
         let mut editor = Editor::new_test(state);
         editor.tick().unwrap();
-        assert_eq!(editor.state.projected_mut().take_drop_stats(), 0);
+        assert_eq!(
+            editor.state.projected_mut().take_repair_stats(),
+            editor_model::RepairStats::default()
+        );
     }
 
     // The zombie fixture projects to "\u{2028}a\u{2029}"; flat offsets 0 and 3
@@ -5483,6 +5501,122 @@ mod tests {
             .map(|p| p.inline_text())
             .collect();
         assert_eq!(texts, vec!["Title".to_string(), "Body".to_string()]);
+    }
+
+    #[test]
+    fn insert_template_fragment_preserves_root_direct_atoms() {
+        use editor_model::{ChildView, NodeType};
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        // Root permits a block-level atom directly; the template ends in a real
+        // Paragraph, so no synthetic trailing paragraph is added to confuse counts.
+        let (template, ..) = state! {
+            doc { root {
+                horizontal_rule
+                tp: paragraph { text("Body") }
+            } }
+            selection: (tp, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor
+            .insert_template_fragment(template.to_plain())
+            .expect("template insert ok");
+
+        // The Root-direct horizontal rule survives the fragment insertion; capturing
+        // only child_blocks() would have silently dropped it, breaking totality.
+        let view = editor.state().view();
+        let has_rule =
+            view.root().unwrap().children().any(
+                |c| matches!(c, ChildView::Leaf(l) if l.node_type() == NodeType::HorizontalRule),
+            );
+        assert!(
+            has_rule,
+            "template's Root-direct atom must be inserted, not dropped"
+        );
+    }
+
+    #[test]
+    fn undo_after_edit_adjacent_to_zombie_restores_tree_and_selection() {
+        use editor_state::assert_state_eq;
+        let mut editor = zombie_fixture_editor();
+        // Park the caret at a legal in-paragraph position beside the revived
+        // dead-parent marker, then snapshot the whole state.
+        let sel_msg = legal_selection_message(&editor);
+        editor.apply(sel_msg);
+        let before = editor.state().clone();
+
+        // Edit adjacent to the zombie, then undo it.
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "x".into() },
+        });
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+
+        // Tree structure and selection are both restored intact — the zombie
+        // neighbourhood is left exactly as it was.
+        assert_state_eq!(editor.state(), &before);
+    }
+
+    #[test]
+    fn dnd_hover_guard_rejection_leaves_no_telemetry_or_side_effect() {
+        let (initial, _p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("a") page_break }
+                blockquote { p2: paragraph { text("inside") } }
+                paragraph {}
+            } }
+            selection: (p1, 1) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p2, 2))
+            .expect("cursor metrics")
+            .caret;
+
+        editor.apply(Message::Dnd {
+            op: DndOp::StartInternalSelection,
+        });
+
+        // Snapshot every observable side channel before the rejected hover.
+        let repair_before = editor.state().projected.projected().repair_stats;
+        let epoch_before = editor.render_epoch;
+        assert!(editor.pending_ops.is_empty());
+        assert!(editor.pending_effects.is_empty());
+
+        // First hover targets a position the schema guard rejects (a page-break
+        // source dropping into a nested inline slot), decided by a side-effect-free
+        // probe rather than a committed transaction.
+        let events = editor.apply(Message::Dnd {
+            op: DndOp::Over {
+                page: 0,
+                x: caret.x,
+                y: caret.y + caret.height * 0.5,
+                modifiers: InputModifiers::default(),
+            },
+        });
+
+        // The guard rejected and the probe left no trace: no drop indicator, no
+        // repair telemetry, no queued ops/effects, no render invalidation.
+        assert!(editor.drop_indicator_for_test().is_none());
+        assert_eq!(
+            editor.state().projected.projected().repair_stats,
+            repair_before
+        );
+        assert_eq!(editor.render_epoch, epoch_before);
+        assert!(editor.pending_ops.is_empty());
+        assert!(editor.pending_effects.is_empty());
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
     }
 
     #[test]

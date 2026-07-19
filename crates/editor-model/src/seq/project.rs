@@ -249,23 +249,6 @@ impl RawChild {
     }
 }
 
-/// Count the real (authored, non-synthetic) op dots in `node`'s subtree — the
-/// measure of content lost when a whole subtree is dropped from the tree.
-pub(crate) fn count_rawnode_real_dots(node: &RawNode) -> u64 {
-    let mut n = (!node.id.is_synthetic()) as u64;
-    for c in &node.children {
-        n += count_rawchild_real_dots(c);
-    }
-    n
-}
-
-pub(crate) fn count_rawchild_real_dots(c: &RawChild) -> u64 {
-    match c {
-        RawChild::Leaf { id, .. } => (!id.is_synthetic()) as u64,
-        RawChild::Block(b) => count_rawnode_real_dots(b),
-    }
-}
-
 /// A block's ordered children, backed by a persistent order-statistics tree
 /// (`SumTree`) summed by direct-leaf count. This makes positional edits
 /// (`insert`/`remove` at a slot, and `leaf_slot` mapping a leaf offset to a child
@@ -453,41 +436,35 @@ struct BuildNode {
     children: Vec<ChildRef>,
 }
 
-fn chain_mismatch(stack: &[(Dot, usize)], parents: &[Dot]) -> Option<usize> {
-    for (i, pid) in parents.iter().enumerate() {
-        match stack.get(i) {
-            Some((sid, _)) if sid == pid => continue,
-            _ => return Some(i),
+fn attach_depth(stack: &[(Dot, usize)], parents: &[Dot]) -> usize {
+    for pid in parents.iter().rev() {
+        if let Some(i) = stack.iter().rposition(|(sid, _)| sid == pid) {
+            return i + 1;
         }
     }
-    None
+    1
 }
 
-fn descend_stack(stack: &mut Vec<(Dot, usize)>, parents: &[Dot]) -> bool {
-    // The implicit root always occupies `stack[0]`, so never truncate below it.
-    // On mismatch, keep only the matched valid-ancestor prefix so following inline
-    // content attaches to the deepest still-live ancestor (or drops at the root).
-    let (keep, descended) = match chain_mismatch(stack, parents) {
-        Some(matched) => (matched.max(1), false),
-        None => (parents.len().max(1), true),
-    };
-    if stack.len() > keep {
-        stack.truncate(keep);
+/// Whether attaching a marker under `stack[keep - 1]` is a revival — the marker's
+/// intended parent (`parents.last()`) is not the ancestor it actually landed
+/// under, because a link in its parent chain is dead/absent. A revival is a
+/// repair; a full match (intended parent still open) is not.
+fn attach_is_revival(stack: &[(Dot, usize)], parents: &[Dot], keep: usize) -> bool {
+    match parents.last() {
+        Some(intended) => stack.get(keep - 1).map(|(sid, _)| sid) != Some(intended),
+        None => false,
     }
-    descended
 }
 
 pub fn project_blocks(items: &[(Dot, SeqItem)]) -> Result<RawTree, ProjectError> {
-    let mut drops = 0;
-    project_blocks_with_stats(items, &mut drops)
+    project_blocks_with_stats(items, &mut crate::RepairStats::default())
 }
 
-/// As [`project_blocks`], additionally counting each real op dot dropped for
-/// failing to attach: a block/block-atom whose parent chain no longer resolves,
-/// and an inline leaf stranded at the root.
+/// As [`project_blocks`], counting each revival attachment (a dead/absent parent
+/// chain resolved to the deepest still-open ancestor) as one repair in `stats`.
 pub fn project_blocks_with_stats(
     items: &[(Dot, SeqItem)],
-    drops: &mut u64,
+    stats: &mut crate::RepairStats,
 ) -> Result<RawTree, ProjectError> {
     let mut nodes: Vec<BuildNode> = vec![BuildNode {
         id: Dot::ROOT,
@@ -504,10 +481,11 @@ pub fn project_blocks_with_stats(
                 parents,
                 attrs,
             } => {
-                if !descend_stack(&mut stack, parents) {
-                    *drops += (!id.is_synthetic()) as u64;
-                    continue;
+                let keep = attach_depth(&stack, parents);
+                if attach_is_revival(&stack, parents, keep) {
+                    stats.repairs += 1;
                 }
+                stack.truncate(keep);
                 let idx = nodes.len();
                 nodes.push(BuildNode {
                     id: *id,
@@ -519,15 +497,13 @@ pub fn project_blocks_with_stats(
                 nodes[parent_idx].children.push(ChildRef::Block(idx));
                 stack.push((*id, idx));
             }
-            SeqItem::Char(_) | SeqItem::Unknown { .. } => match stack.last() {
-                Some((sid, parent_idx)) if *sid != Dot::ROOT => {
-                    nodes[*parent_idx].children.push(ChildRef::Leaf {
-                        id: *id,
-                        item: item.clone(),
-                    });
-                }
-                _ => *drops += (!id.is_synthetic()) as u64,
-            },
+            SeqItem::Char(_) | SeqItem::Unknown { .. } => {
+                let parent_idx = stack.last().expect("root is always present").1;
+                nodes[parent_idx].children.push(ChildRef::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                });
+            }
             SeqItem::Atom(leaf) => {
                 if leaf.is_block_level() {
                     return Err(ProjectError::AtomClassMismatch {
@@ -535,15 +511,11 @@ pub fn project_blocks_with_stats(
                         leaf_type: leaf.node_type(),
                     });
                 }
-                match stack.last() {
-                    Some((sid, parent_idx)) if *sid != Dot::ROOT => {
-                        nodes[*parent_idx].children.push(ChildRef::Leaf {
-                            id: *id,
-                            item: item.clone(),
-                        });
-                    }
-                    _ => *drops += (!id.is_synthetic()) as u64,
-                }
+                let parent_idx = stack.last().expect("root is always present").1;
+                nodes[parent_idx].children.push(ChildRef::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                });
             }
             SeqItem::BlockAtom { leaf, parents } => {
                 if !leaf.is_block_level() {
@@ -555,10 +527,11 @@ pub fn project_blocks_with_stats(
                 if parents.is_empty() {
                     return Err(ProjectError::OrphanLeaf { id: *id });
                 }
-                if !descend_stack(&mut stack, parents) {
-                    *drops += (!id.is_synthetic()) as u64;
-                    continue;
+                let keep = attach_depth(&stack, parents);
+                if attach_is_revival(&stack, parents, keep) {
+                    stats.repairs += 1;
                 }
+                stack.truncate(keep);
                 let parent_idx = stack.last().expect("root is always present").1;
                 nodes[parent_idx].children.push(ChildRef::Leaf {
                     id: *id,
@@ -740,34 +713,142 @@ mod tests {
         assert_eq!(got, vec![0, 1, 1, 2, 3]);
     }
 
+    fn find_raw(tree: &RawTree, id: Dot) -> Option<&RawNode> {
+        fn search(node: &RawNode, id: Dot) -> Option<&RawNode> {
+            if node.id == id {
+                return Some(node);
+            }
+            node.children.iter().find_map(|c| match c {
+                RawChild::Block(b) => search(b, id),
+                _ => None,
+            })
+        }
+        tree.roots.iter().find_map(|r| search(r, id))
+    }
+
     #[test]
-    fn project_blocks_with_stats_counts_dropped_marker_and_inline() {
-        let para = Dot::new(1, 0);
-        let ghost = Dot::new(9, 9);
-        let dropped_block = Dot::new(1, 1);
-        let dropped_char = Dot::new(1, 2);
-        let seq = vec![
+    fn dead_link_marker_attaches_under_deepest_open_ancestor() {
+        let d = |a, c| Dot::new(a, c);
+        let root = Dot::ROOT;
+        let els = vec![
             (
-                para,
+                d(1, 1),
                 SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
+                    node_type: NodeType::BulletList,
+                    parents: vec![root],
                     attrs: vec![],
                 },
             ),
             (
-                dropped_block,
+                d(1, 2),
                 SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, ghost],
+                    node_type: NodeType::ListItem,
+                    parents: vec![root, d(1, 1)],
                     attrs: vec![],
                 },
             ),
-            (dropped_char, SeqItem::Char('z')),
+            (
+                d(1, 3),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, d(1, 1), d(1, 2)],
+                    attrs: vec![],
+                },
+            ),
+            (d(1, 4), SeqItem::Char('a')),
+            (
+                d(1, 10),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, d(1, 1), d(1, 2), d(9, 9)],
+                    attrs: vec![],
+                },
+            ),
+            (d(1, 11), SeqItem::Char('z')),
         ];
-        let mut drops = 0u64;
-        let _ = project_blocks_with_stats(&seq, &mut drops).unwrap();
-        assert_eq!(drops, 2, "dropped block marker + its stranded inline char");
+        let raw = project_blocks(&els).unwrap();
+        let item = find_raw(&raw, d(1, 2)).unwrap();
+        assert!(
+            item.children
+                .iter()
+                .any(|c| matches!(c, RawChild::Block(b) if b.id == d(1, 10))),
+            "중간 dead link 문단은 열린 최심 조상(item) 아래 부착"
+        );
+        let revived = find_raw(&raw, d(1, 10)).unwrap();
+        assert!(
+            revived
+                .children
+                .iter()
+                .any(|c| matches!(c, RawChild::Leaf { id, .. } if *id == d(1, 11)))
+        );
+    }
+
+    #[test]
+    fn closed_ancestor_is_not_reopened() {
+        let d = |a, c| Dot::new(a, c);
+        let root = Dot::ROOT;
+        let els = vec![
+            (
+                d(1, 1),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (d(1, 2), SeqItem::Char('a')),
+            (
+                d(1, 5),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                d(1, 8),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, d(1, 1)],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let raw = project_blocks(&els).unwrap();
+        let first = find_raw(&raw, d(1, 1)).unwrap();
+        assert!(
+            !first
+                .children
+                .iter()
+                .any(|c| matches!(c, RawChild::Block(b) if b.id == d(1, 8)))
+        );
+        assert!(
+            raw.roots[0]
+                .children
+                .iter()
+                .any(|c| matches!(c, RawChild::Block(b) if b.id == d(1, 8)))
+        );
+    }
+
+    #[test]
+    fn root_level_stray_char_and_unknown_are_kept() {
+        let d = |c| Dot::new(1, c);
+        let els = vec![
+            (d(1), SeqItem::Char('x')),
+            (
+                d(2),
+                SeqItem::Unknown {
+                    tag: 0,
+                    bytes: vec![],
+                },
+            ),
+        ];
+        let raw = project_blocks(&els).unwrap();
+        assert_eq!(
+            raw.roots[0].children.len(),
+            2,
+            "ROOT 직속 stray char/Unknown 보존"
+        );
     }
 
     #[test]
@@ -850,10 +931,11 @@ mod tests {
     }
 
     #[test]
-    fn malformed_parent_is_dropped() {
+    fn malformed_parent_revives_under_root() {
         let ghost = Dot::new(9, 9);
+        let block = Dot::new(1, 1);
         let seq = vec![(
-            Dot::new(1, 1),
+            block,
             SeqItem::Block {
                 node_type: NodeType::Paragraph,
                 parents: vec![ghost],
@@ -861,12 +943,14 @@ mod tests {
             },
         )];
         let tree = project_blocks(&seq).unwrap();
-        assert!(tree.roots[0].children.is_empty());
+        assert_eq!(tree.roots[0].children.len(), 1);
+        assert!(matches!(&tree.roots[0].children[0], RawChild::Block(b) if b.id == block));
     }
 
     #[test]
-    fn corrupted_prefix_parent_chain_drops_block() {
+    fn corrupted_prefix_parent_chain_attaches_under_named_ancestor() {
         let bq = Dot::new(1, 4);
+        let para = Dot::new(1, 5);
         let ghost = Dot::new(9, 9);
         let seq = vec![
             (
@@ -878,7 +962,7 @@ mod tests {
                 },
             ),
             (
-                Dot::new(1, 5),
+                para,
                 SeqItem::Block {
                     node_type: NodeType::Paragraph,
                     parents: vec![ghost, bq],
@@ -891,14 +975,15 @@ mod tests {
         match &tree.roots[0].children[0] {
             RawChild::Block(b) => {
                 assert_eq!(b.id, bq);
-                assert!(b.children.is_empty());
+                assert_eq!(b.children.len(), 1);
+                assert!(matches!(&b.children[0], RawChild::Block(p) if p.id == para));
             }
             _ => panic!("expected blockquote block"),
         }
     }
 
     #[test]
-    fn dropped_block_drops_following_inline_not_prior_block() {
+    fn dead_parent_block_revives_and_keeps_following_inline() {
         let a = Dot::new(1, 1);
         let ax = Dot::new(1, 2);
         let b = Dot::new(1, 3);
@@ -925,19 +1010,27 @@ mod tests {
             (by, SeqItem::Char('y')),
         ];
         let tree = project_blocks(&seq).unwrap();
-        assert_eq!(tree.roots[0].children.len(), 1);
+        assert_eq!(tree.roots[0].children.len(), 2);
         match &tree.roots[0].children[0] {
             RawChild::Block(blk) => {
                 assert_eq!(blk.id, a);
-                assert_eq!(blk.children.len(), 1, "'y' must drop, not adopt into A");
+                assert_eq!(blk.children.len(), 1);
                 assert!(matches!(&blk.children[0], RawChild::Leaf { id, .. } if *id == ax));
             }
             _ => panic!("expected paragraph A"),
         }
+        match &tree.roots[0].children[1] {
+            RawChild::Block(blk) => {
+                assert_eq!(blk.id, b);
+                assert_eq!(blk.children.len(), 1);
+                assert!(matches!(&blk.children[0], RawChild::Leaf { id, .. } if *id == by));
+            }
+            _ => panic!("expected revived paragraph B"),
+        }
     }
 
     #[test]
-    fn dropped_nested_block_promotes_following_inline_to_valid_ancestor() {
+    fn dead_grandparent_block_revives_under_named_ancestor() {
         let fold = Dot::new(1, 1);
         let title = Dot::new(1, 2);
         let b = Dot::new(1, 3);
@@ -964,46 +1057,50 @@ mod tests {
             (by, SeqItem::Char('y')),
         ];
         let tree = project_blocks(&seq).unwrap();
-        // B dropped; matched prefix [ROOT, fold] keeps fold open, so 'y' attaches to fold
-        // (deepest still-valid ancestor), not dropped at root.
         assert_eq!(tree.roots[0].children.len(), 1);
         match &tree.roots[0].children[0] {
             RawChild::Block(blk) => {
                 assert_eq!(blk.id, fold);
-                let leaves: Vec<Dot> = blk
-                    .children
-                    .iter()
-                    .filter_map(|c| match c {
-                        RawChild::Leaf { id, .. } => Some(*id),
-                        _ => None,
-                    })
-                    .collect();
-                assert_eq!(leaves, vec![title, by]);
+                assert_eq!(blk.children.len(), 2);
+                assert!(matches!(&blk.children[0], RawChild::Leaf { id, .. } if *id == title));
+                match &blk.children[1] {
+                    RawChild::Block(rev) => {
+                        assert_eq!(rev.id, b);
+                        assert!(matches!(&rev.children[0], RawChild::Leaf { id, .. } if *id == by));
+                    }
+                    _ => panic!("expected revived paragraph B under fold"),
+                }
             }
             _ => panic!("expected fold-title block"),
         }
     }
 
     #[test]
-    fn orphan_leaf_is_dropped() {
-        let seq = vec![(Dot::new(1, 0), SeqItem::Char('x'))];
+    fn root_level_stray_char_is_kept() {
+        let x = Dot::new(1, 0);
+        let seq = vec![(x, SeqItem::Char('x'))];
         let tree = project_blocks(&seq).unwrap();
-        assert!(tree.roots[0].children.is_empty());
+        assert_eq!(tree.roots[0].children.len(), 1);
+        assert!(matches!(&tree.roots[0].children[0], RawChild::Leaf { id, .. } if *id == x));
     }
 
     #[test]
-    fn orphan_inline_atom_is_dropped() {
+    fn root_level_stray_inline_atom_is_kept() {
         use crate::seq::AtomLeaf;
-        let seq = vec![(Dot::new(1, 0), SeqItem::Atom(AtomLeaf::HardBreak))];
+        let hb = Dot::new(1, 0);
+        let seq = vec![(hb, SeqItem::Atom(AtomLeaf::HardBreak))];
         let tree = project_blocks(&seq).unwrap();
-        assert!(tree.roots[0].children.is_empty());
+        assert_eq!(tree.roots[0].children.len(), 1);
+        assert!(matches!(&tree.roots[0].children[0], RawChild::Leaf { id, .. } if *id == hb));
     }
 
     #[test]
-    fn orphan_leaf_before_block_dropped_rest_kept() {
+    fn root_level_stray_char_before_block_is_kept() {
+        let stray = Dot::new(1, 0);
         let para = Dot::new(1, 1);
+        let y = Dot::new(1, 2);
         let seq = vec![
-            (Dot::new(1, 0), SeqItem::Char('x')),
+            (stray, SeqItem::Char('x')),
             (
                 para,
                 SeqItem::Block {
@@ -1012,18 +1109,16 @@ mod tests {
                     attrs: vec![],
                 },
             ),
-            (Dot::new(1, 2), SeqItem::Char('y')),
+            (y, SeqItem::Char('y')),
         ];
         let tree = project_blocks(&seq).unwrap();
-        assert_eq!(tree.roots[0].children.len(), 1);
-        match &tree.roots[0].children[0] {
+        assert_eq!(tree.roots[0].children.len(), 2);
+        assert!(matches!(&tree.roots[0].children[0], RawChild::Leaf { id, .. } if *id == stray));
+        match &tree.roots[0].children[1] {
             RawChild::Block(b) => {
                 assert_eq!(b.id, para);
                 assert_eq!(b.children.len(), 1);
-                assert!(matches!(
-                    &b.children[0],
-                    RawChild::Leaf { id, .. } if *id == Dot::new(1, 2)
-                ));
+                assert!(matches!(&b.children[0], RawChild::Leaf { id, .. } if *id == y));
             }
             _ => panic!("expected paragraph block"),
         }
@@ -1436,12 +1531,13 @@ mod tests {
     }
 
     #[test]
-    fn block_atom_unknown_parent_is_dropped() {
+    fn block_atom_unknown_parent_revives_under_root() {
         use crate::nodes::HorizontalRuleVariant;
         use crate::seq::AtomLeaf;
         let ghost = Dot::new(9, 9);
+        let hr = Dot::new(1, 1);
         let seq = vec![(
-            Dot::new(1, 1),
+            hr,
             SeqItem::BlockAtom {
                 leaf: AtomLeaf::HorizontalRule {
                     variant: HorizontalRuleVariant::default(),
@@ -1450,7 +1546,12 @@ mod tests {
             },
         )];
         let tree = project_blocks(&seq).unwrap();
-        assert!(tree.roots[0].children.is_empty());
+        assert_eq!(tree.roots[0].children.len(), 1);
+        assert!(matches!(
+            &tree.roots[0].children[0],
+            RawChild::Leaf { id, item }
+                if *id == hr && matches!(item, SeqItem::Atom(AtomLeaf::HorizontalRule { .. }))
+        ));
     }
 
     #[test]

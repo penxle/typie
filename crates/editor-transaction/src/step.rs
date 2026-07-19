@@ -48,6 +48,15 @@ pub enum Step {
         index: usize,
         subtree: Subtree,
     },
+    /// Like `InsertSubtree`, but the inserted subtree's `source_dots` are aliased
+    /// to the freshly minted dots (the alias op `InsertSubtree` discards). Used by
+    /// `materialize_repair_target` to re-issue a repair scaffold's owned real
+    /// content under a fresh real container while keeping the old dots resolvable.
+    ReissueSubtree {
+        parent: Dot,
+        index: usize,
+        subtree: Subtree,
+    },
     /// Position-based deletion for slots that carry lossy/unrepresentable
     /// content (an unknown placeholder) and so cannot be captured into a
     /// `Subtree` for algebraic (re-insert) inversion. `emitted` is empty at
@@ -185,6 +194,11 @@ impl Step {
                 index,
                 subtree,
             } => steps::remove_subtree::apply_to(batched, *parent, *index, subtree),
+            Step::ReissueSubtree {
+                parent,
+                index,
+                subtree,
+            } => steps::reissue_subtree::apply_to(batched, *parent, *index, subtree),
             Step::DeleteOpaque { dots, .. } => steps::delete_opaque::apply_to(batched, dots),
             Step::UndeleteOpaque { dels } => steps::delete_opaque::apply_to_undelete(batched, dels),
             Step::MoveNode {
@@ -269,6 +283,11 @@ impl Step {
                 index,
                 subtree,
             } => steps::remove_subtree::inverse(*parent, *index, subtree.clone()),
+            Step::ReissueSubtree {
+                parent,
+                index,
+                subtree,
+            } => steps::reissue_subtree::inverse(*parent, *index, subtree.clone()),
             Step::DeleteOpaque { emitted, .. } => steps::delete_opaque::inverse(emitted.clone()),
             Step::UndeleteOpaque { .. } => steps::delete_opaque::inverse_of_undelete(),
             Step::MoveNode {
