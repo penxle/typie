@@ -140,6 +140,15 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       await db.transaction(async (tx) => {
         lock.signal.throwIfAborted();
 
+        // The Redis lock is liveness-only: a wedged event loop starves its
+        // renewal and lets it expire while this tx is still open, and the
+        // maxSeq CAS below is checked once at tx start — an arbitrary delay
+        // before the inserts can interleave with a concurrent consolidation
+        // and land rows below its CONSOLIDATED prefix (children-before-parents
+        // in the rebuilt stream). The advisory xact lock serializes the whole
+        // bundle-mutating tx against consolidate at the DB level.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${documentId}, 0))`);
+
         const maxSeq = await tx
           .select({ max: max(DocumentBundles.seq) })
           .from(DocumentBundles)
@@ -385,6 +394,12 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
     const lastMergedSeq = rows[lastMergedIdx].seq;
     await db.transaction(async (tx) => {
       lock.signal.throwIfAborted();
+
+      // Same DB-level serialization as the collect tx (see there): the prefix
+      // CAS below cannot see a concurrent collect's uncommitted inserts, and
+      // deleting the prefix around them strands their rows below the new
+      // CONSOLIDATED row.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${documentId}, 0))`);
 
       const prefix = await tx
         .select({ count: count(), max: max(DocumentBundles.seq) })
