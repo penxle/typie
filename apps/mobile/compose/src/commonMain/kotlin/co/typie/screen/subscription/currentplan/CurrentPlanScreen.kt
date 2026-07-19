@@ -17,9 +17,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
+import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.Subscription
 import co.typie.domain.subscription.SubscriptionService
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -50,8 +50,8 @@ fun CurrentPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(SubscriptionService.state) {
-    if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
+  LaunchedEffect(SubscriptionService.entitlement) {
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
       nav.pop()
     }
   }

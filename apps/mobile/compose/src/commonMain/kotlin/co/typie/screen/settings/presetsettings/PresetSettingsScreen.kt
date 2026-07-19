@@ -21,12 +21,16 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.preview.EditorPreview
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -57,8 +61,10 @@ fun PresetSettingsScreen() {
   val scrollState = rememberScrollState()
   val toast = LocalToast.current
   val sheet = LocalSheet.current
+  val nav = Nav.current
 
   suspend fun save(preset: Preset) {
+    if (!SubscriptionService.gate(sheet, nav, GatedAction.PresetSettings)) return
     model.updatePreset(preset).withDefaultExceptionHandler(toast)
   }
 
@@ -74,7 +80,13 @@ fun PresetSettingsScreen() {
     center = { Text("프리셋", style = AppTheme.typography.title) },
     trailing = {
       PresetMenu(
-        onReset = { scope.launch { model.resetPreset().withDefaultExceptionHandler(toast) } }
+        onReset = {
+          scope.launch {
+            if (SubscriptionService.gate(sheet, nav, GatedAction.PresetSettings)) {
+              model.resetPreset().withDefaultExceptionHandler(toast)
+            }
+          }
+        }
       )
     },
     scrollOffset = scrollState.topBarScrollOffset(),

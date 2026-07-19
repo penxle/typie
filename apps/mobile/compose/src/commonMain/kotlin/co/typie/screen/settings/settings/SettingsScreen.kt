@@ -22,8 +22,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.auth.AuthService
 import co.typie.domain.settings.SettingSwitch
 import co.typie.domain.settings.SettingsCardRow
+import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.SubscriptionService
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -137,10 +137,10 @@ fun SettingsScreen() {
         SettingsCardRow(
           "플랜",
           onClick = {
-            when (SubscriptionService.state) {
-              is SubscriptionServiceState.Subscribed -> nav.navigate(Route.CurrentPlan)
-              is SubscriptionServiceState.NotSubscribed -> nav.navigate(Route.EnrollPlan)
-              is SubscriptionServiceState.Unknown -> {}
+            when (SubscriptionService.entitlement) {
+              is Entitlement.Active -> nav.navigate(Route.CurrentPlan)
+              is Entitlement.Expired -> nav.navigate(Route.EnrollPlan)
+              is Entitlement.Unknown -> {}
             }
           },
         )

@@ -57,6 +57,9 @@ import co.typie.domain.entitytransfer.EntityPasteBar
 import co.typie.domain.entitytransfer.EntityPasteTarget
 import co.typie.domain.entitytransfer.toMessage
 import co.typie.domain.entitytransfer.toTransferSource
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
@@ -189,6 +192,7 @@ fun SpaceScreen() {
     }
 
     presenterScope.launch {
+      if (!SubscriptionService.gate(sheet, nav, GatedAction.ShareFolder)) return@launch
       sheet.present {
         FolderEntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
       }
@@ -219,6 +223,7 @@ fun SpaceScreen() {
           summary = selectionSummary,
           onChangeIcon = {
             presenterScope.launch {
+              if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) return@launch
               sheet.present(
                 stops = EntityIconPickerStops,
                 stopPolicy = EntityIconPickerStopPolicy,
@@ -289,8 +294,11 @@ fun SpaceScreen() {
         icon = Lucide.ChevronsUpDown,
         label = "순서 변경하기",
         onClick = {
-          selection.reset()
-          isReordering = true
+          presenterScope.launch {
+            if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) return@launch
+            selection.reset()
+            isReordering = true
+          }
         },
       ),
     )
@@ -351,6 +359,10 @@ fun SpaceScreen() {
                 if (!isPasting) {
                   isPasting = true
                   presenterScope.launch {
+                    if (!SubscriptionService.gate(sheet, nav, GatedAction.Paste)) {
+                      isPasting = false
+                      return@launch
+                    }
                     clipboard
                       .pasteInto(resolvedPasteTarget)
                       .collect(
@@ -431,6 +443,8 @@ fun SpaceScreen() {
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity))
+                            return@launch
                           sheet.present {
                             DocumentRenameSheet(
                               model = documentActionModel,
@@ -443,6 +457,8 @@ fun SpaceScreen() {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon))
+                            return@launch
                           sheet.present(
                             stops = EntityIconPickerStops,
                             stopPolicy = EntityIconPickerStopPolicy,
@@ -464,6 +480,8 @@ fun SpaceScreen() {
 
                       EntityAction.Move -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity))
+                            return@launch
                           sheet.present(stops = EntityMoveStops) {
                             EntityMoveSheet(
                               source = entity.toTransferSource(),
@@ -508,8 +526,13 @@ fun SpaceScreen() {
                       EntityAction.SelectMultiple -> Unit
 
                       EntityAction.StartReorder -> {
-                        selection.reset()
-                        isReordering = true
+                        presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+                            return@launch
+                          }
+                          selection.reset()
+                          isReordering = true
+                        }
                       }
                     }
                   }
@@ -533,6 +556,8 @@ fun SpaceScreen() {
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity))
+                            return@launch
                           sheet.present {
                             FolderRenameSheet(
                               model = folderActionModel,
@@ -545,6 +570,8 @@ fun SpaceScreen() {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon))
+                            return@launch
                           sheet.present(
                             stops = EntityIconPickerStops,
                             stopPolicy = EntityIconPickerStopPolicy,
@@ -566,6 +593,8 @@ fun SpaceScreen() {
 
                       EntityAction.Move -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity))
+                            return@launch
                           sheet.present(stops = EntityMoveStops) {
                             EntityMoveSheet(
                               source = entity.toTransferSource(),
@@ -610,8 +639,13 @@ fun SpaceScreen() {
                       EntityAction.SelectMultiple -> Unit
 
                       EntityAction.StartReorder -> {
-                        selection.reset()
-                        isReordering = true
+                        presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+                            return@launch
+                          }
+                          selection.reset()
+                          isReordering = true
+                        }
                       }
                     }
                   }

@@ -11,6 +11,7 @@ internal interface EditorGestureContext {
   val geometry: EditorInteractionGeometry
   val mode: EditorInteractionMode
   val uiState: EditorUiState
+  val readOnly: Boolean
 
   val platform: Platform
 

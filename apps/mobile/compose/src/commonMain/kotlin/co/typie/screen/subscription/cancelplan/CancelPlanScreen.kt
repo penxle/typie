@@ -12,9 +12,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
+import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.SubscriptionFeatureList
 import co.typie.domain.subscription.SubscriptionService
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.fullPlanFeatures
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
@@ -39,8 +39,8 @@ fun CancelPlanScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
 
-  LaunchedEffect(SubscriptionService.state) {
-    if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
+  LaunchedEffect(SubscriptionService.entitlement) {
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
       nav.pop()
     }
   }

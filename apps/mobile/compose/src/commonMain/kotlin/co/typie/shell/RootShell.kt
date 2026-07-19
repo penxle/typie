@@ -25,6 +25,8 @@ import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
+import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.SubscriptionService
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.orphanSweeper
 import co.typie.editor.sync.ws.SyncWs
@@ -87,6 +89,27 @@ fun RootShell() {
         orphanSweeper.resetPermanentFailures()
         orphanSweeper.sweep()
       }
+  }
+
+  LaunchedEffect(Unit) {
+    var wasActive = SubscriptionService.entitlement is Entitlement.Active
+    snapshotFlow { SubscriptionService.entitlement }
+      .collect { entitlement ->
+        val active = entitlement is Entitlement.Active
+        if (active && !wasActive) {
+          // 재구독(Active) 전환: permanent 실패를 일괄 리셋하고 전 문서 pending을 플러시한다.
+          orphanSweeper.resetPermanentFailures()
+          SyncWs.resetPermanentlyFailedChannels()
+          ActiveDocumentEditingSessions.resumeSyncAll()
+          orphanSweeper.sweep()
+        }
+        wasActive = active
+      }
+  }
+
+  LaunchedEffect(Unit) {
+    // WS 재연결 시 엔타이틀먼트 재조회(스펙 §3.1 트리거 ③). setter만 세팅 — 연결을 강제 초기화하지 않는다.
+    SyncWs.onSyncReconnected = { SubscriptionService.refresh() }
   }
 
   val lifecycleOwner = LocalLifecycleOwner.current

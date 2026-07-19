@@ -64,6 +64,9 @@ import co.typie.domain.entitytransfer.EntityPasteBar
 import co.typie.domain.entitytransfer.EntityPasteTarget
 import co.typie.domain.entitytransfer.toMessage
 import co.typie.domain.entitytransfer.toTransferSource
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -211,6 +214,7 @@ fun FolderScreen(entityId: String) {
     }
 
     presenterScope.launch {
+      if (!SubscriptionService.gate(sheet, nav, GatedAction.ShareFolder)) return@launch
       sheet.present {
         FolderEntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
       }
@@ -241,6 +245,7 @@ fun FolderScreen(entityId: String) {
           summary = selectionSummary,
           onChangeIcon = {
             presenterScope.launch {
+              if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) return@launch
               sheet.present(
                 stops = EntityIconPickerStops,
                 stopPolicy = EntityIconPickerStopPolicy,
@@ -311,8 +316,11 @@ fun FolderScreen(entityId: String) {
         icon = Lucide.ChevronsUpDown,
         label = "순서 변경하기",
         onClick = {
-          selection.reset()
-          isReordering = true
+          presenterScope.launch {
+            if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) return@launch
+            selection.reset()
+            isReordering = true
+          }
         },
       ),
     )
@@ -385,6 +393,10 @@ fun FolderScreen(entityId: String) {
                 if (!isPasting) {
                   isPasting = true
                   presenterScope.launch {
+                    if (!SubscriptionService.gate(sheet, nav, GatedAction.Paste)) {
+                      isPasting = false
+                      return@launch
+                    }
                     clipboard
                       .pasteInto(resolvedPasteTarget)
                       .collect(
@@ -456,6 +468,8 @@ fun FolderScreen(entityId: String) {
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity))
+                            return@launch
                           sheet.present {
                             DocumentRenameSheet(
                               model = model,
@@ -468,6 +482,8 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon))
+                            return@launch
                           sheet.present(
                             stops = EntityIconPickerStops,
                             stopPolicy = EntityIconPickerStopPolicy,
@@ -489,6 +505,8 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.Move -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity))
+                            return@launch
                           sheet.present(stops = EntityMoveStops) {
                             EntityMoveSheet(
                               source = entity.toTransferSource(),
@@ -531,8 +549,13 @@ fun FolderScreen(entityId: String) {
                       EntityAction.SelectMultiple -> Unit
 
                       EntityAction.StartReorder -> {
-                        selection.reset()
-                        isReordering = true
+                        presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+                            return@launch
+                          }
+                          selection.reset()
+                          isReordering = true
+                        }
                       }
                     }
                   }
@@ -556,6 +579,8 @@ fun FolderScreen(entityId: String) {
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity))
+                            return@launch
                           sheet.present {
                             FolderRenameSheet(
                               model = model,
@@ -568,6 +593,8 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon))
+                            return@launch
                           sheet.present(
                             stops = EntityIconPickerStops,
                             stopPolicy = EntityIconPickerStopPolicy,
@@ -589,6 +616,8 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.Move -> {
                         presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity))
+                            return@launch
                           sheet.present(stops = EntityMoveStops) {
                             EntityMoveSheet(
                               source = entity.toTransferSource(),
@@ -631,8 +660,13 @@ fun FolderScreen(entityId: String) {
                       EntityAction.SelectMultiple -> Unit
 
                       EntityAction.StartReorder -> {
-                        selection.reset()
-                        isReordering = true
+                        presenterScope.launch {
+                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+                            return@launch
+                          }
+                          selection.reset()
+                          isReordering = true
+                        }
                       }
                     }
                   }

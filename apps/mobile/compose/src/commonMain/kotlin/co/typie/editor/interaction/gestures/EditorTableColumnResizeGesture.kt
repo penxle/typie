@@ -27,8 +27,12 @@ internal class EditorTableColumnResizeGesture {
   }
 
   fun hitTest(position: Offset, context: EditorGestureContext): EditorTableColumnResizePlacement? =
-    resolveTableColumnResizePlacement(editor = context.editor, geometry = context.geometry)
-      ?.takeIf { candidate -> candidate.handleRects.any { rect -> rect.contains(position) } }
+    if (context.readOnly) {
+      null
+    } else {
+      resolveTableColumnResizePlacement(editor = context.editor, geometry = context.geometry)
+        ?.takeIf { candidate -> candidate.handleRects.any { rect -> rect.contains(position) } }
+    }
 
   fun handlePointerDown(
     pointerId: Long,

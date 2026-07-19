@@ -65,6 +65,7 @@ import * as aws from '#/external/aws.ts';
 import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { getUserUsage } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
@@ -1026,6 +1027,8 @@ builder.mutationFields((t) => ({
     type: User,
     input: { value: t.input.field({ type: 'JSON' }) },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const preference = await db
         .select({ value: UserPreferences.value })
         .from(UserPreferences)
@@ -1049,6 +1052,8 @@ builder.mutationFields((t) => ({
   resetPreferences: t.withAuth({ session: true }).field({
     type: User,
     resolve: async (_, __, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const value = {};
 
       await db

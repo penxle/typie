@@ -50,6 +50,8 @@ class SyncEngine(
   private val scope: CoroutineScope,
   private val isPermanent: (Throwable) -> Boolean = { false },
   private val onEvent: (SyncEvent) -> Unit = {},
+  private val canPush: () -> Boolean = { true },
+  private val onPermanentError: (Throwable) -> Unit = {},
   private val now: () -> Long,
 ) : SyncHeadsSink {
   private companion object {
@@ -149,6 +151,9 @@ class SyncEngine(
 
   private suspend fun drain() {
     if (stopped) return
+    // Expired 등으로 push가 차단되면 아무것도 보내지 않는다.
+    // capture()/persistFresh()는 firePush()에서 이미 실행돼 로컬 스태시가 보존된 상태다.
+    if (!canPush()) return
     val missing = editor.missingChangesetsFor(confirmedHeads)
     if (missing.withheld > 0) onEvent(SyncEvent.PersistWithheld(missing.withheld))
     if (missing.bytes.isEmpty()) return
@@ -295,6 +300,7 @@ class SyncEngine(
     if (isPermanent(error)) {
       statusFlow.value = SyncStatus.Error
       Logger.e(error) { "SyncEngine: permanent failure" }
+      onPermanentError(error)
       return
     }
     statusFlow.value = SyncStatus.Retrying
@@ -318,6 +324,17 @@ class SyncEngine(
     retryJob = null
     statusFlow.value = SyncStatus.Idle
     scope.launch(start = CoroutineStart.UNDISPATCHED) { firePush() }
+  }
+
+  /** permanent Error 상태를 포함해 push를 강제로 재개한다(재구독/백스톱 회복 경로). */
+  fun resumePush() {
+    if (stopped) return
+    retryJob?.cancel()
+    retryJob = null
+    if (statusFlow.value == SyncStatus.Error || statusFlow.value == SyncStatus.Retrying) {
+      statusFlow.value = SyncStatus.Idle
+    }
+    flushScheduledChanges()
   }
 
   override fun setConfirmedHeads(heads: ByteArray) {

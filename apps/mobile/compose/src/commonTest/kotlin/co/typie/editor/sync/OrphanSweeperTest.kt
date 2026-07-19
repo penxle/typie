@@ -216,4 +216,29 @@ class OrphanSweeperTest {
     assertEquals(emptyList(), store.load("docA").map { it.id })
     assertEquals(listOf("1:1"), store.load("docB").map { it.id })
   }
+
+  @Test
+  fun doesNotPushWhilePushIsGated() = runTest {
+    val store = FakeDeltaStore()
+    store.records.add(
+      DeltaRecord(id = "1:1", documentId = "docA", changeset = byteArrayOf(1), createdAt = 1)
+    )
+    var gateOpen = false
+    val pushed = mutableListOf<String>()
+    val sweeper =
+      OrphanSweeper(
+        store = store,
+        pushFn = { documentId, _ -> pushed.add(documentId) },
+        openDocumentIds = { emptySet() },
+        canPush = { gateOpen },
+      )
+
+    sweeper.sweep()
+    assertEquals(emptyList(), pushed)
+    assertEquals(1, store.records.size) // 스태시 보존
+
+    gateOpen = true
+    sweeper.sweep()
+    assertEquals(listOf("docA"), pushed)
+  }
 }

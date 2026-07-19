@@ -95,6 +95,8 @@ internal fun NoteList(
   reorderState: ReorderableColumnState<String>,
   noteColorOptions: List<NoteColorOption>,
   interactive: Boolean,
+  reorderEnabled: Boolean = true,
+  contentEditable: Boolean = true,
   actions: NoteListActions,
 ) {
   val toast = LocalToast.current
@@ -196,13 +198,15 @@ internal fun NoteList(
                 content = noteContent,
                 isSaving = !isLoading && item.isSaving,
                 colorOption = colorOption,
+                contentEditable = contentEditable,
                 dragHandleModifier =
                   if (interactive && !isLoading) {
                     Modifier.reorderableDragHandle(
                       state = reorderState,
                       key = note.id,
                       enabled =
-                        !noteIsExiting &&
+                        reorderEnabled &&
+                          !noteIsExiting &&
                           !item.isSaving &&
                           !item.hasPendingColor &&
                           (!item.expanded || !item.isDirty),

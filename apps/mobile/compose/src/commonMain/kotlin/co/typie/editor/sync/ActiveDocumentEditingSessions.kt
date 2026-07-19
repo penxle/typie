@@ -36,6 +36,12 @@ internal object ActiveDocumentEditingSessions {
     }
   }
 
+  fun resumeSyncAll() {
+    for (session in all()) {
+      session.resumeSyncNow()
+    }
+  }
+
   fun stopAll() {
     for (session in all()) {
       session.stop()

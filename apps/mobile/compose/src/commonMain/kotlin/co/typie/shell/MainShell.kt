@@ -12,6 +12,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import co.typie.domain.subscription.SubscriptionGateHost
 import co.typie.graphql.Apollo
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
 import co.typie.navigation.Nav
@@ -81,6 +82,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
         }
       }
       MainDrawerOverlay(drawer)
+      SubscriptionGateHost()
     }
   }
 }

@@ -17,6 +17,7 @@ import { compressZstd } from '#/utils/compression.ts';
 import { isUnsupportedFontFormat, processFont } from '#/utils/font.ts';
 import { processFont as processFontLegacy } from '#/utils/font-legacy.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
+import { persistBlobAsImage as persistImageFile } from '#/utils/user-contents.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { builder } from '../builder.ts';
 import { Blob, File, Font, Image, isTypeOf } from '../objects.ts';
@@ -412,6 +413,31 @@ builder.mutationFields((t) => ({
         .returning()
         .then(firstOrThrow);
       /* eslint-enable @typescript-eslint/no-non-null-assertion */
+    },
+  }),
+
+  persistBlobAsAvatar: t.withAuth({ session: true }).fieldWithInput({
+    type: Image,
+    input: {
+      path: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const object = await aws.s3.send(
+        new GetObjectCommand({
+          Bucket: 'typie-uploads',
+          Key: input.path,
+        }),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const buffer = await object.Body!.transformToByteArray();
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const name = decodeURIComponent(object.Metadata!.name);
+
+      const data = await sharp(buffer, { failOn: 'none' }).rotate().resize({ width: 512, height: 512, fit: 'cover' }).png().toBuffer();
+
+      const file = new globalThis.File([data], name, { type: 'image/png' });
+      return await persistImageFile({ userId: ctx.session.userId, file });
     },
   }),
 

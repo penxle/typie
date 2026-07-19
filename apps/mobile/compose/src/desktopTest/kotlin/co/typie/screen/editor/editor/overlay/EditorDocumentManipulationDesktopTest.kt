@@ -948,6 +948,62 @@ class EditorDocumentManipulationDesktopTest {
   }
 
   @Test
+  fun tableColumnResizeHandleDragDoesNothingWhenReadOnly() = runComposeUiTest {
+    val selection =
+      Selection(
+        anchor = Position("cell-text", 0, Affinity.Downstream),
+        head = Position("cell-text", 0, Affinity.Downstream),
+      )
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        pageSizesProvider = { listOf(Size(width = 120f, height = 120f)) },
+        tableOverlaysProvider = {
+          listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+        },
+      )
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val uiState =
+      EditorUiState().apply {
+        updateFocus(true)
+        updatePageOffset(page = 0, offset = Offset.Zero)
+        updateInteractionSurfaceBounds(TestRootRect, density = 1f)
+        updateEditorBounds(
+          ComposeRect(
+            offset = Offset(x = 20f, y = 20f),
+            size = ComposeSize(width = 120f, height = 120f),
+          ),
+          density = 1f,
+        )
+      }
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    editor.sync {}
+    try {
+      setOverlayHostContent(
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+        readOnly = true,
+      )
+      waitForIdle()
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(Offset(x = 80f, y = 50f))
+        moveTo(Offset(x = 100f, y = 50f))
+        up()
+      }
+      waitForIdle()
+
+      assertTrue(fake.enqueued.filterIsInstance<Message.Node>().isEmpty())
+    } finally {
+      runtime.clear(editor)
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun tableColumnResizeHandleDragStartsWithinHandleHitArea() = runComposeUiTest {
     val selection =
       Selection(
@@ -1111,6 +1167,7 @@ class EditorDocumentManipulationDesktopTest {
     pageSizes: List<Size> = listOf(Size(width = 120f, height = 120f)),
     displayZoom: Float = 1f,
     viewportZoomConfig: EditorViewportZoomSemanticConfig? = null,
+    readOnly: Boolean = false,
     onLowerPointerDown: () -> Unit = {},
     onInteractionScope: (EditorInteractionScope) -> Unit = {},
   ) {
@@ -1153,6 +1210,7 @@ class EditorDocumentManipulationDesktopTest {
           scrollGestureLockState = scrollGestureLockState,
           viewportZoomConfig = viewportZoomConfig,
           layoutSpec = layoutSpec,
+          readOnly = { readOnly },
           onSelectionHaptic = {},
           onRequestSoftwareKeyboard = {},
         )

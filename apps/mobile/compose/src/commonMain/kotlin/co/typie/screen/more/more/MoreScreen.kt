@@ -19,9 +19,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.stats.ActivityGrid
+import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionService.subscription
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.verticalScroll
@@ -165,10 +165,10 @@ fun MoreScreen() {
         Column {
           CardRow(
             onClick = {
-              when (SubscriptionService.state) {
-                is SubscriptionServiceState.Subscribed -> nav.navigate(Route.CurrentPlan)
-                is SubscriptionServiceState.NotSubscribed -> nav.navigate(Route.EnrollPlan)
-                is SubscriptionServiceState.Unknown -> {}
+              when (SubscriptionService.entitlement) {
+                is Entitlement.Active -> nav.navigate(Route.CurrentPlan)
+                is Entitlement.Expired -> nav.navigate(Route.EnrollPlan)
+                is Entitlement.Unknown -> {}
               }
             }
           ) {
@@ -202,9 +202,9 @@ fun MoreScreen() {
             ) {
               Skeleton.Unite {
                 Text(
-                  when (SubscriptionService.state) {
-                    is SubscriptionServiceState.Subscribed -> "이용권 정보"
-                    is SubscriptionServiceState.NotSubscribed -> "구매하기"
+                  when (SubscriptionService.entitlement) {
+                    is Entitlement.Active -> "이용권 정보"
+                    is Entitlement.Expired -> "구매하기"
                     else -> ""
                   },
                   style = AppTheme.typography.caption,
@@ -303,7 +303,7 @@ fun MoreScreen() {
 
       CardSurface(modifier = Modifier.fillMaxWidth()) {
         Column {
-          if (SubscriptionService.state is SubscriptionServiceState.Subscribed) {
+          if (SubscriptionService.entitlement is Entitlement.Active) {
             CardRow(onClick = { uriHandler.openUri("https://discord.gg/MteQ9AMa4B") }) {
               Skeleton.Unite {
                 Img(

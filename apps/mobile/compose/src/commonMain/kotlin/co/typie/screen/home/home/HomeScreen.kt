@@ -62,6 +62,9 @@ import co.typie.domain.entity.EntityRow
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatEntityExcerpt
 import co.typie.domain.entity.parentFolderMeta
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -92,6 +95,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarAction
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -127,6 +131,7 @@ fun HomeScreen() {
 
   val nav = Nav.current
   val toast = LocalToast.current
+  val sheet = LocalSheet.current
 
   ProvideTopBar(
     leadingKey = MainDrawerTriggerLeadingKey,
@@ -142,6 +147,8 @@ fun HomeScreen() {
         icon = Lucide.Pencil,
         onClick = {
           if (model.isCreatingDocument) return@BottomBarAction
+          if (!SubscriptionService.gate(sheet, nav, GatedAction.CreateDocument))
+            return@BottomBarAction
           model.createDocument().withDefaultExceptionHandler(toast).onOk {
             nav.navigate(Route.Editor(it))
           }
@@ -162,7 +169,9 @@ fun HomeScreen() {
   val continueWritingDoc = model.continueWritingDocument
 
   val createDocument: suspend () -> Unit = {
-    if (!model.isCreatingDocument) {
+    if (
+      !model.isCreatingDocument && SubscriptionService.gate(sheet, nav, GatedAction.CreateDocument)
+    ) {
       model.createDocument().withDefaultExceptionHandler(toast).onOk {
         nav.navigate(Route.Editor(it))
       }
@@ -331,7 +340,11 @@ private fun EmptyHome(
 
         Spacer(Modifier.width(8.dp))
 
-        Text("새 문서 쓰기", style = AppTheme.typography.action, color = AppTheme.colors.surfaceDefault)
+        Text(
+          "새 문서 쓰기",
+          style = AppTheme.typography.action,
+          color = AppTheme.colors.surfaceDefault,
+        )
       }
     }
   }

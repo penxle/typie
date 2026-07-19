@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { and, asc, eq, isNotNull, or } from 'drizzle-orm';
 import { db, firstOrThrow, TableCode, TextReplacementPreferences, TextReplacements, validateDbId } from '#/db/index.ts';
 import { generateFractionalOrder } from '#/utils/index.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { isTypeOf, TextReplacement, TextReplacementPreference, User } from '../objects.ts';
 
@@ -70,6 +71,8 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       return await db.transaction(async (tx) => {
         const textReplacement = await tx
           .insert(TextReplacements)
@@ -111,6 +114,8 @@ builder.mutationFields((t) => ({
       state: t.input.field({ type: TextReplacementState, required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const textReplacement = await db
         .select()
         .from(TextReplacements)
@@ -205,6 +210,8 @@ builder.mutationFields((t) => ({
       textReplacementId: t.input.id({ validate: validateDbId(TableCode.TEXT_REPLACEMENTS) }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const textReplacement = await db
         .select()
         .from(TextReplacements)
@@ -238,6 +245,8 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       return await db
         .update(TextReplacementPreferences)
         .set({

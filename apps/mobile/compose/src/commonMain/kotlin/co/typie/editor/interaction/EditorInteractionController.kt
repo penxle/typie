@@ -20,6 +20,7 @@ internal class EditorInteractionController(
   private val platformProvider: () -> Platform = { Platform.Desktop },
   private val uiStateProvider: () -> EditorUiState,
   private val pointerInputEnabledProvider: () -> Boolean = { true },
+  private val readOnlyProvider: () -> Boolean = { false },
 ) {
   private var mode by mutableStateOf(EditorInteractionMode.Idle)
   private val gestureContext =
@@ -41,6 +42,9 @@ internal class EditorInteractionController(
 
       override val uiState: EditorUiState
         get() = uiStateProvider()
+
+      override val readOnly: Boolean
+        get() = readOnlyProvider()
 
       override val platform: Platform
         get() = platformProvider()

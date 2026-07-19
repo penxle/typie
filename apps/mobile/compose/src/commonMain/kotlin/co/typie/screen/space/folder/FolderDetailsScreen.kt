@@ -42,6 +42,9 @@ import co.typie.domain.entity.formatFolderName
 import co.typie.domain.entity.isRowEntity
 import co.typie.domain.entitytransfer.EntityClipboardService
 import co.typie.domain.entitytransfer.toTransferSource
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -182,7 +185,7 @@ fun FolderDetailsScreen(entityId: String) {
     val characterCount = folderDetails?.characterCount ?: 0
 
     val renameFolder: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity)) {
         sheet.present {
           FolderRenameSheet(
             model = model,
@@ -194,7 +197,7 @@ fun FolderDetailsScreen(entityId: String) {
       }
     }
     val openIconPicker: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) {
         sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
           EntityIconPickerSheet(
             model = model,
@@ -208,7 +211,7 @@ fun FolderDetailsScreen(entityId: String) {
       }
     }
     val shareFolder: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ShareFolder)) {
         sheet.present {
           FolderEntityShareSheet(entityIds = listOf(row.id), onUpdated = model::refetch)
         }
@@ -220,7 +223,7 @@ fun FolderDetailsScreen(entityId: String) {
       }
     }
     val moveFolder: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
         sheet.present(stops = EntityMoveStops) {
           EntityMoveSheet(
             source = details.toTransferSource(),

@@ -29,6 +29,9 @@ import co.typie.domain.entity.document
 import co.typie.domain.entity.folder
 import co.typie.domain.entity.formatEntityExcerpt
 import co.typie.domain.entity.isFolder
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.verticalScroll
 import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
@@ -154,9 +157,11 @@ fun TrashScreen(entityId: String? = null) {
                 label = "복원",
                 icon = Lucide.Undo2,
                 onClick = {
-                  model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
-                    toast.show(ToastType.Success, message)
-                    model.refetch()
+                  if (SubscriptionService.gate(sheet, nav, GatedAction.RecoverFromTrash)) {
+                    model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
+                      toast.show(ToastType.Success, message)
+                      model.refetch()
+                    }
                   }
                 },
               ),
@@ -211,10 +216,12 @@ fun TrashScreen(entityId: String? = null) {
               label = "복원",
               icon = Lucide.Undo2,
               onClick = {
-                model.recoverEntity(currentItem).withDefaultExceptionHandler(toast).onOk { message
-                  ->
-                  toast.show(ToastType.Success, message)
-                  nav.pop()
+                if (SubscriptionService.gate(sheet, nav, GatedAction.RecoverFromTrash)) {
+                  model.recoverEntity(currentItem).withDefaultExceptionHandler(toast).onOk { message
+                    ->
+                    toast.show(ToastType.Success, message)
+                    nav.pop()
+                  }
                 }
               },
             )

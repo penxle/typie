@@ -21,10 +21,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.settings.SettingSwitch
+import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.clickable
 import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -59,13 +64,18 @@ fun TextReplacementsScreen() {
   val scrollState = rememberScrollState()
 
   val sheet = LocalSheet.current
+  val nav = Nav.current
 
   ProvideTopBar(
     center = { Text("텍스트 대치", style = AppTheme.typography.title) },
     trailing = {
       TopBarButton(
         icon = Lucide.Plus,
-        onClick = { sheet.present { TextReplacementEditSheet(model = model, editing = null) } },
+        onClick = {
+          if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+            sheet.present { TextReplacementEditSheet(model = model, editing = null) }
+          }
+        },
       )
     },
     scrollOffset = scrollState.topBarScrollOffset(),
@@ -121,6 +131,8 @@ fun TextReplacementsScreen() {
 @Composable
 private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScope) {
   val toast = LocalToast.current
+  val sheet = LocalSheet.current
+  val nav = Nav.current
 
   Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     SectionTitle(text = "기본 대치", modifier = Modifier.padding(top = 4.dp))
@@ -129,9 +141,11 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
       Column(modifier = Modifier.fillMaxWidth()) {
         CardRow(
           onClick = {
-            model
-              .updateSmartQuotesTextReplacementState(model.smartQuotes.all { it.isActive })
-              .withDefaultExceptionHandler(toast)
+            if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+              model
+                .updateSmartQuotesTextReplacementState(model.smartQuotes.all { it.isActive })
+                .withDefaultExceptionHandler(toast)
+            }
           }
         ) {
           Text(
@@ -145,6 +159,8 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
             checked = model.smartQuotes.all { it.isActive },
             onCheckedChange = { next ->
               scope.launch {
+                if (!SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement))
+                  return@launch
                 model.updateSmartQuotesTextReplacementState(next).withDefaultExceptionHandler(toast)
               }
             },
@@ -157,12 +173,16 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
           PresetRow(
             entry = it,
             onClick = {
-              model
-                .updateTextReplacementState(it.textReplacementId, !it.isActive)
-                .withDefaultExceptionHandler(toast)
+              if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+                model
+                  .updateTextReplacementState(it.textReplacementId, !it.isActive)
+                  .withDefaultExceptionHandler(toast)
+              }
             },
             onCheckedChange = { next ->
               scope.launch {
+                if (!SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement))
+                  return@launch
                 model
                   .updateTextReplacementState(it.textReplacementId, next)
                   .withDefaultExceptionHandler(toast)
@@ -183,7 +203,9 @@ private fun CustomSection(
   scope: CoroutineScope,
 ) {
   val sheet = LocalSheet.current
+  val nav = Nav.current
   val toast = LocalToast.current
+  val reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired
 
   Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     SectionTitle(text = "사용자 대치", modifier = Modifier.padding(top = 4.dp))
@@ -207,15 +229,20 @@ private fun CustomSection(
                 entry = entry,
                 order = index + 1,
                 reorderState = reorderState,
+                reorderEnabled = reorderEnabled,
                 onEdit = {
-                  sheet.present {
-                    TextReplacementEditSheet(model = model, editing = entry.onTextReplacement)
+                  if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+                    sheet.present {
+                      TextReplacementEditSheet(model = model, editing = entry.onTextReplacement)
+                    }
                   }
                 },
                 onToggle = {
-                  model
-                    .updateTextReplacementState(entry.textReplacementId, entry.isActive)
-                    .withDefaultExceptionHandler(toast)
+                  if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+                    model
+                      .updateTextReplacementState(entry.textReplacementId, entry.isActive)
+                      .withDefaultExceptionHandler(toast)
+                  }
                 },
                 onReorderCommit = { movedKey, orderedKeys ->
                   scope.launch {
@@ -248,6 +275,7 @@ private fun CustomRow(
   entry: TextReplacement,
   order: Int,
   reorderState: ReorderableColumnState<String>,
+  reorderEnabled: Boolean,
   onEdit: suspend () -> Unit,
   onToggle: suspend () -> Unit,
   onReorderCommit: (movedKey: String, orderedKeys: List<String>) -> Unit,
@@ -264,6 +292,7 @@ private fun CustomRow(
         Modifier.reorderableDragHandle(
             state = reorderState,
             key = id,
+            enabled = reorderEnabled,
             onDragStopped = { drop ->
               if (drop == null) return@reorderableDragHandle
               onReorderCommit(drop.movedKey, drop.orderedKeys)

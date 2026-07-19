@@ -1,0 +1,27 @@
+package co.typie.domain.subscription
+
+enum class GatedAction {
+  CreateDocument,
+  CreateFolder,
+  CreateSpace,
+  CreateNote,
+  EditNote,
+  RenameEntity,
+  ChangeIcon,
+  DuplicateDocument,
+  ConvertDocumentType,
+  MoveEntity,
+  Paste,
+  RecoverFromTrash,
+  UpdateSpace,
+  ChangeSpaceAddress,
+  ShareFolder,
+  ShareDocument,
+  UploadFont,
+  TextReplacement,
+  PresetSettings,
+  AiSettings,
+  Spellcheck,
+  AiFeedback,
+  Generic,
+}

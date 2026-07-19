@@ -99,12 +99,19 @@ object SyncWs {
   private val scope =
     CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)
 
+  /**
+   * WS 재연결(onReconnected) 시 호출된다. 앱 계층(RootShell)이 SubscriptionService.refresh를 건다. 이 var를 세팅해도
+   * lazy 연결은 초기화되지 않으며, 연결 생성 시점에 콜백이 배선된다.
+   */
+  var onSyncReconnected: (() -> Unit)? = null
+
   private val connectionDelegate = lazy {
     SyncWsConnection(
-      socketFactory = { KtorSyncWsSocket.connect(url = "${Konfig.WS_URL}/sync", scope = scope) },
-      fetchTicket = { WebSocketSession.create() },
-      scope = scope,
-    )
+        socketFactory = { KtorSyncWsSocket.connect(url = "${Konfig.WS_URL}/sync", scope = scope) },
+        fetchTicket = { WebSocketSession.create() },
+        scope = scope,
+      )
+      .also { conn -> conn.onReconnected { onSyncReconnected?.invoke() } }
   }
   val connection: SyncWsConnection by connectionDelegate
 
@@ -123,6 +130,13 @@ object SyncWs {
   fun retryDocument(documentId: String) {
     channels.remove(documentId)
     connection.resetTerminal()
+  }
+
+  /** 재구독 전환 시 연결 terminal + 열린 채널의 permanent 실패를 방어적으로 리셋·재attach 한다. */
+  fun resetPermanentlyFailedChannels() {
+    if (!connectionDelegate.isInitialized()) return
+    connection.resetTerminal()
+    channels.values.toList().forEach { it.resetPermanentFailure() }
   }
 
   fun onAppForeground() {

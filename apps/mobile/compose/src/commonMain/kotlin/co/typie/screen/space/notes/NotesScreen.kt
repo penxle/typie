@@ -33,6 +33,10 @@ import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.domain.note.rememberNoteListReorderState
 import co.typie.domain.note.toggled
+import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeDrawing
@@ -166,6 +170,10 @@ fun NotesScreen() {
       return
     }
 
+    if (!SubscriptionService.gate(sheet, nav, GatedAction.CreateNote)) {
+      return
+    }
+
     if (!collapseExpandedNote()) {
       return
     }
@@ -221,6 +229,10 @@ fun NotesScreen() {
   }
 
   suspend fun handleToggleStatus(note: NoteCard_note, sceneStatus: NoteStatus) {
+    if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+      return
+    }
+
     if (!flushNoteEdits(note.id)) {
       return
     }
@@ -245,6 +257,11 @@ fun NotesScreen() {
   }
 
   fun handleColorChange(note: NoteCard_note, color: String) {
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
+      SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
+      return
+    }
+
     if (note.color == color) {
       return
     }
@@ -296,6 +313,8 @@ fun NotesScreen() {
     }
 
     scope.launch {
+      if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) return@launch
+
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
           linkedEntityIds = note.entities.mapTo(mutableSetOf()) { it.noteLinkedEntity_entity.id },
@@ -318,7 +337,13 @@ fun NotesScreen() {
               else nav.navigate(Route.Editor(linkedEntity.id))
             }
           },
-          onUnlink = { scope.launch { handleRemoveEntity(note.id, linkedEntity.id) } },
+          onUnlink = {
+            scope.launch {
+              if (SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+                handleRemoveEntity(note.id, linkedEntity.id)
+              }
+            }
+          },
         )
       }
     }
@@ -421,6 +446,8 @@ fun NotesScreen() {
             reorderState = reorderState,
             noteColorOptions = noteColorOptions,
             interactive = status == model.filterStatus,
+            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
+            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
             actions = listActions,
           )
 

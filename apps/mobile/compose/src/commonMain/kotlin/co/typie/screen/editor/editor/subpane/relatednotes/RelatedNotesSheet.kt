@@ -36,6 +36,10 @@ import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.domain.note.rememberNoteListReorderState
 import co.typie.domain.note.toggled
+import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
@@ -233,6 +237,10 @@ private fun RelatedNotesSheetContent(
   }
 
   suspend fun handleCreateNote() {
+    if (!SubscriptionService.gate(sheet, nav, GatedAction.CreateNote)) {
+      return
+    }
+
     if (!collapseExpandedNote()) {
       return
     }
@@ -288,6 +296,10 @@ private fun RelatedNotesSheetContent(
   }
 
   suspend fun handleToggleStatus(note: NoteCard_note, sceneStatus: NoteStatus) {
+    if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+      return
+    }
+
     if (!flushNoteEdits(note.id)) {
       return
     }
@@ -312,6 +324,11 @@ private fun RelatedNotesSheetContent(
   }
 
   fun handleColorChange(note: NoteCard_note, color: String) {
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
+      SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
+      return
+    }
+
     if (note.color == color) {
       return
     }
@@ -375,6 +392,8 @@ private fun RelatedNotesSheetContent(
 
   fun presentEntityPicker(note: NoteCard_note, sceneStatus: NoteStatus) {
     scope.launch {
+      if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) return@launch
+
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
           linkedEntityIds = note.entities.mapTo(mutableSetOf()) { it.noteLinkedEntity_entity.id },
@@ -403,7 +422,13 @@ private fun RelatedNotesSheetContent(
               else nav.navigate(Route.Editor(linkedEntity.id))
             }
           },
-          onUnlink = { scope.launch { handleRemoveEntity(note, linkedEntity.id, sceneStatus) } },
+          onUnlink = {
+            scope.launch {
+              if (SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+                handleRemoveEntity(note, linkedEntity.id, sceneStatus)
+              }
+            }
+          },
         )
       }
     }
@@ -482,6 +507,8 @@ private fun RelatedNotesSheetContent(
             reorderState = reorderState,
             noteColorOptions = noteColorOptions,
             interactive = status == model.filterStatus,
+            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
+            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
             actions = listActions,
           )
 

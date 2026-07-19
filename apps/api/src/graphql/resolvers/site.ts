@@ -286,6 +286,8 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const updateData: { name?: string; logoId?: string; dateDisplay?: SiteDateDisplay } = {};
       if (input.name !== undefined && input.name !== null) {
         updateData.name = input.name;

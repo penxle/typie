@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db, firstOrThrow, TableCode, validateDbId, Widgets } from '#/db/index.ts';
 import { generateFractionalOrder } from '#/utils/index.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { isTypeOf, User, Widget } from '../objects.ts';
 
@@ -36,6 +37,8 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       return await db
         .insert(Widgets)
         .values({
@@ -59,6 +62,8 @@ builder.mutationFields((t) => ({
       data: t.input.field({ type: 'JSON' }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       return await db
         .update(Widgets)
         .set({
@@ -78,6 +83,8 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       return await db
         .update(Widgets)
         .set({

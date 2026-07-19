@@ -39,3 +39,21 @@ private fun isPermanentSyncError(error: Throwable, seen: MutableSet<Throwable>):
   }
   return false
 }
+
+fun isSubscriptionRequiredSyncError(error: Throwable): Boolean =
+  isSubscriptionRequiredSyncError(error, mutableSetOf())
+
+private fun isSubscriptionRequiredSyncError(
+  error: Throwable,
+  seen: MutableSet<Throwable>,
+): Boolean {
+  var current: Throwable? = error
+  while (current != null && seen.add(current)) {
+    if (current is SyncWsException && current.code == "subscription_required") return true
+    for (suppressed in current.suppressedExceptions) {
+      if (isSubscriptionRequiredSyncError(suppressed, seen)) return true
+    }
+    current = current.cause
+  }
+  return false
+}

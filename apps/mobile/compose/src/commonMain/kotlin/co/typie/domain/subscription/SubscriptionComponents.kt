@@ -25,8 +25,8 @@ data class SubscriptionFeature(val icon: IconData, val label: String)
 
 val basicPlanFeatures =
   listOf(
-    SubscriptionFeature(icon = Lucide.BookOpenText, label = "200,000자까지 작성 가능"),
-    SubscriptionFeature(icon = Lucide.Images, label = "100MB까지 파일 업로드 가능"),
+    SubscriptionFeature(icon = Lucide.BookOpenText, label = "작성한 글 읽기와 내용 복사"),
+    SubscriptionFeature(icon = Lucide.Images, label = "글·스페이스 정리와 삭제"),
   )
 
 val fullPlanFeatures =

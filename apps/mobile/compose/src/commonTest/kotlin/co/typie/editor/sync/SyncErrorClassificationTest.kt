@@ -33,4 +33,20 @@ class SyncErrorClassificationTest {
     d.addSuppressed(c)
     assertTrue(isPermanentSyncError(c))
   }
+
+  @Test
+  fun detectsSubscriptionRequiredThroughCauseChain() {
+    assertTrue(isSubscriptionRequiredSyncError(SyncWsException("subscription_required", true)))
+    assertTrue(
+      isSubscriptionRequiredSyncError(
+        RuntimeException("wrapper", SyncWsException("subscription_required", true))
+      )
+    )
+    val suppressed = RuntimeException("outer")
+    suppressed.addSuppressed(SyncWsException("subscription_required", true))
+    assertTrue(isSubscriptionRequiredSyncError(suppressed))
+
+    assertFalse(isSubscriptionRequiredSyncError(SyncWsException("forbidden", true)))
+    assertFalse(isSubscriptionRequiredSyncError(RuntimeException("network")))
+  }
 }

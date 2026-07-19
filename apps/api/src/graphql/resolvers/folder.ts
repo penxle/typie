@@ -351,6 +351,8 @@ builder.mutationFields((t) => ({
         siteId: folder.siteId,
       });
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const renamedFolder = await db
         .update(Folders)
         .set({ name: input.name })
@@ -474,6 +476,8 @@ builder.mutationFields((t) => ({
         siteId,
       });
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       await db.transaction(async (tx) => {
         await tx.update(Entities).set({ visibility: input.visibility }).where(eq(Entities.id, folder.entityId));
 
@@ -535,6 +539,8 @@ builder.mutationFields((t) => ({
         userId: ctx.session.userId,
         siteId,
       });
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       if (folders.some((folder) => folder.siteId !== siteId)) {
         throw new TypieError({ code: 'site_mismatch' });

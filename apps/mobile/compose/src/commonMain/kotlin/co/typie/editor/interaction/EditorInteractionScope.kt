@@ -39,6 +39,7 @@ internal class EditorInteractionScope(
   private var onSelectionHaptic: (() -> Unit)? = null
   private var onRequestSoftwareKeyboard: (() -> Unit)? = null
   private var pointerInputEnabled: () -> Boolean = { true }
+  private var readOnly: () -> Boolean = { false }
   private var tapDispatchJob: Job? = null
   private var longPressDispatchJob: Job? = null
   private var scrollGestureLockState: ScrollGestureLockState? = null
@@ -54,6 +55,7 @@ internal class EditorInteractionScope(
       platformProvider = { platformProvider() },
       uiStateProvider = { checkNotNull(uiState) { "Editor interaction scope has no UI state" } },
       pointerInputEnabledProvider = { pointerInputEnabled() },
+      readOnlyProvider = { readOnly() },
     )
 
   fun update(
@@ -67,6 +69,7 @@ internal class EditorInteractionScope(
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
     layoutSpec: EditorDocumentLayoutSpec? = null,
     pointerInputEnabled: () -> Boolean = { true },
+    readOnly: () -> Boolean = { false },
     onSelectionHaptic: () -> Unit,
     onRequestSoftwareKeyboard: () -> Unit,
   ) {
@@ -80,6 +83,7 @@ internal class EditorInteractionScope(
     this.onSelectionHaptic = onSelectionHaptic
     this.onRequestSoftwareKeyboard = onRequestSoftwareKeyboard
     this.pointerInputEnabled = pointerInputEnabled
+    this.readOnly = readOnly
     outsidePageTapEnabled = layoutSpec == null || layoutSpec is EditorDocumentLayoutSpec.Continuous
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
@@ -105,6 +109,7 @@ internal class EditorInteractionScope(
     onSelectionHaptic = null
     onRequestSoftwareKeyboard = null
     pointerInputEnabled = { true }
+    readOnly = { false }
     outsidePageTapEnabled = true
     scrollGestureLockState = null
   }

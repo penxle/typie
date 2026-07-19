@@ -309,6 +309,8 @@ builder.mutationFields((t) => ({
         .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
         .then(firstOrThrow);
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const newOrder = generateFractionalOrder({
         lower: input.lowerOrder,
         upper: input.upperOrder,
@@ -357,6 +359,8 @@ builder.mutationFields((t) => ({
         .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
         .then(firstOrThrow);
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       await db
         .select({ id: Entities.id })
         .from(Entities)
@@ -381,6 +385,8 @@ builder.mutationFields((t) => ({
         .from(Notes)
         .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
         .then(firstOrThrow);
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       await db.delete(NoteEntities).where(and(eq(NoteEntities.noteId, input.noteId), eq(NoteEntities.entityId, input.entityId)));
 

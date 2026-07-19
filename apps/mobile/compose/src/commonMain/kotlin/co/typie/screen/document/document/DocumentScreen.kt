@@ -52,6 +52,9 @@ import co.typie.domain.entity.EntityMoveStops
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entitytransfer.EntityClipboardService
 import co.typie.domain.entitytransfer.EntityTransferSource
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -233,7 +236,7 @@ fun DocumentScreen(entityId: String) {
       )
 
     val openIconPicker: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) {
         sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
           EntityIconPickerSheet(
             model = model,
@@ -260,7 +263,7 @@ fun DocumentScreen(entityId: String) {
       }
     }
     val moveDocument: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
         currentTransferSource()?.let { transferSource ->
           sheet.present(stops = EntityMoveStops) {
             EntityMoveSheet(
@@ -273,7 +276,7 @@ fun DocumentScreen(entityId: String) {
       }
     }
     val toggleDocumentType: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ConvertDocumentType)) {
         val nextType =
           if (document.type == DocumentType.TEMPLATE) DocumentType.NORMAL else DocumentType.TEMPLATE
         val isToTemplate = nextType == DocumentType.TEMPLATE
@@ -296,7 +299,7 @@ fun DocumentScreen(entityId: String) {
       }
     }
     val duplicateDocument: suspend () -> Unit = {
-      if (!loading) {
+      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.DuplicateDocument)) {
         model.duplicateDocument(document.id).withDefaultExceptionHandler(toast).onOk {
           duplicatedEntityId ->
           replaceWithDuplicatedEditor(duplicatedEntityId)

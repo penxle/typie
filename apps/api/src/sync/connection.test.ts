@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MAX_BUFFERED_BYTES, PUSH_BUCKET_CAPACITY, SyncConnection } from './connection.ts';
+import { MAX_BUFFERED_BYTES, PUSH_BUCKET_CAPACITY, SyncConnection, WRITABLE_TTL_MS } from './connection.ts';
 import { decodeRaw, encodeMessage } from './protocol.ts';
 import { FakeSyncDeps } from './testing.ts';
 import type { SyncSocket } from './connection.ts';
@@ -268,13 +268,41 @@ test('push: 무구독이면 error(subscription_required, permanent) + append 없
   assert.equal((d.deps.stream.get('D1') ?? []).length, 0);
 });
 
-test('push: 구독 있으면 통과하고 checkWritable은 커넥션당 1회', async () => {
-  const d = setup();
+test('push: checkWritable은 TTL 내에는 캐시된다', async () => {
+  let now = 0;
+  const d = setup({ now: () => now });
   await hello(d);
   await d.dispatch({ t: 'push', id: 'r1', documentId: 'D1', changesets: Uint8Array.of(1) });
+  now += WRITABLE_TTL_MS - 1;
   await d.dispatch({ t: 'push', id: 'r2', documentId: 'D1', changesets: Uint8Array.of(2) });
   assert.equal(d.deps.checkWritableCalls, 1);
   assert.equal(d.socket.sent.filter((m) => m.t === 'push-ack').length, 2);
+});
+
+test('push: TTL 경과 후 checkWritable 재평가 — 만료가 재연결 없이 반영된다', async () => {
+  let now = 0;
+  const d = setup({ now: () => now });
+  await hello(d);
+  await d.dispatch({ t: 'push', id: 'r1', documentId: 'D1', changesets: Uint8Array.of(1) });
+  d.deps.writable = false;
+  now += WRITABLE_TTL_MS;
+  await d.dispatch({ t: 'push', id: 'r2', documentId: 'D1', changesets: Uint8Array.of(2) });
+  assert.equal(d.deps.checkWritableCalls, 2);
+  const error = d.socket.sent.at(-1);
+  if (error?.t !== 'error') return assert.fail();
+  assert.equal(error.code, 'subscription_required');
+});
+
+test('push: TTL 경과 후 재구독이 재연결 없이 반영된다', async () => {
+  let now = 0;
+  const d = setup({ now: () => now });
+  d.deps.writable = false;
+  await hello(d);
+  await d.dispatch({ t: 'push', id: 'r1', documentId: 'D1', changesets: Uint8Array.of(1) });
+  d.deps.writable = true;
+  now += WRITABLE_TTL_MS;
+  await d.dispatch({ t: 'push', id: 'r2', documentId: 'D1', changesets: Uint8Array.of(2) });
+  assert.equal(d.socket.sent.at(-1)?.t, 'push-ack');
 });
 
 test('pull: 무구독이어도 허용', async () => {

@@ -11,6 +11,7 @@ export const PUSH_BUCKET_CAPACITY = 300;
 export const PUSH_BUCKET_REFILL_PER_SECOND = 5;
 export const FRAME_WARN_BYTES = 1024 * 1024;
 export const HELLO_TIMEOUT_MS = 15_000;
+export const WRITABLE_TTL_MS = 30_000;
 
 const log = logger.getChild('sync');
 
@@ -37,6 +38,7 @@ export class SyncConnection {
   #pushTokens = PUSH_BUCKET_CAPACITY;
   #pushRefilledAt: number;
   #writable: boolean | undefined;
+  #writableCheckedAt = 0;
   #queue: Promise<void> = Promise.resolve();
   #destroyed = false;
   #helloTimer: ReturnType<typeof setTimeout> | null = null;
@@ -207,9 +209,10 @@ export class SyncConnection {
       return;
     }
     if (this.#destroyed) return;
-    if (this.#writable === undefined) {
+    if (this.#writable === undefined || this.#now() - this.#writableCheckedAt >= WRITABLE_TTL_MS) {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before push
       this.#writable = await this.#deps.checkWritable(this.#session!.userId);
+      this.#writableCheckedAt = this.#now();
     }
     if (this.#destroyed) return;
     if (!this.#writable) {

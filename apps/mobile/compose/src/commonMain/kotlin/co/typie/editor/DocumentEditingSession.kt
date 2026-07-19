@@ -151,6 +151,11 @@ internal class DocumentEditingSession(
     engine.retryNow()
   }
 
+  /** 재구독/백스톱 회복 시 permanent Error를 포함해 push를 재개한다. */
+  fun resumeSyncNow() {
+    engine.resumePush()
+  }
+
   suspend fun flushSyncNow() {
     engine.flushNow()
   }

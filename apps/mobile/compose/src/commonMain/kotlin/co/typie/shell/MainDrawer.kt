@@ -44,9 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.PlanUpgradeBenefit
+import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -121,22 +121,7 @@ internal fun MainDrawerContent() {
   }
 
   suspend fun openCreateSpaceSheet() {
-    if (SubscriptionService.state is SubscriptionServiceState.Unknown) return
-
-    val passed =
-      SubscriptionService.gate(
-        sheet,
-        nav,
-        title = "주제마다\n어울리는 공간을 만들어요.",
-        benefits =
-          listOf(
-            PlanUpgradeBenefit.MultipleSpaces,
-            PlanUpgradeBenefit.CustomSpaceAddress,
-            PlanUpgradeBenefit.UnlimitedCharacters,
-          ),
-      )
-
-    if (passed) {
+    if (SubscriptionService.gate(sheet, nav, GatedAction.CreateSpace)) {
       sheet.present<Unit> { CreateSpaceSheet(model) }
     }
   }
@@ -250,7 +235,7 @@ internal fun MainDrawerContent() {
             }
           }
 
-          Skeleton(enabled = SubscriptionService.state is SubscriptionServiceState.Unknown) {
+          Skeleton(enabled = SubscriptionService.entitlement is Entitlement.Unknown) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
               modifier =

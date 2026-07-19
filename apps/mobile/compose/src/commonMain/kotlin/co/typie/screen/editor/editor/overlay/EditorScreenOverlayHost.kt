@@ -40,6 +40,7 @@ internal fun EditorScreenOverlayHost(
   visibleArea: EditorVisibleArea,
   autoScrollPolicy: EditorAutoScrollPolicy,
   onTableAxisActionsRequest: (EditorTableAxisActionsTarget, Selection?) -> Unit,
+  editorReadOnly: Boolean = false,
   showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
@@ -134,6 +135,7 @@ internal fun EditorScreenOverlayHost(
                 overlaySize = overlayBounds.size,
                 visibleArea = visibleArea,
                 showCopyCutActions = actions.showCopyCutActions,
+                editorReadOnly = editorReadOnly,
                 availableExpansionUnits = actions.availableExpansionUnits,
                 onCopy = actions.onCopy,
                 onCut = actions.onCut,

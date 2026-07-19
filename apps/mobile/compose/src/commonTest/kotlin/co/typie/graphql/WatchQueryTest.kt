@@ -225,7 +225,7 @@ class WatchQueryTest {
     connectivity: ConnectivityService = ConnectivityService(emptyFlow()),
     scope: CoroutineScope = backgroundScope,
     skip: () -> Boolean = { false },
-  ): WatchQuery<PlanUpgradeSheet_Query.Data, PlanUpgradeSheet_Query.Data?> {
+  ): WatchQuery<SubscriptionService_Query.Data, SubscriptionService_Query.Data?> {
     val client =
       ApolloClient.Builder()
         .networkTransport(transport)
@@ -239,7 +239,7 @@ class WatchQueryTest {
     return WatchQuery(
       scope = scope,
       apolloClient = client,
-      query = ::PlanUpgradeSheet_Query,
+      query = ::SubscriptionService_Query,
       placeholderData = null,
       onInitialData = null,
       skip = skip,

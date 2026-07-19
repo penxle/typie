@@ -11,14 +11,14 @@ import co.typie.form.ValidateOn
 import co.typie.form.maxLength
 import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.UpdateProfileScreen_PersistBlobAsImage_Mutation
+import co.typie.graphql.UpdateProfileScreen_PersistBlobAsAvatar_Mutation
 import co.typie.graphql.UpdateProfileScreen_Query
 import co.typie.graphql.UpdateProfileScreen_UpdateUser_Mutation
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
-import co.typie.graphql.type.PersistBlobAsImageInput
+import co.typie.graphql.type.PersistBlobAsAvatarInput
 import co.typie.graphql.type.UpdateUserInput
 import co.typie.graphql.watchQuery
 import co.typie.platform.PickedFile
@@ -72,13 +72,13 @@ class UpdateProfileViewModel : ViewModel() {
 
     val result =
       Apollo.executeMutation(
-        UpdateProfileScreen_PersistBlobAsImage_Mutation(
-          input = PersistBlobAsImageInput(path = path)
+        UpdateProfileScreen_PersistBlobAsAvatar_Mutation(
+          input = PersistBlobAsAvatarInput(path = path)
         )
       )
 
-    avatarPreviewUrl = result.persistBlobAsImage.url
-    form.avatarId.value = result.persistBlobAsImage.id
+    avatarPreviewUrl = result.persistBlobAsAvatar.url
+    form.avatarId.value = result.persistBlobAsAvatar.id
   }
 
   suspend fun submit(): Result<Unit, UpdateProfileError> {

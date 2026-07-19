@@ -873,6 +873,7 @@ type Mutation {
   moveNote(input: MoveNoteInput!): Note!
   moveTextReplacement(input: MoveTextReplacementInput!): TextReplacementNode!
   moveWidget(input: MoveWidgetInput!): Widget!
+  persistBlobAsAvatar(input: PersistBlobAsAvatarInput!): Image!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsFontLegacy(input: PersistBlobAsFontLegacyInput!): Font!
@@ -988,6 +989,10 @@ type PaymentRecord {
 type Permalink {
   entitySlug: String!
   siteUrl: String!
+}
+
+input PersistBlobAsAvatarInput {
+  path: String!
 }
 
 input PersistBlobAsFileInput {

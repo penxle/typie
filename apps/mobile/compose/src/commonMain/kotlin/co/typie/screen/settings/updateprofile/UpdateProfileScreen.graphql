@@ -19,8 +19,8 @@ mutation UpdateProfileScreen_UpdateUser_Mutation($input: UpdateUserInput!) {
   }
 }
 
-mutation UpdateProfileScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
-  persistBlobAsImage(input: $input) {
+mutation UpdateProfileScreen_PersistBlobAsAvatar_Mutation($input: PersistBlobAsAvatarInput!) {
+  persistBlobAsAvatar(input: $input) {
     id
     url
     ...Img_image

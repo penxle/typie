@@ -7,6 +7,7 @@ import { db, DocumentComments, DocumentCommentThreads, Documents, Entities, firs
 import { pubsub } from '#/pubsub.ts';
 import { normalizeStableSelection } from '#/utils/comment-selection.ts';
 import { assertDocumentCommentAccess } from '#/utils/permission.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { Document, DocumentComment, DocumentCommentThread, User } from '../objects.ts';
 
@@ -115,6 +116,8 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       await assertDocumentCommentAccess({ userId: ctx.session.userId, documentId: input.documentId });
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const thread = await db.transaction(async (tx) => {
         const created = await tx
           .insert(DocumentCommentThreads)
@@ -160,6 +163,8 @@ builder.mutationFields((t) => ({
 
       // 엔티티 ACTIVE + availability 게이트를 함께 검사한다.
       await assertDocumentCommentAccess({ userId: ctx.session.userId, documentId: thread.documentId });
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       await db.transaction(async (tx) => {
         await tx.insert(DocumentComments).values({ threadId: input.threadId, userId: ctx.session.userId, content: input.content });
@@ -207,6 +212,8 @@ builder.mutationFields((t) => ({
       if (comment.userId !== ctx.session.userId) {
         throw new TypieError({ code: 'permission_denied' });
       }
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       await db.transaction(async (tx) => {
         await tx
@@ -314,6 +321,8 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const thread = await loadThreadForManage(input.threadId, ctx.session.userId);
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const updated = await db
         .update(DocumentCommentThreads)
         .set({ resolvedAt: dayjs(), resolvedBy: ctx.session.userId, updatedAt: dayjs() })
@@ -334,6 +343,8 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const thread = await loadThreadForManage(input.threadId, ctx.session.userId);
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       const updated = await db
         .update(DocumentCommentThreads)

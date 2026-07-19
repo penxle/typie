@@ -61,6 +61,7 @@ import { pubsub } from '#/pubsub.ts';
 import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
 import { compressZstd, decompressZstd } from '#/utils/compression.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
+import { isPrivateVisibilityOnlyInput } from '#/utils/documents-option-policy.ts';
 import {
   buildFreshV2Content,
   calculateBlobSizeFromAssetIds,
@@ -82,7 +83,7 @@ import {
 } from '#/utils/index.ts';
 import { migrateDocumentToV2 } from '#/utils/migrate-v2.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
-import { assertActiveSubscription, assertPlanRule } from '#/utils/plan.ts';
+import { assertActiveSubscription, hasActiveSubscription } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
@@ -1196,9 +1197,6 @@ builder.mutationFields((t) => ({
 
       await assertActiveSubscription({ userId: ctx.session.userId });
 
-      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
-      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
-
       // TODO: anchors
 
       const noteRows = await db
@@ -1346,6 +1344,8 @@ builder.mutationFields((t) => ({
         });
       }
 
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
       const updatedDocument = await db
         .update(Documents)
         .set({
@@ -1384,6 +1384,8 @@ builder.mutationFields((t) => ({
         userId: ctx.session.userId,
         siteId: document.siteId,
       });
+
+      await assertActiveSubscription({ userId: ctx.session.userId });
 
       const updatedDocument = await db
         .update(Documents)
@@ -1435,6 +1437,10 @@ builder.mutationFields((t) => ({
 
       if (documents.some((doc) => doc.siteId !== siteId)) {
         throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      if (!isPrivateVisibilityOnlyInput(input) && !(await hasActiveSubscription({ userId: ctx.session.userId }))) {
+        throw new TypieError({ code: 'subscription_required', status: 403 });
       }
 
       await db.transaction(async (tx) => {

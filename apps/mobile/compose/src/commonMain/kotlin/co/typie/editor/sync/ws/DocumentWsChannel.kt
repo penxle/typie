@@ -244,6 +244,14 @@ class DocumentWsChannel(
     reattach()
   }
 
+  /** permanent 실패로 멈춘 채널을 되살려 재attach 한다(재구독 플러시 경로). */
+  fun resetPermanentFailure() {
+    if (!permanentlyFailed) return
+    permanentlyFailed = false
+    retryAttempts = 0
+    if (_events.subscriptionCount.value > 0) reattach()
+  }
+
   private fun reattach() {
     awaitingAck = true
     val snapshotCursor = cursor

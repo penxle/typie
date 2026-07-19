@@ -1,5 +1,6 @@
 package co.typie.editor.sync
 
+import co.typie.editor.sync.ws.SyncWsException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,6 +24,8 @@ class SyncEngineTest {
     initialDurableHeads: ByteArray = enc(),
     isPermanent: (Throwable) -> Boolean = { false },
     onEvent: (SyncEvent) -> Unit = {},
+    canPush: () -> Boolean = { true },
+    onPermanentError: (Throwable) -> Unit = {},
     pushFn: suspend (ByteArray) -> PushResult,
   ): SyncEngine =
     SyncEngine(
@@ -35,6 +38,8 @@ class SyncEngineTest {
       scope = CoroutineScope(coroutineContext),
       isPermanent = isPermanent,
       onEvent = onEvent,
+      canPush = canPush,
+      onPermanentError = onPermanentError,
       now = { clock++ },
     )
 
@@ -666,6 +671,102 @@ class SyncEngineTest {
       runCurrent()
     }
     assertEquals(pushesAfterInit + 1, pushes)
+    engine.stop()
+  }
+
+  @Test
+  fun gatedPushDoesNotSendButStillPersistsAndFlushesWhenGateOpens() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    var gateOpen = false
+    var pushes = 0
+    val engine =
+      engine(editor, store, canPush = { gateOpen }) {
+        pushes++
+        PushResult(heads = editor.currentHeads(), durableHeads = enc())
+      }
+    runCurrent()
+    val base = pushes
+
+    editor.known.add(9)
+    engine.schedule()
+    advanceTimeBy(500)
+    runCurrent()
+
+    // 로컬 스태시는 보존되지만 push는 시도되지 않는다.
+    assertEquals(listOf("9"), store.load("doc1").map { it.id })
+    assertEquals(base, pushes)
+
+    gateOpen = true
+    engine.resumePush()
+    advanceUntilIdle()
+    assertEquals(base + 1, pushes)
+    engine.stop()
+  }
+
+  @Test
+  fun permanentErrorInvokesCallbackAndResumeClearsErrorState() = runTest {
+    val editor = FakeSyncEditor()
+    val store = FakeDeltaStore()
+    val permanentErrors = mutableListOf<Throwable>()
+    var fail = true
+    val engine =
+      engine(
+        editor,
+        store,
+        isPermanent = { true },
+        onPermanentError = { permanentErrors.add(it) },
+      ) {
+        if (fail) throw SyncWsException("subscription_required", true)
+        PushResult(heads = editor.currentHeads(), durableHeads = enc())
+      }
+    runCurrent()
+
+    editor.known.add(3)
+    engine.schedule()
+    advanceTimeBy(500)
+    runCurrent()
+
+    assertEquals(SyncStatus.Error, engine.status.value)
+    assertEquals(1, permanentErrors.size)
+    assertTrue(isPermanentSyncError(permanentErrors.first()))
+
+    fail = false
+    engine.resumePush()
+    advanceUntilIdle()
+    assertEquals(SyncStatus.Idle, engine.status.value)
+    engine.stop()
+  }
+
+  @Test
+  fun resumePushDuringBackoffRetryingClearsStateAndResumes() = runTest {
+    val editor = FakeSyncEditor(listOf(5))
+    val store = FakeDeltaStore()
+    var fail = true
+    var pushes = 0
+    val engine =
+      engine(editor, store) {
+        pushes++
+        if (fail) throw RuntimeException("network")
+        PushResult(heads = enc(5), durableHeads = enc(5))
+      }
+    runCurrent()
+
+    assertEquals(1, pushes)
+    assertEquals(SyncStatus.Retrying, engine.status.value)
+
+    // 백오프 대기 중(재시도 시각 도달 전).
+    advanceTimeBy(500)
+    runCurrent()
+    assertEquals(1, pushes)
+
+    fail = false
+    engine.resumePush()
+    advanceUntilIdle()
+
+    assertEquals(2, pushes)
+    assertEquals(SyncStatus.Idle, engine.status.value)
+    assertEquals(0, store.load("doc1").size)
     engine.stop()
   }
 }

@@ -1,6 +1,0 @@
-query PlanUpgradeSheet_Query {
-  me @catch(to: THROW) {
-    id
-    canStartTrial
-  }
-}

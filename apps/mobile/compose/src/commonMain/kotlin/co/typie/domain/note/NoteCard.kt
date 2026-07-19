@@ -122,6 +122,7 @@ internal fun NoteCard(
   isSaving: Boolean,
   colorOption: NoteColorOption,
   dragHandleModifier: Modifier,
+  contentEditable: Boolean = true,
   modifier: Modifier = Modifier,
   onExpand: () -> Unit,
   onCollapse: () -> Unit,
@@ -209,6 +210,7 @@ internal fun NoteCard(
           isSaving = isSaving,
           colorOption = colorOption,
           dragHandleModifier = dragHandleModifier,
+          contentEditable = contentEditable,
           noteColorOptions = noteColorOptions,
           onCollapse = onCollapse,
           onContentChange = onContentChange,
@@ -240,6 +242,7 @@ private fun NoteExpandedContent(
   isSaving: Boolean,
   colorOption: NoteColorOption,
   dragHandleModifier: Modifier,
+  contentEditable: Boolean,
   noteColorOptions: List<NoteColorOption>,
   onCollapse: () -> Unit,
   onContentChange: (String) -> Unit,
@@ -269,7 +272,12 @@ private fun NoteExpandedContent(
         verticalAlignment = Alignment.Top,
       ) {
         Column(modifier = Modifier.weight(1f).padding(top = 2.dp)) {
-          NoteContentEditor(content = content, onValueChange = onContentChange, onBlur = onBlur)
+          NoteContentEditor(
+            content = content,
+            onValueChange = onContentChange,
+            onBlur = onBlur,
+            readOnly = !contentEditable,
+          )
         }
 
         NoteActionIconButton(icon = Lucide.Minimize2, onClick = onCollapse)
@@ -666,16 +674,16 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
 
     val trailingWidth =
       buildList {
-          overflowPlaceable?.let { add(it.width) }
-          separatorPlaceable?.let { add(it.width) }
-          add(timePlaceable.width)
-        }
+        overflowPlaceable?.let { add(it.width) }
+        separatorPlaceable?.let { add(it.width) }
+        add(timePlaceable.width)
+      }
         .sum() +
         spacingPx *
           (buildList {
-              overflowPlaceable?.let { add(Unit) }
-              separatorPlaceable?.let { add(Unit) }
-            }
+            overflowPlaceable?.let { add(Unit) }
+            separatorPlaceable?.let { add(Unit) }
+          }
             .size)
 
     val chipMaxWidth =
@@ -782,6 +790,7 @@ private fun NoteContentEditor(
   content: String,
   onValueChange: (String) -> Unit,
   onBlur: () -> Unit,
+  readOnly: Boolean,
 ) {
   val focusManager = LocalFocusManager.current
   val textInputState =
@@ -803,6 +812,7 @@ private fun NoteContentEditor(
             onBlur()
           }
         },
+      readOnly = readOnly,
       textStyle = AppTheme.typography.body.copy(color = AppTheme.colors.textDefault),
       keyboardOptions =
         KeyboardOptions(

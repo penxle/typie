@@ -16,7 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.PlanUpgradeBenefit
+import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
@@ -118,18 +118,7 @@ fun FontSettingsScreen() {
   suspend fun uploadFonts() {
     if (model.isUploading) return
 
-    val passed =
-      SubscriptionService.gate(
-        sheet,
-        nav,
-        title = "나만의 글꼴로\n글에 개성을 더해요.",
-        benefits =
-          listOf(
-            PlanUpgradeBenefit.CustomFontUpload,
-            PlanUpgradeBenefit.CustomSpaceAddress,
-            PlanUpgradeBenefit.UnlimitedFileUpload,
-          ),
-      )
+    val passed = SubscriptionService.gate(sheet, nav, GatedAction.UploadFont)
 
     if (passed) {
       sheet.present {

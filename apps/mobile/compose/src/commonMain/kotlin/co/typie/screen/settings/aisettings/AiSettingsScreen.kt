@@ -18,7 +18,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.settings.SettingControlRow
 import co.typie.domain.settings.SettingSwitch
+import co.typie.domain.subscription.GatedAction
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.verticalScroll
+import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
@@ -26,6 +30,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
@@ -42,9 +47,13 @@ fun AiSettingsScreen() {
 
   val dialog = LocalDialog.current
   val toast = LocalToast.current
+  val sheet = LocalSheet.current
+  val nav = Nav.current
 
   fun update(enabled: Boolean) {
     scope.launch {
+      if (!SubscriptionService.gate(sheet, nav, GatedAction.AiSettings)) return@launch
+
       if (enabled) {
         val result =
           dialog.alert(

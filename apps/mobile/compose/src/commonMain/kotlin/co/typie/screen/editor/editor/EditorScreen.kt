@@ -40,9 +40,11 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.PlanUpgradeBenefit
+import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.editorIsReadOnly
 import co.typie.domain.subscription.gate
+import co.typie.domain.subscription.shouldAttemptPush
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
@@ -94,6 +96,7 @@ import co.typie.editor.sync.SyncEngine
 import co.typie.editor.sync.asSyncEditor
 import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.isPermanentSyncError
+import co.typie.editor.sync.isSubscriptionRequiredSyncError
 import co.typie.editor.sync.orphanSweeper
 import co.typie.editor.sync.syncAppScope
 import co.typie.editor.sync.ws.AttachEvent
@@ -227,12 +230,15 @@ fun EditorScreen(entityId: String) {
   val entity = model.query.data.entity
   val document = entity.node.onDocument
   val documentLocked = document?.locked == true
+  val editorReadOnly = editorIsReadOnly(documentLocked, SubscriptionService.entitlement)
   val documentId = model.documentId
   var editorLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
   var syncActiveLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
   val pendingChangesets = remember(entityId) { mutableListOf<AttachEvent.ChangesetsEvent>() }
   var loaderFailedCode by remember(entityId) { mutableStateOf<String?>(null) }
   var loaderRetryGeneration by remember(entityId) { mutableStateOf(0) }
+
+  LaunchedEffect(Unit) { SubscriptionService.refresh() }
 
   DisposableEffect(model) {
     onDispose {
@@ -337,7 +343,7 @@ fun EditorScreen(entityId: String) {
     )
   val findReplace =
     rememberEditorFindReplaceSession(
-      documentLocked = documentLocked,
+      documentLocked = editorReadOnly,
       editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -352,20 +358,10 @@ fun EditorScreen(entityId: String) {
     requestEditorFocusIfSelectionActive()
   }
   suspend fun ensureSpellcheckSubscription(): Boolean {
-    return SubscriptionService.gate(
-      sheet = sheet,
-      nav = nav,
-      title = "맞춤법 검사로\n글을 더 자연스럽게 다듬어요.",
-      benefits = listOf(PlanUpgradeBenefit.SpellCheck),
-    )
+    return SubscriptionService.gate(sheet = sheet, nav = nav, action = GatedAction.Spellcheck)
   }
   suspend fun ensureAiFeedbackSubscription(): Boolean {
-    return SubscriptionService.gate(
-      sheet = sheet,
-      nav = nav,
-      title = "AI 피드백은 FULL ACCESS 플랜에서 사용할 수 있어요.",
-      benefits = listOf(PlanUpgradeBenefit.AiFeedback),
-    )
+    return SubscriptionService.gate(sheet = sheet, nav = nav, action = GatedAction.AiFeedback)
   }
   val aiOptIn =
     remember(model.query.data.me.preferences) {
@@ -385,7 +381,7 @@ fun EditorScreen(entityId: String) {
   val spellcheck =
     rememberEditorSpellcheckSession(
       documentId = document?.id,
-      documentLocked = documentLocked,
+      documentLocked = editorReadOnly,
       editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -717,6 +713,12 @@ fun EditorScreen(entityId: String) {
           pushFn = { transport.push(it) },
           scope = engineScope,
           isPermanent = ::isPermanentSyncError,
+          canPush = { shouldAttemptPush(SubscriptionService.entitlement) },
+          onPermanentError = { error ->
+            // 클라 게이트를 뚫고 나간 push가 서버 subscription_required(permanent)를 받은 경우:
+            // 조용히 실패시키지 않고 엔타이틀먼트를 재조회한다(→ Expired 판명 시 에디터가 반응형으로 읽기 전용 전환).
+            if (isSubscriptionRequiredSyncError(error)) SubscriptionService.refresh()
+          },
           now = { Clock.System.now().toEpochMilliseconds() },
         )
       val createdPipeline =
@@ -770,13 +772,25 @@ fun EditorScreen(entityId: String) {
       is EditorDocumentLayoutSpec.Continuous -> AppTheme.colors.surfaceDefault
     }
 
-  Screen(loadable = model.query, background = background, contentPadding = PaddingValues()) {
-    contentPadding ->
+  val toolbarBackdropHazeState = remember { HazeState() }
+
+  Screen(
+    loadable = model.query,
+    background = background,
+    contentPadding = PaddingValues(),
+    overlay = {
+      EditorSubscriptionBanner(
+        documentId = documentId,
+        hazeState = toolbarBackdropHazeState,
+        backdropColor = background,
+      )
+    },
+  ) { contentPadding ->
     val comments =
       rememberEditorCommentsSession(
         entityId = entityId,
         documentId = document?.id,
-        documentLocked = documentLocked,
+        documentLocked = editorReadOnly,
         editor = editor,
         editorState = editorState,
         sheetActive = subPaneState.active == EditorSubPane.Comments,
@@ -797,7 +811,6 @@ fun EditorScreen(entityId: String) {
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarInputState = rememberEditorToolbarInputState()
-    val toolbarBackdropHazeState = remember { HazeState() }
     val keyboardState = rememberEditorKeyboardState()
     val toolbarPagerState = rememberToolbarPagerState(key = entityId)
     val toolbarSessionState = rememberEditorToolbarSessionState(key = entityId)
@@ -813,7 +826,8 @@ fun EditorScreen(entityId: String) {
       editorSessionAttached &&
         screenState.sceneInForeground &&
         !subPaneBlocksEditorInput &&
-        !findReplace.active
+        !findReplace.active &&
+        !editorReadOnly
     val findReplaceToolbarVisible =
       screenState.sceneInForeground && !subPaneBlocksEditorInput && findReplace.active
     val findReplaceToolbarTransition = remember {
@@ -1001,7 +1015,7 @@ fun EditorScreen(entityId: String) {
         maxOf(toolbarBottomOcclusion.value, findReplaceToolbarOcclusion).value.coerceAtLeast(0f)
       }
     val repasteAsTextVisible =
-      !documentLocked &&
+      !editorReadOnly &&
         uiState.focused &&
         editorState.selection != null &&
         editorState.lastHistoryTag is HistoryTag.PasteHtml
@@ -1023,6 +1037,21 @@ fun EditorScreen(entityId: String) {
           ),
       )
     val visibleArea = visibleAreas.editor
+    LaunchedEffect(editorReadOnly) {
+      if (!editorReadOnly) return@LaunchedEffect
+      // 세션 중 강등: 열린 보조 모드를 닫고 포커스·키보드를 안전 복구한다.
+      findReplace.close()
+      spellcheck.close()
+      aiFeedback.close()
+      subPaneState.dismiss()
+      uiState.contextMenu.hide()
+      if (uiState.focused) {
+        runtime.blur()
+        uiState.updateFocus(false)
+        runtime.editor?.sync { enqueue(Message.System(SystemEvent.SetFocused(false))) }
+      }
+      keyboardController?.hide()
+    }
     LaunchedEffect(imeVisible, bottomPanelOpen) { previousImeVisible.value = imeVisible }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
       zoomController.syncLayout(
@@ -1175,6 +1204,7 @@ fun EditorScreen(entityId: String) {
         viewportZoomConfig = viewportZoomConfig,
         layoutSpec = layoutSpec,
         pointerInputEnabled = { editorInteractionEnabled },
+        readOnly = { editorReadOnly },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
         onRequestSoftwareKeyboard = {
           if (editorReady && editorInputEnabledByToolbar && !editorSuppressesSoftwareKeyboard) {
@@ -1254,7 +1284,7 @@ fun EditorScreen(entityId: String) {
             layoutSpec = layoutSpec,
             trackWidth = headerTrackWidth,
             loading = false,
-            enabled = editorReady,
+            enabled = editorReady && !editorReadOnly,
             topInset = topInset,
             subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
             onTitleChange = model::updateTitleDraft,
@@ -1320,6 +1350,7 @@ fun EditorScreen(entityId: String) {
                     )
                   )
                 },
+                editorReadOnly = editorReadOnly,
                 showDebugOverlay = devMode && model.debugViewportOverlayVisible,
                 modifier = Modifier.fillMaxSize(),
               )
@@ -1365,12 +1396,13 @@ fun EditorScreen(entityId: String) {
               autoScrollPolicy = autoScrollPolicy,
               modifier = Modifier,
               interactionModifier = editorInteractionModifier,
-              editorInputEnabled = editorReady && editorInputEnabledByToolbar,
-              suppressSoftwareKeyboard = !editorReady || editorSuppressesSoftwareKeyboard,
+              editorInputEnabled = editorReady && editorInputEnabledByToolbar && !editorReadOnly,
+              suppressSoftwareKeyboard =
+                !editorReady || editorSuppressesSoftwareKeyboard || editorReadOnly,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
               overlay = {
-                if (editorReady && !documentLocked) {
+                if (editorReady && !editorReadOnly) {
                   EditorDocumentPlaceholder(
                     placeholder = editorState.placeholder,
                     geometry = bodyGeometry,
