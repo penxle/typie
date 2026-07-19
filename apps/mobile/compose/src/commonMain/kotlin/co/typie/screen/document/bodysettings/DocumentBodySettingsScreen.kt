@@ -226,7 +226,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
             style = resolvedBodyStyle,
             fontFamilies = model.fontFamilies,
             sheet = sheet,
-            onStyleChange = ::saveStyle,
+            onStyleChange = { style -> saveStyle(style) },
           )
 
           EditorSettingsSectionDivider()
@@ -234,12 +234,15 @@ fun DocumentBodySettingsScreen(entityId: String) {
           EditorSettingsLayoutSection(
             layout = resolvedLayout,
             sheet = sheet,
-            onLayoutChange = ::saveLayout,
+            onLayoutChange = { layout -> saveLayout(layout) },
           )
 
           EditorSettingsSectionDivider()
 
-          EditorSettingsDetailLayoutSection(style = resolvedBodyStyle, onStyleChange = ::saveStyle)
+          EditorSettingsDetailLayoutSection(
+            style = resolvedBodyStyle,
+            onStyleChange = { style -> saveStyle(style) },
+          )
         }
       }
 
