@@ -9,6 +9,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlin.math.abs
 
 enum class DrawerAnchor {
   Closed,
@@ -51,8 +52,29 @@ class Drawer {
     if (isOpen) close() else open()
   }
 
-  suspend fun settle() {
-    runProgrammatic { state.animateTo(state.targetValue, DrawerDefaults.AnimationSpec) }
+  internal suspend fun settle(velocityX: Float, velocityThresholdPx: Float) {
+    val target = releaseTarget(velocityX, velocityThresholdPx)
+    runProgrammatic { state.animateTo(target, DrawerDefaults.AnimationSpec) }
+  }
+
+  internal fun releaseTarget(velocity: Float, velocityThreshold: Float): DrawerAnchor {
+    // Mirrors Foundation's anchored-draggable target selection with Material3's drawer threshold.
+    val offset = state.requireOffset()
+    val anchors = state.anchors
+    if (velocity == 0f) return anchors.closestAnchor(offset)!!
+
+    val movingForward = velocity > 0f
+    if (abs(velocity) >= velocityThreshold) {
+      return anchors.closestAnchor(offset, searchUpwards = movingForward)!!
+    }
+
+    val lowerAnchor = anchors.closestAnchor(offset, searchUpwards = false)!!
+    val upperAnchor = anchors.closestAnchor(offset, searchUpwards = true)!!
+    val origin = if (movingForward) lowerAnchor else upperAnchor
+    val destination = if (movingForward) upperAnchor else lowerAnchor
+    val distance = abs(anchors.positionOf(upperAnchor) - anchors.positionOf(lowerAnchor))
+    val threshold = distance * DrawerDefaults.PositionalThresholdFraction
+    return if (abs(offset - anchors.positionOf(origin)) >= threshold) destination else origin
   }
 
   private suspend inline fun runProgrammatic(block: () -> Unit) {

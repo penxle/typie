@@ -1,12 +1,16 @@
 package co.typie.shell
 
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
+import androidx.compose.foundation.gestures.snapping.snapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,12 +38,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.zIndex
@@ -392,6 +401,7 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
 fun MainDrawerOverlay(drawer: Drawer) {
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
+  val flingBehavior = rememberDrawerFlingBehavior(drawer)
 
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
     val panelWidthDp =
@@ -457,6 +467,7 @@ fun MainDrawerOverlay(drawer: Drawer) {
             state = drawer.state,
             orientation = Orientation.Horizontal,
             enabled = !drawer.isProgrammaticAnimating,
+            flingBehavior = flingBehavior,
           )
           .background(AppTheme.colors.surfaceDefault, panelShape)
           .statusBarsPadding()
@@ -465,6 +476,27 @@ fun MainDrawerOverlay(drawer: Drawer) {
     ) {
       MainDrawerContent()
     }
+  }
+}
+
+@Composable
+private fun rememberDrawerFlingBehavior(drawer: Drawer): TargetedFlingBehavior {
+  val velocityThresholdPx = with(LocalDensity.current) { DrawerDefaults.VelocityThreshold.toPx() }
+  return remember(drawer, velocityThresholdPx) {
+    snapFlingBehavior(
+      snapLayoutInfoProvider =
+        object : SnapLayoutInfoProvider {
+          override fun calculateApproachOffset(velocity: Float, decayOffset: Float): Float = 0f
+
+          override fun calculateSnapOffset(velocity: Float): Float {
+            val currentOffset = drawer.state.requireOffset()
+            val target = drawer.releaseTarget(velocity, velocityThresholdPx)
+            return drawer.state.anchors.positionOf(target) - currentOffset
+          }
+        },
+      decayAnimationSpec = exponentialDecay(),
+      snapAnimationSpec = DrawerDefaults.AnimationSpec,
+    )
   }
 }
 
@@ -487,14 +519,17 @@ fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
 
   return Modifier.pointerInput(drawer) {
     val slop = viewConfiguration.touchSlop
+    val velocityThresholdPx = DrawerDefaults.VelocityThreshold.toPx()
 
     awaitEachGesture {
       val down = awaitFirstDown(requireUnconsumed = false)
-      if (drawer.isOpen || drawer.isProgrammaticAnimating) {
+      if (down.type == PointerType.Mouse || drawer.isOpen || drawer.isProgrammaticAnimating) {
         return@awaitEachGesture
       }
 
-      var overSlopX = 0f
+      val velocityTracker = VelocityTracker()
+      velocityTracker.addPointerInputChange(down)
+      var initialDragX = 0f
       var claimed = false
 
       while (!claimed) {
@@ -503,6 +538,8 @@ fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
         if (!change.pressed) {
           return@awaitEachGesture
         }
+
+        velocityTracker.addPointerInputChange(change)
 
         val dx = change.position.x - down.position.x
         val dy = change.position.y - down.position.y
@@ -519,18 +556,18 @@ fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
             return@awaitEachGesture
           }
 
+          velocityTracker.addPointerInputChange(confirmChange)
           confirmChange.consume()
-          overSlopX = confirmChange.position.x - down.position.x
+          initialDragX = confirmChange.position.x - down.position.x
           claimed = true
         }
       }
 
-      if (overSlopX != 0f) {
-        drawer.state.dispatchRawDelta(overSlopX)
-      }
+      if (initialDragX != 0f) drawer.state.dispatchRawDelta(initialDragX)
 
       // MainDrawerOverlay의 blocker가 Main pass에서 consume하므로 isConsumed 무시.
       // 자식 scrollable이 수직 slop을 잡아 제스처가 취소되지 않도록 우리가 계속 consume.
+      var releaseVelocityX = 0f
       var dragging = true
       while (dragging) {
         val event = awaitPointerEvent(PointerEventPass.Main)
@@ -539,12 +576,31 @@ fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
           dragging = false
           continue
         }
+
+        velocityTracker.addPointerInputChange(change)
         val dx = change.positionChangeIgnoreConsumed().x
         if (dx != 0f) drawer.state.dispatchRawDelta(dx)
-        if (!change.pressed) dragging = false else change.consume()
+        if (!change.pressed) {
+          if (event.type == PointerEventType.Release) {
+            releaseVelocityX =
+              velocityTracker
+                .calculateVelocity(
+                  Velocity(
+                    viewConfiguration.maximumFlingVelocity,
+                    viewConfiguration.maximumFlingVelocity,
+                  )
+                )
+                .x
+          }
+          dragging = false
+        } else {
+          change.consume()
+        }
       }
 
-      scope.launch { drawer.settle() }
+      scope.launch {
+        drawer.settle(velocityX = releaseVelocityX, velocityThresholdPx = velocityThresholdPx)
+      }
     }
   }
 }
