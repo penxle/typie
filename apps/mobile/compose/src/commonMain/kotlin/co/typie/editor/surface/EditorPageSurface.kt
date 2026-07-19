@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.LocalEditorZoomController
+import co.typie.editor.SurfaceConfiguration
 import co.typie.editor.SurfaceSessionHandle
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.render.RenderCanvas
@@ -70,19 +71,21 @@ internal fun EditorPageSurface(
       }
     }
   var surfaceSession by remember(editor, page) { mutableStateOf<SurfaceSessionHandle?>(null) }
-  val render =
-    remember(editor, page, onPresented) { { surfaceSession?.requestRender(onPresented) } }
 
   val widthDouble = width.toDouble()
   val heightDouble = height.toDouble()
-  val renderWidthPx = round(widthDouble * density.density.toDouble() * renderZoom.toDouble())
-  val renderHeightPx = round(heightDouble * density.density.toDouble() * renderZoom.toDouble())
-  val renderWidthPxInt = renderWidthPx.toInt().coerceAtLeast(1)
-  val renderHeightPxInt = renderHeightPx.toInt().coerceAtLeast(1)
-  val desiredPixelSize = IntSize(renderWidthPxInt, renderHeightPxInt)
+  val configuration =
+    SurfaceConfiguration(width = widthDouble, height = heightDouble, scaleFactor = scaleFactor)
+  val desiredPixelSize =
+    IntSize(
+      width = round(configuration.width * configuration.scaleFactor).toInt().coerceAtLeast(1),
+      height = round(configuration.height * configuration.scaleFactor).toInt().coerceAtLeast(1),
+    )
   var committedPixelSize by remember { mutableStateOf(desiredPixelSize) }
   var committedRenderZoom by remember { mutableFloatStateOf(renderZoom) }
   val currentRenderZoom by rememberUpdatedState(renderZoom)
+  val render =
+    remember(editor, page, onPresented) { { surfaceSession?.requestRender(onPresented) } }
   var renderActive by remember(editor, page) { mutableStateOf(false) }
 
   val safeCommittedRenderZoom = if (committedRenderZoom > 0f) committedRenderZoom else 1f
@@ -149,6 +152,7 @@ internal fun EditorPageSurface(
                 transformOrigin = TransformOrigin(0f, 0f),
               ),
             desiredPixelSize = desiredPixelSize,
+            configuration = configuration,
             trigger = trigger,
             onAttach = { handle ->
               surfaceSession =
@@ -158,9 +162,7 @@ internal fun EditorPageSurface(
               surfaceSession?.detach(releaseBuffer) ?: releaseBuffer()
               surfaceSession = null
             },
-            onResize = {
-              surfaceSession?.requestResize(widthDouble, heightDouble, scaleFactor, onPresented)
-            },
+            onResize = { surfaceSession?.requestResize(configuration, onPresented) },
             onBitmapCommitted = { size, version ->
               committedPixelSize = size
               committedRenderZoom = currentRenderZoom

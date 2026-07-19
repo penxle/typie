@@ -3,12 +3,14 @@ package co.typie.editor.render
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntSize
+import co.typie.editor.SurfaceConfiguration
 import kotlinx.coroutines.flow.SharedFlow
 
 @Composable
 internal expect fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
+  configuration: SurfaceConfiguration,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: (releaseBuffer: () -> Unit) -> Unit,

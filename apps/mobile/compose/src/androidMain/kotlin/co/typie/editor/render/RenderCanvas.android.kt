@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.core.graphics.createBitmap
+import co.typie.editor.SurfaceConfiguration
 import com.sun.jna.Pointer
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.conflate
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.conflate
 internal actual fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
+  configuration: SurfaceConfiguration,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
@@ -39,7 +41,7 @@ internal actual fun RenderCanvas(
   val currentOnResize by rememberUpdatedState(onResize)
   val currentOnBitmapCommitted by rememberUpdatedState(onBitmapCommitted)
 
-  LaunchedEffect(desiredPixelSize) {
+  LaunchedEffect(desiredPixelSize, configuration) {
     if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
     if (bufferHandle == 0L) {
       val handle = RenderBuffer.allocate(desiredPixelSize.width, desiredPixelSize.height)

@@ -13,6 +13,7 @@ import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TrackedRange
@@ -832,10 +833,10 @@ class EditorAwaitTest {
         editor.attachSurface(page = 0, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
 
       surface.requestRender { presentedVersions += it }
-      surface.requestResize(width = 10.0, height = 20.0, scaleFactor = 2.0) {
+      surface.requestResize(SurfaceConfiguration(width = 10.0, height = 20.0, scaleFactor = 2.0)) {
         presentedVersions += it
       }
-      surface.requestResize(width = 12.0, height = 24.0, scaleFactor = 3.0) {
+      surface.requestResize(SurfaceConfiguration(width = 12.0, height = 24.0, scaleFactor = 3.0)) {
         presentedVersions += it
       }
 
@@ -852,6 +853,79 @@ class EditorAwaitTest {
       )
       assertEquals(1, fake.renderCount)
       assertEquals(listOf(0L), presentedVersions)
+    }
+
+  @Test
+  fun render_settles_without_rendering_when_engine_page_size_differs_from_surface() =
+    runTest(dispatcher) {
+      var pageSize = Size(width = 1f, height = 2f)
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { listOf(pageSize) },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 1.0, height = 2.0, scaleFactor = 1.0)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      pageSize = Size(width = 3f, height = 4f)
+      var returned = false
+      val job =
+        launch(dispatcher) {
+          editor.await { enqueue(sampleMessage) }
+          returned = true
+        }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertFalse(returned)
+
+      surface.requestRender { version -> editor.onPageSettled(page = 0, version = version) }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(returned)
+      assertEquals(0, fake.renderCount)
+      job.join()
+    }
+
+  @Test
+  fun stale_surface_resize_settles_without_rendering() =
+    runTest(dispatcher) {
+      var pageSize = Size(width = 1f, height = 2f)
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { listOf(pageSize) },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 1.0, height = 2.0, scaleFactor = 1.0)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      pageSize = Size(width = 3f, height = 4f)
+      var returned = false
+      val job =
+        launch(dispatcher) {
+          editor.await { enqueue(sampleMessage) }
+          returned = true
+        }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertFalse(returned)
+
+      surface.requestResize(SurfaceConfiguration(width = 1.0, height = 2.0, scaleFactor = 1.0)) {
+        version ->
+        editor.onPageSettled(page = 0, version = version)
+      }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(returned)
+      assertEquals(
+        listOf(
+          FakeFfiEditor.SurfaceResizeCall(page = 0, width = 1.0, height = 2.0, scaleFactor = 1.0)
+        ),
+        fake.resizeCalls,
+      )
+      assertEquals(0, fake.renderCount)
+      job.join()
     }
 
   @Test

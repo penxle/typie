@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import co.typie.editor.SurfaceConfiguration
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.conflate
 import org.jetbrains.skia.Bitmap
@@ -26,6 +27,7 @@ import org.jetbrains.skia.impl.use
 internal actual fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
+  configuration: SurfaceConfiguration,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
@@ -40,7 +42,7 @@ internal actual fun RenderCanvas(
   val currentOnResize by rememberUpdatedState(onResize)
   val currentOnBitmapCommitted by rememberUpdatedState(onBitmapCommitted)
 
-  LaunchedEffect(desiredPixelSize) {
+  LaunchedEffect(desiredPixelSize, configuration) {
     if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
     if (bufferHandle == 0L) {
       val handle = RenderBuffer.allocate(desiredPixelSize.width, desiredPixelSize.height)

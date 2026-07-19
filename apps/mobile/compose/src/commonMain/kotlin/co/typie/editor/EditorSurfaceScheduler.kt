@@ -17,6 +17,12 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
+internal data class SurfaceConfiguration(
+  val width: Double,
+  val height: Double,
+  val scaleFactor: Double,
+)
+
 private typealias SurfacePresentedCallback = (version: Long) -> Unit
 
 internal class SurfaceSessionHandle
@@ -29,13 +35,8 @@ internal constructor(
     scheduler.requestRender(this, onPresented)
   }
 
-  fun requestResize(
-    width: Double,
-    height: Double,
-    scaleFactor: Double,
-    onPresented: SurfacePresentedCallback,
-  ) {
-    scheduler.requestResize(this, width, height, scaleFactor, onPresented)
+  fun requestResize(configuration: SurfaceConfiguration, onPresented: SurfacePresentedCallback) {
+    scheduler.requestResize(this, configuration, onPresented)
   }
 
   fun detach(onDetached: () -> Unit = {}) {
@@ -44,6 +45,8 @@ internal constructor(
 }
 
 private data class SurfaceSession(val id: Long)
+
+private data class AttachedSurfaceSession(val id: Long, val configuration: SurfaceConfiguration)
 
 private data class SurfaceSessionKey(val page: Int, val sessionId: Long)
 
@@ -56,9 +59,7 @@ private data class SurfaceAttachCommand(
   override val sessionId: Long,
   override val page: Int,
   val handle: Long,
-  val width: Double,
-  val height: Double,
-  val scaleFactor: Double,
+  val configuration: SurfaceConfiguration,
 ) : SurfaceCommand
 
 private sealed interface SurfaceRenderCommand : SurfaceCommand {
@@ -74,9 +75,7 @@ private data class SurfaceRenderOnlyCommand(
 private data class SurfaceResizeAndRenderCommand(
   override val sessionId: Long,
   override val page: Int,
-  val width: Double,
-  val height: Double,
-  val scaleFactor: Double,
+  val configuration: SurfaceConfiguration,
   override val onPresented: SurfacePresentedCallback,
 ) : SurfaceRenderCommand
 
@@ -104,7 +103,7 @@ internal class EditorSurfaceScheduler(
   private val commands: AtomicReference<PersistentList<SurfaceCommand>> =
     AtomicReference(persistentListOf())
   private val scheduled: AtomicBoolean = AtomicBoolean(false)
-  private val attachedSessions: AtomicReference<PersistentMap<Int, Long>> =
+  private val attachedSessions: AtomicReference<PersistentMap<Int, AttachedSurfaceSession>> =
     AtomicReference(persistentMapOf())
   private val pendingAttachSessions: AtomicReference<PersistentSet<SurfaceSessionKey>> =
     AtomicReference(persistentSetOf())
@@ -128,9 +127,7 @@ internal class EditorSurfaceScheduler(
         sessionId = sessionId,
         page = page,
         handle = handle,
-        width = width,
-        height = height,
-        scaleFactor = scaleFactor,
+        configuration = SurfaceConfiguration(width, height, scaleFactor),
       )
     )
     return surface
@@ -149,9 +146,7 @@ internal class EditorSurfaceScheduler(
 
   fun requestResize(
     surface: SurfaceSessionHandle,
-    width: Double,
-    height: Double,
-    scaleFactor: Double,
+    configuration: SurfaceConfiguration,
     onPresented: SurfacePresentedCallback,
   ) {
     if (disposed.load() || !isActive(surface)) return
@@ -159,9 +154,7 @@ internal class EditorSurfaceScheduler(
       SurfaceResizeAndRenderCommand(
         sessionId = surface.id,
         page = surface.page,
-        width = width,
-        height = height,
-        scaleFactor = scaleFactor,
+        configuration = configuration,
         onPresented = onPresented,
       )
     )
@@ -205,7 +198,7 @@ internal class EditorSurfaceScheduler(
   private fun isActive(page: Int, sessionId: Long): Boolean = sessions.load()[page]?.id == sessionId
 
   private fun requiresDeferredDetach(page: Int, sessionId: Long): Boolean =
-    attachedSessions.load()[page] == sessionId ||
+    attachedSessions.load()[page]?.id == sessionId ||
       pendingAttachSessions.load().contains(SurfaceSessionKey(page, sessionId))
 
   private fun enqueue(command: SurfaceCommand) {
@@ -239,40 +232,43 @@ internal class EditorSurfaceScheduler(
     command: SurfaceRenderOnlyCommand
   ): PersistentList<SurfaceCommand> {
     var replaced = false
-    val next = map { queued ->
-      when {
-        queued is SurfaceResizeAndRenderCommand && queued.sessionId == command.sessionId -> {
-          replaced = true
-          queued.copy(onPresented = command.onPresented)
+    val next =
+      map { queued ->
+          when {
+            queued is SurfaceResizeAndRenderCommand && queued.sessionId == command.sessionId -> {
+              replaced = true
+              queued.copy(onPresented = command.onPresented)
+            }
+            queued is SurfaceRenderOnlyCommand && queued.sessionId == command.sessionId -> {
+              replaced = true
+              command
+            }
+            else -> queued
+          }
         }
-        queued is SurfaceRenderOnlyCommand && queued.sessionId == command.sessionId -> {
-          replaced = true
-          command
-        }
-        else -> queued
-      }
-    }
-      .toPersistentList()
+        .toPersistentList()
     return if (replaced) next else next.adding(command)
   }
 
   private fun PersistentList<SurfaceCommand>.coalesceResize(
     command: SurfaceResizeAndRenderCommand
-  ): PersistentList<SurfaceCommand> = filterNot {
-    it.sessionId == command.sessionId &&
-      (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
-  }
-    .toPersistentList()
-    .adding(command)
+  ): PersistentList<SurfaceCommand> =
+    filterNot {
+        it.sessionId == command.sessionId &&
+          (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
+      }
+      .toPersistentList()
+      .adding(command)
 
   private fun PersistentList<SurfaceCommand>.coalesceDetach(
     command: SurfaceDetachCommand
-  ): PersistentList<SurfaceCommand> = filterNot {
-    it.sessionId == command.sessionId &&
-      (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
-  }
-    .toPersistentList()
-    .adding(command)
+  ): PersistentList<SurfaceCommand> =
+    filterNot {
+        it.sessionId == command.sessionId &&
+          (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
+      }
+      .toPersistentList()
+      .adding(command)
 
   private fun schedule() {
     if (!scheduled.compareAndSet(expectedValue = false, newValue = true)) return
@@ -333,11 +329,13 @@ internal class EditorSurfaceScheduler(
       inner.attachSurface(
         command.page,
         command.handle,
-        command.width,
-        command.height,
-        command.scaleFactor,
+        command.configuration.width,
+        command.configuration.height,
+        command.configuration.scaleFactor,
       )
-      attachedSessions.updatePersistent { it.putting(command.page, command.sessionId) }
+      attachedSessions.updatePersistent {
+        it.putting(command.page, AttachedSurfaceSession(command.sessionId, command.configuration))
+      }
       attached = true
     }
 
@@ -354,13 +352,49 @@ internal class EditorSurfaceScheduler(
   private suspend fun flushRender(command: SurfaceRenderCommand) {
     if (disposed.load() || !isActive(command.page, command.sessionId)) return
 
-    // Reading the version before rendering under-reports what the frame may
-    // contain, which only delays a settle until the follow-up render command;
-    // the skip path below then settles it with a fresh read.
-    val version = versionCounter.load()
-    if (command is SurfaceResizeAndRenderCommand) {
-      inner.resizeSurface(command.page, command.width, command.height, command.scaleFactor)
+    val applied =
+      when (command) {
+        is SurfaceResizeAndRenderCommand -> {
+          val configuration = command.configuration
+          inner.resizeSurface(
+            command.page,
+            configuration.width,
+            configuration.height,
+            configuration.scaleFactor,
+          )
+          attachedSessions.updatePersistent { sessions ->
+            if (sessions[command.page]?.id == command.sessionId) {
+              sessions.putting(
+                command.page,
+                AttachedSurfaceSession(command.sessionId, configuration),
+              )
+            } else {
+              sessions
+            }
+          }
+          configuration
+        }
+
+        is SurfaceRenderOnlyCommand -> {
+          val attached = attachedSessions.load()[command.page]
+          if (attached?.id != command.sessionId) return
+          attached.configuration
+        }
+      }
+    val pageSize = inner.pageSizes().getOrNull(command.page)
+    if (
+      pageSize != null &&
+        (pageSize.width.toDouble() != applied.width || pageSize.height.toDouble() != applied.height)
+    ) {
+      // A tick changed logical page geometry before the matching surface resize was applied.
+      // Rendering here would put the new layout into an old target. Settle this attempt;
+      // the published state will request the matching resize-and-render.
+      onPageSettled(command.page, versionCounter.load())
+      return
     }
+    // Reading the version before rendering under-reports what the frame may contain,
+    // which only delays a settle until the follow-up render command.
+    val version = versionCounter.load()
     val presented = inner.renderSurface(command.page)
 
     if (!isActive(command.page, command.sessionId)) return
@@ -388,14 +422,14 @@ internal class EditorSurfaceScheduler(
   }
 
   private suspend fun detachAttachedSession(page: Int, sessionId: Long) {
-    if (attachedSessions.load()[page] != sessionId) return
+    if (attachedSessions.load()[page]?.id != sessionId) return
     inner.detachSurface(page)
     removeAttachedSession(page, sessionId)
   }
 
   private fun removeAttachedSession(page: Int, sessionId: Long) {
     attachedSessions.updatePersistent { current ->
-      if (current[page] == sessionId) current.removing(page) else current
+      if (current[page]?.id == sessionId) current.removing(page) else current
     }
   }
 
