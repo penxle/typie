@@ -27,6 +27,7 @@ editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-state = { path = "../editor-state" }
+hashbrown.workspace = true
 log.workspace = true
 serde.workspace = true
 smallvec.workspace = true

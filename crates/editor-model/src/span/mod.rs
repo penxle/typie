@@ -19,7 +19,7 @@ pub use covering::*;
 mod segs;
 pub use segs::*;
 
-use editor_crdt::{CrdtError, Dot};
+use editor_crdt::{CrdtError, Dot, FastMap};
 use serde::{Deserialize, Serialize};
 
 use crate::{Modifier, ModifierType};
@@ -73,13 +73,13 @@ impl SpanOp {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpanLog {
-    ops: imbl::HashMap<Dot, SpanOp>,
+    ops: FastMap<Dot, SpanOp>,
 }
 
 impl SpanLog {
     pub fn new() -> Self {
         Self {
-            ops: imbl::HashMap::new(),
+            ops: FastMap::new(),
         }
     }
 

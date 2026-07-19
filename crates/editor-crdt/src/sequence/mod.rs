@@ -1,8 +1,8 @@
 use crate::Dot;
 use crate::oplog::{ListOp, NYI, OpLog, item_width, lv_cmp};
 use editor_common::content_tree::{ContentTree, Cursor, Leaf, Sum};
+use hashbrown::HashMap;
 use std::collections::BinaryHeap;
-use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Bias {
@@ -1216,8 +1216,9 @@ mod tests {
         assert_eq!(sc.dot_at_visible(&log, snap.len()), None);
     }
 
+    use hashbrown::HashSet;
     use proptest::prelude::*;
-    use std::collections::{BTreeMap, HashSet};
+    use std::collections::BTreeMap;
 
     fn sub(events: &[InputEvent], parents: &[Dot]) -> Vec<InputEvent> {
         let map: HashMap<Dot, &InputEvent> = events.iter().map(|e| (e.id, e)).collect();

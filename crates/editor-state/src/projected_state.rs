@@ -4887,7 +4887,7 @@ mod tests {
         assert_eq!(batch_ops.len(), 3);
         assert_eq!(batched.view().node(para).unwrap().inline_text(), "abc");
 
-        let mut distinct: std::collections::HashSet<Dot> = std::collections::HashSet::new();
+        let mut distinct: hashbrown::HashSet<Dot> = hashbrown::HashSet::new();
         for op in &batch_ops {
             assert!(distinct.insert(op.id), "returned dots must be distinct");
         }

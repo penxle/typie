@@ -2046,7 +2046,7 @@ mod concurrency_proptest {
 
     fn collect_new(
         registry: &mut Vec<Changeset<EditOp>>,
-        seen: &mut std::collections::HashSet<Dot>,
+        seen: &mut hashbrown::HashSet<Dot>,
         state: &ProjectedState,
     ) {
         for cs in state.graph().changesets_as_vec() {
@@ -2100,7 +2100,7 @@ mod concurrency_proptest {
             .unwrap();
 
         let mut registry: Vec<Changeset<EditOp>> = base.clone();
-        let mut seen: std::collections::HashSet<Dot> = base.iter().map(|c| c.ops[0].id).collect();
+        let mut seen: hashbrown::HashSet<Dot> = base.iter().map(|c| c.ops[0].id).collect();
 
         for cmd in cmds {
             match *cmd {

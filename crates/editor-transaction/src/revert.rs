@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use hashbrown::HashSet;
 
 use editor_crdt::Dot;
 use editor_model::{ChildView, Modifier, NodeView, PlainNode, Subtree};

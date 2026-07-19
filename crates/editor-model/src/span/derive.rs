@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap};
+use hashbrown::HashMap;
+use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_crdt::sequence::SeqResolve;
@@ -214,6 +215,7 @@ pub fn derive_explicit_effect(
 mod tests {
     use super::*;
     use crate::seq::project_blocks;
+    use editor_crdt::FastMap;
 
     fn para_chars(chars: &str) -> Vec<(Dot, SeqItem)> {
         let mut out = vec![(
@@ -330,14 +332,14 @@ mod tests {
         attrs: &ModifierAttrLog,
     ) -> BTreeMap<Dot, BTreeMap<ModifierType, Modifier>> {
         use crate::span::{EffectiveSources, derive_explicit_effect};
-        use std::collections::HashMap;
+        use hashbrown::HashMap;
         let log = oplog(elems);
         let (els, resolver) = checkout_with_resolver(&log);
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let explicit: HashMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, spans)
             .into_iter()
             .collect();
-        let node_attrs: imbl::HashMap<Dot, crate::nodes::Node> = imbl::HashMap::new();
+        let node_attrs: FastMap<Dot, crate::nodes::Node> = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: attrs,
             explicit_spans: &explicit,
@@ -357,14 +359,14 @@ mod tests {
         attrs: &ModifierAttrLog,
     ) -> BTreeMap<Dot, BTreeMap<ModifierType, Modifier>> {
         use crate::span::{EffectiveSources, derive_block_effective, derive_explicit_effect};
-        use std::collections::HashMap;
+        use hashbrown::HashMap;
         let log = oplog(elems);
         let (els, resolver) = checkout_with_resolver(&log);
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let explicit: HashMap<Dot, _> = derive_explicit_effect(&els, &tree, &resolver, spans)
             .into_iter()
             .collect();
-        let node_attrs: imbl::HashMap<Dot, crate::nodes::Node> = imbl::HashMap::new();
+        let node_attrs: FastMap<Dot, crate::nodes::Node> = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: attrs,
             explicit_spans: &explicit,

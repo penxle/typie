@@ -96,6 +96,7 @@ fn scaffold_children(content: &ContentExpr) -> Vec<Subtree> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use editor_crdt::FastMap;
     use editor_macros::state;
 
     // The projected DocView is always normalized (missing required children are
@@ -122,7 +123,7 @@ mod tests {
         let unknown_id = Dot::new(1, 1);
         let title_id = Dot::new(1, 2);
 
-        let mut nodes = editor_model::imbl::HashMap::new();
+        let mut nodes = FastMap::new();
         nodes.insert(
             fold_id,
             BlockNode {
@@ -156,11 +157,11 @@ mod tests {
                 nodes,
                 root: fold_id,
             },
-            block_effective: editor_model::imbl::HashMap::new(),
+            block_effective: FastMap::new(),
             seg_index: editor_model::BlockSegs::default(),
-            block_modifiers: editor_model::imbl::HashMap::new(),
-            node_attrs: editor_model::imbl::HashMap::new(),
-            node_carries: editor_model::imbl::HashMap::new(),
+            block_modifiers: FastMap::new(),
+            node_attrs: FastMap::new(),
+            node_carries: FastMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
             repair_stats: editor_model::RepairStats::default(),
         };
@@ -194,7 +195,7 @@ mod tests {
         let content_id = Dot::new(1, 1);
         let unknown_id = Dot::new(1, 2);
 
-        let mut nodes = editor_model::imbl::HashMap::new();
+        let mut nodes = FastMap::new();
         nodes.insert(
             fold_id,
             BlockNode {
@@ -227,11 +228,11 @@ mod tests {
                 nodes,
                 root: fold_id,
             },
-            block_effective: editor_model::imbl::HashMap::new(),
+            block_effective: FastMap::new(),
             seg_index: editor_model::BlockSegs::default(),
-            block_modifiers: editor_model::imbl::HashMap::new(),
-            node_attrs: editor_model::imbl::HashMap::new(),
-            node_carries: editor_model::imbl::HashMap::new(),
+            block_modifiers: FastMap::new(),
+            node_attrs: FastMap::new(),
+            node_carries: FastMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
             repair_stats: editor_model::RepairStats::default(),
         };
@@ -267,7 +268,7 @@ mod tests {
         let unknown_id = Dot::new(1, 1);
         let content_id = Dot::new(1, 2);
 
-        let mut nodes = editor_model::imbl::HashMap::new();
+        let mut nodes = FastMap::new();
         nodes.insert(
             fold_id,
             BlockNode {
@@ -300,11 +301,11 @@ mod tests {
                 nodes,
                 root: fold_id,
             },
-            block_effective: editor_model::imbl::HashMap::new(),
+            block_effective: FastMap::new(),
             seg_index: editor_model::BlockSegs::default(),
-            block_modifiers: editor_model::imbl::HashMap::new(),
-            node_attrs: editor_model::imbl::HashMap::new(),
-            node_carries: editor_model::imbl::HashMap::new(),
+            block_modifiers: FastMap::new(),
+            node_attrs: FastMap::new(),
+            node_carries: FastMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
             repair_stats: editor_model::RepairStats::default(),
         };

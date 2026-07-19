@@ -1,10 +1,10 @@
-use editor_crdt::Dot;
+use editor_crdt::{Dot, FastMap};
 
 use super::{SpanLog, SpanOp};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpanAnchorIndex {
-    by_anchor: imbl::HashMap<Dot, Vec<Dot>>,
+    by_anchor: FastMap<Dot, Vec<Dot>>,
 }
 
 impl SpanAnchorIndex {

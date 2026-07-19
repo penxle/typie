@@ -25,6 +25,15 @@ pub use orset::{OrSet, OrSetOp};
 pub use sync::SyncMessage;
 pub use to_plain::ToPlain;
 
+/// `imbl` map/set with a fast non-cryptographic hasher — the default
+/// `RandomState` (SipHash) shows up in profiles when every dot lookup hashes
+/// through it. Keys here are u64 actors / 16-byte dots, not attacker-chosen
+/// hash-flood surfaces.
+pub type FastMap<K, V> =
+    imbl::GenericHashMap<K, V, hashbrown::DefaultHashBuilder, imbl::shared_ptr::DefaultSharedPtr>;
+pub type FastSet<A> =
+    imbl::GenericHashSet<A, hashbrown::DefaultHashBuilder, imbl::shared_ptr::DefaultSharedPtr>;
+
 #[cfg(test)]
 mod test_utils;
 

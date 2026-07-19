@@ -1,6 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use hashbrown::HashMap;
+use std::collections::BTreeMap;
 
-use editor_crdt::Dot;
+use editor_crdt::{Dot, FastMap};
 use strum::IntoEnumIterator;
 
 use crate::nodes::Node;
@@ -10,7 +11,7 @@ use crate::{Alignment, Modifier, ModifierAttrLog, ModifierType, NodeType, Schema
 pub struct EffectiveSources<'a> {
     pub block_modifiers: &'a ModifierAttrLog,
     pub explicit_spans: &'a HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
-    pub node_attrs: &'a imbl::HashMap<Dot, Node>,
+    pub node_attrs: &'a FastMap<Dot, Node>,
 }
 
 pub(crate) fn is_table_justify(node_type: NodeType, m: &Modifier) -> bool {
@@ -186,7 +187,7 @@ pub(crate) fn blocks_with_context(tree: &BlockTree) -> Vec<BlockContext> {
 pub fn derive_block_effective(
     tree: &BlockTree,
     src: &EffectiveSources,
-) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+) -> FastMap<Dot, BTreeMap<ModifierType, Modifier>> {
     blocks_with_context(tree)
         .into_iter()
         .map(|ctx| {
@@ -242,7 +243,7 @@ mod tests {
     fn sources<'a>(
         bm: &'a ModifierAttrLog,
         spans: &'a HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
-        node_attrs: &'a imbl::HashMap<Dot, Node>,
+        node_attrs: &'a FastMap<Dot, Node>,
     ) -> EffectiveSources<'a> {
         EffectiveSources {
             block_modifiers: bm,
@@ -266,7 +267,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let own = own_effect(
             Some(img),
@@ -297,7 +298,7 @@ mod tests {
         let mut e = BTreeMap::new();
         e.insert(ModifierType::Bold, Modifier::Bold);
         spans.insert(leaf, e);
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
         let own = own_effect(Some(leaf), NodeType::Text, &path, true, &src);
@@ -321,7 +322,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root];
         let own = own_effect(Some(root), NodeType::Root, &path, false, &src);
@@ -344,7 +345,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root];
         let own = own_effect(Some(root), NodeType::Root, &path, false, &src);
@@ -369,7 +370,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root, NodeType::Table];
         let own = own_effect(Some(table), NodeType::Table, &path, false, &src);
@@ -387,7 +388,7 @@ mod tests {
         let mut e = BTreeMap::new();
         e.insert(ModifierType::FontSize, Modifier::FontSize { value: 50000 });
         spans.insert(leaf, e);
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let path = [NodeType::Root, NodeType::Paragraph, NodeType::Text];
         let own = own_effect(Some(leaf), NodeType::Text, &path, true, &src);
@@ -403,7 +404,7 @@ mod tests {
         let blk = Dot::new(1, 1);
         let bm = ModifierAttrLog::new();
         let spans = HashMap::new();
-        let mut node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
+        let mut node_attrs: FastMap<Dot, Node> = FastMap::new();
         let mut bq = match NodeType::Blockquote.into_node() {
             Node::Blockquote(b) => b,
             _ => unreachable!(),
@@ -564,7 +565,7 @@ mod tests {
                 e.insert(m.as_type(), m);
                 spans.insert(leaf, e);
             }
-            let node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
+            let node_attrs: FastMap<Dot, Node> = FastMap::new();
             let src = EffectiveSources { block_modifiers: &bm, explicit_spans: &spans, node_attrs: &node_attrs };
             let block_path = [(NodeType::Root, Some(root)), (NodeType::Paragraph, Some(para))];
             let got = resolve_effective(&block_path, Some(leaf), NodeType::Text, true, &src);
@@ -588,7 +589,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -621,7 +622,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -641,12 +642,11 @@ mod tests {
     fn table_alignment_src(bm: &ModifierAttrLog) -> EffectiveSources<'_> {
         static EMPTY_SPANS: std::sync::OnceLock<HashMap<Dot, BTreeMap<ModifierType, Modifier>>> =
             std::sync::OnceLock::new();
-        static EMPTY_ATTRS: std::sync::OnceLock<imbl::HashMap<Dot, Node>> =
-            std::sync::OnceLock::new();
+        static EMPTY_ATTRS: std::sync::OnceLock<FastMap<Dot, Node>> = std::sync::OnceLock::new();
         EffectiveSources {
             block_modifiers: bm,
             explicit_spans: EMPTY_SPANS.get_or_init(HashMap::new),
-            node_attrs: EMPTY_ATTRS.get_or_init(imbl::HashMap::new),
+            node_attrs: EMPTY_ATTRS.get_or_init(FastMap::new),
         }
     }
 
@@ -806,7 +806,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -835,7 +835,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -867,7 +867,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -930,7 +930,7 @@ mod tests {
             )
             .unwrap();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -952,7 +952,7 @@ mod tests {
         let a = Dot::new(1, 3);
         let bm = ModifierAttrLog::new();
         let spans = HashMap::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let eff = crate::span::resolve_effective(
             &[
@@ -1009,7 +1009,7 @@ mod tests {
         let tree = BlockTree::from_raw(&normalize(project_blocks(&els).unwrap()));
         let bm = ModifierAttrLog::new();
         let spans = HashMap::new();
-        let mut node_attrs: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
+        let mut node_attrs: FastMap<Dot, Node> = FastMap::new();
         let mut bqn = match NodeType::Blockquote.into_node() {
             Node::Blockquote(n) => n,
             _ => unreachable!(),
@@ -1076,7 +1076,7 @@ mod tests {
         let mut spans: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
         spans.insert(a, BTreeMap::from([(ModifierType::Bold, Modifier::Bold)]));
         let bm = ModifierAttrLog::new();
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = EffectiveSources {
             block_modifiers: &bm,
             explicit_spans: &spans,
@@ -1109,7 +1109,7 @@ mod tests {
             },
         );
         spans.insert(leaf, e);
-        let node_attrs = imbl::HashMap::new();
+        let node_attrs = FastMap::new();
         let src = sources(&bm, &spans, &node_attrs);
         let own = own_modifiers_for_leaf(leaf, &src);
         assert!(

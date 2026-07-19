@@ -1,4 +1,4 @@
-use editor_crdt::{CrdtError, Dot};
+use editor_crdt::{CrdtError, Dot, FastMap};
 use serde::{Deserialize, Serialize};
 
 use crate::{ModelError, Node, NodeAttr, NodeType};
@@ -11,13 +11,13 @@ pub struct NodeAttrOp {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NodeAttrLog {
-    ops: imbl::HashMap<Dot, NodeAttrOp>,
+    ops: FastMap<Dot, NodeAttrOp>,
 }
 
 impl NodeAttrLog {
     pub fn new() -> Self {
         Self {
-            ops: imbl::HashMap::new(),
+            ops: FastMap::new(),
         }
     }
 
@@ -45,8 +45,8 @@ impl NodeAttrLog {
         self.ops.iter()
     }
 
-    pub fn project(&self, node_of: impl Fn(Dot) -> Option<Node>) -> imbl::HashMap<Dot, Node> {
-        let mut out: imbl::HashMap<Dot, Node> = imbl::HashMap::new();
+    pub fn project(&self, node_of: impl Fn(Dot) -> Option<Node>) -> FastMap<Dot, Node> {
+        let mut out: FastMap<Dot, Node> = FastMap::new();
         for (op_id, op) in &self.ops {
             let Some(mut node) = out.get(&op.target).cloned().or_else(|| node_of(op.target)) else {
                 continue;
@@ -370,7 +370,7 @@ mod tests {
 
 #[cfg(test)]
 mod proptests {
-    use std::collections::HashSet;
+    use hashbrown::HashSet;
 
     use proptest::prelude::*;
 

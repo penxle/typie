@@ -39,7 +39,7 @@ mod tests {
     fn carry_tombstone_kinds(
         editor: &Editor,
         block: editor_crdt::Dot,
-    ) -> std::collections::HashSet<ModifierType> {
+    ) -> hashbrown::HashSet<ModifierType> {
         editor
             .state()
             .projected

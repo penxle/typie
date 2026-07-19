@@ -1,4 +1,4 @@
-use editor_crdt::Dot;
+use editor_crdt::{Dot, FastMap};
 
 use super::SeqItem;
 use crate::nodes::{NodeAttr, NodeType};
@@ -42,12 +42,12 @@ pub fn anchor_dot(id: Dot) -> Option<Dot> {
 /// `O(N)` descent — the property the per-character paste path needs. A block's
 /// ordered children live in its `ChildList`: inline leaves are stored by value,
 /// child blocks are referenced by `Dot` (resolved through `nodes`). `nodes` is a
-/// persistent `imbl::HashMap` and `ChildList` a persistent `SumTree`, so cloning a
+/// persistent `FastMap` and `ChildList` a persistent `SumTree`, so cloning a
 /// whole tree is `O(1)` (structural sharing) — cloning a projection per
 /// transaction stays cheap.
 #[derive(Clone, Debug)]
 pub struct BlockTree {
-    pub nodes: imbl::HashMap<Dot, BlockNode>,
+    pub nodes: FastMap<Dot, BlockNode>,
     pub root: Dot,
 }
 
@@ -108,7 +108,7 @@ impl BlockTree {
     /// Build the flat tree from a freshly projected/normalized nested scratch tree.
     /// `O(N)`.
     pub fn from_raw(raw: &RawTree) -> Self {
-        fn add(raw: &RawNode, nodes: &mut imbl::HashMap<Dot, BlockNode>) {
+        fn add(raw: &RawNode, nodes: &mut FastMap<Dot, BlockNode>) {
             let children: ChildList = raw
                 .children
                 .iter()
@@ -133,7 +133,7 @@ impl BlockTree {
                 },
             );
         }
-        let mut nodes = imbl::HashMap::new();
+        let mut nodes = FastMap::new();
         let root = raw.roots.first().map(|r| r.id).unwrap_or(Dot::ROOT);
         // Only the canonical (first) root is reachable; `normalize` guarantees a
         // single `Root`, so this never orphans real content.
@@ -146,7 +146,7 @@ impl BlockTree {
     /// Insert a nested scratch block (and its whole subtree) into `nodes`, returning
     /// its id. Used to graft a freshly re-projected window subtree into the live tree.
     pub fn insert_block_subtree(&mut self, raw: &RawNode) -> Dot {
-        fn add(raw: &RawNode, nodes: &mut imbl::HashMap<Dot, BlockNode>) {
+        fn add(raw: &RawNode, nodes: &mut FastMap<Dot, BlockNode>) {
             let children: ChildList = raw
                 .children
                 .iter()

@@ -4,7 +4,7 @@ use crate::display_list::DisplayList;
 use crate::sink::RenderSink;
 
 pub fn diff(prev: &DisplayList, new: &DisplayList, full: IRect) -> Vec<IRect> {
-    use std::collections::HashMap;
+    use hashbrown::HashMap;
     let mut buckets: HashMap<u64, Vec<usize>> = HashMap::new();
     for (i, p) in prev.primitives.iter().enumerate() {
         buckets.entry(p.key).or_default().push(i);

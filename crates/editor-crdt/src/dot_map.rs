@@ -1,11 +1,4 @@
-use crate::Dot;
-
-/// `imbl` map with a fast non-cryptographic hasher — the default
-/// `RandomState` (SipHash) shows up in profiles when every dot lookup hashes
-/// through it. Keys here are u64 actors / 16-byte dots, not attacker-chosen
-/// hash-flood surfaces.
-type FastMap<K, V> =
-    imbl::GenericHashMap<K, V, hashbrown::DefaultHashBuilder, imbl::shared_ptr::DefaultSharedPtr>;
+use crate::{Dot, FastMap};
 
 /// Largest clock gap a lane will bridge with `None` slots. Anything further
 /// out lands in the `spill` map so a hostile/corrupt clock can't force a
@@ -300,7 +293,7 @@ mod tests {
             (0u64..3, 0u64..200, 0u32..1000, 0u8..3), 0..400,
         )) {
             let mut dut: DotMap<u32> = DotMap::new();
-            let mut reference: std::collections::HashMap<Dot, u32> = std::collections::HashMap::new();
+            let mut reference: hashbrown::HashMap<Dot, u32> = hashbrown::HashMap::new();
             for (actor, clock, value, kind) in ops {
                 let d = Dot::new(actor, clock);
                 match kind {

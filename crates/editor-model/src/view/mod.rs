@@ -1098,11 +1098,11 @@ mod tests {
         #[test]
         fn every_real_block_and_leaf_reachable_once(doc in arb_projected_doc()) {
             let view = DocView::new(&doc);
-            let mut ids = std::collections::HashSet::new();
+            let mut ids = hashbrown::HashSet::new();
             fn count(
                 tree: &crate::seq::BlockTree,
                 b: &crate::seq::BlockNode,
-                ids: &mut std::collections::HashSet<Dot>,
+                ids: &mut hashbrown::HashSet<Dot>,
             ) -> bool {
                 let fresh = ids.insert(b.id);
                 let mut ok = fresh;

@@ -194,7 +194,7 @@ mod tests {
         let p = &slice.content[0];
         let text_frag = &p.children[0];
         assert!(matches!(text_frag.node, PlainNode::Text(_)));
-        let mods: std::collections::HashSet<_> = text_frag.modifiers.iter().collect();
+        let mods: hashbrown::HashSet<_> = text_frag.modifiers.iter().collect();
         assert!(mods.contains(&Modifier::Bold));
         assert!(mods.contains(&Modifier::Italic));
     }

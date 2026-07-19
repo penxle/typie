@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use super::{
     compare_navigation_band_entry, is_navigable_entry, navigable_above_at_x,

@@ -217,7 +217,7 @@ mod tests {
 
 #[cfg(test)]
 mod proptests {
-    use std::collections::HashSet;
+    use hashbrown::HashSet;
 
     use super::*;
     use crate::test_utils::permute;

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use editor_crdt::{CrdtError, Dot};
+use editor_crdt::{CrdtError, Dot, FastMap};
 use serde::{Deserialize, Serialize};
 
 use crate::{Modifier, ModifierType};
@@ -25,15 +25,15 @@ type ModWinner = (Dot, Option<Modifier>);
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ModifierAttrLog {
-    ops: imbl::HashMap<Dot, ModifierAttrOp>,
-    by_target: imbl::HashMap<Dot, BTreeMap<ModifierType, ModWinner>>,
+    ops: FastMap<Dot, ModifierAttrOp>,
+    by_target: FastMap<Dot, BTreeMap<ModifierType, ModWinner>>,
 }
 
 impl ModifierAttrLog {
     pub fn new() -> Self {
         Self {
-            ops: imbl::HashMap::new(),
-            by_target: imbl::HashMap::new(),
+            ops: FastMap::new(),
+            by_target: FastMap::new(),
         }
     }
 

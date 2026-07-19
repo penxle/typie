@@ -1,7 +1,7 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, NodeType};
 use editor_state::Selection;
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 pub(crate) struct Labeler {
     labels: HashMap<Dot, String>,

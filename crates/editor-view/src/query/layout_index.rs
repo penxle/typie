@@ -2,9 +2,9 @@ use editor_common::Rect;
 use editor_crdt::Dot;
 use editor_state::Affinity;
 use editor_state::Position;
+use hashbrown::HashMap;
 use rstar::{AABB, RTree, RTreeObject};
 use smallvec::SmallVec;
-use std::collections::HashMap;
 
 use crate::page::{LayoutPage, PageRect};
 use crate::paginate::types::{LayoutContent, LayoutLine, LayoutNode, LayoutTree, SpacingKind};

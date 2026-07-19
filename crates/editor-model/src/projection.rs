@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
+use std::collections::BTreeMap;
 
-use editor_crdt::Dot;
 use editor_crdt::OpLog;
 use editor_crdt::sequence::{Bias, Boundary, SeqCheckout, SeqResolve, checkout_with_resolver};
+use editor_crdt::{Dot, FastMap};
 
 use crate::{
     AliasClasses, AliasLog, BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog,
@@ -42,13 +43,13 @@ pub type LeafOwn = std::sync::Arc<BTreeMap<ModifierType, OwnModifier>>;
 #[derive(Clone, Debug)]
 pub struct ProjectedDoc {
     pub tree: BlockTree,
-    pub block_effective: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub block_effective: FastMap<Dot, BTreeMap<ModifierType, Modifier>>,
     /// Run segments per block: the sole store of per-leaf derived
     /// `effective` / `own` modifier state, coalesced by `(leaf_type, covering)`.
     pub seg_index: crate::span::BlockSegs,
-    pub block_modifiers: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
-    pub node_attrs: imbl::HashMap<Dot, Node>,
-    pub node_carries: imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub block_modifiers: FastMap<Dot, BTreeMap<ModifierType, Modifier>>,
+    pub node_attrs: FastMap<Dot, Node>,
+    pub node_carries: FastMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub alias_classes: AliasClasses,
     /// Repairs applied while producing THIS projection pass (revival attachments,
     /// WRAP / SPLIT-HOIST). Per-pass, not deduplicated: a persistent damaged state
@@ -119,8 +120,8 @@ impl PartialEq for ProjectedDoc {
     }
 }
 
-fn collect_block_init(tree: &BlockTree) -> imbl::HashMap<Dot, Node> {
-    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut imbl::HashMap<Dot, Node>) {
+fn collect_block_init(tree: &BlockTree) -> FastMap<Dot, Node> {
+    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut FastMap<Dot, Node>) {
         if !node.attrs.is_empty()
             && let Some(d) = anchor_dot(node.id)
             && let Some(seeded) = seed_block_init(node.node_type, &node.attrs)
@@ -135,7 +136,7 @@ fn collect_block_init(tree: &BlockTree) -> imbl::HashMap<Dot, Node> {
             }
         }
     }
-    let mut out = imbl::HashMap::new();
+    let mut out = FastMap::new();
     if let Some(r) = tree.root_node() {
         walk(tree, r, &mut out);
     }
@@ -187,12 +188,12 @@ pub fn block_init_of(tree: &BlockTree, dot: Dot) -> Option<Node> {
 fn collect_block_modifiers(
     tree: &BlockTree,
     log: &ModifierAttrLog,
-) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+) -> FastMap<Dot, BTreeMap<ModifierType, Modifier>> {
     fn walk(
         tree: &BlockTree,
         node: &BlockNode,
         log: &ModifierAttrLog,
-        out: &mut imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+        out: &mut FastMap<Dot, BTreeMap<ModifierType, Modifier>>,
     ) {
         if let Some(d) = anchor_dot(node.id) {
             let m = log.modifiers_of(d);
@@ -208,7 +209,7 @@ fn collect_block_modifiers(
             }
         }
     }
-    let mut out = imbl::HashMap::new();
+    let mut out = FastMap::new();
     if let Some(r) = tree.root_node() {
         walk(tree, r, log, &mut out);
     }
@@ -222,12 +223,12 @@ fn collect_block_modifiers(
 fn collect_node_carries(
     tree: &BlockTree,
     log: &ModifierAttrLog,
-) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+) -> FastMap<Dot, BTreeMap<ModifierType, Modifier>> {
     fn walk(
         tree: &BlockTree,
         node: &BlockNode,
         log: &ModifierAttrLog,
-        out: &mut imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>>,
+        out: &mut FastMap<Dot, BTreeMap<ModifierType, Modifier>>,
     ) {
         if let Some(d) = anchor_dot(node.id)
             && node.node_type.spec().is_textblock()
@@ -249,7 +250,7 @@ fn collect_node_carries(
             }
         }
     }
-    let mut out = imbl::HashMap::new();
+    let mut out = FastMap::new();
     if let Some(r) = tree.root_node() {
         walk(tree, r, log, &mut out);
     }
@@ -258,9 +259,9 @@ fn collect_node_carries(
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BlockPaths {
-    parent: imbl::HashMap<Dot, Dot>,
-    block_of_leaf: imbl::HashMap<Dot, Dot>,
-    node_type: imbl::HashMap<Dot, NodeType>,
+    parent: FastMap<Dot, Dot>,
+    block_of_leaf: FastMap<Dot, Dot>,
+    node_type: FastMap<Dot, NodeType>,
 }
 
 impl BlockPaths {
@@ -268,9 +269,9 @@ impl BlockPaths {
         fn walk(
             tree: &BlockTree,
             node: &BlockNode,
-            parent: &mut imbl::HashMap<Dot, Dot>,
-            bol: &mut imbl::HashMap<Dot, Dot>,
-            nt: &mut imbl::HashMap<Dot, NodeType>,
+            parent: &mut FastMap<Dot, Dot>,
+            bol: &mut FastMap<Dot, Dot>,
+            nt: &mut FastMap<Dot, NodeType>,
         ) {
             nt.insert(node.id, node.node_type);
             for c in &node.children {
@@ -287,9 +288,9 @@ impl BlockPaths {
                 }
             }
         }
-        let mut parent = imbl::HashMap::new();
-        let mut block_of_leaf = imbl::HashMap::new();
-        let mut node_type = imbl::HashMap::new();
+        let mut parent = FastMap::new();
+        let mut block_of_leaf = FastMap::new();
+        let mut node_type = FastMap::new();
         if let Some(root) = tree.root_node() {
             walk(tree, root, &mut parent, &mut block_of_leaf, &mut node_type);
         }
@@ -921,8 +922,8 @@ pub fn project_from_tree<R: SeqResolve>(
 fn block_effective_all(
     tree: &BlockTree,
     block_modifiers: &ModifierAttrLog,
-    node_attrs: &imbl::HashMap<Dot, Node>,
-) -> imbl::HashMap<Dot, BTreeMap<ModifierType, Modifier>> {
+    node_attrs: &FastMap<Dot, Node>,
+) -> FastMap<Dot, BTreeMap<ModifierType, Modifier>> {
     let empty_ex: HashMap<Dot, BTreeMap<ModifierType, Modifier>> = HashMap::new();
     let src = crate::span::EffectiveSources {
         block_modifiers,
@@ -934,7 +935,7 @@ fn block_effective_all(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use hashbrown::HashSet;
 
     use super::*;
     use crate::{AliasOp, AliasRun, AtomLeaf, SeqItem, normalize, project_blocks};
@@ -1026,11 +1027,11 @@ mod tests {
         let tree = BlockTree::from_raw(&normalize(project_blocks(&elems_nested()).unwrap()));
         let projected = ProjectedDoc {
             tree: tree.clone(),
-            block_effective: imbl::HashMap::new(),
+            block_effective: FastMap::new(),
             seg_index: crate::span::BlockSegs::new(),
-            block_modifiers: imbl::HashMap::new(),
-            node_attrs: imbl::HashMap::new(),
-            node_carries: imbl::HashMap::new(),
+            block_modifiers: FastMap::new(),
+            node_attrs: FastMap::new(),
+            node_carries: FastMap::new(),
             alias_classes: AliasClasses::default(),
             repair_stats: RepairStats::default(),
         };
@@ -2246,7 +2247,7 @@ mod tests {
 
 #[cfg(test)]
 mod overlay_tests {
-    use std::collections::HashMap;
+    use hashbrown::HashMap;
 
     use editor_crdt::Dot;
     use editor_crdt::sequence::{Bias, Boundary, SeqResolve};

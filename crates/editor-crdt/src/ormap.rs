@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use crate::{CrdtError, Dot, ToPlain};
+use crate::{CrdtError, Dot, FastMap, FastSet, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -22,9 +22,9 @@ pub enum OrMapOp<K, V> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrMap<K: Clone + Eq + Hash, V: Clone + Eq> {
-    entries: imbl::HashMap<Dot, OrMapEntry<K, V>>,
-    pending_tombstones: imbl::HashSet<Dot>,
-    by_key: imbl::HashMap<K, imbl::HashSet<Dot>>,
+    entries: FastMap<Dot, OrMapEntry<K, V>>,
+    pending_tombstones: FastSet<Dot>,
+    by_key: FastMap<K, FastSet<Dot>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,9 +37,9 @@ struct OrMapEntry<K, V> {
 impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
     pub fn new() -> Self {
         Self {
-            entries: imbl::HashMap::new(),
-            pending_tombstones: imbl::HashSet::new(),
-            by_key: imbl::HashMap::new(),
+            entries: FastMap::new(),
+            pending_tombstones: FastSet::new(),
+            by_key: FastMap::new(),
         }
     }
 }
@@ -94,7 +94,7 @@ impl<K: Clone + Eq + Hash, V: Clone + Eq> OrMap<K, V> {
                 .by_key
                 .get(&key)
                 .cloned()
-                .unwrap_or_else(imbl::HashSet::new)
+                .unwrap_or_else(FastSet::new)
                 .update(id);
             self.by_key.update(key.clone(), updated)
         } else {
@@ -312,7 +312,7 @@ mod tests {
             .unwrap();
         assert_eq!(m.len(), 1);
         assert_eq!(m.get(&7), Some(&42));
-        let tags: std::collections::HashSet<Dot> = m.tags_for(&7).copied().collect();
+        let tags: hashbrown::HashSet<Dot> = m.tags_for(&7).copied().collect();
         assert_eq!(tags.len(), 2);
         assert!(tags.contains(&d_winner));
         assert!(tags.contains(&d_loser));
@@ -468,8 +468,8 @@ mod tests {
 mod proptests {
     use super::*;
     use crate::test_utils::permute;
+    use hashbrown::HashMap;
     use proptest::prelude::*;
-    use std::collections::HashMap;
 
     /// Generate a sequence of *causally-valid* OrMap ops. Each Set produces a fresh
     /// dot per actor; each Unset's observed holds the K-atomic alive set at generation
@@ -657,7 +657,7 @@ mod proptests {
                 // below ensures the dead dot is actually removed from the live set.
                 prop_assert_eq!(m.get(&key), Some(&v_concurrent), "d_concurrent must surface in perm {:?}", perm);
                 prop_assert_eq!(m.len(), 1);
-                let tags: std::collections::HashSet<Dot> = m.tags_for(&key).copied().collect();
+                let tags: hashbrown::HashSet<Dot> = m.tags_for(&key).copied().collect();
                 prop_assert!(tags.contains(&d_concurrent), "d_concurrent must be alive in perm {:?}", perm);
                 prop_assert!(!tags.contains(&d_first), "d_first (in observed) must be dead in perm {:?}", perm);
                 prop_assert_eq!(tags.len(), 1, "exactly one alive tag for the survivor in perm {:?}", perm);
@@ -686,8 +686,8 @@ mod proptests {
                 // dead_dots: union of every Unset's observed.
                 // Winner per K = max(Dot) where dot ∈ alive_dots, key matches K, dot ∉ dead_dots.
                 let mut alive_dots: HashMap<Dot, (u32, u32)> = HashMap::new();
-                let mut dead_dots: std::collections::HashSet<Dot> =
-                    std::collections::HashSet::new();
+                let mut dead_dots: hashbrown::HashSet<Dot> =
+                    hashbrown::HashSet::new();
                 for (op_id, op_payload) in &applied {
                     match op_payload {
                         OrMapOp::Set { key: k, value: v } => {
@@ -716,7 +716,7 @@ mod proptests {
                         .or_insert((*dot, *v));
                 }
                 // Expected tags_for set per K.
-                let mut expected_tags: HashMap<u32, std::collections::HashSet<Dot>> = HashMap::new();
+                let mut expected_tags: HashMap<u32, hashbrown::HashSet<Dot>> = HashMap::new();
                 for (dot, (k, _v)) in &alive_dots {
                     if dead_dots.contains(dot) {
                         continue;
@@ -734,7 +734,7 @@ mod proptests {
                         actual, expected_value,
                         "get mismatch for key {} after op ({:?}, {:?})", key, id, op
                     );
-                    let actual_tags: std::collections::HashSet<Dot> =
+                    let actual_tags: hashbrown::HashSet<Dot> =
                         state.tags_for(&key).copied().collect();
                     let expected_tags_for_k = expected_tags.get(&key).cloned().unwrap_or_default();
                     prop_assert_eq!(
@@ -766,7 +766,7 @@ mod proptests {
         ) {
             let mut ops: Vec<(Dot, OrMapOp<u32, u32>)> = Vec::new();
             // K → alive dots, for K-atomic unset construction.
-            let mut alive_per_key: std::collections::HashMap<u32, Vec<Dot>> = std::collections::HashMap::new();
+            let mut alive_per_key: hashbrown::HashMap<u32, Vec<Dot>> = hashbrown::HashMap::new();
             let mut unset_counter: u64 = 0;
 
             for actor in 1..=num_actors {
@@ -809,7 +809,7 @@ mod proptests {
             let mut state: OrMap<u32, u32> = OrMap::new();
             for (id, op) in &permuted {
                 state = state.apply(*id, op.clone()).unwrap();
-                let oracle: std::collections::HashSet<u32> = state
+                let oracle: hashbrown::HashSet<u32> = state
                     .entries
                     .iter()
                     .filter(|(_, e)| e.alive)

@@ -3,7 +3,7 @@ use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::dot_map::DotMap;
-use crate::{CrdtError, Dot};
+use crate::{CrdtError, Dot, FastSet};
 
 /// Sorted-ascending child list. Sorted so set semantics (dedup, equality)
 /// hold regardless of insertion order; inline capacity 2 keeps the common
@@ -104,7 +104,7 @@ pub struct OpGraph<P> {
     pending: Vec<Op<P>>,
 
     ops: DotMap<Op<P>>,
-    heads: imbl::HashSet<Dot>,
+    heads: FastSet<Dot>,
     /// Reverse parent index: each dot maps to the set of ops that reference
     /// it as a parent. Drives O(1) `has_child` checks during frontier
     /// maintenance and powers the cascade walks that keep `self_contained`
@@ -165,7 +165,7 @@ impl<P: Clone> OpGraph<P> {
             changesets: imbl::Vector::new(),
             pending: Vec::new(),
             ops: DotMap::new(),
-            heads: imbl::HashSet::new(),
+            heads: FastSet::new(),
             children: DotMap::new(),
             self_contained: DotMap::new(),
         }
@@ -2378,7 +2378,6 @@ mod proptests {
     use super::*;
     use crate::test_utils::causal_permute;
     use proptest::prelude::*;
-    use std::collections::HashMap as StdHashMap;
 
     /// Build a causally-valid op sequence. Each new op picks a deterministic
     /// subset of all previously emitted ops as its parents, using
@@ -2393,7 +2392,7 @@ mod proptests {
     }
 
     fn build_ops(raw: Vec<(u64, u8, u32)>) -> Vec<Op<u32>> {
-        let mut clocks: StdHashMap<u64, u64> = StdHashMap::new();
+        let mut clocks: HashMap<u64, u64> = HashMap::new();
         let mut emitted: Vec<Dot> = Vec::new();
         let mut ops: Vec<Op<u32>> = Vec::new();
 

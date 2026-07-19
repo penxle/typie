@@ -44,5 +44,6 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state", features = ["test-utils"] }
 editor-transaction = { path = "../editor-transaction" }
+hashbrown = { workspace = true }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 serde_json = { workspace = true }

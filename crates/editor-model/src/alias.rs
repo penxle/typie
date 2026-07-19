@@ -1,4 +1,4 @@
-use editor_crdt::Dot;
+use editor_crdt::{Dot, FastMap};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AliasRun {
@@ -33,8 +33,8 @@ impl AliasLog {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct AliasClasses {
-    rep_of: imbl::HashMap<Dot, Dot>,
-    members: imbl::HashMap<Dot, Vec<Dot>>,
+    rep_of: FastMap<Dot, Dot>,
+    members: FastMap<Dot, Vec<Dot>>,
 }
 
 impl AliasClasses {

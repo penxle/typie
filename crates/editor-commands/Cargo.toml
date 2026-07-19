@@ -37,6 +37,7 @@ editor-resource = { path = "../editor-resource" }
 editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 fancy-regex.workspace = true
+hashbrown.workspace = true
 log.workspace = true
 strum.workspace = true
 thiserror.workspace = true

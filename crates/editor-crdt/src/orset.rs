@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use crate::{CrdtError, Dot, ToPlain};
+use crate::{CrdtError, Dot, FastMap, FastSet, ToPlain};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -12,9 +12,9 @@ pub enum OrSetOp<T> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrSet<T: Clone + Eq + Hash> {
-    entries: imbl::HashMap<Dot, Entry<T>>,
-    pending_tombstones: imbl::HashSet<Dot>,
-    by_elem: imbl::HashMap<T, imbl::HashSet<Dot>>,
+    entries: FastMap<Dot, Entry<T>>,
+    pending_tombstones: FastSet<Dot>,
+    by_elem: FastMap<T, FastSet<Dot>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,9 +26,9 @@ struct Entry<T> {
 impl<T: Clone + Eq + Hash> OrSet<T> {
     pub fn new() -> Self {
         Self {
-            entries: imbl::HashMap::new(),
-            pending_tombstones: imbl::HashSet::new(),
-            by_elem: imbl::HashMap::new(),
+            entries: FastMap::new(),
+            pending_tombstones: FastSet::new(),
+            by_elem: FastMap::new(),
         }
     }
 
@@ -81,7 +81,7 @@ impl<T: Clone + Eq + Hash> OrSet<T> {
                 .by_elem
                 .get(&elem)
                 .cloned()
-                .unwrap_or_else(imbl::HashSet::new)
+                .unwrap_or_else(FastSet::new)
                 .update(id);
             self.by_elem.update(elem.clone(), updated)
         } else {
@@ -371,8 +371,8 @@ mod tests {
             )
             .unwrap();
 
-        let tags_42: std::collections::HashSet<Dot> = s.tags_for(&42).copied().collect();
-        let tags_99: std::collections::HashSet<Dot> = s.tags_for(&99).copied().collect();
+        let tags_42: hashbrown::HashSet<Dot> = s.tags_for(&42).copied().collect();
+        let tags_99: hashbrown::HashSet<Dot> = s.tags_for(&99).copied().collect();
         let tags_missing: Vec<&Dot> = s.tags_for(&999).collect();
 
         assert_eq!(tags_42.len(), 1);
@@ -423,8 +423,8 @@ mod tests {
 mod proptests {
     use super::*;
     use crate::test_utils::permute;
+    use hashbrown::HashMap;
     use proptest::prelude::*;
-    use std::collections::HashMap;
 
     /// Generate a sequence of *causally-valid* OR-Set ops:
     /// each Remove targets a Dot already produced by an earlier Add in this sequence.
@@ -630,7 +630,7 @@ mod proptests {
             let mut state: OrSet<u32> = OrSet::new();
             for (id, op) in &permuted {
                 state = state.apply(*id, op.clone()).unwrap();
-                let oracle: std::collections::HashSet<u32> = state
+                let oracle: hashbrown::HashSet<u32> = state
                     .entries
                     .iter()
                     .filter(|(_, e)| e.alive)

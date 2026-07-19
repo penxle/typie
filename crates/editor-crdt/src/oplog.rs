@@ -1,6 +1,5 @@
 use crate::Dot;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use hashbrown::{HashMap, HashSet};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ListOp<P = char> {
@@ -302,8 +301,9 @@ mod tests {
     }
 
     use crate::sequence::checkout_text;
+    use hashbrown::{HashMap, HashSet};
     use proptest::prelude::*;
-    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::collections::{BTreeMap, BTreeSet};
 
     fn sub(events: &[InputEvent<char>], parents: &[Dot]) -> Vec<InputEvent<char>> {
         let map: HashMap<Dot, &InputEvent<char>> = events.iter().map(|e| (e.id, e)).collect();

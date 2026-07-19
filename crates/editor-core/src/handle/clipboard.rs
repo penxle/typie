@@ -1991,13 +1991,13 @@ mod tests {
         assert_eq!(items[1].child_blocks().next().unwrap().inline_text(), "b");
 
         let ps = &editor.state().projected;
-        let visible: std::collections::HashSet<editor_crdt::Dot> = ps
+        let visible: hashbrown::HashSet<editor_crdt::Dot> = ps
             .seq_checkout()
             .snapshot(ps.seq())
             .into_iter()
             .map(|(dot, _)| dot)
             .collect();
-        let reachable: std::collections::HashSet<editor_crdt::Dot> = ps
+        let reachable: hashbrown::HashSet<editor_crdt::Dot> = ps
             .subtree_real_dots(editor_crdt::Dot::ROOT)
             .into_iter()
             .collect();

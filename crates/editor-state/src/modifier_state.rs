@@ -73,8 +73,8 @@ fn virtual_paragraph_toolbar(
         .collect();
     container_path.reverse();
 
-    let empty: std::collections::HashMap<editor_crdt::Dot, BTreeMap<ModifierType, Modifier>> =
-        std::collections::HashMap::new();
+    let empty: hashbrown::HashMap<editor_crdt::Dot, BTreeMap<ModifierType, Modifier>> =
+        hashbrown::HashMap::new();
     let src = editor_model::EffectiveSources {
         block_modifiers: state.block_modifiers(),
         explicit_spans: &empty,
@@ -140,7 +140,7 @@ fn carry_virtual_leaves<'a>(
 /// distinct path, not per node.
 fn intern_path(
     entries: &mut Vec<(NodeType, Vec<NodeType>)>,
-    index: &mut std::collections::HashMap<(editor_crdt::Dot, NodeType), usize>,
+    index: &mut hashbrown::HashMap<(editor_crdt::Dot, NodeType), usize>,
     host: &NodeView,
     ty: NodeType,
     is_leaf: bool,
@@ -179,8 +179,8 @@ pub fn resolve_modifier_state_in_range(
     let carriers = carry_virtual_leaves(state, rs);
 
     let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
-    let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
-        std::collections::HashMap::new();
+    let mut index: hashbrown::HashMap<(editor_crdt::Dot, NodeType), usize> =
+        hashbrown::HashMap::new();
     // (path idx, effective, node count, is_leaf) — blocks count 1, leaf groups
     // count a whole uniform stretch.
     let mut groups: Vec<(usize, &BTreeMap<ModifierType, Modifier>, usize, bool)> = Vec::new();
@@ -1801,8 +1801,8 @@ mod tests {
 
         fn build_range_path_table(nodes: &[RangeNode]) -> RangePathTable {
             let mut entries: Vec<(NodeType, Vec<NodeType>)> = Vec::new();
-            let mut index: std::collections::HashMap<(editor_crdt::Dot, NodeType), usize> =
-                std::collections::HashMap::new();
+            let mut index: hashbrown::HashMap<(editor_crdt::Dot, NodeType), usize> =
+                hashbrown::HashMap::new();
             let mut node_path = Vec::with_capacity(nodes.len());
             for n in nodes {
                 let key = match n {

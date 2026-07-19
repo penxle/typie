@@ -28,7 +28,7 @@ pub(crate) fn included_in_selection(
     y_bounds: Option<(f32, f32)>,
 ) -> Vec<SelectedParagraphBreak> {
     let mut paragraph_breaks = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = hashbrown::HashSet::new();
     for entry in layout_index.entries() {
         if let Some((y_start, y_end)) = y_bounds
             && !entry.overlaps_y_range(y_start, y_end)
