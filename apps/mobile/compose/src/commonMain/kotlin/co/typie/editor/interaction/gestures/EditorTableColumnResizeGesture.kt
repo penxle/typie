@@ -22,6 +22,9 @@ internal class EditorTableColumnResizeGesture {
   val active: Boolean
     get() = dragging
 
+  fun shouldStartDrag(pointerId: Long, position: Offset): Boolean =
+    this.pointerId == pointerId && pending && (position - downPosition).getDistance() > dragSlop
+
   fun updateDragSlop(dragSlop: Float) {
     this.dragSlop = dragSlop.coerceAtLeast(0f)
   }
@@ -63,7 +66,7 @@ internal class EditorTableColumnResizeGesture {
     currentPosition = position
     var deltaPx = currentPosition.x - previousPosition.x
     if (!dragging) {
-      if ((currentPosition - downPosition).getDistance() <= dragSlop) {
+      if (!shouldStartDrag(pointerId = pointerId, position = currentPosition)) {
         return true
       }
       if (
@@ -79,9 +82,21 @@ internal class EditorTableColumnResizeGesture {
         cancel(context = context)
         return false
       }
+      context.effects.setScrollGestureLocked(true)
       deltaPx = currentPosition.x - downPosition.x
     }
     context.semantics.tableColumnResize.update(deltaPx = deltaPx)
+    context.semantics.edgeAutoScroll.track(
+      edgePosition = currentPosition,
+      context = context,
+      onScroll = { consumed ->
+        currentPosition += consumed
+        previousPosition += consumed
+        if (consumed.x != 0f) {
+          context.semantics.tableColumnResize.update(deltaPx = consumed.x)
+        }
+      },
+    )
     return true
   }
 
@@ -96,12 +111,16 @@ internal class EditorTableColumnResizeGesture {
     } else {
       context.semantics.tableColumnResize.cancel()
     }
+    context.semantics.edgeAutoScroll.stop()
+    context.effects.setScrollGestureLocked(false)
     clear()
     return completedDrag
   }
 
   fun cancel(context: EditorGestureContext) {
     context.semantics.tableColumnResize.cancel()
+    context.semantics.edgeAutoScroll.stop()
+    context.effects.setScrollGestureLocked(false)
     clear()
   }
 

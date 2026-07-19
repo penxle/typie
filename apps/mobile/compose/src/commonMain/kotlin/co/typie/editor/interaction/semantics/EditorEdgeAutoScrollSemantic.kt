@@ -8,6 +8,7 @@ import co.typie.editor.interaction.EditorEdgeAutoScrollViewport
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.ext.computeEdgeAutoScrollPlan
 import kotlin.math.abs
+import kotlin.math.sign
 import kotlinx.coroutines.delay
 
 private const val EditorEdgeAutoScrollTickMillis = 16L
@@ -94,11 +95,18 @@ internal class EditorEdgeAutoScrollSemantic {
     )
   }
 
-  private fun track(
+  fun track(edgePosition: Offset, context: EditorGestureContext, onScroll: (Offset) -> Unit) {
+    trackWithResult(
+      edgePosition = edgePosition,
+      context = context,
+      onScroll = { result -> onScroll(result.consumedDelta) },
+    )
+  }
+
+  private fun trackWithResult(
     edgePosition: Offset,
-    dispatchPosition: Offset,
     context: EditorGestureContext,
-    dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
+    onScroll: (EditorEdgeAutoScrollResult) -> Unit,
   ) {
     val viewport = context.geometry.resolveEdgeAutoScrollViewport()
     if (viewport == null || planFor(edgePosition = edgePosition, viewport = viewport).isNoOp) {
@@ -106,15 +114,31 @@ internal class EditorEdgeAutoScrollSemantic {
       return
     }
 
-    activeRequest =
-      EditorEdgeAutoScrollRequest(
-        edgePosition = edgePosition,
-        dispatchPosition = dispatchPosition,
-        dispatch = dispatch,
-      )
+    activeRequest = EditorEdgeAutoScrollRequest(edgePosition = edgePosition, onScroll = onScroll)
     if (!running) {
       start(context)
     }
+  }
+
+  private fun track(
+    edgePosition: Offset,
+    dispatchPosition: Offset,
+    context: EditorGestureContext,
+    dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
+  ) {
+    trackWithResult(
+      edgePosition = edgePosition,
+      context = context,
+      onScroll = { result ->
+        dispatchScrolledPosition(
+          edgePosition = edgePosition,
+          result = result,
+          dispatchPosition = dispatchPosition,
+          dispatch = dispatch,
+          context = context,
+        )
+      },
+    )
   }
 
   private fun start(context: EditorGestureContext) {
@@ -125,7 +149,11 @@ internal class EditorEdgeAutoScrollSemantic {
           delay(EditorEdgeAutoScrollTickMillis)
           val request = activeRequest ?: break
           val viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: break
-          val plan = planFor(edgePosition = request.edgePosition, viewport = viewport)
+          val plan =
+            planFor(
+              edgePosition = request.edgePosition + request.accumulatedScroll,
+              viewport = viewport,
+            )
           if (plan.isNoOp) {
             break
           }
@@ -146,18 +174,16 @@ internal class EditorEdgeAutoScrollSemantic {
             continue
           }
 
-          val scrolledViewport = context.geometry.resolveEdgeAutoScrollViewport() ?: viewport
-          dispatchScrolledPosition(
-            request = request,
-            viewport = scrolledViewport,
-            verticalDirection = plan.verticalDirection.takeIf { consumed.y != 0f } ?: 0f,
-            verticalBoundaryReached =
-              reachedScrollBoundary(requestedDelta = delta.y, consumedDelta = consumed.y),
-            horizontalDirection = plan.horizontalDirection.takeIf { consumed.x != 0f } ?: 0f,
-            horizontalBoundaryReached =
-              reachedScrollBoundary(requestedDelta = delta.x, consumedDelta = consumed.x),
-            context = context,
+          request.onScroll(
+            EditorEdgeAutoScrollResult(
+              requestedDelta = delta,
+              consumedDelta = consumed,
+              viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: viewport,
+            )
           )
+          if (activeRequest === request) {
+            activeRequest = request.copy(accumulatedScroll = request.accumulatedScroll + consumed)
+          }
         }
       } finally {
         running = false
@@ -168,17 +194,30 @@ internal class EditorEdgeAutoScrollSemantic {
   }
 
   private fun dispatchScrolledPosition(
-    request: EditorEdgeAutoScrollRequest,
-    viewport: EditorEdgeAutoScrollViewport,
-    verticalDirection: Float,
-    verticalBoundaryReached: Boolean,
-    horizontalDirection: Float,
-    horizontalBoundaryReached: Boolean,
+    edgePosition: Offset,
+    result: EditorEdgeAutoScrollResult,
+    dispatchPosition: Offset,
+    dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
     context: EditorGestureContext,
   ) {
+    val viewport = result.viewport
     val rect = viewport.rect
-    var x = request.dispatchPosition.x
-    var y = request.dispatchPosition.y
+    val verticalDirection =
+      sign(result.requestedDelta.y).takeIf { result.consumedDelta.y != 0f } ?: 0f
+    val horizontalDirection =
+      sign(result.requestedDelta.x).takeIf { result.consumedDelta.x != 0f } ?: 0f
+    val verticalBoundaryReached =
+      reachedScrollBoundary(
+        requestedDelta = result.requestedDelta.y,
+        consumedDelta = result.consumedDelta.y,
+      )
+    val horizontalBoundaryReached =
+      reachedScrollBoundary(
+        requestedDelta = result.requestedDelta.x,
+        consumedDelta = result.consumedDelta.x,
+      )
+    var x = dispatchPosition.x
+    var y = dispatchPosition.y
     if (verticalDirection > 0f) {
       y = if (verticalBoundaryReached) rect.bottom else rect.bottom - viewport.edgeThresholdPx
     } else if (verticalDirection < 0f) {
@@ -197,9 +236,9 @@ internal class EditorEdgeAutoScrollSemantic {
     }
     lastDispatchedPoint = point
     if (
-      request.dispatch(
+      dispatch(
         EditorEdgeAutoScrollDispatch(
-          edgePosition = request.edgePosition,
+          edgePosition = edgePosition,
           dispatchPosition = position,
           point = point,
         )
@@ -233,8 +272,14 @@ private fun reachedScrollBoundary(requestedDelta: Float, consumedDelta: Float): 
 
 private data class EditorEdgeAutoScrollRequest(
   val edgePosition: Offset,
-  val dispatchPosition: Offset,
-  val dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
+  val accumulatedScroll: Offset = Offset.Zero,
+  val onScroll: (EditorEdgeAutoScrollResult) -> Unit,
+)
+
+private data class EditorEdgeAutoScrollResult(
+  val requestedDelta: Offset,
+  val consumedDelta: Offset,
+  val viewport: EditorEdgeAutoScrollViewport,
 )
 
 internal data class EditorEdgeAutoScrollDispatch(

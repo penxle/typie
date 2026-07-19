@@ -29,6 +29,7 @@ import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.TableBorderStyle
+import co.typie.editor.ffi.TableOp
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TableOverlayCellSelection
 import co.typie.editor.ffi.TableOverlayColumn
@@ -1319,6 +1320,51 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `selection edge auto-scroll tracks stationary pointer across viewport movement`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(0f, 8f)
+          edgeAutoScrollMovesViewport = true
+        }
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+
+      assertTrue(controller.pointerDownOnSelectionHandle(Offset(42f, 30f)))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
+      fake.enqueued.clear()
+
+      advanceTimeBy(80)
+      runCurrent()
+
+      assertEquals(5, host.edgeAutoScrollDispatchCount)
+
+      assertTrue(controller.upSelectionHandlePointer())
+    }
+
+  @Test
   fun `selection from handle drag anchors opposite document endpoint for reverse selection`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2254,6 +2300,134 @@ class EditorInteractionControllerTest {
 
       assertTrue(
         controller.onPointerUp(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 40L)
+      )
+    }
+
+  @Test
+  fun `column resize drag locks scroll only while active`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateColumnResizeSlop(8f)
+      val down = Offset(60f, 30f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertFalse(host.scrollGestureLockActive)
+
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(70f, 30f), nowMillis = 20L)
+      )
+      assertTrue(host.scrollGestureLockActive)
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(70f, 30f), nowMillis = 40L)
+      )
+      assertFalse(host.scrollGestureLockActive)
+
+      assertTrue(controller.onPointerDown(pointerId = 2L, position = down, nowMillis = 60L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 2L, position = Offset(70f, 30f), nowMillis = 80L)
+      )
+      assertTrue(host.scrollGestureLockActive)
+
+      controller.cancel()
+
+      assertFalse(host.scrollGestureLockActive)
+    }
+
+  @Test
+  fun `column resize edge auto-scroll keeps handle aligned with horizontal viewport movement`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val overlay =
+        tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0)
+          .copy(
+            bounds = Rect(x = 10f, y = 20f, width = 120f, height = 80f),
+            contentWidth = 120f,
+            columns =
+              listOf(
+                TableOverlayColumn(index = 0, widthAsPx = 60f, position = 60f),
+                TableOverlayColumn(index = 1, widthAsPx = 60f, position = 120f),
+              ),
+          )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = { listOf(overlay) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(5f, 8f)
+        }
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateColumnResizeSlop(8f)
+
+      assertTrue(
+        controller.onPointerDown(pointerId = 1L, position = Offset(70f, 30f), nowMillis = 0L)
+      )
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 20L)
+      )
+
+      advanceTimeBy(16)
+      runCurrent()
+
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 1L,
+          position = Offset(85f, 95f),
+          positionInRoot = Offset(80f, 95f),
+          nowMillis = 36L,
+        )
+      )
+      assertTrue(
+        controller.onPointerUp(
+          pointerId = 1L,
+          position = Offset(85f, 95f),
+          positionInRoot = Offset(80f, 95f),
+          nowMillis = 40L,
+        )
+      )
+      assertEquals(
+        listOf(
+          Message.Node(
+            NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(listOf(0.625f, 0.375f)))
+          )
+        ),
+        fake.enqueued.filterIsInstance<Message.Node>(),
       )
     }
 
@@ -3230,6 +3404,8 @@ class EditorInteractionControllerTest {
     var point: PagePoint? = PagePoint(page = 0, x = 10f, y = 20f)
     var edgeAutoScrollViewport: EditorEdgeAutoScrollViewport? = null
     var edgeAutoScrollConsumedDelta = Offset.Zero
+    var edgeAutoScrollDispatchCount = 0
+    var edgeAutoScrollMovesViewport = false
     val requestedBringIntoViewVersions = mutableListOf<Long>()
 
     override fun resolveInteractionPosition(positionInSurface: Offset): Offset = positionInSurface
@@ -3254,7 +3430,16 @@ class EditorInteractionControllerTest {
       edgeAutoScrollViewport
 
     override fun dispatchEdgeAutoScroll(delta: Offset): Offset {
-      return edgeAutoScrollConsumedDelta
+      edgeAutoScrollDispatchCount += 1
+      val consumed = edgeAutoScrollConsumedDelta
+      if (edgeAutoScrollMovesViewport) {
+        edgeAutoScrollViewport = edgeAutoScrollViewport?.let { viewport ->
+          viewport.copy(
+            rect = viewport.rect.translate(translateX = consumed.x, translateY = consumed.y)
+          )
+        }
+      }
+      return consumed
     }
 
     override fun scheduleTapDispatch(dispatchAtMillis: Long) {

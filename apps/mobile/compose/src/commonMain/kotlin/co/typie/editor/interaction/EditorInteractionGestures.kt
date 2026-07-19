@@ -210,17 +210,14 @@ internal class EditorInteractionGestures(
 
     trackTapPointerMove(pointerId = pointerId, position = position, context = context)
     if (tableColumnResize.pending || tableColumnResize.active) {
-      val wasActive = tableColumnResize.active
-      val handled =
-        tableColumnResize.handlePointerMove(
-          pointerId = pointerId,
-          position = position,
-          context = context,
-        )
-      if (!wasActive && tableColumnResize.active) {
+      if (tableColumnResize.shouldStartDrag(pointerId = pointerId, position = position)) {
         cancelTapAndLongPress(context = context)
       }
-      return handled
+      return tableColumnResize.handlePointerMove(
+        pointerId = pointerId,
+        position = position,
+        context = context,
+      )
     }
     if (tableHandle.activeDrag) {
       return handleTableDragUpdate(position = position)
