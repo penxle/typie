@@ -80,6 +80,10 @@ class EditorUiState {
 
   fun editorRectInRoot(): Rect? = editorBoundsInRoot.takeIf { it.isUsable }
 
+  internal fun containsDocumentInteraction(positionInRoot: Offset): Boolean =
+    interactionSurfaceBoundsInRoot.isUsable &&
+      interactionSurfaceBoundsInRoot.contains(positionInRoot)
+
   fun textClippingRectInRoot(): Rect? = editorClippedBoundsInRoot.takeIf { it.isUsable }
 
   fun cursorRectInRoot(cursor: CursorMetrics?): Rect? {

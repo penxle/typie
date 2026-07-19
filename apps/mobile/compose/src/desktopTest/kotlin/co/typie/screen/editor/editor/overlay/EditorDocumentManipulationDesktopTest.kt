@@ -948,6 +948,76 @@ class EditorDocumentManipulationDesktopTest {
   }
 
   @Test
+  fun rootAttachedColumnResizeUsesEditorRootOffsetAcrossSyntheticHeader() = runComposeUiTest {
+    val selection =
+      Selection(
+        anchor = Position("cell-text", 0, Affinity.Downstream),
+        head = Position("cell-text", 0, Affinity.Downstream),
+      )
+    val shallowTable =
+      tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0)
+        .copy(bounds = Rect(x = 10f, y = 20f, width = 100f, height = 20f))
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        pageSizesProvider = { listOf(Size(width = 120f, height = 120f)) },
+        tableOverlaysProvider = { listOf(shallowTable) },
+      )
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val uiState =
+      EditorUiState().apply {
+        updateFocus(true)
+        updatePageOffset(page = 0, offset = Offset.Zero)
+        updateInteractionSurfaceBounds(
+          ComposeRect(left = 0f, top = SyntheticHeaderHeight, right = 120f, bottom = 160f),
+          density = 1f,
+        )
+        updateEditorBounds(
+          ComposeRect(left = 0f, top = SyntheticHeaderHeight, right = 120f, bottom = 160f),
+          density = 1f,
+        )
+      }
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    lateinit var interactionScope: EditorInteractionScope
+    editor.sync {}
+    try {
+      setOverlayHostContent(
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+        onInteractionScope = { interactionScope = it },
+      )
+      waitForIdle()
+
+      onNodeWithTag(RootTag).performTouchInput {
+        down(Offset(x = 60f, y = SyntheticHeaderHeight + 30f))
+        moveTo(Offset(x = 80f, y = SyntheticHeaderHeight / 2f))
+        up()
+      }
+      waitUntil(timeoutMillis = 1_000L) {
+        fake.enqueued.filterIsInstance<Message.Node>().isNotEmpty()
+      }
+
+      assertEquals(
+        listOf(
+          Message.Node(
+            NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(widths = listOf(0.6f, 0.4f)))
+          )
+        ),
+        fake.enqueued.filterIsInstance<Message.Node>(),
+      )
+      assertEquals(EditorInteractionMode.Idle, interactionScope.controller.interactionMode)
+      assertFalse(interactionScope.controller.tableColumnResizePresentation.pressed)
+      assertNull(interactionScope.controller.tableColumnResizePresentation.draft)
+    } finally {
+      runtime.clear(editor)
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun tableColumnResizeHandleDragDoesNothingWhenReadOnly() = runComposeUiTest {
     val selection =
       Selection(
@@ -1325,6 +1395,7 @@ class EditorDocumentManipulationDesktopTest {
 
   private companion object {
     const val RootTag = "editor-document-manipulation-root"
+    const val SyntheticHeaderHeight = 40f
     val TestRootSize = ComposeSize(width = 120f, height = 120f)
     val TestRootRect = ComposeRect(Offset.Zero, TestRootSize)
 

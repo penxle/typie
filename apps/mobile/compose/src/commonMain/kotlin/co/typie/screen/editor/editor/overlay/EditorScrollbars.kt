@@ -51,6 +51,7 @@ import co.typie.editor.viewport.EditorViewportScrollbarMetrics
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.resolveEditorViewportScrollbarMetrics
 import co.typie.editor.viewport.resolveEditorViewportScrollbarScrollPositionFromDrag
+import co.typie.screen.editor.editor.layout.viewportDirectControl
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -502,7 +503,11 @@ private fun EditorScrollbarThumb(
   ) {
     Box(
       modifier =
-        Modifier.fillMaxSize().pointerInput(horizontal, viewportState, density) {
+        Modifier.fillMaxSize().viewportDirectControl().pointerInput(
+          horizontal,
+          viewportState,
+          density,
+        ) {
           val touchSlop = viewConfiguration.touchSlop
           val touchSlopSquared = touchSlop * touchSlop
 

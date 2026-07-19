@@ -1386,7 +1386,7 @@ fun EditorScreen(entityId: String) {
             }
           }
         },
-        body = { editorInteractionModifier ->
+        body = {
           val editorLoad = editorLoadState
           if (editorLoad != null) {
             EditorBody(
@@ -1395,7 +1395,6 @@ fun EditorScreen(entityId: String) {
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
               modifier = Modifier,
-              interactionModifier = editorInteractionModifier,
               editorInputEnabled = editorReady && editorInputEnabledByToolbar && !editorReadOnly,
               suppressSoftwareKeyboard =
                 !editorReady || editorSuppressesSoftwareKeyboard || editorReadOnly,

@@ -6,9 +6,11 @@ import co.typie.editor.PagePoint
 internal interface EditorInteractionGeometry {
   val density: Float
 
-  fun resolveInteractionPosition(positionInSurface: Offset): Offset?
+  fun containsDocumentInteraction(positionInRoot: Offset): Boolean
 
-  fun isTapEligible(positionInSurface: Offset): Boolean
+  fun resolveInteractionPosition(positionInRoot: Offset): Offset?
+
+  fun isTapEligible(positionInRoot: Offset): Boolean
 
   fun resolvePoint(positionInNode: Offset): PagePoint?
 

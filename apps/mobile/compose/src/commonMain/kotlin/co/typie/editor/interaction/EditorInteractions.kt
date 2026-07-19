@@ -38,6 +38,16 @@ import kotlinx.coroutines.launch
 private const val EditorTapSlopDp = 8f
 private const val WheelBurstGapMs = 56L
 
+private enum class EditorDirectPointerAdmission {
+  Document,
+  HeaderViewportOnly,
+}
+
+private data class EditorDirectPointer(
+  val type: PointerType,
+  val admission: EditorDirectPointerAdmission,
+)
+
 internal fun Modifier.editorInteractions(
   interactionController: EditorInteractionController,
   geometry: EditorInteractionGeometry,
@@ -147,8 +157,9 @@ private class EditorInteractionsNode(
   SemanticsModifierNode,
   EditorScreenPointerListener,
   EditorPlatformIndirectScaleOwner {
-  private val pointers = mutableMapOf<Long, PointerType>()
+  private val pointers = mutableMapOf<Long, EditorDirectPointer>()
   private val singlePointerStreams = mutableSetOf<Long>()
+  private var directPointerEventProcessedInInitial = false
   private var suppressUntilAllUp = false
   private var wheelLastEventMillis: Long? = null
   private var wheelZoomActive = false
@@ -232,7 +243,11 @@ private class EditorInteractionsNode(
       cancelInteraction(clearSuppression = true)
       return
     }
-    if (pointerEvent.changes.any { change -> change.isUnconsumedDirectDown(pointerEvent) }) {
+    if (
+      pointerEvent.changes.any { change ->
+        change.isDirectDown(pointerEvent) && change.id.value in pointers
+      }
+    ) {
       onEditorPointerInput()
     }
 
@@ -240,11 +255,10 @@ private class EditorInteractionsNode(
     interactionController.updateColumnResizeSlop(
       dragSlopPx = min(touchSlop, EditorTapSlopDp * density)
     )
-    registerPointerDowns(pointerEvent)
     if (
       scaleZoomActive &&
         pointers.isNotEmpty() &&
-        pointers.values.all { pointerType -> pointerType == PointerType.Mouse }
+        pointers.values.all { pointer -> pointer.type == PointerType.Mouse }
     ) {
       suppressUntilAllUp = true
       physicalSequenceYieldedToIndirectInput = true
@@ -269,7 +283,7 @@ private class EditorInteractionsNode(
       finishReleasedPointers(pointerEvent)
       return
     }
-    if (pointers.values.count { pointerType -> pointerType == PointerType.Touch } > 2) {
+    if (pointers.values.count { pointer -> pointer.type == PointerType.Touch } > 2) {
       cancelAndSuppress(pointerEvent)
       return
     }
@@ -310,6 +324,11 @@ private class EditorInteractionsNode(
   }
 
   private fun routePointerPass(pointerEvent: PointerEvent, pass: PointerEventPass): Boolean {
+    if (pass == PointerEventPass.Initial) {
+      directPointerEventProcessedInInitial = false
+    } else if (pass == PointerEventPass.Final) {
+      directPointerEventProcessedInInitial = false
+    }
     if (pointerEvent.type.isIndirectPointerEvent()) {
       if (pass == PointerEventPass.Initial) {
         handleIndirectPointerEvent(pointerEvent)
@@ -318,22 +337,31 @@ private class EditorInteractionsNode(
     }
 
     val hasFreshDown = pointerEvent.changes.any { change -> change.isDirectDown(pointerEvent) }
-    // Track membership before the screen observer's Final pass, but let shared overlay siblings
-    // claim direct gestures during Main before admitting a new editor sequence.
+    if (hasFreshDown) {
+      when (pass) {
+        PointerEventPass.Initial -> {
+          if (enabled && density > 0f) {
+            registerProvisionalPointerDowns(pointerEvent)
+          }
+          return true
+        }
+        PointerEventPass.Main -> return true
+        PointerEventPass.Final -> {
+          discardConsumedDocumentDowns(pointerEvent)
+          return false
+        }
+      }
+    }
+
+    // Header pointers must arbitrate before descendant fields in Initial, while document-only
+    // sequences keep their existing Main-pass ordering; this latch prevents duplicate processing.
     return when (pass) {
-      PointerEventPass.Initial -> true
-      PointerEventPass.Main -> {
-        if (hasFreshDown && enabled && density > 0f) {
-          registerPointerDowns(pointerEvent)
-        }
-        hasFreshDown
+      PointerEventPass.Initial -> {
+        directPointerEventProcessedInInitial = hasHeaderViewportPointer()
+        !directPointerEventProcessedInInitial
       }
-      PointerEventPass.Final -> {
-        if (hasFreshDown) {
-          discardConsumedPointerDowns(pointerEvent)
-        }
-        !hasFreshDown
-      }
+      PointerEventPass.Main -> directPointerEventProcessedInInitial
+      PointerEventPass.Final -> true
     }
   }
 
@@ -354,6 +382,7 @@ private class EditorInteractionsNode(
   override fun onGlobalAllUp() {
     pointers.clear()
     singlePointerStreams.clear()
+    directPointerEventProcessedInInitial = false
     suppressUntilAllUp = false
     physicalSequenceYieldedToIndirectInput = false
     releasePhysicalDragLock()
@@ -370,11 +399,18 @@ private class EditorInteractionsNode(
     scrollByOffset(scrollDriver::performSemanticsScroll)
   }
 
-  private fun registerPointerDowns(pointerEvent: PointerEvent) {
+  private fun registerProvisionalPointerDowns(pointerEvent: PointerEvent) {
     pointerEvent.changes
       .filter { it.isUnconsumedDirectDown(pointerEvent) }
       .forEach { change ->
-        pointers[change.id.value] = change.type
+        val positionInRoot = positionInRoot(change.position)
+        val admission =
+          if (geometry.containsDocumentInteraction(positionInRoot)) {
+            EditorDirectPointerAdmission.Document
+          } else {
+            EditorDirectPointerAdmission.HeaderViewportOnly
+          }
+        pointers[change.id.value] = EditorDirectPointer(type = change.type, admission = admission)
         if (
           physicalDragLockHandle == null &&
             change.type == PointerType.Mouse &&
@@ -385,10 +421,16 @@ private class EditorInteractionsNode(
       }
   }
 
-  private fun discardConsumedPointerDowns(pointerEvent: PointerEvent) {
+  private fun discardConsumedDocumentDowns(pointerEvent: PointerEvent) {
     var pointerRemoved = false
     pointerEvent.changes
-      .filter { change -> change.isDirectDown(pointerEvent) && change.isConsumed }
+      .filter { change ->
+        if (!change.isDirectDown(pointerEvent)) {
+          return@filter false
+        }
+        val pointer = pointers[change.id.value] ?: return@filter false
+        change.isConsumed && pointer.admission == EditorDirectPointerAdmission.Document
+      }
       .forEach { change ->
         if (pointers.remove(change.id.value) != null) {
           pointerRemoved = true
@@ -404,21 +446,34 @@ private class EditorInteractionsNode(
     onScreenPointerMembershipChanged()
   }
 
+  private fun hasHeaderViewportPointer(): Boolean =
+    pointers.values.any { pointer ->
+      pointer.admission == EditorDirectPointerAdmission.HeaderViewportOnly
+    }
+
   private fun isEditorTouchPointer(pointerId: Long): Boolean =
-    pointers[pointerId] == PointerType.Touch
+    pointers[pointerId]?.type == PointerType.Touch
 
   private fun pressedTouchChanges(pointerEvent: PointerEvent): List<PointerInputChange> =
     pointerEvent.changes.filter { change ->
-      change.pressed && pointers[change.id.value] == PointerType.Touch
+      change.pressed && pointers[change.id.value]?.type == PointerType.Touch
     }
 
   private fun forwardSinglePointerChanges(pointerEvent: PointerEvent) {
     pointerEvent.changes
-      .filter { it.isUnconsumedDirectDown(pointerEvent) }
+      .filter { change -> change.isDirectDown(pointerEvent) && change.id.value in pointers }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
-        val tapEnabled = geometry.isTapEligible(change.position)
-        val editorPosition = geometry.resolveInteractionPosition(change.position)
+        val pointer = checkNotNull(pointers[change.id.value])
+        val editorPosition =
+          resolveInteractionPosition(pointer = pointer, positionInRoot = rootPosition)
+        if (pointer.admission == EditorDirectPointerAdmission.Document && editorPosition == null) {
+          cancelAndSuppress(pointerEvent)
+          return
+        }
+        val tapEnabled =
+          pointer.admission == EditorDirectPointerAdmission.Document &&
+            geometry.isTapEligible(rootPosition)
         singlePointerStreams += change.id.value
         if (
           interactionController.onPointerDown(
@@ -441,7 +496,13 @@ private class EditorInteractionsNode(
       }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
-        val editorPosition = geometry.resolveInteractionPosition(change.position)
+        val pointer = pointers[change.id.value] ?: return@forEach
+        val editorPosition =
+          resolveInteractionPosition(pointer = pointer, positionInRoot = rootPosition)
+        if (pointer.admission == EditorDirectPointerAdmission.Document && editorPosition == null) {
+          cancelAndSuppress(pointerEvent)
+          return
+        }
         if (
           interactionController.onPointerMove(
             pointerId = change.id.value,
@@ -461,7 +522,13 @@ private class EditorInteractionsNode(
       }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
-        val editorPosition = geometry.resolveInteractionPosition(change.position)
+        val pointer = pointers[change.id.value] ?: return@forEach
+        val editorPosition =
+          resolveInteractionPosition(pointer = pointer, positionInRoot = rootPosition)
+        if (pointer.admission == EditorDirectPointerAdmission.Document && editorPosition == null) {
+          cancelAndSuppress(pointerEvent)
+          return
+        }
         if (
           interactionController.onPointerUp(
             pointerId = change.id.value,
@@ -475,6 +542,15 @@ private class EditorInteractionsNode(
         singlePointerStreams -= change.id.value
       }
   }
+
+  private fun resolveInteractionPosition(
+    pointer: EditorDirectPointer,
+    positionInRoot: Offset,
+  ): Offset? =
+    when (pointer.admission) {
+      EditorDirectPointerAdmission.Document -> geometry.resolveInteractionPosition(positionInRoot)
+      EditorDirectPointerAdmission.HeaderViewportOnly -> null
+    }
 
   private fun resolvePinchSample(changes: List<PointerInputChange>): EditorPinchSample? =
     resolveEditorPinchSample(
@@ -501,8 +577,8 @@ private class EditorInteractionsNode(
   }
 
   private fun hasPhysicalDragPointer(): Boolean =
-    pointers.values.any { pointerType ->
-      pointerType == PointerType.Mouse && pointerType.isTouchDragPointer()
+    pointers.values.any { pointer ->
+      pointer.type == PointerType.Mouse && pointer.type.isTouchDragPointer()
     }
 
   private fun cancelAndSuppress(pointerEvent: PointerEvent) {
@@ -755,7 +831,7 @@ private class EditorInteractionsNode(
     if (
       screenPointerSequence.hasScreenPointers ||
         pointers.isEmpty() ||
-        pointers.values.any { pointerType -> pointerType != PointerType.Mouse } ||
+        pointers.values.any { pointer -> pointer.type != PointerType.Mouse } ||
         !interactionController.cancelPendingPointerForIndirectInput()
     ) {
       return false
@@ -776,6 +852,7 @@ private class EditorInteractionsNode(
     val hadPointers = pointers.isNotEmpty() || suppressUntilAllUp
     pointers.clear()
     singlePointerStreams.clear()
+    directPointerEventProcessedInInitial = false
     if (hadPointers) {
       interactionController.cancel()
     }
@@ -915,7 +992,7 @@ private class EditorScreenPointerObserverNode(var sequence: EditorScreenPointerS
   }
 }
 
-private fun PointerInputChange.isDirectDown(pointerEvent: PointerEvent): Boolean =
+internal fun PointerInputChange.isDirectDown(pointerEvent: PointerEvent): Boolean =
   pressed && !previousPressed && (type != PointerType.Mouse || pointerEvent.isDirectMousePress())
 
 private fun PointerInputChange.isUnconsumedDirectDown(pointerEvent: PointerEvent): Boolean =

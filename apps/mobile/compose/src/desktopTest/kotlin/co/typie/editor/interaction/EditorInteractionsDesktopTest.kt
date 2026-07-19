@@ -96,6 +96,50 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
+  fun `document pointer cancels when interaction mapping becomes unavailable`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
+    setEditorContent(fixture)
+    val editor = onNodeWithTag(EditorTag)
+
+    editor.performTouchInput { down(pointerId = 0, position = Offset(x = 100f, y = 100f)) }
+    assertEquals(1, fixture.host.longPressDispatchScheduleCount)
+    runOnIdle { fixture.host.interactionMappingAvailable = false }
+
+    try {
+      editor.performTouchInput { moveTo(pointerId = 0, position = Offset(x = 120f, y = 100f)) }
+      waitForIdle()
+
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertTrue(fixture.touchPanDeltas.isEmpty())
+      assertEquals(1, fixture.host.pointerCancelEnqueueCount)
+      assertEquals(1, fixture.host.longPressDispatchCancelCount)
+    } finally {
+      editor.performTouchInput { up(pointerId = 0) }
+    }
+  }
+
+  @Test
+  fun `header Down stays pan only after moving into document body`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true, documentDownEligible = false)
+    setEditorContent(fixture)
+
+    onNodeWithTag(EditorTag).performTouchInput {
+      down(pointerId = 0, position = Offset(x = 100f, y = 40f))
+      moveTo(pointerId = 0, position = Offset(x = 100f, y = 120f))
+      up(pointerId = 0)
+    }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(0, fixture.host.tapDispatchScheduleCount)
+    assertEquals(0, fixture.host.longPressDispatchScheduleCount)
+    assertEquals(0, fixture.host.pointerCancelEnqueueCount)
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertFalse(fixture.controller.tableColumnResizePresentation.pressed)
+    assertEquals(null, fixture.controller.tableColumnResizePresentation.draft)
+  }
+
+  @Test
   fun `editor physical click drag owns desktop scroll translation until release`() =
     runComposeUiTest {
       val fixture = Fixture()
@@ -1736,6 +1780,7 @@ class EditorInteractionsDesktopTest {
     pageSize: PageSize = PageSize(width = 720f, height = 960f),
     flingBehaviorOverride: FlingBehavior? = null,
     tapEligible: Boolean = false,
+    documentDownEligible: Boolean = tapEligible,
   ) {
     val touchPanDeltas = mutableListOf<Offset>()
     val flingPanDeltas = mutableListOf<Offset>()
@@ -1813,7 +1858,7 @@ class EditorInteractionsDesktopTest {
         updatePageOffset(page = 0, offset = Offset.Zero)
         updateEditorBounds(boundsInRoot = editorBoundsInRoot, density = 1f)
       }
-    val host = TestHost(tapEligible = tapEligible)
+    val host = TestHost(tapEligible = tapEligible, documentDownEligible = documentDownEligible)
     private val editor = Editor(FakeFfiEditor(), CoroutineScope(Job()), Dispatchers.Unconfined)
     private val semantics =
       EditorInteractionSemantics(effects = host).apply {
@@ -1841,8 +1886,10 @@ class EditorInteractionsDesktopTest {
       )
   }
 
-  private class TestHost(private val tapEligible: Boolean) :
+  private class TestHost(private val tapEligible: Boolean, val documentDownEligible: Boolean) :
     EditorInteractionEffects, EditorInteractionGeometry {
+    var interactionMappingAvailable = tapEligible
+    var pointerCancelEnqueueCount = 0
     var pointerStreamCancelCount = 0
     var tapDispatchScheduleCount = 0
     var longPressDispatchScheduleCount = 0
@@ -1850,12 +1897,14 @@ class EditorInteractionsDesktopTest {
 
     override val density: Float = 1f
 
-    override fun resolveInteractionPosition(positionInSurface: Offset): Offset? =
-      positionInSurface.takeIf {
-        tapEligible
+    override fun containsDocumentInteraction(positionInRoot: Offset): Boolean = documentDownEligible
+
+    override fun resolveInteractionPosition(positionInRoot: Offset): Offset? =
+      positionInRoot.takeIf {
+        interactionMappingAvailable
       }
 
-    override fun isTapEligible(positionInSurface: Offset): Boolean = tapEligible
+    override fun isTapEligible(positionInRoot: Offset): Boolean = tapEligible
 
     override fun resolvePoint(positionInNode: Offset): PagePoint? =
       PagePoint(page = 0, x = positionInNode.x, y = positionInNode.y).takeIf { tapEligible }
@@ -1892,7 +1941,9 @@ class EditorInteractionsDesktopTest {
 
     override fun requestSoftwareKeyboard() = Unit
 
-    override fun enqueuePointerCancel() = Unit
+    override fun enqueuePointerCancel() {
+      pointerCancelEnqueueCount += 1
+    }
 
     override fun setScrollGestureLocked(locked: Boolean) = Unit
 

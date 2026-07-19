@@ -44,6 +44,7 @@ import co.typie.editor.interaction.EditorScreenPointerSequence
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.interaction.editorPlatformIndirectScale
+import co.typie.editor.interaction.isDirectDown
 import co.typie.editor.interaction.observeEditorScreenPointerSequence
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
@@ -99,8 +100,32 @@ private class SharePointerInputWithSiblingsNode : Modifier.Node(), PointerInputM
   override fun onCancelPointerInput() = Unit
 }
 
+private data object ViewportDirectControlElement :
+  ModifierNodeElement<ViewportDirectControlNode>() {
+  override fun create(): ViewportDirectControlNode = ViewportDirectControlNode()
+
+  override fun update(node: ViewportDirectControlNode) = Unit
+}
+
+private class ViewportDirectControlNode : Modifier.Node(), PointerInputModifierNode {
+  override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
+    if (pass != PointerEventPass.Initial) {
+      return
+    }
+    pointerEvent.changes.forEach { change ->
+      if (change.isDirectDown(pointerEvent)) {
+        change.consume()
+      }
+    }
+  }
+
+  override fun onCancelPointerInput() = Unit
+}
+
 private fun Modifier.sharePointerInputWithSiblings(): Modifier =
   this then SharePointerInputWithSiblingsElement
+
+internal fun Modifier.viewportDirectControl(): Modifier = this then ViewportDirectControlElement
 
 internal enum class EditorViewportScrollReconcileMode {
   Disabled,
@@ -123,7 +148,7 @@ internal fun EditorScreenLayout(
   onEditorPointerInput: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
-  body: @Composable (Modifier) -> Unit,
+  body: @Composable () -> Unit,
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
   overlay: @Composable () -> Unit = {},
   toolbar: @Composable () -> Unit,
@@ -242,7 +267,8 @@ internal fun EditorScreenLayout(
                 .clipToBounds()
                 .hazeSource(toolbarBackdropHazeState)
                 .navigationPopNestedScroll()
-                .nestedScroll(EditorViewportNestedScrollConnection, viewportNestedScrollDispatcher),
+                .nestedScroll(EditorViewportNestedScrollConnection, viewportNestedScrollDispatcher)
+                .then(editorInteractionModifier),
             content = {
               Column {
                 Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
@@ -252,7 +278,7 @@ internal fun EditorScreenLayout(
                       translationX = -state.viewportState.scrollOffset.x * density.density
                     }
                 ) {
-                  body(editorInteractionModifier)
+                  body()
                 }
               }
             },

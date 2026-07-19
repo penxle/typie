@@ -114,38 +114,29 @@ internal class EditorInteractionScope(
     scrollGestureLockState = null
   }
 
-  override fun resolveInteractionPosition(positionInSurface: Offset): Offset? {
+  override fun containsDocumentInteraction(positionInRoot: Offset): Boolean =
+    editor != null && density > 0f && uiState?.containsDocumentInteraction(positionInRoot) == true
+
+  override fun resolveInteractionPosition(positionInRoot: Offset): Offset? {
     if (editor == null) {
       return null
     }
-    val bounds = uiState?.editorBoundsInContainer ?: return null
-    if (!bounds.isValid || density <= 0f) {
+    val bounds = uiState?.editorRectInRoot() ?: return null
+    if (density <= 0f) {
       return null
     }
 
-    return Offset(
-      x = positionInSurface.x - bounds.x * density,
-      y = positionInSurface.y - bounds.y * density,
-    )
+    return Offset(x = positionInRoot.x - bounds.left, y = positionInRoot.y - bounds.top)
   }
 
-  override fun isTapEligible(positionInSurface: Offset): Boolean {
-    if (editor == null || density <= 0f) {
-      return false
-    }
-    val bounds = uiState?.editorBoundsInContainer ?: return false
-    if (!bounds.isValid) {
+  override fun isTapEligible(positionInRoot: Offset): Boolean {
+    if (!containsDocumentInteraction(positionInRoot)) {
       return false
     }
     if (outsidePageTapEnabled) {
       return true
     }
-    val x = positionInSurface.x / density
-    val y = positionInSurface.y / density
-    return x >= bounds.x &&
-      x <= bounds.x + bounds.width &&
-      y >= bounds.y &&
-      y <= bounds.y + bounds.height
+    return uiState?.editorRectInRoot()?.contains(positionInRoot) == true
   }
 
   override fun resolvePoint(positionInNode: Offset): PagePoint? {

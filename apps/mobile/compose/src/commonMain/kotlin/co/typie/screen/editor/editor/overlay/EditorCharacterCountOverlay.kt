@@ -4,8 +4,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -38,6 +41,7 @@ import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.icons.Lucide
+import co.typie.screen.editor.editor.layout.viewportDirectControl
 import co.typie.storage.Preference
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
@@ -153,9 +157,7 @@ internal fun EditorCharacterCountOverlay(
     delay(WidgetFadeIdleMs)
     faded = false
   }
-  LaunchedEffect(wakeRequest) {
-    if (wakeRequest > 0) faded = false
-  }
+  LaunchedEffect(wakeRequest) { if (wakeRequest > 0) faded = false }
 
   val alpha by
     animateFloatAsState(
@@ -179,6 +181,7 @@ internal fun EditorCharacterCountOverlay(
         .offset { IntOffset(state.offsetX.toInt(), state.offsetY.toInt()) }
         .onSizeChanged { widgetSize = it.width to it.height }
         .graphicsLayer { this.alpha = alpha }
+        .viewportDirectControl()
         .pointerInput(Unit) {
           detectDragGestures(
             onDragStart = {
@@ -193,7 +196,7 @@ internal fun EditorCharacterCountOverlay(
           }
         }
         .pointerInput(Unit) {
-          detectTapGestures {
+          detectTapAfterConsumedDown {
             // Legacy: tapping a faded widget only wakes it, without toggling the expanded rows.
             val wasFaded = faded
             wakeRequest += 1
@@ -229,10 +232,7 @@ internal fun EditorCharacterCountOverlay(
 
       if (state.expanded) {
         current.expandedRows().forEach { (label, value) ->
-          Row(
-            modifier = Modifier.width(160.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-          ) {
+          Row(modifier = Modifier.width(160.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
               text = label,
               style = AppTheme.typography.caption,
@@ -247,5 +247,14 @@ internal fun EditorCharacterCountOverlay(
         }
       }
     }
+  }
+}
+
+internal suspend fun PointerInputScope.detectTapAfterConsumedDown(onTap: () -> Unit) {
+  awaitEachGesture {
+    awaitFirstDown(requireUnconsumed = false)
+    val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+    up.consume()
+    onTap()
   }
 }

@@ -3408,9 +3408,11 @@ class EditorInteractionControllerTest {
     var edgeAutoScrollMovesViewport = false
     val requestedBringIntoViewVersions = mutableListOf<Long>()
 
-    override fun resolveInteractionPosition(positionInSurface: Offset): Offset = positionInSurface
+    override fun containsDocumentInteraction(positionInRoot: Offset): Boolean = true
 
-    override fun isTapEligible(positionInSurface: Offset): Boolean = true
+    override fun resolveInteractionPosition(positionInRoot: Offset): Offset = positionInRoot
+
+    override fun isTapEligible(positionInRoot: Offset): Boolean = true
 
     override fun resolvePoint(positionInNode: Offset): PagePoint? {
       if (density <= 0f) {

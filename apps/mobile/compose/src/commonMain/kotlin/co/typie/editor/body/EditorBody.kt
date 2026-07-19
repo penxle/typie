@@ -47,7 +47,6 @@ internal fun EditorBody(
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
-  interactionModifier: Modifier = Modifier,
   editorInputEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
@@ -71,7 +70,7 @@ internal fun EditorBody(
       .trackEditorInteractionSurfaceBounds(uiState = uiState, density = density.density)
 
   Box(modifier = modifier.fillMaxWidth()) {
-    Box(modifier = interactionSurfaceModifier.then(interactionModifier)) {
+    Box(modifier = interactionSurfaceModifier) {
       if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
         EditorExtensionAreaLineHighlightOverlay(
           cursor = editor?.cursor,
