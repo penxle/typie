@@ -11,7 +11,6 @@ import co.typie.editor.interaction.semantics.resolveTableColumnResizePlacement
 internal class EditorTableColumnResizeGesture {
   private var pointerId: Long? = null
   private var downPosition = Offset.Zero
-  private var previousPosition = Offset.Zero
   private var currentPosition = Offset.Zero
   private var dragSlop = 0f
   private var dragging = false
@@ -50,7 +49,6 @@ internal class EditorTableColumnResizeGesture {
     }
     this.pointerId = pointerId
     downPosition = position
-    previousPosition = position
     currentPosition = position
     dragging = false
     context.semantics.tableColumnResize.press(editor = context.editor, placement = placement)
@@ -62,11 +60,8 @@ internal class EditorTableColumnResizeGesture {
     if (this.pointerId != pointerId) {
       return false
     }
-    previousPosition = currentPosition
-    currentPosition = position
-    var deltaPx = currentPosition.x - previousPosition.x
     if (!dragging) {
-      if (!shouldStartDrag(pointerId = pointerId, position = currentPosition)) {
+      if (!shouldStartDrag(pointerId = pointerId, position = position)) {
         return true
       }
       if (
@@ -83,19 +78,12 @@ internal class EditorTableColumnResizeGesture {
         return false
       }
       context.effects.setScrollGestureLocked(true)
-      deltaPx = currentPosition.x - downPosition.x
     }
-    context.semantics.tableColumnResize.update(deltaPx = deltaPx)
+    moveTo(position = position, context = context)
     context.semantics.edgeAutoScroll.track(
       edgePosition = currentPosition,
       context = context,
-      onScroll = { consumed ->
-        currentPosition += consumed
-        previousPosition += consumed
-        if (consumed.x != 0f) {
-          context.semantics.tableColumnResize.update(deltaPx = consumed.x)
-        }
-      },
+      onScroll = { scrolledPosition -> moveTo(position = scrolledPosition, context = context) },
     )
     return true
   }
@@ -127,9 +115,16 @@ internal class EditorTableColumnResizeGesture {
   fun reset() {
     pointerId = null
     downPosition = Offset.Zero
-    previousPosition = Offset.Zero
     currentPosition = Offset.Zero
     dragging = false
+  }
+
+  private fun moveTo(position: Offset, context: EditorGestureContext) {
+    val deltaPx = position.x - currentPosition.x
+    currentPosition = position
+    if (deltaPx != 0f) {
+      context.semantics.tableColumnResize.update(deltaPx = deltaPx)
+    }
   }
 
   private fun clear() {

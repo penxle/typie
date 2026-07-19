@@ -1365,6 +1365,55 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `edge auto-scroll reports position advanced by actual consumption and skips zero`() =
+    runTest(StandardTestDispatcher()) {
+      val testEditor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val host =
+        TestHost(this).apply {
+          edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+          edgeAutoScrollConsumedDelta = Offset(2f, 3f)
+        }
+      val semantics = EditorInteractionSemantics(effects = host)
+      val context =
+        object : EditorGestureContext {
+          override val editor = testEditor
+          override val semantics = semantics
+          override val effects = host
+          override val geometry = host
+          override val mode = EditorInteractionMode.Idle
+          override val uiState = host.uiState
+          override val readOnly = false
+          override val platform = Platform.Desktop
+
+          override fun applyModeEvent(event: EditorInteractionEvent) = Unit
+
+          override fun reduceMode(event: EditorInteractionEvent) = Unit
+        }
+      val reportedPositions = mutableListOf<Offset>()
+
+      semantics.edgeAutoScroll.track(edgePosition = Offset(80f, 95f), context = context) {
+        reportedPositions += it
+        semantics.edgeAutoScroll.stop()
+      }
+      advanceTimeBy(32)
+      runCurrent()
+
+      assertEquals(listOf(Offset(82f, 98f)), reportedPositions)
+      assertEquals(1, host.edgeAutoScrollDispatchCount)
+
+      host.edgeAutoScrollConsumedDelta = Offset.Zero
+      semantics.edgeAutoScroll.track(edgePosition = Offset(80f, 95f), context = context) {
+        reportedPositions += it
+      }
+      advanceTimeBy(32)
+      runCurrent()
+      semantics.edgeAutoScroll.stop()
+
+      assertEquals(listOf(Offset(82f, 98f)), reportedPositions)
+      assertTrue(host.edgeAutoScrollDispatchCount > 1)
+    }
+
+  @Test
   fun `selection from handle drag anchors opposite document endpoint for reverse selection`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2384,7 +2433,8 @@ class EditorInteractionControllerTest {
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
-          edgeAutoScrollConsumedDelta = Offset(5f, 8f)
+          edgeAutoScrollConsumedDelta = Offset(2f, 8f)
+          edgeAutoScrollMovesViewport = true
         }
       val controller =
         EditorInteractionController(
@@ -2405,27 +2455,29 @@ class EditorInteractionControllerTest {
       advanceTimeBy(16)
       runCurrent()
 
+      host.edgeAutoScrollConsumedDelta = Offset(0f, 8f)
+      advanceTimeBy(16)
+      runCurrent()
+
       assertTrue(
         controller.onPointerMove(
           pointerId = 1L,
-          position = Offset(85f, 95f),
+          position = Offset(82f, 111f),
           positionInRoot = Offset(80f, 95f),
-          nowMillis = 36L,
+          nowMillis = 52L,
         )
       )
       assertTrue(
         controller.onPointerUp(
           pointerId = 1L,
-          position = Offset(85f, 95f),
+          position = Offset(82f, 111f),
           positionInRoot = Offset(80f, 95f),
-          nowMillis = 40L,
+          nowMillis = 56L,
         )
       )
       assertEquals(
         listOf(
-          Message.Node(
-            NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(listOf(0.625f, 0.375f)))
-          )
+          Message.Node(NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(listOf(0.6f, 0.4f))))
         ),
         fake.enqueued.filterIsInstance<Message.Node>(),
       )

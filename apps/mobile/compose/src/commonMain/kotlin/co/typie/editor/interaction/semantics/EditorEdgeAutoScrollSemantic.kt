@@ -99,7 +99,7 @@ internal class EditorEdgeAutoScrollSemantic {
     trackWithResult(
       edgePosition = edgePosition,
       context = context,
-      onScroll = { result -> onScroll(result.consumedDelta) },
+      onScroll = { result -> onScroll(result.edgePosition) },
     )
   }
 
@@ -149,11 +149,7 @@ internal class EditorEdgeAutoScrollSemantic {
           delay(EditorEdgeAutoScrollTickMillis)
           val request = activeRequest ?: break
           val viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: break
-          val plan =
-            planFor(
-              edgePosition = request.edgePosition + request.accumulatedScroll,
-              viewport = viewport,
-            )
+          val plan = planFor(edgePosition = request.edgePosition, viewport = viewport)
           if (plan.isNoOp) {
             break
           }
@@ -174,15 +170,17 @@ internal class EditorEdgeAutoScrollSemantic {
             continue
           }
 
+          val scrolledPosition = request.edgePosition + consumed
           request.onScroll(
             EditorEdgeAutoScrollResult(
+              edgePosition = scrolledPosition,
               requestedDelta = delta,
               consumedDelta = consumed,
               viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: viewport,
             )
           )
           if (activeRequest === request) {
-            activeRequest = request.copy(accumulatedScroll = request.accumulatedScroll + consumed)
+            activeRequest = request.copy(edgePosition = scrolledPosition)
           }
         }
       } finally {
@@ -272,11 +270,11 @@ private fun reachedScrollBoundary(requestedDelta: Float, consumedDelta: Float): 
 
 private data class EditorEdgeAutoScrollRequest(
   val edgePosition: Offset,
-  val accumulatedScroll: Offset = Offset.Zero,
   val onScroll: (EditorEdgeAutoScrollResult) -> Unit,
 )
 
 private data class EditorEdgeAutoScrollResult(
+  val edgePosition: Offset,
   val requestedDelta: Offset,
   val consumedDelta: Offset,
   val viewport: EditorEdgeAutoScrollViewport,
