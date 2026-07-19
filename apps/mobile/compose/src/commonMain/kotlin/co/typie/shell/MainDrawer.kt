@@ -121,7 +121,7 @@ internal fun MainDrawerContent() {
   }
 
   suspend fun openCreateSpaceSheet() {
-    if (SubscriptionService.gate(sheet, nav, GatedAction.CreateSpace)) {
+    if (SubscriptionService.gate(sheet, GatedAction.CreateSpace)) {
       sheet.present<Unit> { CreateSpaceSheet(model) }
     }
   }

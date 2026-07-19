@@ -185,7 +185,7 @@ fun FolderDetailsScreen(entityId: String) {
     val characterCount = folderDetails?.characterCount ?: 0
 
     val renameFolder: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.RenameEntity)) {
         sheet.present {
           FolderRenameSheet(
             model = model,
@@ -197,7 +197,7 @@ fun FolderDetailsScreen(entityId: String) {
       }
     }
     val openIconPicker: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.ChangeIcon)) {
         sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
           EntityIconPickerSheet(
             model = model,
@@ -211,7 +211,7 @@ fun FolderDetailsScreen(entityId: String) {
       }
     }
     val shareFolder: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ShareFolder)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.ShareFolder)) {
         sheet.present {
           FolderEntityShareSheet(entityIds = listOf(row.id), onUpdated = model::refetch)
         }
@@ -223,7 +223,7 @@ fun FolderDetailsScreen(entityId: String) {
       }
     }
     val moveFolder: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
         sheet.present(stops = EntityMoveStops) {
           EntityMoveSheet(
             source = details.toTransferSource(),

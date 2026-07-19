@@ -214,7 +214,7 @@ fun FolderScreen(entityId: String) {
     }
 
     presenterScope.launch {
-      if (!SubscriptionService.gate(sheet, nav, GatedAction.ShareFolder)) return@launch
+      if (!SubscriptionService.gate(sheet, GatedAction.ShareFolder)) return@launch
       sheet.present {
         FolderEntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
       }
@@ -245,7 +245,7 @@ fun FolderScreen(entityId: String) {
           summary = selectionSummary,
           onChangeIcon = {
             presenterScope.launch {
-              if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) return@launch
+              if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon)) return@launch
               sheet.present(
                 stops = EntityIconPickerStops,
                 stopPolicy = EntityIconPickerStopPolicy,
@@ -317,7 +317,7 @@ fun FolderScreen(entityId: String) {
         label = "순서 변경하기",
         onClick = {
           presenterScope.launch {
-            if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) return@launch
+            if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) return@launch
             selection.reset()
             isReordering = true
           }
@@ -393,7 +393,7 @@ fun FolderScreen(entityId: String) {
                 if (!isPasting) {
                   isPasting = true
                   presenterScope.launch {
-                    if (!SubscriptionService.gate(sheet, nav, GatedAction.Paste)) {
+                    if (!SubscriptionService.gate(sheet, GatedAction.Paste)) {
                       isPasting = false
                       return@launch
                     }
@@ -468,7 +468,7 @@ fun FolderScreen(entityId: String) {
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity))
+                          if (!SubscriptionService.gate(sheet, GatedAction.RenameEntity))
                             return@launch
                           sheet.present {
                             DocumentRenameSheet(
@@ -482,7 +482,7 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon))
+                          if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon))
                             return@launch
                           sheet.present(
                             stops = EntityIconPickerStops,
@@ -505,7 +505,7 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.Move -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity))
+                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity))
                             return@launch
                           sheet.present(stops = EntityMoveStops) {
                             EntityMoveSheet(
@@ -550,7 +550,7 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.StartReorder -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
                             return@launch
                           }
                           selection.reset()
@@ -579,7 +579,7 @@ fun FolderScreen(entityId: String) {
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.RenameEntity))
+                          if (!SubscriptionService.gate(sheet, GatedAction.RenameEntity))
                             return@launch
                           sheet.present {
                             FolderRenameSheet(
@@ -593,7 +593,7 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon))
+                          if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon))
                             return@launch
                           sheet.present(
                             stops = EntityIconPickerStops,
@@ -616,7 +616,7 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.Move -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity))
+                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity))
                             return@launch
                           sheet.present(stops = EntityMoveStops) {
                             EntityMoveSheet(
@@ -661,7 +661,7 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.StartReorder -> {
                         presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
                             return@launch
                           }
                           selection.reset()

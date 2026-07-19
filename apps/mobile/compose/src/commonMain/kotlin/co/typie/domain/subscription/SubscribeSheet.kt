@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import co.typie.ui.component.Button
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Text
+import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.Sheet
 import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
@@ -29,12 +31,14 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.PaperlogyFontFamily
 
 sealed interface SubscribeSheetResult {
-  data object Subscribe : SubscribeSheetResult
+  data object Subscribed : SubscribeSheetResult
 }
 
 @Composable
 context(_: SheetScope<SubscribeSheetResult>)
 fun SubscribeSheet() {
+  val sheet = LocalSheet.current
+
   SheetLayout(
     padding = SheetPadding(header = PaddingValues(0.dp)),
     handle = false,
@@ -46,7 +50,12 @@ fun SubscribeSheet() {
           text = "구독하기",
           textStyle = TextStyle(fontFamily = PaperlogyFontFamily),
           height = 54.dp,
-          onClick = { complete(SubscribeSheetResult.Subscribe) },
+          onClick = {
+            val result = sheet.present { PlanPickerSheet() }
+            if (result is PlanPickerSheetResult.Purchased) {
+              complete(SubscribeSheetResult.Subscribed)
+            }
+          },
         )
         SheetBarTextButton(
           text = "나중에 할게요",
@@ -123,4 +132,20 @@ private fun PlanUpgradeBenefitList(benefits: List<PlanUpgradeBenefit>) {
       }
     }
   }
+}
+
+suspend fun Sheet.presentSubscribeSheet(): Boolean {
+  val result = present { SubscribeSheet() }
+  val subscribed = result is SubscribeSheetResult.Subscribed
+
+  if (subscribed) {
+    present {
+      SubscriptionCelebrationSheet(
+        title = "구독이 시작됐어요!",
+        message = "타이피의 모든 기능을 자유롭게 이용해보세요.",
+      )
+    }
+  }
+
+  return subscribed
 }

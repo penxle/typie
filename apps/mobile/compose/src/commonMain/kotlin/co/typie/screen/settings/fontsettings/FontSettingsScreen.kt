@@ -26,7 +26,6 @@ import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.graphql.FontSettingsScreen_Query
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.platform.FilePickerResult
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
@@ -69,7 +68,6 @@ fun FontSettingsScreen() {
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
 
-  val nav = Nav.current
   val dialog = LocalDialog.current
   val toast = LocalToast.current
   val sheet = LocalSheet.current
@@ -118,7 +116,7 @@ fun FontSettingsScreen() {
   suspend fun uploadFonts() {
     if (model.isUploading) return
 
-    val passed = SubscriptionService.gate(sheet, nav, GatedAction.UploadFont)
+    val passed = SubscriptionService.gate(sheet, GatedAction.UploadFont)
 
     if (passed) {
       sheet.present {

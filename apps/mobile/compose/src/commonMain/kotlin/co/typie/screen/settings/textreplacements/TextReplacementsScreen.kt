@@ -29,7 +29,6 @@ import co.typie.ext.clickable
 import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -64,7 +63,6 @@ fun TextReplacementsScreen() {
   val scrollState = rememberScrollState()
 
   val sheet = LocalSheet.current
-  val nav = Nav.current
 
   ProvideTopBar(
     center = { Text("텍스트 대치", style = AppTheme.typography.title) },
@@ -72,7 +70,7 @@ fun TextReplacementsScreen() {
       TopBarButton(
         icon = Lucide.Plus,
         onClick = {
-          if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+          if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
             sheet.present { TextReplacementEditSheet(model = model, editing = null) }
           }
         },
@@ -132,7 +130,6 @@ fun TextReplacementsScreen() {
 private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScope) {
   val toast = LocalToast.current
   val sheet = LocalSheet.current
-  val nav = Nav.current
 
   Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     SectionTitle(text = "기본 대치", modifier = Modifier.padding(top = 4.dp))
@@ -141,7 +138,7 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
       Column(modifier = Modifier.fillMaxWidth()) {
         CardRow(
           onClick = {
-            if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+            if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
               model
                 .updateSmartQuotesTextReplacementState(model.smartQuotes.all { it.isActive })
                 .withDefaultExceptionHandler(toast)
@@ -159,8 +156,7 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
             checked = model.smartQuotes.all { it.isActive },
             onCheckedChange = { next ->
               scope.launch {
-                if (!SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement))
-                  return@launch
+                if (!SubscriptionService.gate(sheet, GatedAction.TextReplacement)) return@launch
                 model.updateSmartQuotesTextReplacementState(next).withDefaultExceptionHandler(toast)
               }
             },
@@ -173,7 +169,7 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
           PresetRow(
             entry = it,
             onClick = {
-              if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+              if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
                 model
                   .updateTextReplacementState(it.textReplacementId, !it.isActive)
                   .withDefaultExceptionHandler(toast)
@@ -181,8 +177,7 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
             },
             onCheckedChange = { next ->
               scope.launch {
-                if (!SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement))
-                  return@launch
+                if (!SubscriptionService.gate(sheet, GatedAction.TextReplacement)) return@launch
                 model
                   .updateTextReplacementState(it.textReplacementId, next)
                   .withDefaultExceptionHandler(toast)
@@ -203,7 +198,6 @@ private fun CustomSection(
   scope: CoroutineScope,
 ) {
   val sheet = LocalSheet.current
-  val nav = Nav.current
   val toast = LocalToast.current
   val reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired
 
@@ -231,14 +225,14 @@ private fun CustomSection(
                 reorderState = reorderState,
                 reorderEnabled = reorderEnabled,
                 onEdit = {
-                  if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+                  if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
                     sheet.present {
                       TextReplacementEditSheet(model = model, editing = entry.onTextReplacement)
                     }
                   }
                 },
                 onToggle = {
-                  if (SubscriptionService.gate(sheet, nav, GatedAction.TextReplacement)) {
+                  if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
                     model
                       .updateTextReplacementState(entry.textReplacementId, entry.isActive)
                       .withDefaultExceptionHandler(toast)

@@ -1,0 +1,16 @@
+query SubscriptionPurchaseService_Query {
+  me {
+    id
+    uuid
+  }
+}
+
+mutation SubscriptionPurchaseService_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
+  subscribeOrChangePlanWithInAppPurchase(input: $input) {
+    id
+
+    plan {
+      id
+    }
+  }
+}

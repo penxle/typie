@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.subscription.SubscriptionCelebrationSheet
 import co.typie.domain.subscription.SubscriptionFeatureList
+import co.typie.domain.subscription.SubscriptionPurchaseService
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.basicPlanFeatures
 import co.typie.domain.subscription.fullPlanFeatures
@@ -76,14 +77,10 @@ fun EnrollPlanScreen() {
 
   val context = activityContext()
 
-  LaunchedEffect(model) {
-    model.events.collect { event ->
-      when (event) {
-        EnrollPlanEvent.PurchaseCompleted -> {
-          sheet.present {
-            SubscriptionCelebrationSheet(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
-          }
-        }
+  LaunchedEffect(Unit) {
+    SubscriptionPurchaseService.completions.collect {
+      sheet.present {
+        SubscriptionCelebrationSheet(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
       }
     }
   }
@@ -92,6 +89,8 @@ fun EnrollPlanScreen() {
     center = { Text("이용권 구매/변경", style = AppTheme.typography.title) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
+
+  LaunchedEffect(Unit) { SubscriptionPurchaseService.ensureProductsLoaded() }
 
   Screen(loadable = model.query) { contentPadding ->
     Column(
@@ -217,7 +216,7 @@ fun EnrollPlanScreen() {
               )
             }
 
-            if (model.productsUnavailable) {
+            if (SubscriptionPurchaseService.productsUnavailable) {
               Box(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
@@ -231,16 +230,20 @@ fun EnrollPlanScreen() {
             } else {
               SubscriptionPurchaseRow(
                 label = "1개월 구독하기",
-                product = model.monthlyProduct,
+                product = SubscriptionPurchaseService.monthlyProduct,
                 isActive = subscription?.planId == "PL0FL1MAP",
-                onClick = { loader.runWith { context(context) { model.purchase(it) } } },
+                onClick = {
+                  loader.runWith { context(context) { SubscriptionPurchaseService.purchase(it) } }
+                },
               )
 
               SubscriptionPurchaseRow(
                 label = "1년 구독하기",
-                product = model.yearlyProduct,
+                product = SubscriptionPurchaseService.yearlyProduct,
                 isActive = subscription?.planId == "PL0FL1YAP",
-                onClick = { loader.runWith { context(context) { model.purchase(it) } } },
+                onClick = {
+                  loader.runWith { context(context) { SubscriptionPurchaseService.purchase(it) } }
+                },
               )
             }
           }

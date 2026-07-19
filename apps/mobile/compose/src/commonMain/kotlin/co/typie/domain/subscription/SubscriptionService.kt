@@ -9,9 +9,7 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.SubscriptionService_Query
 import co.typie.graphql.watchQuery
-import co.typie.navigation.Navigator
 import co.typie.platform.appLifecycleService
-import co.typie.route.Route
 import co.typie.ui.component.sheet.Sheet
 import kotlin.time.Clock
 import kotlinx.coroutines.CoroutineScope
@@ -117,12 +115,9 @@ private fun SubscriptionService_Query.Subscription.toSubscription(): Subscriptio
   )
 }
 
-suspend fun SubscriptionService.gate(sheet: Sheet, nav: Navigator, action: GatedAction): Boolean {
+suspend fun SubscriptionService.gate(sheet: Sheet, action: GatedAction): Boolean {
   if (entitlement !is Entitlement.Expired) return true
 
-  val result = sheet.present { SubscribeSheet() }
-  if (result is SubscribeSheetResult.Subscribe) {
-    nav.navigate(Route.EnrollPlan)
-  }
+  sheet.presentSubscribeSheet()
   return false
 }

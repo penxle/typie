@@ -157,7 +157,7 @@ fun TrashScreen(entityId: String? = null) {
                 label = "복원",
                 icon = Lucide.Undo2,
                 onClick = {
-                  if (SubscriptionService.gate(sheet, nav, GatedAction.RecoverFromTrash)) {
+                  if (SubscriptionService.gate(sheet, GatedAction.RecoverFromTrash)) {
                     model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
                       toast.show(ToastType.Success, message)
                       model.refetch()
@@ -216,7 +216,7 @@ fun TrashScreen(entityId: String? = null) {
               label = "복원",
               icon = Lucide.Undo2,
               onClick = {
-                if (SubscriptionService.gate(sheet, nav, GatedAction.RecoverFromTrash)) {
+                if (SubscriptionService.gate(sheet, GatedAction.RecoverFromTrash)) {
                   model.recoverEntity(currentItem).withDefaultExceptionHandler(toast).onOk { message
                     ->
                     toast.show(ToastType.Success, message)

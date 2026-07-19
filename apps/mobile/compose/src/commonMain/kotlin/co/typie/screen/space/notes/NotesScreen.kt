@@ -170,7 +170,7 @@ fun NotesScreen() {
       return
     }
 
-    if (!SubscriptionService.gate(sheet, nav, GatedAction.CreateNote)) {
+    if (!SubscriptionService.gate(sheet, GatedAction.CreateNote)) {
       return
     }
 
@@ -229,7 +229,7 @@ fun NotesScreen() {
   }
 
   suspend fun handleToggleStatus(note: NoteCard_note, sceneStatus: NoteStatus) {
-    if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+    if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) {
       return
     }
 
@@ -313,7 +313,7 @@ fun NotesScreen() {
     }
 
     scope.launch {
-      if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) return@launch
+      if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) return@launch
 
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
@@ -339,7 +339,7 @@ fun NotesScreen() {
           },
           onUnlink = {
             scope.launch {
-              if (SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+              if (SubscriptionService.gate(sheet, GatedAction.EditNote)) {
                 handleRemoveEntity(note.id, linkedEntity.id)
               }
             }

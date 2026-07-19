@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
@@ -175,7 +174,7 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
             contentAlignment = Alignment.CenterEnd,
             modifier =
               Modifier.align(Alignment.CenterEnd)
-                .width(TopBarDefaults.SlotWidth)
+                .widthIn(min = TopBarDefaults.SlotWidth)
                 .height(TopBarDefaults.Height),
           ) {
             AnimatedContent(

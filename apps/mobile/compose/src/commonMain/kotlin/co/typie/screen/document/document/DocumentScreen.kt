@@ -236,7 +236,7 @@ fun DocumentScreen(entityId: String) {
       )
 
     val openIconPicker: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ChangeIcon)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.ChangeIcon)) {
         sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
           EntityIconPickerSheet(
             model = model,
@@ -263,7 +263,7 @@ fun DocumentScreen(entityId: String) {
       }
     }
     val moveDocument: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.MoveEntity)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
         currentTransferSource()?.let { transferSource ->
           sheet.present(stops = EntityMoveStops) {
             EntityMoveSheet(
@@ -276,7 +276,7 @@ fun DocumentScreen(entityId: String) {
       }
     }
     val toggleDocumentType: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.ConvertDocumentType)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.ConvertDocumentType)) {
         val nextType =
           if (document.type == DocumentType.TEMPLATE) DocumentType.NORMAL else DocumentType.TEMPLATE
         val isToTemplate = nextType == DocumentType.TEMPLATE
@@ -299,7 +299,7 @@ fun DocumentScreen(entityId: String) {
       }
     }
     val duplicateDocument: suspend () -> Unit = {
-      if (!loading && SubscriptionService.gate(sheet, nav, GatedAction.DuplicateDocument)) {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.DuplicateDocument)) {
         model.duplicateDocument(document.id).withDefaultExceptionHandler(toast).onOk {
           duplicatedEntityId ->
           replaceWithDuplicatedEditor(duplicatedEntityId)

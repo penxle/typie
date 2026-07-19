@@ -30,7 +30,6 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -61,10 +60,9 @@ fun PresetSettingsScreen() {
   val scrollState = rememberScrollState()
   val toast = LocalToast.current
   val sheet = LocalSheet.current
-  val nav = Nav.current
 
   suspend fun save(preset: Preset) {
-    if (!SubscriptionService.gate(sheet, nav, GatedAction.PresetSettings)) return
+    if (!SubscriptionService.gate(sheet, GatedAction.PresetSettings)) return
     model.updatePreset(preset).withDefaultExceptionHandler(toast)
   }
 
@@ -82,7 +80,7 @@ fun PresetSettingsScreen() {
       PresetMenu(
         onReset = {
           scope.launch {
-            if (SubscriptionService.gate(sheet, nav, GatedAction.PresetSettings)) {
+            if (SubscriptionService.gate(sheet, GatedAction.PresetSettings)) {
               model.resetPreset().withDefaultExceptionHandler(toast)
             }
           }

@@ -8,6 +8,7 @@ import co.typie.domain.auth.AuthService
 import co.typie.domain.auth.AuthState
 import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
+import co.typie.domain.subscription.SubscriptionPurchaseService
 import co.typie.graphql.Apollo
 import co.typie.graphql.BootstrapService_Query
 import co.typie.migration.LegacyMigrationCoordinator
@@ -53,6 +54,8 @@ object BootstrapService {
         }
       }
     }
+
+    SubscriptionPurchaseService.launch()
 
     try {
       PlatformModule.purchaseService.launch()

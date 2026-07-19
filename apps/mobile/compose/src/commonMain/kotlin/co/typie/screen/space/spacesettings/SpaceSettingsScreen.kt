@@ -145,7 +145,7 @@ fun SpaceSettingsScreen() {
           loading = model.isSubmitting,
           loadingText = "저장 중...",
           onClick = {
-            if (!SubscriptionService.gate(sheet, nav, GatedAction.UpdateSpace)) return@Button
+            if (!SubscriptionService.gate(sheet, GatedAction.UpdateSpace)) return@Button
             model.submit().withDefaultExceptionHandler(toast).onOk {
               toast.success("스페이스 설정이 변경되었어요.")
               nav.pop()
@@ -169,7 +169,7 @@ fun SpaceSettingsScreen() {
         previewUrl = model.logoPreviewUrl,
         onClick = {
           scope.launch {
-            if (SubscriptionService.gate(sheet, nav, GatedAction.UpdateSpace)) {
+            if (SubscriptionService.gate(sheet, GatedAction.UpdateSpace)) {
               filePicker("image/*")
             }
           }
@@ -193,7 +193,7 @@ fun SpaceSettingsScreen() {
               Modifier.fillMaxWidth().thenIf(
                 SubscriptionService.entitlement is Entitlement.Expired
               ) {
-                clickable { SubscriptionService.gate(sheet, nav, GatedAction.ChangeSpaceAddress) }
+                clickable { SubscriptionService.gate(sheet, GatedAction.ChangeSpaceAddress) }
               }
           ) {
             TextField(

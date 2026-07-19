@@ -15,13 +15,13 @@ internal class DesktopPurchaseService : PurchaseService {
         productId = "",
         planId = "pl0fl1map",
         name = "타이피 FULL ACCESS 월간",
-        price = "6,900원",
+        price = "2,900원",
       ),
       PurchaseProduct(
         productId = "",
         planId = "pl0fl1yap",
         name = "타이피 FULL ACCESS 연간",
-        price = "69,000원",
+        price = "29,000원",
       ),
     )
   }

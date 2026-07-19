@@ -41,6 +41,8 @@ object Preference {
 
   var legacyMigrationHandled by prefs("legacy_migration_handled", false)
 
+  var planChangeNoticeShown by prefs("plan_change_notice_shown", false)
+
   var preflightCache by prefs<Preflight?>("preflight_cache", null)
 
   private var _deviceId: String? by prefs<String?>("device_id", null)

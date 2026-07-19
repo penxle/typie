@@ -22,7 +22,6 @@ import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.ext.verticalScroll
-import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
@@ -48,11 +47,10 @@ fun AiSettingsScreen() {
   val dialog = LocalDialog.current
   val toast = LocalToast.current
   val sheet = LocalSheet.current
-  val nav = Nav.current
 
   fun update(enabled: Boolean) {
     scope.launch {
-      if (!SubscriptionService.gate(sheet, nav, GatedAction.AiSettings)) return@launch
+      if (!SubscriptionService.gate(sheet, GatedAction.AiSettings)) return@launch
 
       if (enabled) {
         val result =

@@ -87,8 +87,7 @@ fun Button(
     InteractionScope {
       Box(
         modifier =
-          modifier
-            .fillMaxWidth()
+          Modifier.fillMaxWidth()
             .height(height)
             .graphicsLayer { this.alpha = alpha }
             .background(colors.background, AppShapes.rounded(AppShapes.lg))

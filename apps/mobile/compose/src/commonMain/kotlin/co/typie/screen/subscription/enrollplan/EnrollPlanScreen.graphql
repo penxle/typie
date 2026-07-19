@@ -1,17 +1,7 @@
 query EnrollPlanScreen_Query {
   me {
     id
-    uuid
     canStartTrial
-
-    subscription {
-      id
-
-      plan {
-        id
-        availability
-      }
-    }
   }
 }
 
@@ -25,16 +15,6 @@ mutation EnrollPlanScreen_SubscribePlanWithTrial_Mutation {
       id
       name
       availability
-    }
-  }
-}
-
-mutation EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation($input: SubscribeOrChangePlanWithInAppPurchaseInput!) {
-  subscribeOrChangePlanWithInAppPurchase(input: $input) {
-    id
-
-    plan {
-      id
     }
   }
 }

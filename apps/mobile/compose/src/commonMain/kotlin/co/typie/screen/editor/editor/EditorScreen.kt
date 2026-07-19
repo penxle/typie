@@ -358,10 +358,10 @@ fun EditorScreen(entityId: String) {
     requestEditorFocusIfSelectionActive()
   }
   suspend fun ensureSpellcheckSubscription(): Boolean {
-    return SubscriptionService.gate(sheet = sheet, nav = nav, action = GatedAction.Spellcheck)
+    return SubscriptionService.gate(sheet = sheet, action = GatedAction.Spellcheck)
   }
   suspend fun ensureAiFeedbackSubscription(): Boolean {
-    return SubscriptionService.gate(sheet = sheet, nav = nav, action = GatedAction.AiFeedback)
+    return SubscriptionService.gate(sheet = sheet, action = GatedAction.AiFeedback)
   }
   val aiOptIn =
     remember(model.query.data.me.preferences) {

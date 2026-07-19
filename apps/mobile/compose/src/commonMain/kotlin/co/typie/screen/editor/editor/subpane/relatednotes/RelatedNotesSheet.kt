@@ -237,7 +237,7 @@ private fun RelatedNotesSheetContent(
   }
 
   suspend fun handleCreateNote() {
-    if (!SubscriptionService.gate(sheet, nav, GatedAction.CreateNote)) {
+    if (!SubscriptionService.gate(sheet, GatedAction.CreateNote)) {
       return
     }
 
@@ -296,7 +296,7 @@ private fun RelatedNotesSheetContent(
   }
 
   suspend fun handleToggleStatus(note: NoteCard_note, sceneStatus: NoteStatus) {
-    if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+    if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) {
       return
     }
 
@@ -392,7 +392,7 @@ private fun RelatedNotesSheetContent(
 
   fun presentEntityPicker(note: NoteCard_note, sceneStatus: NoteStatus) {
     scope.launch {
-      if (!SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) return@launch
+      if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) return@launch
 
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
@@ -424,7 +424,7 @@ private fun RelatedNotesSheetContent(
           },
           onUnlink = {
             scope.launch {
-              if (SubscriptionService.gate(sheet, nav, GatedAction.EditNote)) {
+              if (SubscriptionService.gate(sheet, GatedAction.EditNote)) {
                 handleRemoveEntity(note, linkedEntity.id, sceneStatus)
               }
             }
