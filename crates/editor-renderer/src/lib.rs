@@ -9,6 +9,7 @@ pub mod icon_data;
 pub mod icons;
 pub mod renderer;
 pub mod sink;
+pub mod translate;
 pub mod types;
 pub mod vector;
 

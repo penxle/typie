@@ -1,13 +1,30 @@
-<script lang="ts">
+<script lang="ts" module>
   import { css } from '@typie/styled-system/css';
-  import { untrack } from 'svelte';
-  import { CROP_MARKER_SIZE, PAGE_RENDER_OVERSCAN_MARGIN } from '../constants';
+  import { glContextPool, setBackendChangeHandler } from '../gl-context-pool';
+  import type { LeaseToken, SurfaceBackend } from '../gl-context-pool';
+
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const poolRoutes = new Set<(editorKey: object, page: number, backend: SurfaceBackend, acquireHint?: LeaseToken) => void>();
+  setBackendChangeHandler((editorKey, page, backend, acquireHint) => {
+    for (const route of poolRoutes) route(editorKey, page, backend, acquireHint);
+  });
+
+  // 기본값 = GL. 'cpu'만 강제 CPU(killswitch).
+  const killSwitch = typeof localStorage !== 'undefined' && localStorage.getItem('typie:page-surface') === 'cpu';
+
+  const canvasClass = css({ position: 'absolute', top: '0', left: '0', width: 'full', imageRendering: 'pixelated' });
+</script>
+
+<script lang="ts">
+  import { CROP_MARKER_SIZE } from '../constants';
   import { getEditorContext } from '../editor.svelte';
+  import { createPageSurfaceManager } from '../page-surface-manager';
   import { probeAttach, probeDetach, probeEvent } from '../surface-probe';
   import { shouldKeepEmbedsWhileHidden, visibleExternalElements } from './external-element-visibility';
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
   import TableOverlay from './TableOverlay.svelte';
+  import type { ManagerEffects, PoolPort } from '../page-surface-manager';
 
   type Props = {
     page: number;
@@ -86,98 +103,256 @@
       };
     }}
   >
-    <div class={css({ position: 'absolute', inset: '0', overflow: 'hidden' })}>
-      <canvas
-        style:height={`${cssBackingHeight}px`}
-        class={css({ position: 'absolute', top: '0', left: '0', width: 'full', imageRendering: 'pixelated' })}
-        {@attach (canvas) => {
-          if (!editor) return;
+    <div
+      class={css({ position: 'absolute', inset: '0', overflow: 'hidden' })}
+      {@attach (wrapper) => {
+        if (!editor) return;
 
-          let isVisible = false;
-          let dirty = false;
-          let needsResize = false;
+        let manager: ReturnType<typeof createPageSurfaceManager<HTMLCanvasElement>>;
+        let isVisible = false;
+        let dirty = false;
+        let needsResize = false;
 
-          untrack(() => {
-            editor.attachSurface(page, canvas, width, backingHeight);
+        const scheduleDeadCheck = () => {
+          requestAnimationFrame(() => {
+            if (editor.surfaceBackend(page) === 'gl-dead') manager.remountFromLoss();
           });
-          probeAttach(editor, page, canvas);
+        };
 
-          const paint = () => {
-            if (isVisible) {
-              editor.requestSurfaceRender(page);
-              dirty = false;
-            } else {
-              dirty = true;
+        const paint = () => {
+          if (manager.isAttached()) {
+            editor.requestSurfaceRender(page);
+            dirty = false;
+            scheduleDeadCheck();
+          } else {
+            dirty = true;
+          }
+        };
+
+        // Flushes dirty/needsResize left over from edits while unattached, once (re)attached.
+        const flushIfAttached = () => {
+          if (!manager.isAttached()) return;
+          if (needsResize) {
+            editor.requestSurfaceResize(page, width, backingHeight);
+            needsResize = false;
+            dirty = false;
+          }
+          if (dirty) {
+            editor.requestSurfaceRender(page);
+            dirty = false;
+          }
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-empty-function -- shared no-op for the killswitch's cpu-only stub pool
+        const noop = () => {};
+        const pool: PoolPort = killSwitch
+          ? {
+              updateDemand: () => 'cpu',
+              acquireLease: () => ({ backend: 'cpu' }),
+              ackAttached: noop,
+              cancelReservation: noop,
+              beginRelease: noop,
+              ackReleased: noop,
+              notePresent: noop,
+              noteGlFailure: noop,
+              noteBudgetFallback: noop,
+              backendOf: () => 'cpu',
+              leave: noop,
+              forget: noop,
             }
-          };
+          : {
+              updateDemand: (zone) => glContextPool.updatePageDemand(editor, page, zone),
+              acquireLease: (requested) => glContextPool.acquireCanvasLease(editor, page, requested),
+              ackAttached: (token, actual) => glContextPool.ackAttached(token, actual),
+              cancelReservation: (token, reason) => glContextPool.cancelReservation(token, reason),
+              beginRelease: (token) => glContextPool.beginRelease(token),
+              ackReleased: (token) => glContextPool.ackReleased(token),
+              notePresent: (token) => glContextPool.notePresent(editor, page, token),
+              noteGlFailure: (incident) => glContextPool.noteGlFailure(editor, page, incident),
+              noteBudgetFallback: () => glContextPool.noteBudgetFallback(editor, page),
+              backendOf: () => glContextPool.backendOf(editor, page),
+              leave: () => glContextPool.leave(editor, page),
+              forget: () => glContextPool.forget(editor, page),
+            };
 
-          const off = editor.on('render_invalidated', paint);
+        const effects: ManagerEffects<HTMLCanvasElement> = {
+          createCanvas: () => {
+            const canvas = document.createElement('canvas');
+            canvas.className = canvasClass;
+            canvas.dataset.pageCanvas = String(page);
+            return canvas;
+          },
+          styleCanvas: (canvas) => {
+            canvas.style.height = `${cssBackingHeight}px`;
+          },
+          attach: (canvas, backend) => {
+            const actual = editor.attachSurfaceWithBackend(page, canvas, width, backingHeight, backend);
+            probeAttach(editor, page, canvas);
+            const polled = editor.surfaceBackend(page);
+            return polled === 'gl-dead' || polled === 'cpu-oversized' ? polled : actual;
+          },
+          detach: () => {
+            probeDetach(editor, page);
+            editor.detachSurface(page);
+          },
+          requestRender: () => editor.requestSurfaceRender(page),
+          onPresented: (listener) => editor.onSurfacePresented(page, listener),
+          addContextListeners: (canvas, isCurrent) => {
+            const onWebglContextLost = (event: Event) => {
+              event.preventDefault();
+              probeEvent(`webglcontextlost page=${page}`);
+              if (isCurrent()) manager.onContextLost();
+            };
+            const onWebglContextRestored = () => {
+              probeEvent(`webglcontextrestored page=${page}`);
+              if (isCurrent()) manager.onContextRestored();
+            };
+            const onContextRestored2d = () => {
+              probeEvent(`contextrestored page=${page}`);
+              if (isCurrent()) {
+                editor.invalidateSurface(page);
+                paint();
+              }
+            };
+            canvas.addEventListener('webglcontextlost', onWebglContextLost);
+            canvas.addEventListener('webglcontextrestored', onWebglContextRestored);
+            canvas.addEventListener('contextrestored', onContextRestored2d);
+            return () => {
+              canvas.removeEventListener('webglcontextlost', onWebglContextLost);
+              canvas.removeEventListener('webglcontextrestored', onWebglContextRestored);
+              canvas.removeEventListener('contextrestored', onContextRestored2d);
+            };
+          },
+          disposeGlContext: (canvas) => {
+            canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
+          },
+          releaseCpuBacking: (canvas) => {
+            canvas.width = 0;
+            canvas.height = 0;
+          },
+          promote: (next) => {
+            wrapper.append(next);
+          },
+          removeNode: (canvas) => {
+            canvas.remove();
+          },
+          schedule: (fn, ms) => {
+            const id = setTimeout(fn, ms);
+            return () => clearTimeout(id);
+          },
+          defer: (fn) => queueMicrotask(fn),
+          pool,
+        };
 
-          const onContextRestored = () => {
-            probeEvent(`contextrestored page=${page}`);
-            editor.invalidateSurface(page);
-            paint();
-          };
-          canvas.addEventListener('contextrestored', onContextRestored);
+        manager = createPageSurfaceManager(effects);
 
-          const onContextLost = () => {
-            probeEvent(`contextlost page=${page}`);
-          };
-          canvas.addEventListener('contextlost', onContextLost);
+        const route = (editorKey: object, routedPage: number, backend: SurfaceBackend, acquireHint?: LeaseToken): void => {
+          if (editorKey !== editor || routedPage !== page) return;
+          manager.onPoolBackend(backend, acquireHint);
+          flushIfAttached();
+        };
+        poolRoutes.add(route);
 
-          $effect.pre(() => {
-            void editor.surfaceScaleFactor;
-            void width;
-            void backingHeight;
-            if (isVisible) {
-              editor.requestSurfaceResize(page, width, backingHeight);
-              dirty = false;
-              needsResize = false;
-            } else {
-              needsResize = true;
-              dirty = true;
-            }
-          });
+        const offRender = editor.on('render_invalidated', paint);
 
-          $effect(() => {
-            const root = editor.scrollRootEl;
-            if (root === undefined) return;
+        $effect(() => {
+          const root = editor.scrollRootEl;
+          if (root === undefined) return;
 
-            const observer = new IntersectionObserver(
-              (entries) => {
-                isVisible = entries.at(-1)?.isIntersecting ?? isVisible;
+          let disposed = false;
+          let observers: IntersectionObserver[] = [];
+          let seeded = 0;
+          const state = { inAcquire: false, inRelease: false, isVisible: false };
+
+          let buildEpoch = 0;
+          const build = () => {
+            const epoch = ++buildEpoch;
+            for (const observer of observers) observer.disconnect();
+            observers = [];
+            seeded = 0;
+            const h = root === null ? window.innerHeight : root.clientHeight;
+            const mk = (margin: string, apply: (hit: boolean) => void, seed: boolean) => {
+              let seededSelf = false;
+              const observer = new IntersectionObserver(
+                (entries) => {
+                  if (epoch !== buildEpoch) return;
+                  apply(entries.at(-1)?.isIntersecting ?? false);
+                  if (seed && !seededSelf) {
+                    seededSelf = true;
+                    seeded += 1;
+                  }
+                  if (seeded >= 3 && !disposed) {
+                    manager.reconcile({ ...state });
+                    flushIfAttached();
+                  }
+                },
+                { root, rootMargin: margin, threshold: 0 },
+              );
+              observer.observe(wrapper);
+              observers.push(observer);
+            };
+            mk(
+              '0px',
+              (hit) => {
+                isVisible = hit;
                 if (overlaysVisible && !isVisible) {
                   keepEmbedsWhileHidden = shouldKeepEmbedsWhileHidden(externalElements);
                 }
                 overlaysVisible = isVisible;
-                if (!isVisible) return;
-                if (needsResize) {
-                  editor.requestSurfaceResize(page, width, backingHeight);
-                  needsResize = false;
-                  dirty = false;
-                }
-                if (dirty) {
-                  editor.requestSurfaceRender(page);
-                  dirty = false;
-                }
+                state.isVisible = hit;
               },
-              { root, rootMargin: PAGE_RENDER_OVERSCAN_MARGIN, threshold: 0 },
+              true,
             );
-            observer.observe(canvas);
+            mk(`${Math.round(h)}px 0px`, (hit) => (state.inAcquire = hit), true);
+            mk(`${Math.round(1.5 * h)}px 0px`, (hit) => (state.inRelease = hit), true);
+          };
 
-            return () => observer.disconnect();
-          });
+          build();
+          let resize: ResizeObserver | null = null;
+          if (root !== null) {
+            resize = new ResizeObserver(() => build());
+            resize.observe(root);
+          }
+          const rebuild = () => build();
+          if (root === null) {
+            window.addEventListener('resize', rebuild);
+            window.visualViewport?.addEventListener('resize', rebuild);
+          }
 
           return () => {
-            canvas.removeEventListener('contextrestored', onContextRestored);
-            canvas.removeEventListener('contextlost', onContextLost);
-            probeDetach(editor, page);
-            off();
-            untrack(() => editor.detachSurface(page));
+            disposed = true;
+            resize?.disconnect();
+            if (root === null) {
+              window.removeEventListener('resize', rebuild);
+              window.visualViewport?.removeEventListener('resize', rebuild);
+            }
+            for (const observer of observers) observer.disconnect();
           };
-        }}
-      ></canvas>
-    </div>
+        });
+
+        $effect.pre(() => {
+          void editor.surfaceScaleFactor;
+          void width;
+          void backingHeight;
+          manager.restyle();
+          if (manager.isAttached()) {
+            editor.requestSurfaceResize(page, width, backingHeight);
+            dirty = false;
+            needsResize = false;
+            scheduleDeadCheck();
+          } else {
+            needsResize = true;
+            dirty = true;
+          }
+        });
+
+        return () => {
+          poolRoutes.delete(route);
+          offRender();
+          manager.destroy();
+        };
+      }}
+    ></div>
 
     {#each externalElements as element (element.node)}
       <ExternalElement {element} />

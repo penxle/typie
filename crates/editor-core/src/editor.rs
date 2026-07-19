@@ -5953,6 +5953,50 @@ mod tests {
         editor_with_real_font(state)
     }
 
+    const CONTINUOUS_PARA_TEXT: &str = "the quick brown fox jumps over the lazy dog";
+
+    fn continuous_doc_editor(n_paras: usize) -> Editor {
+        let mut paras = Vec::with_capacity(n_paras);
+        for _ in 0..n_paras {
+            let text = PlainNodeEntry {
+                node: PlainNode::Text(PlainTextNode {
+                    text: CONTINUOUS_PARA_TEXT.into(),
+                }),
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children: vec![],
+            };
+            paras.push(PlainNodeEntry {
+                node: PlainNode::Paragraph(PlainParagraphNode {}),
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children: vec![text],
+            });
+        }
+        let plain = PlainDoc {
+            root: PlainNodeEntry {
+                node: PlainNode::Root(PlainRootNode {
+                    layout_mode: LayoutMode::Continuous { max_width: 600 },
+                }),
+                modifiers: root_font_modifiers(),
+                carry: Vec::new(),
+                children: paras,
+            },
+        };
+        let (mut state, handles) = editor_state::test_utils::build_state_from_plain(plain);
+        // Cursor at the END of the LAST paragraph: edits append rather than prepend,
+        // so growth adds new rows below existing content instead of reflowing
+        // (and thus diff-damaging) every paragraph above it. A prepend-at-para-0
+        // edit cascades a position shift through the whole page, which trips
+        // diff's near-full-page collapse heuristic and makes the revealed-strip
+        // union a no-op -- defeating the purpose of this fixture.
+        state.selection = Some(Selection::collapsed(Position::new(
+            handles[&vec![n_paras - 1, 0]],
+            CONTINUOUS_PARA_TEXT.chars().count(),
+        )));
+        editor_with_real_font(state)
+    }
+
     #[test]
     fn localized_edit_damage_is_small_and_correct() {
         let mut editor = big_doc_editor(80);
@@ -5994,6 +6038,325 @@ mod tests {
             full.area()
         );
         assert!(changes_within_damage(&old_full, &fresh, w, &damage));
+    }
+
+    #[test]
+    fn raster_rect_matches_full_subregion() {
+        let mut editor = big_doc_editor(12);
+        let sf = 2.0f32;
+        let size = editor.view().pages()[0].size;
+        let (w, h) = (
+            (size.width * sf).round() as u16,
+            (size.height * sf).round() as u16,
+        );
+        let full = IRect {
+            x0: 0,
+            y0: 0,
+            x1: w as i32,
+            y1: h as i32,
+        };
+        let mut full_sink = CpuSink::new(w, h);
+        let (dl, _b) = editor.build_display_list(0, sf).unwrap();
+        editor_renderer::diff::render_incremental(None, &dl, &mut full_sink, full);
+
+        let rects = [
+            full,
+            IRect {
+                x0: 37,
+                y0: 53,
+                x1: 191,
+                y1: 167,
+            },
+            IRect {
+                x0: 0,
+                y0: 0,
+                x1: 40,
+                y1: full.y1,
+            },
+            IRect {
+                x0: full.x1 - 33,
+                y0: full.y1 - 21,
+                x1: full.x1,
+                y1: full.y1,
+            },
+            IRect {
+                x0: 101,
+                y0: 101,
+                x1: 102,
+                y1: 102,
+            },
+        ];
+        for r in rects {
+            let (rw, rh) = (r.width() as usize, r.height() as usize);
+            let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
+            editor_renderer::diff::raster_rect(&dl, r, &mut scratch);
+            let mut expect = vec![0u8; rw * rh * 4];
+            full_sink.read_back_rect(&mut expect, rw * 4, r);
+            let mut got = vec![0u8; rw * rh * 4];
+            scratch.read_back_rect(
+                &mut got,
+                rw * 4,
+                IRect {
+                    x0: 0,
+                    y0: 0,
+                    x1: r.width(),
+                    y1: r.height(),
+                },
+            );
+            assert_eq!(got, expect, "subregion mismatch for {r:?}");
+        }
+    }
+
+    #[test]
+    fn raster_rect_matches_full_subregion_across_fixtures() {
+        use editor_renderer::display_list::PrimPayload;
+        let mut path_prim_count = 0usize;
+        for pick in 0..=2 {
+            let mut editor = build_fixture_editor(pick);
+            let sf = 2.0f32;
+            let size = editor.view().pages()[0].size;
+            let (w, h) = (
+                (size.width * sf).round() as u16,
+                (size.height * sf).round() as u16,
+            );
+            let full = IRect {
+                x0: 0,
+                y0: 0,
+                x1: w as i32,
+                y1: h as i32,
+            };
+            let mut full_sink = CpuSink::new(w, h);
+            let (dl, _b) = editor.build_display_list(0, sf).unwrap();
+            editor_renderer::diff::render_incremental(None, &dl, &mut full_sink, full);
+            path_prim_count += dl
+                .primitives
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.payload,
+                        PrimPayload::FillPath { .. } | PrimPayload::StrokePath { .. }
+                    )
+                })
+                .count();
+            for r in [
+                IRect {
+                    x0: 3,
+                    y0: 7,
+                    x1: (w as i32).min(180),
+                    y1: (h as i32).min(140),
+                },
+                IRect {
+                    x0: 0,
+                    y0: (h as i32) / 2,
+                    x1: w as i32,
+                    y1: h as i32,
+                },
+            ] {
+                let (rw, rh) = (r.width() as usize, r.height() as usize);
+                let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
+                editor_renderer::diff::raster_rect(&dl, r, &mut scratch);
+                let mut expect = vec![0u8; rw * rh * 4];
+                full_sink.read_back_rect(&mut expect, rw * 4, r);
+                let mut got = vec![0u8; rw * rh * 4];
+                scratch.read_back_rect(
+                    &mut got,
+                    rw * 4,
+                    IRect {
+                        x0: 0,
+                        y0: 0,
+                        x1: r.width(),
+                        y1: r.height(),
+                    },
+                );
+                assert_eq!(got, expect, "fixture {pick} subregion mismatch for {r:?}");
+            }
+        }
+        assert!(
+            path_prim_count >= 1,
+            "fixtures must exercise fill_path/stroke_path primitives (bullet marker / fold icon), else this oracle vacuously passes"
+        );
+    }
+
+    fn accumulate_damage(dl: &DisplayList, damage: &[IRect], acc: &mut [u8], w: u16) {
+        for &r in damage {
+            let (rw, rh) = (r.width() as usize, r.height() as usize);
+            if rw == 0 || rh == 0 {
+                continue;
+            }
+            let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
+            editor_renderer::diff::raster_rect(dl, r, &mut scratch);
+            let mut buf = vec![0u8; rw * rh * 4];
+            scratch.read_back_rect(
+                &mut buf,
+                rw * 4,
+                IRect {
+                    x0: 0,
+                    y0: 0,
+                    x1: r.width(),
+                    y1: r.height(),
+                },
+            );
+            for row in 0..rh {
+                let dst = ((r.y0 as usize + row) * w as usize + r.x0 as usize) * 4;
+                acc[dst..dst + rw * 4].copy_from_slice(&buf[row * rw * 4..(row + 1) * rw * 4]);
+            }
+        }
+    }
+
+    #[test]
+    fn damage_accumulation_equals_full_render() {
+        let mut editor = big_doc_editor(40);
+        let sf = 1.0f32;
+        let size = editor.view().pages()[0].size;
+        let (w, h) = (
+            (size.width * sf).round() as u16,
+            (size.height * sf).round() as u16,
+        );
+        let full = IRect {
+            x0: 0,
+            y0: 0,
+            x1: w as i32,
+            y1: h as i32,
+        };
+        let mut acc = vec![0u8; w as usize * h as usize * 4];
+        let (dl0, _b) = editor.build_display_list(0, sf).unwrap();
+        accumulate_damage(&dl0, &[full], &mut acc, w);
+        assert_eq!(acc, full_page_buf(&mut editor, 0, sf, w, h));
+        let mut prev = dl0;
+
+        for text in ["x", "안녕하세요 ", "y"] {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: text.into() }],
+            });
+            editor.tick().unwrap();
+            let (dl, _b) = editor.build_display_list(0, sf).unwrap();
+            let damage = editor_renderer::diff::diff(&prev, &dl, full);
+            accumulate_damage(&dl, &damage, &mut acc, w);
+            assert_eq!(
+                acc,
+                full_page_buf(&mut editor, 0, sf, w, h),
+                "accumulation must equal full after edit"
+            );
+            prev = dl;
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum Edit {
+        Grow,
+        Shrink,
+    }
+
+    #[test]
+    fn continuous_strip_accumulation_equals_full_render() {
+        // big_doc_editor와 동일 구성에서 layout_mode만 Continuous로 바꾼 픽스처.
+        let mut editor = continuous_doc_editor(6);
+        let sf = 1.0f32;
+        let last = editor.view().pages().len() - 1;
+        let backing_h = editor.view().page_backing_sizes()[last].height;
+        let size = editor.view().pages()[last].size;
+        let w = (size.width * sf).round() as u16;
+        let bh = (backing_h * sf).round() as u16;
+        let content_h0 = (size.height * sf).round() as i32;
+        let full0 = IRect {
+            x0: 0,
+            y0: 0,
+            x1: w as i32,
+            y1: content_h0,
+        };
+        let mut acc = vec![0u8; w as usize * bh as usize * 4];
+        let (dl0, _b) = editor.build_display_list(last as u32, sf).unwrap();
+        accumulate_damage(&dl0, &[full0], &mut acc, w);
+        let mut prev = dl0;
+        let mut prev_content_h = content_h0;
+
+        // grow -> shrink -> re-grow: 각 단계에서 diff + revealed strip을 누적하고 콘텐츠 영역만 비교.
+        // 재-grow 텍스트는 첫 grow와 다른 글리프로 골라, shrink 잔상(첫 grow 픽셀)과 재-grow
+        // 정답이 달라지게 한다 — 그래야 아래의 diff-only 대조군이 "strip 없으면 stale"을 실제로
+        // 판별한다. 각 단계 높이 변화 assert로 "줄바꿈이 안 생겨 generic diff만으로 통과" 퇴화도 막는다.
+        let texts = [
+            "grow grow grow grow grow grow grow grow grow grow ",
+            "",
+            "WIDER TEXT WIDER TEXT WIDER TEXT WIDER TEXT XX ",
+        ];
+        for (edit_index, (edit, text)) in [
+            (Edit::Grow, texts[0]),
+            (Edit::Shrink, texts[0]),
+            (Edit::Grow, texts[2]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            match edit {
+                Edit::Grow => editor.apply(Message::TextInput {
+                    ops: vec![FlatImeOp::ReplaceSelection { text: text.into() }],
+                }),
+                Edit::Shrink => editor.apply(Message::TextInput {
+                    ops: vec![FlatImeOp::DeleteSurrounding {
+                        before: text.chars().count(),
+                        after: 0,
+                    }],
+                }),
+            };
+            editor.tick().unwrap();
+            assert_eq!(
+                editor.view().pages().len() - 1,
+                last,
+                "fixture edit must stay within the last tile"
+            );
+            let size = editor.view().pages()[last].size;
+            let content_h = (size.height * sf).round() as i32;
+            match edit {
+                Edit::Grow => assert!(
+                    content_h > prev_content_h,
+                    "grow must increase content height ({prev_content_h} -> {content_h}); lengthen the text"
+                ),
+                Edit::Shrink => assert!(
+                    content_h < prev_content_h,
+                    "shrink must decrease content height ({prev_content_h} -> {content_h})"
+                ),
+            }
+            let bounds = IRect {
+                x0: 0,
+                y0: 0,
+                x1: w as i32,
+                y1: content_h,
+            };
+            let (dl, _b) = editor.build_display_list(last as u32, sf).unwrap();
+            let mut damage = editor_renderer::diff::diff(&prev, &dl, bounds);
+            let strip = IRect {
+                x0: 0,
+                y0: prev_content_h.max(0),
+                x1: bounds.x1,
+                y1: bounds.y1,
+            };
+            // 대조군: 재-grow(다른 텍스트)에서 strip 없이 diff만 누적하면 반드시 stale이어야
+            // 한다 — strip 로직을 지우면 이 oracle이 실패함을 보장하는 판별 장치.
+            if matches!(edit, Edit::Grow) && prev_content_h < content_h && !strip.is_empty() {
+                let mut diff_only = acc.clone();
+                accumulate_damage(&dl, &damage, &mut diff_only, w);
+                let fresh = full_page_buf(&mut editor, last, sf, w, content_h as u16);
+                if edit_index == 2 {
+                    assert_ne!(
+                        &diff_only[..w as usize * content_h as usize * 4],
+                        &fresh[..],
+                        "control: diff-only accumulation must be stale without the revealed strip"
+                    );
+                }
+            }
+            if !strip.is_empty() {
+                damage.push(strip);
+            }
+            accumulate_damage(&dl, &damage, &mut acc, w);
+            let fresh = full_page_buf(&mut editor, last, sf, w, content_h as u16);
+            assert_eq!(
+                &acc[..w as usize * content_h as usize * 4],
+                &fresh[..],
+                "content rows must equal full render after {edit:?}"
+            );
+            prev = dl;
+            prev_content_h = content_h;
+        }
     }
 
     struct SeedPage {

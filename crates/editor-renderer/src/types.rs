@@ -37,6 +37,15 @@ impl Transform {
             m: [a * s, b * s, c * s, d * s, e, f],
         }
     }
+
+    /// Output(device)-space offset: shifts where the transform lands without
+    /// reinterpreting the offset in the transform's local basis (unlike `translate`).
+    pub fn translate_device(self, tx: f32, ty: f32) -> Self {
+        let [a, b, c, d, e, f] = self.m;
+        Self {
+            m: [a, b, c, d, e + tx, f + ty],
+        }
+    }
 }
 
 impl From<Transform> for kurbo::Affine {

@@ -6,7 +6,7 @@ cfg_if! {
         mod cpu_surface;
         pub use cpu_surface::{PlatformHandle, SurfaceHandle};
     } else if #[cfg(feature = "wasm-browser")] {
-        pub(crate) mod gl;
+        pub(crate) mod gl_surface;
         mod wasm_browser;
         pub use wasm_browser::{PlatformHandle, SurfaceHandle};
     } else {
@@ -21,3 +21,6 @@ cfg_if! {
     not(any(target_os = "android", target_os = "ios", feature = "uniffi"))
 ))]
 mod render_buffer;
+
+#[cfg(all(test, not(feature = "wasm-browser")))]
+pub(crate) mod gl_surface;

@@ -20,7 +20,6 @@ pub mod ingest;
 #[cfg(not(feature = "wasm-server"))]
 mod platform;
 mod prelude;
-pub mod present;
 mod root;
 #[cfg(any(test, feature = "wasm-server"))]
 mod server;

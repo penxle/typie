@@ -255,14 +255,6 @@ impl EditorHost {
     }
 }
 
-#[cfg(feature = "wasm-browser")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-impl EditorHost {
-    pub fn set_gl_canary(&self, callback: js_sys::Function) {
-        crate::platform::gl::set_canary(callback);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

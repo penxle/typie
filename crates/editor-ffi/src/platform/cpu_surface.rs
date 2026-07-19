@@ -52,6 +52,21 @@ impl SurfaceHandle {
         self.backend.cpu_sink()
     }
 
+    pub fn apply_damage(
+        &mut self,
+        dl: &editor_renderer::display_list::DisplayList,
+        damage: &[IRect],
+    ) -> bool {
+        let sink = self.cpu_sink();
+        for &r in damage {
+            sink.clear_rect(r);
+            sink.set_clip(Some(r));
+            editor_renderer::diff::replay(dl, r, sink);
+        }
+        sink.set_clip(None);
+        self.present_damage(damage)
+    }
+
     pub fn present_damage(&mut self, damage: &[IRect]) -> bool {
         if self.handle == 0 {
             return true;

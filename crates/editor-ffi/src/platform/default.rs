@@ -29,6 +29,14 @@ impl SurfaceHandle {
         unreachable!();
     }
 
+    pub fn apply_damage(
+        &mut self,
+        _dl: &editor_renderer::display_list::DisplayList,
+        _damage: &[IRect],
+    ) -> bool {
+        unreachable!()
+    }
+
     pub fn present_damage(&mut self, _damage: &[IRect]) -> bool {
         unreachable!();
     }

@@ -656,6 +656,13 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
+    /**
+     * Attaches with an explicit backend choice (the TS pool decides `"gl"` vs `"cpu"`).
+     * `"gl"` falls back to CPU on failure or when the context budget is exhausted; the
+     * returned string reports the backend actually attached so the caller's pool
+     * accounting stays in sync.
+     */
+    attach_surface_with_backend(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number, backend: string): string;
     block_state(): BlockState | undefined;
     can(message: Message): boolean;
     /**
@@ -670,6 +677,27 @@ declare class Editor {
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
     cursor_hit_test(page: number, x: number, y: number): boolean;
+    /**
+     * Damage rects of the last committed present, flattened as `[x0,y0,x1,y1]*n`.
+     * Recorded only once a debug readback FFI has armed capture, so the first call
+     * may return an empty list until the next present lands.
+     */
+    debug_last_damage(page: number): Int32Array;
+    /**
+     * Probe-only pixel readback (RGBA premultiplied; empty Vec = unreadable). `source`
+     * `"texture"` reads the retained tile textures (the internal oracle); `"present"`
+     * does a fresh `blit_all` then reads the default framebuffer (the final present
+     * oracle — catches blit Y-flip, an empty backbuffer, or tile-placement bugs).
+     * Requests are clamped to the surface bounds and capped; `w/h <= 0`, an empty
+     * intersection, or an oversized request all return an empty Vec.
+     */
+    debug_read_surface_pixels(page: number, x: number, y: number, w: number, h: number, source: string): Uint8Array;
+    /**
+     * Device `y0` of every retained GL tile (single-tile pages report `[0]`); CPU or
+     * missing surfaces report an empty list. The surface-probe derives seam sample
+     * points from these boundaries.
+     */
+    debug_surface_tile_ranges(page: number): Int32Array;
     detach_surface(page: number): void;
     enqueue(message: Message): void;
     export_page_vector(page: number, scale_factor: number): Uint8Array;
@@ -707,6 +735,14 @@ declare class Editor {
     prose_to_selection(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
     /**
+     * Visibility-return recovery. GL re-blits retained tiles (pixels only; sig/DL
+     * stay so the following `render_surface` skips the re-raster), falling back to
+     * a present-state clear on a failed blit. CPU keeps the invalidate semantics
+     * (clear → full re-render). A dead GL surface stays dead — `refresh` returns
+     * false without resurrecting it; the TS manager's dead-check/remount recovers.
+     */
+    refresh_surface(page: number): void;
+    /**
      * Returns whether a new frame was presented. `false` means no frame will arrive
      * from this call — the page's pixels already match the current state — so hosts
      * that wait for a present (the mobile settle handshake) must treat the page as
@@ -721,6 +757,7 @@ declare class Editor {
     selection_hit_test(page: number, x: number, y: number): boolean;
     set_doc(plain: PlainDoc): void;
     split_changesets(payload: Uint8Array): ChangesetEntry[];
+    surface_backend(page: number): string;
     table_overlays(): TableOverlay[];
     tick(): EditorEvent[];
     tracked_ranges(group?: string | null): TrackedRange[];
@@ -745,7 +782,6 @@ declare class EditorHost {
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
     set_auto_surround_enabled(enabled: boolean): void;
     set_fonts(families: FontFamily[]): void;
-    set_gl_canary(callback: Function): void;
     set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
     set_theme_variant(variant: ThemeVariant): boolean;
 }

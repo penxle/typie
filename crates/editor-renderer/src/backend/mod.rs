@@ -12,9 +12,19 @@ impl RenderBackend {
         Self::Cpu(CpuSink::new(width, height))
     }
 
+    pub fn try_new_cpu(width: u16, height: u16) -> Option<Self> {
+        CpuSink::try_new(width, height).map(Self::Cpu)
+    }
+
     pub fn resize(&mut self, width: u16, height: u16) {
         match self {
             Self::Cpu(s) => s.resize(width, height),
+        }
+    }
+
+    pub fn try_resize(&mut self, width: u16, height: u16) -> bool {
+        match self {
+            Self::Cpu(s) => s.try_resize(width, height),
         }
     }
 
@@ -46,5 +56,18 @@ mod tests {
         let mut backend = RenderBackend::new_cpu(10, 10);
         let sink = backend.cpu_sink();
         assert_eq!(sink.pixel_size(), (10, 10));
+    }
+
+    #[test]
+    fn try_new_cpu_returns_backend_with_matching_dims() {
+        let mut backend = RenderBackend::try_new_cpu(10, 10).expect("small alloc should succeed");
+        assert_eq!(backend.cpu_sink().pixel_size(), (10, 10));
+    }
+
+    #[test]
+    fn try_resize_backend_updates_dims_on_success() {
+        let mut backend = RenderBackend::new_cpu(4, 4);
+        assert!(backend.try_resize(8, 8));
+        assert_eq!(backend.cpu_sink().pixel_size(), (8, 8));
     }
 }

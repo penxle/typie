@@ -37,22 +37,47 @@ pub struct CpuSink {
 }
 
 impl CpuSink {
-    pub fn new(width: u16, height: u16) -> Self {
-        Self {
-            buf: vec![0u8; width as usize * height as usize * 4],
+    pub fn try_new(width: u16, height: u16) -> Option<Self> {
+        let len = width as usize * height as usize * 4;
+        let mut buf = Vec::new();
+        buf.try_reserve_exact(len).ok()?;
+        buf.resize(len, 0u8);
+        Some(Self {
+            buf,
             width,
             height,
             scratch: RasterScratch::new(),
             clip: None,
+        })
+    }
+
+    pub fn new(width: u16, height: u16) -> Self {
+        Self::try_new(width, height).expect("CpuSink allocation failed")
+    }
+
+    pub fn try_resize(&mut self, width: u16, height: u16) -> bool {
+        if self.width == width && self.height == height {
+            return true;
         }
+        let len = width as usize * height as usize * 4;
+        let mut buf = Vec::new();
+        if buf.try_reserve_exact(len).is_err() {
+            return false;
+        }
+        buf.resize(len, 0u8);
+        self.buf = buf;
+        self.width = width;
+        self.height = height;
+        self.clip = None;
+        true
     }
 
     pub fn resize(&mut self, width: u16, height: u16) {
         if self.width != width || self.height != height {
-            self.width = width;
-            self.height = height;
-            self.buf = vec![0u8; width as usize * height as usize * 4];
-            self.clip = None;
+            assert!(
+                self.try_resize(width, height),
+                "CpuSink resize allocation failed"
+            );
         }
     }
 
@@ -277,6 +302,40 @@ mod tests {
 
     fn opaque(sink: &mut CpuSink, r: editor_common::Rect) {
         sink.fill_rect(r, Color::new(255, 0, 0, 255), Transform::IDENTITY);
+    }
+
+    #[test]
+    fn try_new_matches_new_dimensions_on_success() {
+        let s = CpuSink::try_new(4, 4).expect("small alloc should succeed");
+        assert_eq!(s.pixel_size(), (4, 4));
+        assert_eq!(s.pixels().len(), 4 * 4 * 4);
+    }
+
+    #[test]
+    fn try_resize_matches_resize_dimensions_on_success() {
+        let mut s = CpuSink::new(4, 4);
+        assert!(s.try_resize(8, 6));
+        assert_eq!(s.pixel_size(), (8, 6));
+        assert_eq!(s.pixels().len(), 8 * 6 * 4);
+    }
+
+    #[test]
+    fn try_resize_is_noop_when_dimensions_unchanged() {
+        let mut s = CpuSink::new(4, 4);
+        opaque(&mut s, editor_common::Rect::from_xywh(0.0, 0.0, 4.0, 4.0));
+        assert!(s.try_resize(4, 4));
+        let mut dst = vec![0u8; 4 * 4 * 4];
+        s.read_back_rect(
+            &mut dst,
+            4 * 4,
+            IRect {
+                x0: 0,
+                y0: 0,
+                x1: 4,
+                y1: 4,
+            },
+        );
+        assert_ne!(dst[3], 0);
     }
 
     #[test]
