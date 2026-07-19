@@ -142,7 +142,7 @@ internal class NavigationPopNestedScroll : NestedScrollConnection {
         return Offset.Zero
       }
       is NavigationPopActivation.Ready -> {
-        if (!gestureSession.tryClaim(initialDrag = dragFromStart, childConsumed = false)) {
+        if (!gestureSession.tryClaim()) {
           return Offset.Zero
         }
 

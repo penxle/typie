@@ -1,37 +1,27 @@
 package co.typie.navigation
 
-import androidx.compose.ui.geometry.Offset
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NavigationPopGestureSessionTest {
   @Test
-  fun zeroDeltaKeepsSessionPossibleForNextMovement() {
-    val session = NavigationPopGestureSession()
-
-    assertFalse(session.tryClaim(initialDrag = Offset.Zero, childConsumed = false))
-
-    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
-  }
-
-  @Test
   fun multiTouchRejectsClaimsUntilEveryPointerIsUp() {
     val session = NavigationPopGestureSession()
 
     session.updatePressedDragPointerCount(1)
     session.updatePressedDragPointerCount(2)
-    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertFalse(session.tryClaim())
 
     session.reset()
     session.updatePressedDragPointerCount(1)
-    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertFalse(session.tryClaim())
 
     session.updatePressedDragPointerCount(0)
-    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertFalse(session.tryClaim())
 
     session.updatePressedDragPointerCount(1)
-    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertTrue(session.tryClaim())
   }
 
   @Test
@@ -39,9 +29,9 @@ class NavigationPopGestureSessionTest {
     val session = NavigationPopGestureSession()
 
     session.updatePressedDragPointerCount(1)
-    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertTrue(session.tryClaim())
 
-    assertTrue(session.updatePressedDragPointerCount(2))
+    session.updatePressedDragPointerCount(2)
     assertFalse(session.isClaimed)
   }
 
@@ -50,16 +40,16 @@ class NavigationPopGestureSessionTest {
     val session = NavigationPopGestureSession()
 
     session.updatePressedDragPointerCount(1, downInSystemBackZone = true)
-    assertTrue(session.isSystemBackZoneRejected)
-    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertTrue(session.isCurrentSequenceRejected)
+    assertFalse(session.tryClaim())
 
     session.reset()
-    assertFalse(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertFalse(session.tryClaim())
 
     session.updatePressedDragPointerCount(0)
     session.updatePressedDragPointerCount(1)
-    assertFalse(session.isSystemBackZoneRejected)
-    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertFalse(session.isCurrentSequenceRejected)
+    assertTrue(session.tryClaim())
   }
 
   @Test
@@ -67,7 +57,7 @@ class NavigationPopGestureSessionTest {
     val session = NavigationPopGestureSession()
 
     session.updatePressedDragPointerCount(1)
-    assertTrue(session.tryClaim(initialDrag = Offset(x = 10f, y = 0f), childConsumed = false))
+    assertTrue(session.tryClaim())
 
     session.updatePressedDragPointerCount(0)
     assertTrue(session.isClaimed)

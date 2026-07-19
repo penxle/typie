@@ -28,66 +28,42 @@ internal fun resolveNavigationPopActivation(
 
 internal class NavigationPopGestureSession {
   private var state = State.Possible
-  private var multiTouchRejected = false
-  private var systemBackZoneRejected = false
   private var pressedDragPointerCount = 0
 
   val isClaimed: Boolean
     get() = state == State.Claimed
 
-  val isSystemBackZoneRejected: Boolean
-    get() = systemBackZoneRejected
-
   val hasPressedDragPointer: Boolean
     get() = pressedDragPointerCount > 0
 
   val isCurrentSequenceRejected: Boolean
-    get() = multiTouchRejected || systemBackZoneRejected || state == State.Rejected
+    get() = state == State.Rejected
 
-  fun tryClaim(initialDrag: Offset, childConsumed: Boolean): Boolean {
-    if (isCurrentSequenceRejected || state != State.Possible) {
-      return false
-    }
-    if (initialDrag == Offset.Zero && !childConsumed) {
-      return false
-    }
-    state =
-      if (!childConsumed && initialDrag.isDominantRightDrag()) {
-        State.Claimed
-      } else {
-        State.Rejected
-      }
-    return isClaimed
+  fun tryClaim(): Boolean {
+    if (state != State.Possible) return false
+    state = State.Claimed
+    return true
   }
 
   fun rejectCurrentSequence() {
     state = State.Rejected
   }
 
-  fun updatePressedDragPointerCount(count: Int, downInSystemBackZone: Boolean = false): Boolean {
-    val wasMultiTouchRejected = multiTouchRejected
+  fun updatePressedDragPointerCount(count: Int, downInSystemBackZone: Boolean = false) {
     val previousCount = pressedDragPointerCount
     pressedDragPointerCount = count
     when {
-      count > 1 -> {
-        multiTouchRejected = true
-        state = State.Rejected
-      }
+      count > 1 -> state = State.Rejected
       count == 1 && previousCount == 0 -> {
-        multiTouchRejected = false
-        systemBackZoneRejected = downInSystemBackZone
         if (state != State.Claimed) {
-          state = if (systemBackZoneRejected) State.Rejected else State.Possible
+          state = if (downInSystemBackZone) State.Rejected else State.Possible
         }
       }
-      count == 0 && multiTouchRejected -> state = State.Rejected
-      count == 0 && state != State.Claimed && state != State.Rejected -> state = State.Possible
     }
-    return !wasMultiTouchRejected && multiTouchRejected
   }
 
   fun reset() {
-    state = if (isCurrentSequenceRejected) State.Rejected else State.Possible
+    if (state == State.Claimed) state = State.Possible
   }
 
   private enum class State {
@@ -96,5 +72,3 @@ internal class NavigationPopGestureSession {
     Rejected,
   }
 }
-
-private fun Offset.isDominantRightDrag(): Boolean = x > 0f && abs(x) > abs(y)

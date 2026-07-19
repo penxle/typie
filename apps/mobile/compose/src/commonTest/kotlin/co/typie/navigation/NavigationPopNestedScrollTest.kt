@@ -5,6 +5,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.unit.Velocity
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 class NavigationPopNestedScrollTest {
@@ -31,6 +32,45 @@ class NavigationPopNestedScrollTest {
     fixture.connection.onPreFling(Velocity(x = 640f, y = 12f))
 
     assertEquals(640f, fixture.releasedVelocityX)
+  }
+
+  @Test
+  fun nestedReleaseReconstructsTheActualPostFlingVelocity() = runTest {
+    val fixture = Fixture()
+    fixture.claimNestedGesture()
+
+    fixture.connection.onPostFling(
+      consumed = Velocity(x = 480f, y = 12f),
+      available = Velocity(x = 80f, y = 0f),
+    )
+
+    assertEquals(560f, fixture.releasedVelocityX)
+  }
+
+  @Test
+  fun staleScrollOwnerCannotUnregisterTheCurrentOwner() {
+    val connection = NavigationPopNestedScroll()
+    val staleOwner = Any()
+    val currentOwner = Any()
+    var staleInterruptCount = 0
+    var currentInterruptCount = 0
+    connection.registerScrollInterruption(
+      owner = staleOwner,
+      isScrollInProgress = { true },
+      interrupt = { staleInterruptCount += 1 },
+    )
+    connection.registerScrollInterruption(
+      owner = currentOwner,
+      isScrollInProgress = { true },
+      interrupt = { currentInterruptCount += 1 },
+    )
+
+    connection.unregisterScrollInterruption(staleOwner)
+    connection.updatePressedDragPointerCount(count = 1, pointerId = 1L, position = Offset.Zero)
+
+    assertEquals(0, staleInterruptCount)
+    assertEquals(1, currentInterruptCount)
+    assertTrue(connection.isCurrentSequenceRejected)
   }
 
   private class Fixture {

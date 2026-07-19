@@ -661,6 +661,8 @@ fun NavigationStack(
                 } else {
                   null
                 }
+              // Compose excludes the UP position from velocity samples, but still uses the event to
+              // apply its platform-specific pointer-stop timeout.
               val pointerSample = activePointer ?: releasedPointer
               popPointerVelocity.update(pressedDragPointerCount, pointerSample)
               popNestedScroll.updatePressedDragPointerCount(
