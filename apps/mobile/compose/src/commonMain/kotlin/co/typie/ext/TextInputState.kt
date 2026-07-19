@@ -136,7 +136,14 @@ internal fun syncTextInputValue(currentValue: TextFieldValue, text: String): Tex
     return currentValue
   }
 
-  val selection = clampTextInputRange(currentValue.selection, text.length)
+  val selection =
+    if (
+      currentValue.selection.collapsed && currentValue.selection.end == currentValue.text.length
+    ) {
+      TextRange(text.length)
+    } else {
+      clampTextInputRange(currentValue.selection, text.length)
+    }
   return TextFieldValue(text = text, selection = selection)
 }
 

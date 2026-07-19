@@ -63,6 +63,27 @@ class TextInputStateTest {
   }
 
   @Test
+  fun sync_text_input_value_keeps_cursor_at_text_end_when_external_text_grows() {
+    val currentValue = TextFieldValue(text = "", selection = TextRange.Zero)
+
+    val result = syncTextInputValue(currentValue = currentValue, text = "recent search")
+
+    assertEquals(
+      TextFieldValue(text = "recent search", selection = TextRange("recent search".length)),
+      result,
+    )
+  }
+
+  @Test
+  fun sync_text_input_value_keeps_middle_selection_when_external_text_grows() {
+    val currentValue = TextFieldValue(text = "hello", selection = TextRange(1, 4))
+
+    val result = syncTextInputValue(currentValue = currentValue, text = "hello world")
+
+    assertEquals(TextFieldValue(text = "hello world", selection = TextRange(1, 4)), result)
+  }
+
+  @Test
   fun sync_text_input_value_keeps_state_when_text_matches() {
     val currentValue =
       TextFieldValue(text = "hello", selection = TextRange(1, 4), composition = TextRange(1, 4))
