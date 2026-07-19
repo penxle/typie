@@ -91,6 +91,7 @@ const harness = (overrides?: {
   pool?: ReturnType<typeof createFakePool>;
   deferSync?: boolean;
   suspended?: boolean;
+  note?: (event: string) => void;
 }) => {
   let nextId = 0;
   const canvases: FakeCanvas[] = [];
@@ -157,6 +158,9 @@ const harness = (overrides?: {
       else deferred.push(fn);
     },
     pool: pool.port,
+    // note는 오버라이드로 명시할 때만 붙는다 — 그 외 모든 케이스는 note 부재로 동작해
+    // "필드가 없어도 매니저가 동작한다"는 불변식을 상시 증명한다.
+    note: overrides?.note,
   };
 
   const manager = createPageSurfaceManager(effects);
@@ -683,6 +687,79 @@ describe('page-surface-manager', () => {
     // 백오프는 다음 단계(5000)로 진행 — 정상 재시도는 5000에서 발화해 재마운트한다.
     expect(h.fireTimer(PARKED_RETRY_MS[1])).toBeDefined();
     expect(h.canvases.length).toBeGreaterThan(canvasesBeforeRetry);
+  });
+
+  it('note: emits mount(cause)/finishSwap(ms)/park events across the lifecycle when the field is present', () => {
+    const notes: string[] = [];
+    const h = harness({
+      note: (event) => {
+        notes.push(event);
+      },
+    });
+
+    h.manager.reconcile(inView);
+    expect(notes).toContain('mount:reconcile-visible');
+
+    h.flushDeferred();
+    h.firePresent();
+    expect(notes.some((e) => e.startsWith('finishSwap:'))).toBe(true);
+
+    h.manager.reconcile(outOfView);
+    expect(notes).toContain('park');
+
+    h.manager.resume();
+    expect(notes).toContain('resume');
+  });
+
+  it('note: swapTimeout1 then swapTimeout2 fire on consecutive uncommitted timeouts', () => {
+    const notes: string[] = [];
+    const h = harness({
+      deferSync: true,
+      note: (event) => {
+        notes.push(event);
+      },
+    });
+    h.manager.reconcile(inView);
+    h.fireTimer(SWAP_TIMEOUT_MS); // 1st timeout → forced cpu fallback
+    expect(notes).toContain('swapTimeout1');
+    expect(notes).toContain('mount:forced-cpu');
+    h.fireTimer(SWAP_TIMEOUT_MS); // 2nd timeout → failedParked
+    expect(notes).toContain('swapTimeout2');
+  });
+
+  it('note: remountFromLoss records mount:dead-remount, distinct from onContextRestored mount:restored', () => {
+    const notes: string[] = [];
+    const h = harness({
+      deferSync: true,
+      note: (event) => {
+        notes.push(event);
+      },
+    });
+    h.manager.reconcile(inView);
+    h.firePresent();
+
+    notes.length = 0;
+    h.manager.remountFromLoss();
+    expect(notes).toContain('mount:dead-remount');
+    expect(notes).not.toContain('mount:restored');
+
+    h.firePresent(); // commit the dead-remount so the next loss path is clean
+    notes.length = 0;
+    h.manager.onContextRestored();
+    expect(notes).toContain('mount:restored');
+    expect(notes).not.toContain('mount:dead-remount');
+  });
+
+  it('note-absent: a full lifecycle runs without the field and never throws', () => {
+    const h = harness(); // no note field at all
+    expect(() => {
+      h.manager.reconcile(inView);
+      h.flushDeferred();
+      h.firePresent();
+      h.manager.reconcile(outOfView);
+      h.flushDeferred();
+    }).not.toThrow();
+    expect(h.manager.debug().live).toBeUndefined();
   });
 
   it('destroy fully disposes local resources and forgets the pool entry', () => {

@@ -20,7 +20,7 @@ export type PoolPort = {
 };
 
 export type ManagerEffects<C> = {
-  createCanvas: () => C;
+  createCanvas: (backend: SurfaceBackend) => C;
   styleCanvas: (canvas: C) => void;
   attach: (canvas: C, backend: SurfaceBackend) => AttachOutcome | 'cpu-oversized';
   detach: () => void;
@@ -36,6 +36,9 @@ export type ManagerEffects<C> = {
   schedule: (fn: () => void, ms: number) => () => void;
   defer: (fn: () => void) => void;
   pool: PoolPort;
+  // 선택적 계측 훅(surface-stats). 없으면(테스트·프로덕션 기본) 매니저 동작에 영향이 없다.
+  // 이벤트: 'mount:<cause>' | 'park' | 'swapTimeout1' | 'swapTimeout2' | 'finishSwap:<ms>' | 'resume'.
+  note?: (event: string) => void;
 };
 
 export const SWAP_TIMEOUT_MS = 1000;
@@ -56,6 +59,8 @@ type Slot<C> = {
   listeners: () => void;
   // gl을 요청했으나 예산 부족으로 cpu가 붙은 슬롯 — 커밋(finishSwap) 시 pool에 un-poison 신호를 보낸다.
   budgetFallback: boolean;
+  // note가 활성일 때만 채워지는 마운트 시각(finishSwap의 mount→commit 지연 계측용). 없으면 0.
+  mountedAt: number;
 };
 
 export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
@@ -114,6 +119,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
   };
 
   const park = () => {
+    effects.note?.('park');
     cancelDebounce?.();
     cancelDebounce = undefined;
     cancelParkedRetry?.();
@@ -147,6 +153,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
     pendingCleanup = undefined;
     const next = pending;
     pending = undefined;
+    if (next.mountedAt > 0) effects.note?.(`finishSwap:${Date.now() - next.mountedAt}`);
     if (live) disposeSlot(live);
     effects.promote(next.canvas, live?.canvas);
     live = next;
@@ -174,6 +181,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
     detachIfAttached();
     if (failedToken !== undefined) effects.defer(() => effects.pool.noteGlFailure(failedToken));
     if (timedOutOnce) {
+      effects.note?.('swapTimeout2');
       // 2차 타임아웃 — 강제 폴백마저 커밋되지 못했다. 구 live까지 전부 처분하고 안정된
       // failedParked로 수렴한다. wantsLive는 건드리지 않아 재진입(acquire/웨이크)이 살아 있다.
       // radius 재진입/쿨다운 웨이크에만 기대지 않도록 백오프 재시도 타이머도 함께 건다 —
@@ -186,11 +194,13 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
       scheduleParkedRetry();
       return;
     }
+    effects.note?.('swapTimeout1');
     timedOutOnce = true;
-    mount('cpu');
+    mount('cpu', undefined, 'forced-cpu');
   };
 
-  const mount = (requested: SurfaceBackend, presetToken?: LeaseToken) => {
+  const mount = (requested: SurfaceBackend, presetToken?: LeaseToken, cause = 'mount') => {
+    effects.note?.(`mount:${cause}`);
     cancelDebounce?.();
     cancelDebounce = undefined;
     // 대기 중 failedParked 재시도 타이머를 취소한다 — 재진입 mount(reconcile/onPoolBackend/resume)가
@@ -227,7 +237,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
       attachBackend = 'cpu';
     }
 
-    const canvas = effects.createCanvas();
+    const canvas = effects.createCanvas(attachBackend);
     effects.styleCanvas(canvas);
     const listeners = effects.addContextListeners(canvas, () => canvas === live?.canvas || canvas === pending?.canvas);
     const actual = effects.attach(canvas, attachBackend);
@@ -265,12 +275,20 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
           effects.pool.ackReleased(deadToken);
         });
       }
-      mount('cpu');
+      mount('cpu', undefined, 'gl-dead-retry');
       return;
     }
 
     attached = true;
-    const slot: Slot<C> = { canvas, isGl: actual === 'gl', token: leaseToken, acked: false, listeners, budgetFallback };
+    const slot: Slot<C> = {
+      canvas,
+      isGl: actual === 'gl',
+      token: leaseToken,
+      acked: false,
+      listeners,
+      budgetFallback,
+      mountedAt: effects.note ? Date.now() : 0,
+    };
     pending = slot;
     if (leaseToken !== undefined) {
       const ackToken = leaseToken;
@@ -301,7 +319,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
         return;
       }
       cancelParkedRetry = undefined;
-      if (wantsLive && !live && !pending) mount(effects.pool.backendOf() ?? 'cpu');
+      if (wantsLive && !live && !pending) mount(effects.pool.backendOf() ?? 'cpu', undefined, 'parked-retry');
     };
     cancelParkedRetry = effects.schedule(onRetry, delay);
   };
@@ -326,13 +344,13 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
             cancelDebounce = effects.schedule(() => {
               cancelDebounce = undefined;
               if (!wantsLive || live || pending) return;
-              mount(effects.pool.updateDemand(zone));
+              mount(effects.pool.updateDemand(zone), undefined, 'reconcile-debounce');
             }, ACQUIRE_DEBOUNCE_MS);
           }
           return;
         }
         // 가시 진입: 사용자에게 보이는 지연 없이 즉시 마운트한다(mount가 대기 중 디바운스 취소).
-        mount(effects.pool.updateDemand(zone));
+        mount(effects.pool.updateDemand(zone), undefined, 'reconcile-visible');
         return;
       }
       const backend = effects.pool.updateDemand(zone);
@@ -341,7 +359,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
       // 경우(제자리 zone 전환으로 인한 강등/승격)는 여기서 직접 mount를 걸어줘야 한다 —
       // 그렇지 않으면 정책은 바뀌었는데 캔버스는 영원히 안 바뀐다.
       const staleLive = !pending && live !== undefined && (live.isGl ? 'gl' : 'cpu') !== backend;
-      if (staleLive) mount(backend);
+      if (staleLive) mount(backend, undefined, 'stale-live');
     },
     onPoolBackend(backend: SurfaceBackend, acquireHint?: LeaseToken): void {
       if (!wantsLive) {
@@ -351,7 +369,7 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
         if (acquireHint !== undefined) effects.pool.cancelReservation(acquireHint, 'unwanted-promotion');
         return;
       }
-      mount(backend, acquireHint);
+      mount(backend, acquireHint, 'pool-route');
     },
     // 로스: 즉시 실패를 기록하고 복원 워치독을 건다 — restored가 제한 시간 내
     // 오지 않으면 fresh 캔버스로 재마운트한다(영구 blank 방지).
@@ -367,27 +385,30 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
           return;
         }
         cancelWatchdog = undefined;
-        if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu');
+        if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu', undefined, 'loss-watchdog');
       };
       cancelWatchdog = effects.schedule(onWatchdog, RESTORE_WATCHDOG_MS);
     },
     onContextRestored(): void {
       cancelWatchdog?.();
       cancelWatchdog = undefined;
-      if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu');
+      if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu', undefined, 'restored');
     },
     remountFromLoss(): void {
-      if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu');
+      // rAF gl-dead 폴 경유 재마운트 — webglcontextrestored('restored')와 구분해 계상한다
+      // (필드 데이터에서 dead-remount vs restored 구분이 진단 핵심).
+      if (wantsLive) mount(effects.pool.backendOf() ?? 'cpu', undefined, 'dead-remount');
     },
     // 가시성 복귀 시 손: failedParked(live/pending 없음)를 치유하고, 숨김 중 정체된 pending은
     // 렌더를 한 번 재촉해 커밋을 유도한다. 원치 않는(park된) 페이지는 건드리지 않는다.
     resume(): void {
+      effects.note?.('resume');
       if (!wantsLive) return;
       if (pending) {
         effects.requestRender();
         return;
       }
-      if (!live) mount(effects.pool.backendOf() ?? 'cpu');
+      if (!live) mount(effects.pool.backendOf() ?? 'cpu', undefined, 'resume');
     },
     restyle(): void {
       if (live) effects.styleCanvas(live.canvas);
