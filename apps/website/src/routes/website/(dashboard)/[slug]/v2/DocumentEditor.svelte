@@ -9,7 +9,7 @@
   import { LocalStore } from '@typie/ui/state';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { onDestroy, setContext, untrack } from 'svelte';
+  import { onDestroy, setContext, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
@@ -350,6 +350,37 @@
     pusher?.setDurableHeads(event.durableHeads);
   };
 
+  let resyncPrep: Promise<void> = Promise.resolve();
+  let resyncing = false;
+
+  // Single-flight: a second reload signal (server push racing the pull poll)
+  // during the capture gap would re-capture the same editor/store and destroy
+  // them twice. The in-flight prep plus the coming snapshot already cover it.
+  const beginResync = () => {
+    if (resyncing) return;
+    resyncing = true;
+    const oldEditor = ctx.liveEditor;
+    const oldStore = editorStore;
+    const oldPusher = pusher;
+    resyncPrep = (async () => {
+      try {
+        await oldPusher?.captureNow();
+      } catch (err) {
+        console.warn('resync: capture failed; pending edits fall back to the last persisted delta', err);
+      }
+      if (destroyed) return;
+      editorStore = null;
+      pendingLiveEvents = [];
+      ctx.editor = undefined;
+      ctx.liveEditor = undefined;
+      await tick();
+      oldEditor?.destroy();
+      oldStore?.destroy();
+    })().finally(() => {
+      resyncing = false;
+    });
+  };
+
   $effect(() => {
     const doc = document;
     const currentDocumentId = documentId;
@@ -361,6 +392,7 @@
       onSnapshot: (graph, meta) => {
         untrack(async () => {
           try {
+            await resyncPrep;
             const store = new IndexeddbDeltaStore();
             const pendingRecords = await store.load(currentDocumentId);
             const pending = pendingRecords.map((r) => r.changeset);
@@ -416,7 +448,7 @@
         applyChangesets(event);
       },
       onReload: () => {
-        location.reload();
+        beginResync();
       },
       onPermanentError: (code) => {
         console.error(`document sync permanently failed: ${code}`);
@@ -500,11 +532,11 @@
     if (!currentDocumentId) return;
 
     // Full-load recovery when the client's cursor has fallen out of the stream's
-    // retained window (offline past retention) — reload rebuilds the editor from
-    // the fresh snapshot. Unpushed local edits survive via the IndexedDB delta
-    // store, which the rebuild replays as pending.
+    // retained window (offline past retention) — resync rebuilds the editor in
+    // place from a fresh snapshot. Unpushed local edits survive via the IndexedDB
+    // delta store, which the rebuild replays as pending.
     const reloadDocument = () => {
-      location.reload();
+      getDocumentChannels().resync(currentDocumentId);
     };
 
     const refetchFromServer = async () => {

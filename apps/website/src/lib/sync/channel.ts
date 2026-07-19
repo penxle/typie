@@ -5,6 +5,7 @@ import type { ServerMessage, SnapshotCursor } from './protocol';
 export type ChannelSubscriber = {
   onSnapshot: (graph: Uint8Array, meta: { seq: string; heads: Uint8Array; durableHeads: Uint8Array }) => void;
   onChangesets: (event: { seq: string; bundles: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array }) => void;
+  // Resync started — a fresh onSnapshot follows; capture and tear down local state.
   onReload: () => void;
   onPermanentError: (code: string) => void;
 };
@@ -196,8 +197,7 @@ export class DocumentChannels {
         return;
       }
       case 'reload': {
-        this.clearAckWatchdog(channel);
-        for (const state of channel.subscribers) state.subscriber.onReload();
+        this.resync(channel.documentId);
         return;
       }
       case 'error': {
@@ -218,6 +218,16 @@ export class DocumentChannels {
         return;
       }
     }
+  }
+
+  resync(documentId: string): void {
+    const channel = this.channels.get(documentId);
+    if (!channel) return;
+    for (const state of channel.subscribers) {
+      state.loading = true;
+      state.subscriber.onReload();
+    }
+    this.restartChannel(channel);
   }
 
   subscribe(documentId: string, subscriber: ChannelSubscriber): () => void {
@@ -274,10 +284,8 @@ export const loadDocumentSnapshot = (channels: DocumentChannels, documentId: str
       },
       // eslint-disable-next-line @typescript-eslint/no-empty-function -- loadDocumentSnapshot only resolves on the terminal snapshot event
       onChangesets: () => {},
-      onReload: () => {
-        off();
-        reject(new Error('reloaded'));
-      },
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- resync in progress; the follow-up snapshot resolves
+      onReload: () => {},
       onPermanentError: (code) => {
         off();
         reject(new Error(code));

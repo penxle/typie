@@ -470,4 +470,81 @@ describe('DocumentChannels', () => {
     await vi.waitFor(() => expect(sockets[1].lastOf('attach')).toBeDefined());
     expect(sockets[1].lastOf('attach')?.sinceSeq).toBe('');
   });
+
+  test('reload: 전 구독자 loading 복귀 + onReload 통지 + fresh 재attach, 다음 snapshot-end에서 onSnapshot 재전달', async () => {
+    const { channels, sockets } = setup();
+    const s = subscriber();
+    channels.subscribe('D1', s.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].lastOf('attach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend(chunk('D1', 'B1', 1, 0, Uint8Array.of(1)));
+    sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '5-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot']));
+
+    sockets[0].serverSend({ t: 'reload', documentId: 'D1' });
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot', 'reload']));
+    await vi.waitFor(() => expect(sockets[0].lastOf('detach')).toBeDefined());
+    const attaches = sockets[0].sent.filter((m) => m.t === 'attach');
+    expect(attaches.length).toBe(2);
+    expect(attaches[1]).toMatchObject({ sinceSeq: undefined, snapshotCursor: undefined });
+
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend({
+      t: 'changesets',
+      documentId: 'D1',
+      seq: '6-0',
+      bundles: [Uint8Array.of(9)],
+      heads: new Uint8Array(),
+      durableHeads: new Uint8Array(),
+    });
+    sockets[0].serverSend(chunk('D1', 'B2', 1, 0, Uint8Array.of(7)));
+    sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '8-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot', 'reload', 'snapshot']));
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(new Uint8Array(s.snapshot()!)).toEqual(Uint8Array.of(7));
+    expect(s.snapshotSeq()).toBe('8-0');
+  });
+
+  test('resync(): 서버 reload 메시지 없이 호출해도 동일한 재동기화 흐름', async () => {
+    const { channels, sockets } = setup();
+    const s = subscriber();
+    channels.subscribe('D1', s.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].lastOf('attach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '3-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot']));
+
+    channels.resync('D1');
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot', 'reload']));
+    await vi.waitFor(() => expect(sockets[0].lastOf('detach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '4-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    await vi.waitFor(() => expect(s.events).toEqual(['snapshot', 'reload', 'snapshot']));
+  });
+
+  test('resync(): 채널이 없는 documentId는 no-op', () => {
+    const { channels } = setup();
+    expect(() => channels.resync('NOPE')).not.toThrow();
+  });
+
+  test('loadDocumentSnapshot: 로드 중 reload가 끼어들어도 다음 snapshot으로 resolve한다', async () => {
+    const { channels, sockets } = setup();
+    const promise = loadDocumentSnapshot(channels, 'D1');
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].lastOf('attach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend(chunk('D1', 'B1', 1, 0, Uint8Array.of(1, 2)));
+
+    sockets[0].serverSend({ t: 'reload', documentId: 'D1' });
+    await vi.waitFor(() => expect(sockets[0].lastOf('detach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+    sockets[0].serverSend(chunk('D1', 'B9', 1, 0, Uint8Array.of(5)));
+    sockets[0].serverSend({ t: 'snapshot-end', documentId: 'D1', seq: '9-0', heads: new Uint8Array(), durableHeads: new Uint8Array() });
+    await expect(promise).resolves.toEqual(Uint8Array.of(5));
+  });
 });

@@ -1902,6 +1902,7 @@ export class Editor {
   }
 
   destroy(): void {
+    if (this.#destroyed) return;
     this.#destroyed = true;
 
     unregister(this);
