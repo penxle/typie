@@ -12,7 +12,18 @@ val dopplerSecrets: Map<String, String> by lazy {
   val output =
     providers
       .exec {
-        commandLine(doppler, "secrets", "download", "-c", "dev", "--no-file", "--format", "json")
+        commandLine(
+          doppler,
+          "secrets",
+          "download",
+          "-p",
+          "mobile",
+          "-c",
+          "dev",
+          "--no-file",
+          "--format",
+          "json",
+        )
       }
       .standardOutput
       .asText
