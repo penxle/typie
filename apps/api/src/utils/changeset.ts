@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { asc, eq, max } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import { db, DocumentBundles, DocumentStates, first } from '#/db/index.ts';
@@ -121,6 +122,35 @@ export const trimStream = async (documentId: string, collectedSeq: string): Prom
 // also covers a document that was never collected — there is nothing to trim yet.
 export const hasStreamBeenTrimmed = async (documentId: string): Promise<boolean> => {
   return (await redis.exists(trimmedKey(documentId))) === 1;
+};
+
+// Delete an idle document's stream key outright. The per-minute scan cron
+// enqueues a collect for every live `stream:{id}` key, so a key that never
+// dies turns that sweep into an all-documents-ever-edited fan-out; expiry
+// bounds it to recently-active documents. Deletion is only legal once every
+// entry is collected AND the newest entry has aged out of the catch-up
+// window — any client that could still catch up incrementally is gone, and
+// reconnects resolve via `tip === null` (full reload, or the caught-up
+// `collectedSeq` fast path). The `trimmed` marker is set before the DEL
+// (same crash direction as `trimStream`: a marker without a drop is one
+// spurious reload); the DEL itself is guarded in Lua so a push appending
+// past the collected cursor between our checks can never be dropped.
+export const expireIdleStream = async (documentId: string, collectedSeq: string | null): Promise<void> => {
+  if (!collectedSeq) return;
+  const tip = await streamTip(documentId);
+  if (!tip) return;
+  if (seqCompare(tip, collectedSeq) > 0) return;
+  if (Number(tip.split('-')[0]) > Date.now() - RETAIN_WINDOW_MS) return;
+
+  await redis.set(trimmedKey(documentId), '1');
+
+  const script = dedent`
+    if #redis.call("xrange", KEYS[1], ARGV[1], "+", "COUNT", "1") == 0 then
+      return redis.call("del", KEYS[1])
+    end
+    return 0
+  `;
+  await redis.eval(script, 1, streamKey(documentId), `(${collectedSeq}`);
 };
 
 // All stream entries strictly after `sinceSeq` (exclusive). `truncated` is true

@@ -144,8 +144,15 @@ export class DocumentChannel {
         }
       }
     } else if ((await this.#deps.streamTip(this.#documentId)) === null) {
-      await reload();
-      return;
+      // An absent stream is either an expired idle stream or data loss; the two
+      // are distinguishable only at the durable frontier. Expiry never drops an
+      // uncollected entry, so a client exactly at collectedSeq is provably
+      // caught up — anything else must full-reload.
+      const collectedSeq = await this.#deps.getCollectedSeq(this.#documentId);
+      if (collectedSeq === null || compareStreamSeq(cursor, collectedSeq) !== 0) {
+        await reload();
+        return;
+      }
     }
     await this.#sendTail(cursor);
   }

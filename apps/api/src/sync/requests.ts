@@ -79,7 +79,16 @@ export const handlePull = async (
     }
   } else {
     const tip = await ctx.deps.streamTip(message.documentId);
-    if (tip === null || compareStreamSeq(sinceSeq, tip) > 0) {
+    if (tip === null) {
+      // Same caught-up carve-out as the channel attach path: an expired idle
+      // stream only ever drops collected entries, so a cursor exactly at
+      // collectedSeq needs no reload — the empty page below acks it as-is.
+      const collectedSeq = await ctx.deps.getCollectedSeq(message.documentId);
+      if (collectedSeq === null || compareStreamSeq(sinceSeq, collectedSeq) !== 0) {
+        await reload();
+        return;
+      }
+    } else if (compareStreamSeq(sinceSeq, tip) > 0) {
       await reload();
       return;
     }

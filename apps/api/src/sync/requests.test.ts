@@ -163,6 +163,30 @@ test('pull: 빈 스트림에 sinceSeq가 있으면 needsReload', async () => {
   assert.equal(ack.needsReload, true);
 });
 
+test('pull: 만료된 idle 스트림 + sinceSeq == collectedSeq면 needsReload=false, 빈 changesets로 ack', async () => {
+  const deps = new FakeSyncDeps();
+  deps.collectedSeq.set('D1', '9-0');
+  deps.trimmed.add('D1');
+  const { sent, send } = collectSend();
+  await handlePull(ctx(deps), { id: 'r10', documentId: 'D1', sinceSeq: '9-0' }, send);
+  const ack = sent[0];
+  if (ack.t !== 'pull-ack') return assert.fail();
+  assert.equal(ack.needsReload, false);
+  assert.deepEqual(ack.changesets, []);
+  assert.equal(ack.seq, '9-0');
+});
+
+test('pull: 만료된 idle 스트림 + sinceSeq < collectedSeq면 needsReload', async () => {
+  const deps = new FakeSyncDeps();
+  deps.collectedSeq.set('D1', '9-0');
+  deps.trimmed.add('D1');
+  const { sent, send } = collectSend();
+  await handlePull(ctx(deps), { id: 'r11', documentId: 'D1', sinceSeq: '5-0' }, send);
+  const ack = sent[0];
+  if (ack.t !== 'pull-ack') return assert.fail();
+  assert.equal(ack.needsReload, true);
+});
+
 test('pull: 빈 문자열 sinceSeq(빈 문서 기준) + 실제 trim 발생이면 needsReload', async () => {
   const deps = new FakeSyncDeps();
   deps.seedStream('D1', [{ seq: '9-0', changeset: Uint8Array.of(9) }]);

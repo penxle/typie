@@ -221,14 +221,14 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
 
     await enqueueJob('search:index:document', documentId, {
       deduplication: {
-        id: documentId,
+        id: `search:index:document:${documentId}`,
         ttl: 60 * 1000,
       },
     });
 
     await enqueueJob('document:preview:invalidate', documentId, {
       deduplication: {
-        id: documentId,
+        id: `document:preview:invalidate:${documentId}`,
         ttl: 60 * 60 * 1000,
       },
     });
@@ -236,14 +236,15 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
 });
 
 export const DocumentSyncScanCron = defineCron('document:sync:scan', '* * * * *', async () => {
-  const keys = await redis.keys('document:sync:updates:*');
+  const prefix = 'document:sync:updates:';
 
-  await Promise.all(
-    keys.map((key) =>
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      enqueueJob('document:sync:collect', key.split(':').at(-1)!),
-    ),
-  );
+  let cursor = '0';
+  do {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 500);
+    cursor = next;
+
+    await Promise.all(keys.map((key) => enqueueJob('document:sync:collect', key.slice(prefix.length))));
+  } while (cursor !== '0');
 });
 
 export const DocumentGCJob = defineJob('document:gc', async (documentId: string) => {

@@ -19,7 +19,15 @@ import {
 } from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
-import { collectedKey, getMaxBundleSeq, loadBundleStream, packLengthPrefixed, readStreamBatch, trimStream } from '#/utils/changeset.ts';
+import {
+  collectedKey,
+  expireIdleStream,
+  getMaxBundleSeq,
+  loadBundleStream,
+  packLengthPrefixed,
+  readStreamBatch,
+  trimStream,
+} from '#/utils/changeset.ts';
 import { calculateBlobSizeFromAssetIds, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
@@ -68,6 +76,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     const collected = await redis.get(collectedKey(documentId));
     const entries = await readStreamBatch(documentId, collected, 5);
     if (entries.length === 0) {
+      await expireIdleStream(documentId, collected);
       return;
     }
 
@@ -272,7 +281,9 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
   }
 
   if (shouldConsolidate) {
-    await enqueueJob('document:changesets:consolidate', documentId, { deduplication: { id: documentId, ttl: 60 * 1000 } });
+    await enqueueJob('document:changesets:consolidate', documentId, {
+      deduplication: { id: `document:changesets:consolidate:${documentId}`, ttl: 60 * 1000 },
+    });
   }
 
   if (stale) {
@@ -321,11 +332,11 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       pubsub.publish('user:usage:update', userId, null);
 
       await enqueueJob('search:index:document', documentId, {
-        deduplication: { id: documentId, ttl: 60 * 1000 },
+        deduplication: { id: `search:index:document:${documentId}`, ttl: 60 * 1000 },
       });
 
       await enqueueJob('document:preview:invalidate', documentId, {
-        deduplication: { id: documentId, ttl: 60 * 60 * 1000 },
+        deduplication: { id: `document:preview:invalidate:${documentId}`, ttl: 60 * 60 * 1000 },
       });
 
       await scheduleSweepDue(documentId);
@@ -425,14 +436,22 @@ export const DocumentZombieSweepJob = defineJob(
 );
 
 export const DocumentChangesetsScanCron = defineCron('document:changesets:scan', '* * * * *', async () => {
-  const keys = await redis.keys('document:changesets:stream:*');
+  const prefix = 'document:changesets:stream:';
 
-  await Promise.all(
-    keys.map((key) =>
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      enqueueJob('document:changesets:collect', key.split(':').at(-1)!),
-    ),
-  );
+  let cursor = '0';
+  do {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 500);
+    cursor = next;
+
+    await Promise.all(
+      keys.map((key) => {
+        const documentId = key.slice(prefix.length);
+        return enqueueJob('document:changesets:collect', documentId, {
+          deduplication: { id: `document:changesets:collect:${documentId}` },
+        });
+      }),
+    );
+  } while (cursor !== '0');
 });
 
 export const DocumentZombieSweepDueCron = defineCron('document:zombies:sweep-due', '* * * * *', async () => {
@@ -442,7 +461,13 @@ export const DocumentZombieSweepDueCron = defineCron('document:zombies:sweep-due
   for (let i = 0; i < rows.length; i += 2) {
     const documentId = rows[i];
     const dueScore = Number(rows[i + 1]);
-    enqueues.push(enqueueJob('document:zombies:sweep', { documentId, dueScore }, { deduplication: { id: documentId, ttl: 60 * 1000 } }));
+    enqueues.push(
+      enqueueJob(
+        'document:zombies:sweep',
+        { documentId, dueScore },
+        { deduplication: { id: `document:zombies:sweep:${documentId}`, ttl: 60 * 1000 } },
+      ),
+    );
   }
 
   await Promise.all(enqueues);
