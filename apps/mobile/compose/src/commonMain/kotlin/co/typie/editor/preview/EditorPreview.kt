@@ -38,15 +38,15 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.currentEditorThemeVariant
+import co.typie.editor.enqueueRootLayoutMode
+import co.typie.editor.enqueueRootModifier
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Modifier as EditorModifier
-import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.PlainNodeEntry
-import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
@@ -88,17 +88,23 @@ internal fun EditorPreview(
 ) {
   val colors = AppTheme.colors
   val scope = rememberCoroutineScope()
-  val doc = remember(layoutMode) { defaultPreviewDoc(layoutMode).withPreviewRootModifiers() }
-  val sourceKey = remember(graph, doc) { graph?.let { it.size to it.contentHashCode() } ?: doc }
-  val layoutSpec = remember(layoutMode) { layoutMode.toEditorDocumentLayoutSpec() }
+  val sourceKey =
+    remember(graph) { graph?.let { it.size to it.contentHashCode() } ?: GeneratedPreviewSourceKey }
+  val doc =
+    remember(runtime, sourceKey) {
+      defaultPreviewDoc(layoutMode).withPreviewRootModifiers(modifiers)
+    }
+  val presentedLayoutMode = runtime.editor?.rootAttrs?.layoutMode ?: layoutMode
+  val layoutSpec =
+    remember(presentedLayoutMode) { presentedLayoutMode.toEditorDocumentLayoutSpec() }
   val background =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous -> colors.surfaceDefault
       is EditorDocumentLayoutSpec.Paginated -> colors.surfaceInset
     }
-  val uiState = remember(sourceKey) { EditorUiState() }
-  val zoomController = remember { EditorZoomController(scope = scope) }
-  val bringIntoViewRequests = remember(sourceKey) { EditorBringIntoViewRequests() }
+  val uiState = remember(runtime, sourceKey) { EditorUiState() }
+  val zoomController = remember(runtime, sourceKey) { EditorZoomController(scope = scope) }
+  val bringIntoViewRequests = remember(runtime, sourceKey) { EditorBringIntoViewRequests() }
   val hintHazeState = remember { HazeState() }
   val hintShape = AppShapes.rounded(AppShapes.sm)
   val hintEvents = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
@@ -110,6 +116,23 @@ internal fun EditorPreview(
       hintAlpha.animateTo(1f, tween(PreviewHintFadeMillis))
       delay(PreviewHintVisibleMillis.toLong())
       hintAlpha.animateTo(0f, tween(PreviewHintFadeMillis))
+    }
+  }
+  LaunchedEffect(runtime.editor, layoutMode, modifiers) {
+    val editor = runtime.editor ?: return@LaunchedEffect
+    val currentModifiers = editor.rootModifiers.orEmpty().toPreviewRootModifierMap()
+    val changedModifiers = modifiers.filter { modifier ->
+      val type = modifier.previewRootModifierType() ?: return@filter false
+      currentModifiers[type] != modifier
+    }
+
+    editor.sync {
+      if (editor.rootAttrs?.layoutMode != layoutMode) {
+        enqueueRootLayoutMode(layoutMode)
+      }
+      changedModifiers.forEach { modifier -> enqueueRootModifier(modifier) }
+      enqueue(Message.Selection(SelectionOp.Unset))
+      enqueue(Message.System(SystemEvent.SetFocused(false)))
     }
   }
 
@@ -156,7 +179,6 @@ internal fun EditorPreview(
               graph = graph,
               doc = doc,
               sourceKey = sourceKey,
-              modifiers = modifiers,
               editorScope = scope,
               runtime = runtime,
               uiState = uiState,
@@ -206,7 +228,6 @@ private fun EditorPreviewContent(
   graph: ByteArray?,
   doc: PlainDoc,
   sourceKey: Any,
-  modifiers: List<EditorModifier>,
   editorScope: CoroutineScope,
   runtime: EditorRuntime,
   uiState: EditorUiState,
@@ -220,29 +241,7 @@ private fun EditorPreviewContent(
   val displayZoom = zoomController.displayZoom
   val editor = runtime.editor
 
-  LaunchedEffect(editor, modifiers) {
-    if (editor == null) {
-      return@LaunchedEffect
-    }
-
-    editor.await {
-      if (modifiers.isNotEmpty()) {
-        enqueue(Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.All)))
-        modifiers.forEach { modifier -> enqueue(Message.Modifier(ModifierOp.Set(modifier))) }
-      }
-      enqueue(Message.Selection(SelectionOp.Unset))
-      enqueue(Message.System(SystemEvent.SetFocused(false)))
-    }
-  }
-
-  LaunchedEffect(
-    sourceKey,
-    viewportWidth,
-    viewportHeight,
-    density.density,
-    themeVariant,
-    modifiers,
-  ) {
+  LaunchedEffect(runtime, sourceKey, viewportWidth, viewportHeight, density.density, themeVariant) {
     val viewport =
       Viewport(
         width = viewportWidth,
@@ -262,7 +261,7 @@ private fun EditorPreviewContent(
           )
         } else {
           Editor.createFromDoc(
-            doc = doc.withPreviewRootModifiers(modifiers),
+            doc = doc,
             viewport = viewport,
             themeVariant = themeVariant,
             scope = editorScope,
@@ -277,7 +276,7 @@ private fun EditorPreviewContent(
           e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
         }
       }
-      activeEditor.await {
+      activeEditor.sync {
         enqueue(
           Message.System(
             SystemEvent.Resize(
@@ -384,11 +383,6 @@ private fun defaultPreviewDoc(layoutMode: LayoutMode): PlainDoc {
   )
 }
 
-private fun PlainDoc.withPreviewRootModifiers(): PlainDoc {
-  val rootModifiers = DefaultPreviewRootModifiers + root.modifiers
-  return copy(root = root.copy(modifiers = rootModifiers))
-}
-
 private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): PlainDoc {
   val rootModifiers =
     DefaultPreviewRootModifiers + root.modifiers + modifiers.toPreviewRootModifierMap()
@@ -396,23 +390,23 @@ private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): 
 }
 
 private fun List<EditorModifier>.toPreviewRootModifierMap(): Map<ModifierType, EditorModifier> =
-  mapNotNull { modifier ->
-      val type =
-        when (modifier) {
-          is EditorModifier.FontFamily -> ModifierType.FontFamily
-          is EditorModifier.FontSize -> ModifierType.FontSize
-          is EditorModifier.FontWeight -> ModifierType.FontWeight
-          is EditorModifier.TextColor -> ModifierType.TextColor
-          is EditorModifier.BackgroundColor -> ModifierType.BackgroundColor
-          is EditorModifier.LetterSpacing -> ModifierType.LetterSpacing
-          is EditorModifier.LineHeight -> ModifierType.LineHeight
-          is EditorModifier.ParagraphIndent -> ModifierType.ParagraphIndent
-          is EditorModifier.BlockGap -> ModifierType.BlockGap
-          else -> null
-        }
-      type?.let { it to modifier }
-    }
-    .toMap()
+  mapNotNull { modifier -> modifier.previewRootModifierType()?.let { it to modifier } }.toMap()
+
+private fun EditorModifier.previewRootModifierType(): ModifierType? =
+  when (this) {
+    is EditorModifier.FontFamily -> ModifierType.FontFamily
+    is EditorModifier.FontSize -> ModifierType.FontSize
+    is EditorModifier.FontWeight -> ModifierType.FontWeight
+    is EditorModifier.TextColor -> ModifierType.TextColor
+    is EditorModifier.BackgroundColor -> ModifierType.BackgroundColor
+    is EditorModifier.LetterSpacing -> ModifierType.LetterSpacing
+    is EditorModifier.LineHeight -> ModifierType.LineHeight
+    is EditorModifier.ParagraphIndent -> ModifierType.ParagraphIndent
+    is EditorModifier.BlockGap -> ModifierType.BlockGap
+    else -> null
+  }
+
+private data object GeneratedPreviewSourceKey
 
 private val DefaultPreviewRootModifiers =
   mapOf(

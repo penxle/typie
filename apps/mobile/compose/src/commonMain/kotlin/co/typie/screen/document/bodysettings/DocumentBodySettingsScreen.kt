@@ -107,10 +107,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
     val settingsRuntime = remember(document.id) { EditorRuntime(uiScope = scope) }
     val previewRuntime = remember(document.id) { EditorRuntime(uiScope = scope) }
     val previewGraph = if (initial?.hasText == true) graph else null
-    val pendingPreviewChangesets =
-      remember(if (previewGraph == null) null else graphKey) {
-        mutableStateOf<List<ByteArray>>(emptyList())
-      }
     var bodyStyle by remember(document.id) { mutableStateOf<EditorStyleSettings?>(null) }
     val editorThemeVariant = currentEditorThemeVariant()
     var layout by remember(document.id) { mutableStateOf<LayoutMode?>(null) }
@@ -158,14 +154,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
       )
     }
 
-    LaunchedEffect(previewRuntime.editor, pendingPreviewChangesets.value) {
-      val previewEditor = previewRuntime.editor ?: return@LaunchedEffect
-      val changesets = pendingPreviewChangesets.value
-      if (changesets.isEmpty()) return@LaunchedEffect
-      pendingPreviewChangesets.value = emptyList()
-      changesets.forEach { previewEditor.receiveRemoteChangeset(it) }
-    }
-
     fun save(block: EditorScope.() -> Unit) {
       if (!controlsEnabled) return
       val activeEditor = settingsRuntime.editor ?: return
@@ -173,11 +161,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
         model
           .updateBodySettings(editor = activeEditor, documentId = document.id, block = block)
           .withDefaultExceptionHandler(toast)
-          .onOk { changesets ->
-            if (changesets != null && previewGraph != null) {
-              pendingPreviewChangesets.value = pendingPreviewChangesets.value + changesets
-            }
-          }
       }
     }
 
@@ -255,8 +238,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
             shape = previewShape,
             contentTopPadding = topBarClearance,
             graph = previewGraph,
-            modifiers =
-              if (previewGraph == null) resolvedBodyStyle.toEditorModifiers() else emptyList(),
+            modifiers = resolvedBodyStyle.toEditorModifiers(),
           )
         } else {
           Skeleton.Bone(

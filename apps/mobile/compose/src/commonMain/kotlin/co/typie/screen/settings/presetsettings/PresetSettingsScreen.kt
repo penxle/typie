@@ -99,7 +99,7 @@ fun PresetSettingsScreen() {
     val previewContainerHeight = topBarClearance + previewHeight
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
     val style = model.preset.toEditorStyleSettings()
-    val previewRuntime = remember(layout) { EditorRuntime(uiScope = scope) }
+    val previewRuntime = remember { EditorRuntime(uiScope = scope) }
 
     Box(
       modifier =
