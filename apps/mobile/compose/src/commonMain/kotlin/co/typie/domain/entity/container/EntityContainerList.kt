@@ -150,7 +150,7 @@ fun EntityContainerReorderListCard(
         val isDragging = reorderState.isDragging(entity.id)
 
         val rowModifier =
-          if (isDragging) {
+          if (isDragging || reorderState.isSettling(entity.id)) {
             Modifier
           } else {
             Modifier.animateBounds(

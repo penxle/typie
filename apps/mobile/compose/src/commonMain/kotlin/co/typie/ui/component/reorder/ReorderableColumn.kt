@@ -94,6 +94,8 @@ internal constructor(internal val edgeAutoScrollController: EdgeAutoScrollContro
 
   fun isDragging(key: K): Boolean = draggingKey == key
 
+  internal fun isSettling(key: K): Boolean = settling?.key == key
+
   internal val activeDragPointer: Offset?
     get() = activeDrag?.pointer
 
