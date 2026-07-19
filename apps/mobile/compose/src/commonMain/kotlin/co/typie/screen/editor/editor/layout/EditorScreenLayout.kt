@@ -26,12 +26,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.EditorPlatformIndirectScaleBridge
@@ -77,6 +82,25 @@ private enum class EditorScreenLayoutSlot {
 private const val EditorViewportScrollAnchorTolerance = 1f
 
 private object EditorViewportNestedScrollConnection : NestedScrollConnection
+
+private data object SharePointerInputWithSiblingsElement :
+  ModifierNodeElement<SharePointerInputWithSiblingsNode>() {
+  override fun create(): SharePointerInputWithSiblingsNode = SharePointerInputWithSiblingsNode()
+
+  override fun update(node: SharePointerInputWithSiblingsNode) = Unit
+}
+
+private class SharePointerInputWithSiblingsNode : Modifier.Node(), PointerInputModifierNode {
+  override fun sharePointerInputWithSiblings(): Boolean = true
+
+  override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) =
+    Unit
+
+  override fun onCancelPointerInput() = Unit
+}
+
+private fun Modifier.sharePointerInputWithSiblings(): Modifier =
+  this then SharePointerInputWithSiblingsElement
 
 internal enum class EditorViewportScrollReconcileMode {
   Disabled,
@@ -329,7 +353,10 @@ internal fun EditorScreenLayout(
         .map { it.measure(viewportConstraints) }
     val viewportOverlayPlaceables =
       subcompose(EditorScreenLayoutSlot.ViewportOverlay) {
-          Box(modifier = Modifier.fillMaxSize().clipToBounds(), content = viewportOverlay)
+          Box(
+            modifier = Modifier.fillMaxSize().clipToBounds().sharePointerInputWithSiblings(),
+            content = viewportOverlay,
+          )
         }
         .map { it.measure(viewportConstraints) }
     val overlayPlaceables =

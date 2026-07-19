@@ -19,13 +19,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
-import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
-import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollMode
@@ -41,9 +39,6 @@ internal fun EditorScreenOverlayHost(
   viewportState: EditorViewportState,
   visibleArea: EditorVisibleArea,
   autoScrollPolicy: EditorAutoScrollPolicy,
-  layoutSpec: EditorDocumentLayoutSpec,
-  pageSizes: List<PageSize>,
-  displayZoom: Float,
   onTableAxisActionsRequest: (EditorTableAxisActionsTarget, Selection?) -> Unit,
   showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
@@ -82,15 +77,6 @@ internal fun EditorScreenOverlayHost(
         overlayBoundsInRoot = coordinates.unclippedBoundsInRoot()
       }
   ) {
-    EditorScrollbars(
-      viewportState = viewportState,
-      visibleArea = visibleArea,
-      layoutSpec = layoutSpec,
-      pageSizes = pageSizes,
-      displayZoom = displayZoom,
-      modifier = Modifier.fillMaxSize(),
-    )
-
     if (showDebugOverlay) {
       DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
       DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))

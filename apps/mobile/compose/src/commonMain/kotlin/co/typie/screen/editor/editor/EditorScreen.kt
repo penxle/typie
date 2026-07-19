@@ -131,6 +131,7 @@ import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
+import co.typie.screen.editor.editor.overlay.EditorScrollbars
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.placeholder.EditorDocumentPlaceholder
 import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
@@ -1283,6 +1284,14 @@ fun EditorScreen(entityId: String) {
               viewportState = screenState.viewportState,
               visibleArea = visibleArea,
             )
+            EditorScrollbars(
+              viewportState = screenState.viewportState,
+              visibleArea = visibleArea,
+              layoutSpec = layoutSpec,
+              pageSizes = pageSizes,
+              displayZoom = displayZoom,
+              modifier = Modifier.fillMaxSize(),
+            )
           } else {
             EditorLoadingSkeleton(
               layoutSpec = layoutSpec,
@@ -1299,9 +1308,6 @@ fun EditorScreen(entityId: String) {
                 viewportState = screenState.viewportState,
                 visibleArea = visibleArea,
                 autoScrollPolicy = autoScrollPolicy,
-                layoutSpec = layoutSpec,
-                pageSizes = pageSizes,
-                displayZoom = displayZoom,
                 onTableAxisActionsRequest = { target, openedSelection ->
                   findReplace.close()
                   aiFeedback.close()

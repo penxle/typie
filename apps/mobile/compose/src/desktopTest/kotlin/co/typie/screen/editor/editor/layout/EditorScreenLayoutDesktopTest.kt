@@ -1,14 +1,18 @@
 package co.typie.screen.editor.editor.layout
 
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
@@ -27,6 +32,7 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorState
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
@@ -41,13 +47,103 @@ import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationPopNestedScroll
+import co.typie.screen.editor.editor.overlay.EditorScrollbars
 import co.typie.screen.editor.editor.state.EditorScreenState
+import co.typie.ui.theme.LightColors
+import co.typie.ui.theme.LocalAppColors
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class EditorScreenLayoutDesktopTest {
+  @Test
+  fun viewportOverlayWheelReachesViewport() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(fixture = fixture, viewportOverlay = { ViewportOverlayTarget() })
+
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = 30f, y = 16f))
+      scroll(Offset(x = 0f, y = 120f))
+    }
+    waitForIdle()
+
+    assertTrue(fixture.scrollDeltas.isNotEmpty())
+  }
+
+  @Test
+  fun viewportOverlayConsumedDownDoesNotStartEditorGesture() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(fixture = fixture, viewportOverlay = { ViewportOverlayTarget() })
+
+    onNodeWithTag(ViewportOverlayTag).performTouchInput {
+      down(center)
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(0, fixture.editorPointerInputCount)
+    assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
+  }
+
+  @Test
+  fun scrollbarOwnsDownAndSharesWheelWithViewport() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = {
+        CompositionLocalProvider(LocalAppColors provides LightColors) {
+          EditorScrollbars(
+            viewportState = fixture.viewportState,
+            visibleArea = fixture.visibleArea,
+            layoutSpec = fixture.layoutSpec,
+            pageSizes = fixture.pageSizes,
+            displayZoom = 1f,
+          )
+        }
+      },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      up()
+    }
+    waitForIdle()
+    assertEquals(0, fixture.editorPointerInputCount, "scrollbar down reached editor")
+
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(center)
+      scroll(Offset(x = 0f, y = 120f))
+    }
+    waitForIdle()
+    assertTrue(fixture.scrollDeltas.isNotEmpty(), "wheel outside the thumb did not reach viewport")
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      scroll(Offset(x = 0f, y = 120f))
+    }
+    waitForIdle()
+
+    assertTrue(fixture.scrollDeltas.isNotEmpty(), "wheel over the thumb did not reach viewport")
+  }
+
+  @Test
+  fun regularOverlayStillBlocksViewportWheel() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(fixture = fixture, overlay = { ViewportOverlayTarget() })
+
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(center)
+      scroll(Offset(x = 0f, y = 120f))
+    }
+    waitForIdle()
+
+    assertTrue(fixture.scrollDeltas.isEmpty())
+  }
+
   @Test
   fun toolbarOverlaysWithoutShrinkingViewport() = runComposeUiTest {
     var measuredViewportSize = Size.Zero
@@ -391,8 +487,94 @@ class EditorScreenLayoutDesktopTest {
     assertTrue(navigationDragCount > 0)
   }
 
+  private fun androidx.compose.ui.test.ComposeUiTest.setViewportOverlayContent(
+    fixture: ViewportOverlayFixture,
+    viewportOverlay: @Composable BoxScope.() -> Unit = {},
+    overlay: @Composable () -> Unit = {},
+  ) {
+    setContent {
+      val coroutineScope = rememberCoroutineScope()
+      val interactionScope = remember { EditorInteractionScope(coroutineScope = coroutineScope) }
+      fixture.interactionScope = interactionScope
+      CompositionLocalProvider(
+        LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
+        LocalEditorInteractionScope provides interactionScope,
+        LocalEditorUiState provides fixture.uiState,
+      ) {
+        EditorScreenLayout(
+          state = remember { EditorScreenState(fixture.viewportState) },
+          scrollFrame = fixture.scrollFrame,
+          visibleArea = fixture.visibleArea,
+          viewportScrollableState =
+            rememberScrollable2DState { delta ->
+              fixture.scrollDeltas += delta
+              delta
+            },
+          viewportContentWidth = TestViewportSize.width,
+          viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
+          onEditorPointerInput = { fixture.editorPointerInputCount += 1 },
+          onMeasuredViewportSizeChange = {},
+          header = {},
+          body = { interactionModifier -> Box(interactionModifier.fillMaxWidth().height(800.dp)) },
+          viewportOverlay = viewportOverlay,
+          overlay = overlay,
+          toolbar = {},
+          modifier =
+            Modifier.size(width = TestViewportSize.width.dp, height = TestViewportSize.height.dp)
+              .testTag(LayoutTag),
+        )
+      }
+    }
+    waitForIdle()
+  }
+
+  @Composable
+  private fun ViewportOverlayTarget() {
+    Box(
+      Modifier.fillMaxSize()
+        .testTag(ViewportOverlayTag)
+        .pointerInput(Unit) { detectDragGestures { change, _ -> change.consume() } }
+        .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+    )
+  }
+
+  private class ViewportOverlayFixture {
+    val viewportState = EditorViewportState()
+    val visibleArea = EditorVisibleArea(viewport = TestViewportSize)
+    val uiState = EditorUiState()
+    lateinit var interactionScope: EditorInteractionScope
+    val scrollDeltas = mutableListOf<Offset>()
+    var editorPointerInputCount = 0
+
+    val layoutSpec =
+      EditorDocumentLayoutSpec.Paginated(
+        pageWidth = TestViewportSize.width,
+        pageHeight = TestViewportSize.height,
+        pageMarginTop = 0f,
+        pageMarginBottom = 0f,
+        pageMarginLeft = 0f,
+        pageMarginRight = 0f,
+      )
+    val pageSizes =
+      listOf(PageSize(width = TestViewportSize.width, height = TestViewportSize.height * 2f))
+
+    val scrollFrame =
+      EditorScrollFrame(
+        state = EditorState.Initial,
+        layoutSpec = layoutSpec,
+        displayZoom = 1f,
+        visibleArea = visibleArea,
+        autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea),
+        headerHeight = 0f,
+        density = 1f,
+        editorBounds = EditorBoundsInContainer(),
+      )
+  }
+
   private companion object {
     const val LayoutTag = "editor-screen-layout"
     const val SubPaneTag = "editor-screen-layout-subpane"
+    const val ViewportOverlayTag = "editor-screen-layout-viewport-overlay-target"
+    val TestViewportSize = Size(width = 320f, height = 640f)
   }
 }

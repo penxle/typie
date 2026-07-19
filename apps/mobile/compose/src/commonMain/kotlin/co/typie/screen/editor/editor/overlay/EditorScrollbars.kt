@@ -511,6 +511,7 @@ private fun EditorScrollbarThumb(
 
           awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            down.consume()
             if (!latestDirectDragEnabled.value) {
               var cancelled = false
               val longPressed =
