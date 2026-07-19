@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -15,12 +14,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
@@ -63,8 +62,7 @@ internal data class EditorTableAxisSelector(
 internal fun EditorTableAxisSelectionOverlay(
   editor: Editor,
   uiState: EditorUiState,
-  editorRectInOverlay: Rect,
-  overlaySize: Size,
+  editorRectInOverlay: () -> Rect?,
   density: Float,
   onTableAxisActionsRequest: (EditorTableAxisActionsTarget, Selection?) -> Unit,
 ) {
@@ -72,31 +70,57 @@ internal fun EditorTableAxisSelectionOverlay(
     return
   }
 
-  val placements =
-    resolveTableAxisSelectorOverlayPlacements(
-      editor = editor,
-      uiState = uiState,
-      editorRectInOverlay = editorRectInOverlay,
-      overlaySize = overlaySize,
-      density = density,
-    )
-  if (placements.isEmpty()) {
+  val selectors = resolveTableAxisSelectors(editor)
+  if (selectors.isEmpty()) {
     return
   }
 
-  Box(modifier = Modifier.fillMaxSize()) {
-    placements.forEach { placement ->
-      EditorTableAxisSelectorButton(
-        placement = placement,
-        onClick = {
-          val selector = placement.selector
-          editor.sendTableAxisOp(
-            selector = selector,
-            op = TableOp.SelectAxis(axis = selector.axis, index = selector.index),
-          )
-          onTableAxisActionsRequest(selector.toActionsTarget(), editor.selection)
-        },
+  Layout(
+    modifier = Modifier.fillMaxSize(),
+    content = {
+      selectors.forEach { selector ->
+        EditorTableAxisSelectorButton(
+          selector = selector,
+          onClick = {
+            editor.sendTableAxisOp(
+              selector = selector,
+              op = TableOp.SelectAxis(axis = selector.axis, index = selector.index),
+            )
+            onTableAxisActionsRequest(selector.toActionsTarget(), editor.selection)
+          },
+        )
+      }
+    },
+  ) { measurables, constraints ->
+    val placeables = measurables.mapIndexed { index, measurable ->
+      val (width, height) = selectors[index].buttonSize()
+      measurable.measure(
+        constraints.copy(
+          minWidth = width.roundToPx(),
+          maxWidth = width.roundToPx(),
+          minHeight = height.roundToPx(),
+          maxHeight = height.roundToPx(),
+        )
       )
+    }
+
+    layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+      val currentEditorRect = editorRectInOverlay() ?: return@layout
+      val placements =
+        resolveTableAxisSelectorOverlayPlacements(
+          editor = editor,
+          uiState = uiState,
+          editorRectInOverlay = currentEditorRect,
+          overlaySize =
+            Size(width = constraints.maxWidth.toFloat(), height = constraints.maxHeight.toFloat()),
+          density = density,
+        )
+      placeables.zip(placements).forEach { (placeable, placement) ->
+        placeable.place(
+          x = placement.buttonRect.left.roundToInt(),
+          y = placement.buttonRect.top.roundToInt(),
+        )
+      }
     }
   }
 }
@@ -247,6 +271,12 @@ private fun EditorTableAxisSelector.tableMessage(op: TableOp): Message =
 private fun EditorTableAxisSelector.toActionsTarget(): EditorTableAxisActionsTarget =
   EditorTableAxisActionsTarget(tableId = overlay.tableId, axis = axis, index = index, count = count)
 
+private fun EditorTableAxisSelector.buttonSize(): Pair<Dp, Dp> =
+  when (axis) {
+    Axis.Horizontal -> TableAxisSelectorRowButtonWidth to TableAxisSelectorRowButtonHeight
+    Axis.Vertical -> TableAxisSelectorColumnButtonWidth to TableAxisSelectorColumnButtonHeight
+  }
+
 internal fun resolveSelectorButtonRect(
   center: Offset,
   axis: Axis,
@@ -290,30 +320,22 @@ private fun resolvePositionInOverlay(
 }
 
 @Composable
-private fun EditorTableAxisSelectorButton(
-  placement: EditorTableAxisSelectorOverlayPlacement,
-  onClick: () -> Unit,
-) {
+private fun EditorTableAxisSelectorButton(selector: EditorTableAxisSelector, onClick: () -> Unit) {
   val icon =
-    when (placement.selector.axis) {
+    when (selector.axis) {
       Axis.Horizontal -> Lucide.EllipsisVertical
       Axis.Vertical -> Lucide.Ellipsis
     }
   val description =
-    when (placement.selector.axis) {
+    when (selector.axis) {
       Axis.Horizontal -> "행 메뉴"
       Axis.Vertical -> "열 메뉴"
     }
+  val (width, height) = selector.buttonSize()
   Box(
     modifier =
-      Modifier.offset {
-          IntOffset(
-            x = placement.buttonRect.left.roundToInt(),
-            y = placement.buttonRect.top.roundToInt(),
-          )
-        }
-        .width(placement.width)
-        .height(placement.height)
+      Modifier.width(width)
+        .height(height)
         .shadow(AppTheme.shadows.sm, TableAxisSelectorButtonShape)
         .clip(TableAxisSelectorButtonShape)
         .border(1.dp, AppTheme.colors.borderEmphasis, TableAxisSelectorButtonShape)

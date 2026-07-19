@@ -189,6 +189,18 @@ data class EditorBoundsInContainer(
 ) {
   val isValid: Boolean
     get() = width > 0f && height > 0f
+
+  internal fun toPxRect(density: Float): Rect? {
+    if (!isValid || density <= 0f) {
+      return null
+    }
+    return Rect(
+      left = x * density,
+      top = y * density,
+      right = (x + width) * density,
+      bottom = (y + height) * density,
+    )
+  }
 }
 
 val LocalEditorUiState = compositionLocalOf<EditorUiState> { error("No EditorUiState provided") }

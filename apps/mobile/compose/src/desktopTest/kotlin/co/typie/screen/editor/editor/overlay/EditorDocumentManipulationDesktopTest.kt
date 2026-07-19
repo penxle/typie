@@ -1251,22 +1251,10 @@ class EditorDocumentManipulationDesktopTest {
               editor = editor,
               uiState = uiState,
               geometry = interactionScope,
-              editorOffsetInSurface =
-                uiState.editorBoundsInContainer.let { bounds -> Offset(bounds.x, bounds.y) },
               presentation = interactionScope.controller.tableColumnResizePresentation,
             )
-            EditorTableCellSelectionOverlay(
-              editor = editor,
-              uiState = uiState,
-              editorRectInOverlay = uiState.editorRectInSurface(),
-              density = 1f,
-            )
-            EditorSelectionHandleOverlay(
-              editor = editor,
-              uiState = uiState,
-              editorRectInOverlay = uiState.editorRectInSurface(),
-              density = 1f,
-            )
+            EditorTableCellSelectionOverlay(editor = editor, uiState = uiState, density = 1f)
+            EditorSelectionHandleOverlay(editor = editor, uiState = uiState, density = 1f)
           }
         }
       }
@@ -1280,16 +1268,6 @@ class EditorDocumentManipulationDesktopTest {
       updatePageOffset(page = 0, offset = Offset.Zero)
       updateInteractionSurfaceBounds(TestRootRect, density = 1f)
       updateEditorBounds(TestRootRect, density = 1f)
-    }
-
-  private fun EditorUiState.editorRectInSurface(): ComposeRect =
-    editorBoundsInContainer.let { bounds ->
-      ComposeRect(
-        left = bounds.x,
-        top = bounds.y,
-        right = bounds.x + bounds.width,
-        bottom = bounds.y + bounds.height,
-      )
     }
 
   private fun testPaginatedLayoutSpec(): EditorDocumentLayoutSpec.Paginated =

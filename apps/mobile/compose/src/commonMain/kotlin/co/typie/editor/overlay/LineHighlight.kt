@@ -1,13 +1,12 @@
 package co.typie.editor.overlay
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
@@ -69,23 +68,26 @@ internal fun EditorLineHighlightOverlay(
 internal fun EditorExtensionAreaLineHighlightOverlay(
   cursor: CursorMetrics?,
   focused: Boolean,
-  editorBounds: EditorBoundsInContainer,
-  viewportTransform: EditorViewportTransform,
+  editorBounds: () -> EditorBoundsInContainer,
+  viewportTransform: () -> EditorViewportTransform,
   enabled: Boolean,
+  modifier: Modifier = Modifier,
 ) {
   if (!enabled || !focused) return
   val currentCursor = cursor ?: return
-  val band =
-    resolveEditorExtensionAreaLineHighlightBand(
-      cursor = currentCursor,
-      editorBounds = editorBounds,
-      viewportTransform = viewportTransform,
-    ) ?: return
+  val color = AppTheme.colors.surfaceInset.copy(alpha = 0.55f)
 
-  Box(
-    Modifier.fillMaxWidth()
-      .graphicsLayer { translationY = band.top.dp.toPx() }
-      .height(band.height.dp)
-      .background(AppTheme.colors.surfaceInset.copy(alpha = 0.55f))
-  )
+  Canvas(modifier) {
+    val band =
+      resolveEditorExtensionAreaLineHighlightBand(
+        cursor = currentCursor,
+        editorBounds = editorBounds(),
+        viewportTransform = viewportTransform(),
+      ) ?: return@Canvas
+    drawRect(
+      color = color,
+      topLeft = Offset(x = 0f, y = band.top * density),
+      size = Size(width = size.width, height = band.height * density),
+    )
+  }
 }

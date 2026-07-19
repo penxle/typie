@@ -16,10 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -27,6 +26,7 @@ import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.overlay.EditorExtensionAreaLineHighlightOverlay
+import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
@@ -67,12 +67,8 @@ internal fun EditorBody(
       )
     }
   val interactionSurfaceModifier =
-    Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
-      uiState.updateInteractionSurfaceBounds(
-        boundsInRoot = coordinates.unclippedBoundsInRoot(),
-        density = density.density,
-      )
-    }
+    Modifier.fillMaxWidth()
+      .trackEditorInteractionSurfaceBounds(uiState = uiState, density = density.density)
 
   Box(modifier = modifier.fillMaxWidth()) {
     Box(modifier = interactionSurfaceModifier.then(interactionModifier)) {
@@ -80,9 +76,10 @@ internal fun EditorBody(
         EditorExtensionAreaLineHighlightOverlay(
           cursor = editor?.cursor,
           focused = uiState.focused,
-          editorBounds = uiState.editorBoundsInContainer,
-          viewportTransform = uiState.resolveViewportTransform(editor?.pageSizes.orEmpty()),
+          editorBounds = { uiState.editorBoundsInContainer },
+          viewportTransform = { uiState.resolveViewportTransform(editor?.pageSizes.orEmpty()) },
           enabled = Preference.lineHighlightEnabled,
+          modifier = Modifier.matchParentSize(),
         )
       }
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
@@ -113,13 +110,8 @@ internal fun EditorBody(
 
             Box(
               modifier =
-                Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
-                  uiState.updateEditorBounds(
-                    boundsInRoot = coordinates.unclippedBoundsInRoot(),
-                    clippedBoundsInRoot = coordinates.boundsInRoot(),
-                    density = density.density,
-                  )
-                }
+                Modifier.fillMaxWidth()
+                  .trackEditorContentBounds(uiState = uiState, density = density.density)
             ) {
               EditorView(
                 load = load,
@@ -156,40 +148,44 @@ internal fun EditorBody(
           }
         }
       }
-      val editorBounds = uiState.editorBoundsInContainer
-      if (editor != null && editorBounds.isValid && density.density > 0f) {
-        val editorRectInSurface =
-          Rect(
-            left = editorBounds.x * density.density,
-            top = editorBounds.y * density.density,
-            right = (editorBounds.x + editorBounds.width) * density.density,
-            bottom = (editorBounds.y + editorBounds.height) * density.density,
-          )
+      if (editor != null) {
         EditorTableColumnResizeOverlay(
           editor = editor,
           uiState = uiState,
           geometry = interactionScope,
-          editorOffsetInSurface = editorRectInSurface.topLeft,
           presentation = interactionScope.controller.tableColumnResizePresentation,
         )
         EditorTableCellSelectionOverlay(
           editor = editor,
           uiState = uiState,
-          editorRectInOverlay = editorRectInSurface,
           density = density.density,
         )
-        EditorSelectionHandleOverlay(
-          editor = editor,
-          uiState = uiState,
-          editorRectInOverlay = editorRectInSurface,
-          density = density.density,
-        )
+        EditorSelectionHandleOverlay(editor = editor, uiState = uiState, density = density.density)
       }
     }
 
     Box(modifier = Modifier.fillMaxSize(), content = overlay)
   }
 }
+
+internal fun Modifier.trackEditorInteractionSurfaceBounds(
+  uiState: EditorUiState,
+  density: Float,
+): Modifier = onPlaced { coordinates ->
+  uiState.updateInteractionSurfaceBounds(
+    boundsInRoot = coordinates.unclippedBoundsInRoot(),
+    density = density,
+  )
+}
+
+internal fun Modifier.trackEditorContentBounds(uiState: EditorUiState, density: Float): Modifier =
+  onPlaced { coordinates ->
+    uiState.updateEditorBounds(
+      boundsInRoot = coordinates.unclippedBoundsInRoot(),
+      clippedBoundsInRoot = coordinates.boundsInRoot(),
+      density = density,
+    )
+  }
 
 private fun Modifier.debugBackground(enabled: Boolean, color: Color): Modifier =
   if (enabled) {

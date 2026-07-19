@@ -1,18 +1,13 @@
 package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import co.typie.editor.Editor
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ext.isCollapsed
@@ -25,29 +20,61 @@ import co.typie.editor.interaction.gestures.resolveSelectionHandleGeometry
 import co.typie.editor.interaction.hasActiveTableCellSelection
 import co.typie.editor.runtime.EditorUiState
 import co.typie.ui.theme.AppTheme
-import kotlin.math.roundToInt
 
 @Composable
-internal fun EditorSelectionHandleOverlay(
-  editor: Editor,
-  uiState: EditorUiState,
-  editorRectInOverlay: Rect,
-  density: Float,
-) {
+internal fun EditorSelectionHandleOverlay(editor: Editor, uiState: EditorUiState, density: Float) {
   if (!uiState.focused || editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
     return
   }
 
-  val placements =
-    resolveSelectionHandleOverlayPlacements(
-      editor = editor,
-      uiState = uiState,
-      editorRectInOverlay = editorRectInOverlay,
-      density = density,
-    ) ?: return
+  if (editor.tickSelectionEndpoints == null) {
+    return
+  }
+
   val color = AppTheme.colors.textDefault
 
-  placements.forEach { placement -> EditorSelectionHandle(placement = placement, color = color) }
+  Canvas(modifier = Modifier.fillMaxSize()) {
+    val editorRect = uiState.editorBoundsInContainer.toPxRect(density) ?: return@Canvas
+    val placements =
+      resolveSelectionHandleOverlayPlacements(
+        editor = editor,
+        uiState = uiState,
+        editorRectInOverlay = editorRect,
+        density = density,
+      ) ?: return@Canvas
+    placements.forEach { placement ->
+      val geometry = resolveSelectionHandleOverlayGeometry(placement, density)
+      translate(
+        left = geometry.touchTargetTopLeft.x + geometry.paintTopLeftInTouchTarget.x,
+        top = geometry.touchTargetTopLeft.y + geometry.paintTopLeftInTouchTarget.y,
+      ) {
+        val centerX = geometry.radiusPx
+        if (placement.type == EditorSelectionHandleType.From) {
+          drawCircle(
+            color = color,
+            radius = geometry.radiusPx,
+            center = Offset(centerX, geometry.radiusPx),
+          )
+          drawRect(
+            color = color,
+            topLeft = Offset(centerX - geometry.stemWidthPx / 2f, geometry.radiusPx * 2f),
+            size = Size(geometry.stemWidthPx, geometry.stemHeightPx),
+          )
+        } else {
+          drawRect(
+            color = color,
+            topLeft = Offset(centerX - geometry.stemWidthPx / 2f, 0f),
+            size = Size(geometry.stemWidthPx, geometry.stemHeightPx),
+          )
+          drawCircle(
+            color = color,
+            radius = geometry.radiusPx,
+            center = Offset(centerX, geometry.stemHeightPx + geometry.radiusPx),
+          )
+        }
+      }
+    }
+  }
 }
 
 internal fun resolveSelectionHandleOverlayPlacements(
@@ -123,56 +150,4 @@ private fun resolveSelectionHandleOverlayPlacement(
     endpointTopLeftInOverlay = topLeft,
     stemHeightPx = stemHeightPx,
   )
-}
-
-@Composable
-private fun EditorSelectionHandle(placement: EditorSelectionHandleOverlayPlacement, color: Color) {
-  val localDensity = LocalDensity.current
-  val geometry = resolveSelectionHandleOverlayGeometry(placement, localDensity.density)
-
-  Box(
-    modifier =
-      Modifier.offset {
-          IntOffset(
-            geometry.touchTargetTopLeft.x.roundToInt(),
-            geometry.touchTargetTopLeft.y.roundToInt(),
-          )
-        }
-        .size(
-          width = with(localDensity) { geometry.touchTargetSize.width.toDp() },
-          height = with(localDensity) { geometry.touchTargetSize.height.toDp() },
-        )
-  ) {
-    Canvas(modifier = Modifier.matchParentSize()) {
-      translate(
-        left = geometry.paintTopLeftInTouchTarget.x,
-        top = geometry.paintTopLeftInTouchTarget.y,
-      ) {
-        val centerX = geometry.radiusPx
-        if (placement.type == EditorSelectionHandleType.From) {
-          drawCircle(
-            color = color,
-            radius = geometry.radiusPx,
-            center = Offset(centerX, geometry.radiusPx),
-          )
-          drawRect(
-            color = color,
-            topLeft = Offset(centerX - geometry.stemWidthPx / 2f, geometry.radiusPx * 2f),
-            size = Size(geometry.stemWidthPx, geometry.stemHeightPx),
-          )
-        } else {
-          drawRect(
-            color = color,
-            topLeft = Offset(centerX - geometry.stemWidthPx / 2f, 0f),
-            size = Size(geometry.stemWidthPx, geometry.stemHeightPx),
-          )
-          drawCircle(
-            color = color,
-            radius = geometry.radiusPx,
-            center = Offset(centerX, geometry.stemHeightPx + geometry.radiusPx),
-          )
-        }
-      }
-    }
-  }
 }

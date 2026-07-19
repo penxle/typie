@@ -51,27 +51,19 @@ internal fun EditorScreenOverlayHost(
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
   val overlayBounds = overlayBoundsInRoot
-  val editorBoundsInContainer = uiState.editorBoundsInContainer
-  val editorRectInViewport =
-    if (editorBoundsInContainer.isValid && density.density > 0f) {
-      val left =
-        editorBoundsInContainer.x * density.density - viewportState.scrollOffset.x * density.density
-      val top =
-        (visibleArea.headerHeight + editorBoundsInContainer.y) * density.density -
-          (viewportState.scrollOffset.y * density.density).roundToInt()
-      Rect(
-        left = left,
-        top = top,
-        right = left + editorBoundsInContainer.width * density.density,
-        bottom = top + editorBoundsInContainer.height * density.density,
-      )
-    } else {
-      null
-    }
   val editorRectInOverlay = overlayBounds?.let { bounds ->
     uiState.editorRectInRoot()?.translate(translateX = -bounds.left, translateY = -bounds.top)
   }
-
+  val editorRectInViewport: () -> Rect? = {
+    uiState.editorBoundsInContainer
+      .toPxRect(density.density)
+      ?.translate(
+        translateX = -viewportState.scrollOffset.x * density.density,
+        translateY =
+          visibleArea.headerHeight * density.density -
+            (viewportState.scrollOffset.y * density.density).roundToInt(),
+      )
+  }
   Box(
     modifier =
       modifier.fillMaxSize().onGloballyPositioned { coordinates ->
@@ -100,16 +92,13 @@ internal fun EditorScreenOverlayHost(
     if (overlayBounds != null) {
       val editor = runtime.editor
       if (editor != null) {
-        if (editorRectInViewport != null) {
-          EditorTableAxisSelectionOverlay(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInViewport,
-            overlaySize = overlayBounds.size,
-            density = density.density,
-            onTableAxisActionsRequest = onTableAxisActionsRequest,
-          )
-        }
+        EditorTableAxisSelectionOverlay(
+          editor = editor,
+          uiState = uiState,
+          editorRectInOverlay = editorRectInViewport,
+          density = density.density,
+          onTableAxisActionsRequest = onTableAxisActionsRequest,
+        )
 
         if (editorRectInOverlay != null && contextMenu.isVisibleFor(editor.state)) {
           val anchor =

@@ -1,7 +1,6 @@
 package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -22,37 +21,35 @@ import co.typie.ui.theme.AppTheme
 internal fun EditorTableCellSelectionOverlay(
   editor: Editor,
   uiState: EditorUiState,
-  editorRectInOverlay: Rect,
   density: Float,
 ) {
   if (!uiState.focused) {
     return
   }
 
-  val placements =
-    resolveTableCellSelectionOverlayPlacements(
-      editor = editor,
-      uiState = uiState,
-      editorRectInOverlay = editorRectInOverlay,
-      density = density,
-    )
-  if (placements.isEmpty()) {
+  if (resolveTableCellSelections(editor).isEmpty()) {
     return
   }
   val color = AppTheme.colors.textDefault
 
-  Box(modifier = Modifier.fillMaxSize()) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-      placements.forEach { placement ->
-        drawRect(
-          color = color,
-          topLeft = placement.outline.topLeft,
-          size = placement.outline.size,
-          style = Stroke(width = placement.borderWidthPx),
-        )
-        placement.handleCenter?.let { handleCenter ->
-          drawCircle(color = color, radius = placement.handleRadiusPx, center = handleCenter)
-        }
+  Canvas(modifier = Modifier.fillMaxSize()) {
+    val editorRect = uiState.editorBoundsInContainer.toPxRect(density) ?: return@Canvas
+    val placements =
+      resolveTableCellSelectionOverlayPlacements(
+        editor = editor,
+        uiState = uiState,
+        editorRectInOverlay = editorRect,
+        density = density,
+      )
+    placements.forEach { placement ->
+      drawRect(
+        color = color,
+        topLeft = placement.outline.topLeft,
+        size = placement.outline.size,
+        style = Stroke(width = placement.borderWidthPx),
+      )
+      placement.handleCenter?.let { handleCenter ->
+        drawCircle(color = color, radius = placement.handleRadiusPx, center = handleCenter)
       }
     }
   }
