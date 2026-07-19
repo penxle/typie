@@ -16,6 +16,7 @@ aggs
 aifeedback
 aigateway
 aisettings
+alexzhirkevich
 amazonses
 androidx
 anifantakis

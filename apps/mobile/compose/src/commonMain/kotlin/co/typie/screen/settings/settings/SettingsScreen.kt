@@ -234,6 +234,8 @@ fun SettingsScreen() {
               )
             },
           )
+          CardDivider()
+          SettingsCardRow("온보딩 미리보기", onClick = { nav.navigate(Route.Onboarding) })
         }
       }
 

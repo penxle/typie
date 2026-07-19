@@ -1,0 +1,14 @@
+query OnboardingGate_Query {
+  me @catch(to: THROW) {
+    id
+    createdAt
+    preferences
+  }
+}
+
+mutation OnboardingGate_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+  updatePreferences(input: $input) {
+    id
+    preferences
+  }
+}

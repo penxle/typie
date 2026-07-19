@@ -70,6 +70,8 @@ sealed interface Route {
 
   @Serializable data class DocumentBodySettings(val entityId: String) : Route
 
+  @Serializable data object Onboarding : Route
+
   @Serializable data object Login : Route
 }
 
@@ -99,5 +101,12 @@ val Route.keepAlive: Boolean
   get() =
     when (this) {
       is Route.Editor -> true
+      else -> false
+    }
+
+val Route.popGestureDisabled: Boolean
+  get() =
+    when (this) {
+      is Route.Onboarding -> true
       else -> false
     }

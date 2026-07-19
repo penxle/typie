@@ -16,6 +16,7 @@ buildkonfig = "0.22.0"
 coil-resvg = "1.0.0"
 coil3 = "3.5.0"
 composeMultiplatform = "1.11.1"
+compottie = "2.2.4"
 detekt = "2.0.0-alpha.5"
 firebase = "34.15.0"
 google-services = "4.5.0"
@@ -57,6 +58,7 @@ compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.re
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
 compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
+compottie = { module = "io.github.alexzhirkevich:compottie", version.ref = "compottie" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }

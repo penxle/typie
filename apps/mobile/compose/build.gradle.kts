@@ -212,6 +212,7 @@ kotlin {
     implementation(libs.ksafe)
     implementation(libs.haze)
     implementation(libs.haze.blur)
+    implementation(libs.compottie)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

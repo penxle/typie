@@ -35,6 +35,7 @@ import co.typie.screen.subscription.cancelplan.CancelPlanScreen
 import co.typie.screen.subscription.currentplan.CurrentPlanScreen
 import co.typie.screen.subscription.enrollplan.EnrollPlanScreen
 import co.typie.screen.subscription.referral.ReferralScreen
+import co.typie.screen.system.onboarding.OnboardingPreviewScreen
 
 @Composable
 fun MainRoutes(route: Route) {
@@ -72,6 +73,7 @@ fun MainRoutes(route: Route) {
     is Route.Editor -> EditorScreen(entityId = route.entityId)
     is Route.Document -> DocumentScreen(entityId = route.entityId)
     is Route.DocumentBodySettings -> DocumentBodySettingsScreen(entityId = route.entityId)
+    is Route.Onboarding -> OnboardingPreviewScreen()
     else -> {}
   }
 }

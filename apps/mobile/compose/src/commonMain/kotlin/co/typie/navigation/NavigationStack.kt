@@ -50,6 +50,7 @@ import co.typie.platform.isTouchDragPointer
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
 import co.typie.route.keepAlive
+import co.typie.route.popGestureDisabled
 import co.typie.route.transitionStyleTo
 import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
@@ -256,6 +257,7 @@ fun NavigationStack(
 
   fun canStartPopGesture(): Boolean =
     navigator.canPop &&
+      !navigator.current.popGestureDisabled &&
       !navigator.isTransitioning &&
       !predictiveBackActive &&
       containerWidth > 0f &&

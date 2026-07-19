@@ -21,6 +21,8 @@ import co.typie.domain.auth.AuthService
 import co.typie.domain.auth.AuthState
 import co.typie.domain.bootstrap.BootstrapService
 import co.typie.domain.bootstrap.BootstrapState
+import co.typie.domain.onboarding.OnboardingGateState
+import co.typie.domain.onboarding.OnboardingService
 import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.domain.pushnotification.PushNotificationService
@@ -35,6 +37,7 @@ import co.typie.platform.connectivityService
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
+import co.typie.screen.system.onboarding.OnboardingScreen
 import co.typie.screen.system.splash.SplashScreen
 import co.typie.screen.system.updaterequired.UpdateRequiredScreen
 import co.typie.ui.component.dialog.Dialog
@@ -65,6 +68,7 @@ private enum class RootScreen {
   Maintenance,
   UpdateRequired,
   Auth,
+  Onboarding,
   Main,
 }
 
@@ -88,7 +92,14 @@ fun RootShell() {
       .collect {
         orphanSweeper.resetPermanentFailures()
         orphanSweeper.sweep()
+        OnboardingService.evaluate()
       }
+  }
+
+  LaunchedEffect(Unit) {
+    snapshotFlow { AuthService.state }
+      .filter { it is AuthState.Unauthenticated }
+      .collect { OnboardingService.reset() }
   }
 
   LaunchedEffect(Unit) {
@@ -148,6 +159,8 @@ fun RootShell() {
       PreflightService.state is PreflightState.UnderMaintenance -> RootScreen.Maintenance
       PreflightService.state is PreflightState.UpdateRequired -> RootScreen.UpdateRequired
       AuthService.state is AuthState.Unauthenticated -> RootScreen.Auth
+      OnboardingService.state == OnboardingGateState.Unknown -> RootScreen.Splash
+      OnboardingService.state == OnboardingGateState.Show -> RootScreen.Onboarding
       else -> RootScreen.Main
     }
 
@@ -173,6 +186,8 @@ fun RootShell() {
           RootScreen.Maintenance -> MaintenanceScreen()
           RootScreen.UpdateRequired -> UpdateRequiredScreen()
           RootScreen.Auth -> AuthShell { route -> AuthRoutes(route) }
+          RootScreen.Onboarding ->
+            OnboardingShell { OnboardingScreen(onComplete = { OnboardingService.complete() }) }
           RootScreen.Main -> MainShell { route -> MainRoutes(route) }
         }
       }

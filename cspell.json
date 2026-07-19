@@ -51,7 +51,8 @@
     "legacy/editor/assets/**",
     "legacy/editor/benches/fixtures/**",
     "assets/**",
-    "**/proptest-regressions/**"
+    "**/proptest-regressions/**",
+    "apps/mobile/compose/src/commonMain/composeResources/files/**"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [
