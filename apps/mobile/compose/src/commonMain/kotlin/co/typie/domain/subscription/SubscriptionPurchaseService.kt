@@ -4,6 +4,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import co.typie.graphql.Apollo
 import co.typie.graphql.SubscriptionPurchaseService_Query
 import co.typie.graphql.SubscriptionPurchaseService_SubscribeOrChangePlanWithInAppPurchase_Mutation
@@ -16,15 +17,18 @@ import co.typie.platform.PlatformModule
 import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchaseProduct
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 object SubscriptionPurchaseService {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -46,6 +50,9 @@ object SubscriptionPurchaseService {
 
   private val _completions = MutableSharedFlow<Unit>()
   val completions: SharedFlow<Unit> = _completions
+
+  var registrationGeneration by mutableStateOf(0L)
+    private set
 
   private var launched = false
 
@@ -90,6 +97,12 @@ object SubscriptionPurchaseService {
     return PlatformModule.purchaseService.purchase(product = product, accountId = accountId)
   }
 
+  suspend fun awaitRegistration(sinceGeneration: Long) {
+    withTimeoutOrNull(15.seconds) {
+      snapshotFlow { registrationGeneration }.first { it > sinceGeneration }
+    }
+  }
+
   private suspend fun handlePurchaseEvent(event: PurchaseEvent) {
     try {
       val previousSubscriptionId = SubscriptionService.subscription?.id
@@ -128,6 +141,8 @@ object SubscriptionPurchaseService {
       throw e
     } catch (_: Exception) {
       // best effort
+    } finally {
+      registrationGeneration += 1
     }
   }
 }

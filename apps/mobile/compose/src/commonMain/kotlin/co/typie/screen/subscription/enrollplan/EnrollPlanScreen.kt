@@ -233,7 +233,12 @@ fun EnrollPlanScreen() {
                 product = SubscriptionPurchaseService.monthlyProduct,
                 isActive = subscription?.planId == "PL0FL1MAP",
                 onClick = {
-                  loader.runWith { context(context) { SubscriptionPurchaseService.purchase(it) } }
+                  loader.runWith {
+                    val generation = SubscriptionPurchaseService.registrationGeneration
+                    if (context(context) { SubscriptionPurchaseService.purchase(it) }) {
+                      SubscriptionPurchaseService.awaitRegistration(generation)
+                    }
+                  }
                 },
               )
 
@@ -242,7 +247,12 @@ fun EnrollPlanScreen() {
                 product = SubscriptionPurchaseService.yearlyProduct,
                 isActive = subscription?.planId == "PL0FL1YAP",
                 onClick = {
-                  loader.runWith { context(context) { SubscriptionPurchaseService.purchase(it) } }
+                  loader.runWith {
+                    val generation = SubscriptionPurchaseService.registrationGeneration
+                    if (context(context) { SubscriptionPurchaseService.purchase(it) }) {
+                      SubscriptionPurchaseService.awaitRegistration(generation)
+                    }
+                  }
                 },
               )
             }

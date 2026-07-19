@@ -90,7 +90,10 @@ fun PlanPickerSheet() {
         onClick = {
           selectedProduct?.let { product ->
             loader.runWith {
-              context(context) { SubscriptionPurchaseService.purchase(product) }
+              val generation = SubscriptionPurchaseService.registrationGeneration
+              if (context(context) { SubscriptionPurchaseService.purchase(product) }) {
+                SubscriptionPurchaseService.awaitRegistration(generation)
+              }
             }
           }
         },
