@@ -57,6 +57,9 @@
   // 에디터가 사라져도 남은 에디터가 파킹 캔버스를 재사용할 수 있으므로 마지막 0에서만 flush한다.
   let activePageCount = 0;
 
+  // attach가 실제 webgl2 컨텍스트를 잡은 캔버스 — promote 시 삽입 후 re-blit 대상 판별용.
+  const glLiveCanvases = new WeakSet<HTMLCanvasElement>();
+
   const parkGlCanvas = (canvas: HTMLCanvasElement): void => {
     const onLostWhilePooled = () => {
       detachPooledLostListener(canvas);
@@ -270,6 +273,7 @@
             const resolved = polled === 'gl-dead' || polled === 'cpu-oversized' ? polled : actual;
             // gl 요청이 실제 webgl2 컨텍스트를 잡았을 때만 create 계상(canvas 신원 dedup으로 재활용 재-attach 제외).
             if (backend === 'gl' && (resolved === 'gl' || resolved === 'gl-dead')) surfaceStats.glCreate(canvas);
+            if (resolved === 'gl') glLiveCanvases.add(canvas);
             return resolved;
           },
           detach: () => {
@@ -328,6 +332,16 @@
           },
           promote: (next) => {
             wrapper.append(next);
+            // GL 캔버스의 present(finishSwap 커밋)는 DOM 삽입 전에 일어난다. iOS WebKit은 삽입 후
+            // 새 present가 없으면 compositor가 잡을 프레임이 없어 빈 화면이 될 수 있다(특히 재삽입
+            // 캔버스). 삽입 뒤 레이어가 생성될 시간을 두고 re-blit 1회로 표시를 보장한다.
+            if (glLiveCanvases.has(next)) {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (next.isConnected) editor.refreshSurface(page);
+                });
+              });
+            }
           },
           removeNode: (canvas) => {
             canvas.remove();
