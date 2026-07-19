@@ -343,8 +343,12 @@ fn first_misfit(node: &RawNode, path: &[NodeType]) -> Option<usize> {
 }
 
 /// Whether the child at `i` is a misfit here (context violation or the first
-/// content residue). Correct when every child before `i` already fits.
-fn is_misfit_at(node: &RawNode, i: usize, path: &[NodeType]) -> bool {
+/// content residue). Correct when every child before `i` already fits and
+/// `residue` equals `content_residue_index(node)` for the node's current
+/// children — callers cache it across loop iterations and must recompute it
+/// after any mutation of `node.children`.
+fn is_misfit_at(node: &RawNode, i: usize, path: &[NodeType], residue: Option<usize>) -> bool {
+    debug_assert_eq!(residue, content_residue_index(node));
     let Some(ct) = node.children[i].as_child_type() else {
         return false;
     };
@@ -354,7 +358,7 @@ fn is_misfit_at(node: &RawNode, i: usize, path: &[NodeType]) -> bool {
     if node.node_type != NodeType::Unknown && !context_allows(path, ct) {
         return true;
     }
-    content_residue_index(node) == Some(i)
+    residue == Some(i)
 }
 
 fn child_own_dot(c: &RawChild) -> Dot {
@@ -724,15 +728,17 @@ pub fn normalize_window_forest_with_stats(
     // Mirror `process_children` for the Root node WITHOUT its terminal
     // `complete_required` (Root completion is applied document-globally elsewhere).
     let mut path = vec![NodeType::Root];
+    let mut residue = content_residue_index(&root);
     let mut i = 0;
     while i < root.children.len() {
         if ctx.capped {
             break;
         }
-        if is_misfit_at(&root, i, &path) {
+        if is_misfit_at(&root, i, &path, residue) {
             match wrap_plan(&root, i, &path, &ctx) {
                 Some(chain) => {
                     wrap_child(&mut root, i, &chain, &path, &mut ctx);
+                    residue = content_residue_index(&root);
                     // The scaffold now fits here; re-examine slot i (recursed next pass).
                     continue;
                 }
@@ -742,6 +748,7 @@ pub fn normalize_window_forest_with_stats(
                     // children rather than lose it (total).
                     let hoist = split_out(&mut root, i, &path, &mut ctx);
                     root.children.splice(i + 1..i + 1, hoist);
+                    residue = content_residue_index(&root);
                     i += 1;
                     continue;
                 }
@@ -754,6 +761,7 @@ pub fn normalize_window_forest_with_stats(
         };
         if !child_hoist.is_empty() {
             root.children.splice(i + 1..i + 1, child_hoist);
+            residue = content_residue_index(&root);
         }
         i += 1;
     }
@@ -845,15 +853,17 @@ fn process_children(
     path: &mut Vec<NodeType>,
     ctx: &mut RepairCtx,
 ) -> Vec<RawChild> {
+    let mut residue = content_residue_index(node);
     let mut i = 0;
     while i < node.children.len() {
         if ctx.capped {
             return Vec::new();
         }
-        if is_misfit_at(node, i, path) {
+        if is_misfit_at(node, i, path, residue) {
             match wrap_plan(node, i, path, ctx) {
                 Some(chain) => {
                     wrap_child(node, i, &chain, path, ctx);
+                    residue = content_residue_index(node);
                     // The scaffold now fits here; re-examine slot i (it will be
                     // recursed on the next pass).
                     continue;
@@ -867,6 +877,7 @@ fn process_children(
         };
         if !child_hoist.is_empty() {
             node.children.splice(i + 1..i + 1, child_hoist);
+            residue = content_residue_index(node);
         }
         i += 1;
     }
