@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
   var pendingResult by remember(entry) { mutableStateOf<Any?>(null) }
   var resolved by remember(entry) { mutableStateOf(false) }
   var dismissed by remember(entry) { mutableStateOf(false) }
+  var surfaceScope by remember(entry) { mutableStateOf<AnchoredSheetSurfaceScope?>(null) }
 
   val handleDismissed: () -> Unit = {
     if (!dismissed) {
@@ -57,6 +59,11 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     stops = entry.stops,
     stopPolicy = entry.stopPolicy,
     onDismissed = handleDismissed,
+    onSettledStopChanged = { stop ->
+      if (stop != null && resolved && !dismissed) {
+        surfaceScope?.dismiss()
+      }
+    },
     scrim = { scrimAlpha ->
       Box(
         Modifier.fillMaxSize()
@@ -67,6 +74,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     },
   ) {
     val anchoredScope = this
+    SideEffect { surfaceScope = anchoredScope }
     val scope =
       remember(entry, anchoredScope) {
         object : SheetScope<Any?> {

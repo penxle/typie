@@ -37,7 +37,9 @@ import co.typie.ext.safeDrawing
 import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.thenIf
 import co.typie.ui.theme.AppShapes
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val AnchorHidden = -1
@@ -213,8 +215,13 @@ internal fun AnchoredSheetSurface(
 
       beginDismiss()
       coroutineScope.launch {
-        anchoredState.animateTo(AnchorHidden, SheetAnimationSpec)
-        finishDismiss()
+        try {
+          anchoredState.animateTo(AnchorHidden, SheetAnimationSpec)
+          finishDismiss()
+        } catch (e: CancellationException) {
+          if (!isActive) throw e
+          dismissing = false
+        }
       }
     }
 
