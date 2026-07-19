@@ -2,6 +2,8 @@ package co.typie.platform
 
 import android.annotation.SuppressLint
 import android.content.Context
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.JnaEditorHost
@@ -40,3 +42,5 @@ actual object PlatformModule {
 }
 
 internal actual fun PointerType.isTouchDragPointer(): Boolean = this == PointerType.Touch
+
+internal actual fun PointerEvent.isDirectMousePress(): Boolean = type == PointerEventType.Press

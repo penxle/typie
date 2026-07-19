@@ -496,6 +496,7 @@ internal class EditorInteractionGestures(
     context: EditorGestureContext,
   ) {
     if (previousMode != currentMode && currentMode == EditorInteractionMode.ViewportZooming) {
+      tap.clearTapHistory()
       pan.cancel(context = context)
       resetPointerOwnedState(context = context)
     }

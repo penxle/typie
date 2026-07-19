@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -20,8 +21,11 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
@@ -38,6 +42,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTrackpadInput
 import androidx.compose.ui.test.scale
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
@@ -138,6 +143,32 @@ class EditorInteractionsDesktopTest {
       absoluteTolerance = 0.5f,
     )
   }
+
+  @OptIn(InternalComposeUiApi::class)
+  @Test
+  fun `command scroll with stale primary button state does not start direct gestures`() =
+    runSkikoComposeUiTest {
+      val fixture = Fixture(tapEligible = true)
+      setEditorContent(fixture)
+      val initialZoom = fixture.zoomController.displayZoom
+
+      runOnIdle {
+        scene.sendPointerEvent(
+          eventType = PointerEventType.Scroll,
+          position = Offset(x = 200f, y = 200f),
+          scrollDelta = Offset(x = 0f, y = -24f),
+          timeMillis = 100L,
+          type = PointerType.Mouse,
+          buttons = PointerButtons(isPrimaryPressed = true),
+          keyboardModifiers = PointerKeyboardModifiers(isMetaPressed = true),
+        )
+      }
+      waitForIdle()
+
+      assertEquals(0, fixture.host.tapDispatchScheduleCount)
+      assertEquals(0, fixture.host.longPressDispatchScheduleCount)
+      assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    }
 
   @Test
   fun `desktop ctrl pointer scroll remains viewport scroll`() = runComposeUiTest {
@@ -1826,7 +1857,8 @@ class EditorInteractionsDesktopTest {
 
     override fun isTapEligible(positionInSurface: Offset): Boolean = tapEligible
 
-    override fun resolvePoint(positionInNode: Offset): PagePoint? = null
+    override fun resolvePoint(positionInNode: Offset): PagePoint? =
+      PagePoint(page = 0, x = positionInNode.x, y = positionInNode.y).takeIf { tapEligible }
 
     override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? = null
 

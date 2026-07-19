@@ -2,6 +2,9 @@
 
 package co.typie.platform
 
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.IosEditorHost
@@ -47,3 +50,7 @@ actual object PlatformModule {
 }
 
 internal actual fun PointerType.isTouchDragPointer(): Boolean = this == PointerType.Touch
+
+@OptIn(ExperimentalComposeUiApi::class)
+internal actual fun PointerEvent.isDirectMousePress(): Boolean =
+  type == PointerEventType.Press && button != null

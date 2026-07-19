@@ -1,5 +1,6 @@
 package co.typie.platform
 
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.ffi.EditorHost
 import co.typie.migration.LegacyMigrationPlatformSource
@@ -28,3 +29,5 @@ expect object PlatformModule {
 }
 
 internal expect fun PointerType.isTouchDragPointer(): Boolean
+
+internal expect fun PointerEvent.isDirectMousePress(): Boolean

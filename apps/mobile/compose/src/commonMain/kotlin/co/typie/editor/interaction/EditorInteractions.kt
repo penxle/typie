@@ -27,6 +27,7 @@ import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.viewport.normalizeEditorViewportWheelZoomDelta
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.ScrollGestureLockState
+import co.typie.platform.isDirectMousePress
 import co.typie.platform.isTouchDragPointer
 import kotlin.math.abs
 import kotlin.math.min
@@ -231,7 +232,7 @@ private class EditorInteractionsNode(
       cancelInteraction(clearSuppression = true)
       return
     }
-    if (pointerEvent.changes.any(PointerInputChange::isUnconsumedDown)) {
+    if (pointerEvent.changes.any { change -> change.isUnconsumedDirectDown(pointerEvent) }) {
       onEditorPointerInput()
     }
 
@@ -316,8 +317,7 @@ private class EditorInteractionsNode(
       return true
     }
 
-    val hasFreshDown =
-      pointerEvent.changes.any { change -> change.pressed && !change.previousPressed }
+    val hasFreshDown = pointerEvent.changes.any { change -> change.isDirectDown(pointerEvent) }
     // Track membership before the screen observer's Final pass, but let shared overlay siblings
     // claim direct gestures during Main before admitting a new editor sequence.
     return when (pass) {
@@ -371,22 +371,24 @@ private class EditorInteractionsNode(
   }
 
   private fun registerPointerDowns(pointerEvent: PointerEvent) {
-    pointerEvent.changes.filter(PointerInputChange::isUnconsumedDown).forEach { change ->
-      pointers[change.id.value] = change.type
-      if (
-        physicalDragLockHandle == null &&
-          change.type == PointerType.Mouse &&
-          change.type.isTouchDragPointer()
-      ) {
-        physicalDragLockHandle = scrollGestureLockState.acquire()
+    pointerEvent.changes
+      .filter { it.isUnconsumedDirectDown(pointerEvent) }
+      .forEach { change ->
+        pointers[change.id.value] = change.type
+        if (
+          physicalDragLockHandle == null &&
+            change.type == PointerType.Mouse &&
+            change.type.isTouchDragPointer()
+        ) {
+          physicalDragLockHandle = scrollGestureLockState.acquire()
+        }
       }
-    }
   }
 
   private fun discardConsumedPointerDowns(pointerEvent: PointerEvent) {
     var pointerRemoved = false
     pointerEvent.changes
-      .filter { change -> change.pressed && !change.previousPressed && change.isConsumed }
+      .filter { change -> change.isDirectDown(pointerEvent) && change.isConsumed }
       .forEach { change ->
         if (pointers.remove(change.id.value) != null) {
           pointerRemoved = true
@@ -411,25 +413,27 @@ private class EditorInteractionsNode(
     }
 
   private fun forwardSinglePointerChanges(pointerEvent: PointerEvent) {
-    pointerEvent.changes.filter(PointerInputChange::isUnconsumedDown).forEach { change ->
-      val rootPosition = positionInRoot(change.position)
-      val tapEnabled = geometry.isTapEligible(change.position)
-      val editorPosition = geometry.resolveInteractionPosition(change.position)
-      singlePointerStreams += change.id.value
-      if (
-        interactionController.onPointerDown(
-          pointerId = change.id.value,
-          position = editorPosition,
-          nowMillis = change.uptimeMillis,
-          tapEnabled = tapEnabled,
-          inputModifiers = pointerEvent.inputModifiers(),
-          positionInRoot = rootPosition,
-          touchPanDriver = if (change.type.isTouchDragPointer()) scrollDriver else null,
-        )
-      ) {
-        change.consume()
+    pointerEvent.changes
+      .filter { it.isUnconsumedDirectDown(pointerEvent) }
+      .forEach { change ->
+        val rootPosition = positionInRoot(change.position)
+        val tapEnabled = geometry.isTapEligible(change.position)
+        val editorPosition = geometry.resolveInteractionPosition(change.position)
+        singlePointerStreams += change.id.value
+        if (
+          interactionController.onPointerDown(
+            pointerId = change.id.value,
+            position = editorPosition,
+            nowMillis = change.uptimeMillis,
+            tapEnabled = tapEnabled,
+            inputModifiers = pointerEvent.inputModifiers(),
+            positionInRoot = rootPosition,
+            touchPanDriver = if (change.type.isTouchDragPointer()) scrollDriver else null,
+          )
+        ) {
+          change.consume()
+        }
       }
-    }
 
     pointerEvent.changes
       .filter { change ->
@@ -911,8 +915,11 @@ private class EditorScreenPointerObserverNode(var sequence: EditorScreenPointerS
   }
 }
 
-private fun PointerInputChange.isUnconsumedDown(): Boolean =
-  pressed && !previousPressed && !isConsumed
+private fun PointerInputChange.isDirectDown(pointerEvent: PointerEvent): Boolean =
+  pressed && !previousPressed && (type != PointerType.Mouse || pointerEvent.isDirectMousePress())
+
+private fun PointerInputChange.isUnconsumedDirectDown(pointerEvent: PointerEvent): Boolean =
+  isDirectDown(pointerEvent) && !isConsumed
 
 private fun PointerEvent.inputModifiers(): InputModifiers {
   val modifiers = keyboardModifiers

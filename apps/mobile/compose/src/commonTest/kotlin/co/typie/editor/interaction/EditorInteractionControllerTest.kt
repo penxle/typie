@@ -152,6 +152,46 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `indirect zoom breaks consecutive tap history`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          semantics = viewportZoomEnabledSemantics(effects = host),
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      controller.onTapTimer(nowMillis = 250L)
+      advanceUntilIdle()
+
+      assertTrue(controller.beginIndirectZoom())
+      controller.endIndirectZoom()
+
+      assertFalse(controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 320L))
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 360L)
+      controller.onTapTimer(nowMillis = 570L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+        ),
+        fake.enqueued,
+      )
+    }
+
+  @Test
   fun `plain drag past tap slop cancels tap timer without taking over selection`() =
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
