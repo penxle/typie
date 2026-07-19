@@ -23,6 +23,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -570,6 +571,81 @@ class EditorInteractionsDesktopTest {
 
     waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
     onAllNodes(hasTestTag(NavigationEditorTag)).assertCountEquals(0)
+  }
+
+  @Test
+  fun `desktop editor scroll owns drag before full-area back swipe`() = runComposeUiTest {
+    val fixture = Fixture()
+    val navigator = Navigator(Route.Home)
+    val touchSlop =
+      setNavigationEditorContent(
+        fixture = fixture,
+        navigator = navigator,
+        usePlatformTouchSlop = true,
+      )
+    val editor = onNodeWithTag(NavigationEditorTag)
+
+    editor.performTrackpadInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+      moveBy(Offset(x = touchSlop - 1f, y = 0f), delayMillis = 100L)
+    }
+    waitForIdle()
+
+    assertEquals(
+      expected = 0f,
+      actual = editor.fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+
+    editor.performTrackpadInput { moveBy(Offset(x = touchSlop * 3f, y = 0f), delayMillis = 100L) }
+    waitForIdle()
+
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(
+      expected = 0f,
+      actual = editor.fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+
+    editor.performTrackpadInput { release() }
+    waitForIdle()
+    assertEquals(NavigationEditorRoute, navigator.current)
+  }
+
+  @Test
+  fun `desktop nested back swipe moves once by activation overshoot`() = runComposeUiTest {
+    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val navigator = Navigator(Route.Home)
+    val touchSlop =
+      setNavigationEditorContent(
+        fixture = fixture,
+        navigator = navigator,
+        usePlatformTouchSlop = true,
+      )
+    val editor = onNodeWithTag(NavigationEditorTag)
+    val initialDrag = touchSlop - 2f
+    val followingDragCount = 6
+    val followingDrag = 10f
+    val totalDrag = initialDrag + followingDragCount * followingDrag
+
+    editor.performTrackpadInput {
+      moveTo(Offset(x = 80f, y = center.y))
+      press()
+      moveBy(Offset(x = initialDrag, y = 0f), delayMillis = 100L)
+      repeat(followingDragCount) { moveBy(Offset(x = followingDrag, y = 0f), delayMillis = 100L) }
+    }
+    waitForIdle()
+
+    assertEquals(
+      expected = totalDrag - touchSlop * 3f,
+      actual = editor.fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+
+    editor.performTrackpadInput { release() }
+    waitForIdle()
+    assertEquals(NavigationEditorRoute, navigator.current)
   }
 
   @Test
@@ -1576,8 +1652,12 @@ class EditorInteractionsDesktopTest {
     fixture: Fixture,
     navigator: Navigator,
     interactionEnabled: () -> Boolean = { true },
-  ) {
+    usePlatformTouchSlop: Boolean = false,
+  ): Float {
+    var effectiveTouchSlop = 0f
     setContent {
+      effectiveTouchSlop =
+        if (usePlatformTouchSlop) LocalViewConfiguration.current.touchSlop else 8f
       NavigationStack(
         navigator = navigator,
         topBarState = remember { TopBarState() },
@@ -1602,7 +1682,7 @@ class EditorInteractionsDesktopTest {
                   scrollableState = fixture.scrollableState,
                   nestedScrollDispatcher = nestedScrollDispatcher,
                   flingBehavior = fixture.flingBehavior,
-                  touchSlop = 8f,
+                  touchSlop = effectiveTouchSlop,
                   density = 1f,
                   enabled = interactionEnabled(),
                   onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
@@ -1616,6 +1696,7 @@ class EditorInteractionsDesktopTest {
       LaunchedEffect(Unit) { navigator.navigate(NavigationEditorRoute) }
     }
     waitUntil { navigator.current == NavigationEditorRoute && !navigator.isTransitioning }
+    return effectiveTouchSlop
   }
 
   private class Fixture(

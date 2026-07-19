@@ -36,7 +36,7 @@ import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -79,7 +79,7 @@ private enum class AnimState {
   PopGestureCommitted,
 }
 
-private val NavigationPopActivationDistance = 15.dp
+private const val NavigationPopActivationSlopMultiplier = 3f
 
 internal fun shouldCommitNavigationPop(
   progress: Float,
@@ -132,6 +132,7 @@ private suspend fun PointerInputScope.detectNavigationPopDrag(
       if (event.changes.count { it.pressed } != 1) return@awaitEachGesture
       val change = event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
       if (!change.pressed) return@awaitEachGesture
+      if (change.isConsumed) return@awaitEachGesture
 
       when (
         val activation =
@@ -248,7 +249,7 @@ fun NavigationStack(
 
   val popNestedScroll = remember { NavigationPopNestedScroll() }
   val navigationPopActivationDistance =
-    with(LocalDensity.current) { NavigationPopActivationDistance.toPx() }
+    LocalViewConfiguration.current.touchSlop * NavigationPopActivationSlopMultiplier
   val backGestureZoneWidth by rememberUpdatedState(systemBackGestureZoneWidth())
   val popPointerVelocity = remember { NavigationPopPointerVelocity() }
   var predictiveBackActive by remember { mutableStateOf(false) }
@@ -919,7 +920,7 @@ fun NavigationStack(
         }
       }
 
-      // 엣지 제스처 감지 영역 (15dp를 넘긴 dominant-right drag만 claim)
+      // 엣지 제스처 감지 영역 (platform touch slop의 3배를 넘긴 dominant-right drag만 claim)
       if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
         Box(
           Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(

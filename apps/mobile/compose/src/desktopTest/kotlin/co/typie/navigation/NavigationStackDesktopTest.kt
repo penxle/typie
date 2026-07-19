@@ -1,8 +1,13 @@
 package co.typie.navigation
 
 import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.Scrollable2DState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.rememberScrollable2DState
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.gestures.scrollable2D
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.TouchInjectionScope
@@ -89,6 +97,112 @@ class NavigationStackDesktopTest {
   }
 
   @Test
+  fun horizontalScrollableChildOwnsDragBeforeFullAreaBackSwipe() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    var platformTouchSlop = 0f
+    var childConsumed = 0f
+
+    setContent {
+      platformTouchSlop = LocalViewConfiguration.current.touchSlop
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        val scrollableState = rememberScrollableState { delta ->
+          childConsumed += delta
+          delta
+        }
+        Box(
+          Modifier.fillMaxSize()
+            .testTag(if (route == editorRoute) EditorRouteTag else HomeRouteTag)
+            .scrollable(scrollableState, Orientation.Horizontal)
+        )
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+    val routeNode = onNodeWithTag(EditorRouteTag)
+
+    routeNode.performTouchInput {
+      down(center)
+      moveBy(Offset(x = platformTouchSlop - 1f, y = 0f))
+    }
+    waitForIdle()
+    assertEquals(0f, routeNode.fetchSemanticsNode().boundsInRoot.left, absoluteTolerance = 0.5f)
+
+    routeNode.performTouchInput { moveBy(Offset(x = platformTouchSlop * 3f, y = 0f)) }
+    waitForIdle()
+    assertTrue(abs(childConsumed) > 0.5f)
+    assertEquals(0f, routeNode.fetchSemanticsNode().boundsInRoot.left, absoluteTolerance = 0.5f)
+
+    routeNode.performTouchInput { up() }
+    waitForIdle()
+    assertEquals(editorRoute, navigator.current)
+  }
+
+  @Test
+  fun childThatReachesItsScrollBoundaryKeepsFullAreaBackSwipeOwnership() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    var platformTouchSlop = 0f
+    var childConsumed = 0f
+
+    setContent {
+      platformTouchSlop = LocalViewConfiguration.current.touchSlop
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(
+          Modifier.fillMaxSize()
+            .testTag(if (route == editorRoute) EditorRouteTag else HomeRouteTag)
+            .pointerInput(Unit) {
+              awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                var canScroll = true
+                while (true) {
+                  val change =
+                    awaitPointerEvent(PointerEventPass.Main).changes.firstOrNull {
+                      it.id == down.id
+                    } ?: break
+                  if (!change.pressed) break
+                  if (canScroll && change.positionChange().x > 0f) {
+                    childConsumed += change.positionChange().x
+                    canScroll = false
+                    change.consume()
+                  }
+                }
+              }
+            }
+        )
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+    val routeNode = onNodeWithTag(EditorRouteTag)
+
+    routeNode.performTouchInput {
+      down(center)
+      moveBy(Offset(x = platformTouchSlop * 2f, y = 0f))
+    }
+    waitForIdle()
+    assertEquals(platformTouchSlop * 2f, childConsumed, absoluteTolerance = 0.5f)
+    assertEquals(0f, routeNode.fetchSemanticsNode().boundsInRoot.left, absoluteTolerance = 0.5f)
+
+    routeNode.performTouchInput { moveBy(Offset(x = platformTouchSlop * 2f, y = 0f)) }
+    waitForIdle()
+    assertEquals(platformTouchSlop * 2f, childConsumed, absoluteTolerance = 0.5f)
+    assertEquals(0f, routeNode.fetchSemanticsNode().boundsInRoot.left, absoluteTolerance = 0.5f)
+
+    routeNode.performTouchInput { up() }
+    waitForIdle()
+    assertEquals(editorRoute, navigator.current)
+  }
+
+  @Test
   fun verticalEdgeSessionDoesNotBecomeBackSwipeAfterTurningRight() =
     assertGestureDoesNotPop(
       scrollConsumer = { delta -> if (abs(delta.y) > abs(delta.x)) delta else Offset.Zero },
@@ -118,9 +232,9 @@ class NavigationStackDesktopTest {
     )
 
   @Test
-  fun directEdgeSwipeStillPops() =
+  fun edgeSwipeBypassesHorizontalScrollableChild() =
     assertGesturePops(
-      scrollConsumer = { Offset.Zero },
+      scrollConsumer = { it },
       gesture = {
         down(Offset(x = 10f, y = center.y))
         moveBy(Offset(x = 220f, y = 0f))
@@ -226,13 +340,13 @@ class NavigationStackDesktopTest {
   }
 
   @Test
-  fun edgeBackSwipeDiscardsTheFifteenDpActivationDistance() = runComposeUiTest {
+  fun edgeBackSwipeDiscardsThreeTimesPlatformTouchSlop() = runComposeUiTest {
     val navigator = Navigator(Route.Home)
     val editorRoute = Route.Editor("document-id")
     var activationDistancePx = 0f
 
     setContent {
-      activationDistancePx = with(LocalDensity.current) { 15.dp.toPx() }
+      activationDistancePx = LocalViewConfiguration.current.touchSlop * 3f
       NavigationStack(
         navigator = navigator,
         topBarState = remember { TopBarState() },
