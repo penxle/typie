@@ -40,6 +40,11 @@ export type ManagerEffects<C> = {
 
 export const SWAP_TIMEOUT_MS = 1000;
 export const RESTORE_WATCHDOG_MS = 2000;
+// overscan 반경 진입(빠른 스크롤 churn의 원천) 마운트를 이만큼 지연시켜, 페이지가 반경에
+// 머무름을 증명한 뒤에만 GL 컨텍스트를 만든다 — transit-only 페이지의 mount→park churn 차단.
+export const ACQUIRE_DEBOUNCE_MS = 200;
+// failedParked 재시도 백오프(2s→5s→10s, 마지막에서 고정). 커밋(finishSwap)·park 시 리셋된다.
+export const PARKED_RETRY_MS = [2000, 5000, 10_000] as const;
 
 export type VisibilityState = { inAcquire: boolean; inRelease: boolean; isVisible: boolean };
 
@@ -67,6 +72,11 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
   // reconcile이 마지막으로 결정한 "이 페이지는 라이브여야 한다" — live/pending이 둘 다 비어도
   // (failedParked) 이 값이 true로 남아 있으면 재진입(acquire 재진입/쿨다운 웨이크)이 유효하다.
   let wantsLive = false;
+  // overscan 진입 디바운스 타이머 canceller — park/mount 시 취소된다.
+  let cancelDebounce: (() => void) | undefined;
+  // failedParked 재시도 타이머 canceller와 백오프 인덱스(finishSwap·park에서 리셋).
+  let cancelParkedRetry: (() => void) | undefined;
+  let parkedRetryIndex = 0;
 
   const disposeSlot = (slot: Slot<C>) => {
     slot.listeners();
@@ -104,6 +114,11 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
   };
 
   const park = () => {
+    cancelDebounce?.();
+    cancelDebounce = undefined;
+    cancelParkedRetry?.();
+    cancelParkedRetry = undefined;
+    parkedRetryIndex = 0;
     cancelWatchdog?.();
     cancelWatchdog = undefined;
     cancelPending();
@@ -122,6 +137,10 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
   // "pending 폐기 + 구 live 유지 + 1회 강제 cpu 폴백"이다.
   const finishSwap = (myEpoch: number) => {
     if (myEpoch !== epoch || !pending) return;
+    // 커밋 성공 — failedParked 재시도 백오프를 리셋하고 대기 중 재시도 타이머를 취소한다.
+    cancelParkedRetry?.();
+    cancelParkedRetry = undefined;
+    parkedRetryIndex = 0;
     cancelWatchdog?.();
     cancelWatchdog = undefined;
     pendingCleanup?.();
@@ -157,11 +176,14 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
     if (timedOutOnce) {
       // 2차 타임아웃 — 강제 폴백마저 커밋되지 못했다. 구 live까지 전부 처분하고 안정된
       // failedParked로 수렴한다. wantsLive는 건드리지 않아 재진입(acquire/웨이크)이 살아 있다.
+      // radius 재진입/쿨다운 웨이크에만 기대지 않도록 백오프 재시도 타이머도 함께 건다 —
+      // 뷰포트에 머무는 페이지가 스크롤 왕복 없이도 스스로 치유되게 한다.
       timedOutOnce = false;
       if (live) {
         disposeSlot(live);
         live = undefined;
       }
+      scheduleParkedRetry();
       return;
     }
     timedOutOnce = true;
@@ -169,6 +191,14 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
   };
 
   const mount = (requested: SurfaceBackend, presetToken?: LeaseToken) => {
+    cancelDebounce?.();
+    cancelDebounce = undefined;
+    // 대기 중 failedParked 재시도 타이머를 취소한다 — 재진입 mount(reconcile/onPoolBackend/resume)가
+    // 이를 취소하지 않으면 고아 타이머가 누적되고, 그 고아가 발화해 failedParked에서 잉여 mount(새 GL
+    // 컨텍스트)를 유발해 F-A가 잡으려는 churn을 되먹인다. 백오프 단계(parkedRetryIndex)는 여기서
+    // 리셋하지 않는다 — 진짜 연속 재실패엔 백오프가 계속 올라가야 하므로 리셋은 finishSwap/park에만.
+    cancelParkedRetry?.();
+    cancelParkedRetry = undefined;
     cancelWatchdog?.();
     cancelWatchdog = undefined;
     cancelPending();
@@ -259,6 +289,23 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
     effects.requestRender();
   };
 
+  // 2차 타임아웃으로 failedParked에 수렴했을 때 백오프 재시도를 예약한다. 발화 시 여전히 원하고
+  // (live/pending 없음) 숨김이 아니면 재마운트하고, 숨김 중이면 같은 지연으로 재예약한다(숨김
+  // 클록 게이트와 일관). backendOf는 최근 정책을 반영하므로 그대로 소비한다.
+  const scheduleParkedRetry = () => {
+    const delay = PARKED_RETRY_MS[Math.min(parkedRetryIndex, PARKED_RETRY_MS.length - 1)];
+    parkedRetryIndex += 1;
+    const onRetry = () => {
+      if (effects.isSuspended()) {
+        cancelParkedRetry = effects.schedule(onRetry, delay);
+        return;
+      }
+      cancelParkedRetry = undefined;
+      if (wantsLive && !live && !pending) mount(effects.pool.backendOf() ?? 'cpu');
+    };
+    cancelParkedRetry = effects.schedule(onRetry, delay);
+  };
+
   return {
     reconcile(state: VisibilityState): void {
       const zone: PageZone = state.isVisible ? 'visible' : 'overscan';
@@ -268,16 +315,42 @@ export function createPageSurfaceManager<C>(effects: ManagerEffects<C>) {
         park();
         return;
       }
+      // 최초 반경 진입 마운트(live/pending 모두 없음)만 디바운스 대상이다 — staleLive 백엔드
+      // 전환·onPoolBackend·로스/resume 마운트는 건드리지 않는다.
+      if (!live && !pending) {
+        if (!state.isVisible) {
+          // overscan 진입(churn 원천): 즉시 마운트/updateDemand를 하지 않는다. 페이지가 반경에
+          // 머무름을 증명(ACQUIRE_DEBOUNCE_MS 유지)한 뒤에만 풀 수요 등록 + 마운트한다. 이미
+          // 디바운스 중이면 재예약하지 않아 최초 진입 시각 기준 지연을 유지한다.
+          if (!cancelDebounce) {
+            cancelDebounce = effects.schedule(() => {
+              cancelDebounce = undefined;
+              if (!wantsLive || live || pending) return;
+              mount(effects.pool.updateDemand(zone));
+            }, ACQUIRE_DEBOUNCE_MS);
+          }
+          return;
+        }
+        // 가시 진입: 사용자에게 보이는 지연 없이 즉시 마운트한다(mount가 대기 중 디바운스 취소).
+        mount(effects.pool.updateDemand(zone));
+        return;
+      }
       const backend = effects.pool.updateDemand(zone);
       // updateDemand는 호출자 자신의 승격/강등을 콜백 없이 반환값으로만 통지한다(풀의 silent
       // 경로). live만 있고 pending이 없는데 그 반환값이 현재 live의 실제 backend와 달라진
       // 경우(제자리 zone 전환으로 인한 강등/승격)는 여기서 직접 mount를 걸어줘야 한다 —
       // 그렇지 않으면 정책은 바뀌었는데 캔버스는 영원히 안 바뀐다.
       const staleLive = !pending && live !== undefined && (live.isGl ? 'gl' : 'cpu') !== backend;
-      if ((!live && !pending) || staleLive) mount(backend);
+      if (staleLive) mount(backend);
     },
     onPoolBackend(backend: SurfaceBackend, acquireHint?: LeaseToken): void {
-      if (!wantsLive) return;
+      if (!wantsLive) {
+        // 이 페이지는 더 이상 gl을 원치 않는다(park/재활용된 좌표에 뒤늦게 도착한 승격 콜백). 콜백에
+        // 실려온 예약 토큰을 그냥 버리면 원장에 orphan reserved lease가 남아 예산이 샌다 —
+        // 원자적으로 취소한다(consume 아니면 release, 계약).
+        if (acquireHint !== undefined) effects.pool.cancelReservation(acquireHint, 'unwanted-promotion');
+        return;
+      }
       mount(backend, acquireHint);
     },
     // 로스: 즉시 실패를 기록하고 복원 워치독을 건다 — restored가 제한 시간 내

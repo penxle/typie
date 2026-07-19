@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createPageSurfaceManager, RESTORE_WATCHDOG_MS, SWAP_TIMEOUT_MS } from './page-surface-manager';
+import {
+  ACQUIRE_DEBOUNCE_MS,
+  createPageSurfaceManager,
+  PARKED_RETRY_MS,
+  RESTORE_WATCHDOG_MS,
+  SWAP_TIMEOUT_MS,
+} from './page-surface-manager';
 import type { AttachOutcome, LeaseToken, SurfaceBackend } from './gl-context-pool';
 import type { ManagerEffects, PoolPort } from './page-surface-manager';
 
@@ -17,6 +23,7 @@ const createFakePool = (options?: { budget?: number; demand?: SurfaceBackend }) 
   let nextToken = 0;
   const leases = new Map<LeaseToken, LeasePhase>();
   const calls = {
+    updateDemand: 0,
     acquireLease: 0,
     ackAttached: [] as [LeaseToken, AttachOutcome][],
     cancelReservation: [] as LeaseToken[],
@@ -29,7 +36,10 @@ const createFakePool = (options?: { budget?: number; demand?: SurfaceBackend }) 
     forget: 0,
   };
   const port: PoolPort = {
-    updateDemand: () => demand,
+    updateDemand: () => {
+      calls.updateDemand += 1;
+      return demand;
+    },
     acquireLease: (requested) => {
       calls.acquireLease += 1;
       if (requested !== 'gl' || leases.size >= budget) return { backend: 'cpu' };
@@ -192,6 +202,8 @@ const harness = (overrides?: {
 
 const inView = { inAcquire: true, inRelease: true, isVisible: true };
 const outOfView = { inAcquire: false, inRelease: false, isVisible: false };
+// overscan 진입: 반경 안이지만 아직 화면에 보이지는 않는다(빠른 스크롤 churn의 원천) — F-A1 디바운스 대상.
+const overscan = { inAcquire: true, inRelease: true, isVisible: false };
 
 describe('page-surface-manager', () => {
   it('mounts on acquire, acks the attach via defer, swaps on committed present, releases fully on park', () => {
@@ -336,14 +348,17 @@ describe('page-surface-manager', () => {
     expect(h.manager.debug().live).toBeUndefined();
     expect(h.manager.debug().pending).toBeUndefined();
     expect(h.attachedCount()).toBe(0);
-    expect(h.activeTimers()).toBe(0);
+    expect(h.activeTimers()).toBe(1); // only the F-B parked-retry timer is armed (self-heal backoff)
     expect(h.manager.debug().wantsLive).toBe(true); // still wanted — re-entry, not normal park
     expect(h.canvases[0].removed).toBe(true);
     expect(h.canvases[1].removed).toBe(true);
 
-    h.manager.reconcile(inView); // acquire re-entry
+    h.manager.reconcile(inView); // acquire re-entry (immediate mount cancels the parked-retry timer)
     expect(h.attachedCount()).toBe(1);
     expect(h.canvases.length).toBe(3);
+    // I1 회귀 고정: 재진입 mount가 대기 중 parked-retry 타이머를 취소했으므로 swap 타이머 하나만
+    // 남는다. 취소하지 않았다면 고아 parked-retry가 남아 2가 된다.
+    expect(h.activeTimers()).toBe(1);
   });
 
   it('a second swap timeout also sweeps up a restore watchdog armed mid-flight', () => {
@@ -358,7 +373,9 @@ describe('page-surface-manager', () => {
 
     expect(h.manager.debug().live).toBeUndefined();
     expect(h.manager.debug().pending).toBeUndefined();
-    expect(h.activeTimers()).toBe(0); // the mid-flight watchdog must not survive the failedParked give-up
+    // the mid-flight watchdog must not survive the failedParked give-up: only the F-B parked-retry
+    // timer remains armed (were the watchdog to survive, this would be 2, not 1).
+    expect(h.activeTimers()).toBe(1);
   });
 
   it('arms a restore watchdog on context loss that remounts if restore never arrives', () => {
@@ -520,6 +537,152 @@ describe('page-surface-manager', () => {
     h.manager.resume();
     expect(h.requestRenderCount()).toBe(rendersAfterPresent);
     expect(h.manager.debug().pending).toBeUndefined();
+  });
+
+  it('R-P1: overscan(가시 아님) 진입은 즉시 마운트/updateDemand 없이 디바운스하고, ACQUIRE_DEBOUNCE_MS 경과 후에 마운트한다', () => {
+    const h = harness();
+    h.manager.reconcile(overscan);
+    // 디바운스 중: 캔버스도, 풀 수요도, lease도 없다(반경에 머무름을 증명하기 전).
+    expect(h.canvases.length).toBe(0);
+    expect(h.pool.calls.updateDemand).toBe(0);
+    expect(h.pool.calls.acquireLease).toBe(0);
+    expect(h.manager.debug().pending).toBeUndefined();
+    expect(h.activeTimers()).toBe(1); // 디바운스 타이머 하나
+
+    const fired = h.fireTimer(ACQUIRE_DEBOUNCE_MS);
+    expect(fired).toBeDefined();
+    // 발화 후에야 updateDemand 1회 + 마운트 1개.
+    expect(h.pool.calls.updateDemand).toBe(1);
+    expect(h.canvases.length).toBe(1);
+    expect(h.manager.debug().pending).toBe(h.canvases[0]);
+  });
+
+  it('R-P2: overscan 진입 후 디바운스 만료 전 park되면 디바운스가 취소돼 마운트도 풀 수요/lease도 발생하지 않는다(churn kill)', () => {
+    const h = harness();
+    h.manager.reconcile(overscan);
+    expect(h.activeTimers()).toBe(1);
+
+    h.manager.reconcile(outOfView); // 디바운스 만료 전 반경 이탈 → park
+    expect(h.activeTimers()).toBe(0); // 디바운스 취소됨
+    expect(h.canvases.length).toBe(0);
+    expect(h.pool.calls.updateDemand).toBe(0);
+    expect(h.pool.calls.acquireLease).toBe(0);
+
+    // 취소된 디바운스 타이머를 발화시켜도 마운트되지 않는다(transit-only churn을 원천 차단).
+    h.fireTimer(ACQUIRE_DEBOUNCE_MS);
+    expect(h.canvases.length).toBe(0);
+    expect(h.pool.calls.updateDemand).toBe(0);
+  });
+
+  it('R-P3: 디바운스 중 가시 진입(isVisible=true)이 오면 디바운스를 취소하고 즉시 1회만 마운트한다', () => {
+    const h = harness();
+    h.manager.reconcile(overscan);
+    expect(h.canvases.length).toBe(0);
+
+    h.manager.reconcile(inView); // 가시 진입 → 지연 없이 즉시 마운트
+    expect(h.canvases.length).toBe(1);
+    expect(h.pool.calls.updateDemand).toBe(1);
+    expect(h.manager.debug().pending).toBe(h.canvases[0]);
+
+    // 취소된 디바운스가 뒤늦게 발화해도 두 번째 마운트는 없다(더블 마운트 금지).
+    h.fireTimer(ACQUIRE_DEBOUNCE_MS);
+    expect(h.canvases.length).toBe(1);
+  });
+
+  it('R-P4: failedParked 재시도는 2000→5000→10000 백오프로 재마운트하고, 커밋 성공 시 백오프가 리셋된다', () => {
+    const h = harness({ deferSync: true });
+    h.manager.reconcile(inView); // gl pending, never presented
+    h.fireTimer(SWAP_TIMEOUT_MS); // 1st timeout — forced cpu fallback
+    h.fireTimer(SWAP_TIMEOUT_MS); // 2nd timeout — failedParked, retry armed at PARKED_RETRY_MS[0]
+    expect(h.manager.debug().live).toBeUndefined();
+    expect(h.manager.debug().pending).toBeUndefined();
+
+    // 재시도 #1: 2000ms
+    let before = h.canvases.length;
+    expect(h.fireTimer(PARKED_RETRY_MS[0])).toBeDefined();
+    expect(h.canvases.length).toBeGreaterThan(before);
+    expect(h.manager.debug().pending).toBeDefined();
+
+    // 다시 failedParked로 몰면 다음 재시도는 5000ms
+    h.fireTimer(SWAP_TIMEOUT_MS);
+    h.fireTimer(SWAP_TIMEOUT_MS);
+    before = h.canvases.length;
+    expect(h.fireTimer(PARKED_RETRY_MS[1])).toBeDefined();
+    expect(h.canvases.length).toBeGreaterThan(before);
+
+    // 세 번째 재시도는 10000ms(cap)
+    h.fireTimer(SWAP_TIMEOUT_MS);
+    h.fireTimer(SWAP_TIMEOUT_MS);
+    before = h.canvases.length;
+    expect(h.fireTimer(PARKED_RETRY_MS[2])).toBeDefined();
+    expect(h.canvases.length).toBeGreaterThan(before);
+
+    // 커밋 성공 → 백오프 리셋. 새 pending을 다시 2회 타임아웃시키면 재시도가 2000ms로 돌아온다.
+    h.firePresent(); // 현재 pending 커밋 → finishSwap이 백오프 리셋
+    expect(h.manager.debug().live).toBeDefined();
+
+    h.manager.onPoolBackend('cpu'); // 백엔드 전환으로 새 pending 생성
+    h.fireTimer(SWAP_TIMEOUT_MS);
+    h.fireTimer(SWAP_TIMEOUT_MS); // 다시 failedParked — 리셋됐다면 재시도는 다시 2000ms
+    before = h.canvases.length;
+    expect(h.fireTimer(PARKED_RETRY_MS[0])).toBeDefined(); // 5000이 아니라 2000(리셋 확인)
+    expect(h.canvases.length).toBeGreaterThan(before);
+  });
+
+  it('R-P5: park는 재시도 타이머를 취소하고, 숨김 중 재시도 발화는 마운트 없이 같은 지연으로 재예약한다', () => {
+    // park가 재시도 타이머를 취소한다
+    const h = harness({ deferSync: true });
+    h.manager.reconcile(inView);
+    h.fireTimer(SWAP_TIMEOUT_MS);
+    h.fireTimer(SWAP_TIMEOUT_MS); // failedParked, retry armed
+    expect(h.activeTimers()).toBe(1);
+    h.manager.reconcile(outOfView); // park
+    expect(h.activeTimers()).toBe(0); // 재시도 타이머 취소됨
+
+    // 숨김 중 재시도 발화는 재마운트 없이 같은 지연으로 재예약한다
+    const s = harness({ deferSync: true });
+    s.manager.reconcile(inView);
+    s.fireTimer(SWAP_TIMEOUT_MS);
+    s.fireTimer(SWAP_TIMEOUT_MS); // failedParked, retry armed
+    const before = s.canvases.length;
+    s.setSuspended(true);
+    expect(s.fireTimer(PARKED_RETRY_MS[0])).toBeDefined();
+    expect(s.canvases.length).toBe(before); // 숨김 중 — 재마운트 없음
+    expect(s.activeTimers()).toBe(1); // 같은 지연으로 재예약됨
+
+    // 복귀 후 재시도 발화는 재마운트한다
+    s.setSuspended(false);
+    expect(s.fireTimer(PARKED_RETRY_MS[0])).toBeDefined();
+    expect(s.canvases.length).toBeGreaterThan(before);
+    expect(s.manager.debug().pending).toBeDefined();
+  });
+
+  it('R-P6: 재진입 mount는 대기 중 parked-retry 타이머를 취소해 고아를 누적하지 않고, 재실패 시 백오프는 다음 단계로 진행한다', () => {
+    const h = harness({ deferSync: true });
+    h.manager.reconcile(inView); // gl pending
+    h.fireTimer(SWAP_TIMEOUT_MS); // 1차 타임아웃 — 강제 cpu 폴백
+    h.fireTimer(SWAP_TIMEOUT_MS); // 2차 타임아웃 — failedParked, parked-retry 무장(index→1, 2000)
+    expect(h.activeTimers()).toBe(1); // parked-retry 하나
+
+    // 재진입 mount(가시): 대기 중 parked-retry를 반드시 취소해야 한다(고아 방지).
+    h.manager.reconcile(inView);
+    // swap 타이머 하나만 남는다 — 취소하지 않았다면 고아 parked-retry가 남아 2가 된다.
+    expect(h.activeTimers()).toBe(1);
+
+    // 이 재진입 mount를 다시 이중 타임아웃시켜 failedParked로 몬다.
+    h.fireTimer(SWAP_TIMEOUT_MS); // 1차
+    h.fireTimer(SWAP_TIMEOUT_MS); // 2차 → scheduleParkedRetry
+    // scheduleParkedRetry 시점: 활성 parked-retry는 정확히 1개(고아 누적 없음).
+    expect(h.activeTimers()).toBe(1);
+
+    // 첫 재시도(2000)는 취소돼 활성 타이머가 없고, 고아 발화로 인한 잉여 mount도 없다.
+    const canvasesBeforeRetry = h.canvases.length;
+    expect(h.fireTimer(PARKED_RETRY_MS[0])).toBeUndefined(); // 2000짜리 활성 타이머 없음
+    expect(h.canvases.length).toBe(canvasesBeforeRetry); // 잉여 mount 없음
+
+    // 백오프는 다음 단계(5000)로 진행 — 정상 재시도는 5000에서 발화해 재마운트한다.
+    expect(h.fireTimer(PARKED_RETRY_MS[1])).toBeDefined();
+    expect(h.canvases.length).toBeGreaterThan(canvasesBeforeRetry);
   });
 
   it('destroy fully disposes local resources and forgets the pool entry', () => {

@@ -406,8 +406,31 @@ export function setBackendChangeHandler(next: BackendChangeHandler): void {
   handler = next;
 }
 const forceCpu = typeof localStorage !== 'undefined' && localStorage.getItem('typie:page-surface') === 'cpu';
-// 스펙 §3.4 예산 장부: 브라우저 한도(≥8) − 프로브/GC 마진 → 8 (구 공유 presenter 제거 완료).
-export const GL_POOL_BUDGET = 8;
+
+export type GlPoolBudgetEnv = {
+  userAgent: string;
+  platform: string;
+  maxTouchPoints: number;
+  matchMedia: ((query: string) => { matches: boolean }) | undefined;
+};
+
+const realBudgetEnv = (): GlPoolBudgetEnv => ({
+  userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+  platform: typeof navigator === 'undefined' ? '' : navigator.platform,
+  maxTouchPoints: typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints,
+  matchMedia: typeof matchMedia === 'undefined' ? undefined : (query) => matchMedia(query),
+});
+
+// 스펙 §3.4 예산 장부: 데스크톱은 브라우저 한도(≥8) − 프로브/GC 마진 → 8. iOS/iPadOS(iPadOS는
+// Mac으로 위장) 또는 coarse-pointer 모바일은 활성 GL 컨텍스트 상한이 낮아 4로 줄인다 — WebKit의
+// "too many active WebGL contexts" force-loss 캐스케이드와 GPU 프로세스 churn을 방지한다.
+export function computeGlPoolBudget(env: GlPoolBudgetEnv = realBudgetEnv()): number {
+  const iosOrIpad = /iPad|iPhone|iPod/.test(env.userAgent) || (env.platform === 'MacIntel' && env.maxTouchPoints > 1);
+  const coarsePointer = env.matchMedia?.('(pointer: coarse)').matches ?? false;
+  return iosOrIpad || coarsePointer ? 4 : 8;
+}
+
+export const GL_POOL_BUDGET = computeGlPoolBudget();
 export const glContextPool = new GlContextPool(
   GL_POOL_BUDGET,
   (editorKey, page, backend, acquireHint) => handler?.(editorKey, page, backend, acquireHint),

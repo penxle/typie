@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GlContextPool } from './gl-context-pool';
-import { createPageSurfaceManager, RESTORE_WATCHDOG_MS, SWAP_TIMEOUT_MS } from './page-surface-manager';
+import { ACQUIRE_DEBOUNCE_MS, createPageSurfaceManager, RESTORE_WATCHDOG_MS, SWAP_TIMEOUT_MS } from './page-surface-manager';
 import type { AttachOutcome, LeaseToken, PageZone, SurfaceBackend } from './gl-context-pool';
 import type { ManagerEffects, PoolPort, VisibilityState } from './page-surface-manager';
 
@@ -213,7 +213,14 @@ function createHarness(budget: number, opts?: { deferSync?: boolean }) {
         canvas.removed = true;
       },
       schedule: (fn, ms) => {
-        const label = ms === SWAP_TIMEOUT_MS ? 'swap-timeout' : ms === RESTORE_WATCHDOG_MS ? 'restore-watchdog' : `ms:${ms}`;
+        const label =
+          ms === SWAP_TIMEOUT_MS
+            ? 'swap-timeout'
+            : ms === ACQUIRE_DEBOUNCE_MS
+              ? 'acquire-debounce'
+              : ms === RESTORE_WATCHDOG_MS
+                ? 'restore-watchdog'
+                : `ms:${ms}`;
         const entry: TimerEntry = { id: ++timerId, at: clock + ms, ms, label, fn, cancelled: false };
         timers.push(entry);
         return () => {
@@ -848,7 +855,9 @@ describe('page-surface-integration', () => {
         expect(page.manager.debug().live).toBeUndefined();
         expect(page.manager.debug().pending).toBeUndefined();
         expect(page.manager.debug().wantsLive).toBe(true);
-        expect(page.timers.some((t) => !t.cancelled)).toBe(false);
+        // F-B: failedParked는 이제 백오프 재시도 타이머 하나를 무장한다(뷰포트에 머무는 페이지가
+        // radius 왕복 없이 스스로 치유되도록). 그 외 잔존 타이머는 없다.
+        expect(page.timers.filter((t) => !t.cancelled)).toHaveLength(1);
 
         h.quiesce();
 
@@ -1119,6 +1128,47 @@ describe('page-surface-integration', () => {
       expect(h.pool.backendOf(ed, 0)).toBe('gl');
       expect(h.pool.debugHoldCount()).toBe(1);
     });
+
+    // 프로덕션 크리티컬(Bug A): 빠른 스크롤 중 반경을 스쳐 지나가는(transit-only) 페이지마다
+    // mount(새 GL 컨텍스트)→park(loseContext)를 반복하면 WebKit force-loss 캐스케이드로 탭이
+    // 죽는다. F-A1 디바운스는 overscan 진입 마운트를 지연시켜, 디바운스 창 안에서 진입 후 이탈한
+    // 페이지는 lease도 캔버스도 만들지 않게 한다 — 머무는 페이지만 실제로 마운트한다.
+    it('R-P: fling — 디바운스 창 안에서 스쳐가는 페이지는 lease/canvas를 만들지 않고, 머무는 페이지만 정확히 1회 마운트한다', () => {
+      const h = createHarness(4);
+      const ed = {};
+      const transitCount = 6;
+      const transit = Array.from({ length: transitCount }, (_, i) => h.addPage(ed, i));
+      const stayer = h.addPage(ed, transitCount);
+
+      // 모든 페이지가 overscan으로 진입(디바운스 무장) — 아직 마운트도 풀 수요도 없다.
+      for (const p of [...transit, stayer]) h.reconcile(p, overscan);
+      for (const p of [...transit, stayer]) {
+        expect(p.canvases.length).toBe(0);
+        expect(h.pool.backendOf(p.editorKey, p.page)).toBeUndefined();
+      }
+      expect(h.pool.debugHoldCount()).toBe(0);
+
+      // transit 페이지들은 디바운스 만료 전에 반경을 이탈(park) — 디바운스가 취소된다.
+      for (const p of transit) h.reconcile(p, outOfView);
+
+      // stayer만 디바운스를 발화시켜 실제로 마운트한다.
+      expect(h.fireTimerLabel(stayer, 'acquire-debounce')).toBe(true);
+      h.flushDefer(stayer);
+      h.firePresent(stayer);
+
+      // transit 페이지: 캔버스 0, attach 시도 0, 원장 미등록, lease 0 — churn 원천을 차단했다.
+      for (const p of transit) {
+        expect(p.canvases.length).toBe(0);
+        expect(p.attachRequests).toEqual([]);
+        expect(h.pool.backendOf(p.editorKey, p.page)).toBeUndefined();
+      }
+      // stayer: 정확히 1개 마운트 + gl lease 정확히 1.
+      expect(stayer.canvases.length).toBe(1);
+      expect(stayer.manager.debug().live).toBeDefined();
+      expect(stayer.manager.debug().live?.isGl).toBe(true);
+      expect(h.pool.debugHoldCount()).toBe(1);
+      h.quiesce();
+    });
   });
 
   describe('Step 2e: 우선순위 정책 정확성(참조 모델)', () => {
@@ -1196,6 +1246,11 @@ describe('page-surface-integration', () => {
         for (let i = 0; i < 20; i++) {
           h.flushAllDefer();
           let progressed = false;
+          // 디바운스된 overscan 진입을 즉시 정착시킨다(가짜 클록 조작 없이 — 디바운스 조기 발화는
+          // swap-timeout과 달리 거짓 failedParked를 만들지 않아 안전하다).
+          for (const { p } of pages) {
+            if (h.fireTimerLabel(p, 'acquire-debounce')) progressed = true;
+          }
           for (const { p } of pages) {
             if (p.presented.length === 0) {
               continue;
@@ -1282,13 +1337,18 @@ describe('page-surface-integration', () => {
     function settleForLiveness(h: Harness): void {
       for (let round = 0; round < 100; round++) {
         h.quiesce();
-        let firedPresent = false;
+        let progressed = false;
+        // 디바운스된 overscan 진입을 정착시킨다(가짜 클록 조작 없이 안전 — 아직 만료 안 된
+        // swap-timeout은 앞당기지 않지만 디바운스 조기 발화는 거짓 failedParked를 만들지 않는다).
+        for (const page of h.knownPages()) {
+          if (h.fireTimerLabel(page, 'acquire-debounce')) progressed = true;
+        }
         for (const page of h.knownPages()) {
           if (page.presented.length === 0) continue;
           h.firePresent(page);
-          firedPresent = true;
+          progressed = true;
         }
-        if (!firedPresent) return;
+        if (!progressed) return;
       }
       throw new Error('I7 체크포인트 settle이 100회 반복 내에 수렴하지 않음(thrash 의심)');
     }

@@ -225,7 +225,10 @@
             };
           },
           disposeGlContext: (canvas) => {
-            canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
+            // 이미 로스된 컨텍스트에 loseContext를 또 호출하면 INVALID_OPERATION 스팸이 난다
+            // (force-loss storm 중 특히 심함) — 살아있을 때만 명시적으로 해제한다.
+            const gl = canvas.getContext('webgl2');
+            if (gl && !gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
           },
           releaseCpuBacking: (canvas) => {
             canvas.width = 0;
