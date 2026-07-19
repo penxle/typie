@@ -1,5 +1,5 @@
 query SubscriptionService_Query {
-  me @catch(to: THROW) {
+  me @catch(to: NULL) {
     id
 
     subscription {

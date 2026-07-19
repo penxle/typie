@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import co.typie.domain.auth.AuthService
+import co.typie.domain.auth.AuthState
 import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.SubscriptionService_Query
@@ -28,7 +30,10 @@ import kotlinx.coroutines.launch
 object SubscriptionService {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-  private val query = Apollo.watchQuery(scope = scope) { SubscriptionService_Query() }
+  private val query =
+    Apollo.watchQuery(scope = scope, skip = { AuthService.state !is AuthState.Authenticated }) {
+      SubscriptionService_Query()
+    }
 
   private var lastKnown: Subscription? by mutableStateOf(null)
   private var clockTick by mutableStateOf(0L)
@@ -40,14 +45,24 @@ object SubscriptionService {
       is QueryState.Error ->
         if (lastKnown == null) Entitlement.Unknown
         else resolveEntitlement(lastKnown, Clock.System.now())
-      is QueryState.Success ->
-        resolveEntitlement(raw.data.me.subscription?.toSubscription(), Clock.System.now())
+      is QueryState.Success -> {
+        val me = raw.data.me
+        if (me == null) {
+          if (lastKnown == null) Entitlement.Unknown
+          else resolveEntitlement(lastKnown, Clock.System.now())
+        } else {
+          resolveEntitlement(me.subscription?.toSubscription(), Clock.System.now())
+        }
+      }
     }
   }
 
   val subscription: Subscription? by derivedStateOf {
     when (val raw = query.state) {
-      is QueryState.Success -> raw.data.me.subscription?.toSubscription()
+      is QueryState.Success -> {
+        val me = raw.data.me
+        if (me == null) lastKnown else me.subscription?.toSubscription()
+      }
       else -> lastKnown
     }
   }
