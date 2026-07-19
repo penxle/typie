@@ -9,11 +9,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,14 +29,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,6 +75,92 @@ private const val ScrollbarIndicatorHeight = 24f
 private const val ScrollbarIndicatorGap = 8f
 private val ScrollbarShape = AppShapes.rounded(4.dp)
 
+private data class EditorScrollbarLayoutMetrics(
+  val viewportSize: Size,
+  val contentSize: Size,
+  val scrollOffset: Offset,
+  val vertical: EditorViewportScrollbarMetrics,
+  val horizontal: EditorViewportScrollbarMetrics,
+)
+
+private data class EditorScrollbarDragMetrics(
+  val trackLength: Float,
+  val thumbSize: Float,
+  val viewportLength: Float,
+  val contentLength: Float,
+)
+
+private fun resolveEditorScrollbarLayoutMetrics(
+  viewportSize: Size,
+  contentSize: Size,
+  scrollOffset: Offset,
+  visibleArea: EditorVisibleArea,
+): EditorScrollbarLayoutMetrics {
+  fun vertical(reserveHorizontalTrack: Boolean): EditorViewportScrollbarMetrics =
+    resolveEditorViewportScrollbarMetrics(
+      viewportLength = viewportSize.height,
+      contentLength = contentSize.height,
+      scrollPosition = scrollOffset.y,
+      minThumbSize = ScrollbarMinThumbSize,
+      leadingInset = visibleArea.topOcclusion,
+      trailingInset = visibleArea.bottomOcclusion,
+      leadingPadding = ScrollbarTrackPadding,
+      trailingPadding =
+        ScrollbarTrackPadding + if (reserveHorizontalTrack) ScrollbarTrackWidth else 0f,
+    )
+
+  fun horizontal(reserveVerticalTrack: Boolean): EditorViewportScrollbarMetrics =
+    resolveEditorViewportScrollbarMetrics(
+      viewportLength = viewportSize.width,
+      contentLength = contentSize.width,
+      scrollPosition = scrollOffset.x,
+      minThumbSize = ScrollbarMinThumbSize,
+      leadingPadding = ScrollbarTrackPadding,
+      trailingPadding =
+        ScrollbarTrackPadding + if (reserveVerticalTrack) ScrollbarTrackWidth else 0f,
+    )
+
+  val verticalWithoutCrossTrack = vertical(reserveHorizontalTrack = false)
+  val horizontalWithoutCrossTrack = horizontal(reserveVerticalTrack = false)
+  val (vertical, horizontal) =
+    when {
+      !verticalWithoutCrossTrack.isVisible && !horizontalWithoutCrossTrack.isVisible ->
+        verticalWithoutCrossTrack to horizontalWithoutCrossTrack
+
+      !verticalWithoutCrossTrack.isVisible ->
+        vertical(reserveHorizontalTrack = true) to horizontalWithoutCrossTrack
+
+      !horizontalWithoutCrossTrack.isVisible ->
+        verticalWithoutCrossTrack to horizontal(reserveVerticalTrack = true)
+
+      else -> {
+        val verticalWithCrossTrack = vertical(reserveHorizontalTrack = true)
+        val horizontalWithCrossTrack = horizontal(reserveVerticalTrack = true)
+        when {
+          verticalWithCrossTrack.isVisible && horizontalWithCrossTrack.isVisible ->
+            verticalWithCrossTrack to horizontalWithCrossTrack
+
+          verticalWithCrossTrack.isVisible -> verticalWithoutCrossTrack to horizontalWithCrossTrack
+
+          horizontalWithCrossTrack.isVisible ->
+            verticalWithCrossTrack to horizontalWithoutCrossTrack
+
+          // Both axes cannot fit while reserving each other. Keep the vertical track, which is the
+          // primary document-scrolling axis, and hide the horizontal one.
+          else -> verticalWithoutCrossTrack to horizontalWithCrossTrack
+        }
+      }
+    }
+
+  return EditorScrollbarLayoutMetrics(
+    viewportSize = viewportSize,
+    contentSize = contentSize,
+    scrollOffset = scrollOffset,
+    vertical = vertical,
+    horizontal = horizontal,
+  )
+}
+
 @Composable
 internal fun EditorScrollbars(
   viewportState: EditorViewportState,
@@ -81,33 +171,6 @@ internal fun EditorScrollbars(
   modifier: Modifier = Modifier,
 ) {
   val haptic = LocalHapticFeedback.current
-  val viewportSize = viewportState.viewportSize
-  val contentSize = viewportState.contentSize
-  val scrollOffset = viewportState.scrollOffset
-  val hasVerticalScroll = contentSize.height > viewportSize.height
-  val hasHorizontalScroll = contentSize.width > viewportSize.width
-
-  val verticalMetrics =
-    resolveEditorViewportScrollbarMetrics(
-      viewportLength = viewportSize.height,
-      contentLength = contentSize.height,
-      scrollPosition = scrollOffset.y,
-      minThumbSize = ScrollbarMinThumbSize,
-      leadingInset = visibleArea.topOcclusion,
-      trailingInset = visibleArea.bottomOcclusion,
-      leadingPadding = ScrollbarTrackPadding,
-      trailingPadding = ScrollbarTrackPadding + if (hasHorizontalScroll) ScrollbarTrackWidth else 0f,
-    )
-  val horizontalMetrics =
-    resolveEditorViewportScrollbarMetrics(
-      viewportLength = viewportSize.width,
-      contentLength = contentSize.width,
-      scrollPosition = scrollOffset.x,
-      minThumbSize = ScrollbarMinThumbSize,
-      leadingPadding = ScrollbarTrackPadding,
-      trailingPadding = ScrollbarTrackPadding + if (hasVerticalScroll) ScrollbarTrackWidth else 0f,
-    )
-  val hasVisibleScrollbar = verticalMetrics.isVisible || horizontalMetrics.isVisible
   var overlayVisible by remember { mutableStateOf(false) }
   var indicatorVisible by remember { mutableStateOf(false) }
   var lastScrollWasAuto by remember { mutableStateOf(false) }
@@ -116,7 +179,7 @@ internal fun EditorScrollbars(
   var hideSequenceRevision by remember { mutableIntStateOf(0) }
 
   val isDragging = isVerticalThumbDragged || isHorizontalThumbDragged
-  val directDragEnabled = hasVisibleScrollbar && (overlayVisible || isDragging)
+  val directDragEnabled = overlayVisible || isDragging
 
   DisposableEffect(viewportState) {
     onDispose { viewportState.updateScrollbarDragInProgress(false) }
@@ -124,20 +187,10 @@ internal fun EditorScrollbars(
   LaunchedEffect(viewportState, isDragging) {
     viewportState.updateScrollbarDragInProgress(isDragging)
   }
-  LaunchedEffect(hasVisibleScrollbar) {
-    if (!hasVisibleScrollbar) {
-      overlayVisible = false
-      indicatorVisible = false
-      lastScrollWasAuto = false
-      isVerticalThumbDragged = false
-      isHorizontalThumbDragged = false
-      hideSequenceRevision = 0
-    }
-  }
-  LaunchedEffect(viewportState, hasVisibleScrollbar) {
+  LaunchedEffect(viewportState) {
     snapshotFlow { viewportState.lastScrollRevision to viewportState.lastScrollWasAuto }
       .collect { (revision, isAutoScroll) ->
-        if (revision <= 0 || !hasVisibleScrollbar) {
+        if (revision <= 0) {
           return@collect
         }
 
@@ -149,8 +202,8 @@ internal fun EditorScrollbars(
         }
       }
   }
-  LaunchedEffect(hasVisibleScrollbar, hideSequenceRevision, isDragging, overlayVisible) {
-    if (!hasVisibleScrollbar || isDragging || !overlayVisible || hideSequenceRevision <= 0) {
+  LaunchedEffect(hideSequenceRevision, isDragging, overlayVisible) {
+    if (isDragging || !overlayVisible || hideSequenceRevision <= 0) {
       return@LaunchedEffect
     }
 
@@ -178,11 +231,7 @@ internal fun EditorScrollbars(
   val indicatorAlpha by
     animateFloatAsState(
       targetValue =
-        if (
-          verticalMetrics.isVisible &&
-            !lastScrollWasAuto &&
-            (indicatorVisible || isVerticalThumbDragged)
-        ) {
+        if (!lastScrollWasAuto && (indicatorVisible || isVerticalThumbDragged)) {
           1f
         } else {
           0f
@@ -190,87 +239,76 @@ internal fun EditorScrollbars(
       animationSpec = tween(durationMillis = ScrollbarOpacityAnimationMs, easing = LinearEasing),
       label = "editor-scrollbar-indicator-alpha",
     )
-  val shouldComposeThumbs = hasVisibleScrollbar
   val indicatorText =
-    if (verticalMetrics.isVisible) {
-      resolveEditorScrollbarIndicatorText(
-        layoutSpec = layoutSpec,
-        pageSizes = pageSizes,
-        displayZoom = displayZoom,
-        viewportLength = viewportSize.height,
-        contentLength = contentSize.height,
-        scrollPosition = scrollOffset.y,
-      )
-    } else {
-      null
-    }
+    resolveEditorScrollbarIndicatorText(
+      layoutSpec = layoutSpec,
+      pageSizes = pageSizes,
+      displayZoom = displayZoom,
+      viewportLength = viewportState.viewportSize.height,
+      contentLength = viewportState.contentSize.height,
+      scrollPosition = viewportState.scrollOffset.y,
+    )
 
   Box(modifier = modifier.fillMaxSize()) {
     Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = overlayAlpha }) {
-      if (shouldComposeThumbs && verticalMetrics.isVisible) {
-        EditorScrollbarThumb(
-          metrics = verticalMetrics,
-          viewportState = viewportState,
-          visibleArea = visibleArea,
-          isAutoScroll = lastScrollWasAuto,
-          directDragEnabled = directDragEnabled,
-          isDragging = isVerticalThumbDragged,
-          onDragChanged = { dragging ->
-            if (isVerticalThumbDragged != dragging) {
-              haptic.performHapticFeedback(
-                if (dragging) {
-                  HapticFeedbackType.GestureThresholdActivate
-                } else {
-                  HapticFeedbackType.GestureEnd
-                }
-              )
-            }
-            isVerticalThumbDragged = dragging
-            overlayVisible = true
-            indicatorVisible = true
-            lastScrollWasAuto = false
-            if (!dragging && !isHorizontalThumbDragged) {
-              hideSequenceRevision += 1
-            }
-          },
-        )
-      }
-      if (shouldComposeThumbs && horizontalMetrics.isVisible) {
-        EditorScrollbarThumb(
-          horizontal = true,
-          metrics = horizontalMetrics,
-          viewportState = viewportState,
-          visibleArea = visibleArea,
-          isAutoScroll = lastScrollWasAuto,
-          directDragEnabled = directDragEnabled,
-          isDragging = isHorizontalThumbDragged,
-          onDragChanged = { dragging ->
-            if (isHorizontalThumbDragged != dragging) {
-              haptic.performHapticFeedback(
-                if (dragging) {
-                  HapticFeedbackType.GestureThresholdActivate
-                } else {
-                  HapticFeedbackType.GestureEnd
-                }
-              )
-            }
-            isHorizontalThumbDragged = dragging
-            overlayVisible = true
-            indicatorVisible = true
-            lastScrollWasAuto = false
-            if (!dragging && !isVerticalThumbDragged) {
-              hideSequenceRevision += 1
-            }
-          },
-        )
-      }
+      EditorScrollbarThumb(
+        viewportState = viewportState,
+        visibleArea = visibleArea,
+        isAutoScroll = lastScrollWasAuto,
+        directDragEnabled = directDragEnabled,
+        isDragging = isVerticalThumbDragged,
+        onDragChanged = { dragging ->
+          if (isVerticalThumbDragged != dragging) {
+            haptic.performHapticFeedback(
+              if (dragging) {
+                HapticFeedbackType.GestureThresholdActivate
+              } else {
+                HapticFeedbackType.GestureEnd
+              }
+            )
+          }
+          isVerticalThumbDragged = dragging
+          overlayVisible = true
+          indicatorVisible = true
+          lastScrollWasAuto = false
+          if (!dragging && !isHorizontalThumbDragged) {
+            hideSequenceRevision += 1
+          }
+        },
+      )
+      EditorScrollbarThumb(
+        horizontal = true,
+        viewportState = viewportState,
+        visibleArea = visibleArea,
+        isAutoScroll = lastScrollWasAuto,
+        directDragEnabled = directDragEnabled,
+        isDragging = isHorizontalThumbDragged,
+        onDragChanged = { dragging ->
+          if (isHorizontalThumbDragged != dragging) {
+            haptic.performHapticFeedback(
+              if (dragging) {
+                HapticFeedbackType.GestureThresholdActivate
+              } else {
+                HapticFeedbackType.GestureEnd
+              }
+            )
+          }
+          isHorizontalThumbDragged = dragging
+          overlayVisible = true
+          indicatorVisible = true
+          lastScrollWasAuto = false
+          if (!dragging && !isVerticalThumbDragged) {
+            hideSequenceRevision += 1
+          }
+        },
+      )
     }
 
     if (
       indicatorText != null && (indicatorAlpha > 0f || indicatorVisible || isVerticalThumbDragged)
     ) {
       EditorScrollbarIndicator(
-        metrics = verticalMetrics,
+        viewportState = viewportState,
         visibleArea = visibleArea,
         text = indicatorText,
         alpha = indicatorAlpha,
@@ -367,46 +405,68 @@ private fun resolveEditorScrollbarMostVisiblePage(
 }
 
 @Composable
-private fun BoxScope.EditorScrollbarIndicator(
-  metrics: EditorViewportScrollbarMetrics,
+private fun EditorScrollbarIndicator(
+  viewportState: EditorViewportState,
   visibleArea: EditorVisibleArea,
   text: String,
   alpha: Float,
 ) {
-  val density = LocalDensity.current
-  val top =
-    visibleArea.topOcclusion +
-      ScrollbarTrackPadding +
-      metrics.thumbOffset +
-      metrics.thumbSize / 2f - ScrollbarIndicatorHeight / 2f
-  val right = ScrollbarTrackPadding + ScrollbarActiveThumbWidth + ScrollbarIndicatorGap
-
-  Box(
-    modifier =
-      Modifier.align(Alignment.TopEnd)
-        .graphicsLayer {
-          this.alpha = alpha
-          translationX = with(density) { -right.dp.toPx() }
-          translationY = with(density) { top.dp.toPx() }
-        }
-        .height(ScrollbarIndicatorHeight.dp)
-        .background(AppTheme.colors.surfaceInverse.copy(alpha = 0.65f), ScrollbarShape)
-        .padding(horizontal = 8.dp, vertical = 4.dp),
-    contentAlignment = Alignment.Center,
+  EditorScrollbarIndicatorLayout(
+    viewportState = viewportState,
+    visibleArea = visibleArea,
+    modifier = Modifier.fillMaxSize(),
   ) {
-    Text(
-      text = text,
-      style = TextStyle(fontSize = 11.sp, fontFeatureSettings = "tnum"),
-      color = AppTheme.colors.textOnInverse,
-      maxLines = 1,
-    )
+    Box(
+      modifier =
+        Modifier.graphicsLayer { this.alpha = alpha }
+          .height(ScrollbarIndicatorHeight.dp)
+          .background(AppTheme.colors.surfaceInverse.copy(alpha = 0.65f), ScrollbarShape)
+          .padding(horizontal = 8.dp, vertical = 4.dp),
+      contentAlignment = Alignment.Center,
+    ) {
+      Text(
+        text = text,
+        style = TextStyle(fontSize = 11.sp, fontFeatureSettings = "tnum"),
+        color = AppTheme.colors.textOnInverse,
+        maxLines = 1,
+      )
+    }
+  }
+}
+
+@Composable
+internal fun EditorScrollbarIndicatorLayout(
+  viewportState: EditorViewportState,
+  visibleArea: EditorVisibleArea,
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  Layout(modifier = modifier, content = content) { measurables, constraints ->
+    val layoutMetrics = resolveEditorScrollbarLayoutMetrics(viewportState, visibleArea)
+    val verticalMetrics = layoutMetrics.vertical
+    val placeable = measurables.single().measure(constraints.copy(minWidth = 0, minHeight = 0))
+
+    layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+      if (verticalMetrics.isVisible) {
+        val top =
+          visibleArea.topOcclusion +
+            ScrollbarTrackPadding +
+            verticalMetrics.thumbOffset +
+            verticalMetrics.thumbSize / 2f - ScrollbarIndicatorHeight / 2f
+        val right = ScrollbarTrackPadding + ScrollbarActiveThumbWidth + ScrollbarIndicatorGap
+        val x =
+          (Dp(layoutMetrics.viewportSize.width - right).roundToPx() - placeable.width)
+            .coerceAtLeast(0)
+        val y = Dp(top).roundToPx().coerceAtLeast(0)
+        placeable.place(x = x, y = y)
+      }
+    }
   }
 }
 
 @Composable
 private fun EditorScrollbarThumb(
   horizontal: Boolean = false,
-  metrics: EditorViewportScrollbarMetrics,
   viewportState: EditorViewportState,
   visibleArea: EditorVisibleArea,
   isAutoScroll: Boolean,
@@ -416,9 +476,8 @@ private fun EditorScrollbarThumb(
 ) {
   val density = LocalDensity.current
   val latestDirectDragEnabled = rememberUpdatedState(directDragEnabled)
-  val viewportSize = viewportState.viewportSize
-  val contentSize = viewportState.contentSize
-  val hitThickness = (ScrollbarTrackWidth + ScrollbarLongPressHitExpansion).dp
+  val latestVisibleArea = rememberUpdatedState(visibleArea)
+  val latestOnDragChanged = rememberUpdatedState(onDragChanged)
   val trackWidth = ScrollbarTrackWidth.dp
   val trackPadding = ScrollbarTrackPadding.dp
   val animatedThumbThickness by
@@ -435,62 +494,20 @@ private fun EditorScrollbarThumb(
       label = "editor-scrollbar-thumb-alpha",
     )
 
-  val translation =
-    if (!horizontal) {
-      Offset(
-        x =
-          (viewportSize.width - ScrollbarTrackWidth - ScrollbarLongPressHitExpansion).coerceAtLeast(
-            0f
-          ),
-        y =
-          (visibleArea.topOcclusion + ScrollbarTrackPadding + metrics.thumbOffset).coerceAtLeast(0f),
-      )
-    } else {
-      Offset(
-        x = (ScrollbarTrackPadding + metrics.thumbOffset).coerceAtLeast(0f),
-        y =
-          (viewportSize.height -
-              visibleArea.bottomOcclusion -
-              ScrollbarTrackWidth -
-              ScrollbarLongPressHitExpansion)
-            .coerceAtLeast(0f),
-      )
-    }
-
-  val size =
-    if (!horizontal) {
-      Pair(hitThickness, Dp(metrics.thumbSize))
-    } else {
-      Pair(Dp(metrics.thumbSize), hitThickness)
-    }
-
-  Box(
-    modifier =
-      Modifier.graphicsLayer {
-          translationX = with(density) { translation.x.dp.toPx() }
-          translationY = with(density) { translation.y.dp.toPx() }
-        }
-        .size(width = size.first, height = size.second)
-        .pointerInput(
-          horizontal,
-          metrics.trackLength,
-          metrics.thumbSize,
-          viewportSize,
-          contentSize,
-          viewportState,
-        ) {
+  EditorScrollbarThumbLayout(
+    horizontal = horizontal,
+    viewportState = viewportState,
+    visibleArea = visibleArea,
+    modifier = Modifier.fillMaxSize(),
+  ) {
+    Box(
+      modifier =
+        Modifier.fillMaxSize().pointerInput(horizontal, viewportState, density) {
           val touchSlop = viewConfiguration.touchSlop
           val touchSlopSquared = touchSlop * touchSlop
 
-          fun dragScrollPosition(startScrollPosition: Float, dragDelta: Float): Float =
-            resolveEditorViewportScrollbarScrollPositionFromDrag(
-              startScrollPosition = startScrollPosition,
-              dragDelta = dragDelta,
-              trackLength = metrics.trackLength,
-              thumbSize = metrics.thumbSize,
-              viewportLength = if (!horizontal) viewportSize.height else viewportSize.width,
-              contentLength = if (!horizontal) contentSize.height else contentSize.width,
-            )
+          fun currentLayoutMetrics(): EditorScrollbarLayoutMetrics =
+            resolveEditorScrollbarLayoutMetrics(viewportState, latestVisibleArea.value)
 
           awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
@@ -526,15 +543,12 @@ private fun EditorScrollbarThumb(
                 return@awaitEachGesture
               }
             }
-            val dragStartScroll =
-              if (!horizontal) {
-                viewportState.scrollOffset.y
-              } else {
-                viewportState.scrollOffset.x
-              }
+            val dragStartLayoutMetrics = currentLayoutMetrics()
+            var dragMetrics = dragStartLayoutMetrics.dragMetrics(horizontal)
+            var dragStartScroll = dragStartLayoutMetrics.scrollPosition(horizontal)
             var accumulatedDrag = 0f
 
-            onDragChanged(true)
+            latestOnDragChanged.value(true)
             try {
               while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
@@ -556,10 +570,21 @@ private fun EditorScrollbarThumb(
                   }
 
                 if (dragDelta != 0f) {
+                  val currentLayoutMetrics = currentLayoutMetrics()
+                  val currentDragMetrics = currentLayoutMetrics.dragMetrics(horizontal)
+                  if (currentDragMetrics != dragMetrics) {
+                    dragMetrics = currentDragMetrics
+                    dragStartScroll = currentLayoutMetrics.scrollPosition(horizontal)
+                    accumulatedDrag = 0f
+                  }
                   val nextScrollPosition =
-                    dragScrollPosition(
+                    resolveEditorViewportScrollbarScrollPositionFromDrag(
                       startScrollPosition = dragStartScroll,
                       dragDelta = accumulatedDrag + dragDelta,
+                      trackLength = dragMetrics.trackLength,
+                      thumbSize = dragMetrics.thumbSize,
+                      viewportLength = dragMetrics.viewportLength,
+                      contentLength = dragMetrics.contentLength,
                     )
 
                   change.consume()
@@ -576,40 +601,125 @@ private fun EditorScrollbarThumb(
                 }
               }
             } finally {
-              onDragChanged(false)
+              latestOnDragChanged.value(false)
             }
           }
         }
-  ) {
-    if (!horizontal) {
-      Box(
-        modifier =
-          Modifier.align(Alignment.CenterEnd)
-            .size(width = trackWidth, height = size.second)
-            .padding(end = trackPadding),
-        contentAlignment = Alignment.CenterEnd,
-      ) {
-        EditorScrollbarThumbBody(
-          modifier = Modifier.size(width = animatedThumbThickness, height = size.second),
-          alpha = animatedThumbAlpha,
-        )
-      }
-    } else {
-      Box(
-        modifier =
-          Modifier.align(Alignment.BottomCenter)
-            .size(width = size.first, height = trackWidth)
-            .padding(bottom = trackPadding),
-        contentAlignment = Alignment.BottomCenter,
-      ) {
-        EditorScrollbarThumbBody(
-          modifier = Modifier.size(width = size.first, height = animatedThumbThickness),
-          alpha = animatedThumbAlpha,
-        )
+    ) {
+      if (!horizontal) {
+        Box(
+          modifier =
+            Modifier.align(Alignment.CenterEnd)
+              .width(trackWidth)
+              .fillMaxHeight()
+              .padding(end = trackPadding),
+          contentAlignment = Alignment.CenterEnd,
+        ) {
+          EditorScrollbarThumbBody(
+            modifier = Modifier.width(animatedThumbThickness).fillMaxHeight(),
+            alpha = animatedThumbAlpha,
+          )
+        }
+      } else {
+        Box(
+          modifier =
+            Modifier.align(Alignment.BottomCenter)
+              .fillMaxWidth()
+              .height(trackWidth)
+              .padding(bottom = trackPadding),
+          contentAlignment = Alignment.BottomCenter,
+        ) {
+          EditorScrollbarThumbBody(
+            modifier = Modifier.fillMaxWidth().height(animatedThumbThickness),
+            alpha = animatedThumbAlpha,
+          )
+        }
       }
     }
   }
 }
+
+@Composable
+internal fun EditorScrollbarThumbLayout(
+  horizontal: Boolean,
+  viewportState: EditorViewportState,
+  visibleArea: EditorVisibleArea,
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  Layout(modifier = modifier, content = content) { measurables, constraints ->
+    val layoutMetrics = resolveEditorScrollbarLayoutMetrics(viewportState, visibleArea)
+    val axisMetrics = if (!horizontal) layoutMetrics.vertical else layoutMetrics.horizontal
+    val hitThickness = Dp(ScrollbarTrackWidth + ScrollbarLongPressHitExpansion).roundToPx()
+    val thumbLength = Dp(axisMetrics.thumbSize).roundToPx()
+    val childConstraints =
+      if (!horizontal) {
+        Constraints.fixed(width = hitThickness, height = thumbLength)
+      } else {
+        Constraints.fixed(width = thumbLength, height = hitThickness)
+      }
+    val placeable = measurables.single().measure(childConstraints)
+
+    layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+      if (axisMetrics.isVisible) {
+        val x =
+          if (!horizontal) {
+            Dp(
+                layoutMetrics.viewportSize.width -
+                  ScrollbarTrackWidth -
+                  ScrollbarLongPressHitExpansion
+              )
+              .roundToPx()
+              .coerceAtLeast(0)
+          } else {
+            Dp(ScrollbarTrackPadding + axisMetrics.thumbOffset).roundToPx().coerceAtLeast(0)
+          }
+        val y =
+          if (!horizontal) {
+            Dp(visibleArea.topOcclusion + ScrollbarTrackPadding + axisMetrics.thumbOffset)
+              .roundToPx()
+              .coerceAtLeast(0)
+          } else {
+            Dp(
+                layoutMetrics.viewportSize.height -
+                  visibleArea.bottomOcclusion -
+                  ScrollbarTrackWidth -
+                  ScrollbarLongPressHitExpansion
+              )
+              .roundToPx()
+              .coerceAtLeast(0)
+          }
+        placeable.place(x = x, y = y)
+      }
+    }
+  }
+}
+
+private fun EditorScrollbarLayoutMetrics.dragMetrics(
+  horizontal: Boolean
+): EditorScrollbarDragMetrics {
+  val axisMetrics = if (!horizontal) vertical else this.horizontal
+  return EditorScrollbarDragMetrics(
+    trackLength = axisMetrics.trackLength,
+    thumbSize = axisMetrics.thumbSize,
+    viewportLength = if (!horizontal) viewportSize.height else viewportSize.width,
+    contentLength = if (!horizontal) contentSize.height else contentSize.width,
+  )
+}
+
+private fun EditorScrollbarLayoutMetrics.scrollPosition(horizontal: Boolean): Float =
+  if (!horizontal) scrollOffset.y else scrollOffset.x
+
+private fun resolveEditorScrollbarLayoutMetrics(
+  viewportState: EditorViewportState,
+  visibleArea: EditorVisibleArea,
+): EditorScrollbarLayoutMetrics =
+  resolveEditorScrollbarLayoutMetrics(
+    viewportSize = viewportState.viewportSize,
+    contentSize = viewportState.contentSize,
+    scrollOffset = viewportState.scrollOffset,
+    visibleArea = visibleArea,
+  )
 
 @Composable
 private fun EditorScrollbarThumbBody(modifier: Modifier, alpha: Float) {
