@@ -12,11 +12,13 @@ class MainApplication : Application() {
 
     val packageInfo = packageManager.getPackageInfo(packageName, 0)
 
-    Sentry.init { options ->
+    Sentry.initWithPlatformOptions { options ->
       options.dsn = Konfig.SENTRY_DSN
-      options.sendDefaultPii = true
-      options.attachScreenshot = true
+      options.isSendDefaultPii = true
+      options.isAttachScreenshot = true
       options.release = "$packageName@${packageInfo.versionName}+${packageInfo.longVersionCode}"
+      options.maxBreadcrumbs = 300
+      options.isAttachAnrThreadDump = true
     }
 
     PlatformModule.context = this
