@@ -4,17 +4,6 @@ query EditorTemplateSheet_Query($siteId: ID!) {
     documentTemplates {
       id
       title
-      entity {
-        id
-        slug
-      }
     }
   }
 }
-
-query EditorTemplateSheet_TemplateGraph_Query($slug: String!) {
-  document(slug: $slug) @catch(to: THROW) {
-    id
-  }
-}
-

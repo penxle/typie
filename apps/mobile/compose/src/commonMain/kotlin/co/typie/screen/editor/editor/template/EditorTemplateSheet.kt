@@ -90,11 +90,7 @@ private fun TemplateSheetLoading() {
       templates =
         Skeleton.list(3) { text(8..14) }
           .mapIndexed { index, title ->
-            EditorTemplateSheetTemplate(
-              id = "placeholder-$index",
-              title = title,
-              slug = "placeholder-$index",
-            )
+            EditorTemplateSheetTemplate(documentId = "placeholder-$index", title = title)
           },
       insertingTemplateId = null,
       onTemplateClick = {},
@@ -146,7 +142,7 @@ private fun TemplateSheetList(
   onTemplateClick: suspend (EditorTemplateSheetTemplate) -> Unit,
 ) {
   SheetOptionList(items = templates) { template ->
-    val inserting = insertingTemplateId == template.id
+    val inserting = insertingTemplateId == template.documentId
     SheetOptionRow(
       selected = false,
       enabled = insertingTemplateId == null,

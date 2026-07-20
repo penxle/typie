@@ -9,14 +9,11 @@ import androidx.lifecycle.viewModelScope
 import co.typie.editor.sync.ws.loadDocumentSnapshotBytes
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorTemplateSheet_Query
-import co.typie.graphql.EditorTemplateSheet_TemplateGraph_Query
 import co.typie.graphql.QueryState
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.storage.Preference
-import com.apollographql.cache.normalized.FetchPolicy
-import com.apollographql.cache.normalized.fetchPolicy
 
 internal class EditorTemplateSheetViewModel : ViewModel() {
   val query =
@@ -39,30 +36,15 @@ internal class EditorTemplateSheetViewModel : ViewModel() {
     template: EditorTemplateSheetTemplate,
     insert: suspend (ByteArray) -> Boolean,
   ): Result<Unit, Nothing> =
-    loading({ loading -> insertingTemplateId = template.id.takeIf { loading } }) {
-      val graph = loadTemplateGraph(template)
+    loading({ loading -> insertingTemplateId = template.documentId.takeIf { loading } }) {
+      val graph = loadDocumentSnapshotBytes(template.documentId)
       if (!insert(graph)) {
         error("failed to insert template fragment")
       }
     }
-
-  private suspend fun loadTemplateGraph(template: EditorTemplateSheetTemplate): ByteArray {
-    val response =
-      Apollo.query(EditorTemplateSheet_TemplateGraph_Query(slug = template.slug))
-        .fetchPolicy(FetchPolicy.NetworkOnly)
-        .execute()
-    val graphError = response.errors?.firstOrNull()
-    val templateDocumentId =
-      when {
-        response.exception != null -> throw response.exception!!
-        graphError != null -> throw Exception(graphError.message)
-        else -> response.data?.document?.id ?: error("missing template document")
-      }
-    return loadDocumentSnapshotBytes(templateDocumentId)
-  }
 }
 
-internal data class EditorTemplateSheetTemplate(val id: String, val title: String, val slug: String)
+internal data class EditorTemplateSheetTemplate(val documentId: String, val title: String)
 
 internal sealed interface EditorTemplateSheetContentState {
   data object Loading : EditorTemplateSheetContentState
@@ -89,7 +71,7 @@ internal fun resolveEditorTemplateSheetContentState(
     is QueryState.Success -> {
       val templates =
         queryState.data.site.documentTemplates.map {
-          EditorTemplateSheetTemplate(id = it.id, title = it.title, slug = it.entity.slug)
+          EditorTemplateSheetTemplate(documentId = it.id, title = it.title)
         }
       if (templates.isEmpty()) {
         EditorTemplateSheetContentState.Empty
