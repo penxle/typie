@@ -1666,6 +1666,7 @@ impl Editor {
         template: editor_model::PlainDoc,
     ) -> Result<(), EditorError> {
         let root_entry = &template.root;
+        let root_node = root_entry.node.clone();
         let root_modifiers: Vec<editor_model::Modifier> =
             root_entry.modifiers.values().cloned().collect();
 
@@ -1717,6 +1718,7 @@ impl Editor {
                 for (i, st) in subtrees.into_iter().enumerate() {
                     tr.insert_subtree(Dot::ROOT, i, st)?;
                 }
+                tr.set_node(Dot::ROOT, root_node)?;
 
                 let existing_root_mods: Vec<editor_model::Modifier> = tr
                     .state()
@@ -5501,6 +5503,54 @@ mod tests {
             .map(|p| p.inline_text())
             .collect();
         assert_eq!(texts, vec!["Title".to_string(), "Body".to_string()]);
+    }
+
+    #[test]
+    fn insert_template_fragment_replaces_root_layout_mode() {
+        let (initial, _p1) = state! {
+            doc {
+                root (layout_mode: LayoutMode::Continuous { max_width: 600 }) {
+                    p1: paragraph { text("") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (template, _p2) = state! {
+            doc {
+                root (
+                    layout_mode: LayoutMode::Paginated {
+                        page_width: 800,
+                        page_height: 1200,
+                        page_margin_top: 80,
+                        page_margin_bottom: 80,
+                        page_margin_left: 60,
+                        page_margin_right: 60,
+                    }
+                ) {
+                    p2: paragraph { text("Body") }
+                }
+            }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor
+            .insert_template_fragment(template.to_plain())
+            .expect("template insert ok");
+
+        let Node::Root(root) = editor.state().view().root().unwrap().node() else {
+            panic!("document root must be a Root node");
+        };
+        assert_eq!(
+            *root.layout_mode.get(),
+            LayoutMode::Paginated {
+                page_width: 800,
+                page_height: 1200,
+                page_margin_top: 80,
+                page_margin_bottom: 80,
+                page_margin_left: 60,
+                page_margin_right: 60,
+            }
+        );
     }
 
     #[test]
