@@ -23,9 +23,9 @@
     resolving: boolean;
     onAddNote: () => void;
     onBeginResolve: () => void;
-    onDragEnd: () => void;
+    onDragEnd: (clientX: number, clientY: number) => void;
     onDragEnter: () => void;
-    onDragMove: (noteId: string) => void;
+    onDragMove: (clientX: number, clientY: number) => void;
     onDragStart: () => void;
     onEndResolve: () => void;
   };
@@ -269,21 +269,13 @@
       if (state.started && state.ghost) {
         state.ghost.style.left = `${ev.clientX - state.offsetX}px`;
         state.ghost.style.top = `${ev.clientY - state.offsetY}px`;
-
-        const elemBelow = document.elementFromPoint(ev.clientX, ev.clientY);
-        const noteBelow = elemBelow?.closest('[data-related-note-id]') as HTMLElement | null;
-        if (noteBelow) {
-          const noteId = noteBelow.dataset.relatedNoteId;
-          if (noteId && noteId !== note.data.id) {
-            onDragMove(noteId);
-          }
-        }
+        onDragMove(ev.clientX, ev.clientY);
       }
     };
 
-    const handleUp = () => {
+    const handleUp = (ev: PointerEvent) => {
       if (state.started) {
-        onDragEnd();
+        onDragEnd(ev.clientX, ev.clientY);
       }
       cleanup();
     };

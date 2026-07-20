@@ -155,7 +155,7 @@
     };
   };
 
-  const handleDragEnter = (noteId: string) => {
+  const moveDraggingNote = (noteId: string) => {
     if (dragging && dragging.noteId !== noteId) {
       const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
       const dropIndex = localNoteOrder.indexOf(noteId);
@@ -169,32 +169,52 @@
     }
   };
 
-  const handleDragEnd = async () => {
-    if (!dragging || !relatedDocument.data?.entity.id) return;
+  const updateDraggingPosition = (clientX: number, clientY: number) => {
+    if (!dragging || !scrollContainer) return;
 
-    const currentIndex = localNoteOrder.indexOf(dragging.noteId);
+    const element = document.elementFromPoint(clientX, clientY);
+    const noteElement = element?.closest('[data-widget-note-id]') as HTMLElement | null;
+    if (!noteElement || !scrollContainer.contains(noteElement)) return;
 
-    if (currentIndex !== -1 && dragging.originalIndex !== -1 && currentIndex !== dragging.originalIndex && sortedNotes.length > 1) {
+    const noteId = noteElement.dataset.widgetNoteId;
+    if (noteId) moveDraggingNote(noteId);
+  };
+
+  const handleDragEnd = async (clientX: number, clientY: number) => {
+    if (!dragging) return;
+
+    updateDraggingPosition(clientX, clientY);
+    const currentDragging = dragging;
+    const currentIndex = localNoteOrder.indexOf(currentDragging.noteId);
+    dragging = null;
+
+    const currentDocument = relatedDocument.data;
+    if (!currentDocument) return;
+
+    if (
+      currentIndex !== -1 &&
+      currentDragging.originalIndex !== -1 &&
+      currentIndex !== currentDragging.originalIndex &&
+      sortedNotes.length > 1
+    ) {
       const lowerNote = sortedNotes[currentIndex - 1] ?? null;
       const upperNote = sortedNotes[currentIndex + 1] ?? null;
 
       try {
         await moveNote({
           input: {
-            noteId: dragging.noteId,
+            noteId: currentDragging.noteId,
             lowerOrder: lowerNote?.order,
             upperOrder: upperNote?.order,
           },
         });
         mixpanel.track('move_related_note');
-        cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, $field: 'notes' });
+        cache.invalidate({ __typename: 'Entity', id: currentDocument.entity.id, $field: 'notes' });
       } catch {
-        localNoteOrder = relatedDocument.data.entity.notes.map((note) => note.id);
+        localNoteOrder = currentDocument.entity.notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
-
-    dragging = null;
   };
 
   let prevNoteIds = $state<string[]>([]);
@@ -220,7 +240,9 @@
 
   $effect(() => {
     if (!palette) {
-      return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging);
+      return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging, {
+        onScroll: updateDraggingPosition,
+      });
     }
   });
 
@@ -346,8 +368,8 @@
           onAddNote={() => handleAddNote('shortcut')}
           onBeginResolve={() => handleBeginResolve(note.id)}
           onDragEnd={handleDragEnd}
-          onDragEnter={() => handleDragEnter(note.id)}
-          onDragMove={handleDragEnter}
+          onDragEnter={() => moveDraggingNote(note.id)}
+          onDragMove={updateDraggingPosition}
           onDragStart={() => handleDragStart(note.id)}
           onEndResolve={() => handleEndResolve(note.id)}
           {palette}

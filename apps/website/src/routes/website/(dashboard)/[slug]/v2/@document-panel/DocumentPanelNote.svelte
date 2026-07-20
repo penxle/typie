@@ -127,7 +127,7 @@
     };
   };
 
-  const handleDragEnter = (noteId: string) => {
+  const moveDraggingNote = (noteId: string) => {
     if (dragging && dragging.noteId !== noteId) {
       const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
       const dropIndex = localNoteOrder.indexOf(noteId);
@@ -141,19 +141,38 @@
     }
   };
 
-  const handleDragEnd = async () => {
+  const updateDraggingPosition = (clientX: number, clientY: number) => {
+    if (!dragging || !scrollContainer) return;
+
+    const element = document.elementFromPoint(clientX, clientY);
+    const noteElement = element?.closest('[data-related-note-id]') as HTMLElement | null;
+    if (!noteElement || !scrollContainer.contains(noteElement)) return;
+
+    const noteId = noteElement.dataset.relatedNoteId;
+    if (noteId) moveDraggingNote(noteId);
+  };
+
+  const handleDragEnd = async (clientX: number, clientY: number) => {
     if (!dragging) return;
 
-    const currentIndex = localNoteOrder.indexOf(dragging.noteId);
+    updateDraggingPosition(clientX, clientY);
+    const currentDragging = dragging;
+    const currentIndex = localNoteOrder.indexOf(currentDragging.noteId);
+    dragging = null;
 
-    if (currentIndex !== -1 && dragging.originalIndex !== -1 && currentIndex !== dragging.originalIndex && sortedNotes.length > 1) {
+    if (
+      currentIndex !== -1 &&
+      currentDragging.originalIndex !== -1 &&
+      currentIndex !== currentDragging.originalIndex &&
+      sortedNotes.length > 1
+    ) {
       const lowerNote = sortedNotes[currentIndex - 1] ?? null;
       const upperNote = sortedNotes[currentIndex + 1] ?? null;
 
       try {
         await moveNote({
           input: {
-            noteId: dragging.noteId,
+            noteId: currentDragging.noteId,
             lowerOrder: lowerNote?.order,
             upperOrder: upperNote?.order,
           },
@@ -165,8 +184,6 @@
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
-
-    dragging = null;
   };
 
   let prevNoteIds = $state<string[]>([]);
@@ -191,7 +208,9 @@
   });
 
   $effect(() => {
-    return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging);
+    return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging, {
+      onScroll: updateDraggingPosition,
+    });
   });
 
   $effect.pre(() => {
@@ -305,8 +324,8 @@
           onAddNote={() => handleAddNote('shortcut')}
           onBeginResolve={() => handleBeginResolve(note.id)}
           onDragEnd={handleDragEnd}
-          onDragEnter={() => handleDragEnter(note.id)}
-          onDragMove={handleDragEnter}
+          onDragEnter={() => moveDraggingNote(note.id)}
+          onDragMove={updateDraggingPosition}
           onDragStart={() => handleDragStart(note.id)}
           onEndResolve={() => handleEndResolve(note.id)}
           resolving={resolvingNoteIds.has(note.id)}
@@ -373,8 +392,8 @@
                 /* noop: resolved notes */
               }}
               onDragEnd={handleDragEnd}
-              onDragEnter={() => handleDragEnter(note.id)}
-              onDragMove={handleDragEnter}
+              onDragEnter={() => moveDraggingNote(note.id)}
+              onDragMove={updateDraggingPosition}
               onDragStart={() => handleDragStart(note.id)}
               onEndResolve={() => {
                 /* noop: resolved notes */
