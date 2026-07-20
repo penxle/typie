@@ -725,6 +725,24 @@ impl Editor {
                     }
                     Ok(())
                 }
+                Message::Insertion { op } => {
+                    self.ime_delete_paint = None;
+                    if ime_failed {
+                        log::warn!("dropping insertion queued after an absorbed ime failure");
+                        continue;
+                    }
+                    if let Err(e) = self.process_message(Message::Insertion { op }) {
+                        if is_illegal_slot(&e) {
+                            log::warn!(
+                                "insertion rejected by insert-slot guard; requesting ime resync: {e}"
+                            );
+                        } else {
+                            log::error!("insertion failed; requesting ime resync: {e}");
+                        }
+                        ime_failed = true;
+                    }
+                    Ok(())
+                }
                 other => {
                     self.ime_delete_paint = None;
                     self.process_message(other)
@@ -2304,8 +2322,10 @@ mod tests {
     }
 
     fn enqueue_failing_non_text_input_message(editor: &mut Editor) {
-        editor.enqueue(Message::Insertion {
-            op: InsertionOp::Text { text: "X".into() },
+        editor.enqueue(Message::Node {
+            op: NodeOp::Delete {
+                id: Dot::new(1, 999),
+            },
         });
     }
 
@@ -2387,6 +2407,61 @@ mod tests {
         enqueue_failing_non_text_input_message(&mut editor);
 
         assert!(editor.tick().is_err());
+    }
+
+    #[test]
+    fn tick_absorbs_insertion_failure_into_resync_event_and_clears_composition() {
+        let mut editor = zombie_fixture_editor();
+        seed_active_composition(&mut editor);
+        let doc_before = editor.state().projected.projected().clone();
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+
+        let events = editor.tick().unwrap();
+
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, EditorEvent::ImeResyncRequired))
+                .count(),
+            1
+        );
+        assert_eq!(editor.state().projected.projected(), &doc_before);
+        assert!(editor.state().composition.is_none());
+        assert!(editor.composition_paint.is_none());
+        assert!(editor.ime_delete_paint.is_none());
+    }
+
+    #[test]
+    fn tick_drops_input_messages_after_insertion_failure_but_processes_other_messages() {
+        let mut editor = zombie_fixture_editor();
+        let doc_before = editor.state().projected.projected().clone();
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+        editor.enqueue(legal_selection_message(&editor));
+        editor.enqueue(Message::TextInput {
+            ops: legal_insert_ops("a"),
+        });
+        editor.enqueue(Message::Insertion {
+            op: InsertionOp::Text { text: "b".into() },
+        });
+
+        let events = editor.tick().unwrap();
+
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, EditorEvent::ImeResyncRequired))
+                .count(),
+            1
+        );
+        assert_eq!(editor.state().projected.projected(), &doc_before);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::StateChanged { fields } if fields.contains(&StateField::Selection)
+        )));
     }
 
     fn test_editor() -> (Editor, editor_crdt::Dot) {

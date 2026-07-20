@@ -2,6 +2,9 @@ package co.typie.editor.input
 
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
+import co.typie.editor.ffi.FlatImeOp
+import co.typie.editor.ffi.InsertionOp
+import co.typie.editor.ffi.Message
 import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -9,6 +12,25 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EditorInputKeyHandlingTest {
+  @Test
+  fun `toolbar insert text commits composition before inserting while composing`() {
+    assertEquals(
+      listOf(
+        Message.TextInput(listOf(FlatImeOp.CommitAsIs)),
+        Message.Insertion(InsertionOp.Text("가")),
+      ),
+      toolbarInsertTextMessages(text = "가", composing = true),
+    )
+  }
+
+  @Test
+  fun `toolbar insert text inserts directly without composition`() {
+    assertEquals(
+      listOf(Message.Insertion(InsertionOp.Text("가"))),
+      toolbarInsertTextMessages(text = "가", composing = false),
+    )
+  }
+
   @Test
   fun `Android navigation keys commit composition before running their binding`() {
     val navigationKeys =

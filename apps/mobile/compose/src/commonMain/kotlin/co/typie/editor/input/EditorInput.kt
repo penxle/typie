@@ -107,6 +107,16 @@ internal fun shouldRestartEditorInputSession(
 internal fun requiresRawKeyTextFallback(platform: Platform): Boolean =
   platform == Platform.Android || platform == Platform.Desktop
 
+internal fun toolbarInsertTextMessages(text: String, composing: Boolean): List<Message> =
+  if (composing) {
+    listOf(
+      Message.TextInput(listOf(FlatImeOp.CommitAsIs)),
+      Message.Insertion(InsertionOp.Text(text)),
+    )
+  } else {
+    listOf(Message.Insertion(InsertionOp.Text(text)))
+  }
+
 private val COMPOSITION_COMMITTING_NAVIGATION_KEYS =
   setOf(
     ComposeKey.DirectionLeft,
@@ -314,7 +324,7 @@ internal class EditorInputNode(
 
       override fun insertText(text: String): Boolean {
         recordToolbarInput("insertText", text)
-        dispatch(listOf(Message.Insertion(InsertionOp.Text(text))))
+        dispatch(toolbarInsertTextMessages(text, editor.ime?.composing != null))
         return true
       }
 
@@ -434,6 +444,17 @@ internal class EditorInputNode(
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
+      if (editor.ime?.composing != null) {
+        recordHardwareKey(
+          event = event,
+          stage = "onKeyEvent",
+          matchedBinding = false,
+          blockedByComposition = true,
+          consumed = true,
+          text = text,
+        )
+        return true
+      }
       recordHardwareKey(
         event = event,
         stage = "onKeyEvent",
@@ -449,6 +470,17 @@ internal class EditorInputNode(
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
+    if (editor.ime?.composing != null) {
+      recordHardwareKey(
+        event = event,
+        stage = "onKeyEvent",
+        matchedBinding = false,
+        blockedByComposition = true,
+        consumed = true,
+        text = ch.toString(),
+      )
+      return true
+    }
     recordHardwareKey(
       event = event,
       stage = "onKeyEvent",

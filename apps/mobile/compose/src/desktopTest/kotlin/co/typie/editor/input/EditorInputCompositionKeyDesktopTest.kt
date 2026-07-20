@@ -22,6 +22,7 @@ import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
+import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
@@ -71,6 +72,64 @@ class EditorInputCompositionKeyDesktopTest {
       expectEnqueued = null,
     )
   }
+
+  @Test
+  fun `android character key during composition drops raw-key fallback`() {
+    runCompositionKeyTest(platform = Platform.Android, key = Key.A, expectEnqueued = null)
+  }
+
+  @Test
+  fun `android character key without composition inserts through raw-key fallback`() =
+    runComposeUiTest {
+      val fake = FakeFfiEditor()
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val editor = Editor(fake, scope)
+      val session = createTestDocumentEditingSession(editor, scope)
+
+      try {
+        setContent {
+          val focusRequester = remember { FocusRequester() }
+          val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+          CompositionLocalProvider(
+            LocalEditorBringIntoViewRequests provides bringIntoViewRequests
+          ) {
+            Box(
+              Modifier.size(200.dp)
+                .testTag(InputTag)
+                .focusRequester(focusRequester)
+                .editorInput(
+                  session = session,
+                  uiState = EditorUiState(),
+                  platform = Platform.Android,
+                  bringIntoViewRequests = bringIntoViewRequests,
+                  enabled = true,
+                  suppressSoftwareKeyboard = true,
+                  clipboard = NoopClipboard,
+                )
+                .focusable()
+            )
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+          }
+        }
+        waitForIdle()
+        fake.enqueued.clear()
+
+        onNodeWithTag(InputTag).performKeyInput {
+          keyDown(Key.A)
+          keyUp(Key.A)
+        }
+        waitForIdle()
+
+        waitUntil(timeoutMillis = 5_000) { fake.enqueued.isNotEmpty() }
+        assertEquals(
+          listOf(Message.Insertion(InsertionOp.Text("a"))),
+          fake.enqueued.toList(),
+        )
+      } finally {
+        session.stop()
+        scope.cancel()
+      }
+    }
 
   private fun runCompositionKeyTest(
     platform: Platform,
