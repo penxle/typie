@@ -1141,7 +1141,9 @@ mod tests {
         };
         let original = Slice::extract(&source).expect("non-collapsed");
         let payload = original.to_payload(&Resource::new_test());
-        let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &Resource::new_test());
+        let (parsed, source) =
+            Slice::from_payload(Some(&payload.html), &payload.text, &Resource::new_test());
+        assert_eq!(source, editor_clipboard::PayloadSource::Html);
         assert!(
             matches!(parsed.content[0].node, PlainNode::Image(_)),
             "sanity: payload carries the image"

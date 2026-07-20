@@ -1,4 +1,4 @@
-use editor_clipboard::Slice;
+use editor_clipboard::{PayloadSource, Slice};
 use editor_commands::{self as commands};
 use editor_common::HistoryTag;
 use editor_model::{Fragment, PlainNode};
@@ -20,11 +20,11 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
             Ok(())
         }),
         ClipboardOp::Paste { html, text } => {
-            let slice = {
+            let (slice, source) = {
                 let resource = editor.resource.lock().unwrap();
                 Slice::from_payload(html.as_deref(), &text, &resource)
             };
-            let is_html_paste = html.as_deref().is_some_and(|h| !h.is_empty());
+            let is_html_paste = source == PayloadSource::Html;
             let provenance = if is_html_paste {
                 commands::types::SliceProvenance::Formatted
             } else {
@@ -1118,6 +1118,29 @@ mod tests {
                 text: "plain".into(),
             },
         });
+        assert!(editor.last_history_tag().is_none());
+    }
+
+    #[test]
+    fn paste_html_that_yields_empty_slice_falls_back_to_plain_text() {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(s);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<script>ignored</script>".into()),
+                text: "plain".into(),
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("plain") } } }
+            selection: (p1, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
         assert!(editor.last_history_tag().is_none());
     }
 

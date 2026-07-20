@@ -2,7 +2,7 @@ use crate::dnd::DndState;
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifiers};
-use editor_clipboard::Slice;
+use editor_clipboard::{PayloadSource, Slice};
 use editor_commands::{self as commands};
 use editor_model::{DocView, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode};
 use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
@@ -251,9 +251,13 @@ fn apply_drop(
 ) -> Result<(), EditorError> {
     match payload {
         DndDropPayload::Text { text, html } => {
-            let (slice, provenance) = {
+            let (slice, source) = {
                 let resource = editor.resource.lock().unwrap();
-                slice_from_drop_text_payload(&text, html.as_deref(), &resource)
+                Slice::from_payload(html.as_deref(), &text, &resource)
+            };
+            let provenance = match source {
+                PayloadSource::Html => commands::types::SliceProvenance::Formatted,
+                PayloadSource::Text => commands::types::SliceProvenance::Plain,
             };
             // TODO: Legacy drop_external filled missing inline styles from
             // the target cascade. Keep this as a separate parity issue rather than
@@ -311,24 +315,6 @@ fn drop_slice_at(
         }
         Ok(())
     })
-}
-
-fn slice_from_drop_text_payload(
-    text: &str,
-    html: Option<&str>,
-    resource: &editor_resource::Resource,
-) -> (Slice, commands::types::SliceProvenance) {
-    if let Some(html) = html.filter(|html| !html.is_empty()) {
-        let slice = Slice::from_html(html, resource);
-        if !slice.is_empty() {
-            return (slice, commands::types::SliceProvenance::Formatted);
-        }
-    }
-
-    (
-        Slice::from_text(text),
-        commands::types::SliceProvenance::Plain,
-    )
 }
 
 fn drop_internal_selection_at(

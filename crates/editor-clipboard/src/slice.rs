@@ -24,6 +24,12 @@ pub struct Slice {
     pub open_end: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PayloadSource {
+    Html,
+    Text,
+}
+
 impl Slice {
     pub fn extract(state: &State) -> Option<Slice> {
         let view = state.view();
@@ -85,11 +91,19 @@ impl Slice {
         html_parse::from_html(html, resource)
     }
 
-    pub fn from_payload(html: Option<&str>, text: &str, resource: &Resource) -> Slice {
-        match html {
-            Some(h) if !h.is_empty() => Self::from_html(h, resource),
-            _ => Self::from_text(text),
+    pub fn from_payload(
+        html: Option<&str>,
+        text: &str,
+        resource: &Resource,
+    ) -> (Slice, PayloadSource) {
+        if let Some(html) = html.filter(|html| !html.is_empty()) {
+            let slice = Self::from_html(html, resource);
+            if !slice.is_empty() {
+                return (slice, PayloadSource::Html);
+            }
         }
+
+        (Self::from_text(text), PayloadSource::Text)
     }
 
     pub fn new(content: Vec<Fragment>, open_start: u32, open_end: u32) -> Self {
@@ -894,14 +908,27 @@ mod tests {
         assert!(!payload.text.is_empty());
 
         let resource = Resource::new_test();
-        let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
+        let (parsed, source) = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
+        assert_eq!(source, PayloadSource::Html);
         assert_eq!(parsed, original);
     }
 
     #[test]
     fn from_payload_text_only() {
-        let parsed = Slice::from_payload(None, "hello\n\nworld", &Resource::new_test());
+        let (parsed, source) = Slice::from_payload(None, "hello\n\nworld", &Resource::new_test());
+        assert_eq!(source, PayloadSource::Text);
         assert_eq!(parsed.content.len(), 3);
+    }
+
+    #[test]
+    fn from_payload_falls_back_to_text_when_html_yields_empty_slice() {
+        let (parsed, source) = Slice::from_payload(
+            Some("<script>ignored</script>"),
+            "plain",
+            &Resource::new_test(),
+        );
+        assert_eq!(source, PayloadSource::Text);
+        assert_eq!(parsed.to_text(), "plain");
     }
 
     #[test]
@@ -1108,7 +1135,8 @@ mod tests {
         let payload = original.to_payload(&Resource::new_test());
 
         let resource = Resource::new_test();
-        let parsed = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
+        let (parsed, source) = Slice::from_payload(Some(&payload.html), &payload.text, &resource);
+        assert_eq!(source, PayloadSource::Html);
         let para = &parsed.content[0];
         assert!(
             para.carry.iter().any(|m| matches!(m, Modifier::Bold)),
