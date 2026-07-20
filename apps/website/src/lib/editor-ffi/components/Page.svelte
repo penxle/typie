@@ -9,8 +9,9 @@
     for (const route of poolRoutes) route(editorKey, page, backend, acquireHint);
   });
 
-  // 기본값 = GL. 'cpu'만 강제 CPU(killswitch).
-  const killSwitch = typeof localStorage !== 'undefined' && localStorage.getItem('typie:page-surface') === 'cpu';
+  // 기본값 = CPU(전 기기에서 검증된 유일한 경로). GL은 'gl' opt-in 시에만 — 컨텍스트 churn·재삽입
+  // 등 플랫폼 리스크가 실측으로 확인되어, present 성능 필요가 측정으로 입증될 때까지 후퇴한다.
+  const glOptIn = typeof localStorage !== 'undefined' && localStorage.getItem('typie:page-surface') === 'gl';
 
   const canvasClass = css({ position: 'absolute', top: '0', left: '0', width: 'full', imageRendering: 'pixelated' });
 </script>
@@ -143,24 +144,10 @@
           }
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-empty-function -- shared no-op for the killswitch's cpu-only stub pool
+        // eslint-disable-next-line @typescript-eslint/no-empty-function -- shared no-op for the default cpu-only stub pool
         const noop = () => {};
-        const pool: PoolPort = killSwitch
+        const pool: PoolPort = glOptIn
           ? {
-              updateDemand: () => 'cpu',
-              acquireLease: () => ({ backend: 'cpu' }),
-              ackAttached: noop,
-              cancelReservation: noop,
-              beginRelease: noop,
-              ackReleased: noop,
-              notePresent: noop,
-              noteGlFailure: noop,
-              noteBudgetFallback: noop,
-              backendOf: () => 'cpu',
-              leave: noop,
-              forget: noop,
-            }
-          : {
               updateDemand: (zone) => glContextPool.updatePageDemand(editor, page, zone),
               acquireLease: (requested) => glContextPool.acquireCanvasLease(editor, page, requested),
               ackAttached: (token, actual) => glContextPool.ackAttached(token, actual),
@@ -173,6 +160,20 @@
               backendOf: () => glContextPool.backendOf(editor, page),
               leave: () => glContextPool.leave(editor, page),
               forget: () => glContextPool.forget(editor, page),
+            }
+          : {
+              updateDemand: () => 'cpu',
+              acquireLease: () => ({ backend: 'cpu' }),
+              ackAttached: noop,
+              cancelReservation: noop,
+              beginRelease: noop,
+              ackReleased: noop,
+              notePresent: noop,
+              noteGlFailure: noop,
+              noteBudgetFallback: noop,
+              backendOf: () => 'cpu',
+              leave: noop,
+              forget: noop,
             };
 
         const effects: ManagerEffects<HTMLCanvasElement> = {
