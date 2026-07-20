@@ -12,9 +12,11 @@ internal data class ImeExtract(
   val selectionEnd: Int,
 )
 
-internal fun Ime.extract(): ImeExtract =
-  ImeExtract(
-    text = text,
-    selectionStart = windowUtf16Offset(selection.start),
-    selectionEnd = windowUtf16Offset(selection.end),
-  )
+internal fun Ime.extract(): ImeExtract {
+  val (selectionStart, selectionEnd) =
+    text.utf16IndicesAtCodePointOffsets(
+      selection.start - windowStart,
+      selection.end - windowStart,
+    )
+  return ImeExtract(text = text, selectionStart = selectionStart, selectionEnd = selectionEnd)
+}

@@ -32,6 +32,23 @@ class EditorImeUtf16OffsetsTest {
   }
 
   @Test
+  fun `utf16 indices for an offset pair match independent walks`() {
+    val text = "a😀가😀b"
+
+    for (first in -1..6) {
+      for (second in first.coerceAtLeast(0)..6) {
+        val expected =
+          text.utf16IndexAtCodePointOffset(first) to text.utf16IndexAtCodePointOffset(second)
+        assertEquals(
+          expected,
+          text.utf16IndicesAtCodePointOffsets(first, second),
+          "pair ($first, $second)",
+        )
+      }
+    }
+  }
+
+  @Test
   fun `window utf16 offset is the inverse of the incoming projection`() {
     val ime =
       Ime(text = "a😀가나", windowStart = 100, selection = ImeRange(100, 104), composing = null)

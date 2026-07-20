@@ -25,12 +25,15 @@ import co.typie.editor.EditorEventListener
 import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
 import co.typie.editor.createBindings
+import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FlatImeOp
+import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Selection
 import co.typie.editor.matchesKeyBinding
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
@@ -45,8 +48,10 @@ import co.typie.platform.Clipboard
 import co.typie.platform.Platform
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.launch
 
 internal fun Modifier.editorInput(
@@ -545,11 +550,10 @@ internal class EditorInputNode(
     editor.inputRecorder?.record { seq, t ->
       RecordedInputEntry.Session(seq = seq, t = t, event = if (sessionEnabled) "start" else "stop")
     }
-    if (!sessionEnabled && editor.ime?.composing != null) {
-      dispatchSync(
-        listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
-        bringIntoViewTarget = null,
-      )
+    if (sessionEnabled) {
+      editor.setImeSessionActive(true)
+    } else {
+      editor.deactivateImeSession()
     }
     focusedJob?.cancel()
     focusedJob = null
@@ -566,6 +570,9 @@ internal class EditorInputNode(
               dispatch = { messages -> dispatch(messages) },
             )
           try {
+            // The ime window is only materialized while a session is active, so
+            // the session must not start against a pre-activation snapshot.
+            editor.refreshImeSnapshot()
             establishTextInputSession {
               val request =
                 createEditorInputRequest(
@@ -614,10 +621,17 @@ internal class EditorInputNode(
                 notifyImeStateChanged(editor)
                 // tickIme covers window text/composing changes that leave the
                 // selection untouched (e.g. remote edits after the cursor), so
-                // extracted-text monitors never go stale.
-                snapshotFlow { Triple(editor.selection, editor.cursor, editor.tickIme) }
-                  .distinctUntilChanged()
-                  .drop(1) // initial emission already handled above
+                // extracted-text monitors never go stale. drop(1): the initial
+                // emission is already handled above.
+                snapshotFlow {
+                  EditorImeNotifyKey(
+                    selection = editor.selection,
+                    cursor = editor.cursor,
+                    ime = editor.tickIme,
+                    paused = editor.imeNotificationsPaused,
+                  )
+                }
+                  .imeNotificationEvents()
                   .collect { notifyImeStateChanged(editor) }
               }
 
@@ -637,6 +651,7 @@ internal class EditorInputNode(
     unsubscribeImeResync = null
     bindingCoalescer = null
     focused = false
+    editor.setImeSessionActive(false)
     platformInputBridge.reset()
     notifyTextInputFocusChanged(this, false)
     registerTextInputClient(this, null)
@@ -644,6 +659,16 @@ internal class EditorInputNode(
     super.onDetach()
   }
 }
+
+internal data class EditorImeNotifyKey(
+  val selection: Selection?,
+  val cursor: CursorMetrics?,
+  val ime: Ime?,
+  val paused: Boolean,
+)
+
+internal fun Flow<EditorImeNotifyKey>.imeNotificationEvents(): Flow<EditorImeNotifyKey> =
+  distinctUntilChanged().drop(1).filterNot { it.paused }
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: Editor)

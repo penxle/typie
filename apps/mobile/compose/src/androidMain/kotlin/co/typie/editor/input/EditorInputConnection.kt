@@ -38,7 +38,26 @@ private const val IME_READ_OVERFLOW_GUARD = 1 shl 24
 // internal editing-state model; monitoring spans connections within a session.
 internal class ImeExtractMonitor {
   var token: Int? = null
+  private var lastDeliveredText: String? = null
+  private var lastDeliveredSelecting: Boolean? = null
+
+  // AOSP TextView (Editor.reportExtractedText) never re-pushes a monitored
+  // extract for selection-only moves — those travel via updateSelection, and
+  // monitored IMEs are validated against that stock behavior. We push on top of
+  // text changes when the collapsed/range mode flips because our FLAG_SELECTING
+  // derives from selectionStart != selectionEnd (unlike AOSP's META_SELECTING),
+  // and that flag travels only in the extract.
+  fun shouldPushFor(extract: ImeExtract): Boolean =
+    lastDeliveredText != extract.text || lastDeliveredSelecting != extract.isSelecting
+
+  fun onExtractDelivered(extract: ImeExtract) {
+    lastDeliveredText = extract.text
+    lastDeliveredSelecting = extract.isSelecting
+  }
 }
+
+private val ImeExtract.isSelecting: Boolean
+  get() = selectionStart != selectionEnd
 
 internal class EditorInputConnection(
   private val editor: Editor,
@@ -164,6 +183,7 @@ internal class EditorInputConnection(
       extractMonitor.token = request.token
     }
     val extract = editor.tickIme?.extract()
+    extract?.let { extractMonitor.onExtractDelivered(it) }
     recordRead(
       "getExtractedText",
       "token=${request?.token}, flags=$flags",

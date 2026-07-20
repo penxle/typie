@@ -21,13 +21,13 @@ internal fun Ime.toTextFieldValue(): TextFieldValue =
   )
 
 private fun resolveImeTextRange(text: String, windowStart: Int, start: Int, end: Int): TextRange {
-  val textStart = resolveImeTextIndex(text = text, windowStart = windowStart, offset = start)
-  val textEnd = resolveImeTextIndex(text = text, windowStart = windowStart, offset = end)
+  val (textStart, textEnd) =
+    text.utf16IndicesAtCodePointOffsets(
+      resolveImeRelativeOffset(windowStart = windowStart, offset = start),
+      resolveImeRelativeOffset(windowStart = windowStart, offset = end),
+    )
   return TextRange(start = textStart, end = textEnd)
 }
 
-private fun resolveImeTextIndex(text: String, windowStart: Int, offset: Int): Int {
-  val relativeOffset =
-    (offset.toLong() - windowStart.toLong()).coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
-  return text.utf16IndexAtCodePointOffset(relativeOffset)
-}
+private fun resolveImeRelativeOffset(windowStart: Int, offset: Int): Int =
+  (offset.toLong() - windowStart.toLong()).coerceIn(0, Int.MAX_VALUE.toLong()).toInt()

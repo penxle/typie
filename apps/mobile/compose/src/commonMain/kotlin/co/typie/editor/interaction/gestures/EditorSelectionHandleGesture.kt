@@ -207,6 +207,7 @@ internal class EditorSelectionHandleGesture(
       resetPointerOwnedState(context = context)
       return false
     }
+    context.editor.imeNotificationsPaused = true
     return true
   }
 
@@ -244,6 +245,7 @@ internal class EditorSelectionHandleGesture(
       resetPointerOwnedState(context = context)
       return false
     }
+    context.editor.imeNotificationsPaused = true
     session.update(
       type = EditorSelectionHandleType.To,
       touchPosition = touchPosition,
@@ -277,6 +279,7 @@ internal class EditorSelectionHandleGesture(
     context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
+    context.editor.imeNotificationsPaused = false
     if (context.mode.canApply(EditorInteractionEvent.SelectionHandleDragEnd)) {
       context.reduceMode(EditorInteractionEvent.SelectionHandleDragEnd)
     }
@@ -294,6 +297,7 @@ internal class EditorSelectionHandleGesture(
     context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
+    context.editor.imeNotificationsPaused = false
     if (context.mode.canApply(EditorInteractionEvent.SelectionHandleDragEnd)) {
       context.reduceMode(EditorInteractionEvent.SelectionHandleDragEnd)
     }
@@ -317,6 +321,7 @@ internal class EditorSelectionHandleGesture(
     context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()
+    context.editor.imeNotificationsPaused = false
   }
 
   fun reset() = session.reset()

@@ -13,6 +13,7 @@ import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElement
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.InteractiveHit
@@ -94,6 +95,11 @@ internal constructor(
 
   internal var inputRecorder: EditorInputRecorder? = null
 
+  // Selection-handle drags pause per-tick IME notifications: each one ships the
+  // whole ime window (O(selection)) over the Android binder. The resume emission
+  // delivers the final state once.
+  internal var imeNotificationsPaused: Boolean by mutableStateOf(false)
+
   val cursor: CursorMetrics? by derivedStateOf { state.cursor }
   val placeholder: PlaceholderMetrics? by derivedStateOf { state.placeholder }
   val selection: Selection? by derivedStateOf { state.selection }
@@ -114,6 +120,7 @@ internal constructor(
   private val mutex = PriorityMutex()
   private val versionCounter: AtomicLong = AtomicLong(0L)
   private val disposed: AtomicBoolean = AtomicBoolean(false)
+  private val imeSessionActive: AtomicBoolean = AtomicBoolean(false)
   private val syncInProgress: AtomicBoolean = AtomicBoolean(false)
   private val localEdits = EditorLocalEditCoordinator()
   private val attachedPages: AtomicReference<PersistentSet<Int>> =
@@ -294,6 +301,58 @@ internal constructor(
       notifyFailure(e)
     } finally {
       syncInProgress.store(false)
+    }
+  }
+
+  // Materializing the snapshot ime window is O(selection + context) per call, so
+  // it only happens while a platform text input session is attached; activation
+  // must be followed by refreshImeSnapshot so the session never reads a stale
+  // (or missing) window.
+  internal fun setImeSessionActive(active: Boolean) {
+    imeSessionActive.store(active)
+  }
+
+  // Composition teardown and ime gating must decide together under the editor
+  // lock: clearing the flag first would let a concurrent tick publish a null
+  // ime and hide a live composition from the teardown check. CommitAsIs stays
+  // conditional — the core runs text replacement on every commit dispatch, so
+  // an unconditional dispatch would fire it on plain blurs.
+  internal fun deactivateImeSession() {
+    if (!imeSessionActive.load()) return
+    sync {
+      if (tickIme?.composing != null) {
+        enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+      }
+      setImeSessionActive(false)
+    }
+  }
+
+  // A versioned tick + commit on purpose: an out-of-band `state.copy(ime = …)`
+  // patch would be wiped back to null when a settle-parked pre-activation
+  // snapshot later lands, starving pull-based platforms of the ime window. The
+  // committed snapshot outranks the parked one instead, and every carried field
+  // in readSnapshot derives from tickSnapshot, so the parked edit's values
+  // (documentRevision included) survive in it.
+  internal suspend fun refreshImeSnapshot() {
+    withSuspendFailureNotification {
+      val events =
+        withContext(NonCancellable + dispatcher) {
+          mutex.withLock {
+            if (disposed.load() || !imeSessionActive.load()) return@withLock emptyList()
+            // Current means the committed state agrees with the latest tick — a
+            // non-null tickSnapshot.ime alone can belong to a settle-parked
+            // snapshot whose commit hasn't landed, and pull-based platforms read
+            // state.ime.
+            if (tickSnapshot.ime != null && state.ime == tickSnapshot.ime) {
+              return@withLock emptyList()
+            }
+            val e = inner.tick()
+            val version = versionCounter.addAndFetch(1L)
+            commit(readSnapshot(version = version, events = e))
+            e
+          }
+        }
+      emit(events)
     }
   }
 
@@ -695,29 +754,42 @@ internal constructor(
       } else {
         tickSnapshot.interactiveRegions
       }
+    val imeChanged = events.hasStateChangedField(StateField.Ime)
+    val ime =
+      when {
+        !imeSessionActive.load() -> null
+        imeChanged || tickSnapshot.ime == null ->
+          inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW)
+        else -> tickSnapshot.ime
+      }
+    // Every carry-over below reads tickSnapshot, not state, for the same reason
+    // as the hit rects above: state lags render settlement, so a tick that
+    // interleaves with a settle-parked commit would otherwise fork from stale
+    // values — and once its higher version lands, the version guard drops the
+    // parked commit and its field updates (documentRevision included) for good.
     val placeholder =
-      if (placeholderChanged || state.version == 0L) {
+      if (placeholderChanged || tickSnapshot.version == 0L) {
         inner.placeholder()
       } else {
-        state.placeholder
+        tickSnapshot.placeholder
       }
     val trackedRanges =
       if (trackedRangesChanged) {
         inner.trackedRanges(null)
       } else {
-        state.trackedRanges
+        tickSnapshot.trackedRanges
       }
     val tableOverlays =
-      if (tableOverlaysChanged || state.version == 0L) {
+      if (tableOverlaysChanged || tickSnapshot.version == 0L) {
         inner.tableOverlays()
       } else {
-        state.tableOverlays
+        tickSnapshot.tableOverlays
       }
-    val selectionChanged = state.selection != selection
+    val selectionChanged = tickSnapshot.selection != selection
     val snapshot =
       EditorState(
         version = version,
-        documentRevision = state.documentRevision + if (documentChanged) 1L else 0L,
+        documentRevision = tickSnapshot.documentRevision + if (documentChanged) 1L else 0L,
         cursor = inner.cursor(),
         placeholder = placeholder,
         selection = selection,
@@ -729,12 +801,12 @@ internal constructor(
         rootModifiers = inner.rootModifiers(),
         modifierState = inner.modifierState(),
         blockState = inner.blockState(),
-        ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW),
+        ime = ime,
         lastHistoryTag =
-          if (lastHistoryTagChanged || state.version == 0L) {
+          if (lastHistoryTagChanged || tickSnapshot.version == 0L) {
             inner.lastHistoryTag()
           } else {
-            state.lastHistoryTag
+            tickSnapshot.lastHistoryTag
           },
         trackedRanges = trackedRanges,
         trackedRangesContainingSelectionHead =
@@ -742,7 +814,7 @@ internal constructor(
             if (selectionChanged || trackedRangesChanged) {
               inner.trackedRangesContainingPosition(selection.head, null)
             } else {
-              state.trackedRangesContainingSelectionHead
+              tickSnapshot.trackedRangesContainingSelectionHead
             }
           } else {
             emptyList()

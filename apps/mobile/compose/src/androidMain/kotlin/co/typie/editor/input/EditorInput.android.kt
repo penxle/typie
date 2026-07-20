@@ -78,8 +78,9 @@ internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: 
       androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         ?: return
     val ctx = editor.tickIme
-    val selStart = ctx?.let { it.windowUtf16Offset(it.selection.start) } ?: -1
-    val selEnd = ctx?.let { it.windowUtf16Offset(it.selection.end) } ?: -1
+    val extract = ctx?.extract()
+    val selStart = extract?.selectionStart ?: -1
+    val selEnd = extract?.selectionEnd ?: -1
     val composingStart = ctx?.composing?.let { ctx.windowUtf16Offset(it.start) } ?: -1
     val composingEnd = ctx?.composing?.let { ctx.windowUtf16Offset(it.end) } ?: -1
     editor.inputRecorder?.record { seq, t ->
@@ -92,9 +93,11 @@ internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: 
         composingEnd = composingEnd,
       )
     }
-    val extractToken = editorImeExtractMonitors[editor]?.token
-    if (extractToken != null && ctx != null) {
-      imm.updateExtractedText(androidView, extractToken, ctx.extract().toExtractedText())
+    val monitor = editorImeExtractMonitors[editor]
+    val extractToken = monitor?.token
+    if (extractToken != null && extract != null && monitor.shouldPushFor(extract)) {
+      imm.updateExtractedText(androidView, extractToken, extract.toExtractedText())
+      monitor.onExtractDelivered(extract)
     }
     imm.updateSelection(androidView, selStart, selEnd, composingStart, composingEnd)
   }

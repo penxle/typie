@@ -1248,6 +1248,83 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `selection handle drag pauses ime notifications until release`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val down = Offset(42f, 30f)
+
+      assertFalse(editor.imeNotificationsPaused)
+      assertTrue(controller.pointerDownOnSelectionHandle(down))
+      assertFalse(editor.imeNotificationsPaused)
+
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 50f)))
+      assertTrue(editor.imeNotificationsPaused)
+
+      assertTrue(controller.upSelectionHandlePointer())
+      assertFalse(editor.imeNotificationsPaused)
+    }
+
+  @Test
+  fun `selection handle cancel resumes ime notifications`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val endpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+          fromPosition = Position("text", 0, Affinity.Downstream),
+          toPosition = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+
+      assertTrue(controller.pointerDownOnSelectionHandle(Offset(42f, 30f)))
+      assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 50f)))
+      assertTrue(editor.imeNotificationsPaused)
+
+      controller.cancel()
+
+      assertFalse(editor.imeNotificationsPaused)
+    }
+
+  @Test
   fun `selection handle drag refreshes context menu after delayed selection commit`() =
     runTest(StandardTestDispatcher()) {
       var selection =

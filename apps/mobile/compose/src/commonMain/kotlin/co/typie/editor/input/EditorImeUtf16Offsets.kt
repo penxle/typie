@@ -27,6 +27,19 @@ internal fun String.codePointOffsetAtUtf16Index(index: Int): Int {
   return codePointOffset
 }
 
+// Single scan for an ordered pair (first <= second): the second walk resumes
+// from the first index instead of rescanning the prefix.
+internal fun String.utf16IndicesAtCodePointOffsets(first: Int, second: Int): Pair<Int, Int> {
+  val firstIndex = utf16IndexAtCodePointOffset(first)
+  var utf16Index = firstIndex
+  var remaining = second.coerceAtLeast(0) - first.coerceAtLeast(0)
+  while (utf16Index < length && remaining > 0) {
+    utf16Index += if (isHighSurrogateAt(utf16Index)) 2 else 1
+    remaining--
+  }
+  return firstIndex to utf16Index.coerceAtMost(length)
+}
+
 internal fun String.utf16IndexAtCodePointOffset(offset: Int): Int {
   var utf16Index = 0
   var remaining = offset
