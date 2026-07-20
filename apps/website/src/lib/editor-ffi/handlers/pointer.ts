@@ -151,7 +151,7 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
   }
 
   state.releasePointer(e.currentTarget, e.pointerId);
-  state.finishPointerUp(editor, e.pointerId);
+  state.finishPointerUp(editor, e.pointerId, { clientX: e.clientX, clientY: e.clientY });
   editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: true });
@@ -338,11 +338,17 @@ class PointerState {
     }
   }
 
-  finishPointerUp(editor: Editor, pointerId: number): void {
+  finishPointerUp(editor: Editor, pointerId: number, pointer: { clientX: number; clientY: number }): void {
     const session = this.#session;
     if (!session || session.pointerId !== pointerId) return;
 
     this.#flushDragPending(editor);
+    if (session.dragging) {
+      const local = editor.clientToLocal(pointer.clientX, pointer.clientY);
+      if (local) {
+        this.#extendSelectionTo(editor, { ...local, ...pointer }, { respectThreshold: false });
+      }
+    }
     if (session.nativeDragCandidate && !session.nativeDragStarted) {
       editor.enqueue({ type: 'selection', op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y } });
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });

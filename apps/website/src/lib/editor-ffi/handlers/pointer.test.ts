@@ -283,4 +283,42 @@ describe('pointer native drag admission', () => {
     });
     vi.unstubAllGlobals();
   });
+
+  it('reprojects a pending drag selection from current geometry on pointer up', () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    try {
+      let pageTop = 200;
+      const editor = createEditor();
+      const target = createPointerTarget({ captured: true });
+      editor.clientToLocal = vi.fn((clientX: number, clientY: number) => ({ page: 0, x: clientX - 100, y: clientY - pageTop }));
+
+      handlePointerDown(editor, createPointerEvent({ target, clientX: 110, clientY: 220 }));
+      editor.enqueue.mockClear();
+
+      handlePointerMove(editor, createPointerEvent({ target, clientX: 130, clientY: 220 }));
+      pageTop = 180;
+      handlePointerUp(editor, createPointerEvent({ target, clientX: 130, clientY: 220 }));
+
+      expect(editor.enqueue).toHaveBeenLastCalledWith({
+        type: 'selection',
+        op: {
+          type: 'extend_to',
+          anchor: collapsedSelection.anchor,
+          head_page: 0,
+          head_x: 30,
+          head_y: 40,
+          base_selection: undefined,
+          allow_collapse: true,
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
