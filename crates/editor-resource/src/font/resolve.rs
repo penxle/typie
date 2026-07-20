@@ -1,6 +1,8 @@
 #[cfg(test)]
 use hashbrown::HashMap;
 
+use smallvec::SmallVec;
+
 use super::manifest::FontManifest;
 use super::registry::FontRegistry;
 use super::resolution::{Resolution, Target};
@@ -28,23 +30,29 @@ pub(crate) struct CodepointMapping {
     pub codepoints: Vec<u32>,
 }
 
-/// Sort `weights` by CSS Fonts Level 4 proximity to `target`.
-fn weights_by_proximity(weights: &[u16], target: u16) -> Vec<u16> {
-    let mut sorted = weights.to_vec();
-    sorted.sort_unstable();
+/// Order `weights` by CSS Fonts Level 4 proximity to `target`. `weights` must
+/// already be sorted ascending (the registry stores them that way), which keeps
+/// this allocation-free on the per-cluster resolve path.
+fn weights_by_proximity(weights: &[u16], target: u16) -> SmallVec<[u16; 9]> {
+    debug_assert!(weights.is_sorted());
 
-    let mut result = Vec::with_capacity(sorted.len());
+    let mut result = SmallVec::with_capacity(weights.len());
 
     if (400..=500).contains(&target) {
-        result.extend(sorted.iter().filter(|&&w| (target..=500).contains(&w)));
-        result.extend(sorted.iter().rev().filter(|&&w| w < target));
-        result.extend(sorted.iter().filter(|&&w| w > 500));
+        result.extend(
+            weights
+                .iter()
+                .copied()
+                .filter(|&w| (target..=500).contains(&w)),
+        );
+        result.extend(weights.iter().rev().copied().filter(|&w| w < target));
+        result.extend(weights.iter().copied().filter(|&w| w > 500));
     } else if target < 400 {
-        result.extend(sorted.iter().rev().filter(|&&w| w <= target));
-        result.extend(sorted.iter().filter(|&&w| w > target));
+        result.extend(weights.iter().rev().copied().filter(|&w| w <= target));
+        result.extend(weights.iter().copied().filter(|&w| w > target));
     } else {
-        result.extend(sorted.iter().filter(|&&w| w >= target));
-        result.extend(sorted.iter().rev().filter(|&&w| w < target));
+        result.extend(weights.iter().copied().filter(|&w| w >= target));
+        result.extend(weights.iter().rev().copied().filter(|&w| w < target));
     }
 
     result
@@ -392,8 +400,8 @@ mod tests {
         // target in [400, 500]: [target..=500] asc, then <target desc, then >500 asc.
         let w = [100, 300, 400, 500, 700, 900];
         assert_eq!(
-            weights_by_proximity(&w, 400),
-            vec![400, 500, 300, 100, 700, 900]
+            weights_by_proximity(&w, 400).as_slice(),
+            [400, 500, 300, 100, 700, 900]
         );
     }
 

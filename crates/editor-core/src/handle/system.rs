@@ -27,17 +27,17 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             Ok(())
         }
 
-        SystemEvent::FontBaseLoaded { family, weight: _ } => {
-            editor.retry_font_load(&family, true);
+        SystemEvent::FontBaseLoaded { family, weight } => {
+            editor.queue_font_load(family, weight, crate::font::FontLoadKind::Base);
             Ok(())
         }
 
         SystemEvent::FontChunkLoaded {
             family,
-            weight: _,
-            chunk_id: _,
+            weight,
+            chunk_id,
         } => {
-            editor.retry_font_load(&family, false);
+            editor.queue_font_load(family, weight, crate::font::FontLoadKind::Chunk(chunk_id));
             Ok(())
         }
 

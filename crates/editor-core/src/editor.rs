@@ -191,6 +191,8 @@ pub struct Editor {
     pub(crate) pending_ops: Vec<Op<EditOp>>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
+    pub(crate) pending_font_index: Option<crate::font::PendingFontIndex>,
+    pub(crate) pending_font_loads: Vec<crate::font::FontLoadNotice>,
     pub(crate) requested_manifests: HashMap<(u16, u16), ManifestRequestClass>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
@@ -270,6 +272,8 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            pending_font_index: None,
+            pending_font_loads: Vec::new(),
             requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
@@ -780,6 +784,8 @@ impl Editor {
             self.push_event(EditorEvent::ImeResyncRequired);
         }
 
+        crate::font::flush_font_loads(self);
+
         let layout_dirty = self.view.take_layout_dirty(&mut self.state);
 
         if !self.pending_ops.is_empty() {
@@ -1280,6 +1286,7 @@ impl Editor {
     }
 
     fn augment_font_state_from_ops(&mut self, layout_dirty: &LayoutDirty) {
+        self.pending_font_index = None;
         let updates = match layout_dirty {
             LayoutDirty::Full => {
                 let resource = self.resource.lock().unwrap();
@@ -1774,11 +1781,20 @@ impl Editor {
         Ok(())
     }
 
-    pub(crate) fn retry_font_load(&mut self, family: &str, base_loaded: bool) {
+    pub(crate) fn queue_font_load(
+        &mut self,
+        family: String,
+        weight: u16,
+        kind: crate::font::FontLoadKind,
+    ) {
         if matches!(self.mode, Mode::Probe { .. }) {
             return;
         }
-        crate::font::retry_pending_on_load(self, family, base_loaded);
+        self.pending_font_loads.push(crate::font::FontLoadNotice {
+            family,
+            weight,
+            kind,
+        });
     }
 
     pub(crate) fn resolve_pending_fonts(&mut self) {
@@ -1789,6 +1805,9 @@ impl Editor {
         if matches!(self.mode, Mode::Probe { .. }) {
             return;
         }
+        // A new manifest can reroute pending resolutions, so the awaited-target
+        // index must be rebuilt.
+        self.pending_font_index = None;
         let family_id = {
             let resource = self.resource.lock().unwrap();
             resource.font_registry.intern_id(family)
@@ -1997,6 +2016,8 @@ impl Editor {
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
+            pending_font_index: None,
+            pending_font_loads: Vec::new(),
             requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,

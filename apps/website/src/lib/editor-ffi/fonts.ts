@@ -359,7 +359,7 @@ async function loadRequired(
   }
 }
 
-export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = async (_, { family, weight, required, prefetch }) => {
+export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = async (editor, { family, weight, required, prefetch }) => {
   const fk = fontKey(family, weight);
   const info = fontPaths.get(fk);
   if (!info) {
@@ -378,6 +378,12 @@ export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = 
   await Promise.allSettled(manifestRequired.map((fd) => loadRequired(family, weight, dispatchHash, dispatchGen, fd, baseUrl)));
   await Promise.allSettled(baseRequired.map((fd) => loadRequired(family, weight, dispatchHash, dispatchGen, fd, baseUrl)));
   await Promise.allSettled(chunkRequired.map((fd) => loadRequired(family, weight, dispatchHash, dispatchGen, fd, baseUrl)));
+
+  // Read-only viewers never type new codepoints, so speculative whole-family
+  // prefetch only wastes reader bandwidth; visible text is covered by `required`.
+  if (editor.readOnly) {
+    return;
+  }
 
   for (const fd of prefetch) {
     const priority = fd.type === 'manifest' ? -2 : fd.type === 'base' ? -1 : fd.id;

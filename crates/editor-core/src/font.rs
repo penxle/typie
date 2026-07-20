@@ -146,6 +146,7 @@ pub(crate) fn derive_font_updates_from_ops(
 
 pub(crate) fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
     editor.requested_manifests.clear();
+    editor.pending_font_index = None;
     {
         let resource = editor.resource.lock().unwrap();
         let view = editor.state.view();
@@ -233,50 +234,179 @@ pub(crate) fn resolve_pending_fonts(editor: &mut Editor) {
     }
 }
 
-pub(crate) fn retry_pending_on_load(editor: &mut Editor, family: &str, base_loaded: bool) {
-    if editor.pending_fonts.is_empty() {
-        return;
-    }
-    let resource = editor.resource.lock().unwrap();
-    if resource.font_registry.intern_id(family).is_none() {
-        return;
-    }
-    let mut affected_nodes = Vec::new();
+#[derive(Debug)]
+pub(crate) enum FontLoadKind {
+    Base,
+    Chunk(u16),
+}
 
-    for ((req_family, req_weight), nodes) in editor.pending_fonts.iter_mut() {
-        let Some(req_family_id) = resource.font_registry.intern_id(req_family) else {
-            continue;
-        };
-        for (node_id, pending_cps) in nodes.iter_mut() {
-            let mut node_affected = false;
-            pending_cps.retain(|cp| {
-                match resource
-                    .font_registry
-                    .resolve(req_family_id, *req_weight, *cp)
-                {
-                    Resolution::Ready(_) => {
-                        node_affected = true;
-                        false
-                    }
-                    Resolution::Pending {
-                        needs_base: false, ..
-                    } if base_loaded => {
-                        node_affected = true;
-                        true
-                    }
-                    _ => true,
-                }
-            });
-            if node_affected {
-                affected_nodes.push(*node_id);
+#[derive(Debug)]
+pub(crate) struct FontLoadNotice {
+    pub(crate) family: String,
+    pub(crate) weight: u16,
+    pub(crate) kind: FontLoadKind,
+}
+
+/// Reverse index over `pending_fonts`, keyed by the awaited resolution target.
+/// A chunk/base arrival then touches only the codepoints waiting on that exact
+/// (family, weight[, chunk]) instead of re-resolving every pending codepoint.
+/// Resolution routing depends only on configured families and manifests, so the
+/// index stays valid until `pending_fonts` is mutated or a manifest/config
+/// change reroutes resolution — both drop it for a rebuild.
+#[derive(Default)]
+pub(crate) struct PendingFontIndex {
+    keys: Vec<(String, u16)>,
+    by_target: HashMap<(u16, u16), HashMap<u16, Vec<(usize, Dot, u32)>>>,
+}
+
+impl PendingFontIndex {
+    fn file(&mut self, target: &editor_resource::Target, entry: (usize, Dot, u32)) {
+        self.by_target
+            .entry((target.family_id, target.weight))
+            .or_default()
+            .entry(target.chunk_id)
+            .or_default()
+            .push(entry);
+    }
+}
+
+fn remove_pending_cps(editor: &mut Editor, key: &(String, u16), removals: &[(Dot, u32)]) {
+    let Some(nodes) = editor.pending_fonts.get_mut(key) else {
+        return;
+    };
+    for (node, cp) in removals {
+        if let Some(cps) = nodes.get_mut(node) {
+            cps.remove(cp);
+            if cps.is_empty() {
+                nodes.remove(node);
             }
         }
-        nodes.retain(|_, cps| !cps.is_empty());
     }
-    editor.pending_fonts.retain(|_, nodes| !nodes.is_empty());
-    drop(resource);
+    if nodes.is_empty() {
+        editor.pending_fonts.remove(key);
+    }
+}
 
-    invalidate_font_affected(editor, &affected_nodes);
+fn build_pending_font_index(editor: &mut Editor, affected: &mut Vec<Dot>) -> PendingFontIndex {
+    let mut index = PendingFontIndex::default();
+    let mut removals: Vec<(usize, Vec<(Dot, u32)>)> = Vec::new();
+    {
+        let resource = editor.resource.lock().unwrap();
+        for ((family, weight), nodes) in editor.pending_fonts.iter() {
+            let Some(family_id) = resource.font_registry.intern_id(family) else {
+                continue;
+            };
+            let key_idx = index.keys.len();
+            index.keys.push((family.clone(), *weight));
+            let mut ready: Vec<(Dot, u32)> = Vec::new();
+            for (node_id, cps) in nodes {
+                for &cp in cps {
+                    match resource.font_registry.resolve(family_id, *weight, cp) {
+                        Resolution::Ready(_) => {
+                            ready.push((*node_id, cp));
+                            affected.push(*node_id);
+                        }
+                        Resolution::Pending { target, .. } => {
+                            index.file(&target, (key_idx, *node_id, cp));
+                        }
+                        Resolution::AwaitingManifest { .. } | Resolution::Missing => {}
+                    }
+                }
+            }
+            if !ready.is_empty() {
+                removals.push((key_idx, ready));
+            }
+        }
+    }
+    for (key_idx, ready) in removals {
+        let key = index.keys[key_idx].clone();
+        remove_pending_cps(editor, &key, &ready);
+    }
+    index
+}
+
+/// Applies every font base/chunk arrival queued during this tick in one pass:
+/// index lookups scoped to the arrived data, one invalidation for all affected
+/// nodes. Replaces the per-event full rescan of `pending_fonts`, which made a
+/// chunked font load O(files × pending codepoints).
+pub(crate) fn flush_font_loads(editor: &mut Editor) {
+    if editor.pending_font_loads.is_empty() {
+        return;
+    }
+    let notices = std::mem::take(&mut editor.pending_font_loads);
+    if editor.pending_fonts.is_empty() {
+        editor.pending_font_index = None;
+        return;
+    }
+
+    let mut affected: Vec<Dot> = Vec::new();
+    if editor.pending_font_index.is_none() {
+        let index = build_pending_font_index(editor, &mut affected);
+        editor.pending_font_index = Some(index);
+    }
+    let mut index = editor.pending_font_index.take().unwrap_or_default();
+
+    for notice in notices {
+        let candidates: Vec<(usize, Dot, u32)> = {
+            let resource = editor.resource.lock().unwrap();
+            let Some(family_id) = resource.font_registry.intern_id(&notice.family) else {
+                continue;
+            };
+            let target_key = (family_id, notice.weight);
+            match notice.kind {
+                FontLoadKind::Chunk(chunk_id) => index
+                    .by_target
+                    .get_mut(&target_key)
+                    .and_then(|chunks| chunks.remove(&chunk_id))
+                    .unwrap_or_default(),
+                FontLoadKind::Base => index
+                    .by_target
+                    .remove(&target_key)
+                    .map(|chunks| chunks.into_values().flatten().collect())
+                    .unwrap_or_default(),
+            }
+        };
+        if candidates.is_empty() {
+            continue;
+        }
+
+        let base_event = matches!(notice.kind, FontLoadKind::Base);
+        let mut removals: HashMap<usize, Vec<(Dot, u32)>> = HashMap::new();
+        {
+            let resource = editor.resource.lock().unwrap();
+            for (key_idx, node_id, cp) in candidates {
+                let (req_family, req_weight) = &index.keys[key_idx];
+                let Some(req_family_id) = resource.font_registry.intern_id(req_family) else {
+                    continue;
+                };
+                match resource
+                    .font_registry
+                    .resolve(req_family_id, *req_weight, cp)
+                {
+                    Resolution::Ready(_) => {
+                        removals.entry(key_idx).or_default().push((node_id, cp));
+                        affected.push(node_id);
+                    }
+                    Resolution::Pending { target, needs_base } => {
+                        if base_event && !needs_base {
+                            affected.push(node_id);
+                        }
+                        index.file(&target, (key_idx, node_id, cp));
+                    }
+                    Resolution::AwaitingManifest { .. } | Resolution::Missing => {}
+                }
+            }
+        }
+        for (key_idx, ready) in removals {
+            let key = index.keys[key_idx].clone();
+            remove_pending_cps(editor, &key, &ready);
+        }
+    }
+    editor.pending_font_index = Some(index);
+
+    affected.sort_unstable();
+    affected.dedup();
+    invalidate_font_affected(editor, &affected);
 }
 
 #[cfg(test)]
