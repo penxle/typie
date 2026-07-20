@@ -236,6 +236,14 @@ fun SettingsScreen() {
           )
           CardDivider()
           SettingsCardRow("온보딩 미리보기", onClick = { nav.navigate(Route.Onboarding) })
+          CardDivider()
+          SettingsCardRow(
+            "트라이얼 리마인더 초기화",
+            onClick = {
+              Preference.trialReminderLastShownDate = null
+              toast.success("트라이얼 리마인더를 초기화했어요")
+            },
+          )
         }
       }
 

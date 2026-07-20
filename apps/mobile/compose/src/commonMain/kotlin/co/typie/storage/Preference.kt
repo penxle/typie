@@ -43,6 +43,8 @@ object Preference {
 
   var planChangeNoticeShown by prefs("plan_change_notice_shown", false)
 
+  var trialReminderLastShownDate by prefs<String?>("trial_reminder_last_shown_date", null)
+
   var preflightCache by prefs<Preflight?>("preflight_cache", null)
 
   private var _deviceId: String? by prefs<String?>("device_id", null)
