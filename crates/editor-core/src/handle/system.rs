@@ -753,7 +753,10 @@ mod tests {
             assert_eq!(required.len(), 2, "primary required: Base + Chunk(0)");
             assert!(matches!(required[0], FontData::Base));
             assert!(matches!(required[1], FontData::Chunk { id: 0 }));
-            assert_eq!(prefetch.len(), 3, "primary prefetch: 3 remaining chunks");
+            assert!(
+                prefetch.is_empty(),
+                "prefetch is deferred until font quiescence"
+            );
         }
 
         // Verify Fallback: required=[Base, Chunk(0)], prefetch=[] (non-primary, no prefetch)
@@ -788,6 +791,12 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::FontDataMissing { .. })),
+            "no prefetch while fallback data is still pending"
+        );
 
         let key = ("Primary".to_string(), 400u16);
         assert!(editor.pending_fonts.get(&key).is_some_and(|n| {
@@ -817,6 +826,179 @@ mod tests {
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );
         assert!(!editor.pending_fonts.contains_key(&key));
+        let prefetch = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::FontDataMissing {
+                    family,
+                    weight,
+                    required,
+                    prefetch,
+                } if family == "Primary" && *weight == 400 && required.is_empty() => {
+                    Some(prefetch.clone())
+                }
+                _ => None,
+            })
+            .expect("primary prefetch must be emitted at quiescence");
+        assert_eq!(prefetch.len(), 3);
+        assert!(matches!(prefetch[0], FontData::Chunk { id: 1 }));
+        assert!(matches!(prefetch[1], FontData::Chunk { id: 2 }));
+        assert!(matches!(prefetch[2], FontData::Chunk { id: 3 }));
+        assert!(
+            !events.iter().any(|e| matches!(
+                e,
+                EditorEvent::FontDataMissing { family, required, .. }
+                    if family == "Fallback" && required.is_empty()
+            )),
+            "non-primary fallback gets no chunk prefetch"
+        );
+    }
+
+    #[test]
+    fn prefetch_defers_until_font_quiescence() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A\u{E000}") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(vec![editor_resource::FontFamily {
+                name: "TestFont".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "tf".into(),
+                }],
+            }]);
+            let id = resource.font_registry.intern_id("TestFont").unwrap();
+            resource.font_registry.set_manifest(
+                id,
+                400,
+                editor_resource::FontManifest::from_coverages(&[
+                    vec![0x41, 0x41],
+                    vec![0x42, 0x42],
+                    vec![0x43, 0x43],
+                ]),
+            );
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let initial = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::FontDataMissing {
+                    family,
+                    weight,
+                    required,
+                    prefetch,
+                } if family == "TestFont" && *weight == 400 => {
+                    Some((required.clone(), prefetch.clone()))
+                }
+                _ => None,
+            })
+            .expect("initial font request");
+        assert!(matches!(initial.0[0], FontData::Base));
+        assert!(matches!(initial.0[1], FontData::Chunk { id: 0 }));
+        assert!(
+            initial.1.is_empty(),
+            "prefetch must not be emitted before quiescence"
+        );
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontChunkLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+                chunk_id: 0,
+            },
+        });
+        let deferred = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::FontDataMissing {
+                    family,
+                    weight,
+                    required,
+                    prefetch,
+                } if family == "TestFont" && *weight == 400 && required.is_empty() => {
+                    Some(prefetch.clone())
+                }
+                _ => None,
+            })
+            .expect("prefetch must be emitted at quiescence");
+        assert_eq!(deferred.len(), 2);
+        assert!(matches!(deferred[0], FontData::Chunk { id: 1 }));
+        assert!(matches!(deferred[1], FontData::Chunk { id: 2 }));
+
+        let events = editor.apply(Message::Insertion {
+            op: crate::InsertionOp::Text {
+                text: "B".to_string(),
+            },
+        });
+        let rearmed = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::FontDataMissing {
+                    family,
+                    weight,
+                    required,
+                    prefetch,
+                } if family == "TestFont" && *weight == 400 && !required.is_empty() => {
+                    Some((required.clone(), prefetch.clone()))
+                }
+                _ => None,
+            })
+            .expect("new codepoint must demand its chunk");
+        assert!(matches!(rearmed.0[0], FontData::Chunk { id: 1 }));
+        assert!(
+            rearmed.1.is_empty(),
+            "re-armed prefetch must wait for the next quiescence"
+        );
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 1, &fake_chunk_bytes())
+                .unwrap();
+        }
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontChunkLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+                chunk_id: 1,
+            },
+        });
+        let rearmed_prefetch = events
+            .iter()
+            .find_map(|e| match e {
+                EditorEvent::FontDataMissing {
+                    family,
+                    weight,
+                    required,
+                    prefetch,
+                } if family == "TestFont" && *weight == 400 && required.is_empty() => {
+                    Some(prefetch.clone())
+                }
+                _ => None,
+            })
+            .expect("prefetch must be re-emitted at the next quiescence");
+        assert_eq!(rearmed_prefetch.len(), 1);
+        assert!(matches!(rearmed_prefetch[0], FontData::Chunk { id: 2 }));
     }
 
     #[test]
@@ -1869,6 +2051,27 @@ mod tests {
     }
 
     #[test]
+    fn fonts_changed_resets_prefetch_backlog() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.prefetch_backlog.chunk_targets.insert((900, 400));
+        editor.apply(Message::System {
+            event: SystemEvent::FontsChanged,
+        });
+        assert!(
+            !editor.prefetch_backlog.chunk_targets.contains(&(900, 400)),
+            "stale backlog entries must not survive a font config change"
+        );
+    }
+
+    #[test]
     fn load_font_emits_manifest_required_and_sibling_prefetch() {
         let (state, ..) = state! {
             doc {
@@ -1923,23 +2126,13 @@ mod tests {
             "weight 400 must demand its manifest exactly once"
         );
 
-        let prefetch_manifest_700 = events
+        let sibling_events = events
             .iter()
-            .filter(|e| {
-                matches!(
-                    e,
-                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
-                        if family == "TestFont"
-                            && *weight == 700
-                            && required.is_empty()
-                            && prefetch.len() == 1
-                            && matches!(prefetch[0], FontData::Manifest)
-                )
-            })
+            .filter(|e| matches!(e, EditorEvent::FontDataMissing { weight, .. } if *weight == 700))
             .count();
         assert_eq!(
-            prefetch_manifest_700, 1,
-            "sibling weight 700's manifest must be prefetched exactly once"
+            sibling_events, 0,
+            "sibling manifest prefetch is deferred until quiescence"
         );
 
         // Deliver weight 400's manifest (covers 'A') and fire FontManifestLoaded. Reinterpreting
@@ -1975,6 +2168,41 @@ mod tests {
         assert!(
             base_now_required,
             "once the manifest arrives, weight 400 must demand base + chunk 0"
+        );
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontChunkLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+                chunk_id: 0,
+            },
+        });
+        let sibling_prefetch = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, weight, required, prefetch }
+                        if family == "TestFont"
+                            && *weight == 700
+                            && required.is_empty()
+                            && prefetch.len() == 1
+                            && matches!(prefetch[0], FontData::Manifest)
+                )
+            })
+            .count();
+        assert_eq!(
+            sibling_prefetch, 1,
+            "sibling manifest prefetch arrives at quiescence"
         );
     }
 
@@ -2117,6 +2345,61 @@ mod tests {
             "first fallback candidate must demand its manifest exactly once"
         );
 
+        let fb2_events = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::FontDataMissing { family, .. } if family == "FB2"))
+            .count();
+        assert_eq!(
+            fb2_events, 0,
+            "fallback sibling manifest prefetch is deferred until quiescence"
+        );
+
+        let primary_manifest_events = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::FontDataMissing { family, .. } if family == "P"
+                )
+            })
+            .count();
+        assert_eq!(
+            primary_manifest_events, 0,
+            "primary with a present manifest must not appear in manifest requests"
+        );
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_manifest(
+                    "FB1",
+                    400,
+                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+                )
+                .unwrap();
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::FontManifestLoaded {
+                family: "FB1".to_string(),
+                weight: 400,
+            },
+        });
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("FB1", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("FB1", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontChunkLoaded {
+                family: "FB1".to_string(),
+                weight: 400,
+                chunk_id: 0,
+            },
+        });
         let fb2_prefetch = events
             .iter()
             .filter(|e| {
@@ -2133,21 +2416,7 @@ mod tests {
             .count();
         assert_eq!(
             fb2_prefetch, 1,
-            "sibling fallback family's manifest must be prefetched exactly once"
-        );
-
-        let primary_manifest_events = events
-            .iter()
-            .filter(|e| {
-                matches!(
-                    e,
-                    EditorEvent::FontDataMissing { family, .. } if family == "P"
-                )
-            })
-            .count();
-        assert_eq!(
-            primary_manifest_events, 0,
-            "primary with a present manifest must not appear in manifest requests"
+            "fallback sibling manifest prefetch arrives at quiescence"
         );
     }
 }

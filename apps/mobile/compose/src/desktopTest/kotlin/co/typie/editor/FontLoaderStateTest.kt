@@ -303,4 +303,44 @@ class FontLoaderStateTest {
     assertTrue(committedB)
     assertTrue(keyB in state.loaded)
   }
+
+  @Test
+  fun preload_drains_in_ascending_priority_order() = runTest {
+    val mutex = Mutex()
+    val state = FontLoaderState()
+    val scope = CoroutineScope(coroutineContext)
+    val queue = FontLoader.PreloadQueue(mutex, state, scope)
+
+    val started = mutableListOf<String>()
+    val blockers = mutableListOf<CompletableDeferred<Unit>>()
+    suspend fun blocked(key: String) {
+      started.add(key)
+      val gate = CompletableDeferred<Unit>()
+      blockers.add(gate)
+      gate.await()
+    }
+
+    repeat(4) { i -> queue.enqueue("order:fill:$i", 100) { blocked("order:fill:$i") } }
+    queue.enqueue("order:chunk:9", 9) { blocked("order:chunk:9") }
+    queue.enqueue("order:chunk:2", 2) { blocked("order:chunk:2") }
+    queue.enqueue("order:manifest", -2) { blocked("order:manifest") }
+    queue.enqueue("order:base", -1) { blocked("order:base") }
+    runCurrent()
+
+    blockers[0].complete(Unit)
+    runCurrent()
+    assertEquals("order:manifest", started[4])
+    blockers[4].complete(Unit)
+    runCurrent()
+    assertEquals("order:base", started[5])
+    blockers[5].complete(Unit)
+    runCurrent()
+    assertEquals("order:chunk:2", started[6])
+    blockers[6].complete(Unit)
+    runCurrent()
+    assertEquals("order:chunk:9", started[7])
+
+    blockers.forEach { it.complete(Unit) }
+    runCurrent()
+  }
 }

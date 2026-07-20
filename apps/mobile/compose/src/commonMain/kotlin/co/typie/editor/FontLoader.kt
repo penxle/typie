@@ -456,7 +456,7 @@ object FontLoader {
         if (key in state.loaded || key in queued) return
         queued[key] = item
         val insertAt =
-          pending.indexOfFirst { it.priority < priority }.let { if (it == -1) pending.size else it }
+          pending.indexOfFirst { it.priority > priority }.let { if (it == -1) pending.size else it }
         pending.add(insertAt, item)
       }
       flush()

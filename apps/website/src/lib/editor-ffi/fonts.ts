@@ -180,12 +180,12 @@ function getCache(): Promise<Cache> {
   return cachePromise;
 }
 
-async function getOrFetch(url: string): Promise<Uint8Array> {
+async function getOrFetch(url: string, lowPriority = false): Promise<Uint8Array> {
   const cache = await getCache();
   const cached = await cache.match(url);
   if (cached) return new Uint8Array(await cached.arrayBuffer());
 
-  const response = await fetch(url);
+  const response = await fetch(url, lowPriority ? { priority: 'low' } : undefined);
   if (!response.ok) throw new Error(`Failed to fetch: ${url}`);
   await cache.put(url, response.clone());
 
@@ -244,7 +244,7 @@ export class PreloadQueue {
     const { promise, resolve, reject }: PromiseWithResolvers<void> = Promise.withResolvers();
 
     const item: PreloadItem = { key, priority, fn, promise, resolve, reject };
-    let i = this.#pending.findIndex((p) => p.priority < priority);
+    let i = this.#pending.findIndex((p) => p.priority > priority);
     if (i === -1) i = this.#pending.length;
     this.#pending.splice(i, 0, item);
 
@@ -291,6 +291,7 @@ async function load(
   fd: FontData,
   baseUrl: string,
   attempts: number,
+  lowPriority = false,
 ): Promise<void> {
   const fk = fontKey(family, weight);
   const key = keyOf(family, weight, dispatchHash, fd);
@@ -300,7 +301,7 @@ async function load(
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const url = urlOf(baseUrl, fd);
       try {
-        const data = await getOrFetch(url);
+        const data = await getOrFetch(url, lowPriority);
 
         if (state.isStale(fk, dispatchGen)) return false;
 
@@ -389,7 +390,7 @@ export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = 
     const priority = fd.type === 'manifest' ? -2 : fd.type === 'base' ? -1 : fd.id;
     preloadQueue.enqueue(keyOf(family, weight, dispatchHash, fd), priority, async () => {
       try {
-        await load(family, weight, dispatchHash, dispatchGen, fd, baseUrl, PREFETCH_LOAD_ATTEMPTS);
+        await load(family, weight, dispatchHash, dispatchGen, fd, baseUrl, PREFETCH_LOAD_ATTEMPTS, true);
       } catch {
         // best-effort
       }

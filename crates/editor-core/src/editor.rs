@@ -193,6 +193,8 @@ pub struct Editor {
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     pub(crate) pending_font_index: Option<crate::font::PendingFontIndex>,
     pub(crate) pending_font_loads: Vec<crate::font::FontLoadNotice>,
+    pub(crate) prefetch_backlog: crate::font::PrefetchBacklog,
+    pub(crate) font_activity: bool,
     pub(crate) requested_manifests: HashMap<(u16, u16), ManifestRequestClass>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
@@ -274,6 +276,8 @@ impl Editor {
             pending_fonts: HashMap::new(),
             pending_font_index: None,
             pending_font_loads: Vec::new(),
+            prefetch_backlog: crate::font::PrefetchBacklog::default(),
+            font_activity: false,
             requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
@@ -813,6 +817,8 @@ impl Editor {
             self.process_effects(effects);
         }
 
+        crate::font::emit_prefetch_if_quiescent(self);
+
         let ops = std::mem::take(&mut self.pending_ops);
         let pending_overlay = normalize_pending_overlay(&self.state);
         let gap_phantom = normalize_gap_phantom(&self.state);
@@ -1303,6 +1309,7 @@ impl Editor {
 
     fn augment_font_state_from_ops(&mut self, layout_dirty: &LayoutDirty) {
         self.pending_font_index = None;
+        self.font_activity = true;
         let updates = match layout_dirty {
             LayoutDirty::Full => {
                 let resource = self.resource.lock().unwrap();
@@ -1824,6 +1831,7 @@ impl Editor {
         // A new manifest can reroute pending resolutions, so the awaited-target
         // index must be rebuilt.
         self.pending_font_index = None;
+        self.font_activity = true;
         let family_id = {
             let resource = self.resource.lock().unwrap();
             resource.font_registry.intern_id(family)
@@ -1845,6 +1853,7 @@ impl Editor {
     pub(crate) fn resolve_fonts(&mut self, family: &str, weight: u16, codepoints: &[u32]) {
         use editor_resource::Resolution;
 
+        self.font_activity = true;
         let mut resource = self.resource.lock().unwrap();
         let family_id = resource.font_registry.intern(family);
 
@@ -1868,61 +1877,42 @@ impl Editor {
             }
         }
 
-        let events: Vec<_> = grouped
-            .into_iter()
-            .filter_map(|((fid, w), used_chunks)| {
-                let is_primary = fid == family_id;
-                let base_loaded = resource.font_registry.is_base_loaded(fid, w);
-
-                let mut required: Vec<FontData> = Vec::new();
-                if !base_loaded {
-                    required.push(FontData::Base);
-                }
-                let mut unloaded_required: Vec<u16> = used_chunks
-                    .iter()
-                    .copied()
-                    .filter(|&cid| !resource.font_registry.is_chunk_loaded(fid, w, cid))
-                    .collect();
-                unloaded_required.sort_unstable();
-                for cid in &unloaded_required {
-                    required.push(FontData::Chunk { id: *cid });
-                }
-
-                let prefetch: Vec<FontData> = if is_primary {
-                    if let Some(manifest) = resource.font_registry.manifest(fid, w) {
-                        manifest
-                            .all_chunk_ids()
-                            .filter(|cid| !used_chunks.contains(cid))
-                            .filter(|cid| !resource.font_registry.is_chunk_loaded(fid, w, *cid))
-                            .map(|id| FontData::Chunk { id })
-                            .collect()
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    Vec::new()
-                };
-
-                if required.is_empty() && prefetch.is_empty() {
-                    return None;
-                }
-
-                let family_name = resource
-                    .font_registry
-                    .family_name_opt(fid)
-                    .unwrap_or("")
-                    .to_string();
-                Some(EditorEvent::FontDataMissing {
-                    family: family_name,
-                    weight: w,
-                    required,
-                    prefetch,
-                })
-            })
-            .collect();
+        let mut events: Vec<EditorEvent> = Vec::new();
+        for ((fid, w), used_chunks) in grouped {
+            if fid == family_id {
+                self.prefetch_backlog.chunk_targets.insert((fid, w));
+            }
+            let base_loaded = resource.font_registry.is_base_loaded(fid, w);
+            let mut required: Vec<FontData> = Vec::new();
+            if !base_loaded {
+                required.push(FontData::Base);
+            }
+            let mut unloaded_required: Vec<u16> = used_chunks
+                .iter()
+                .copied()
+                .filter(|&cid| !resource.font_registry.is_chunk_loaded(fid, w, cid))
+                .collect();
+            unloaded_required.sort_unstable();
+            for cid in &unloaded_required {
+                required.push(FontData::Chunk { id: *cid });
+            }
+            if required.is_empty() {
+                continue;
+            }
+            let family_name = resource
+                .font_registry
+                .family_name_opt(fid)
+                .unwrap_or("")
+                .to_string();
+            events.push(EditorEvent::FontDataMissing {
+                family: family_name,
+                weight: w,
+                required,
+                prefetch: Vec::new(),
+            });
+        }
 
         let mut manifest_events: Vec<EditorEvent> = Vec::new();
-        let mut prefetch_targets: HashSet<(u16, u16)> = HashSet::default();
         for &(fid, w) in &manifest_needed {
             let prev = self
                 .requested_manifests
@@ -1947,7 +1937,9 @@ impl Editor {
             if let Some(ws) = resource.font_registry.weights(&family_name) {
                 for &sibling in ws {
                     if sibling != w && !resource.font_registry.has_manifest(fid, sibling) {
-                        prefetch_targets.insert((fid, sibling));
+                        self.prefetch_backlog
+                            .manifest_targets
+                            .insert((fid, sibling));
                     }
                 }
             }
@@ -1970,31 +1962,10 @@ impl Editor {
                     if !resource.font_registry.has_manifest(fb_id, w)
                         && !manifest_needed.contains(&(fb_id, w))
                     {
-                        prefetch_targets.insert((fb_id, w));
+                        self.prefetch_backlog.manifest_targets.insert((fb_id, w));
                     }
                 }
             }
-        }
-        for (fid, w) in prefetch_targets {
-            if manifest_needed.contains(&(fid, w)) {
-                continue;
-            }
-            if self.requested_manifests.contains_key(&(fid, w)) {
-                continue;
-            }
-            self.requested_manifests
-                .insert((fid, w), ManifestRequestClass::Prefetch);
-            let family_name = resource
-                .font_registry
-                .family_name_opt(fid)
-                .unwrap_or("")
-                .to_string();
-            manifest_events.push(EditorEvent::FontDataMissing {
-                family: family_name,
-                weight: w,
-                required: Vec::new(),
-                prefetch: vec![FontData::Manifest],
-            });
         }
 
         drop(resource);
@@ -2034,6 +2005,8 @@ impl Editor {
             pending_fonts: HashMap::new(),
             pending_font_index: None,
             pending_font_loads: Vec::new(),
+            prefetch_backlog: crate::font::PrefetchBacklog::default(),
+            font_activity: false,
             requested_manifests: HashMap::new(),
             composition_paint: None,
             ime_delete_paint: None,
@@ -2866,7 +2839,50 @@ mod tests {
         let init = editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let init_prefetch_700 = init
+        let init_sibling_events = init
+            .iter()
+            .filter(|e| {
+                matches!(e, EditorEvent::FontDataMissing { family, weight, .. } if family == "TestFont" && *weight == 700)
+            })
+            .count();
+        assert_eq!(
+            init_sibling_events, 0,
+            "sibling manifest prefetch is deferred until quiescence"
+        );
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_manifest(
+                    "TestFont",
+                    400,
+                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+                )
+                .unwrap();
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::FontManifestLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("TestFont", 400, compressed_test_font())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &0u32.to_be_bytes())
+                .unwrap();
+        }
+        let quiescent = editor.apply(Message::System {
+            event: SystemEvent::FontChunkLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+                chunk_id: 0,
+            },
+        });
+        let init_prefetch_700 = quiescent
             .iter()
             .filter(|e| {
                 matches!(
@@ -2882,7 +2898,7 @@ mod tests {
             .count();
         assert_eq!(
             init_prefetch_700, 1,
-            "sibling weight 700's manifest must start as a prefetch-only request"
+            "sibling weight 700's manifest must arrive as a prefetch-only request at quiescence"
         );
 
         editor.resolve_fonts("TestFont", 700, &['A' as u32]);

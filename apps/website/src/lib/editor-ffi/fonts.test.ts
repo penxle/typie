@@ -272,3 +272,42 @@ describe('PreloadQueue.purge', () => {
     await expect(pending).resolves.toBeUndefined();
   });
 });
+
+describe('PreloadQueue 드레인 순서', () => {
+  it('priority 오름차순(manifest → base → 청크 빈도순)으로 드레인한다', async () => {
+    const queue = new PreloadQueue();
+    const started: string[] = [];
+    const blockers: (() => void)[] = [];
+    const blocked = (key: string) => () => {
+      started.push(key);
+      return new Promise<void>((resolve) => {
+        blockers.push(resolve);
+      });
+    };
+    const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    for (let i = 0; i < 4; i++) {
+      void queue.enqueue(`order:fill:${i}`, 100, blocked(`order:fill:${i}`));
+    }
+    void queue.enqueue('order:chunk:9', 9, blocked('order:chunk:9'));
+    void queue.enqueue('order:chunk:2', 2, blocked('order:chunk:2'));
+    void queue.enqueue('order:manifest', -2, blocked('order:manifest'));
+    void queue.enqueue('order:base', -1, blocked('order:base'));
+
+    blockers[0]();
+    await flush();
+    expect(started[4]).toBe('order:manifest');
+    blockers[4]();
+    await flush();
+    expect(started[5]).toBe('order:base');
+    blockers[5]();
+    await flush();
+    expect(started[6]).toBe('order:chunk:2');
+    blockers[6]();
+    await flush();
+    expect(started[7]).toBe('order:chunk:9');
+
+    for (const release of blockers) release();
+    await flush();
+  });
+});
