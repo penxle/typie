@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -122,7 +123,7 @@ class EditorDocumentManipulationDesktopTest {
         selectionEndpointsProvider = { endpoints },
         pageSizesProvider = { pageSizes },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -201,7 +202,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState = focusedTestUiState()
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -267,7 +268,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState = focusedTestUiState()
     val runtime = EditorRuntime(scope).apply { attach(editor) }
@@ -340,7 +341,7 @@ class EditorDocumentManipulationDesktopTest {
         selectionEndpointsProvider = { endpoints },
         pageSizesProvider = { listOf(Size(width = 120f, height = 120f)) },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -395,7 +396,7 @@ class EditorDocumentManipulationDesktopTest {
         selectionEndpointsProvider = { endpoints },
         pageSizesProvider = { pageSizes },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -477,7 +478,7 @@ class EditorDocumentManipulationDesktopTest {
         selectionEndpointsProvider = { endpoints },
         pageSizesProvider = { listOf(Size(width = 120f, height = 400f)) },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -546,7 +547,7 @@ class EditorDocumentManipulationDesktopTest {
         selectionEndpointsProvider = { endpoints },
         pageSizesProvider = { pageSizes },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -628,7 +629,7 @@ class EditorDocumentManipulationDesktopTest {
         selectionEndpointsProvider = { endpoints },
         pageSizesProvider = { listOf(Size(width = 120f, height = 120f)) },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -683,7 +684,7 @@ class EditorDocumentManipulationDesktopTest {
           pageSizesProvider = { listOf(Size(width = 120f, height = 120f)) },
           tableOverlaysProvider = { listOf(tableOverlay) },
         )
-      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
       val editor = Editor(fake, scope)
       val uiState =
         EditorUiState().apply {
@@ -749,7 +750,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -905,7 +906,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -963,7 +964,7 @@ class EditorDocumentManipulationDesktopTest {
         pageSizesProvider = { listOf(Size(width = 120f, height = 120f)) },
         tableOverlaysProvider = { listOf(shallowTable) },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -1032,7 +1033,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -1088,7 +1089,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -1139,7 +1140,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {
@@ -1191,7 +1192,7 @@ class EditorDocumentManipulationDesktopTest {
           listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
         },
       )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + BroadcastFrameClock())
     val editor = Editor(fake, scope)
     val uiState =
       EditorUiState().apply {

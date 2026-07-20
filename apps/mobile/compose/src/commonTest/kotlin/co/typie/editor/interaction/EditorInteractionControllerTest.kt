@@ -1,5 +1,6 @@
 package co.typie.editor.interaction
 
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
@@ -49,7 +50,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -1331,8 +1331,7 @@ class EditorInteractionControllerTest {
       assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
       fake.enqueued.clear()
 
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(endpoints.fromPosition, extend.anchor)
@@ -1343,6 +1342,7 @@ class EditorInteractionControllerTest {
       assertFalse(extend.allowCollapse)
 
       assertTrue(controller.upSelectionHandlePointer())
+      pumpEdgeAutoScrollFrames(host, 1)
     }
 
   @Test
@@ -1382,12 +1382,12 @@ class EditorInteractionControllerTest {
       assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
       fake.enqueued.clear()
 
-      advanceTimeBy(80)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 6)
 
       assertEquals(5, host.edgeAutoScrollDispatchCount)
 
       assertTrue(controller.upSelectionHandlePointer())
+      pumpEdgeAutoScrollFrames(host, 1)
     }
 
   @Test
@@ -1421,8 +1421,7 @@ class EditorInteractionControllerTest {
         reportedPositions += it
         semantics.edgeAutoScroll.stop()
       }
-      advanceTimeBy(32)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 3)
 
       assertEquals(listOf(Offset(82f, 98f)), reportedPositions)
       assertEquals(1, host.edgeAutoScrollDispatchCount)
@@ -1431,9 +1430,9 @@ class EditorInteractionControllerTest {
       semantics.edgeAutoScroll.track(edgePosition = Offset(80f, 95f), context = context) {
         reportedPositions += it
       }
-      advanceTimeBy(32)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 3)
       semantics.edgeAutoScroll.stop()
+      pumpEdgeAutoScrollFrames(host, 1)
 
       assertEquals(listOf(Offset(82f, 98f)), reportedPositions)
       assertTrue(host.edgeAutoScrollDispatchCount > 1)
@@ -1509,8 +1508,7 @@ class EditorInteractionControllerTest {
 
       controller.cancel()
       fake.enqueued.clear()
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
     }
@@ -1531,7 +1529,7 @@ class EditorInteractionControllerTest {
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
-          edgeAutoScrollConsumedDelta = Offset(0f, 8f)
+          edgeAutoScrollConsumedDelta = Offset(0f, 4f)
         }
       val controller =
         EditorInteractionController(
@@ -1546,14 +1544,14 @@ class EditorInteractionControllerTest {
       assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 95f)))
       fake.enqueued.clear()
 
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(100f, extend.headY)
       assertFalse(extend.allowCollapse)
 
       assertTrue(controller.upSelectionHandlePointer())
+      pumpEdgeAutoScrollFrames(host, 1)
     }
 
   @Test
@@ -2345,7 +2343,7 @@ class EditorInteractionControllerTest {
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
-          edgeAutoScrollConsumedDelta = Offset(0f, 8f)
+          edgeAutoScrollConsumedDelta = Offset(0f, 4f)
         }
       val controller =
         EditorInteractionController(
@@ -2363,8 +2361,7 @@ class EditorInteractionControllerTest {
       )
       fake.enqueued.clear()
 
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(selection.anchor, extend.anchor)
@@ -2375,6 +2372,7 @@ class EditorInteractionControllerTest {
       assertTrue(
         controller.onPointerUp(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 40L)
       )
+      pumpEdgeAutoScrollFrames(host, 1)
     }
 
   @Test
@@ -2477,12 +2475,10 @@ class EditorInteractionControllerTest {
         controller.onPointerMove(pointerId = 1L, position = Offset(80f, 95f), nowMillis = 20L)
       )
 
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       host.edgeAutoScrollConsumedDelta = Offset(0f, 8f)
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 1)
 
       assertTrue(
         controller.onPointerMove(
@@ -2506,6 +2502,7 @@ class EditorInteractionControllerTest {
         ),
         fake.enqueued.filterIsInstance<Message.Node>(),
       )
+      pumpEdgeAutoScrollFrames(host, 1)
     }
 
   @Test
@@ -2547,8 +2544,7 @@ class EditorInteractionControllerTest {
       fake.enqueued.clear()
       host.edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 120f))
 
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(selection.anchor, extend.anchor)
@@ -2569,6 +2565,7 @@ class EditorInteractionControllerTest {
       assertTrue(
         controller.onPointerUp(pointerId = 1L, position = Offset(80f, 96f), nowMillis = 72L)
       )
+      pumpEdgeAutoScrollFrames(host, 1)
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
     }
@@ -2815,8 +2812,7 @@ class EditorInteractionControllerTest {
       controller.onPointerMove(pointerId = 2L, position = Offset(22f, 95f), nowMillis = 140L)
       fake.enqueued.clear()
 
-      advanceTimeBy(16)
-      runCurrent()
+      pumpEdgeAutoScrollFrames(host, 2)
 
       val extend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(baseSelection, extend.baseSelection)
@@ -2829,6 +2825,7 @@ class EditorInteractionControllerTest {
         controller.onPointerUp(pointerId = 2L, position = Offset(22f, 95f), nowMillis = 180L)
       )
       advanceUntilIdle()
+      pumpEdgeAutoScrollFrames(host, 1)
     }
 
   @Test
@@ -3462,8 +3459,24 @@ class EditorInteractionControllerTest {
     override fun cancel() = Unit
   }
 
+  private fun TestScope.pumpEdgeAutoScrollFrames(host: TestHost, frames: Int) {
+    repeat(frames) {
+      runCurrent()
+      host.sendFrame()
+    }
+    runCurrent()
+  }
+
   private class TestHost(private val scope: TestScope) :
     EditorInteractionEffects, EditorInteractionGeometry {
+    val frameClock = BroadcastFrameClock()
+    private var frameTimeNanos = 0L
+
+    fun sendFrame() {
+      frameTimeNanos += 16_000_000L
+      frameClock.sendFrame(frameTimeNanos)
+    }
+
     override var density: Float = 1f
     var scheduledTapDispatchAtMillis: Long? = null
     var scheduledLongPressDispatchAtMillis: Long? = null
@@ -3540,7 +3553,7 @@ class EditorInteractionControllerTest {
 
     override fun launchInteraction(block: suspend () -> Unit) {
       launchInteractionCount += 1
-      scope.launch { block() }
+      scope.launch(frameClock) { block() }
     }
 
     override fun requestFocus(editor: Editor): Boolean {

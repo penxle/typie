@@ -1,5 +1,6 @@
 package co.typie.editor.interaction.semantics
 
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Position
@@ -9,12 +10,10 @@ import co.typie.editor.interaction.EditorGestureContext
 import co.typie.ext.computeEdgeAutoScrollPlan
 import kotlin.math.abs
 import kotlin.math.sign
-import kotlinx.coroutines.delay
 
-private const val EditorEdgeAutoScrollTickMillis = 16L
 private const val EditorEdgeAutoScrollThresholdDp = 30f
-private const val EditorEdgeAutoScrollMinSpeedDpPerSecond = 250f
-private const val EditorEdgeAutoScrollMaxSpeedDpPerSecond = 1000f
+private const val EditorEdgeAutoScrollMinSpeedDpPerSecond = 100f
+private const val EditorEdgeAutoScrollMaxSpeedDpPerSecond = 400f
 
 internal class EditorEdgeAutoScrollSemantic {
   private var activeRequest: EditorEdgeAutoScrollRequest? = null
@@ -145,8 +144,12 @@ internal class EditorEdgeAutoScrollSemantic {
     running = true
     context.effects.launchInteraction {
       try {
+        var lastFrameNanos = withFrameNanos { it }
         while (true) {
-          delay(EditorEdgeAutoScrollTickMillis)
+          val nowNanos = withFrameNanos { it }
+          val dtSeconds = (nowNanos - lastFrameNanos) / 1_000_000_000f
+          lastFrameNanos = nowNanos
+
           val request = activeRequest ?: break
           val viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: break
           val plan = planFor(edgePosition = request.edgePosition, viewport = viewport)
@@ -156,14 +159,8 @@ internal class EditorEdgeAutoScrollSemantic {
 
           val delta =
             Offset(
-              x =
-                plan.horizontalDirection *
-                  plan.horizontalSpeedPxPerSec *
-                  EditorEdgeAutoScrollTickMillis / 1000f,
-              y =
-                plan.verticalDirection *
-                  plan.verticalSpeedPxPerSec *
-                  EditorEdgeAutoScrollTickMillis / 1000f,
+              x = plan.horizontalDirection * plan.horizontalSpeedPxPerSec * dtSeconds,
+              y = plan.verticalDirection * plan.verticalSpeedPxPerSec * dtSeconds,
             )
           val consumed = context.effects.dispatchEdgeAutoScroll(delta)
           if (consumed == Offset.Zero) {
