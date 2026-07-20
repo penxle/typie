@@ -41,13 +41,14 @@ internal fun editorTableToolbarPage(target: EditorToolbarTableTarget?): EditorTo
             }
           },
         )
-        EditorToolbarButton(
-          icon = toolbarAlignmentIcon(currentTarget.align),
-          contentDescription = "표 정렬",
-          selected = scope.activeSecondaryToolbar == alignmentSecondary,
-          enabled = currentTarget.node.proportion != 100,
-          onClick = { scope.toggleSecondaryToolbar(alignmentSecondary) },
-        )
+        if (currentTarget.node.proportion < 100) {
+          EditorToolbarButton(
+            icon = toolbarAlignmentIcon(currentTarget.align),
+            contentDescription = "표 정렬",
+            selected = scope.activeSecondaryToolbar == alignmentSecondary,
+            onClick = { scope.toggleSecondaryToolbar(alignmentSecondary) },
+          )
+        }
         EditorToolbarButton(
           icon = Lucide.TableProperties,
           contentDescription = "표 테두리",
