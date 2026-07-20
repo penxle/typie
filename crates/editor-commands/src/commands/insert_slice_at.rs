@@ -134,6 +134,28 @@ mod tests {
         }
     }
 
+    fn open_paragraphs_ending_in_page_break_slice() -> Slice {
+        Slice {
+            content: vec![
+                paragraph_fragment("A"),
+                paragraph_with_page_break_fragment("B"),
+            ],
+            open_start: 1,
+            open_end: 1,
+        }
+    }
+
+    fn open_page_break_paragraphs_slice() -> Slice {
+        Slice {
+            content: vec![
+                paragraph_with_page_break_fragment("A"),
+                paragraph_with_page_break_fragment("B"),
+            ],
+            open_start: 1,
+            open_end: 1,
+        }
+    }
+
     fn open_bullet_list_slice(text: &str, open_start: u32, open_end: u32) -> Slice {
         Slice {
             content: vec![Fragment {
@@ -704,6 +726,140 @@ mod tests {
     }
 
     #[test]
+    fn insert_page_break_slice_at_root_paragraph_start_keeps_right_content_separate() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("World") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 0),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("page break inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { page_break }
+                p2: paragraph { text("World") }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert!(!inserted.is_collapsed());
+    }
+
+    #[test]
+    fn insert_page_break_slice_into_empty_root_paragraph_uses_synthetic_following_paragraph() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 0),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("page break inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { page_break }
+                p2: paragraph {}
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_trailing_paragraph_is_synthetic(&actual);
+        assert!(!inserted.is_collapsed());
+    }
+
+    #[test]
+    fn insert_open_paragraphs_ending_in_page_break_in_middle_uses_right_half() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("xy") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 1),
+            open_paragraphs_ending_in_page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("paragraphs inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("xA") }
+                paragraph { text("B") page_break }
+                p2: paragraph { text("y") }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert!(!inserted.is_collapsed());
+    }
+
+    #[test]
+    fn insert_open_page_break_paragraphs_in_middle_keeps_full_inserted_range() {
+        let (initial, root, p1) = state! {
+            doc { root: root { p1: paragraph { text("xy") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 1),
+            open_page_break_paragraphs_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("paragraphs inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("xA") page_break }
+                paragraph { text("B") page_break }
+                p2: paragraph { text("y") }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(
+            inserted.anchor,
+            Position {
+                node: p1,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            }
+        );
+        assert_eq!(
+            inserted.head,
+            Position {
+                node: root,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            }
+        );
+    }
+
+    #[test]
     fn insert_page_break_slice_at_root_paragraph_end_uses_synthetic_following_paragraph() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("World") } } }
@@ -730,6 +886,44 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
         assert_trailing_paragraph_is_synthetic(&actual);
+        assert!(!inserted.is_collapsed());
+    }
+
+    #[test]
+    fn open_textblock_after_terminal_inline_stays_in_its_wrapper() {
+        let (initial, p1) = state! {
+            doc { root {
+                p1: paragraph { text("x") page_break }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let slice = Slice {
+            content: vec![paragraph_fragment("A")],
+            open_start: 1,
+            open_end: 0,
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 2),
+            slice,
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("paragraph inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("x") page_break }
+                inserted: paragraph { text("A") }
+                paragraph {}
+            } }
+            selection: (inserted, 1)
+        };
+        assert_state_eq!(&actual, &expected);
         assert!(!inserted.is_collapsed());
     }
 

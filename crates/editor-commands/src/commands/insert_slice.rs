@@ -39,6 +39,7 @@ mod tests {
     };
     use editor_resource::Resource;
     use editor_state::{Position, Selection, State};
+    use editor_transaction::Step;
 
     use super::*;
     use crate::test_utils::*;
@@ -94,6 +95,27 @@ mod tests {
         }
     }
 
+    fn paragraph_break_slice() -> Slice {
+        let empty_paragraph = || Fragment {
+            node: PlainNode::Paragraph(PlainParagraphNode::default()),
+            modifiers: vec![],
+            carry: vec![],
+            children: vec![],
+        };
+        Slice {
+            content: vec![empty_paragraph(), empty_paragraph()],
+            open_start: 1,
+            open_end: 1,
+        }
+    }
+
+    fn split_step_count(steps: &[editor_transaction::StepRecord]) -> usize {
+        steps
+            .iter()
+            .filter(|record| matches!(record.step, Step::SplitNode { .. }))
+            .count()
+    }
+
     fn open_fold_title_slice(text: &str) -> Slice {
         Slice {
             content: vec![Fragment {
@@ -129,7 +151,7 @@ mod tests {
             selection: (p1, 2)
         };
         let slice = root_with_paragraph("XY");
-        let (actual, ..) = transact!(initial, |tr| insert_slice(
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
             &mut tr,
             slice,
             SliceProvenance::Formatted
@@ -139,6 +161,7 @@ mod tests {
             selection: (p1, 4)
         };
         assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 1);
     }
 
     #[test]
@@ -147,20 +170,9 @@ mod tests {
             doc { root { p1: paragraph { text("asd") } } }
             selection: (p1, 1)
         };
-        let empty_paragraph = || Fragment {
-            node: PlainNode::Paragraph(PlainParagraphNode::default()),
-            modifiers: vec![],
-            carry: vec![],
-            children: vec![],
-        };
-        let slice = Slice {
-            content: vec![empty_paragraph(), empty_paragraph()],
-            open_start: 1,
-            open_end: 1,
-        };
-        let (actual, ..) = transact!(initial, |tr| insert_slice(
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
             &mut tr,
-            slice,
+            paragraph_break_slice(),
             SliceProvenance::Formatted
         ));
         let (expected, ..) = state! {
@@ -171,6 +183,73 @@ mod tests {
             selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 1);
+    }
+
+    #[test]
+    fn insert_paragraph_break_slice_at_paragraph_start_preserves_boundary() {
+        let (initial, ..) = state! {
+            doc { root { target: paragraph { text("x") } } }
+            selection: (target, 0)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            paragraph_break_slice(),
+            SliceProvenance::Formatted
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph {}
+                target: paragraph { text("x") }
+            } }
+            selection: (target, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn insert_paragraph_break_slice_at_paragraph_end_preserves_boundary() {
+        let (initial, ..) = state! {
+            doc { root { target: paragraph { text("x") } } }
+            selection: (target, 1)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            paragraph_break_slice(),
+            SliceProvenance::Formatted
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("x") }
+                target: paragraph {}
+            } }
+            selection: (target, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn insert_paragraph_break_slice_replaces_empty_destination() {
+        let (initial, ..) = state! {
+            doc { root { target: paragraph {} } }
+            selection: (target, 0)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            paragraph_break_slice(),
+            SliceProvenance::Formatted
+        ));
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph {}
+                target: paragraph {}
+            } }
+            selection: (target, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
     }
 
     #[test]
@@ -842,6 +921,216 @@ mod tests {
             "alignment (block format) survives paste, got {:?}",
             block_modifiers_of(&actual, pasted)
         );
+    }
+
+    #[test]
+    fn full_document_paragraph_replaces_empty_destination_with_source_context() {
+        let (source, ..) = state! {
+            doc { root {
+                source_paragraph: paragraph [alignment(Alignment::Right)] { text("hello") }
+            } }
+            selection: (source_paragraph, 0) -> (source_paragraph, 5, <)
+        };
+        let slice = Slice::extract(&source).expect("full-document slice");
+
+        let (initial, ..) = state! {
+            doc { root {
+                target: paragraph [alignment(Alignment::Left)] {}
+            } }
+            selection: (target, 0)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                pasted: paragraph [alignment(Alignment::Right)] { text("hello") }
+            } }
+            selection: (pasted, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn structural_slice_at_paragraph_start_preserves_only_unjoined_source_context() {
+        let (source, ..) = state! {
+            doc { root {
+                first: paragraph [alignment(Alignment::Right)] { text("A") }
+                last: paragraph [alignment(Alignment::Left)] { text("B") }
+            } }
+            selection: (first, 0) -> (last, 1, <)
+        };
+        let slice = Slice::extract(&source).expect("full-document slice");
+
+        let (initial, ..) = state! {
+            doc { root {
+                target: paragraph [alignment(Alignment::Center)] { text("x") }
+            } }
+            selection: (target, 0)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph [alignment(Alignment::Right)] { text("A") }
+                target: paragraph [alignment(Alignment::Center)] { text("Bx") }
+            } }
+            selection: (target, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn structural_slice_at_paragraph_end_preserves_only_unjoined_source_context() {
+        let (source, ..) = state! {
+            doc { root {
+                first: paragraph [alignment(Alignment::Right)] { text("A") }
+                last: paragraph [alignment(Alignment::Left)] { text("B") }
+            } }
+            selection: (first, 0) -> (last, 1, <)
+        };
+        let slice = Slice::extract(&source).expect("full-document slice");
+
+        let (initial, ..) = state! {
+            doc { root {
+                target: paragraph [alignment(Alignment::Center)] { text("x") }
+            } }
+            selection: (target, 1)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph [alignment(Alignment::Center)] { text("xA") }
+                target: paragraph [alignment(Alignment::Left)] { text("B") }
+            } }
+            selection: (target, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn structural_slice_replaces_empty_paragraph_with_all_source_contexts() {
+        let (source, ..) = state! {
+            doc { root {
+                first: paragraph [alignment(Alignment::Right)] { text("A") }
+                last: paragraph [alignment(Alignment::Center)] { text("B") }
+            } }
+            selection: (first, 0) -> (last, 1, <)
+        };
+        let slice = Slice::extract(&source).expect("full-document slice");
+
+        let (initial, ..) = state! {
+            doc { root {
+                target: paragraph [alignment(Alignment::Left)] {}
+            } }
+            selection: (target, 0)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph [alignment(Alignment::Right)] { text("A") }
+                target: paragraph [alignment(Alignment::Center)] { text("B") }
+            } }
+            selection: (target, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn full_document_paragraph_replaces_empty_list_item_paragraph() {
+        let (source, ..) = state! {
+            doc { root {
+                source_paragraph: paragraph [alignment(Alignment::Right)] { text("A") }
+            } }
+            selection: (source_paragraph, 0) -> (source_paragraph, 1, <)
+        };
+        let slice = Slice::extract(&source).expect("full-document slice");
+
+        let (initial, ..) = state! {
+            doc { root {
+                bullet_list { list_item {
+                    target: paragraph [alignment(Alignment::Left)] {}
+                } }
+                paragraph {}
+            } }
+            selection: (target, 0)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list { list_item {
+                    target: paragraph [alignment(Alignment::Right)] { text("A") }
+                } }
+                paragraph {}
+            } }
+            selection: (target, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(split_step_count(&steps), 0);
+    }
+
+    #[test]
+    fn bare_inline_slice_keeps_empty_destination_context() {
+        let (source, ..) = state! {
+            doc { root {
+                source_paragraph: paragraph [alignment(Alignment::Right)] { text("A") }
+                paragraph { text("after") }
+            } }
+            selection: (source_paragraph, 0) -> (source_paragraph, 1, <)
+        };
+        let slice = Slice::extract(&source).expect("inline slice");
+        assert!(
+            slice
+                .content
+                .iter()
+                .all(|fragment| fragment.node.as_type().spec().inline)
+        );
+
+        let (initial, ..) = state! {
+            doc { root {
+                target: paragraph [alignment(Alignment::Left)] {}
+            } }
+            selection: (target, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                target: paragraph [alignment(Alignment::Left)] { text("A") }
+            } }
+            selection: (target, 1)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
